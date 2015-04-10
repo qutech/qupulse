@@ -1,0 +1,164 @@
+\documentclass[a4paper,12pt]{article}
+\usepackage{fancyhdr, graphicx}
+\usepackage[utf8]{inputenc}
+\usepackage[top=2.5cm,left=3cm,right=3cm,bottom=3cm]{geometry}
+% \usepackage[headsepline,footsepline]{scrpage2}
+
+\renewcommand{\headrulewidth}{0.4pt} %obere Trennlinie
+\renewcommand{\footrulewidth}{0.4pt} %untere Trennlinie
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{\raisebox{1.2\baselineskip}{
+\includegraphics[height=1cm]{pictures/qutech}}}
+\lhead{\raisebox{1.2\baselineskip}{
+\includegraphics[height=0.75cm]{pictures/se}}}
+\chead{\leftmark}
+\cfoot{\thepage}
+
+
+\title{\vspace*{2cm}{\huge \textbf{QC-Toolkit}}\\ {\large Version 0.2 - DRAFT}\vspace*{2.5cm}}
+\author{RWTH Aachen University}
+% \date{2015-03-19}
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This document describes the current status of the requirement analysis and the implementation progress of the QC-Toolkit project. This project consists in the restructuring of the pulsecontrol (special measure) project of Prof.~Dr.~Hendrik~Bluhm. 
+In short, the QC-Toolkit should increase the modularity and flexibility of pulsecontrol.
+\end{abstract}
+
+\thispagestyle{fancy}
+\vfill
+
+{\footnotesize \textbf{Every effort has been made to ensure that all statements and information contained herein are accurate, however the QC-Toolkit crew accept no liability for any error or omission in the same.}}
+\newpage
+
+\tableofcontents
+
+\newpage
+\section{Involved People}
+
+\underline{\textbf{The Bluhm-Group}}
+\begin{description} \itemsep-0.5pt
+ \item[Prof. Dr. Hendrik Bluhm] Project initiator and supervisor.
+ \item[Patrick Bethke] PhD-Student
+ \item[Pascal Cerfontaine] PhD-Student
+ \item[Tim Botzem] PhD-Student
+ \item[Simon Humpohl] Scientific assistant
+\end{description}
+
+\noindent
+\underline{\textbf{The Rumpe-Group}}
+\begin{description} \itemsep-0.5pt
+ \item[Prof. Dr. Bernhardt Rumpe] Project initiator and supervisor.
+ \item[Deni Raco] Student assistant supervisor
+ \item[Lukas Prediger] Scientific assistant
+ \item[Jerome Bergmann] Scientific assistant
+ 
+\end{description}
+
+
+% \section{Theoretical background}
+ 
+\section{The current state}
+
+Special measure is a General purpose data acquisition package for (table top scale) physics experiments. Out of that project, the Bluhm-Group created pulsecontrol, a package for defining and tracking AWG pulses for quantum information experiments. It communicates with special-measure in a few places, but is largely independent. 
+
+As the development of this project took place over several years, pulsecontrol is now a feature rich toolkit with plenty of features. Special measure was written imperatively, so is pulsecontrol. Now, the project has reached a state where it is hard to understand, modify and repair. 
+This is the point where the QC-Toolkit Project has been created, aiming for a object oriented implementation of pulsecontrol.
+
+\subsection{The driver interface}
+The pulsecontrol toolkit has been expanded by a Multi-AWG concept. This allows to map the channels of a virtual AWG onto hardware channels provided by several AWGs.
+There are already drivers for all the tools the Bluhm Group written in C++. Currently, we are testing their correctness. If this process is finished, we could directly use them in the QC-Toolkit. 
+As our focus is modularity, we designed the interface of the driver layer as versatile as possible.
+
+\subsection{The pulse representation in quantum mechanics}
+In quantum mechanics, a pulse can be described on different layers. The last three layers are part of pulsecontrol:
+\begin{description} \itemsep-0.5pt
+ \item[Algorithm:] Description in Quantum-Circuit-Form, the most general form, only theoretical
+ \item[Optimized Algorithm:] The Algorithm can be adapted to the actual setup with error correction and setup relevant environment variables can be set.
+ This layer can also be represented in Quantum-Circuit-Form. One could also make here a separation between the logic gates and the manipulation of environment variables.
+ \item[PulseGroup:] The logic gates can be represented as a PulseGroup, which may contain PulseTabs and Pulses.
+ \item[PulseTab:] Tabular description of a Pulse. Only major supporting points needed. Between two supporting points, a linear interpolation occurs.
+ \item[Pulse:] A table containing in the first row all time points and on the other rows the amplitude for each channel.
+\end{description}
+
+\section{The desired state}
+Until now, we are able to formulize the following requirements to the QC-Toolkit.
+\begin{itemize} \itemsep-0.5pt
+ \item The implementation should be object oriented and easy to maintain.
+ \item The migration to other setups or devices should be easy and the interface for both should be as general as possible.
+ \item The system should allow to declare pulses as pulsetables (i.e. some points with linear integration in between) or clockwise by hand.
+ \item A pulse should be able to accept parameters and functions, for reusability.
+ \item Even with changes in the pulse database, the old pulses that have been used in an experiment should be reconstructable.
+ \item A simulation tool could be integrated. Patrik Behtke is currently looking for an adequate tool. Was not successful.
+ \item The system should allow feedback-loops and post process the measured data, allowing easier interpretation.
+ \item In a later stage of the project, the other layers (see pulse management) may be implemented.
+ \item In a later stage of the project, there should be an ``experiment management system'' (i.e. a management system which stores efficiently all input data, results and documentation).
+ \item In a later stage of the project, the system should support quantum computing alongside with examination of the underlying physics.
+ \item In a later stage of the project, a snapshot feature for runs may be required.
+ 
+\end{itemize}
+
+There is still a discussion open, in which language(s) the QC-Toolkit will be implemented. Until now, Java and Python are in discussion, whereas the driver layer will probably stay in C/C++.
+
+\section{Implementation proposition}
+During several discussions with members of the Bluhm Group (Patrick Bethke and Pascal Cerfontaine), a first implementation idea came up, how to restructurize the pulsecontrol project.  
+
+\subsection{Usage of the python project ``\texttt{QtLab}''}
+Patrick Behtke 
+
+\subsection{Layers}
+The software system will be subdivided into layers of increasing levels of abstraction from bottom to top. These layers are shortly introduced in the following and their interfaces are specified in greater detail afterwards.
+\paragraph{Driver Layer} The bottom-most layer of the software located directly above the hardware drivers of the hardware manufacturers. It defines abstract interfaces for AWGs (Arbitrary Waveform Generators) and DACs (Data Acqusition Cards) and implements these for specific hardware models. These implementations will be as modular as possible and result in units interchangeable by dynamic linking. This layer offers functionality to upload and playback waveforms on single AWGs and read raw measurment data from single DACs.
+\paragraph{Hardware Abstraction Layer} Located above the Driver Layer, the HAL abstract from the concrete hardware setup. Its interface only offers functionality that operates on virtual channel which are interally mapped on the concrete hardware channels. This mapping is not exposed to higher levels. Datawise this layer also operates on waveforms and raw data.
+\paragraph{Data Abstraction Layer} This layer abstracts from raw data and provides means to define pulses on a higher level as trees of subelements. It also offers functionality to filter, transform and identify/map measured data.
+\paragraph{TimeStream Layer}
+\paragraph{Quantum Circuit Layer}
+
+
+\subsection{The Driver Layer}
+
+\subsubsection{AWG}
+For easier man
+\subsubsection{DAC}
+
+\subsection{The Hardware Abstraction Layer}
+
+\subsection{The Data Abstraction Layer}
+
+\subsubsection{Pulse configuration}
+
+\subsubsection{Measurement configuration}
+
+\subsection{The \texttt{TimeStream}-representation}
+A quantum algorithm can be modeled as quantum cirquit. In this model, each qubit has its own lifeline on which gates will eventually appear. This kind of representation lead us to the following implementation idea:
+
+For each \texttt{Qubit}, our \texttt{Experiment} will have a \texttt{TimeStream}-Object, storing time ordered action similar to the quantum circuit. 
+This \texttt{TimeStream} object may now contain a list of \texttt{Action}s. These \texttt{Action}s could be:
+\begin{itemize} \itemsep-0.5pt
+ \item \texttt{Initialisation}s: pulse or nonpulse changes to the \texttt{Experiment}
+ \item \texttt{Execution}s: simple executions of \texttt{Pulse}s
+ \item \texttt{ConditionedLoop}s: You may pass a function and a \texttt{Pulse}, this \texttt{Pulse} will be repeated, as long as the function returns \texttt{true}.
+ \item and many more.
+\end{itemize}
+
+To archive more flexibility, we could also allow to nest \texttt{TimeStream} objects or use them in \texttt{Action} objects and an \texttt{Action} object may also be a \texttt{TimeStream} object.
+
+Another possibility of such an implementation is the ability to take snapshots, un- and redo actions. When we track all actions and find an adequate way to store the state of the \texttt{Experiment}, we may allow the user to save their work in mid way and continue their work afterwards.
+
+\subsection{Quantum Circuit Layer and Algorithm Layer}
+
+\section{Terminology}
+ \begin{description}
+  \item[AWG]: Arbitrary waveform generator, output device.
+  \item[Pulse]: Internal representation of a tension curve.
+  \item[PulseTab]: Pulse defined bye some points with linear integration in between.
+%   \item[ClockedPulse]: Clockewise ``hard coded'' representation of a pulse.
+  \item[Experiment]: The set of Input-Data, Measurements and Documentation for each run.
+  \item[Setup]: Internal representation of the links between the output-port of the AWG(s) and the QPU and QPU and the measurement tools.
+  \item[Waveform]: Actual data, that will be played by the AWG. 
+  \item[DAC]: Data aquisition card, measurement device.
+ \end{description}
+
+\end{document}
