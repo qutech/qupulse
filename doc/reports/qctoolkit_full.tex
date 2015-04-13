@@ -38,9 +38,9 @@ In short, the QC-Toolkit should increase the modularity and flexibility of pulse
 \newpage
 \section{Involved People}
 
-\underline{\textbf{The Bluhm-Group}}
+\underline{\textbf{The Bluhm-Group (Physics)}}
 \begin{description} \itemsep-0.5pt
- \item[Prof. Dr. Hendrik Bluhm] Project initiator and supervisor.
+ \item[Prof.~Dr.~Hendrik Bluhm] Project initiator and supervisor.
  \item[Patrick Bethke] PhD-Student
  \item[Pascal Cerfontaine] PhD-Student
  \item[Tim Botzem] PhD-Student
@@ -48,9 +48,9 @@ In short, the QC-Toolkit should increase the modularity and flexibility of pulse
 \end{description}
 
 \noindent
-\underline{\textbf{The Rumpe-Group}}
+\underline{\textbf{The Rumpe-Group (Computer Science)}}
 \begin{description} \itemsep-0.5pt
- \item[Prof. Dr. Bernhardt Rumpe] Project initiator and supervisor.
+ \item[Prof.~Dr.~Bernhardt Rumpe] Project initiator and supervisor.
  \item[Deni Raco] Student assistant supervisor
  \item[Lukas Prediger] Scientific assistant
  \item[Jerome Bergmann] Scientific assistant
@@ -60,19 +60,20 @@ In short, the QC-Toolkit should increase the modularity and flexibility of pulse
 
 % \section{Theoretical background}
  
-\section{The current state}
+\section{The Current State}
 
-Special measure is a General purpose data acquisition package for (table top scale) physics experiments. Out of that project, the Bluhm-Group created pulsecontrol, a package for defining and tracking AWG pulses for quantum information experiments. It communicates with special-measure in a few places, but is largely independent. 
+Special measure is a general purpose data acquisition package for (table top scale) physics experiments. Out of that project, the Bluhm-Group created pulsecontrol, a package for defining and tracking AWG pulses for quantum information experiments. It communicates with special-measure in a few places but is largely independent. 
 
-As the development of this project took place over several years, pulsecontrol is now a feature rich toolkit with plenty of features. Special measure was written imperatively, so is pulsecontrol. Now, the project has reached a state where it is hard to understand, modify and repair. 
-This is the point where the QC-Toolkit Project has been created, aiming for a object oriented implementation of pulsecontrol.
+As the development of this project took place over several years, pulsecontrol is now a feature rich toolkit. Special measure was written imperatively, so is pulsecontrol. Currently, the project has reached a state where it is hard to understand, modify and repair. 
+To address this issues, the QC-Toolkit Project has been initiated, aiming for a object oriented implementation of pulsecontrol and subsequently adding more functionality with higher abstraction.
 
-\subsection{The driver interface}
-The pulsecontrol toolkit has been expanded by a Multi-AWG concept. This allows to map the channels of a virtual AWG onto hardware channels provided by several AWGs.
+\subsection{The Driver Interface}
+Recently, the pulsecontrol toolkit has been expanded by a Multi-AWG concept. This allows to map the channels of a virtual AWG onto hardware channels provided by several AWGs.
 There are already drivers for all the tools the Bluhm Group written in C++. Currently, we are testing their correctness. If this process is finished, we could directly use them in the QC-Toolkit. 
 As our focus is modularity, we designed the interface of the driver layer as versatile as possible.
 
-\subsection{The pulse representation in quantum mechanics}
+\subsection{The Pulse Representation in Quantum Mechanics}
+\paragraph{ todo}: is this correct? for example, the actual implementation of an algorithm may use pulses as a tool but the algorithm itself is independent from pulses. this sections needs some clarification in my opinion.\par
 In quantum mechanics, a pulse can be described on different layers. The last three layers are part of pulsecontrol:
 \begin{description} \itemsep-0.5pt
  \item[Algorithm:] Description in Quantum-Circuit-Form, the most general form, only theoretical
@@ -83,24 +84,35 @@ In quantum mechanics, a pulse can be described on different layers. The last thr
  \item[Pulse:] A table containing in the first row all time points and on the other rows the amplitude for each channel.
 \end{description}
 
-\section{The desired state}
-Until now, we are able to formulize the following requirements to the QC-Toolkit.
+\section{The Desired State}
+Until now, we were able to formulate the following requirements for the QC-Toolkit.
+\paragraph{Functional}
 \begin{itemize} \itemsep-0.5pt
- \item The implementation should be object oriented and easy to maintain.
- \item The migration to other setups or devices should be easy and the interface for both should be as general as possible.
- \item The system should allow to declare pulses as pulsetables (i.e. some points with linear integration in between) or clockwise by hand.
+ \item The system should allow to declare pulses as pulse tables, i.e., certain defining points that are then used to obtain values in between by (linear) interpolation).
+ \item It should be possible to nest pulses, i.e., construct pulses by combining already existing ones.
  \item A pulse should be able to accept parameters and functions, for reusability.
- \item Even with changes in the pulse database, the old pulses that have been used in an experiment should be reconstructable.
- \item A simulation tool could be integrated. Patrik Behtke is currently looking for an adequate tool. Was not successful.
- \item The system should allow feedback-loops and post process the measured data, allowing easier interpretation.
- \item In a later stage of the project, the other layers (see pulse management) may be implemented.
- \item In a later stage of the project, there should be an ``experiment management system'' (i.e. a management system which stores efficiently all input data, results and documentation).
- \item In a later stage of the project, the system should support quantum computing alongside with examination of the underlying physics.
- \item In a later stage of the project, a snapshot feature for runs may be required.
+ \item Productive pulses shall be stored in a pulse database.
+ \item A concrete pulse used in a certain experiment must be reconstructable, even if the corresponding pulse in the database was changed afterwards.
+ \item The system should allow feedback loops on pulse execution and post process the measured data to enable easier interpretation.
+ \item In a later stage of the project, there should be an ``experiment management system'' (i.e.~a management system which efficiently stores all input data, (pulses, parameter, setup, etc.), results and documentation).
+ \item The system should provide different levels of abstraction: It should be possible to operate directly with pulses (to optimze them or to inspect the physical behavior of the quantum hardware) as well as (later on) representing and executing quantum circuits and algorithms whithout having to mess with corresponding pulse implementation.
+ \item The system should support the execution on real qubit hardware as well as some means of simulation (Integration of the qtip project might be a viable solution for simulation).
+ \item In a later stage of the project, a snapshot feature for runs may be required to allow interrupting and resuming or replaying an experimental run.
  
 \end{itemize}
 
-There is still a discussion open, in which language(s) the QC-Toolkit will be implemented. Until now, Java and Python are in discussion, whereas the driver layer will probably stay in C/C++.
+\paragraph{Technical / Non-Functional}
+\begin{itemize} \itemsep-0.5pt
+  \item The implementation should be object oriented and easy to maintain.
+  \item The migration to other setups or devices should be easy and the interface for both should be as general as possible.
+\end{itemize}
+
+\paragraph{Implementation Language}
+The current software is mostly implemented using the MATLAB script language with some C(++) code for the basic hardware operations. The Bluhm Group wants to move away from MATLAB as the language to set up and run the experiment and favors Python at the moment.\par
+Python - and other interpreted languages with dynamic typing - are great for prototyping and writing small programs fast, which makes them ideal to quickly write a small script that sets up some pulses and executes an experiment without the need to separately compile the program after each small change.\par
+However, these languages tend to result in software that is hard to maintain when used in more complex systems. Especially the lack of static type checks requires the programmer to introduce more sanity checks for parameters and attributes. A compilation phase that is separated from execution often makes it easier to find inconsistencies and errors in the code (before the program is run). Thus, for the implementation of the core functionality of the software, a statically typed language (such as Java, C++, C\#, ...) should be used.\par
+Statically typed languages are often a bit more difficult for inexperienced users (or someone who just wants to set up his experiment). Thus, an interface of required functionality should be implemented to allow the usage from scripting languages while the implementation of these features is done in a statically typed language.\par
+C++/C seem to provide the best option for cross-language interface definition, since nearly every interpreted language offers functionality to access C libraries. Additionally, the device drivers of the hardware used in the experiment already come as C libraries. Using these would be easiest in C++/C (this is only a very minor argument, though).
 
 \section{Implementation proposition}
 During several discussions with members of the Bluhm Group (Patrick Bethke and Pascal Cerfontaine), a first implementation idea came up, how to restructurize the pulsecontrol project.  
