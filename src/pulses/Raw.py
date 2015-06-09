@@ -1,0 +1,2 @@
+class Waveform(object):
+	
