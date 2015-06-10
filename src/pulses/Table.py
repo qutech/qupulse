@@ -1,32 +1,16 @@
 """STANDARD LIBRARY IMPORTS"""
 from logging import getLogger, Logger
 from abc import ABCMeta, abstractmethod
+from typing import Dict
 
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
-from Parameter import Parameter
+from Parameter import ParameterDeclaration, Parameter
 from PulseTemplate import PulseTemplate
 
-class Table(PulseTemplate):
-    """docstring for Table"""
-    def __init__(self):
-        super(Table, self).__init__()
-        self.entries = None
-
-    def add_entry(self, table_entry):
-        if self.entries is None:
-            self.entries = {table_entry,}
-        else:
-            self.entries.add(table_entry)
-
-class TableEntry(object):
-    """docstring for TableEntry"""
-    def __init__(self, time: TableValue, voltage: TableValue):
-        super(TableEntry, self).__init__()
-        self.time = time
-        self.value = value
-
+__all__ = ["Table"]
+        
 class TableValue(metaclass = ABCMeta):
     """docstring for TableValue"""
     def __init__(self):
@@ -53,8 +37,25 @@ class ParameterTableValue(object):
         super(ParameterTableValue, self).register(self)
         self.parameter_name = parameter_name
 
-    def get_value(self, mapping):
-        return mapping[name]
-
-
+    def get_value(self, mapping: Dict[str, Parameter]) -> Parameter:
+        return mapping[self.parameter_name]
         
+class TableEntry(object):
+    """docstring for TableEntry"""
+    def __init__(self, time: TableValue, voltage: TableValue):
+        super(TableEntry, self).__init__()
+        self.time = time
+        self.voltage = voltage
+
+class Table(PulseTemplate):
+    """docstring for Table"""
+    def __init__(self):
+        super(Table, self).__init__()
+        self.entries = {}
+        self.parameterDeclarations = dict()
+
+    def add_entry(self, table_entry: TableEntry) -> None:
+        self.entries.add(table_entry)
+        
+    def declare_parameter(self, name: str, **kwargs) -> None:
+        self.parameterDeclarations[name] = ParameterDeclaration(kwargs)

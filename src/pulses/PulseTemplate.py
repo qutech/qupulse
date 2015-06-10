@@ -1,6 +1,6 @@
 """STANDARD LIBRARY IMPORTS"""
-from logging import getLogger, Logger
 from abc import ABCMeta, abstractmethod
+from typing import Dict
 
 """RELATED THIRD PARTY IMPORTS"""
 
@@ -22,11 +22,11 @@ class PulseTemplate(metaclass = ABCMeta):
         pass
 
     @abstractmethod
-    def __str__(self) -> string:
+    def __str__(self) -> str:
         pass
     
     @abstractmethod
-    def get_parameters(self) -> {string,Parameter}:
+    def get_parameters(self) -> Dict[str, ParameterDeclaration]:
         pass
 
     @abstractmethod
@@ -38,7 +38,8 @@ class PulseTemplate(metaclass = ABCMeta):
         pass
 
     @abstractmethod
-    def generate_waveforms(self, sequencer) -> Waveform:
+    def generate_waveforms(self, sequencer, parameters):
+        """Compile a waveform of the pulse represented by this PulseTemplate and the given parameters using the hardware-specific Sequencer object."""
         pass
 
     @abstractmethod
@@ -48,10 +49,10 @@ class PulseTemplate(metaclass = ABCMeta):
 
 class ParameterNotInPulseTemplateException(Exception):
     """docstring for ParameterNotInPulseException"""
-    def __init__(self, name: string, pulse_template: PulseTemplate):
-        super(ParameterNotInPulseException, self).__init__()
+    def __init__(self, name: str, pulse_template: PulseTemplate):
+        super().__init__()
         self.name = name
         self.pulse_template = pulse_template
 
     def __str__(self):
-        return "Parameter {1} not found".format(name)
+        return "Parameter {1} not found".format(self.name)
