@@ -35,11 +35,13 @@ class ComparisonCondition(Condition):
             self.lhs_value = self.lhs.get_value
         else:
             #TODO: Figure out how to handle other Types
+            pass
         self.rhs_value = None
         if isinstance(self.rhs,Parameter):
             self.rhs_value = self.rhs.get_value
         else:
             #TODO: Figure out how to handle other Types
+            pass
         return self.__evaluation_function()
         
     def __get_evaluation_function(self):
