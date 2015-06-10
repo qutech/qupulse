@@ -1,6 +1,7 @@
 """STANDARD LIBRARY IMPORTS"""
 from abc import ABCMeta, abstractmethod
 from typing import Optional
+import numbers
 
 """RELATED THIRD PARTY IMPORTS"""
 
@@ -48,9 +49,9 @@ class ParameterDeclaration(object):
         """Creates a ParameterDeclaration object.
         
         Keyword Arguments:
-        min or minValue -- An optional real number specifying the minimum value allowed for the .
-        max or maxValue -- An optional real number specifying the maximum value allowed.
-        default or defaultValue -- An optional real number specifying a default value for the declared pulse template parameter.
+        min -- An optional real number specifying the minimum value allowed for the .
+        max -- An optional real number specifying the maximum value allowed.
+        default -- An optional real number specifying a default value for the declared pulse template parameter.
         """
         super().__init__()
         self._minValue = None
@@ -58,14 +59,18 @@ class ParameterDeclaration(object):
         self._defaultValue = None
         for key in kwargs:
             value = kwargs[key]
-            if isinstance(value, float):
-                if (key == "min" or key == "minValue"):
-                    self._minValue == value
-                elif (key == "max" or key == "maxValue"):
-                    self._maxValue == value
-                elif (key == "default" or key == "defaultValue"):
+            if isinstance(value, numbers.Real):
+                if key == "min":
+                    self._minValue = value
+                elif key == "max":
+                    self._maxValue = value
+                elif key == "default":
                     self._defaultValue = value
-        
+                else:
+                    raise ValueError("{0} is not a valid argument.".format(key))
+            else:
+                raise ValueError("{0}={1} is not a valid argument.".format(key, value))
+    
     def get_min_value(self) -> Optional[float]:
         return self._minValue
     
@@ -77,7 +82,7 @@ class ParameterDeclaration(object):
         
     def get_default_parameter(self) -> ConstantParameter:
         """Creates a ConstantParameter object holding the default value of this ParameterDeclaration."""
-        if (self.__defaultValue is None):
+        if (self._defaultValue is None):
             raise NoDefaultValueException()
         return ConstantParameter(self._defaultValue)
     
