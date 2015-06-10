@@ -2,6 +2,7 @@
 from logging import getLogger, Logger
 from abc import ABCMeta, abstractmethod
 from typing import Dict
+from numbers import Real
 
 """RELATED THIRD PARTY IMPORTS"""
 
@@ -14,7 +15,7 @@ __all__ = ["Table"]
 class TableValue(metaclass = ABCMeta):
     """docstring for TableValue"""
     def __init__(self):
-        super(TableValue, self).__init__()
+        super().__init__()
 
     @abstractmethod
     def get_value(self, *args, **kwargs):
@@ -23,8 +24,7 @@ class TableValue(metaclass = ABCMeta):
 class ConstantTableValue(object):
     """docstring for ConstantTableValue"""
     def __init__(self, value):
-        super(ConstantTableValue, self).__init__()
-        super(ConstantTableValue, self).register(self)
+        super().__init__()
         self.value = value
     
     def get_value(self, *args):
@@ -32,13 +32,12 @@ class ConstantTableValue(object):
 
 class ParameterTableValue(object):
     """docstring for ParameterTableValue"""
-    def __init__(self, parameter_name):
-        super(ParameterTableValue, self).__init__()
-        super(ParameterTableValue, self).register(self)
+    def __init__(self, parameter_name: str):
+        super().__init__()
         self.parameter_name = parameter_name
 
-    def get_value(self, mapping: Dict[str, Parameter]) -> Parameter:
-        return mapping[self.parameter_name]
+    def get_value(self, mapping: Dict[str, Parameter]) -> Real:
+        return mapping[self.parameter_name].get_value()
         
 class TableEntry(object):
     """docstring for TableEntry"""
@@ -50,12 +49,12 @@ class TableEntry(object):
 class Table(PulseTemplate):
     """docstring for Table"""
     def __init__(self):
-        super(Table, self).__init__()
-        self.entries = {}
-        self.parameterDeclarations = dict()
+        super().__init__()
+        self._entries = [] # type: Iterable[Tuple[TableValue, TableValue]]
+        self._parameterDeclarations = {} # type: Dict[ParameterDeclaration]
 
     def add_entry(self, table_entry: TableEntry) -> None:
-        self.entries.add(table_entry)
+        self._entries.add(table_entry)
         
     def declare_parameter(self, name: str, **kwargs) -> None:
-        self.parameterDeclarations[name] = ParameterDeclaration(kwargs)
+        self._parameterDeclarations[name] = ParameterDeclaration(**kwargs)

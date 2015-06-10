@@ -11,7 +11,7 @@ from Parameter import Parameter
 class Condition(metaclass = ABCMeta):
     """docstring for Condition"""
     def __init__(self, *args, **kwargs):
-        super(Condition, self).__init__()
+        super().__init__()
         
     @abstractmethod
     def evaluate(self) -> bool:
@@ -22,12 +22,11 @@ class ComparisonCondition(Condition):
     # lhs := left hand side of the operation
     # rhs := right hand side of the operation
     def __init__(self, lhs, operator, rhs):
-        super(ComparisonCondition, self).__init__()
-        super(ComparisonCondition, self).register(self)
+        super().__init__()
         self.lhs = lhs
         self.operator = operator
         self.rhs = rhs
-        self.__evaluation_function = self.__get_evaluation_function()
+        self._evaluation_function = self.__get_evaluation_function()
 
     def evaluate(self) -> bool:
         self.lhs_value = None
@@ -42,7 +41,7 @@ class ComparisonCondition(Condition):
         else:
             #TODO: Figure out how to handle other Types
             pass
-        return self.__evaluation_function()
+        return self._evaluation_function()
         
     def __get_evaluation_function(self):
         if self.operator in ("le","<=","=<"):

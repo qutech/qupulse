@@ -26,13 +26,12 @@ class ConstantParameter(Parameter):
     
     def __init__(self, value: Real):
         super().__init__()
-        self.register(self)
-        self.__value = value
-        if (self.__value is None):
+        self._value = value
+        if (self._value is None):
             self.value = 0
         
     def get_value(self) -> Real:
-        return self.__value
+        return self._value
         
     def requires_stop(self) -> bool:
         return False
@@ -55,33 +54,33 @@ class ParameterDeclaration(object):
         default or defaultValue -- A real number specifying a default value for the declared pulse template parameter.
         """
         super().__init__()
-        self.__minValue = None
-        self.__maxValue = None
-        self.__defaultValue = None
+        self._minValue = None
+        self._maxValue = None
+        self._defaultValue = None
         for key in kwargs:
             value = kwargs[key]
             if isinstance(value, Real):
                 if (key == "min" or key == "minValue"):
-                    self.__minValue == value
+                    self._minValue == value
                 elif (key == "max" or key == "maxValue"):
-                    self.__maxValue == value
+                    self._maxValue == value
                 elif (key == "default" or key == "defaultValue"):
-                    self.__defaultValue = value
+                    self._defaultValue = value
         
     def get_min_value(self) -> Optional[Real]:
-        return self.__minValue
+        return self._minValue
     
     def get_max_value(self) -> Optional[Real]:
-        return self.__maxValue
+        return self._maxValue
         
     def get_default_value(self) -> Optional[Real]:
-        return self.__defaultValue
+        return self._defaultValue
         
     def get_default_parameter(self) -> ConstantParameter:
         """Creates a ConstantParameter object holding the default value of this ParameterDeclaration."""
         if (self.__defaultValue is None):
             raise NoDefaultValueException()
-        return ConstantParameter(self.__defaultValue)
+        return ConstantParameter(self._defaultValue)
     
     minValue = property(get_min_value)
     maxValue = property(get_max_value)
@@ -95,8 +94,8 @@ class ParameterDeclaration(object):
         - If the declaration specifies a maximum value, the parameter's value must be less or equal
         """
         isValid = True
-        isValid &= (self.__minValue is None or self.__minValue <= p.get_value())
-        isValid &= (self.__maxValue is None or self.__maxValue >= p.get_value())
+        isValid &= (self._minValue is None or self._minValue <= p.get_value())
+        isValid &= (self._maxValue is None or self._maxValue >= p.get_value())
         return isValid
         
 class NoDefaultValueException(Exception):

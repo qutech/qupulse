@@ -11,9 +11,8 @@ from Parameter import ParameterDeclaration
 class PulseTemplate(metaclass = ABCMeta):
     """docstring for PulseTemplate"""
     def __init__(self):
-        super(PulseTemplate, self).__init__()
+        super().__init__()
         
-
     @abstractmethod
     def __len__(self) -> int:
         """Defines the behaviour of len(PulseTemplate), which is the sum of all subpulses. 
