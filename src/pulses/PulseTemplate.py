@@ -1,11 +1,11 @@
 """STANDARD LIBRARY IMPORTS"""
 from abc import ABCMeta, abstractmethod
-from typing import Dict
+from typing import Dict, List, Tuple, Set
 
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
-from Parameter import ParameterDeclaration
+from Parameter import ParameterDeclaration, Parameter
 
 
 class PulseTemplate(metaclass = ABCMeta):
@@ -18,6 +18,7 @@ class PulseTemplate(metaclass = ABCMeta):
         """Defines the behaviour of len(PulseTemplate), which is the sum of all subpulses. 
         __len__ already provides a type check to assure that only numerical values are returned
         """
+        # TODO: decide whether or not measuring the length of a PulseTemplate actually makes sense, since it may depend on parameters (maybe move to Pulse)
         pass
 
     @abstractmethod
@@ -25,24 +26,29 @@ class PulseTemplate(metaclass = ABCMeta):
         pass
     
     @abstractmethod
-    def get_parameters(self) -> Dict[str, ParameterDeclaration]:
+    def get_parameter_names(self) -> Set[str]:
+        """Return the set of names of declared parameters."""
+        pass
+        
+    @abstractmethod
+    def get_parameter_declarations(self) -> Dict[str, ParameterDeclaration]:
+        """Return a copy of the dictionary containing the parameter declarations of this PulseTemplate."""
         pass
 
     @abstractmethod
-    def get_measurement_windows(self):
+    def get_measurement_windows(self) -> List[Tuple[float, float]]:
+        """Return all measurment windows defined in this PulseTemplate."""
+        # TODO: decide whether or not defining exact measurment windows on templates makes sense (maybe move to Pulse)
         pass
 
     @abstractmethod
     def is_interruptable(self) -> bool:
+        """Return true, if this PulseTemplate contains points at which it can halt if interrupted."""
         pass
 
     @abstractmethod
-    def generate_waveforms(self, sequencer, parameters):
+    def generate_waveforms(self, sequencer: "Sequencer", parameters: Dict[str, Parameter]) -> None:
         """Compile a waveform of the pulse represented by this PulseTemplate and the given parameters using the hardware-specific Sequencer object."""
-        pass
-
-    @abstractmethod
-    def set_parameter(self, name, value):
         pass
 
 

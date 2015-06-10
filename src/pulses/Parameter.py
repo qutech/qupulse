@@ -1,7 +1,6 @@
 """STANDARD LIBRARY IMPORTS"""
 from abc import ABCMeta, abstractmethod
 from typing import Optional
-from numbers import Real
 
 """RELATED THIRD PARTY IMPORTS"""
 
@@ -13,7 +12,7 @@ class Parameter(metaclass = ABCMeta):
         super().__init__()
 
     @abstractmethod
-    def get_value(self) -> Real:
+    def get_value(self) -> float:
         pass
 
     @abstractmethod
@@ -24,13 +23,13 @@ class Parameter(metaclass = ABCMeta):
 class ConstantParameter(Parameter):
     """A parameter with a constant value."""
     
-    def __init__(self, value: Real):
+    def __init__(self, value: float):
         super().__init__()
         self._value = value
         if (self._value is None):
             self.value = 0
         
-    def get_value(self) -> Real:
+    def get_value(self) -> float:
         return self._value
         
     def requires_stop(self) -> bool:
@@ -49,9 +48,9 @@ class ParameterDeclaration(object):
         """Creates a ParameterDeclaration object.
         
         Keyword Arguments:
-        min or minValue -- A real number specifying the minimum value allowed for the .
-        max or maxValue -- A real number specifying the maximum value allowed.
-        default or defaultValue -- A real number specifying a default value for the declared pulse template parameter.
+        min or minValue -- An optional real number specifying the minimum value allowed for the .
+        max or maxValue -- An optional real number specifying the maximum value allowed.
+        default or defaultValue -- An optional real number specifying a default value for the declared pulse template parameter.
         """
         super().__init__()
         self._minValue = None
@@ -59,7 +58,7 @@ class ParameterDeclaration(object):
         self._defaultValue = None
         for key in kwargs:
             value = kwargs[key]
-            if isinstance(value, Real):
+            if isinstance(value, float):
                 if (key == "min" or key == "minValue"):
                     self._minValue == value
                 elif (key == "max" or key == "maxValue"):
@@ -67,13 +66,13 @@ class ParameterDeclaration(object):
                 elif (key == "default" or key == "defaultValue"):
                     self._defaultValue = value
         
-    def get_min_value(self) -> Optional[Real]:
+    def get_min_value(self) -> Optional[float]:
         return self._minValue
     
-    def get_max_value(self) -> Optional[Real]:
+    def get_max_value(self) -> Optional[float]:
         return self._maxValue
         
-    def get_default_value(self) -> Optional[Real]:
+    def get_default_value(self) -> Optional[float]:
         return self._defaultValue
         
     def get_default_parameter(self) -> ConstantParameter:
