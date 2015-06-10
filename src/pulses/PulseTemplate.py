@@ -5,6 +5,7 @@ from abc import ABCMeta, abstractmethod
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
+from Parameter import ParameterDeclaration
 
 
 class PulseTemplate(metaclass = ABCMeta):
