@@ -3,6 +3,7 @@ import os
 import unittest
 
 basePath = os.path.dirname(os.path.abspath(__file__))
+
 srcPath = basePath + '/src/'
 
 sys.path.insert(0, srcPath)

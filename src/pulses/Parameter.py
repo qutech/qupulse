@@ -2,10 +2,13 @@
 from abc import ABCMeta, abstractmethod
 from typing import Optional
 import numbers
+import logging
 
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""    
+
+logger = logging.getLogger(__name__)
 
 class Parameter(metaclass = ABCMeta):
     """A parameter for pulses."""

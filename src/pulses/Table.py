@@ -1,12 +1,16 @@
 """STANDARD LIBRARY IMPORTS"""
 from logging import getLogger, Logger
 from typing import Union, Dict, List, Set, Tuple
+import logging
 
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
 from Parameter import ParameterDeclaration, Parameter
 from PulseTemplate import PulseTemplate
+
+logger = logging.getLogger(__name__)
+
 
 TableValue = Union[float, str]
 TableEntry = Tuple[Union[float, str], Union[float, str]]

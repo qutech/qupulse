@@ -1,12 +1,14 @@
 """STANDARD LIBRARY IMPORTS"""
 from abc import ABCMeta, abstractmethod
 from typing import Dict, List, Tuple, Set
+import logging
 
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
 from Parameter import ParameterDeclaration, Parameter
 
+logger = logging.getLogger(__name__)
 
 class PulseTemplate(metaclass = ABCMeta):
     """docstring for PulseTemplate"""
