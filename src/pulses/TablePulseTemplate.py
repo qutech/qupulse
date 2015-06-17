@@ -144,9 +144,9 @@ class TablePulseTemplate(PulseTemplate):
         """!@brief Return true, if this PulseTemplate contains points at which it can halt if interrupted."""
         return False
 
-    def generate_waveforms(self, sequencer: "Sequencer", parameters: Dict[str, Parameter]) -> None:
-        """!@brief Compile a waveform of the pulse represented by this PulseTemplate and the given parameters using the hardware-specific Sequencer object."""
-        # TODO: pending detailed definition of Sequencer class
+    @abstractmethod
+    def upload_waveform(self, uploadInterface: HardwareUploadInterface, parameters: Dict[str, Parameter]) -> Waveform:
+        """!@brief Compile a waveform of the pulse represented by this PulseTemplate and the given parameters using the given HardwareUploadInterface object."""
         raise NotImplementedError()
         
 class ParameterNotDeclaredException(Exception):

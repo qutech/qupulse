@@ -7,6 +7,7 @@ import logging
 
 """LOCAL IMPORTS"""
 from Parameter import ParameterDeclaration, Parameter
+from HardwareUploadInterface import Waveform
 
 logger = logging.getLogger(__name__)
 
@@ -58,8 +59,8 @@ class PulseTemplate(metaclass = ABCMeta):
         pass
 
     @abstractmethod
-    def generate_waveforms(self, sequencer: "Sequencer", parameters: Dict[str, Parameter]) -> None:
-        """!@brief Compile a waveform of the pulse represented by this PulseTemplate and the given parameters using the hardware-specific Sequencer object."""
+    def upload_waveform(self, uploadInterface: HardwareUploadInterface, parameters: Dict[str, Parameter]) -> Waveform:
+        """!@brief Compile a waveform of the pulse represented by this PulseTemplate and the given parameters using the given HardwareUploadInterface object."""
         pass
 
 
