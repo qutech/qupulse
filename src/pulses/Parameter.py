@@ -30,8 +30,6 @@ class ConstantParameter(Parameter):
     def __init__(self, value: float):
         super().__init__()
         self._value = value
-        if (self._value is None):
-            self.value = 0
         
     def get_value(self) -> float:
         return self._value
@@ -73,6 +71,14 @@ class ParameterDeclaration(object):
                     raise ValueError("{0} is not a valid argument.".format(key))
             else:
                 raise ValueError("{0}={1} is not a valid argument.".format(key, value))
+        if self._minValue is not None:
+            if (self._maxValue is not None) and (self._minValue > self._maxValue):
+                raise ValueError("Max value ({0}) is less than min value ({1}).".format(self._maxValue, self._minValue))
+            if (self._defaultValue is not None) and (self._minValue > self._defaultValue):
+                raise ValueError("Default value({0}) is less than min value ({1}).".format(self._defaultValue, self._minValue))
+        if (self._maxValue is not None) and (self._defaultValue is not None) and (self._defaultValue > self._maxValue):
+            raise ValueError("Default value ({0}) is greater than max value ({1}).".format(self._defaultValue, self._maxValue))
+                
     
     def get_min_value(self) -> Optional[float]:
         return self._minValue
