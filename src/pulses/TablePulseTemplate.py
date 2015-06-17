@@ -37,7 +37,7 @@ class TablePulseTemplate(PulseTemplate):
         self._isMeasurementPulse = False # type: bool
         
     def add_entry(self, time: TableValue, voltage: TableValue) -> None:
-        """!@brief Add an entry to this Table pulse template.
+        """!@brief Add an entry to this TablePulseTemplate.
         
         The arguments time and voltage may either be real numbers or a string which
         references a parameter declaration by name. If a non-existing parameter declaration
@@ -72,7 +72,7 @@ class TablePulseTemplate(PulseTemplate):
         return float('inf')
         
     def _sort_entries(self) -> None:
-        """!@brief Sort this Table's entries according to their time value.
+        """!@brief Sort this TablePulseTemplate's entries according to their time value.
         
         If the time value is a parameter reference it is placed in the sorted list
         according to the parameter declarations default, minimum or maximum value
@@ -81,20 +81,20 @@ class TablePulseTemplate(PulseTemplate):
         """
         if self._isSorted:
             return
-        self._entries = sorted(self._entries, key=Table._get_entry_sort_value)
+        self._entries = sorted(self._entries, key=self._get_entry_sort_value)
         self._isSorted = True
         
     def get_entries(self) -> List[TableEntry]:
-        """!@brief Return a sorted copy of this Table's entries."""
+        """!@brief Return a sorted copy of this TablePulseTemplate's entries."""
         self._sort_entries()
         return self._entries.copy()
         
     def remove_entry(self, entry: TableEntry) -> None:
-        """!@brief Removes an entry from this Table pulse template by its index."""
+        """!@brief Removes an entry from this TablePulseTemplate by its index."""
         self._entries.remove(entry)
         
     def declare_parameter(self, name: str, **kwargs) -> None:
-        """!@brief Declare a new parameter for use in this Table.
+        """!@brief Declare a new parameter for use in this TablePulseTemplate.
         
         If a parameter declaration for the given name exists, it is overwritten.
         
@@ -106,12 +106,12 @@ class TablePulseTemplate(PulseTemplate):
         self._parameterDeclarations[name] = ParameterDeclaration(**kwargs)
         
     def remove_parameter_declaration(self, name: str) -> None:
-        """!@brief Remove an existing parameter declaration from this Table."""
+        """!@brief Remove an existing parameter declaration from this TablePulseTemplate."""
         # TODO: check whether the parameter declaration is referenced from entries and delete if not
         raise NotImplementedError()
     
     def set_is_measurement_pulse(self, isMeasurementPulse: bool) -> None:
-        """!@brief Set whether or not this Table represents a measurement pulse."""
+        """!@brief Set whether or not this TablePulseTemplate represents a measurement pulse."""
         self._isMeasurementPulse = isMeasurementPulse
         
     def __len__(self) -> int:
@@ -132,7 +132,7 @@ class TablePulseTemplate(PulseTemplate):
     def get_measurement_windows(self) -> List[Tuple[float, float]]:
         """!@brief Return all measurment windows defined in this PulseTemplate.
         
-        A Table specifies either no measurement windows or exactly one that spans its entire duration,
+        A TablePulseTemplate specifies either no measurement windows or exactly one that spans its entire duration,
         depending on whether set_is_measurement_pulse(True) was called or not.
         """
         if not self._isMeasurementPulse:
