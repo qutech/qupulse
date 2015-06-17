@@ -11,7 +11,13 @@ from Parameter import Parameter
 logger = logging.getLogger(__name__)
 
 class Condition(metaclass = ABCMeta):
-    """docstring for Condition"""
+    """!@brief A condition on which the execution of a pulse may depend.
+    
+    Conditions are used for branching and looping of pulses and
+    thus relevant for BranchPulseTemplate and LoopPulseTemplate.
+    Implementations of Condition may rely on software variables,
+    measured data or be mere placeholders for hardware triggers.
+    """
     def __init__(self, *args, **kwargs):
         super().__init__()
         

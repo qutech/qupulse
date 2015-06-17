@@ -5,3 +5,7 @@ import logging
 
 """LOCAL IMPORTS"""
 logger = logging.getLogger(__name__)
+
+class Pulse:
+    """!@brief A concrete pulse, ready for execution."""
+    pass

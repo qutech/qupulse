@@ -15,17 +15,29 @@ logger = logging.getLogger(__name__)
 TableValue = Union[float, str]
 TableEntry = Tuple[Union[float, str], Union[float, str]]
 
-class Table(PulseTemplate):
-    """docstring for Table"""
+class TablePulseTemplate(PulseTemplate):
+    """!@brief Defines a pulse via linear interpolation of a sequence of (time,voltage)-pairs.
+    
+    TablePulseTemplate stores a list of (time,voltage)-pairs (the table) which is sorted
+    by time and uniquely define a pulse structure via interpolation of voltages of subsequent
+    table entries.
+    TablePulseTemplate provides methods to declare parameters which may be referred to instead of
+    using concrete values for both, time and voltage. If the time of a table entry is a parameter
+    reference, it is sorted into the table according to the first value of default, minimum or maximum
+    which is defined (not None) in the corresponding ParameterDeclaration. If none of these are defined,
+    the entry is placed at the end of the table.
+    A TablePulseTemplate may be flagged as representing a measurement pulse, meaning that it defines a
+    measurement window.
+    """
     def __init__(self):
         super().__init__()
-        self._isSorted = True
+        self._isSorted = True # type : bool
         self._entries = [] # type: List[TableEntry]
         self._parameterDeclarations = {} # type: Dict[str, ParameterDeclaration]
-        self._isMeasurementPulse = False
+        self._isMeasurementPulse = False # type: bool
         
     def add_entry(self, time: TableValue, voltage: TableValue) -> None:
-        """Add an entry to this Table pulse template.
+        """!@brief Add an entry to this Table pulse template.
         
         The arguments time and voltage may either be real numbers or a string which
         references a parameter declaration by name. If a non-existing parameter declaration
@@ -40,12 +52,12 @@ class Table(PulseTemplate):
         
     @staticmethod
     def _get_entry_sort_value(self, entry: TableEntry) -> float:
-        """Determine the value of an entry for sorting purposes.
+        """@brief Determine the value of an entry for sorting purposes.
         
         If the time value is a constant float, that is returned.
-        If the time value is a parameter reference the returned value is the first
+        If the time value is a parameter reference, the returned value is the first
         value of default, minimum or maximum which is defined in the parameter declaration.
-        If all these values are None, the result is len(self)+1 to ensure that the entry will
+        If all these values are None, the result is inf to ensure that the entry will
         appear at the end of a sorted list.
         """
         if isinstance(entry[0]):
@@ -57,10 +69,10 @@ class Table(PulseTemplate):
             return parameterDeclaration.minValue
         if parameterDeclaration.maxValue is not None:
             return parameterDeclaration.maxValue
-        return len(self)+1
+        return float('inf')
         
     def _sort_entries(self) -> None:
-        """Sort this Table's entries according to their time value.
+        """!@brief Sort this Table's entries according to their time value.
         
         If the time value is a parameter reference it is placed in the sorted list
         according to the parameter declarations default, minimum or maximum value
@@ -73,39 +85,36 @@ class Table(PulseTemplate):
         self._isSorted = True
         
     def get_entries(self) -> List[TableEntry]:
-        """Return a sorted copy of this Table's entries."""
+        """!@brief Return a sorted copy of this Table's entries."""
         self._sort_entries()
         return self._entries.copy()
         
     def remove_entry(self, entry: TableEntry) -> None:
-        """Removes an entry from this Table pulse template by its index."""
+        """!@brief Removes an entry from this Table pulse template by its index."""
         self._entries.remove(entry)
         
     def declare_parameter(self, name: str, **kwargs) -> None:
-        """Declare a new parameter for use in this Table.
+        """!@brief Declare a new parameter for use in this Table.
         
         If a parameter declaration for the given name exists, it is overwritten.
         
         Keyword Arguments:
-        min or minValue -- An optional real number specifying the minimum value allowed for the .
-        max or maxValue -- An optional real number specifying the maximum value allowed.
-        default or defaultValue -- An optional real number specifying a default value for the declared pulse template parameter.
+        min -- An optional real number specifying the minimum value allowed for the .
+        max -- An optional real number specifying the maximum value allowed.
+        default -- An optional real number specifying a default value for the declared pulse template parameter.
         """
         self._parameterDeclarations[name] = ParameterDeclaration(**kwargs)
         
     def remove_parameter_declaration(self, name: str) -> None:
-        """Remove an existing parameter declaration from this Table."""
+        """!@brief Remove an existing parameter declaration from this Table."""
         # TODO: check whether the parameter declaration is referenced from entries and delete if not
         raise NotImplementedError()
     
     def set_is_measurement_pulse(self, isMeasurementPulse: bool) -> None:
-        """Set whether or not this Table represents a measurement pulse."""
+        """!@brief Set whether or not this Table represents a measurement pulse."""
         self._isMeasurementPulse = isMeasurementPulse
         
     def __len__(self) -> int:
-        """Defines the behaviour of len(PulseTemplate), which is the sum of all subpulses. 
-        __len__ already provides a type check to assure that only numerical values are returned
-        """
         raise NotImplementedError()
 
     def __str__(self) -> str:
@@ -113,15 +122,15 @@ class Table(PulseTemplate):
         raise NotImplementedError()
     
     def get_parameter_names(self) -> Set[str]:
-        """Return the set of names of declared parameters."""
+        """!@brief Return the set of names of declared parameters."""
         return self._parameterDeclarations.keys()
         
     def get_parameter_declarations(self) -> Dict[str, ParameterDeclaration]:
-        """Return a copy of the dictionary containing the parameter declarations of this PulseTemplate."""
+        """!@brief Return a copy of the dictionary containing the parameter declarations of this PulseTemplate."""
         return self._parameterDeclarations.copy()
 
     def get_measurement_windows(self) -> List[Tuple[float, float]]:
-        """Return all measurment windows defined in this PulseTemplate.
+        """!@brief Return all measurment windows defined in this PulseTemplate.
         
         A Table specifies either no measurement windows or exactly one that spans its entire duration,
         depending on whether set_is_measurement_pulse(True) was called or not.
@@ -129,19 +138,19 @@ class Table(PulseTemplate):
         if not self._isMeasurementPulse:
             return []
         else:
-            return [(0, len(self))]
+            return [(0, len(self))] # TODO: will len be defined?
 
     def is_interruptable(self) -> bool:
-        """Return true, if this PulseTemplate contains points at which it can halt if interrupted."""
+        """!@brief Return true, if this PulseTemplate contains points at which it can halt if interrupted."""
         return False
 
     def generate_waveforms(self, sequencer: "Sequencer", parameters: Dict[str, Parameter]) -> None:
-        """Compile a waveform of the pulse represented by this PulseTemplate and the given parameters using the hardware-specific Sequencer object."""
+        """!@brief Compile a waveform of the pulse represented by this PulseTemplate and the given parameters using the hardware-specific Sequencer object."""
         # TODO: pending detailed definition of Sequencer class
         raise NotImplementedError()
         
 class ParameterNotDeclaredException(Exception):
-    """Indicates that a parameter has not been declared in a Table pulse template."""
+    """!@brief Indicates that a parameter has not been declared in a TablePulseTemplate."""
     
     def __init__(self, parameterName: str):
         super().__init__()

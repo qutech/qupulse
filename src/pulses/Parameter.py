@@ -11,7 +11,14 @@ import logging
 logger = logging.getLogger(__name__)
 
 class Parameter(metaclass = ABCMeta):
-    """A parameter for pulses."""
+    """!@brief A parameter for pulses.
+    
+    Parameter specifies a concrete value which is inserted instead
+    of the parameter declaration reference in a PulseTemplate if it satisfies
+    the minimum and maximum boundary of the corresponding ParameterDeclaration.
+    Implementations of Parameter may provide a single constant value or
+    obtain values by computation (e.g. from measurement results).
+    """
     def __init__(self):
         super().__init__()
 
@@ -25,7 +32,7 @@ class Parameter(metaclass = ABCMeta):
         
         
 class ConstantParameter(Parameter):
-    """A parameter with a constant value."""
+    """!@brief A pulse parameter with a constant value."""
     
     def __init__(self, value: float):
         super().__init__()
@@ -39,7 +46,7 @@ class ConstantParameter(Parameter):
       
 
 class ParameterDeclaration(object):
-    """A declaration of a parameter required by a pulse template.
+    """!@brief A declaration of a parameter required by a pulse template.
     
     PulseTemplates may declare parameters to allow for variations of values in an otherwise
     static pulse structure. ParameterDeclaration represents a declaration of such a parameter
@@ -47,12 +54,12 @@ class ParameterDeclaration(object):
     """
     
     def __init__(self, **kwargs):
-        """Creates a ParameterDeclaration object.
+        """!@brief Creates a ParameterDeclaration object.
         
         Keyword Arguments:
-        min -- An optional real number specifying the minimum value allowed for the .
-        max -- An optional real number specifying the maximum value allowed.
-        default -- An optional real number specifying a default value for the declared pulse template parameter.
+        @param min: float -- An optional real number specifying the minimum value allowed for the .
+        @param max: float -- An optional real number specifying the maximum value allowed.
+        @param default: float -- An optional real number specifying a default value for the declared pulse template parameter.
         """
         super().__init__()
         self._minValue = None
@@ -81,16 +88,19 @@ class ParameterDeclaration(object):
                 
     
     def get_min_value(self) -> Optional[float]:
+        """!@brief Return this ParameterDeclaration's minimum value."""
         return self._minValue
     
     def get_max_value(self) -> Optional[float]:
+        """!@brief Return this ParameterDeclaration's maximum value."""
         return self._maxValue
         
     def get_default_value(self) -> Optional[float]:
+        """!@brief Return this ParameterDeclaration's default value"""
         return self._defaultValue
         
     def get_default_parameter(self) -> ConstantParameter:
-        """Creates a ConstantParameter object holding the default value of this ParameterDeclaration."""
+        """!@brief Creates a ConstantParameter object holding the default value of this ParameterDeclaration."""
         if (self._defaultValue is None):
             raise NoDefaultValueException()
         return ConstantParameter(self._defaultValue)
@@ -100,7 +110,7 @@ class ParameterDeclaration(object):
     defaultValue = property(get_default_value)
 
     def is_parameter_valid(self, p: Parameter) -> bool:
-        """Checks whether a given parameter satisfies this ParameterDeclaration.
+        """!@brief Checks whether a given parameter satisfies this ParameterDeclaration.
         
         A parameter is valid if the following two statements hold:
         - If the declaration specifies a minimum value, the parameter's value must be greater or equal
@@ -112,7 +122,7 @@ class ParameterDeclaration(object):
         return isValid
         
 class NoDefaultValueException(Exception):
-    """Indicates that a ParameterDeclaration specifies no default value."""
+    """!@brief Indicates that a ParameterDeclaration specifies no default value."""
     def __init__(self):
         super().__init__()
         
