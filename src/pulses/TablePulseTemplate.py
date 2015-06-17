@@ -8,6 +8,7 @@ import logging
 """LOCAL IMPORTS"""
 from Parameter import ParameterDeclaration, Parameter
 from PulseTemplate import PulseTemplate
+from HardwareUploadInterface import Waveform, PulseHardwareUploadInterface
 
 logger = logging.getLogger(__name__)
 
@@ -144,8 +145,7 @@ class TablePulseTemplate(PulseTemplate):
         """!@brief Return true, if this PulseTemplate contains points at which it can halt if interrupted."""
         return False
 
-    @abstractmethod
-    def upload_waveform(self, uploadInterface: HardwareUploadInterface, parameters: Dict[str, Parameter]) -> Waveform:
+    def upload_waveform(self, uploadInterface: PulseHardwareUploadInterface, parameters: Dict[str, Parameter]) -> Waveform:
         """!@brief Compile a waveform of the pulse represented by this PulseTemplate and the given parameters using the given HardwareUploadInterface object."""
         raise NotImplementedError()
         
