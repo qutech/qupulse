@@ -77,7 +77,7 @@ class ParameterDeclaration(object):
                 else:
                     raise ValueError("{0} is not a valid argument.".format(key))
             else:
-                raise ValueError("{0}={1} is not a valid argument.".format(key, value))
+                raise TypeError("Argument {0}={1} must be of type float.".format(key, value))
         if self._minValue is not None:
             if (self._maxValue is not None) and (self._minValue > self._maxValue):
                 raise ValueError("Max value ({0}) is less than min value ({1}).".format(self._maxValue, self._minValue))
@@ -120,6 +120,29 @@ class ParameterDeclaration(object):
         isValid &= (self._minValue is None or self._minValue <= p.get_value())
         isValid &= (self._maxValue is None or self._maxValue >= p.get_value())
         return isValid
+        
+class TimeParameterDeclaration(ParameterDeclaration):
+    """!@brief A TimeParameterDeclaration declares a parameter that is used as a time value.
+    
+    All values must be natural numbers.
+    """
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        
+        if self._minValue is None:
+            self._minValue = 0
+        
+        for key in kwargs:
+            value = kwargs[key]
+            if not isinstance(value, numbers.Integral):
+                raise TypeError("{0} value {1} is not an integer.".format(key, value))
+            if value < 0:
+                raise ValueError("{0} value {1} is less than zero.".format(key, value))
+        
+    def is_parameter_valid(self, p: Parameter) -> bool:
+        if not isinstance(p.get_value(), numbers.Integral):
+            return False
+        return super().is_parameter_valid(p)
         
 class NoDefaultValueException(Exception):
     """!@brief Indicates that a ParameterDeclaration specifies no default value."""
