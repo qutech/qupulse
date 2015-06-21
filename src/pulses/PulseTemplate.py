@@ -6,7 +6,7 @@ import logging
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
-from Parameter import ParameterDeclaration, Parameter
+from Parameter import ParameterDeclaration, TimeParameterDeclaration, Parameter
 from HardwareUploadInterface import Waveform, PulseHardwareUploadInterface
 
 logger = logging.getLogger(__name__)
@@ -38,13 +38,23 @@ class PulseTemplate(metaclass = ABCMeta):
         pass
     
     @abstractmethod
-    def get_parameter_names(self) -> Set[str]:
-        """!@brief Return the set of names of declared parameters."""
+    def get_time_parameter_names(self) -> Set[str]:
+        """!@brief Return the set of names of declared time parameters."""
         pass
         
     @abstractmethod
-    def get_parameter_declarations(self) -> Dict[str, ParameterDeclaration]:
-        """!@brief Return a copy of the dictionary containing the parameter declarations of this PulseTemplate."""
+    def get_voltage_parameter_names(self) -> Set[str]:
+        """!@brief Return the set of names of declared voltage parameters."""
+        pass
+        
+    @abstractmethod
+    def get_time_parameter_declarations(self) -> Dict[str, TimeParameterDeclaration]:
+        """!@brief Return a copy of the dictionary containing the time parameter declarations of this PulseTemplate."""
+        pass
+        
+    @abstractmethod
+    def get_voltage_parameter_declarations(self) -> Dict[str, ParameterDeclaration]:
+        """!@brief Return a copy of the dictionary containing the voltage parameter declarations of this PulseTemplate."""
         pass
 
     @abstractmethod
