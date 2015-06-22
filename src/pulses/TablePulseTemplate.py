@@ -44,12 +44,12 @@ class TablePulseTemplate(PulseTemplate):
         
         The arguments time and voltage may either be real numbers or a string which
         references a parameter declaration by name. If a non-existing parameter declaration
-        is referenced, this method raises a ParameterNotDeclaredException.
+        is referenced, it is created.
         """
         if isinstance(time, str) and not self._timeParameterDeclarations.has_key(time):
-            raise ParameterNotDeclaredException(time)
+            self.declare_time_parameter(time)
         if isinstance(voltage, str) and not self._voltageParameterDeclarations.has_key(voltage):
-            raise ParameterNotDeclaredException(voltage)
+            self.declare_voltage_parameter(voltage)
         self._isSorted = False
         self._entries.add((time, voltage))
         
@@ -119,6 +119,14 @@ class TablePulseTemplate(PulseTemplate):
         default -- An optional real number specifying a default value for the declared pulse template parameter.
         """
         self._voltageParameterDeclarations[name] = ParameterDeclaration(**kwargs)
+        
+    def get_time_parameter_declaration(self, name: str) -> TimeParameterDeclaration:
+        """!@brief Return the TimeParameterDeclaration associated with the given parameter name."""
+        return self._timeParameterDeclarations[name]
+        
+    def get_voltage_parameter_declaration(self, name:str) -> ParameterDeclaration:
+        """!@brief Return the voltage ParameterDeclaration associated with the given parameter name."""
+        return self._voltageParameterDeclarations[name]
         
     def remove_time_parameter_declaration(self, name: str) -> None:
         """!@brief Remove an existing time parameter declaration from this TablePulseTemplate."""
