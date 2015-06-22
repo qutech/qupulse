@@ -6,9 +6,9 @@ import logging
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
-from Parameter import ParameterDeclaration, TimeParameterDeclaration, Parameter
-from PulseTemplate import PulseTemplate
-from HardwareUploadInterface import Waveform, PulseHardwareUploadInterface
+from pulses.Parameter import ParameterDeclaration, TimeParameterDeclaration, Parameter
+from pulses.PulseTemplate import PulseTemplate
+from pulses.HardwareUploadInterface import Waveform, PulseHardwareUploadInterface
 
 logger = logging.getLogger(__name__)
 
@@ -122,13 +122,17 @@ class TablePulseTemplate(PulseTemplate):
         
     def remove_time_parameter_declaration(self, name: str) -> None:
         """!@brief Remove an existing time parameter declaration from this TablePulseTemplate."""
-        # TODO: check whether the parameter declaration is referenced from entries and delete if not
-        raise NotImplementedError()
+        for entry in self._entries:
+            if (isinstance(entry[0], str)) and (name == entry[0]):
+                raise ParameterDeclarationInUseException(name)
+        self._timeParameterDeclarations.remove(name)
         
     def remove_voltage_parameter_declaration(self, name: str) -> None:
         """!@brief Remove an existing voltage parameter declaration from this TablePulseTemplate."""
-        # TODO: check whether the parameter declaration is referenced from entries and delete if not
-        raise NotImplementedError()
+        for entry in self._entries:
+            if (isinstance(entry[1], str)) and (name == entry[1]):
+                raise ParameterDeclarationInUseException(name)
+        self._timeParameterDeclarations.remove(name)
     
     def set_is_measurement_pulse(self, isMeasurementPulse: bool) -> None:
         """!@brief Set whether or not this TablePulseTemplate represents a measurement pulse."""
@@ -136,10 +140,14 @@ class TablePulseTemplate(PulseTemplate):
         
     def __len__(self) -> int:
         raise NotImplementedError()
+        
+    def get_length(self, timeParameters: Dict[str, Parameter]) -> int:
+        """!@brief Return the length of the pulse instantiated from this PulseTemplate with the given time parameters."""
+        raise NotImplementedError()
 
     def __str__(self) -> str:
         # TODO: come up with a meaningful description which can be returned here
-        raise NotImplementedError()
+        return __name__
     
     def get_time_parameter_names(self) -> Set[str]:
         """!@brief Return the set of names of declared time parameters."""
@@ -175,6 +183,16 @@ class TablePulseTemplate(PulseTemplate):
     def upload_waveform(self, uploadInterface: PulseHardwareUploadInterface, parameters: Dict[str, Parameter]) -> Waveform:
         """!@brief Compile a waveform of the pulse represented by this PulseTemplate and the given parameters using the given HardwareUploadInterface object."""
         raise NotImplementedError()
+        
+class ParameterDeclarationInUseException(Exception):
+    """!@brief Indicated that a parameter declaration which should be deleted is in use."""
+    
+    def __init__(self, declarationName: str):
+        super.__init__()
+        self.declarationName = declarationName
+        
+    def __str__(self):
+        return "The parameter declaration {0} is in use and cannot be deleted.".format(self.declarationName)
         
 class ParameterNotDeclaredException(Exception):
     """!@brief Indicates that a parameter has not been declared in a TablePulseTemplate."""

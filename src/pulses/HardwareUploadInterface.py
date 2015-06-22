@@ -4,9 +4,9 @@ from abc import ABCMeta, abstractmethod
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
-from Pulse import Pulse
+from pulses.Pulse import Pulse
 
-class Waveform(metclass = ABCMeta):
+class Waveform(metaclass = ABCMeta):
     """!@brief Waveform representation of a pulse. Interface to hardware.
     """
     

@@ -3,7 +3,7 @@ import logging
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
-from PulseTemplate import PulseTemplate
+from pulse.PulseTemplate import PulseTemplate
 
 logger = logging.getLogger(__name__)
 
