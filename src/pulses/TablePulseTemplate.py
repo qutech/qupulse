@@ -184,6 +184,52 @@ class TablePulseTemplate(PulseTemplate):
         """!@brief Compile a waveform of the pulse represented by this PulseTemplate and the given parameters using the given HardwareUploadInterface object."""
         raise NotImplementedError()
         
+    def _get_entries_instantiated(self, timeParameters: Dict[str, Parameter], voltageParameters: Dict[str, Parameter]) -> List[Tuple[int, float]]:
+        """!@brief Return a sorted list of all table entries with concrete values provided by the given parameters."""
+        instantiatedEntries = [] # type: List[Tuple[int, float]]
+        for entry in self._entries:
+            timeValue = None # type: int
+            voltageValue = None # type: float
+            # resolve time parameter references
+            if isinstance(entry[0], str):
+                parameterDeclaration = self._timeParameterDeclarations[entry[0]] # type: TimeParameterDeclaration
+                if timeParameters.has_key(entry[0]):
+                    parameter = timeParameters[entry[0]]
+                    if not parameterDeclaration.is_parameter_valid(parameter):
+                        raise ParameterValueIllegalException(entry[0], parameter, parameterDeclaration)
+                    timeValue = parameter.get_value()
+                elif parameterDeclaration.defaultValue is not None:
+                    timeValue = parameterDeclaration.defaultValue
+                else:
+                    raise ParameterNotProvidedException(entry[0])
+            else:
+                timeValue = entry[0]
+            # resolve voltage parameter references
+            if isinstance(entry[1], str):
+                parameterDeclaration = self._voltageParameterDeclarations[entry[1]] # type: ParameterDeclaration
+                if voltageParameters.has_key(entry[1]):
+                    parameter = voltageParameters[entry[1]]
+                    if not parameterDeclaration.is_parameter_valid(parameter):
+                        raise ParameterValueIllegalException(entry[1], parameter, parameterDeclaration)
+                    voltageValue = parameter.get_value()
+                elif parameterDeclaration.defaultValue is not None:
+                    voltageValue = parameterDeclaration.defaultValue
+                else:
+                    raise ParameterNotProvidedException(entry[1])
+            else:
+                voltageValue = entry[1]
+                
+            instantiatedEntries.add((timeValue, voltageValue))
+            
+        # sanity check: no time value must occur more than once
+        lastTime = -1 # type: int
+        for entry in instantiatedEntries:
+            if entry[0] <= lastTime:
+                raise DuplicatedTimeEntryException(entry[0])
+            lastTime = entry[0]
+            
+        return sorted(instantiatedEntries)
+        
 class ParameterDeclarationInUseException(Exception):
     """!@brief Indicated that a parameter declaration which should be deleted is in use."""
     
@@ -203,3 +249,36 @@ class ParameterNotDeclaredException(Exception):
         
     def __str__(self):
         return "The parameter {0} has not been declared in the PulseTemplate.".format(self.parameterName)
+
+class ParameterNotProvidedException(Exception):
+    """!@brief Indicates that a required parameter value was not provided."""
+    
+    def __init__(self, parameterName: str):
+        super().__init__()
+        self.parameterName = parameterName
+        
+    def __str__(self):
+        return "No value was provided for parameter {0} and no default value was specified.".format(self.parameterName)
+        
+class ParameterValueIllegalException(Exception):
+    """!@brief Indicates that the value provided for a parameter is illegal, i.e., is outside the parameter's bounds or of wrong type."""
+    
+    def __init__(self, parameterName: str, parameter: Parameter, parameterDeclaration: ParameterDeclaration):
+        super().__init__()
+        self.parameterName = parameterName
+        self.parameter = parameter
+        self.parameterDeclaration = parameterDeclaration
+        
+    def __str__(self):
+        return "The value {0} provided for parameter {1} is illegal (min = {2}, max = {3})".format(
+            self.parameterName, self.parameter.get_value(), self.parameterDeclaration.minValue, self.parameterDeclaration.maxValue)
+            
+class DuplicatedTimeEntryException(Exception):
+    """!@brief Indicates that a time value occurred twice in TablePulseTemplate instantiation."""
+    
+    def __init__(self, value: int):
+        super().__init__()
+        self.value = value
+        
+    def __str__(self):
+        return "The time value {0} occurred twice.".format(self.value)
