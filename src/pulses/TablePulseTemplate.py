@@ -8,7 +8,8 @@ import logging
 """LOCAL IMPORTS"""
 from pulses.Parameter import ParameterDeclaration, TimeParameterDeclaration, Parameter
 from pulses.PulseTemplate import PulseTemplate
-from pulses.HardwareUploadInterface import Waveform, PulseHardwareUploadInterface
+from pulses.Sequencer import InstructionBlock, Sequencer
+from pulses.Instructions import WaveformTable, Waveform
 
 logger = logging.getLogger(__name__)
 
@@ -187,13 +188,10 @@ class TablePulseTemplate(PulseTemplate):
     def is_interruptable(self) -> bool:
         """!@brief Return true, if this PulseTemplate contains points at which it can halt if interrupted."""
         return False
-
-    def upload_waveform(self, uploadInterface: PulseHardwareUploadInterface, parameters: Dict[str, Parameter]) -> Waveform:
-        """!@brief Compile a waveform of the pulse represented by this PulseTemplate and the given parameters using the given HardwareUploadInterface object."""
-        raise NotImplementedError()
         
-    def _get_entries_instantiated(self, timeParameters: Dict[str, Parameter], voltageParameters: Dict[str, Parameter]) -> List[Tuple[int, float]]:
+    def _get_entries_instantiated(self, timeParameters: Dict[str, Parameter], voltageParameters: Dict[str, Parameter]) -> WaveformTable:
         """!@brief Return a sorted list of all table entries with concrete values provided by the given parameters."""
+        #todo: maybe cache result
         instantiatedEntries = [] # type: List[Tuple[int, float]]
         for entry in self._entries:
             timeValue = None # type: int
@@ -236,7 +234,11 @@ class TablePulseTemplate(PulseTemplate):
                 raise DuplicatedTimeEntryException(entry[0])
             lastTime = entry[0]
             
-        return sorted(instantiatedEntries)
+        return tuple(sorted(instantiatedEntries))
+        
+    def build_sequence(self, sequencer: Sequencer, timeParameters: Dict[str, Parameter], voltageParameters: Dict[str, Parameter], instructionBlock: InstructionBlock) -> None:
+        waveform = sequencer.register_waveform(self._get_entries_instantiated(timeParameters, voltageParameters))
+        instructionBlock.add_instruction_exec(waveform)
         
 class ParameterDeclarationInUseException(Exception):
     """!@brief Indicates that a parameter declaration which should be deleted is in use."""

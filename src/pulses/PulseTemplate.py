@@ -6,12 +6,12 @@ import logging
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
-from pulses.Parameter import ParameterDeclaration, TimeParameterDeclaration, Parameter
-from pulses.HardwareUploadInterface import Waveform, PulseHardwareUploadInterface
+from pulses.Parameter import ParameterDeclaration, TimeParameterDeclaration
+from pulses.Sequencer import SequencingElement
 
 logger = logging.getLogger(__name__)
 
-class PulseTemplate(metaclass = ABCMeta):
+class PulseTemplate(SequencingElement, metaclass = ABCMeta):
     """!@brief A PulseTemplate represents the parametrized general structure of a pulse.
     
     A PulseTemplate described a pulse in an abstract way: It defines the structure of a pulse
@@ -67,11 +67,10 @@ class PulseTemplate(metaclass = ABCMeta):
     def is_interruptable(self) -> bool:
         """!@brief Return true, if this PulseTemplate contains points at which it can halt if interrupted."""
         pass
-
-    @abstractmethod
-    def upload_waveform(self, uploadInterface: PulseHardwareUploadInterface, parameters: Dict[str, Parameter]) -> Waveform:
-        """!@brief Compile a waveform of the pulse represented by this PulseTemplate and the given parameters using the given HardwareUploadInterface object."""
-        pass
+       
+    ##@abstractmethod
+    ##def build_sequence(self, sequencer: Sequencer, timeParameters: Dict[str, Parameter], voltageParameters: Dict[str, Parameter], instructionBlock: InstructionBlock) -> None:
+        ##pass
 
 
 class ParameterNotInPulseTemplateException(Exception):
