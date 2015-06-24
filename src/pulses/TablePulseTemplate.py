@@ -46,9 +46,9 @@ class TablePulseTemplate(PulseTemplate):
         references a parameter declaration by name. If a non-existing parameter declaration
         is referenced, it is created.
         """
-        if isinstance(time, str) and not self._timeParameterDeclarations.has_key(time):
+        if isinstance(time, str) and time not in self._timeParameterDeclarations:
             self.declare_time_parameter(time)
-        if isinstance(voltage, str) and not self._voltageParameterDeclarations.has_key(voltage):
+        if isinstance(voltage, str) and voltage not in self._voltageParameterDeclarations:
             self.declare_voltage_parameter(voltage)
         self._isSorted = False
         self._entries.add((time, voltage))
@@ -201,7 +201,7 @@ class TablePulseTemplate(PulseTemplate):
             # resolve time parameter references
             if isinstance(entry[0], str):
                 parameterDeclaration = self._timeParameterDeclarations[entry[0]] # type: TimeParameterDeclaration
-                if timeParameters.has_key(entry[0]):
+                if entry[0] in timeParameters:
                     parameter = timeParameters[entry[0]]
                     if not parameterDeclaration.is_parameter_valid(parameter):
                         raise ParameterValueIllegalException(entry[0], parameter, parameterDeclaration)
@@ -215,7 +215,7 @@ class TablePulseTemplate(PulseTemplate):
             # resolve voltage parameter references
             if isinstance(entry[1], str):
                 parameterDeclaration = self._voltageParameterDeclarations[entry[1]] # type: ParameterDeclaration
-                if voltageParameters.has_key(entry[1]):
+                if entry[1] in voltageParameters:
                     parameter = voltageParameters[entry[1]]
                     if not parameterDeclaration.is_parameter_valid(parameter):
                         raise ParameterValueIllegalException(entry[1], parameter, parameterDeclaration)
