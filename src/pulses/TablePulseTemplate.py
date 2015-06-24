@@ -12,11 +12,6 @@ from pulses.HardwareUploadInterface import Waveform, PulseHardwareUploadInterfac
 
 logger = logging.getLogger(__name__)
 
-
-TimeTableValue = Union[int, str]
-VoltageTableValue = Union[float, str]
-TableEntry = Tuple[TimeTableValue, VoltageTableValue]
-
 class TablePulseTemplate(PulseTemplate):
     """!@brief Defines a pulse via linear interpolation of a sequence of (time,voltage)-pairs.
     
@@ -31,6 +26,11 @@ class TablePulseTemplate(PulseTemplate):
     A TablePulseTemplate may be flagged as representing a measurement pulse, meaning that it defines a
     measurement window.
     """
+    
+    TimeValue = Union[int, str]
+    VoltageValue = Union[float, str]
+    TableEntry = Tuple[TimeValue, VoltageValue]
+    
     def __init__(self):
         super().__init__()
         self._isSorted = True # type : bool
@@ -39,7 +39,7 @@ class TablePulseTemplate(PulseTemplate):
         self._voltageParameterDeclarations = {} # type: Dict[str, ParameterDeclaration]
         self._isMeasurementPulse = False # type: bool
         
-    def add_entry(self, time: TimeTableValue, voltage: VoltageTableValue) -> None:
+    def add_entry(self, time: TimeValue, voltage: VoltageValue) -> None:
         """!@brief Add an entry to this TablePulseTemplate.
         
         The arguments time and voltage may either be real numbers or a string which
@@ -239,7 +239,7 @@ class TablePulseTemplate(PulseTemplate):
         return sorted(instantiatedEntries)
         
 class ParameterDeclarationInUseException(Exception):
-    """!@brief Indicated that a parameter declaration which should be deleted is in use."""
+    """!@brief Indicates that a parameter declaration which should be deleted is in use."""
     
     def __init__(self, declarationName: str):
         super.__init__()
