@@ -16,6 +16,10 @@ class SequencingElement(metaclass = ABCMeta):
     @abstractmethod
     def build_sequence(self, sequencer: "Sequencer", timeParameters: Dict[str, Parameter], voltageParameters: Dict[str, Parameter], instructionBlock: InstructionBlock) -> None:
         pass
+        
+    @abstractmethod
+    def requires_stop(self) -> bool:
+        pass
     
 class SequencingHardwareInterface(metaclass = ABCMeta):
 
@@ -36,20 +40,20 @@ class Sequencer:
         self._hardwareInterface = hardwareInterface
         self._waveforms = dict() #type: Dict[int, Waveform]
         
-    def push(self, pulseTemplate: SequencingElement, timeParameters: Dict[str, Parameter], voltageParameters: Dict[str, Parameter], targetBlock: InstructionBlock = None) -> None:
-        self._sequencingStack.append((pulseTemplate, timeParameters, voltageParameters, targetBlock))
+    def push(self, sequencingElement: SequencingElement, timeParameters: Dict[str, Parameter], voltageParameters: Dict[str, Parameter], targetBlock: InstructionBlock = None) -> None:
+        self._sequencingStack.append((sequencingElement, timeParameters, voltageParameters, targetBlock))
         
     def build(self) -> InstructionBlock:
         mainBlock = InstructionBlock()
         if not self.has_finished():
-            (template, timeParameters, voltageParameters, targetBlock) = self._sequencingStack.pop()
-            while True: # there seems to be no do-while loop in python and "while" True with a break condition is a suggested solution
+            (element, timeParameters, voltageParameters, targetBlock) = self._sequencingStack.pop()
+            while True: # there seems to be no do-while loop in python and "while True" with a break condition is a suggested solution
                 if targetBlock is None:
                     targetBlock = mainBlock
-                template.build_sequence(self, timeParameters, voltageParameters, targetBlock)
-                if (self.has_finished()) or (self._sequencingStack[-1].requires_stop()):
+                element.build_sequence(self, timeParameters, voltageParameters, targetBlock)
+                if (self.has_finished()) or (self._sequencingStack[-1][0].requires_stop()):
                     break
-                (template, timeParameters, voltageParameters, targetBlock) = self._sequencingStack.pop()
+                (element, timeParameters, voltageParameters, targetBlock) = self._sequencingStack.pop()
         
         mainBlock.finalize()
         return mainBlock
