@@ -176,7 +176,11 @@ class TablePulseTemplate(PulseTemplate):
         A TablePulseTemplate specifies either no measurement windows or exactly one that spans its entire duration,
         depending on whether set_is_measurement_pulse(True) was called or not.
         """
-        return NotImplementedError()
+        if timeParameters is None:
+            raise NotImplementedError()
+        
+        instantiatedEntries = self._get_entries_instantiated(timeParameters, None)
+        return (0, instantiatedEntries[-1][0])
 
     def is_interruptable(self) -> bool:
         """!@brief Return true, if this PulseTemplate contains points at which it can halt if interrupted."""
@@ -186,12 +190,15 @@ class TablePulseTemplate(PulseTemplate):
         """!@brief Compile a waveform of the pulse represented by this PulseTemplate and the given parameters using the given HardwareUploadInterface object."""
         raise NotImplementedError()
         
-    def _get_entries_instantiated(self, timeParameters: Dict[str, Parameter], voltageParameters: Dict[str, Parameter]) -> List[Tuple[int, float]]:
-        """!@brief Return a sorted list of all table entries with concrete values provided by the given parameters."""
-        instantiatedEntries = [] # type: List[Tuple[int, float]]
+    def _get_entries_instantiated(self, timeParameters: Dict[str, Parameter], voltageParameters: Dict[str, Parameter] = None) -> List[Tuple[int, VoltageValue]]:
+        """!@brief Return a sorted list of all table entries with concrete values provided by the given parameters.
+        
+        The voltageParameters argument may be None in which case voltage parameter references are not resolved.
+        """
+        instantiatedEntries = [] # type: List[Tuple[int, VoltageValue]]
         for entry in self._entries:
             timeValue = None # type: int
-            voltageValue = None # type: float
+            voltageValue = None # type: VoltageValue
             # resolve time parameter references
             if isinstance(entry[0], str):
                 parameterDeclaration = self._timeParameterDeclarations[entry[0]] # type: TimeParameterDeclaration
@@ -206,8 +213,8 @@ class TablePulseTemplate(PulseTemplate):
                     raise ParameterNotProvidedException(entry[0])
             else:
                 timeValue = entry[0]
-            # resolve voltage parameter references
-            if isinstance(entry[1], str):
+            # resolve voltage parameter references only if voltageParameters argument is not None, otherwise they are irrelevant
+            if isinstance(entry[1], str) and voltageParameters is not None:
                 parameterDeclaration = self._voltageParameterDeclarations[entry[1]] # type: ParameterDeclaration
                 if entry[1] in voltageParameters:
                     parameter = voltageParameters[entry[1]]
@@ -220,7 +227,7 @@ class TablePulseTemplate(PulseTemplate):
                     raise ParameterNotProvidedException(entry[1])
             else:
                 voltageValue = entry[1]
-                
+            
             instantiatedEntries.add((timeValue, voltageValue))
             
         # sanity check: no time value must occur more than once
