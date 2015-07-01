@@ -41,7 +41,7 @@ class LoopPulseTemplate(PulseTemplate):
         """!@brief Return a copy of the dictionary containing the voltage parameter declarations of this PulseTemplate."""
         raise NotImplementedError()
 
-    def get_measurement_windows(self, timeParameters: Dict[str, Parameter] = None) -> List[MeasurementWindow]:
+    def get_measurement_windows(self, time_parameters: Dict[str, Parameter] = None) -> List[MeasurementWindow]:
         """!@brief Return all measurement windows defined in this PulseTemplate."""
         raise NotImplementedError()
 
@@ -49,7 +49,7 @@ class LoopPulseTemplate(PulseTemplate):
         """!@brief Return true, if this PulseTemplate contains points at which it can halt if interrupted."""
         raise NotImplementedError()
 
-    def upload_waveform(self, uploadInterface: PulseHardwareUploadInterface, parameters: Dict[str, Parameter]) -> Waveform:
+    def upload_waveform(self, upload_interface: PulseHardwareUploadInterface, parameters: Dict[str, Parameter]) -> Waveform:
         """!@brief Compile a waveform of the pulse represented by this PulseTemplate and the given parameters using the given HardwareUploadInterface object."""
         raise NotImplementedError()
         

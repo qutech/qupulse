@@ -52,7 +52,7 @@ class PulseTemplate(metaclass = ABCMeta):
         pass
 
     @abstractmethod
-    def get_measurement_windows(self, timeParameters: Dict[str, Parameter] = None) -> List[MeasurementWindow]:
+    def get_measurement_windows(self, time_parameters: Dict[str, Parameter] = None) -> List[MeasurementWindow]:
         """!@brief Return all measurement windows defined in this PulseTemplate."""
         pass
 
@@ -62,7 +62,7 @@ class PulseTemplate(metaclass = ABCMeta):
         pass
 
     @abstractmethod
-    def upload_waveform(self, uploadInterface: PulseHardwareUploadInterface, parameters: Dict[str, Parameter]) -> Waveform:
+    def upload_waveform(self, upload_interface: PulseHardwareUploadInterface, parameters: Dict[str, Parameter]) -> Waveform:
         """!@brief Compile a waveform of the pulse represented by this PulseTemplate and the given parameters using the given HardwareUploadInterface object."""
         pass
 
