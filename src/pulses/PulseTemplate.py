@@ -11,6 +11,8 @@ from pulses.HardwareUploadInterface import Waveform, PulseHardwareUploadInterfac
 
 logger = logging.getLogger(__name__)
 
+MeasurementWindow = Tuple[int, int]
+
 class PulseTemplate(metaclass = ABCMeta):
     """!@brief A PulseTemplate represents the parametrized general structure of a pulse.
     
@@ -24,14 +26,6 @@ class PulseTemplate(metaclass = ABCMeta):
     
     def __init__(self):
         super().__init__()
-        
-    @abstractmethod
-    def __len__(self) -> int:
-        """Defines the behaviour of len(PulseTemplate), which is the sum of all subpulses. 
-        __len__ already provides a type check to assure that only numerical values are returned
-        """
-        # TODO: decide whether or not measuring the length of a PulseTemplate actually makes sense, since it may depend on parameters (maybe move to Pulse)
-        pass
 
     @abstractmethod
     def __str__(self) -> str:
@@ -58,9 +52,8 @@ class PulseTemplate(metaclass = ABCMeta):
         pass
 
     @abstractmethod
-    def get_measurement_windows(self) -> List[Tuple[float, float]]:
-        """!@brief Return all measurment windows defined in this PulseTemplate."""
-        # TODO: decide whether or not defining exact measurment windows on templates makes sense (maybe move to Pulse)
+    def get_measurement_windows(self, timeParameters: Dict[str, Parameter] = None) -> List[MeasurementWindow]:
+        """!@brief Return all measurement windows defined in this PulseTemplate."""
         pass
 
     @abstractmethod

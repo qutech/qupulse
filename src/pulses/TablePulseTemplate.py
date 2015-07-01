@@ -7,7 +7,7 @@ import logging
 
 """LOCAL IMPORTS"""
 from pulses.Parameter import ParameterDeclaration, TimeParameterDeclaration, Parameter
-from pulses.PulseTemplate import PulseTemplate
+from pulses.PulseTemplate import PulseTemplate, MeasurementWindow
 from pulses.HardwareUploadInterface import Waveform, PulseHardwareUploadInterface
 
 logger = logging.getLogger(__name__)
@@ -145,16 +145,8 @@ class TablePulseTemplate(PulseTemplate):
     def set_is_measurement_pulse(self, isMeasurementPulse: bool) -> None:
         """!@brief Set whether or not this TablePulseTemplate represents a measurement pulse."""
         self._isMeasurementPulse = isMeasurementPulse
-        
-    def __len__(self) -> int:
-        raise NotImplementedError()
-        
-    def get_length(self, timeParameters: Dict[str, Parameter]) -> int:
-        """!@brief Return the length of the pulse instantiated from this PulseTemplate with the given time parameters."""
-        raise NotImplementedError()
 
     def __str__(self) -> str:
-        # TODO: come up with a meaningful description which can be returned here
         return __name__
     
     def get_time_parameter_names(self) -> Set[str]:
@@ -172,17 +164,14 @@ class TablePulseTemplate(PulseTemplate):
     def get_voltage_parameter_declarations(self) -> Dict[str, ParameterDeclaration]:
         """!@brief Return a copy of the dictionary containing the voltage parameter declarations of this PulseTemplate."""
         return self._voltageParameterDeclarations.copy()
-
-    def get_measurement_windows(self) -> List[Tuple[float, float]]:
+        
+    def get_measurement_windows(self, timeParameters: Dict[str, Parameter] = None) -> List[MeasurementWindow]:
         """!@brief Return all measurement windows defined in this PulseTemplate.
         
         A TablePulseTemplate specifies either no measurement windows or exactly one that spans its entire duration,
         depending on whether set_is_measurement_pulse(True) was called or not.
         """
-        if not self._isMeasurementPulse:
-            return []
-        else:
-            return [(0, len(self))] # TODO: will len be defined?
+        return NotImplementedError()
 
     def is_interruptable(self) -> bool:
         """!@brief Return true, if this PulseTemplate contains points at which it can halt if interrupted."""
