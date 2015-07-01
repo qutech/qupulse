@@ -46,8 +46,13 @@ class TablePulseTemplate(PulseTemplate):
         references a parameter declaration by name. If a non-existing parameter declaration
         is referenced, it is created.
         """
-        if isinstance(time, str) and time not in self._timeParameterDeclarations:
-            self.declare_time_parameter(time)
+        if isinstance(time, str):
+            if time not in self._timeParameterDeclarations:
+                self.declare_time_parameter(time)
+        else:
+            if time < 0:
+                raise ValueError("Argument time must be positive, was: {}!".format(time))
+                
         if isinstance(voltage, str) and voltage not in self._voltageParameterDeclarations:
             self.declare_voltage_parameter(voltage)
         self._isSorted = False
