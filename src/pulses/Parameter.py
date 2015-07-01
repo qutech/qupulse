@@ -36,10 +36,10 @@ class ConstantParameter(Parameter):
     
     def __init__(self, value: float):
         super().__init__()
-        self._value = value
+        self.__value = value
         
     def get_value(self) -> float:
-        return self._value
+        return self.__value
         
     def requires_stop(self) -> bool:
         return False
@@ -62,52 +62,52 @@ class ParameterDeclaration(object):
         @param default: float -- An optional real number specifying a default value for the declared pulse template parameter.
         """
         super().__init__()
-        self._minValue = None
-        self._maxValue = None
-        self._defaultValue = None
+        self._min_value = None
+        self._max_value = None
+        self._default_value = None
         for key in kwargs:
             value = kwargs[key]
             if isinstance(value, numbers.Real):
                 if key == "min":
-                    self._minValue = value
+                    self._min_value = value
                 elif key == "max":
-                    self._maxValue = value
+                    self._max_value = value
                 elif key == "default":
-                    self._defaultValue = value
+                    self._default_value = value
                 else:
                     raise ValueError("{0} is not a valid argument.".format(key))
             else:
                 raise TypeError("Argument {0}={1} must be of type float.".format(key, value))
-        if self._minValue is not None:
-            if (self._maxValue is not None) and (self._minValue > self._maxValue):
-                raise ValueError("Max value ({0}) is less than min value ({1}).".format(self._maxValue, self._minValue))
-            if (self._defaultValue is not None) and (self._minValue > self._defaultValue):
-                raise ValueError("Default value({0}) is less than min value ({1}).".format(self._defaultValue, self._minValue))
-        if (self._maxValue is not None) and (self._defaultValue is not None) and (self._defaultValue > self._maxValue):
-            raise ValueError("Default value ({0}) is greater than max value ({1}).".format(self._defaultValue, self._maxValue))
-                
+        if self._min_value is not None:
+            if (self._max_value is not None) and (self._min_value > self._max_value):
+                raise ValueError("Max value ({0}) is less than min value ({1}).".format(self._max_value, self._min_value))
+            if (self._default_value is not None) and (self._min_value > self._default_value):
+                raise ValueError("Default value({0}) is less than min value ({1}).".format(self._default_value, self._min_value))
+        if (self._max_value is not None) and (self._default_value is not None) and (self._default_value > self._max_value):
+            raise ValueError("Default value ({0}) is greater than max value ({1}).".format(self._default_value, self._max_value))
+        
     
     def get_min_value(self) -> Optional[float]:
         """!@brief Return this ParameterDeclaration's minimum value."""
-        return self._minValue
+        return self._min_value
     
     def get_max_value(self) -> Optional[float]:
         """!@brief Return this ParameterDeclaration's maximum value."""
-        return self._maxValue
+        return self._max_value
         
     def get_default_value(self) -> Optional[float]:
         """!@brief Return this ParameterDeclaration's default value"""
-        return self._defaultValue
+        return self._default_value
         
     def get_default_parameter(self) -> ConstantParameter:
         """!@brief Creates a ConstantParameter object holding the default value of this ParameterDeclaration."""
-        if (self._defaultValue is None):
+        if (self._default_value is None):
             raise NoDefaultValueException()
-        return ConstantParameter(self._defaultValue)
+        return ConstantParameter(self._default_value)
     
-    minValue = property(get_min_value)
-    maxValue = property(get_max_value)
-    defaultValue = property(get_default_value)
+    min_value = property(get_min_value)
+    max_value = property(get_max_value)
+    default_value = property(get_default_value)
 
     def is_parameter_valid(self, p: Parameter) -> bool:
         """!@brief Checks whether a given parameter satisfies this ParameterDeclaration.
@@ -116,10 +116,10 @@ class ParameterDeclaration(object):
         - If the declaration specifies a minimum value, the parameter's value must be greater or equal
         - If the declaration specifies a maximum value, the parameter's value must be less or equal
         """
-        isValid = True
-        isValid &= (self._minValue is None or self._minValue <= p.get_value())
-        isValid &= (self._maxValue is None or self._maxValue >= p.get_value())
-        return isValid
+        is_valid = True
+        is_valid &= (self._min_value is None or self._min_value <= p.get_value())
+        is_valid &= (self._max_value is None or self._max_value >= p.get_value())
+        return is_valid
         
 class TimeParameterDeclaration(ParameterDeclaration):
     """!@brief A TimeParameterDeclaration declares a parameter that is used as a time value.
@@ -129,8 +129,8 @@ class TimeParameterDeclaration(ParameterDeclaration):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         
-        if self._minValue is None:
-            self._minValue = 0
+        if self._min_value is None:
+            self._min_value = 0
         
         for key in kwargs:
             value = kwargs[key]
