@@ -17,8 +17,8 @@ class SequencingElement(metaclass = ABCMeta):
     def build_sequence(self, sequencer: "Sequencer", time_parameters: Dict[str, Parameter], voltage_parameters: Dict[str, Parameter], instruction_block: InstructionBlock) -> None:
         pass
         
-    @abstractproperty
-    def requires_stop(self) -> bool:
+    @abstractmethod
+    def requires_stop(self, time_parameters: Dict[str, Parameter], voltage_parameters: Dict[str, Parameter]) -> bool:
         pass
     
 class SequencingHardwareInterface(metaclass = ABCMeta):
@@ -51,7 +51,7 @@ class Sequencer:
                 if target_block is None:
                     target_block = main_block
                 element.build_sequence(self, time_parameters, voltage_parameters, target_block)
-                if (self.has_finished()) or (self.__sequencing_stack[-1][0].requires_stop):
+                if (self.has_finished()) or (self.__sequencing_stack[-1][0].requires_stop(time_parameters, voltage_parameters)):
                     break
                 (element, time_parameters, voltage_parameters, target_block) = self.__sequencing_stack.pop()
         

@@ -13,7 +13,7 @@ class DummySequencingElement(SequencingElement):
         self.target_block = None
         self.time_parameters = None
         self.voltage_parameters = None
-        self.requires_stop = requires_stop
+        self.requires_stop_ = requires_stop
     
     def build_sequence(self, sequencer: Sequencer, time_parameters: Dict[str, Parameter], voltage_parameters: Dict[str, Parameter], instruction_block: InstructionBlock) -> None:
         self.call_counter += 1
@@ -21,8 +21,8 @@ class DummySequencingElement(SequencingElement):
         self.time_parameters = time_parameters
         self.voltage_parameters = voltage_parameters
         
-    def requires_stop(self) -> bool:
-        return self.requires_stop
+    def requires_stop(self, time_parameters: Dict[str, Parameter], voltage_parameters: Dict[str, Parameter]) -> bool:
+        return self.requires_stop_
 
         
 class DummySequencingHardware(SequencingHardwareInterface):
