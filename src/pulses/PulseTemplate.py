@@ -6,7 +6,7 @@ import logging
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
-from pulses.Parameter import ParameterDeclaration, TimeParameterDeclaration
+from pulses.Parameter import ParameterDeclaration, TimeParameterDeclaration, Parameter
 from pulses.Sequencer import SequencingElement
 
 logger = logging.getLogger(__name__)
@@ -60,10 +60,6 @@ class PulseTemplate(SequencingElement, metaclass = ABCMeta):
     def is_interruptable(self) -> bool:
         """!@brief Return true, if this PulseTemplate contains points at which it can halt if interrupted."""
         pass
-       
-    ##@abstractmethod
-    ##def build_sequence(self, sequencer: Sequencer, timeParameters: Dict[str, Parameter], voltageParameters: Dict[str, Parameter], instructionBlock: InstructionBlock) -> None:
-        ##pass
 
 
 class ParameterNotInPulseTemplateException(Exception):

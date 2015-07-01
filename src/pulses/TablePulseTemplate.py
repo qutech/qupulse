@@ -235,9 +235,9 @@ class TablePulseTemplate(PulseTemplate):
             
         return tuple(sorted(instantiated_entries))
         
-    def build_sequence(self, sequencer: Sequencer, timeParameters: Dict[str, Parameter], voltageParameters: Dict[str, Parameter], instructionBlock: InstructionBlock) -> None:
-        waveform = sequencer.register_waveform(self._get_entries_instantiated(timeParameters, voltageParameters))
-        instructionBlock.add_instruction_exec(waveform)
+    def build_sequence(self, sequencer: Sequencer, time_parameters: Dict[str, Parameter], voltage_parameters: Dict[str, Parameter], instruction_block: InstructionBlock) -> None:
+        waveform = sequencer.register_waveform(self._get_entries_instantiated(time_parameters, voltage_parameters))
+        instruction_block.add_instruction_exec(waveform)
         
 class ParameterDeclarationInUseException(Exception):
     """!@brief Indicates that a parameter declaration which should be deleted is in use."""

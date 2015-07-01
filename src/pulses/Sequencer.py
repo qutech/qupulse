@@ -1,5 +1,5 @@
 """STANDARD LIBRARY IMPORTS"""
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta, abstractmethod, abstractproperty
 from typing import Tuple, Dict
 
 """RELATED THIRD PARTY IMPORTS"""
@@ -14,10 +14,10 @@ class SequencingElement(metaclass = ABCMeta):
         super().__init__()
         
     @abstractmethod
-    def build_sequence(self, sequencer: "Sequencer", timeParameters: Dict[str, Parameter], voltageParameters: Dict[str, Parameter], instructionBlock: InstructionBlock) -> None:
+    def build_sequence(self, sequencer: "Sequencer", time_parameters: Dict[str, Parameter], voltage_parameters: Dict[str, Parameter], instruction_block: InstructionBlock) -> None:
         pass
         
-    @abstractmethod
+    @abstractproperty
     def requires_stop(self) -> bool:
         pass
     
@@ -27,46 +27,46 @@ class SequencingHardwareInterface(metaclass = ABCMeta):
         super().__init__()
     
     @abstractmethod
-    def register_waveform(self, waveformTable: WaveformTable) -> Waveform:
+    def register_waveform(self, waveform_table: WaveformTable) -> Waveform:
         pass
     
 class Sequencer:
 
     StackElement = Tuple[SequencingElement, Dict[str, Parameter], Dict[str, Parameter], InstructionBlock]
 
-    def __init__(self, hardwareInterface: SequencingHardwareInterface):
+    def __init__(self, hardware_interface: SequencingHardwareInterface):
         super().__init__()
-        self._sequencingStack = [] #type: List[StackElement]
-        self._hardwareInterface = hardwareInterface
-        self._waveforms = dict() #type: Dict[int, Waveform]
+        self.__sequencing_stack = [] #type: List[StackElement]
+        self.__hardware_interface = hardware_interface
+        self.__waveforms = dict() #type: Dict[int, Waveform]
         
-    def push(self, sequencingElement: SequencingElement, timeParameters: Dict[str, Parameter], voltageParameters: Dict[str, Parameter], targetBlock: InstructionBlock = None) -> None:
-        self._sequencingStack.append((sequencingElement, timeParameters, voltageParameters, targetBlock))
+    def push(self, sequencing_element: SequencingElement, time_parameters: Dict[str, Parameter], voltage_parameters: Dict[str, Parameter], target_block: InstructionBlock = None) -> None:
+        self.__sequencing_stack.append((sequencing_element, time_parameters, voltage_parameters, target_block))
         
     def build(self) -> InstructionBlock:
-        mainBlock = InstructionBlock()
+        main_block = InstructionBlock()
         if not self.has_finished():
-            (element, timeParameters, voltageParameters, targetBlock) = self._sequencingStack.pop()
+            (element, time_parameters, voltage_parameters, target_block) = self.__sequencing_stack.pop()
             while True: # there seems to be no do-while loop in python and "while True" with a break condition is a suggested solution
-                if targetBlock is None:
-                    targetBlock = mainBlock
-                element.build_sequence(self, timeParameters, voltageParameters, targetBlock)
-                if (self.has_finished()) or (self._sequencingStack[-1][0].requires_stop()):
+                if target_block is None:
+                    target_block = main_block
+                element.build_sequence(self, time_parameters, voltage_parameters, target_block)
+                if (self.has_finished()) or (self.__sequencing_stack[-1][0].requires_stop):
                     break
-                (element, timeParameters, voltageParameters, targetBlock) = self._sequencingStack.pop()
+                (element, time_parameters, voltage_parameters, target_block) = self.__sequencing_stack.pop()
         
-        mainBlock.finalize()
-        return mainBlock
+        main_block.finalize()
+        return main_block
         
     def has_finished(self):
-        return not self._sequencingStack
+        return not self.__sequencing_stack
         
-    def register_waveform(self, waveformTable: WaveformTable) -> Waveform:
-        waveformTableHash = hash(waveformTable)
+    def register_waveform(self, waveform_table: WaveformTable) -> Waveform:
+        waveform_table_hash = hash(waveform_table)
         waveform = None
-        if waveformTableHash in self._waveforms:
-            waveform = self._waveforms[waveformTableHash]
+        if waveform_table_hash in self.__waveforms:
+            waveform = self.__waveforms[waveform_table_hash]
         else:
-            waveform = self._hardwareInterface.register_waveform(waveformTable)
-            self._waveforms[waveformTableHash] = waveform
+            waveform = self.__hardware_interface.register_waveform(waveform_table)
+            self.__waveforms[waveform_table_hash] = waveform
         return waveform
