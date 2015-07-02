@@ -1,5 +1,5 @@
 """STANDARD LIBRARY IMPORTS"""
-from abc import ABCMeta, abstractmethod, abstractproperty
+from abc import ABCMeta, abstractmethod
 from typing import Tuple, Dict
 
 """RELATED THIRD PARTY IMPORTS"""

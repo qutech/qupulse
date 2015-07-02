@@ -87,10 +87,10 @@ class TablePulseTemplate(PulseTemplate):
         (with this precedence, i.e., if no default value is given, the minimum value
         is chosen). If none of these values is set, the entry is appended to the end.
         """
-        if self.__isSorted:
+        if self.__is_sorted:
             return
         self.__entries = sorted(self.__entries, key=self.__get_entry_sort_value)
-        self.__isSorted = True
+        self.__is_sorted = True
         
     def get_entries(self) -> List[TableEntry]:
         """!@brief Return a sorted copy of this TablePulseTemplate's entries."""
@@ -238,6 +238,9 @@ class TablePulseTemplate(PulseTemplate):
     def build_sequence(self, sequencer: Sequencer, time_parameters: Dict[str, Parameter], voltage_parameters: Dict[str, Parameter], instruction_block: InstructionBlock) -> None:
         waveform = sequencer.register_waveform(self._get_entries_instantiated(time_parameters, voltage_parameters))
         instruction_block.add_instruction_exec(waveform)
+        
+    def requires_stop(self, time_parameters: Dict[str, Parameter], voltage_parameters: Dict[str, Parameter]) -> bool:
+        return any(parameter.requires_stop for parameter in time_parameters) or any(parameter.requires_stop for parameter in voltage_parameters)
         
 class ParameterDeclarationInUseException(Exception):
     """!@brief Indicates that a parameter declaration which should be deleted is in use."""
