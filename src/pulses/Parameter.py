@@ -1,5 +1,5 @@
 """STANDARD LIBRARY IMPORTS"""
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta, abstractmethod, abstractproperty
 from typing import Optional
 import numbers
 import logging
@@ -26,7 +26,7 @@ class Parameter(metaclass = ABCMeta):
     def get_value(self) -> float:
         pass
 
-    @abstractmethod
+    @abstractproperty
     def requires_stop(self) -> bool:
         pass
         
@@ -41,6 +41,7 @@ class ConstantParameter(Parameter):
     def get_value(self) -> float:
         return self.__value
         
+    @property
     def requires_stop(self) -> bool:
         return False
       

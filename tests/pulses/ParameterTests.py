@@ -17,7 +17,7 @@ class ConstantParameterTest(unittest.TestCase):
         
     def test_requires_stop(self) -> None:
         constant_parameter = ConstantParameter(0.3)
-        self.assertFalse(constant_parameter.requires_stop())
+        self.assertFalse(constant_parameter.requires_stop)
 
 class ParameterDeclarationTest(unittest.TestCase):
 
