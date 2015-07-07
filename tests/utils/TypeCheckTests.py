@@ -1,6 +1,12 @@
 import unittest
+import os
+import sys
 
-from utils.type_check import typecheck,MismatchingTypesException
+"""Change the path as we were in the similar path in the src directory"""
+srcPath = "src".join(os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1))
+sys.path.insert(0,srcPath)
+
+from type_check import typecheck,MismatchingTypesException
 
 INTEGERS = [0,1,-1]
 BOOLEANS = [True,False]
@@ -204,3 +210,28 @@ class DictionaryCheckTest(unittest.TestCase):
         
         self.assertRaises(MismatchingTypesException, g,STRINGS[0],INTEGERS[0])
         self.assertNotRaises(MismatchingTypesException, g,INTEGERS[0],STRINGS[0])
+        
+class CustomClassTest(unittest.TestCase):
+    def assertNotRaises(self,exception,function,*args,**kwargs) -> None:
+        try: 
+            function(*args,**kwargs)
+        except exception:
+            self.assertFalse(True,"{} raised by {}".format(exception.__name__,function.__name__))
+            
+    class A(object):
+        pass
+    
+    # FIXME
+    #===========================================================================
+    # def test_custom_as_argument(self):
+    #     global A
+    #     @typecheck(**TYPECHECKARGS)
+    #     def g(x:A):
+    #         pass
+    #     
+    #     self.assertNotRaises(MismatchingTypesException, g, A())
+    #     self.assertNotRaises(MismatchingTypesException, g, 1)
+    #===========================================================================
+        
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
