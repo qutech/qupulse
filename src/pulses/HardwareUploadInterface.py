@@ -4,6 +4,7 @@ from abc import ABCMeta, abstractmethod
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
+#TODO: Why import here?
 from pulses.Pulse import Pulse
 
 class Waveform(metaclass = ABCMeta):

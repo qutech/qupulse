@@ -19,6 +19,7 @@ class Condition(metaclass = ABCMeta):
     measured data or be mere placeholders for hardware triggers.
     """
     def __init__(self, *args, **kwargs):
+        """!@brief Initialisation of the ABCMeta superclass"""
         super().__init__()
         
     @abstractmethod

@@ -4,7 +4,7 @@ from functools import partial
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
-from pulse.PulseTemplate import PulseTemplate
+from PulseTemplate import PulseTemplate
 from Parameter import ParameterDeclaration, TimeParameterDeclaration, Parameter
 
 logger = logging.getLogger(__name__)

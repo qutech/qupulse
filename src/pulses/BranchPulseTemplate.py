@@ -5,9 +5,9 @@ from typing import Dict, Set, List
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
-from pulses.Parameter import ParameterDeclaration, TimeParameterDeclaration, Parameter
-from pulses.PulseTemplate import PulseTemplate, MeasurementWindow
-from pulses.HardwareUploadInterface import Waveform, PulseHardwareUploadInterface
+#from Parameter import ParameterDeclaration, TimeParameterDeclaration, Parameter
+from PulseTemplate import PulseTemplate, MeasurementWindow
+#from HardwareUploadInterface import Waveform, PulseHardwareUploadInterface
 
 logger = logging.getLogger(__name__)
 
