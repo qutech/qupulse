@@ -1,6 +1,12 @@
 import unittest
+import os
+import sys
 
-from pulses.Parameter import ConstantParameter, ParameterDeclaration, NoDefaultValueException, TimeParameterDeclaration
+"""Change the path as we were in the similar path in the src directory"""
+srcPath = "src".join(os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1))
+sys.path.insert(0,srcPath)
+
+from Parameter import ConstantParameter, ParameterDeclaration, NoDefaultValueException, TimeParameterDeclaration
 
 class ConstantParameterTest(unittest.TestCase):
 
@@ -349,3 +355,5 @@ class TimeParameterDeclarationTest(unittest.TestCase):
         self.__test_is_parameter_valid(17, True, min=4, max=23)
         self.__test_is_parameter_valid(23, True, min=4, max=23)
         
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

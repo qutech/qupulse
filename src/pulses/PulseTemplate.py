@@ -6,8 +6,8 @@ import logging
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
-from pulses.Parameter import ParameterDeclaration, TimeParameterDeclaration, Parameter
-from pulses.HardwareUploadInterface import Waveform, PulseHardwareUploadInterface
+from Parameter import ParameterDeclaration, TimeParameterDeclaration, Parameter
+from HardwareUploadInterface import Waveform, PulseHardwareUploadInterface
 
 logger = logging.getLogger(__name__)
 
