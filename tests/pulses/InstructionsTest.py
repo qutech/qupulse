@@ -1,7 +1,5 @@
 import unittest
-from typing import List
 
-#import pulses.Instructions as instructions
 from pulses.Instructions import *
  
 class InstructionPointerTest(unittest.TestCase):
@@ -152,45 +150,37 @@ class STOPInstructionTest(unittest.TestCase):
             
 class InstructionBlockTest(unittest.TestCase):
 
-    def __verify_block(self, block: InstructionBlock, expected_instructions: List[Instruction], finalized: bool) -> None:
+    def __verify_block(self, block: InstructionBlock, expected_instructions: InstructionSequence, expected_compiled_instructions: InstructionSequence) -> None:
         self.assertEqual(len(expected_instructions), len(block))
-        self.assertEqual(finalized, block.finalized)
-        self.assertEqual(finalized, block.is_finalized())
         self.assertEqual(expected_instructions, block.instructions)
-        self.assertEqual(expected_instructions, block.get_instructions())
+        self.assertEqual(expected_compiled_instructions, block.compile_sequence())
 
     def test_empty_unreturning_main_block(self):
         block = InstructionBlock()
-        self.__verify_block(block, [], False)
+        self.__verify_block(block, [], [STOPInstruction()])
         self.assertEqual(0, block.get_start_address())
         self.assertIsNone(block.return_ip)
-        block.finalize()
-        self.__verify_block(block, [STOPInstruction()], True)
+        self.__verify_block(block, [], [STOPInstruction()])
         
     def test_empty_returning_main_block(self):
         block = InstructionBlock()
-        self.__verify_block(block, [], False)
         self.assertEqual(0, block.get_start_address())
         self.assertIsNone(block.return_ip)
         ip = InstructionPointer(InstructionBlock(), 7)
         block.return_ip = ip # must have no effect
-        block.finalize()
-        self.__verify_block(block, [STOPInstruction()], True)
+        self.__verify_block(block, [], [STOPInstruction()])
         
     def test_empty_relative_block(self):
         return_block = InstructionBlock()
         block = InstructionBlock(return_block)
-        self.__verify_block(block, [], False)
         self.assertRaises(InstructionBlockNotYetPlacedException, block.get_start_address)
-        self.assertRaises(MissingReturnAddressException, block.finalize)
+        self.assertRaises(MissingReturnAddressException, block.compile_sequence)
         ip = InstructionPointer(return_block, 7)
         block.return_ip = ip
-        block.finalize()
-        self.__verify_block(block, [GOTOInstruction(ip.block, ip.offset)], True)
+        self.__verify_block(block, [], [GOTOInstruction(ip.block, ip.offset)])
         
     def test_add_instruction_exec(self):
         block = InstructionBlock()
-        self.__verify_block(block, [], False)
         expected_instructions = []
         
         waveforms = [Waveform(), Waveform(), Waveform()]
@@ -201,12 +191,13 @@ class InstructionBlockTest(unittest.TestCase):
             expected_instructions.append(instruction)
             block.add_instruction_exec(waveform)
             
-        self.__verify_block(block, expected_instructions, False)
+        expected_compiled_instructions = expected_instructions.copy()
+        expected_compiled_instructions.append(STOPInstruction())
+        self.__verify_block(block, expected_instructions, expected_compiled_instructions)
         
         
     def test_add_instruction_goto(self):
         block = InstructionBlock()
-        self.__verify_block(block, [], False)
         expected_instructions = []
         
         targets = [(InstructionBlock(), 0), (InstructionBlock(), 1), (InstructionBlock(), 50)]
@@ -217,33 +208,41 @@ class InstructionBlockTest(unittest.TestCase):
             expected_instructions.append(instruction)
             block.add_instruction_goto(target[0], target[1])
             
-        self.__verify_block(block, expected_instructions, False)
+        expected_compiled_instructions = expected_instructions.copy()
+        expected_compiled_instructions.append(STOPInstruction())
+        self.__verify_block(block, expected_instructions, expected_compiled_instructions)
         
     def test_add_instruction_cjmp(self):
         block = InstructionBlock()
-        self.__verify_block(block, [], False)
         expected_instructions = []
+        expected_compiled_instructions = []
+        jump_back_instructions = []
         
         for i in [0, 1, 1, 35]:
             condition = i
             new_block = block.add_instruction_cjmp(condition)
             instruction = CJMPInstruction(condition, new_block, 0)
             expected_instructions.append(instruction)
-            
-        self.__verify_block(block, expected_instructions, False)
+            jump_back_instructions.append(GOTOInstruction(block, len(expected_instructions)))
+
+        expected_compiled_instructions = expected_instructions.copy()
+        expected_compiled_instructions.append(STOPInstruction())
+        expected_compiled_instructions.extend(jump_back_instructions)
+        self.__verify_block(block, expected_instructions, expected_compiled_instructions)
         
     def test_add_instruction_stop(self):
         block = InstructionBlock()
-        self.__verify_block(block, [], False)
         expected_instructions = [STOPInstruction(), STOPInstruction()]
         block.add_instruction_stop()
         block.add_instruction_stop()
-        self.__verify_block(block, expected_instructions, False)        
+        expected_compiled_instructions = expected_instructions.copy()
+        expected_compiled_instructions.append(STOPInstruction())
+        self.__verify_block(block, expected_instructions, expected_compiled_instructions)
         
     def test_nested_block_construction(self):
         main_block = InstructionBlock()
-        self.__verify_block(main_block, [], False)
         expected_instructions = [[], [], [], []]
+        expected_compiled_instructions = [[], [], [], []]
         return_ips = []
         
         blocks = []
@@ -282,37 +281,32 @@ class InstructionBlockTest(unittest.TestCase):
             expected_instructions[3].append(EXECInstruction(waveform))
             block.add_instruction_exec(waveform)
         
-        # not expressed as a loop to better understand assertion failures
-        self.__verify_block(blocks[2], expected_instructions[3], False)
-        self.__verify_block(blocks[1], expected_instructions[2], False)
-        self.__verify_block(blocks[0], expected_instructions[1], False)
-        self.__verify_block(main_block, expected_instructions[0], False)
-        
         self.assertIsNone(main_block.return_ip)
         self.assertEqual(blocks[2].return_ip, return_ips[2])
         self.assertEqual(blocks[1].return_ip, return_ips[1])
         self.assertEqual(blocks[0].return_ip, return_ips[0])
         
-        main_block.finalize()
+        for i in [0, 1, 2, 3]:
+            expected_compiled_instructions[i] = expected_instructions[i].copy()
         
-        expected_instructions[0].append(STOPInstruction())
+        expected_compiled_instructions[0].append(STOPInstruction())
         for i in [0, 1, 2]:
-            expected_instructions[i + 1].append(GOTOInstruction(return_ips[i].block, return_ips[i].offset))
+            expected_compiled_instructions[i + 1].append(GOTOInstruction(return_ips[i].block, return_ips[i].offset))
         
         positions = [0, None, None, None]                
-        positions[3] = len(expected_instructions[1])
+        positions[3] = len(expected_compiled_instructions[1])
         
-        expected_instructions[1].extend(expected_instructions[3])
+        expected_compiled_instructions[1].extend(expected_compiled_instructions[3])
         for i in [1, 2]:
-            positions[i] = len(expected_instructions[0])
-            expected_instructions[0].extend(expected_instructions[i])
+            positions[i] = len(expected_compiled_instructions[0])
+            expected_compiled_instructions[0].extend(expected_compiled_instructions[i])
             
         positions[3] += positions[1]
         
-        self.__verify_block(blocks[2], expected_instructions[3], True)
-        self.__verify_block(blocks[1], expected_instructions[2], True)
-        self.__verify_block(blocks[0], expected_instructions[1], True)
-        self.__verify_block(main_block, expected_instructions[0], True)
+        self.__verify_block(blocks[2], expected_instructions[3], expected_compiled_instructions[3])
+        self.__verify_block(blocks[1], expected_instructions[2], expected_compiled_instructions[2])
+        self.__verify_block(blocks[0], expected_instructions[1], expected_compiled_instructions[1])
+        self.__verify_block(main_block, expected_instructions[0], expected_compiled_instructions[0])
         
         self.assertEqual(positions[3], blocks[2].get_start_address())
         self.assertEqual(positions[2], blocks[1].get_start_address())

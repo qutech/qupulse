@@ -55,7 +55,7 @@ class Sequencer:
                     break
                 (element, time_parameters, voltage_parameters, target_block) = self.__sequencing_stack.pop()
         
-        main_block.finalize()
+        main_block.compile_sequence()
         return main_block
         
     def has_finished(self):

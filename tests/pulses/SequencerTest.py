@@ -100,8 +100,7 @@ class SequencerTest(unittest.TestCase):
         block = sequencer.build()
         self.assertTrue(sequencer.has_finished())
         self.assertFalse(dummy_hardware.waveforms)
-        self.assertEqual(1, len(block)) # STOP instruction is always generated, so len(block) is 1
-        self.assertTrue(block.finalized)
+        self.assertEqual(0, len(block))
         
     
     def test_build_path_1_2_3_5_8(self) -> None:
@@ -113,10 +112,9 @@ class SequencerTest(unittest.TestCase):
         vps = {'bar': ConstantParameter(7.3)}
         target_block = InstructionBlock()
         sequencer.push(elem, tps, vps, target_block)
-        block = sequencer.build()
+        sequencer.build()
         
         self.assertTrue(sequencer.has_finished())
-        self.assertTrue(block.finalized)
         self.assertIs(target_block, elem.target_block)
         self.assertEqual(tps, elem.time_parameters)
         self.assertEqual(vps, elem.voltage_parameters)
@@ -134,7 +132,6 @@ class SequencerTest(unittest.TestCase):
         block = sequencer.build()
         
         self.assertTrue(sequencer.has_finished())
-        self.assertTrue(block.finalized)
         self.assertIs(block, elem.target_block)
         self.assertEqual(tps, elem.time_parameters)
         self.assertEqual(vps, elem.voltage_parameters)
@@ -154,7 +151,6 @@ class SequencerTest(unittest.TestCase):
         block = sequencer.build()
         
         self.assertFalse(sequencer.has_finished())
-        self.assertTrue(block.finalized)
         self.assertIs(block, elem.target_block)
         self.assertEqual(tps, elem.time_parameters)
         self.assertEqual(vps, elem.voltage_parameters)
@@ -172,10 +168,9 @@ class SequencerTest(unittest.TestCase):
         vps = {'bar': ConstantParameter(7.3)}
         target_block = InstructionBlock()
         sequencer.push(elem, tps, vps, target_block)
-        block = sequencer.build()
+        sequencer.build()
         
         self.assertFalse(sequencer.has_finished())
-        self.assertTrue(block.finalized)
         self.assertIs(target_block, elem.target_block)
         self.assertEqual(tps, elem.time_parameters)
         self.assertEqual(vps, elem.voltage_parameters)
@@ -198,7 +193,6 @@ class SequencerTest(unittest.TestCase):
         block = sequencer.build()
         
         self.assertTrue(sequencer.has_finished())
-        self.assertTrue(block.finalized)
         
         self.assertIs(block, elem.target_block)
         self.assertEqual(tps, elem.time_parameters)

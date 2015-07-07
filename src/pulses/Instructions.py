@@ -7,7 +7,7 @@ from typing import List, Tuple
 """LOCAL IMPORTS"""
 
 
-__all__ = ['WaveformTableEntry', 'WaveformTable', 'Waveform', 'InstructionPointer', 'InstructionBlockAlreadyFinalizedException',
+__all__ = ['WaveformTableEntry', 'WaveformTable', 'Waveform', 'InstructionPointer', 'InstructionSequence',
             'InstructionBlockNotYetPlacedException', 'MissingReturnAddressException', 'InstructionBlock',
             'Instruction', 'EXECInstruction', 'CJMPInstruction', 'GOTOInstruction', 'STOPInstruction'
           ]
@@ -60,112 +60,10 @@ class InstructionPointer:
         return hash((self.block, self.offset))
         
     def __str__(self) -> str:
-        return "IP:{0}#{1}".format(self.block, self.offset)
-        
-class InstructionBlockAlreadyFinalizedException(Exception):
-    """!@brief Indicates that an attempt was made to change an already finalized InstructionBlock."""
-    def __str__(self):
-        return "An attempt was made to change an already finalized InstructionBlock."
-        
-        
-class InstructionBlockNotYetPlacedException(Exception):
-    """!@brief Indicates that an attempt was made to obtain the start address of an InstructionBlock that was not yet placed inside the corresponding outer block."""
-    def __str__(self):
-        return "An attempt was made to obtain the start address of an InstructionBlock that was not yet finally placed inside the corresponding outer block."
-        
-class MissingReturnAddressException(Exception):
-    """!@brief Indicates that an inner InstructionBlock has no return address."""
-    def __str__(self):
-        return "No return address is set!"
-        
-class InstructionBlock:
-    
-    def __init__(self, outerBlock: "InstructionBlock" = None):
-        super().__init__()
-        self.__instruction_list = [] # type: List[Instruction]
-        self.__embedded_blocks = [] # type: List[InstructionBlock]
-        self.__finalized = False # type: bool
-        self.__outer_block = outerBlock
-        self.__offset = None
-        if self.__outer_block is None:
-            self.__offset = 0
-        self.return_ip = None
-        
-    def __add_instruction(self, instruction: "Instruction") -> None:
-        if not self.__finalized:
-            self.__instruction_list.append(instruction)
-        else:
-            raise InstructionBlockAlreadyFinalizedException()
-            
-    def add_instruction_exec(self, waveform: Waveform) -> None:
-        self.__add_instruction(EXECInstruction(waveform))
-        
-    def add_instruction_goto(self, goto_block: "InstructionBlock", offset: int = 0) -> None:
-        self.__add_instruction(GOTOInstruction(goto_block, offset))
-        
-    def add_instruction_cjmp(self, condition) -> "InstructionBlock":
-        target_block = self.__create_embedded_block()
-        self.__add_instruction(CJMPInstruction(condition, target_block, 0))
-        target_block.return_ip = InstructionPointer(self, len(self))
-        return target_block
-        
-    def add_instruction_stop(self) -> None:
-        self.__add_instruction(STOPInstruction())
-        
-    def get_instructions(self) -> List["Instruction"]:
-        return self.__instruction_list.copy()
-        
-    def __create_embedded_block(self) -> "InstructionBlock":
-        block = InstructionBlock(self)
-        self.__embedded_blocks.append(block)
-        return block
-        
-    def finalize(self) -> None:
-        if (self.__finalized):
-            return
-        
-        if self.__outer_block is None:
-            self.add_instruction_stop()
-        elif self.return_ip is not None:
-            self.add_instruction_goto(self.return_ip.block, self.return_ip.offset)
-        else:
-            raise MissingReturnAddressException()
-            
-        self.__finalized = True
-            
-        for block in self.__embedded_blocks:
-            block.finalize()
-            block.__offset = len(self.__instruction_list)
-            self.__instruction_list.extend(block.__instruction_list)
-    
-    def get_start_address(self) -> int:
-        if self.__offset is None:
-            raise InstructionBlockNotYetPlacedException()
-        pos = self.__offset
-        if self.return_ip is not None:
-            pos += self.__outer_block.get_start_address()
-        return pos
-        
-    def is_finalized(self) -> bool:
-        return self.__finalized
-        
-    instructions = property(get_instructions)
-    finalized = property(is_finalized)
-    
-    def __len__(self) -> int:
-        return len(self.__instruction_list)
-    
-    def __eq__(self, other) -> bool:
-        return self is other
-        
-    def __ne__(self, other) -> bool:
-        return not self == other
-    
-    def __hash__(self) -> int:
-        return id(self)
-        
-    def __str__(self) -> str:
-        return str(hash(self))
+        try:
+            return "{}".format(self.get_absolute_address())
+        finally:
+            return "IP:{0}#{1}".format(self.block, self.offset)
         
 class Instruction(metaclass = ABCMeta):
 
@@ -181,7 +79,7 @@ class Instruction(metaclass = ABCMeta):
         
 class CJMPInstruction(Instruction):
 
-    def __init__(self, condition, block: InstructionBlock, offset: int = 0):
+    def __init__(self, condition, block: "InstructionBlock", offset: int = 0):
         super().__init__()
         self.condition = condition
         self.target = InstructionPointer(block, offset)
@@ -203,7 +101,7 @@ class CJMPInstruction(Instruction):
         
 class GOTOInstruction(Instruction):
     
-    def __init__(self, block: InstructionBlock, offset: int = 0):
+    def __init__(self, block: "InstructionBlock", offset: int = 0):
         super().__init__()
         self.target = InstructionPointer(block, offset)
         
@@ -260,3 +158,119 @@ class STOPInstruction(Instruction):
     def __hash__(self) -> int:
         return 0
         
+        
+class InstructionBlockAlreadyFinalizedException(Exception):
+    """!@brief Indicates that an attempt was made to change an already finalized InstructionBlock."""
+    def __str__(self):
+        return "An attempt was made to change an already finalized InstructionBlock."
+        
+        
+class InstructionBlockNotYetPlacedException(Exception):
+    """!@brief Indicates that an attempt was made to obtain the start address of an InstructionBlock that was not yet placed inside the corresponding outer block."""
+    def __str__(self):
+        return "An attempt was made to obtain the start address of an InstructionBlock that was not yet finally placed inside the corresponding outer block."
+        
+class MissingReturnAddressException(Exception):
+    """!@brief Indicates that an inner InstructionBlock has no return address."""
+    def __str__(self):
+        return "No return address is set!"
+        
+        
+InstructionSequence = List[Instruction]
+        
+class InstructionBlock:
+    
+    def __init__(self, outerBlock: "InstructionBlock" = None):
+        super().__init__()
+        self.__instruction_list = [] # type: InstructionSequence
+        self.__embedded_blocks = [] # type: Collection[InstructionBlock]
+        self.__outer_block = outerBlock
+        self.__offset = None
+        if self.__outer_block is None:
+            self.__offset = 0
+        self.return_ip = None
+        self.__compiled_sequence = None # type: InstructionSequence
+        
+    def __add_instruction(self, instruction: Instruction) -> None:
+        # change to instructions, invalidate cached compiled sequence
+        self.__compiled_sequence = None
+        self.__instruction_list.append(instruction)
+            
+    def add_instruction_exec(self, waveform: Waveform) -> None:
+        self.__add_instruction(EXECInstruction(waveform))
+        
+    def add_instruction_goto(self, goto_block: "InstructionBlock", offset: int = 0) -> None:
+        self.__add_instruction(GOTOInstruction(goto_block, offset))
+        
+    def add_instruction_cjmp(self, condition) -> "InstructionBlock":
+        target_block = self.__create_embedded_block()
+        self.__add_instruction(CJMPInstruction(condition, target_block, 0))
+        target_block.return_ip = InstructionPointer(self, len(self))
+        return target_block
+        
+    def add_instruction_stop(self) -> None:
+        self.__add_instruction(STOPInstruction())
+      
+    @property
+    def instructions(self) -> InstructionSequence:
+        return self.__instruction_list.copy()
+        
+    def __create_embedded_block(self) -> "InstructionBlock":
+        block = InstructionBlock(self)
+        self.__embedded_blocks.append(block)
+        return block
+        
+    def __get_sequence_length(self) -> int:
+        sequence_length = len(self) + 1
+        for block in self.__embedded_blocks:
+            sequence_length += block.__get_sequence_length()
+        return sequence_length        
+        
+    def compile_sequence(self) -> InstructionSequence:
+        # do not recompile if no changes happened
+        if self.__compiled_sequence is not None:
+            return self.__compiled_sequence
+            
+        # clear old offsets
+        for block in self.__embedded_blocks:
+            block.__offset = None
+            
+        self.__compiled_sequence = self.__instruction_list.copy()
+        
+        if self.__outer_block is None:
+            self.__compiled_sequence.append(STOPInstruction())
+        elif self.return_ip is not None:
+            self.__compiled_sequence.append(GOTOInstruction(self.return_ip.block, self.return_ip.offset))
+        else:
+            self.__compiled_sequence = None
+            raise MissingReturnAddressException()
+            
+        for block in self.__embedded_blocks:
+            block.__offset = len(self.__compiled_sequence)
+            blockSequence = block.compile_sequence()
+            self.__compiled_sequence.extend(blockSequence)
+            
+        return self.__compiled_sequence
+    
+    def get_start_address(self) -> int:
+        if self.__offset is None:
+            raise InstructionBlockNotYetPlacedException()
+        pos = self.__offset
+        if self.return_ip is not None:
+            pos += self.__outer_block.get_start_address()
+        return pos
+    
+    def __len__(self) -> int:
+        return len(self.__instruction_list)
+    
+    def __eq__(self, other) -> bool:
+        return self is other
+        
+    def __ne__(self, other) -> bool:
+        return not self == other
+    
+    def __hash__(self) -> int:
+        return id(self)
+        
+    def __str__(self) -> str:
+        return str(hash(self))
