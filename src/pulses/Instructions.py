@@ -6,8 +6,10 @@ from typing import List, Tuple
 
 """LOCAL IMPORTS"""
 
+# TODO lumip: add docstrings
 
-__all__ = ['WaveformTableEntry', 'WaveformTable', 'Waveform', 'InstructionPointer', 'InstructionSequence',
+
+__all__ = ['WaveformTableEntry', 'WaveformTable', 'Waveform', 'Trigger', 'InstructionPointer', 'InstructionSequence',
             'InstructionBlockNotYetPlacedException', 'MissingReturnAddressException', 'InstructionBlock',
             'Instruction', 'EXECInstruction', 'CJMPInstruction', 'GOTOInstruction', 'STOPInstruction'
           ]
@@ -37,10 +39,27 @@ class Waveform:
         
     def __str__(self) -> str:
         return str(hash(self))
+    
+class Trigger:
+        
+    def __init__(self):
+        super().__init__()
+        
+    def __eq__(self, other) -> bool:
+        return self is other
+    
+    def __ne__(self, other) -> bool:
+        return not self == other
+    
+    def __hash__(self) -> int:
+        return id(self)
+    
+    def __str__(self) -> str:
+        return "Trigger {}".format(hash(self))
         
 class InstructionPointer:
     
-    def __init__(self, block: "InstructionBlock", offset: int):
+    def __init__(self, block: 'InstructionBlock', offset: int):
         super().__init__()
         if offset < 0:
             raise ValueError("offset must be a non-negative integer (was {})".format(offset))
@@ -79,29 +98,29 @@ class Instruction(metaclass = ABCMeta):
         
 class CJMPInstruction(Instruction):
 
-    def __init__(self, condition, block: "InstructionBlock", offset: int = 0):
+    def __init__(self, trigger: Trigger, block: 'InstructionBlock', offset: int = 0):
         super().__init__()
-        self.condition = condition
+        self.trigger = trigger
         self.target = InstructionPointer(block, offset)
 
     def get_instruction_code(self) -> str:
         return 'cjmp'
         
     def __eq__(self, other) -> bool:
-        return ((isinstance(other, CJMPInstruction)) and (self.condition == other.condition) and (self.target == other.target))
+        return ((isinstance(other, CJMPInstruction)) and (self.trigger == other.trigger) and (self.target == other.target))
         
     def __ne__(self, other) -> bool:
         return not self == other
         
     def __hash__(self) -> int:
-        return hash((self.condition, self.target))
+        return hash((self.trigger, self.target))
         
     def __str__(self) -> str:
-        return "{0} to {1} on {2}".format(self.get_instruction_code(), self.target, self.condition)
+        return "{0} to {1} on {2}".format(self.get_instruction_code(), self.target, self.trigger)
         
 class GOTOInstruction(Instruction):
     
-    def __init__(self, block: "InstructionBlock", offset: int = 0):
+    def __init__(self, block: 'InstructionBlock', offset: int = 0):
         super().__init__()
         self.target = InstructionPointer(block, offset)
         
@@ -180,7 +199,7 @@ InstructionSequence = List[Instruction]
         
 class InstructionBlock:
     
-    def __init__(self, outerBlock: "InstructionBlock" = None):
+    def __init__(self, outerBlock: 'InstructionBlock' = None):
         super().__init__()
         self.__instruction_list = [] # type: InstructionSequence
         self.__embedded_blocks = [] # type: Collection[InstructionBlock]
@@ -192,21 +211,21 @@ class InstructionBlock:
         self.__compiled_sequence = None # type: InstructionSequence
         
     def __add_instruction(self, instruction: Instruction) -> None:
-        # change to instructions, invalidate cached compiled sequence
-        self.__compiled_sequence = None
+        # change to instructions -> invalidate cached compiled sequence
+        if self.__compiled_sequence is not None:
+            self.__compiled_sequence = None
+            for block in self.__embedded_blocks:
+                block.__offset = None 
         self.__instruction_list.append(instruction)
             
     def add_instruction_exec(self, waveform: Waveform) -> None:
         self.__add_instruction(EXECInstruction(waveform))
         
-    def add_instruction_goto(self, goto_block: "InstructionBlock", offset: int = 0) -> None:
-        self.__add_instruction(GOTOInstruction(goto_block, offset))
+    def add_instruction_goto(self, target_block: 'InstructionBlock', offset: int = 0) -> None:
+        self.__add_instruction(GOTOInstruction(target_block, offset))
         
-    def add_instruction_cjmp(self, condition) -> "InstructionBlock":
-        target_block = self.__create_embedded_block()
-        self.__add_instruction(CJMPInstruction(condition, target_block, 0))
-        target_block.return_ip = InstructionPointer(self, len(self))
-        return target_block
+    def add_instruction_cjmp(self, trigger: Trigger, target_block: 'InstructionBlock', offset: int = 0) -> None:
+        self.__add_instruction(CJMPInstruction(trigger, target_block, offset))
         
     def add_instruction_stop(self) -> None:
         self.__add_instruction(STOPInstruction())
@@ -215,7 +234,7 @@ class InstructionBlock:
     def instructions(self) -> InstructionSequence:
         return self.__instruction_list.copy()
         
-    def __create_embedded_block(self) -> "InstructionBlock":
+    def create_embedded_block(self) -> 'InstructionBlock':
         block = InstructionBlock(self)
         self.__embedded_blocks.append(block)
         return block
@@ -256,7 +275,7 @@ class InstructionBlock:
         if self.__offset is None:
             raise InstructionBlockNotYetPlacedException()
         pos = self.__offset
-        if self.return_ip is not None:
+        if self.__outer_block is not None:
             pos += self.__outer_block.get_start_address()
         return pos
     
