@@ -95,15 +95,20 @@ class ImportTest(unittest.TestCase):
                             for method in methods[name]:
                                 try:
                                     hasattr(__import__(package, fromlist=[method]), method)
-                                except exception as e:
-                                    raise e("{} in file {}.".format(str(e),file_path))
+                                except Exception as e:
+                                    raise Exception("{} in file {}.".format(str(e),file_path)) from e
                         else:
-                            if hasattr(__import__(package, fromlist=[name]), name):
-                                for method in methods[name]:
-                                    try:
-                                        hasattr(method, name)
-                                    except exception as e:
-                                        raise e("{} in file {}.".format(str(e),file_path))
+                            try:
+                                isobject = hasattr(__import__(package, fromlist=[name]), name)
+                            except Exception as e:
+                                raise Exception("{} in file {}.".format(str(e),file_path)) from e
+                            else:
+                                if isobject:
+                                    for method in methods[name]:
+                                        try:
+                                            hasattr(method, name)
+                                        except Exception as e:
+                                            raise Exception("{} in file {}.".format(str(e),file_path)) from e
         
 if __name__ == "__main__":
     unittest.main()
