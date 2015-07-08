@@ -5,8 +5,8 @@ from typing import Tuple, Dict
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
-from pulses.Instructions import InstructionBlock, Waveform, WaveformTable
-from pulses.Parameter import Parameter
+from Instructions import InstructionBlock, Waveform, WaveformTable
+from Parameter import Parameter
     
 class SequencingElement(metaclass = ABCMeta):
     

@@ -68,7 +68,7 @@ def typecheck(same_length=False,raise_on_error=False,log=True):
     
     Usage:
     "@typecheck:
-    def f(x):"
+    'def f(x):"
     
     """
     def check(f):

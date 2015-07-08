@@ -1,10 +1,11 @@
 """STANDARD LIBRARY IMPORTS"""
 import logging
+from typing import Dict, List, Tuple
 from functools import partial
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
-from pulse.PulseTemplate import PulseTemplate
+from PulseTemplate import PulseTemplate
 from Parameter import ParameterDeclaration, TimeParameterDeclaration, Parameter
 
 logger = logging.getLogger(__name__)
@@ -86,9 +87,6 @@ class SequencePulseTemplate(PulseTemplate):
         for subtemplate in self.subtemplates:
             interruptable = interruptable and subtemplate.is_interruptable()
         return interruptable
-    
-    def upload_waveform(self, uploadInterface: PulseHardwareUploadInterface, parameters: Dict[str, Parameter]) -> Waveform:
-        pass
 
     def get_mapping(self):
         return self.mapping

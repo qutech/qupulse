@@ -6,8 +6,8 @@ import logging
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
-from pulses.Parameter import ParameterDeclaration, TimeParameterDeclaration, Parameter
-from pulses.Sequencer import SequencingElement
+from Parameter import ParameterDeclaration, TimeParameterDeclaration, Parameter
+from Sequencer import SequencingElement
 
 logger = logging.getLogger(__name__)
 

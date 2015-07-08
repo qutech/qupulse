@@ -217,21 +217,32 @@ class CustomClassTest(unittest.TestCase):
             function(*args,**kwargs)
         except exception:
             self.assertFalse(True,"{} raised by {}".format(exception.__name__,function.__name__))
-            
-    class A(object):
-        pass
     
-    # FIXME
-    #===========================================================================
-    # def test_custom_as_argument(self):
-    #     global A
-    #     @typecheck(**TYPECHECKARGS)
-    #     def g(x:A):
-    #         pass
-    #     
-    #     self.assertNotRaises(MismatchingTypesException, g, A())
-    #     self.assertNotRaises(MismatchingTypesException, g, 1)
-    #===========================================================================
+
+    def test_custom_as_argument(self):
+        class A(object):
+            pass
+
+        @typecheck(**TYPECHECKARGS)
+        def g(x:A):
+            pass
+         
+        self.assertNotRaises(MismatchingTypesException, g, A())
+        self.assertRaises(MismatchingTypesException, g, 1)
+    
+    def test_custom_as_return(self):
+        class A(object):
+            pass
+
+        @typecheck(**TYPECHECKARGS)
+        def g(x)-> A:
+            return x
+         
+        self.assertNotRaises(MismatchingTypesException, g, A())
+        self.assertRaises(MismatchingTypesException, g, 1)
+        
+class CustomSubClassTest(unittest.TestCase):
+    pass
         
 if __name__ == "__main__":
     unittest.main(verbosity=2)

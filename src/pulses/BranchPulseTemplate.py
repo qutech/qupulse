@@ -5,9 +5,8 @@ from typing import Dict, Set, List
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
-from pulses.Parameter import ParameterDeclaration, TimeParameterDeclaration, Parameter
-from pulses.PulseTemplate import PulseTemplate, MeasurementWindow
-from pulses.HardwareUploadInterface import Waveform, PulseHardwareUploadInterface
+from Parameter import ParameterDeclaration, TimeParameterDeclaration, Parameter
+from PulseTemplate import PulseTemplate, MeasurementWindow
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +58,4 @@ class BranchPulseTemplate(PulseTemplate):
         """!@brief Return true, if this PulseTemplate contains points at which it can halt if interrupted."""
         raise NotImplementedError()
 
-    def upload_waveform(self, upload_interface: PulseHardwareUploadInterface, parameters: Dict[str, Parameter]) -> Waveform:
-        """!@brief Compile a waveform of the pulse represented by this PulseTemplate and the given parameters using the given HardwareUploadInterface object."""
-        raise NotImplementedError()
 

@@ -1,6 +1,12 @@
 import unittest
+import os
+import sys
 
-from pulses.Instructions import *
+"""Change the path as we were in the similar path in the src directory"""
+srcPath = "src".join(os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1))
+sys.path.insert(0,srcPath)
+
+from Instructions import *
  
 class InstructionPointerTest(unittest.TestCase):
 
@@ -325,3 +331,5 @@ class InstructionBlockTest(unittest.TestCase):
         self.assertNotEqual(block1, block2)
         self.assertNotEqual(hash(block1), hash(block2))
         
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

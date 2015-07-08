@@ -6,10 +6,10 @@ import logging
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
-from pulses.Parameter import ParameterDeclaration, TimeParameterDeclaration, Parameter
-from pulses.PulseTemplate import PulseTemplate, MeasurementWindow
-from pulses.Sequencer import InstructionBlock, Sequencer
-from pulses.Instructions import WaveformTable, Waveform
+from Parameter import ParameterDeclaration, TimeParameterDeclaration, Parameter
+from PulseTemplate import PulseTemplate, MeasurementWindow
+from Sequencer import InstructionBlock, Sequencer
+from Instructions import WaveformTable, Waveform
 
 logger = logging.getLogger(__name__)
 
