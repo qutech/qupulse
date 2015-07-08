@@ -1,7 +1,7 @@
 import unittest
 import os
 import sys
-from typing import Dict, Optional, Callable
+from typing import Dict
 
 """Change the path as we were in the similar path in the src directory"""
 srcPath = "src".join(os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1))
@@ -171,7 +171,7 @@ class SoftwareConditionTest(unittest.TestCase):
         self.assertFalse(block.instructions)
         self.assertEqual([(if_branch, [], [], block)], sequencer.sequencing_stack)
         
-    def test_build_sequence_branch_true(self):
+    def test_build_sequence_branch_false(self):
         sequencer = DummySequencer()
         block = DummyInstructionBlock()
         
