@@ -1,6 +1,6 @@
 """STANDARD LIBRARY IMPORTS"""
 import logging
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Set, Callable
 from functools import partial
 """RELATED THIRD PARTY IMPORTS"""
 
@@ -35,7 +35,7 @@ class SequencePulseTemplate(PulseTemplate):
         self.mapping = Mapping() #type: Mapping
         self.__is_interruptable = None
         
-    def get_time_parameter_names(self) -> set[str]:
+    def get_time_parameter_names(self) -> Set[str]:
         time_parameter_names = set()
         for subtemplate in self.subtemplates:
             for time_parameter_name in subtemplate.get_time_parameter_names():
@@ -45,7 +45,7 @@ class SequencePulseTemplate(PulseTemplate):
                     time_parameter_names.add(time_parameter_name)
         return time_parameter_names
         
-    def get_voltage_parameter_names(self) -> set[str]:
+    def get_voltage_parameter_names(self) -> Set[str]:
         voltage_parameter_names = set()
         for subtemplate in self.subtemplates:
             for voltage_parameter_name in subtemplate.get_time_parameter_names():
@@ -55,7 +55,7 @@ class SequencePulseTemplate(PulseTemplate):
                     voltage_parameter_names.add(voltage_parameter_name)
         return voltage_parameter_names
     
-    def get_time_parameter_declaration(self) -> dict[str, TimeParameterDeclaration]:
+    def get_time_parameter_declaration(self) -> Dict[str, TimeParameterDeclaration]:
         time_parameter_declaration = {}
         for subtemplate in self.subtemplates:
             for parameter,declaration in subtemplate.get_time_parameter_declaration():
@@ -97,7 +97,7 @@ class Mapping(object):
         self.functions = {}
         self.__targets = {}
     
-    def add_mapping_function(self,source:str,target:str,func:function,*args,**kwargs):
+    def add_mapping_function(self,source:str,target:str,func:Callable,*args,**kwargs):
         if source not in self.functions:
             self.functions[source] = {}
         if target not in self.__targets:
@@ -106,14 +106,14 @@ class Mapping(object):
         else:
             raise DoubleMappingException
     
-    def get_mapping_function(self,source:str,target:str)-> function:
+    def get_mapping_function(self,source:str,target:str)-> Callable:
         return self.functions[source][target]
     
     def remove_mapping_function(self,source:str,target:str):
         self.functions[source].pop(target)
         self.__targets.pop(target)
         
-    def set_mapping_function(self,source:str, target:str,func:function,*args,**kwargs):
+    def set_mapping_function(self,source:str, target:str,func:Callable,*args,**kwargs):
         self.functions[source][target] = partial(func,*args,**kwargs)
 
                 
