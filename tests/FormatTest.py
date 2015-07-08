@@ -93,13 +93,18 @@ class ImportTest(unittest.TestCase):
                     for name in methods:
                         if name == "None":
                             for method in methods[name]:
-                                if hasattr(__import__(package, fromlist=[method]), method):
-                                    pass
+                                try:
+                                    hasattr(__import__(package, fromlist=[method]), method)
+                                except exception as e:
+                                    raise e("{} in file {}.".format(str(e),file_path))
                         else:
                             if hasattr(__import__(package, fromlist=[name]), name):
                                 for method in methods[name]:
-                                    if hasattr(imported, method):
-                                        pass
-                                    
+                                    try:
+                                        hasattr(method, name)
+                                    except exception as e:
+                                        raise e("{} in file {}.".format(str(e),file_path))
+        
 if __name__ == "__main__":
     unittest.main()
+    
