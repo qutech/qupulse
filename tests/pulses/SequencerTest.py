@@ -6,10 +6,14 @@ from typing import Dict
 """Change the path as we were in the similar path in the src directory"""
 srcPath = "src".join(os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1))
 sys.path.insert(0,srcPath)
-
-from Parameter import Parameter, ConstantParameter
-from Instructions import InstructionBlock, Waveform, WaveformTable
-from Sequencer import SequencingElement, SequencingHardwareInterface, Sequencer
+try:
+    from .Parameter import Parameter, ConstantParameter
+    from .Instructions import InstructionBlock, Waveform, WaveformTable
+    from .Sequencer import SequencingElement, SequencingHardwareInterface, Sequencer
+except:
+    from Parameter import Parameter, ConstantParameter
+    from Instructions import InstructionBlock, Waveform, WaveformTable
+    from Sequencer import SequencingElement, SequencingHardwareInterface, Sequencer
 
 class DummySequencingElement(SequencingElement):
 

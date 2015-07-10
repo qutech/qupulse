@@ -106,7 +106,7 @@ class Mapping(object):
             self.functions[source][target] = partial(func,*args,**kwargs)
             self.__targets[target] = source
         else:
-            raise DoubleMappingException
+            raise DoubleMappingException(target)
     
     def get_mapping_function(self,source:str,target:str)-> Callable:
         return self.functions[source][target]

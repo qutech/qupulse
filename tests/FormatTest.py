@@ -1,10 +1,11 @@
+import unittest
 import os
 import sys
+
 """Change the path as we were in the similar path in the src directory"""
 srcPath = "src".join(os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1))
 sys.path.insert(0,srcPath)
 
-import unittest
 
 class TabTest(unittest.TestCase):
     def test_tabs_in_all_py_files(self):    
