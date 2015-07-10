@@ -24,8 +24,7 @@ class InstructionPointerTest(unittest.TestCase):
             self.assertEqual(offset, ip.get_absolute_address())
             
     def test_initialization_relative_block(self):
-        block = InstructionBlock()
-        block = block.add_instruction_cjmp(0)
+        block = InstructionBlock().create_embedded_block()
         for offset in [0, 1, 924]:
             ip = InstructionPointer(block, offset)
             self.assertIs(block, ip.block)
@@ -34,7 +33,7 @@ class InstructionPointerTest(unittest.TestCase):
             
     def test_equality(self):
         blocks = [InstructionBlock(), InstructionBlock()]
-        blocks.append(blocks[0].add_instruction_cjmp(0))
+        blocks.append(blocks[0].create_embedded_block())
         ips = []
         for block in blocks:
             for offset in [0, 1, 2352]:
@@ -66,10 +65,27 @@ class WaveformTest(unittest.TestCase):
         self.assertNotEqual(wf2, wf1)
         self.assertNotEqual(hash(wf1), hash(wf2))
         
+class TriggerTest(unittest.TestCase):
+    
+    def test_equality(self):
+        t1 = Trigger()
+        t2 = Trigger()
+        self.assertEqual(t1, t1)
+        self.assertNotEqual(t1, t2)
+        self.assertNotEqual(t2, t1)
+        self.assertNotEqual(hash(t1), hash(t2))
+        
 class CJMPInstructionTest(unittest.TestCase):
     
     def test_initialization(self):
-        self.fail("!!FAILURE TEMPORARILY INTENDED!! How to pass conditions to pulses and thus conditional jump instructions is not yet specified. !!FAILURE TEMPORARILY INTENDED!!")
+        block = InstructionBlock()
+        trigger = Trigger()
+        for offset in [0, 1, 23]:
+            instr = CJMPInstruction(trigger, block, offset)
+            self.assertEqual('cjmp', instr.get_instruction_code())
+            self.assertEqual(trigger, instr.trigger)
+            self.assertEqual(block, instr.target.block)
+            self.assertEqual(offset, instr.target.offset)
         
     def test_equality(self):
         blocks = [InstructionBlock(), InstructionBlock()]
@@ -79,10 +95,10 @@ class CJMPInstructionTest(unittest.TestCase):
             self.assertEqual(instrA, instrB)
             self.assertEqual(instrB, instrA)
         instrs = []
-        for condition in [0, 1]:
+        for trigger in [Trigger(), Trigger()]:
             for block in blocks:
                 for offset in [0, 17]:
-                    instruction = CJMPInstruction(condition, block, offset)
+                    instruction = CJMPInstruction(trigger, block, offset)
                     self.assertEqual(instruction, instruction)
                     for other in instrs:
                         self.assertNotEqual(instruction, other)
@@ -185,6 +201,16 @@ class InstructionBlockTest(unittest.TestCase):
         block.return_ip = ip
         self.__verify_block(block, [], [GOTOInstruction(ip.block, ip.offset)])
         
+    def test_create_embedded_block(self):
+        parent_block = InstructionBlock()
+        block = parent_block.create_embedded_block()
+        self.assertRaises(InstructionBlockNotYetPlacedException, block.get_start_address)
+        self.assertRaises(MissingReturnAddressException, block.compile_sequence)
+        block.return_ip = InstructionPointer(parent_block, 0)
+        self.__verify_block(block, [], [GOTOInstruction(parent_block, 0)])
+        self.__verify_block(parent_block, [], [STOPInstruction(), GOTOInstruction(parent_block, 0)])
+        self.assertEqual(1, block.get_start_address())
+        
     def test_add_instruction_exec(self):
         block = InstructionBlock()
         expected_instructions = []
@@ -222,18 +248,16 @@ class InstructionBlockTest(unittest.TestCase):
         block = InstructionBlock()
         expected_instructions = []
         expected_compiled_instructions = []
-        jump_back_instructions = []
         
-        for i in [0, 1, 1, 35]:
-            condition = i
-            new_block = block.add_instruction_cjmp(condition)
-            instruction = CJMPInstruction(condition, new_block, 0)
-            expected_instructions.append(instruction)
-            jump_back_instructions.append(GOTOInstruction(block, len(expected_instructions)))
+        targets = [(InstructionBlock(), 0), (InstructionBlock(), 1), (InstructionBlock(), 50)]
+        triggers = [Trigger(), Trigger()]
+        LOOKUP = [(0, 0), (1, 0), (1, 1), (0, 1), (2, 0), (1, 0), (0, 1), (0, 1), (0, 0), (1, 0), (2, 1), (2, 1)]
+        for i in LOOKUP:
+            block.add_instruction_cjmp(triggers[i[1]], targets[i[0]])
+            expected_instructions.append(CJMPInstruction(triggers[i[1]], targets[i[0]], 0))
 
         expected_compiled_instructions = expected_instructions.copy()
         expected_compiled_instructions.append(STOPInstruction())
-        expected_compiled_instructions.extend(jump_back_instructions)
         self.__verify_block(block, expected_instructions, expected_compiled_instructions)
         
     def test_add_instruction_stop(self):
@@ -249,7 +273,6 @@ class InstructionBlockTest(unittest.TestCase):
         main_block = InstructionBlock()
         expected_instructions = [[], [], [], []]
         expected_compiled_instructions = [[], [], [], []]
-        return_ips = []
         
         blocks = []
             
@@ -258,15 +281,19 @@ class InstructionBlockTest(unittest.TestCase):
         main_block.add_instruction_exec(waveforms[0])
         expected_instructions[0].append(EXECInstruction(waveforms[0]))
         
-        block = main_block.add_instruction_cjmp(0)
-        expected_instructions[0].append(CJMPInstruction(0, block, 0))
+        block = main_block.create_embedded_block() 
+        trigger = Trigger()
+        main_block.add_instruction_cjmp(trigger, block)
+        expected_instructions[0].append(CJMPInstruction(trigger, block, 0))
+        block.return_ip = InstructionPointer(main_block, len(main_block))
         blocks.append(block)
-        return_ips.append(InstructionPointer(main_block, len(main_block)))
         
-        block = main_block.add_instruction_cjmp(15)
-        expected_instructions[0].append(CJMPInstruction(15, block, 0))
+        block = main_block.create_embedded_block()
+        trigger = Trigger()
+        main_block.add_instruction_cjmp(trigger, block)
+        expected_instructions[0].append(CJMPInstruction(trigger, block, 0))
+        block.return_ip = InstructionPointer(main_block, len(main_block))
         blocks.append(block)
-        return_ips.append(InstructionPointer(main_block, len(main_block)))
         
         WAVEFORM_LOOKUP = [[2, 2, 1, 1],[0, 1, 1, 0, 2, 1]]
         for i in [0, 1]:
@@ -277,27 +304,23 @@ class InstructionBlockTest(unittest.TestCase):
                 expected_instructions[i + 1].append(EXECInstruction(waveform))
                 block.add_instruction_exec(waveform)
             
-        block = blocks[0].add_instruction_cjmp(1)
-        expected_instructions[1].append(CJMPInstruction(1, block, 0))
+        block = blocks[0].create_embedded_block()
+        blocks[0].add_instruction_cjmp(trigger, block)
+        expected_instructions[1].append(CJMPInstruction(trigger, block, 0))
+        block.return_ip = InstructionPointer(blocks[0], len(blocks[0]))
         blocks.append(block)
-        return_ips.append(InstructionPointer(blocks[0], len(blocks[0])))
         
         for id in [1, 2, 0, 2]:
             waveform = waveforms[id]
             expected_instructions[3].append(EXECInstruction(waveform))
             block.add_instruction_exec(waveform)
         
-        self.assertIsNone(main_block.return_ip)
-        self.assertEqual(blocks[2].return_ip, return_ips[2])
-        self.assertEqual(blocks[1].return_ip, return_ips[1])
-        self.assertEqual(blocks[0].return_ip, return_ips[0])
-        
         for i in [0, 1, 2, 3]:
             expected_compiled_instructions[i] = expected_instructions[i].copy()
         
         expected_compiled_instructions[0].append(STOPInstruction())
         for i in [0, 1, 2]:
-            expected_compiled_instructions[i + 1].append(GOTOInstruction(return_ips[i].block, return_ips[i].offset))
+            expected_compiled_instructions[i + 1].append(GOTOInstruction(blocks[i].return_ip.block, blocks[i].return_ip.offset))
         
         positions = [0, None, None, None]                
         positions[3] = len(expected_compiled_instructions[1])
