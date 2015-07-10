@@ -5,8 +5,8 @@ from typing import Dict, Set, List
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
-from Parameter import ParameterDeclaration, TimeParameterDeclaration, Parameter
-from PulseTemplate import PulseTemplate, MeasurementWindow
+from .Parameter import ParameterDeclaration, TimeParameterDeclaration, Parameter
+from .PulseTemplate import PulseTemplate, MeasurementWindow
 
 logger = logging.getLogger(__name__)
 

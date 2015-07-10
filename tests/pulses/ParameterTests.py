@@ -6,8 +6,11 @@ import sys
 srcPath = "src".join(os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1))
 sys.path.insert(0,srcPath)
 
-from Parameter import ConstantParameter, ParameterDeclaration, NoDefaultValueException, TimeParameterDeclaration
-
+try:
+    from .Parameter import ConstantParameter, ParameterDeclaration, NoDefaultValueException, TimeParameterDeclaration
+except:
+    from Parameter import ConstantParameter, ParameterDeclaration, NoDefaultValueException, TimeParameterDeclaration
+    
 class ConstantParameterTest(unittest.TestCase):
 
     def __test_valid_params(self, value: float) -> None:
@@ -357,3 +360,4 @@ class TimeParameterDeclarationTest(unittest.TestCase):
         
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+    

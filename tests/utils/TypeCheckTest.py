@@ -3,10 +3,10 @@ import os
 import sys
 
 """Change the path as we were in the similar path in the src directory"""
-srcPath = "src".join(os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1))
+srcPath = "src".join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))).rsplit('tests',1))
 sys.path.insert(0,srcPath)
 
-from type_check import typecheck,MismatchingTypesException
+from .type_check import typecheck,MismatchingTypesException
 
 INTEGERS = [0,1,-1]
 BOOLEANS = [True,False]
@@ -15,7 +15,6 @@ FLOATS = [0.0,1.0,-1.0]
 STRINGS = ["foo","bar"]
 TYPES = [INTEGERS,BOOLEANS,COMPLEX,FLOATS,STRINGS]
 TYPECHECKARGS = {"raise_on_error":True,"log":False}
-
 
 class BaseTypeCheckTest(unittest.TestCase):
     def assertNotRaises(self,exception,function,*args,**kwargs) -> None:
@@ -246,3 +245,4 @@ class CustomSubClassTest(unittest.TestCase):
         
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+    

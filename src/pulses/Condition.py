@@ -6,7 +6,7 @@ import operator
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
-from Parameter import Parameter
+from .Parameter import Parameter
 
 logger = logging.getLogger(__name__)
 
