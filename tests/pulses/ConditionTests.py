@@ -7,10 +7,10 @@ from typing import Dict
 srcPath = "src".join(os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1))
 sys.path.insert(0,srcPath)
 
-from Parameter import Parameter
-from Sequencer import SequencingElement, Sequencer
-from Instructions import InstructionBlock, InstructionPointer, Trigger, WaveformTable, Waveform, CJMPInstruction, GOTOInstruction, STOPInstruction
-from Condition import HardwareCondition, SoftwareCondition
+from .Parameter import Parameter
+from .Sequencer import SequencingElement, Sequencer
+from .Instructions import InstructionBlock, InstructionPointer, Trigger, WaveformTable, Waveform, CJMPInstruction, GOTOInstruction, STOPInstruction
+from .Condition import HardwareCondition, SoftwareCondition
 
 class DummySequencingElement(SequencingElement):
     
