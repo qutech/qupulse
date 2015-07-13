@@ -7,8 +7,8 @@ from typing import Dict, Optional, Callable
 
 """LOCAL IMPORTS"""
 from .Parameter import Parameter
-from Sequencer import SequencingElement, Sequencer
-from Instructions import InstructionBlock, InstructionPointer, Trigger
+from .Sequencer import SequencingElement, Sequencer
+from .Instructions import InstructionBlock, InstructionPointer, Trigger
 
 logger = logging.getLogger(__name__)
 

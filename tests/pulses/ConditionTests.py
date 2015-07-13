@@ -12,6 +12,7 @@ from .Sequencer import SequencingElement, Sequencer
 from .Instructions import InstructionBlock, InstructionPointer, Trigger, WaveformTable, Waveform, CJMPInstruction, GOTOInstruction, STOPInstruction
 from .Condition import HardwareCondition, SoftwareCondition
 
+
 class DummySequencingElement(SequencingElement):
     
     def build_sequence(self, sequencer: Sequencer, time_parameters: Dict[str, Parameter], voltage_parameters: Dict[str, Parameter], instruction_block: InstructionBlock) -> None:
