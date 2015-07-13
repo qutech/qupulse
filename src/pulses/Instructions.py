@@ -19,13 +19,13 @@ WaveformTable = Tuple[WaveformTableEntry, ...]
 
 class Waveform:
     
-    def __init__(self, length: int= 0):
+    def __init__(self, length: int= 0) -> None:
         super().__init__()
         if length < 0:
             raise ValueError("length must be a non-negative integer (was {})".format(length))
         self.__length = length
         
-    def __len__(self):
+    def __len__(self) -> int:
         return self.__length
         
     def __eq__(self, other) -> bool:
@@ -42,7 +42,7 @@ class Waveform:
     
 class Trigger:
         
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         
     def __eq__(self, other) -> bool:
@@ -59,7 +59,7 @@ class Trigger:
         
 class InstructionPointer:
     
-    def __init__(self, block: 'InstructionBlock', offset: int):
+    def __init__(self, block: 'InstructionBlock', offset: int) -> None:
         super().__init__()
         if offset < 0:
             raise ValueError("offset must be a non-negative integer (was {})".format(offset))
@@ -75,7 +75,7 @@ class InstructionPointer:
     def __ne__(self, other) -> bool:
         return not self == other
         
-    def __hash__(self) -> bool:
+    def __hash__(self) -> int:
         return hash((self.block, self.offset))
         
     def __str__(self) -> str:
@@ -86,7 +86,7 @@ class InstructionPointer:
         
 class Instruction(metaclass = ABCMeta):
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
 
     @abstractmethod
@@ -98,7 +98,7 @@ class Instruction(metaclass = ABCMeta):
         
 class CJMPInstruction(Instruction):
 
-    def __init__(self, trigger: Trigger, block: 'InstructionBlock', offset: int = 0):
+    def __init__(self, trigger: Trigger, block: 'InstructionBlock', offset: int = 0) -> None:
         super().__init__()
         self.trigger = trigger
         self.target = InstructionPointer(block, offset)
@@ -120,7 +120,7 @@ class CJMPInstruction(Instruction):
         
 class GOTOInstruction(Instruction):
     
-    def __init__(self, block: 'InstructionBlock', offset: int = 0):
+    def __init__(self, block: 'InstructionBlock', offset: int = 0) -> None:
         super().__init__()
         self.target = InstructionPointer(block, offset)
         
@@ -141,7 +141,7 @@ class GOTOInstruction(Instruction):
         
 class EXECInstruction(Instruction):
 
-    def __init__(self, waveform: Waveform):
+    def __init__(self, waveform: Waveform) -> None:
         super().__init__()
         self.waveform = waveform
         
@@ -162,7 +162,7 @@ class EXECInstruction(Instruction):
         
 class STOPInstruction(Instruction):
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
 
     def get_instruction_code(self) -> str:
@@ -180,18 +180,18 @@ class STOPInstruction(Instruction):
         
 class InstructionBlockAlreadyFinalizedException(Exception):
     """!@brief Indicates that an attempt was made to change an already finalized InstructionBlock."""
-    def __str__(self):
+    def __str__(self) -> str:
         return "An attempt was made to change an already finalized InstructionBlock."
         
         
 class InstructionBlockNotYetPlacedException(Exception):
     """!@brief Indicates that an attempt was made to obtain the start address of an InstructionBlock that was not yet placed inside the corresponding outer block."""
-    def __str__(self):
+    def __str__(self) -> str:
         return "An attempt was made to obtain the start address of an InstructionBlock that was not yet finally placed inside the corresponding outer block."
         
 class MissingReturnAddressException(Exception):
     """!@brief Indicates that an inner InstructionBlock has no return address."""
-    def __str__(self):
+    def __str__(self) -> str:
         return "No return address is set!"
         
         
@@ -199,7 +199,7 @@ InstructionSequence = List[Instruction]
         
 class InstructionBlock:
     
-    def __init__(self, outerBlock: 'InstructionBlock' = None):
+    def __init__(self, outerBlock: 'InstructionBlock' = None) -> None:
         super().__init__()
         self.__instruction_list = [] # type: InstructionSequence
         self.__embedded_blocks = [] # type: Collection[InstructionBlock]

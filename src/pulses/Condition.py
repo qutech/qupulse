@@ -23,7 +23,7 @@ class Condition(metaclass = ABCMeta):
     Implementations of Condition may rely on software variables,
     measured data or be mere placeholders for hardware triggers.
     """
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs) -> None:
         super().__init__()
         
     @abstractmethod
@@ -33,7 +33,7 @@ class Condition(metaclass = ABCMeta):
             sequencer: Sequencer, 
             time_parameters: Dict[str, Parameter], 
             voltage_parameters: Dict[str, Parameter], 
-            instruction_block: InstructionBlock):
+            instruction_block: InstructionBlock) -> None:
         pass
     
     @abstractmethod
@@ -44,13 +44,13 @@ class Condition(metaclass = ABCMeta):
             sequencer: Sequencer, 
             time_parameters: Dict[str, Parameter], 
             voltage_parameters: Dict[str, Parameter], 
-            instruction_block: InstructionBlock):
+            instruction_block: InstructionBlock) -> None:
         pass
 
 
 class HardwareCondition(Condition):
     
-    def __init__(self, trigger: Trigger):
+    def __init__(self, trigger: Trigger) -> None:
         super().__init__()
         self.__trigger = trigger # type: Trigger
         
@@ -61,7 +61,7 @@ class HardwareCondition(Condition):
             sequencer: Sequencer, 
             time_parameters: Dict[str, Parameter], 
             voltage_parameters: Dict[str, Parameter], 
-            instruction_block: InstructionBlock):
+            instruction_block: InstructionBlock) -> None:
         
         body_block = instruction_block.create_embedded_block()
         body_block.return_ip = InstructionPointer(instruction_block, len(body_block))
@@ -76,7 +76,7 @@ class HardwareCondition(Condition):
             sequencer: Sequencer, 
             time_parameters: Dict[str, Parameter], 
             voltage_parameters: Dict[str, Parameter], 
-            instruction_block: InstructionBlock):
+            instruction_block: InstructionBlock) -> None:
         
         if_block = instruction_block.create_embedded_block()
         else_block = instruction_block.create_embedded_block()
@@ -93,7 +93,7 @@ class HardwareCondition(Condition):
     
 class SoftwareCondition(Condition):
         
-    def __init__(self, evaluationCallback: Callable[[], Optional[bool]]):
+    def __init__(self, evaluationCallback: Callable[[], Optional[bool]]) -> None:
         super().__init__()
         self.__callback = evaluationCallback # type: Callable[[], Optional[bool]]
         
@@ -104,7 +104,7 @@ class SoftwareCondition(Condition):
             sequencer: Sequencer, 
             time_parameters: Dict[str, Parameter], 
             voltage_parameters: Dict[str, Parameter], 
-            instruction_block: InstructionBlock):
+            instruction_block: InstructionBlock) -> None:
         
         evaluationResult = self.__callback()
         if evaluationResult is None:
@@ -123,7 +123,7 @@ class SoftwareCondition(Condition):
             sequencer: Sequencer, 
             time_parameters: Dict[str, Parameter], 
             voltage_parameters: Dict[str, Parameter], 
-            instruction_block: InstructionBlock):
+            instruction_block: InstructionBlock) -> None:
         
         evaluationResult = self.__callback()
         if evaluationResult is None:

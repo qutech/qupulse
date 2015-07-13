@@ -32,7 +32,7 @@ class TablePulseTemplate(PulseTemplate):
     VoltageValue = Union[float, str]
     TableEntry = Tuple[TimeValue, VoltageValue]
     
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.__is_sorted = True # type : bool
         self.__entries = [] # type: List[TableEntry]
@@ -245,52 +245,52 @@ class TablePulseTemplate(PulseTemplate):
 class ParameterDeclarationInUseException(Exception):
     """!@brief Indicates that a parameter declaration which should be deleted is in use."""
     
-    def __init__(self, declaration_name: str):
+    def __init__(self, declaration_name: str) -> None:
         super.__init__()
         self.declaration_name = declaration_name
         
-    def __str__(self):
+    def __str__(self) -> str:
         return "The parameter declaration {0} is in use and cannot be deleted.".format(self.declaration_name)
         
 class ParameterNotDeclaredException(Exception):
     """!@brief Indicates that a parameter has not been declared in a TablePulseTemplate."""
     
-    def __init__(self, parameter_name: str):
+    def __init__(self, parameter_name: str) -> None:
         super().__init__()
         self.parameter_name = parameter_name
         
-    def __str__(self):
+    def __str__(self) -> str:
         return "The parameter {0} has not been declared in the PulseTemplate.".format(self.parameter_name)
 
 class ParameterNotProvidedException(Exception):
     """!@brief Indicates that a required parameter value was not provided."""
     
-    def __init__(self, parameter_name: str):
+    def __init__(self, parameter_name: str) -> None:
         super().__init__()
         self.parameter_name = parameter_name
         
-    def __str__(self):
+    def __str__(self) -> str:
         return "No value was provided for parameter {0} and no default value was specified.".format(self.parameter_name)
         
 class ParameterValueIllegalException(Exception):
     """!@brief Indicates that the value provided for a parameter is illegal, i.e., is outside the parameter's bounds or of wrong type."""
     
-    def __init__(self, parameter_name: str, parameter: Parameter, parameter_declaration: ParameterDeclaration):
+    def __init__(self, parameter_name: str, parameter: Parameter, parameter_declaration: ParameterDeclaration) -> None:
         super().__init__()
         self.parameter_name = parameter_name
         self.parameter = parameter
         self.parameter_declaration = parameter_declaration
         
-    def __str__(self):
+    def __str__(self) -> str:
         return "The value {0} provided for parameter {1} is illegal (min = {2}, max = {3})".format(
             self.parameter_name, self.parameter.get_value(), self.parameter_declaration.min_value, self.parameter_declaration.max_value)
             
 class DuplicatedTimeEntryException(Exception):
     """!@brief Indicates that a time value occurred twice in TablePulseTemplate instantiation."""
     
-    def __init__(self, value: int):
+    def __init__(self, value: int) -> None:
         super().__init__()
         self.value = value
         
-    def __str__(self):
+    def __str__(self) -> str:
         return "The time value {0} occurred twice.".format(self.value)

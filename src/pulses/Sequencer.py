@@ -15,7 +15,7 @@ except:
     
 class SequencingElement(metaclass = ABCMeta):
     
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         
     @abstractmethod
@@ -28,7 +28,7 @@ class SequencingElement(metaclass = ABCMeta):
     
 class SequencingHardwareInterface(metaclass = ABCMeta):
 
-    def __init(self):
+    def __init(self) -> None:
         super().__init__()
     
     @abstractmethod
@@ -39,7 +39,7 @@ class Sequencer:
 
     StackElement = Tuple[SequencingElement, Dict[str, Parameter], Dict[str, Parameter], InstructionBlock]
 
-    def __init__(self, hardware_interface: SequencingHardwareInterface):
+    def __init__(self, hardware_interface: SequencingHardwareInterface) -> None:
         super().__init__()
         self.__sequencing_stack = [] #type: List[StackElement]
         self.__hardware_interface = hardware_interface
@@ -63,7 +63,7 @@ class Sequencer:
         main_block.compile_sequence()
         return main_block
         
-    def has_finished(self):
+    def has_finished(self) -> bool:
         return not self.__sequencing_stack
         
     def register_waveform(self, waveform_table: WaveformTable) -> Waveform:

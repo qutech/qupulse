@@ -19,7 +19,7 @@ class Parameter(metaclass = ABCMeta):
     Implementations of Parameter may provide a single constant value or
     obtain values by computation (e.g. from measurement results).
     """
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
 
     @abstractmethod
@@ -34,7 +34,7 @@ class Parameter(metaclass = ABCMeta):
 class ConstantParameter(Parameter):
     """!@brief A pulse parameter with a constant value."""
     
-    def __init__(self, value: float):
+    def __init__(self, value: float) -> None:
         super().__init__()
         self.__value = value
         
@@ -54,7 +54,7 @@ class ParameterDeclaration(object):
     and allows for the definition of boundaries and a default value for a parameter.
     """
     
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         """!@brief Creates a ParameterDeclaration object.
         
         Keyword Arguments:
@@ -127,7 +127,7 @@ class TimeParameterDeclaration(ParameterDeclaration):
     
     All values must be natural numbers.
     """
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         
         if self._min_value is None:
@@ -147,7 +147,7 @@ class TimeParameterDeclaration(ParameterDeclaration):
         
 class NoDefaultValueException(Exception):
     """!@brief Indicates that a ParameterDeclaration specifies no default value."""
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         
     def __str__(self) -> str:

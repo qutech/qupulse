@@ -24,7 +24,7 @@ class PulseTemplate(SequencingElement, metaclass = ABCMeta):
     called instantiation of the PulseTemplate.
     """
     
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
 
     @abstractmethod
@@ -65,10 +65,10 @@ class PulseTemplate(SequencingElement, metaclass = ABCMeta):
 class ParameterNotInPulseTemplateException(Exception):
     """!@brief Indicates that a provided parameter was not declared in a PulseTemplate."""
     
-    def __init__(self, name: str, pulse_template: PulseTemplate):
+    def __init__(self, name: str, pulse_template: PulseTemplate) -> None:
         super().__init__()
         self.name = name
         self.pulse_template = pulse_template
 
-    def __str__(self):
+    def __str__(self) -> str:
         return "Parameter {1} not found".format(self.name)

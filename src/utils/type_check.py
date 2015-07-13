@@ -7,7 +7,7 @@ import inspect
 import logging 
 
 logger = logging.getLogger(__name__)
-def __equalTypes(x,y,same_length=True) -> bool:
+def __equalTypes(x, y, same_length: bool = True) -> bool:
     """!@brief Test whether x and y are of (or reference to) the same type or not.
     
     This strictly internal function compares the type of two variables and the returned
@@ -54,7 +54,7 @@ def __equalTypes(x,y,same_length=True) -> bool:
             return False    
     return True   
 
-def typecheck(same_length=False,raise_on_error=False,log=True):
+def typecheck(same_length: bool = False, raise_on_error: bool = False, log: bool = True):
     """!@brief Decorator for functions, invokes typechecking on their annotation
     
     This function invokes the typechecking on functions which uses the annotations of
@@ -109,11 +109,11 @@ class MismatchingTypesException(Exception):
     Has the behaviour of an default Exception due inheritance of the self. 
     
     """
-    def __init__(self,message):
+    def __init__(self,message) -> None:
         super().__init__()
         self.message = message
         
-    def __str__(self, *args, **kwargs):
+    def __str__(self, *args, **kwargs) -> str:
         return "Mismatching types Exception:{}".format(self.message)
     
 

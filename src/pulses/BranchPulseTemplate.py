@@ -25,7 +25,7 @@ class BranchPulseTemplate(PulseTemplate):
     
     Both branches must be of the same length.
     """
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.else_branch = None
         self.if_branch = None

@@ -31,7 +31,7 @@ class SequencePulseTemplate(PulseTemplate):
     is thrown and an explicit mapping must be specified.
     """
     
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.subtemplates = [] # type: List[PulseTemplate]
         self.mapping = Mapping() #type: Mapping
@@ -90,16 +90,16 @@ class SequencePulseTemplate(PulseTemplate):
             interruptable = interruptable and subtemplate.is_interruptable()
         return interruptable
 
-    def get_mapping(self):
+    def get_mapping(self) -> 'Mapping':
         return self.mapping
     
 class Mapping(object):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.functions = {}
         self.__targets = {}
     
-    def add_mapping_function(self,source:str,target:str,func:Callable,*args,**kwargs):
+    def add_mapping_function(self,source:str,target:str,func:Callable,*args,**kwargs) -> None:
         if source not in self.functions:
             self.functions[source] = {}
         if target not in self.__targets:
@@ -111,11 +111,11 @@ class Mapping(object):
     def get_mapping_function(self,source:str,target:str)-> Callable:
         return self.functions[source][target]
     
-    def remove_mapping_function(self,source:str,target:str):
+    def remove_mapping_function(self,source:str,target:str) -> None:
         self.functions[source].pop(target)
         self.__targets.pop(target)
         
-    def set_mapping_function(self,source:str, target:str,func:Callable,*args,**kwargs):
+    def set_mapping_function(self,source:str, target:str,func:Callable,*args,**kwargs) -> None:
         self.functions[source][target] = partial(func,*args,**kwargs)
 
                 
@@ -126,11 +126,11 @@ class Mapping(object):
         return self.__targets.keys()
     
 class DoubleMappingException(Exception):
-    def __init__(self,key):
+    def __init__(self,key) -> None:
         super().__init__()
         self.key = key
     
-    def __str__(self):
+    def __str__(self) -> str:
         return "The targed {} can not assigned twice".format(self.key)
     
         

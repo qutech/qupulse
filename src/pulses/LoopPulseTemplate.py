@@ -17,7 +17,7 @@ class LoopPulseTemplate(PulseTemplate):
     during execution as long as a certain condition holds.
     """
     
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         raise NotImplementedError()
 
