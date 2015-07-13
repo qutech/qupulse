@@ -1,4 +1,7 @@
 # qc-toolkit: Quantum Computing Toolkit
+[![Build Status](https://travis-ci.org/qutech/qc-toolkit.svg)](https://travis-ci.org/qutech/qc-toolkit)
+
+
 The qc-toolkit project aims to produce a software toolkit facilitating experiments (or productive use of) involving pulse driven state manipulation of physical qubits.
 It will provide a hardware independent object representation of pulses and pulse templates as well as means to translate this representation to hardware instructions, execute these instructions and perform corresponding measurements.
 Pulses may be as complex as specifying conditional branching/looping and the object representation features easy reuse of previously defined pulse templates.
