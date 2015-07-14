@@ -2,11 +2,10 @@ import unittest
 import os
 import sys
 
-"""Change the path as we were in the similar path in the src directory"""
-srcPath = "src".join(os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1))
+srcPath = os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1)[0] + 'src'
 sys.path.insert(0,srcPath)
 
-
+@unittest.skipIf(os.getenv('TRAVIS', False), "skipping format tests on travis")
 class TabTest(unittest.TestCase):
     def test_tabs_in_all_py_files(self):    
         for root, dirs, files in os.walk(srcPath):
@@ -18,6 +17,7 @@ class TabTest(unittest.TestCase):
                         for index,line in enumerate(infile):
                             self.assertNotIn(u"\t",line,"Tabs should be replaced by 4 spaces. File: {}, Line: {}".format(file_path, index))
 
+@unittest.skipIf(os.getenv('TRAVIS', False), "skipping format tests on travis")
 class DocumentationTest(unittest.TestCase):
     def _test_attribute(self,package,name):
         try:
@@ -71,6 +71,7 @@ class DocumentationTest(unittest.TestCase):
                                             if getattr(imported, method).__doc__ is None:
                                                 print("The docstring should not be empty. Module: {}, Class: {}, Method: {}".format(package,name,method))
                                         
+@unittest.skipIf(os.getenv('TRAVIS', False), "skipping format tests on travis")
 class ImportTest(unittest.TestCase):
     def test_imports(self):
         for root, dirs, files in os.walk(srcPath):
@@ -110,6 +111,7 @@ class ImportTest(unittest.TestCase):
                                         except Exception as e:
                                             raise Exception("{} in file {}.".format(str(e),file_path)) from e
         
+@unittest.skipIf(os.getenv('TRAVIS', False), "skipping format tests on travis")
 class AnnotationTest(unittest.TestCase):
     def _test_attribute(self,package,name):
         try:
@@ -152,7 +154,3 @@ class AnnotationTest(unittest.TestCase):
                                         if hasattr(loaded_method,"__call__"):
                                             self.assertIn("return",loaded_method.__annotations__,"No Return annotation found for Module: {}, Class: {}, Method: {}".format(package,name,method))
                                             self.assertNotEqual(len(loaded_method.__annotations__.keys()),0,"No Annotation found. Module: {}, Class: {}, Method: {}".format(package,name,method))
-
-if __name__ == "__main__":
-    unittest.main()
-    

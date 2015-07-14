@@ -2,11 +2,10 @@ import unittest
 import os
 import sys
 
-"""Change the path as we were in the similar path in the src directory"""
-srcPath = "src".join(os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1))
+srcPath = os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1)[0] + 'src'
 sys.path.insert(0,srcPath)
 
-from Instructions import *
+from pulses.Instructions import *
  
 class InstructionPointerTest(unittest.TestCase):
 

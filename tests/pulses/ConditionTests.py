@@ -3,14 +3,13 @@ import os
 import sys
 from typing import Dict
 
-"""Change the path as we were in the similar path in the src directory"""
-srcPath = "src".join(os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1))
+srcPath = os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1)[0] + 'src'
 sys.path.insert(0,srcPath)
 
-from .Parameter import Parameter
-from .Sequencer import SequencingElement, Sequencer
-from .Instructions import InstructionBlock, InstructionPointer, Trigger, WaveformTable, Waveform, CJMPInstruction, GOTOInstruction, STOPInstruction
-from .Condition import HardwareCondition, SoftwareCondition
+from pulses.Parameter import Parameter
+from pulses.Sequencer import SequencingElement, Sequencer
+from pulses.Instructions import InstructionBlock, InstructionPointer, Trigger, WaveformTable, Waveform, CJMPInstruction, GOTOInstruction, STOPInstruction
+from pulses.Condition import HardwareCondition, SoftwareCondition
 
 
 class DummySequencingElement(SequencingElement):
