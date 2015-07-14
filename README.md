@@ -1,4 +1,5 @@
 # qc-toolkit: Quantum Computing Toolkit
+[![Coverage Status](https://coveralls.io/repos/qutech/qc-toolkit/badge.svg?branch=travis&service=github)](https://coveralls.io/github/qutech/qc-toolkit?branch=travis)
 [![Build Status](https://travis-ci.org/qutech/qc-toolkit.svg)](https://travis-ci.org/qutech/qc-toolkit)
 
 
