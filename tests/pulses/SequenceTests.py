@@ -2,16 +2,11 @@ import unittest
 import os
 import sys
 
-"""Change the path as we were in the similar path in the src directory"""
-srcPath = "src".join(os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1))
+srcPath = os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1)[0] + 'src'
 sys.path.insert(0,srcPath)
 
-try:
-    from .PulseTemplate import PulseTemplate
-    from .SequencePulseTemplate import SequencePulseTemplate, Mapping, DoubleMappingException
-except:
-    from PulseTemplate import PulseTemplate
-    from SequencePulseTemplate import SequencePulseTemplate, Mapping, DoubleMappingException
+from pulses.PulseTemplate import PulseTemplate
+from pulses.SequencePulseTemplate import SequencePulseTemplate, Mapping, DoubleMappingException
 
 class MappingTest(unittest.TestCase):
     def _dummy(a):
