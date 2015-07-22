@@ -12,8 +12,6 @@ from .Instructions import InstructionBlock, InstructionPointer, Trigger
 
 logger = logging.getLogger(__name__)
 
-# TODO lumip: Tests
-
 class Condition(metaclass = ABCMeta):
     """!@brief A condition on which the execution of a pulse may depend.
     
