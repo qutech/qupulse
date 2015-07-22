@@ -64,8 +64,13 @@ class Condition(metaclass = ABCMeta):
 
 
 class HardwareCondition(Condition):
+    """!@brief A condition that will be evaluated using hardware triggers.
+    
+    During the translation process, HardwareCondition instanced will produce in code blocks for branches/loop bodies and the corresponding conditional jump instructions.
+    """
     
     def __init__(self, trigger: Trigger) -> None:
+        """!@brief Create a new HardwareCondition instance. Argument trigger is the trigger handle of the corresponding hardware device."""
         super().__init__()
         self.__trigger = trigger # type: Trigger
         
@@ -109,8 +114,27 @@ class HardwareCondition(Condition):
 
     
 class SoftwareCondition(Condition):
+    """!@brief A condition that will be evaluated in the software.
+    
+    SoftwareConditions are evaluated in software, allowing them to rely on sophisticated measurement evaluation or
+    to be used when the hardware device does not support trigger based jumping instructions.
+    
+    On the downside, this means that a translation processes may be interrupted because a SoftwareCondition
+    relying on measurement data cannot be evaluated before that data is acquired. In this case, the already translated
+    part has to be executed, the measurement is made and in a subsequent translation, the SoftwareCondition is evaluated
+    and the corresponding instructions of one branch/the loop body are generated without jumping instructions.
+    
+    This interruption of pulse execution might not be feasible in some environments.
+    """
         
     def __init__(self, evaluationCallback: Callable[[int], Optional[bool]]) -> None:
+        """!@brief Create a new SoftwareCondition instance.
+        
+        Argument evaluationCallback is a callable function which accepts an integer argument and returns a bool or None.
+        The integer argument is the current iteration of a loop (starting at zero before the first loop execution). For
+        branch sequencing, this argument will always be zero. The callbacks return value must be None, if evaluation
+        is currently not possible and boolean otherwise.
+        """
         super().__init__()
         self.__callback = evaluationCallback # type: Callable[[int], Optional[bool]]
         self.__loop_iteration = 0
@@ -128,6 +152,8 @@ class SoftwareCondition(Condition):
             instruction_block: InstructionBlock) -> None:
         
         evaluationResult = self.__callback(self.__loop_iteration)
+        if evaluationResult is None:
+            raise ConditionEvaluationException()
         #if evaluationResult is None:
         #    instruction_block.add_instruction_stop()
         #    sequencer.push(delegator, time_parameters, voltage_parameters, instruction_block)
@@ -149,6 +175,8 @@ class SoftwareCondition(Condition):
             instruction_block: InstructionBlock) -> None:
         
         evaluationResult = self.__callback(self.__loop_iteration)
+        if evaluationResult is None:
+            raise ConditionEvaluationException()
         #if evaluationResult is None:
         #    instruction_block.add_instruction_stop()
         #    sequencer.push(delegator, time_parameters, voltage_parameters, instruction_block)
@@ -159,3 +187,8 @@ class SoftwareCondition(Condition):
         else:
             sequencer.push(else_branch, time_parameters, voltage_parameters, instruction_block)
                 
+class ConditionEvaluationException(Exception):
+    """!@brief Indicates that a SoftwareCondition cannot be evaluated yet."""
+    
+    def __str__(self) -> str:
+        return "The Condition can currently not be evaluated."

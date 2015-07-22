@@ -1,7 +1,7 @@
 import unittest
 import os
 import sys
-from typing import Dict
+from typing import Dict, Optional
 
 srcPath = os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1)[0] + 'src'
 sys.path.insert(0,srcPath)
@@ -9,7 +9,7 @@ sys.path.insert(0,srcPath)
 from pulses.Parameter import Parameter
 from pulses.Sequencer import SequencingElement, Sequencer
 from pulses.Instructions import InstructionBlock, InstructionPointer, Trigger, WaveformTable, Waveform, CJMPInstruction, GOTOInstruction, STOPInstruction
-from pulses.Condition import HardwareCondition, SoftwareCondition
+from pulses.Condition import HardwareCondition, SoftwareCondition, ConditionEvaluationException
 
 
 class DummySequencingElement(SequencingElement):
@@ -31,7 +31,7 @@ class DummySequencingElement(SequencingElement):
     
 class DummySequencer(Sequencer):
     
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(None)
         self.sequencing_stack = [] #type: List[StackElement]
         
@@ -49,7 +49,7 @@ class DummySequencer(Sequencer):
     
 class DummyInstructionBlock(InstructionBlock):
     
-    def __init__(self, outerBlock: 'InstructionBlock' = None):
+    def __init__(self, outerBlock: 'InstructionBlock' = None) -> None:
         super().__init__(outerBlock)
         self.embedded_blocks = [] # type: Collection[InstructionBlock]
         
@@ -60,7 +60,7 @@ class DummyInstructionBlock(InstructionBlock):
 
 class HardwareConditionTest(unittest.TestCase):
     
-    def test_build_sequence_loop(self):        
+    def test_build_sequence_loop(self) -> None:        
         sequencer = DummySequencer()
         block = DummyInstructionBlock()
         
@@ -79,7 +79,7 @@ class HardwareConditionTest(unittest.TestCase):
         self.assertEqual([(body, [], [], body_block)], sequencer.sequencing_stack, "HardwareCondition did not correctly push the body element to the stack")
         
     
-    def test_build_sequence_branch(self):
+    def test_build_sequence_branch(self) -> None:
         sequencer = DummySequencer()
         block = DummyInstructionBlock()
         
@@ -101,34 +101,50 @@ class HardwareConditionTest(unittest.TestCase):
         self.assertEqual([(if_branch, [], [], if_block), (else_branch, [], [], else_block)], sequencer.sequencing_stack, "HardwareCondition did not correctly push the branch elements to the stack")
         
 
+class IterationCallbackDummy:
+    
+    def __init__(self, callback_return: Optional[bool]) -> None:
+        super().__init__()
+        self.callback_return = callback_return
+        self.loop_iteration = 0
+    
+    def callback(self, loop_iteration: int) -> Optional[bool]:
+        self.loop_iteration = loop_iteration
+        return self.callback_return
+        
 
 class SoftwareConditionTest(unittest.TestCase):
     
-    def test_build_sequence_loop_cannot_evaluate(self):
+    def test_build_cannot_evaluate(self) -> None:
         sequencer = DummySequencer()
         block = DummyInstructionBlock()
         
         delegator = DummySequencingElement()
         body = DummySequencingElement()
         
-        condition = SoftwareCondition(lambda: None)
-        condition.build_sequence_loop(delegator, body, sequencer, [], [], block)
+        condition = SoftwareCondition(lambda loop_iteration: None)
         
-        self.assertEqual([STOPInstruction()], block.instructions)
-        self.assertEqual([(delegator, [], [], block)], sequencer.sequencing_stack)
+        self.assertTrue(condition.requires_stop())
+        self.assertRaises(ConditionEvaluationException, condition.build_sequence_loop, delegator, body, sequencer, [], [], block)
+        self.assertRaises(ConditionEvaluationException, condition.build_sequence_branch, delegator, body, body, sequencer, [], [], block)
     
-    def test_build_sequence_loop_true(self):
+    def test_build_sequence_loop_true(self) -> None:
         sequencer = DummySequencer()
         block = DummyInstructionBlock()
         
         delegator = DummySequencingElement()
         body = DummySequencingElement()
+        callback = IterationCallbackDummy(True)
         
-        condition = SoftwareCondition(lambda: True)
+        condition = SoftwareCondition(lambda loop_iteration: callback.callback(loop_iteration))
         condition.build_sequence_loop(delegator, body, sequencer, [], [], block)
         
+        self.assertEqual(0, callback.loop_iteration)
         self.assertFalse(block.instructions)
         self.assertEqual([(delegator, [], [], block), (body, [], [], block)], sequencer.sequencing_stack)
+        
+        condition.build_sequence_loop(delegator, body, sequencer, [], [], block)
+        self.assertEqual(1, callback.loop_iteration)
         
     def test_build_sequence_loop_false(self):
         sequencer = DummySequencer()
@@ -136,26 +152,17 @@ class SoftwareConditionTest(unittest.TestCase):
         
         delegator = DummySequencingElement()
         body = DummySequencingElement()
+        callback = IterationCallbackDummy(False)
         
-        condition = SoftwareCondition(lambda: False)
+        condition = SoftwareCondition(lambda loop_iteration: callback.callback(loop_iteration))
         condition.build_sequence_loop(delegator, body, sequencer, [], [], block)
         
+        self.assertEqual(0, callback.loop_iteration)
         self.assertFalse(block.instructions)
         self.assertFalse(sequencer.sequencing_stack)
-    
-    def test_build_sequence_branch_cannot_evaluate(self):
-        sequencer = DummySequencer()
-        block = DummyInstructionBlock()
         
-        delegator = DummySequencingElement()
-        if_branch = DummySequencingElement()
-        else_branch = DummySequencingElement()
-        
-        condition = SoftwareCondition(lambda: None)
-        condition.build_sequence_branch(delegator, if_branch, else_branch, sequencer, [], [], block)
-        
-        self.assertEqual([STOPInstruction()], block.instructions)
-        self.assertEqual([(delegator, [], [], block)], sequencer.sequencing_stack)
+        condition.build_sequence_loop(delegator, body, sequencer, [], [], block)
+        self.assertEqual(0, callback.loop_iteration)
         
     def test_build_sequence_branch_true(self):
         sequencer = DummySequencer()
@@ -164,12 +171,18 @@ class SoftwareConditionTest(unittest.TestCase):
         delegator = DummySequencingElement()
         if_branch = DummySequencingElement()
         else_branch = DummySequencingElement()
+        callback = IterationCallbackDummy(True)
         
-        condition = SoftwareCondition(lambda: True)
+        condition = SoftwareCondition(lambda loop_iteration: callback.callback(loop_iteration))
         condition.build_sequence_branch(delegator, if_branch, else_branch, sequencer, [], [], block)
         
+        self.assertEqual(0, callback.loop_iteration)
         self.assertFalse(block.instructions)
         self.assertEqual([(if_branch, [], [], block)], sequencer.sequencing_stack)
+        
+        condition.build_sequence_branch(delegator, if_branch, else_branch, sequencer, [], [], block)
+        self.assertEqual(0, callback.loop_iteration)
+        
         
     def test_build_sequence_branch_false(self):
         sequencer = DummySequencer()
@@ -178,13 +191,17 @@ class SoftwareConditionTest(unittest.TestCase):
         delegator = DummySequencingElement()
         if_branch = DummySequencingElement()
         else_branch = DummySequencingElement()
+        callback = IterationCallbackDummy(False)
         
-        condition = SoftwareCondition(lambda: False)
+        condition = SoftwareCondition(lambda loop_iteration: callback.callback(loop_iteration))
         condition.build_sequence_branch(delegator, if_branch, else_branch, sequencer, [], [], block)
         
+        self.assertEqual(0, callback.loop_iteration)
         self.assertFalse(block.instructions)
         self.assertEqual([(else_branch, [], [], block)], sequencer.sequencing_stack)
         
+        condition.build_sequence_branch(delegator, if_branch, else_branch, sequencer, [], [], block)
+        self.assertEqual(0, callback.loop_iteration)
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -13,7 +13,7 @@ from pulses.Sequencer import SequencingElement, SequencingHardwareInterface, Seq
 
 class DummySequencingElement(SequencingElement):
 
-    def __init__(self, requires_stop: bool = False, push_elements: Tuple[InstructionBlock, List[SequencingElement]] = None):
+    def __init__(self, requires_stop: bool = False, push_elements: Tuple[InstructionBlock, List[SequencingElement]] = None) -> None:
         super().__init__()
         self.build_call_counter = 0
         self.requires_stop_call_counter = 0
@@ -41,7 +41,7 @@ class DummySequencingElement(SequencingElement):
         
 class DummySequencingHardware(SequencingHardwareInterface):
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.waveforms = [] # type: List[WaveformTable]
         
