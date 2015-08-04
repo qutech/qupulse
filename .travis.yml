@@ -1,6 +1,6 @@
 language: python
 python:
-  - "nightly"
+  - "3.5.0b3"
 # command to install dependencies
 install:
     - "pip install pyflakes"
