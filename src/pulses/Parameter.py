@@ -11,7 +11,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 class Parameter(metaclass = ABCMeta):
-    """!@brief A parameter for pulses.
+    """A parameter for pulses.
     
     Parameter specifies a concrete value which is inserted instead
     of the parameter declaration reference in a PulseTemplate if it satisfies
@@ -32,7 +32,7 @@ class Parameter(metaclass = ABCMeta):
         
         
 class ConstantParameter(Parameter):
-    """!@brief A pulse parameter with a constant value."""
+    """A pulse parameter with a constant value."""
     
     def __init__(self, value: float) -> None:
         super().__init__()
@@ -47,7 +47,7 @@ class ConstantParameter(Parameter):
       
 
 class ParameterDeclaration(object):
-    """!@brief A declaration of a parameter required by a pulse template.
+    """A declaration of a parameter required by a pulse template.
     
     PulseTemplates may declare parameters to allow for variations of values in an otherwise
     static pulse structure. ParameterDeclaration represents a declaration of such a parameter
@@ -55,12 +55,12 @@ class ParameterDeclaration(object):
     """
     
     def __init__(self, **kwargs) -> None:
-        """!@brief Creates a ParameterDeclaration object.
+        """Creates a ParameterDeclaration object.
         
-        Keyword Arguments:
-        @param min: float -- An optional real number specifying the minimum value allowed for the .
-        @param max: float -- An optional real number specifying the maximum value allowed.
-        @param default: float -- An optional real number specifying a default value for the declared pulse template parameter.
+        Args:
+            min (float): An optional real number specifying the minimum value allowed for the .
+            max (float): An optional real number specifying the maximum value allowed.
+            default (float): An optional real number specifying a default value for the declared pulse template parameter.
         """
         super().__init__()
         self._min_value = None
@@ -89,19 +89,19 @@ class ParameterDeclaration(object):
         
     
     def get_min_value(self) -> Optional[float]:
-        """!@brief Return this ParameterDeclaration's minimum value."""
+        """Return this ParameterDeclaration's minimum value."""
         return self._min_value
     
     def get_max_value(self) -> Optional[float]:
-        """!@brief Return this ParameterDeclaration's maximum value."""
+        """Return this ParameterDeclaration's maximum value."""
         return self._max_value
         
     def get_default_value(self) -> Optional[float]:
-        """!@brief Return this ParameterDeclaration's default value"""
+        """Return this ParameterDeclaration's default value"""
         return self._default_value
         
     def get_default_parameter(self) -> ConstantParameter:
-        """!@brief Creates a ConstantParameter object holding the default value of this ParameterDeclaration."""
+        """Creates a ConstantParameter object holding the default value of this ParameterDeclaration."""
         if (self._default_value is None):
             raise NoDefaultValueException()
         return ConstantParameter(self._default_value)
@@ -111,7 +111,7 @@ class ParameterDeclaration(object):
     default_value = property(get_default_value)
 
     def is_parameter_valid(self, p: Parameter) -> bool:
-        """!@brief Checks whether a given parameter satisfies this ParameterDeclaration.
+        """Checks whether a given parameter satisfies this ParameterDeclaration.
         
         A parameter is valid if the following two statements hold:
         - If the declaration specifies a minimum value, the parameter's value must be greater or equal
@@ -123,7 +123,7 @@ class ParameterDeclaration(object):
         return is_valid
         
 class TimeParameterDeclaration(ParameterDeclaration):
-    """!@brief A TimeParameterDeclaration declares a parameter that is used as a time value.
+    """A TimeParameterDeclaration declares a parameter that is used as a time value.
     
     All values must be natural numbers.
     """
@@ -146,7 +146,7 @@ class TimeParameterDeclaration(ParameterDeclaration):
         return super().is_parameter_valid(p)
         
 class NoDefaultValueException(Exception):
-    """!@brief Indicates that a ParameterDeclaration specifies no default value."""
+    """Indicates that a ParameterDeclaration specifies no default value."""
     def __init__(self) -> None:
         super().__init__()
         
