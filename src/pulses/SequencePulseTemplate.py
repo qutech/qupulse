@@ -12,6 +12,39 @@ from .Parameter import ParameterDeclaration, Parameter
 
 logger = logging.getLogger(__name__)
 
+class Mapping(object):
+    def __init__(self) -> None:
+        super().__init__()
+        self.functions = {}  # type: Dict[str, Dict[str, Callable]]
+        self.__targets = {}  # type: Dict[str, str]
+    
+    def add_mapping_function(self,source:str,target:str,func:Callable,*args,**kwargs) -> None:
+        if source not in self.functions:
+            self.functions[source] = {}
+        if target not in self.__targets:
+            self.functions[source][target] = partial(func,*args,**kwargs)
+            self.__targets[target] = source
+        else:
+            raise DoubleMappingException(target)
+    
+    def get_mapping_function(self,source:str,target:str)-> Callable:
+        return self.functions[source][target]
+    
+    def remove_mapping_function(self,source:str,target:str) -> None:
+        self.functions[source].pop(target)
+        self.__targets.pop(target)
+        
+    def set_mapping_function(self,source:str, target:str,func:Callable,*args,**kwargs) -> None:
+        self.functions[source][target] = partial(func,*args,**kwargs)
+
+                
+    def get_sources(self) -> List[str]:
+        return self.functions.keys()
+    
+    def get_targets(self) -> List[str]:
+        return self.__targets.keys()
+    
+
 class SequencePulseTemplate(PulseTemplate):
     """A sequence of different PulseTemplates.
     
@@ -82,37 +115,6 @@ class SequencePulseTemplate(PulseTemplate):
     def get_mapping(self) -> Mapping:
         return self.mapping
     
-class Mapping(object):
-    def __init__(self) -> None:
-        super().__init__()
-        self.functions = {}  # type: Dict[str, Dict[str, Callable]]
-        self.__targets = {}  # type: Dict[str, str]
-    
-    def add_mapping_function(self,source:str,target:str,func:Callable,*args,**kwargs) -> None:
-        if source not in self.functions:
-            self.functions[source] = {}
-        if target not in self.__targets:
-            self.functions[source][target] = partial(func,*args,**kwargs)
-            self.__targets[target] = source
-        else:
-            raise DoubleMappingException(target)
-    
-    def get_mapping_function(self,source:str,target:str)-> Callable:
-        return self.functions[source][target]
-    
-    def remove_mapping_function(self,source:str,target:str) -> None:
-        self.functions[source].pop(target)
-        self.__targets.pop(target)
-        
-    def set_mapping_function(self,source:str, target:str,func:Callable,*args,**kwargs) -> None:
-        self.functions[source][target] = partial(func,*args,**kwargs)
-
-                
-    def get_sources(self) -> List[str]:
-        return self.functions.keys()
-    
-    def get_targets(self) -> List[str]:
-        return self.__targets.keys()
     
 class DoubleMappingException(Exception):
     def __init__(self,key) -> None:
