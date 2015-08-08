@@ -13,7 +13,7 @@ from .Parameter import ParameterDeclaration, TimeParameterDeclaration, Parameter
 logger = logging.getLogger(__name__)
 
 class SequencePulseTemplate(PulseTemplate):
-    """!@brief A sequence of different PulseTemplates.
+    """A sequence of different PulseTemplates.
     
     SequencePulseTemplate allows to group smaller
     PulseTemplates (subtemplates) into on larger sequence,

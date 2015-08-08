@@ -14,7 +14,7 @@ from .Instructions import WaveformTable, Waveform
 logger = logging.getLogger(__name__)
 
 class TablePulseTemplate(PulseTemplate):
-    """!@brief Defines a pulse via linear interpolation of a sequence of (time,voltage)-pairs.
+    """Defines a pulse via linear interpolation of a sequence of (time,voltage)-pairs.
     
     TablePulseTemplate stores a list of (time,voltage)-pairs (the table) which is sorted
     by time and uniquely define a pulse structure via interpolation of voltages of subsequent
@@ -41,7 +41,7 @@ class TablePulseTemplate(PulseTemplate):
         self.__is_measurement_pulse = False # type: bool
         
     def add_entry(self, time: TimeValue, voltage: VoltageValue) -> None:
-        """!@brief Add an entry to this TablePulseTemplate.
+        """Add an entry to this TablePulseTemplate.
         
         The arguments time and voltage may either be real numbers or a string which
         references a parameter declaration by name. If a non-existing parameter declaration
@@ -80,7 +80,7 @@ class TablePulseTemplate(PulseTemplate):
         return float('inf')
         
     def __sort_entries(self) -> None:
-        """!@brief Sort this TablePulseTemplate's entries according to their time value.
+        """Sort this TablePulseTemplate's entries according to their time value.
         
         If the time value is a parameter reference it is placed in the sorted list
         according to the parameter declarations default, minimum or maximum value
@@ -93,16 +93,16 @@ class TablePulseTemplate(PulseTemplate):
         self.__is_sorted = True
         
     def get_entries(self) -> List[TableEntry]:
-        """!@brief Return a sorted copy of this TablePulseTemplate's entries."""
+        """Return a sorted copy of this TablePulseTemplate's entries."""
         self.__sort_entries()
         return self.__entries.copy()
         
     def remove_entry(self, entry: TableEntry) -> None:
-        """!@brief Removes an entry from this TablePulseTemplate by its index."""
+        """Removes an entry from this TablePulseTemplate by its index."""
         self.__entries.remove(entry)
         
     def declare_time_parameter(self, name: str, **kwargs) -> None:
-        """!@brief Declare a new parameter for usage as time value in this TablePulseTemplate.
+        """Declare a new parameter for usage as time value in this TablePulseTemplate.
         
         If a time parameter declaration for the given name exists, it is overwritten.
         
@@ -114,7 +114,7 @@ class TablePulseTemplate(PulseTemplate):
         self.__time_parameter_declarations[name] = TimeParameterDeclaration(**kwargs)
         
     def declare_voltage_parameter(self, name:str, **kwargs) -> None:
-        """!@brief Declare a new parameter for usage as voltage value in this TablePulseTemplate.
+        """Declare a new parameter for usage as voltage value in this TablePulseTemplate.
         
         If a voltage parameter declaration for the given name exists, it is overwritten.
         
@@ -126,52 +126,52 @@ class TablePulseTemplate(PulseTemplate):
         self.__voltage_parameter_declarations[name] = ParameterDeclaration(**kwargs)
         
     def get_time_parameter_declaration(self, name: str) -> TimeParameterDeclaration:
-        """!@brief Return the TimeParameterDeclaration associated with the given parameter name."""
+        """Return the TimeParameterDeclaration associated with the given parameter name."""
         return self.__time_parameter_declarations[name]
         
     def get_voltage_parameter_declaration(self, name:str) -> ParameterDeclaration:
-        """!@brief Return the voltage ParameterDeclaration associated with the given parameter name."""
+        """Return the voltage ParameterDeclaration associated with the given parameter name."""
         return self.__voltage_parameter_declarations[name]
         
     def remove_time_parameter_declaration(self, name: str) -> None:
-        """!@brief Remove an existing time parameter declaration from this TablePulseTemplate."""
+        """Remove an existing time parameter declaration from this TablePulseTemplate."""
         for entry in self.__entries:
             if (isinstance(entry[0], str)) and (name == entry[0]):
                 raise ParameterDeclarationInUseException(name)
         self.__time_parameter_declarations.remove(name)
         
     def remove_voltage_parameter_declaration(self, name: str) -> None:
-        """!@brief Remove an existing voltage parameter declaration from this TablePulseTemplate."""
+        """Remove an existing voltage parameter declaration from this TablePulseTemplate."""
         for entry in self.__entries:
             if (isinstance(entry[1], str)) and (name == entry[1]):
                 raise ParameterDeclarationInUseException(name)
         self.__voltage_parameter_declarations.remove(name)
     
     def set_is_measurement_pulse(self, is_measurement_pulse: bool) -> None:
-        """!@brief Set whether or not this TablePulseTemplate represents a measurement pulse."""
+        """Set whether or not this TablePulseTemplate represents a measurement pulse."""
         self.__is_measurement_pulse = is_measurement_pulse
 
     def __str__(self) -> str:
         return __name__
     
     def get_time_parameter_names(self) -> Set[str]:
-        """!@brief Return the set of names of declared time parameters."""
+        """Return the set of names of declared time parameters."""
         return self.__time_parameter_declarations.keys()
         
     def get_voltage_parameter_names(self) -> Set[str]:
-        """!@brief Return the set of names of declared voltage parameters."""
+        """Return the set of names of declared voltage parameters."""
         return self.__voltage_parameter_declarations.keys()
         
     def get_time_parameter_declarations(self) -> Dict[str, TimeParameterDeclaration]:
-        """!@brief Return a copy of the dictionary containing the time parameter declarations of this PulseTemplate."""
+        """Return a copy of the dictionary containing the time parameter declarations of this PulseTemplate."""
         return self.__time_parameter_declarations.copy()
         
     def get_voltage_parameter_declarations(self) -> Dict[str, ParameterDeclaration]:
-        """!@brief Return a copy of the dictionary containing the voltage parameter declarations of this PulseTemplate."""
+        """Return a copy of the dictionary containing the voltage parameter declarations of this PulseTemplate."""
         return self.__voltage_parameter_declarations.copy()
         
     def get_measurement_windows(self, time_parameters: Dict[str, Parameter] = None) -> List[MeasurementWindow]:
-        """!@brief Return all measurement windows defined in this PulseTemplate.
+        """Return all measurement windows defined in this PulseTemplate.
         
         A TablePulseTemplate specifies either no measurement windows or exactly one that spans its entire duration,
         depending on whether set_is_measurement_pulse(True) was called or not.
@@ -183,11 +183,11 @@ class TablePulseTemplate(PulseTemplate):
         return (0, instantiated_entries[-1][0])
 
     def is_interruptable(self) -> bool:
-        """!@brief Return true, if this PulseTemplate contains points at which it can halt if interrupted."""
+        """Return true, if this PulseTemplate contains points at which it can halt if interrupted."""
         return False
         
     def __get_entries_instantiated(self, time_parameters: Dict[str, Parameter], voltage_parameters: Dict[str, Parameter] = None) -> List[Tuple[int, VoltageValue]]:
-        """!@brief Return a sorted list of all table entries with concrete values provided by the given parameters.
+        """Return a sorted list of all table entries with concrete values provided by the given parameters.
         
         The voltageParameters argument may be None in which case voltage parameter references are not resolved.
         """
@@ -243,7 +243,7 @@ class TablePulseTemplate(PulseTemplate):
         return any(parameter.requires_stop for parameter in time_parameters) or any(parameter.requires_stop for parameter in voltage_parameters)
         
 class ParameterDeclarationInUseException(Exception):
-    """!@brief Indicates that a parameter declaration which should be deleted is in use."""
+    """Indicates that a parameter declaration which should be deleted is in use."""
     
     def __init__(self, declaration_name: str) -> None:
         super.__init__()
@@ -253,7 +253,7 @@ class ParameterDeclarationInUseException(Exception):
         return "The parameter declaration {0} is in use and cannot be deleted.".format(self.declaration_name)
         
 class ParameterNotDeclaredException(Exception):
-    """!@brief Indicates that a parameter has not been declared in a TablePulseTemplate."""
+    """Indicates that a parameter has not been declared in a TablePulseTemplate."""
     
     def __init__(self, parameter_name: str) -> None:
         super().__init__()
@@ -263,7 +263,7 @@ class ParameterNotDeclaredException(Exception):
         return "The parameter {0} has not been declared in the PulseTemplate.".format(self.parameter_name)
 
 class ParameterNotProvidedException(Exception):
-    """!@brief Indicates that a required parameter value was not provided."""
+    """Indicates that a required parameter value was not provided."""
     
     def __init__(self, parameter_name: str) -> None:
         super().__init__()
@@ -273,7 +273,7 @@ class ParameterNotProvidedException(Exception):
         return "No value was provided for parameter {0} and no default value was specified.".format(self.parameter_name)
         
 class ParameterValueIllegalException(Exception):
-    """!@brief Indicates that the value provided for a parameter is illegal, i.e., is outside the parameter's bounds or of wrong type."""
+    """Indicates that the value provided for a parameter is illegal, i.e., is outside the parameter's bounds or of wrong type."""
     
     def __init__(self, parameter_name: str, parameter: Parameter, parameter_declaration: ParameterDeclaration) -> None:
         super().__init__()
@@ -286,7 +286,7 @@ class ParameterValueIllegalException(Exception):
             self.parameter_name, self.parameter.get_value(), self.parameter_declaration.min_value, self.parameter_declaration.max_value)
             
 class DuplicatedTimeEntryException(Exception):
-    """!@brief Indicates that a time value occurred twice in TablePulseTemplate instantiation."""
+    """Indicates that a time value occurred twice in TablePulseTemplate instantiation."""
     
     def __init__(self, value: int) -> None:
         super().__init__()

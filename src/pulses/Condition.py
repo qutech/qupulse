@@ -13,7 +13,7 @@ from .Instructions import InstructionBlock, InstructionPointer, Trigger
 logger = logging.getLogger(__name__)
 
 class Condition(metaclass = ABCMeta):
-    """!@brief A condition on which the execution of a pulse may depend.
+    """A condition on which the execution of a pulse may depend.
     
     Conditions are used for branching and looping of pulses and
     thus relevant for BranchPulseTemplate and LoopPulseTemplate.
@@ -62,13 +62,13 @@ class Condition(metaclass = ABCMeta):
 
 
 class HardwareCondition(Condition):
-    """!@brief A condition that will be evaluated using hardware triggers.
+    """A condition that will be evaluated using hardware triggers.
     
     During the translation process, HardwareCondition instanced will produce in code blocks for branches/loop bodies and the corresponding conditional jump instructions.
     """
     
     def __init__(self, trigger: Trigger) -> None:
-        """!@brief Create a new HardwareCondition instance. Argument trigger is the trigger handle of the corresponding hardware device."""
+        """Create a new HardwareCondition instance. Argument trigger is the trigger handle of the corresponding hardware device."""
         super().__init__()
         self.__trigger = trigger # type: Trigger
         
@@ -112,7 +112,7 @@ class HardwareCondition(Condition):
 
     
 class SoftwareCondition(Condition):
-    """!@brief A condition that will be evaluated in the software.
+    """A condition that will be evaluated in the software.
     
     SoftwareConditions are evaluated in software, allowing them to rely on sophisticated measurement evaluation or
     to be used when the hardware device does not support trigger based jumping instructions.
@@ -126,7 +126,7 @@ class SoftwareCondition(Condition):
     """
         
     def __init__(self, evaluationCallback: Callable[[int], Optional[bool]]) -> None:
-        """!@brief Create a new SoftwareCondition instance.
+        """Create a new SoftwareCondition instance.
         
         Argument evaluationCallback is a callable function which accepts an integer argument and returns a bool or None.
         The integer argument is the current iteration of a loop (starting at zero before the first loop execution). For
@@ -186,7 +186,7 @@ class SoftwareCondition(Condition):
             sequencer.push(else_branch, time_parameters, voltage_parameters, instruction_block)
                 
 class ConditionEvaluationException(Exception):
-    """!@brief Indicates that a SoftwareCondition cannot be evaluated yet."""
+    """Indicates that a SoftwareCondition cannot be evaluated yet."""
     
     def __str__(self) -> str:
         return "The Condition can currently not be evaluated."

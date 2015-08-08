@@ -179,18 +179,18 @@ class STOPInstruction(Instruction):
         
         
 class InstructionBlockAlreadyFinalizedException(Exception):
-    """!@brief Indicates that an attempt was made to change an already finalized InstructionBlock."""
+    """Indicates that an attempt was made to change an already finalized InstructionBlock."""
     def __str__(self) -> str:
         return "An attempt was made to change an already finalized InstructionBlock."
         
         
 class InstructionBlockNotYetPlacedException(Exception):
-    """!@brief Indicates that an attempt was made to obtain the start address of an InstructionBlock that was not yet placed inside the corresponding outer block."""
+    """Indicates that an attempt was made to obtain the start address of an InstructionBlock that was not yet placed inside the corresponding outer block."""
     def __str__(self) -> str:
         return "An attempt was made to obtain the start address of an InstructionBlock that was not yet finally placed inside the corresponding outer block."
         
 class MissingReturnAddressException(Exception):
-    """!@brief Indicates that an inner InstructionBlock has no return address."""
+    """Indicates that an inner InstructionBlock has no return address."""
     def __str__(self) -> str:
         return "No return address is set!"
         
