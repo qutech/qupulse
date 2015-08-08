@@ -59,32 +59,20 @@ class ParameterDeclaration(ParameterValueProvider):
     and allows for the definition of boundaries and a default value for a parameter.
     """
     
-    def __init__(self, name: str, **kwargs) -> None:
+    BoundaryValue = Union[float, 'ParameterDeclaration']
+    
+    def __init__(self, name: str, min: BoundaryValue = float('-inf'), max: BoundaryValue = float('+inf'), default: Optional[float] = None) -> None:
         """Creates a ParameterDeclaration object.
         
         Args:
-            min (float): An optional real number or ParameterDeclaration object specifying the minimum value allowed for the .
-            max (float): An optional real number or ParameterDeclaration object specifying the maximum value allowed.
+            min (float, ParameterDeclaration): An optional real number or ParameterDeclaration object specifying the minimum value allowed.
+            max (float, ParameterDeclaration): An optional real number or ParameterDeclaration object specifying the maximum value allowed.
             default (float): An optional real number specifying a default value for the declared pulse template parameter.
         """
         self.__name = name
-        self.__min_value = float('-inf') # type: Union[ParameterDeclaration, float]
-        self.__max_value = float('+inf') # type: Union[ParameterDeclaration, float]
-        self.__default_value = None # type: Optional[float]
-        for key in kwargs:
-            if key not in ['min', 'max', 'default']:
-                raise ValueError("{0} is not a valid argument.".format(key))
-            
-            value = kwargs[key]
-            if not isinstance(value, (numbers.Real, ParameterDeclaration)):
-                raise TypeError("value <{0}> is not a real number (float) or a ParameterDeclaration but a {1}.".format(value, type(value)))
-            if key == "min":
-                self.__min_value = value
-            elif key == "max":
-                self.__max_value = value
-            elif key == "default":
-                self.__default_value = value
-            
+        self.__min_value = min # type: BoundaryValue
+        self.__max_value = max # type: BoundaryValue
+        self.__default_value = default # type: Optional[float]            
             
         self.__assert_values_valid()
         
