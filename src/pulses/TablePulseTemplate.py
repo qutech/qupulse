@@ -1,12 +1,12 @@
 """STANDARD LIBRARY IMPORTS"""
 from logging import getLogger, Logger
-from typing import Union, Dict, List, Set, Tuple
+from typing import Union, Dict, List, Set, Tuple, Optional
 import logging
 
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
-from .Parameter import ParameterDeclaration, TimeParameterDeclaration, Parameter
+from .Parameter import ParameterDeclaration, ImmutableParameterDeclaration, Parameter
 from .PulseTemplate import PulseTemplate, MeasurementWindow
 from .Sequencer import InstructionBlock, Sequencer
 from .Instructions import WaveformTable, Waveform
@@ -28,19 +28,18 @@ class TablePulseTemplate(PulseTemplate):
     measurement window.
     """
     
-    TimeValue = Union[int, str]
-    VoltageValue = Union[float, str]
-    TableEntry = Tuple[TimeValue, VoltageValue]
+    TableValue = Union[int, str]
+    TableEntry = Tuple[TableValue, TableValue]
     
     def __init__(self) -> None:
         super().__init__()
         self.__is_sorted = True # type : bool
         self.__entries = [] # type: List[TableEntry]
-        self.__time_parameter_declarations = {} # type: Dict[str, TimeParameterDeclaration]
+        self.__time_parameter_declarations = {} # type: Dict[str, ParameterDeclaration]
         self.__voltage_parameter_declarations = {} # type: Dict[str, ParameterDeclaration]
         self.__is_measurement_pulse = False # type: bool
         
-    def add_entry(self, time: TimeValue, voltage: VoltageValue) -> None:
+    def add_entry(self, time: TableValue, voltage: TableValue) -> None:
         """Add an entry to this TablePulseTemplate.
         
         The arguments time and voltage may either be real numbers or a string which
@@ -125,9 +124,9 @@ class TablePulseTemplate(PulseTemplate):
         """
         self.__voltage_parameter_declarations[name] = ParameterDeclaration(**kwargs)
         
-    def get_time_parameter_declaration(self, name: str) -> TimeParameterDeclaration:
-        """Return the TimeParameterDeclaration associated with the given parameter name."""
-        return self.__time_parameter_declarations[name]
+    def get_time_parameter_declaration(self, name: str) -> ImmutableParameterDeclaration:
+        """Return ParameterDeclaration as an immutable object associated with the given parameter name."""
+        return ImmutableParameterDeclaration(self.__time_parameter_declarations[name])
         
     def get_voltage_parameter_declaration(self, name:str) -> ParameterDeclaration:
         """Return the voltage ParameterDeclaration associated with the given parameter name."""
@@ -162,15 +161,25 @@ class TablePulseTemplate(PulseTemplate):
         """Return the set of names of declared voltage parameters."""
         return self.__voltage_parameter_declarations.keys()
         
-    def get_time_parameter_declarations(self) -> Dict[str, TimeParameterDeclaration]:
+    def get_time_parameter_declarations(self) -> Dict[str, ImmutableParameterDeclaration]:
         """Return a copy of the dictionary containing the time parameter declarations of this PulseTemplate."""
-        return self.__time_parameter_declarations.copy()
+        parameter_declarations = dict()
+        for parameter_name in self.__time_parameter_declarations:
+            parameter_declaration = self.__time_parameter_declarations[parameter_name]
+            parameter_declaration = ImmutableParameterDeclaration(parameter_declaration)
+            parameter_declarations[parameter_name] = parameter_declaration
+        return parameter_declarations
         
-    def get_voltage_parameter_declarations(self) -> Dict[str, ParameterDeclaration]:
+    def get_voltage_parameter_declarations(self) -> Dict[str, ImmutableParameterDeclaration]:
         """Return a copy of the dictionary containing the voltage parameter declarations of this PulseTemplate."""
-        return self.__voltage_parameter_declarations.copy()
+        parameter_declarations = dict()
+        for parameter_name in self.__voltage_parameter_declarations:
+            parameter_declaration = self.__voltage_parameter_declarations[parameter_name]
+            parameter_declaration = ImmutableParameterDeclaration(parameter_declaration)
+            parameter_declarations[parameter_name] = parameter_declaration
+        return parameter_declarations
         
-    def get_measurement_windows(self, time_parameters: Dict[str, Parameter] = None) -> List[MeasurementWindow]:
+    def get_measurement_windows(self, time_parameters: Optional[Dict[str, Parameter]] = None) -> List[MeasurementWindow]:
         """Return all measurement windows defined in this PulseTemplate.
         
         A TablePulseTemplate specifies either no measurement windows or exactly one that spans its entire duration,
@@ -186,7 +195,7 @@ class TablePulseTemplate(PulseTemplate):
         """Return true, if this PulseTemplate contains points at which it can halt if interrupted."""
         return False
         
-    def __get_entries_instantiated(self, time_parameters: Dict[str, Parameter], voltage_parameters: Dict[str, Parameter] = None) -> List[Tuple[int, VoltageValue]]:
+    def __get_entries_instantiated(self, time_parameters: Dict[str, Parameter], voltage_parameters: Optional[Dict[str, Parameter]] = None) -> List[Tuple[int, TableValue]]:
         """Return a sorted list of all table entries with concrete values provided by the given parameters.
         
         The voltageParameters argument may be None in which case voltage parameter references are not resolved.
@@ -197,7 +206,7 @@ class TablePulseTemplate(PulseTemplate):
             voltage_value = None # type: VoltageValue
             # resolve time parameter references
             if isinstance(entry[0], str):
-                parameter_declaration = self.__time_parameter_declarations[entry[0]] # type: TimeParameterDeclaration
+                parameter_declaration = self.__time_parameter_declarations[entry[0]] # type: ParameterDeclaration
                 if entry[0] in time_parameters:
                     parameter = time_parameters[entry[0]]
                     if not parameter_declaration.is_parameter_valid(parameter):

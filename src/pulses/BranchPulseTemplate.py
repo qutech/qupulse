@@ -5,7 +5,7 @@ from typing import Dict, Set, List
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
-from .Parameter import ParameterDeclaration, TimeParameterDeclaration, Parameter
+from .Parameter import ImmutableParameterDeclaration, Parameter
 from .PulseTemplate import PulseTemplate, MeasurementWindow
 
 logger = logging.getLogger(__name__)
@@ -42,11 +42,11 @@ class BranchPulseTemplate(PulseTemplate):
         """Return the set of names of declared voltage parameters."""
         raise NotImplementedError()
         
-    def get_time_parameter_declarations(self) -> Dict[str, TimeParameterDeclaration]:
+    def get_time_parameter_declarations(self) -> Dict[str, ImmutableParameterDeclaration]:
         """Return a copy of the dictionary containing the time parameter declarations of this PulseTemplate."""
         raise NotImplementedError()
         
-    def get_voltage_parameter_declarations(self) -> Dict[str, ParameterDeclaration]:
+    def get_voltage_parameter_declarations(self) -> Dict[str, ImmutableParameterDeclaration]:
         """Return a copy of the dictionary containing the voltage parameter declarations of this PulseTemplate."""
         raise NotImplementedError()
 

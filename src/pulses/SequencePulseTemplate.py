@@ -7,7 +7,7 @@ from functools import partial
 """LOCAL IMPORTS"""
 
 from .PulseTemplate import PulseTemplate
-from .Parameter import ParameterDeclaration, TimeParameterDeclaration, Parameter
+from .Parameter import ImmutableParameterDeclaration, Parameter
 
 
 logger = logging.getLogger(__name__)
@@ -57,7 +57,7 @@ class SequencePulseTemplate(PulseTemplate):
                     voltage_parameter_names.add(voltage_parameter_name)
         return voltage_parameter_names
     
-    def get_time_parameter_declaration(self) -> Dict[str, TimeParameterDeclaration]:
+    def get_time_parameter_declaration(self) -> Dict[str, ImmutableParameterDeclaration]:
         time_parameter_declaration = {}
         for subtemplate in self.subtemplates:
             for parameter,declaration in subtemplate.get_time_parameter_declaration():
@@ -68,7 +68,7 @@ class SequencePulseTemplate(PulseTemplate):
                     time_parameter_declaration[parameter] = declaration
         return time_parameter_declaration
            
-    def get_voltage_parameter_declarations(self) -> Dict[str, ParameterDeclaration]:
+    def get_voltage_parameter_declarations(self) -> Dict[str, ImmutableParameterDeclaration]:
         voltage_parameter_declaration = {}
         for subtemplate in self.subtemplates:
             for parameter,declaration in subtemplate.get_voltage_parameter_declaration():

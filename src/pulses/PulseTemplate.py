@@ -6,7 +6,7 @@ import logging
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
-from .Parameter import ParameterDeclaration, TimeParameterDeclaration, Parameter
+from .Parameter import ImmutableParameterDeclaration, Parameter
 from .Sequencer import SequencingElement
 
 logger = logging.getLogger(__name__)
@@ -42,12 +42,12 @@ class PulseTemplate(SequencingElement, metaclass = ABCMeta):
         pass
         
     @abstractmethod
-    def get_time_parameter_declarations(self) -> Dict[str, TimeParameterDeclaration]:
+    def get_time_parameter_declarations(self) -> Dict[str, ImmutableParameterDeclaration]:
         """Return a copy of the dictionary containing the time parameter declarations of this PulseTemplate."""
         pass
         
     @abstractmethod
-    def get_voltage_parameter_declarations(self) -> Dict[str, ParameterDeclaration]:
+    def get_voltage_parameter_declarations(self) -> Dict[str, ImmutableParameterDeclaration]:
         """Return a copy of the dictionary containing the voltage parameter declarations of this PulseTemplate."""
         pass
 
