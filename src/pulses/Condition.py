@@ -33,8 +33,7 @@ class Condition(metaclass = ABCMeta):
             delegator: SequencingElement,
             body: SequencingElement,
             sequencer: Sequencer, 
-            time_parameters: Dict[str, Parameter], 
-            voltage_parameters: Dict[str, Parameter], 
+            parameters: Dict[str, Parameter], 
             instruction_block: InstructionBlock) -> None:
         """Translate a looping SequencingElement using this Condition into an instruction sequence for the given instruction block using sequencer and the given parameter sets.
         
@@ -49,8 +48,7 @@ class Condition(metaclass = ABCMeta):
             if_branch: SequencingElement, 
             else_branch: SequencingElement, 
             sequencer: Sequencer, 
-            time_parameters: Dict[str, Parameter], 
-            voltage_parameters: Dict[str, Parameter], 
+            parameters: Dict[str, Parameter],  
             instruction_block: InstructionBlock) -> None:
         """Translate a branching SequencingElement using this Condition into an instruction sequence for the given instruction block using sequencer and the given parameter sets.
         
@@ -79,33 +77,31 @@ class HardwareCondition(Condition):
             delegator: SequencingElement,
             body: SequencingElement, 
             sequencer: Sequencer, 
-            time_parameters: Dict[str, Parameter], 
-            voltage_parameters: Dict[str, Parameter], 
+            parameters: Dict[str, Parameter], 
             instruction_block: InstructionBlock) -> None:
         
         body_block = instruction_block.create_embedded_block()
         body_block.return_ip = InstructionPointer(instruction_block, len(body_block))
         
         instruction_block.add_instruction_cjmp(self.__trigger, body_block)
-        sequencer.push(body, time_parameters, voltage_parameters, body_block)
+        sequencer.push(body, parameters, body_block)
         
     def build_sequence_branch(self, 
             delegator: SequencingElement,
             if_branch: SequencingElement, 
             else_branch: SequencingElement, 
             sequencer: Sequencer, 
-            time_parameters: Dict[str, Parameter], 
-            voltage_parameters: Dict[str, Parameter], 
+            parameters: Dict[str, Parameter], 
             instruction_block: InstructionBlock) -> None:
         
         if_block = instruction_block.create_embedded_block()
         else_block = instruction_block.create_embedded_block()
         
         instruction_block.add_instruction_cjmp(self.__trigger, if_block)
-        sequencer.push(if_branch, time_parameters, voltage_parameters, if_block)
+        sequencer.push(if_branch, parameters, if_block)
         
         instruction_block.add_instruction_goto(else_block)
-        sequencer.push(else_branch, time_parameters, voltage_parameters, else_block)
+        sequencer.push(else_branch, parameters, else_block)
         
         if_block.return_ip = InstructionPointer(instruction_block, len(instruction_block))
         else_block.return_ip = if_block.return_ip
@@ -145,8 +141,7 @@ class SoftwareCondition(Condition):
             delegator: SequencingElement,
             body: SequencingElement, 
             sequencer: Sequencer, 
-            time_parameters: Dict[str, Parameter], 
-            voltage_parameters: Dict[str, Parameter], 
+            parameters: Dict[str, Parameter], 
             instruction_block: InstructionBlock) -> None:
         
         evaluationResult = self.__callback(self.__loop_iteration)
@@ -158,8 +153,8 @@ class SoftwareCondition(Condition):
         #else:
         # the above should be done by Sequencer via evaluating requires_stop()
         if evaluationResult == True:
-            sequencer.push(delegator, time_parameters, voltage_parameters, instruction_block)
-            sequencer.push(body, time_parameters, voltage_parameters, instruction_block)
+            sequencer.push(delegator, parameters, instruction_block)
+            sequencer.push(body, parameters, instruction_block)
             self.__loop_iteration += 1 # next time, evaluate for next iteration
                 
         
@@ -168,8 +163,7 @@ class SoftwareCondition(Condition):
             if_branch: SequencingElement, 
             else_branch: SequencingElement, 
             sequencer: Sequencer, 
-            time_parameters: Dict[str, Parameter], 
-            voltage_parameters: Dict[str, Parameter], 
+            parameters: Dict[str, Parameter], 
             instruction_block: InstructionBlock) -> None:
         
         evaluationResult = self.__callback(self.__loop_iteration)
@@ -181,9 +175,9 @@ class SoftwareCondition(Condition):
         #else:
         # the above should be done by Sequencer via evaluating requires_stop()
         if evaluationResult == True:
-            sequencer.push(if_branch, time_parameters, voltage_parameters, instruction_block)
+            sequencer.push(if_branch, parameters, instruction_block)
         else:
-            sequencer.push(else_branch, time_parameters, voltage_parameters, instruction_block)
+            sequencer.push(else_branch, parameters, instruction_block)
                 
 class ConditionEvaluationException(Exception):
     """Indicates that a SoftwareCondition cannot be evaluated yet."""

@@ -34,26 +34,21 @@ class BranchPulseTemplate(PulseTemplate):
     def __str__(self) -> str:
         raise NotImplementedError()
     
-    def get_time_parameter_names(self) -> Set[str]:
-        """Return the set of names of declared time parameters."""
-        raise NotImplementedError()
-        
-    def get_voltage_parameter_names(self) -> Set[str]:
-        """Return the set of names of declared voltage parameters."""
-        raise NotImplementedError()
-        
-    def get_time_parameter_declarations(self) -> Dict[str, ImmutableParameterDeclaration]:
-        """Return a copy of the dictionary containing the time parameter declarations of this PulseTemplate."""
-        raise NotImplementedError()
-        
-    def get_voltage_parameter_declarations(self) -> Dict[str, ImmutableParameterDeclaration]:
-        """Return a copy of the dictionary containing the voltage parameter declarations of this PulseTemplate."""
+    @property
+    def parameter_names(self) -> Set[str]:
+        """Return the set of names of declared parameters."""
         raise NotImplementedError()
 
-    def get_measurement_windows(self, time_parameters: Dict[str, Parameter] = None) -> List[MeasurementWindow]:
+    @property
+    def parameter_declarations(self) -> Set[str]:
+        """Return the set of ParameterDeclarations."""
+        raise NotImplementedError()
+
+    def get_measurement_windows(self, parameters: Dict[str, Parameter] = None) -> List[MeasurementWindow]:
         """Return all measurement windows defined in this PulseTemplate."""
         raise NotImplementedError()
 
+    @property
     def is_interruptable(self) -> bool:
         """Return True, if this PulseTemplate contains points at which it can halt if interrupted."""
         raise NotImplementedError()

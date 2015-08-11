@@ -18,24 +18,21 @@ class DummySequencingElement(SequencingElement):
         self.build_call_counter = 0
         self.requires_stop_call_counter = 0
         self.target_block = None
-        self.time_parameters = None
-        self.voltage_parameters = None
+        self.parameters = None
         self.requires_stop_ = requires_stop
         self.push_elements = push_elements
     
-    def build_sequence(self, sequencer: Sequencer, time_parameters: Dict[str, Parameter], voltage_parameters: Dict[str, Parameter], instruction_block: InstructionBlock) -> None:
+    def build_sequence(self, sequencer: Sequencer, parameters: Dict[str, Parameter], instruction_block: InstructionBlock) -> None:
         self.build_call_counter += 1
         self.target_block = instruction_block
-        self.time_parameters = time_parameters
-        self.voltage_parameters = voltage_parameters
+        self.parameters = parameters
         if self.push_elements is not None:
             for element in self.push_elements[1]:
-                sequencer.push(element, time_parameters, voltage_parameters, self.push_elements[0])
+                sequencer.push(element, parameters, self.push_elements[0])
         
-    def requires_stop(self, time_parameters: Dict[str, Parameter], voltage_parameters: Dict[str, Parameter]) -> bool:
+    def requires_stop(self, parameters: Dict[str, Parameter]) -> bool:
         self.requires_stop_call_counter += 1
-        self.time_parameters = time_parameters
-        self.voltage_parameters = voltage_parameters
+        self.parameters = parameters
         return self.requires_stop_
 
         
@@ -81,11 +78,10 @@ class SequencerTest(unittest.TestCase):
         dummy_hardware = DummySequencingHardware()
         sequencer = Sequencer(dummy_hardware)
         
-        tps = {'foo': ConstantParameter(1)}
-        vps = {'bar': ConstantParameter(7.3)}
+        ps = {'foo': ConstantParameter(1), 'bar': ConstantParameter(7.3)}
         elem = DummySequencingElement()
         
-        sequencer.push(elem, tps, vps)
+        sequencer.push(elem, ps)
         self.assertFalse(sequencer.has_finished())
     
 #   The following are methods to test different execution path through the build() method.
@@ -112,14 +108,12 @@ class SequencerTest(unittest.TestCase):
         sequencer = Sequencer(dummy_hardware)
     
         elem = DummySequencingElement(True)
-        tps = {'foo': ConstantParameter(1)}
-        vps = {'bar': ConstantParameter(7.3)}
-        sequencer.push(elem, tps, vps)
+        ps = {'foo': ConstantParameter(1), 'bar': ConstantParameter(7.3)}
+        sequencer.push(elem, ps)
         block = sequencer.build()
         
         self.assertFalse(sequencer.has_finished())
-        self.assertEqual(tps, elem.time_parameters)
-        self.assertEqual(vps, elem.voltage_parameters)
+        self.assertEqual(ps, elem.parameters)
         self.assertEqual(1, elem.requires_stop_call_counter)
         self.assertEqual(0, elem.build_call_counter)
         
@@ -128,15 +122,13 @@ class SequencerTest(unittest.TestCase):
         sequencer = Sequencer(dummy_hardware)
     
         elem = DummySequencingElement(True)
-        tps = {'foo': ConstantParameter(1)}
-        vps = {'bar': ConstantParameter(7.3)}
+        ps = {'foo': ConstantParameter(1), 'bar': ConstantParameter(7.3)}
         target_block = InstructionBlock()
-        sequencer.push(elem, tps, vps, target_block)
+        sequencer.push(elem, ps, target_block)
         block = sequencer.build()
         
         self.assertFalse(sequencer.has_finished())
-        self.assertEqual(tps, elem.time_parameters)
-        self.assertEqual(vps, elem.voltage_parameters)
+        self.assertEqual(ps, elem.parameters)
         self.assertEqual(1, elem.requires_stop_call_counter)
         self.assertEqual(0, elem.build_call_counter)
         
@@ -144,25 +136,22 @@ class SequencerTest(unittest.TestCase):
         dummy_hardware = DummySequencingHardware()
         sequencer = Sequencer(dummy_hardware)
     
-        tps = {'foo': ConstantParameter(1)}
-        vps = {'bar': ConstantParameter(7.3)}
+        ps = {'foo': ConstantParameter(1), 'bar': ConstantParameter(7.3)}
     
         elem_main = DummySequencingElement(True)
-        sequencer.push(elem_main, tps, vps)
+        sequencer.push(elem_main, ps)
         
         elem_cstm = DummySequencingElement(True)
         target_block = InstructionBlock()
-        sequencer.push(elem_cstm, tps, vps, target_block)
+        sequencer.push(elem_cstm, ps, target_block)
         
         block = sequencer.build()
         
         self.assertFalse(sequencer.has_finished())
-        self.assertEqual(tps, elem_main.time_parameters)
-        self.assertEqual(vps, elem_main.voltage_parameters)
+        self.assertEqual(ps, elem_main.parameters)
         self.assertEqual(1, elem_main.requires_stop_call_counter)
         self.assertEqual(0, elem_main.build_call_counter)
-        self.assertEqual(tps, elem_cstm.time_parameters)
-        self.assertEqual(vps, elem_cstm.voltage_parameters)
+        self.assertEqual(ps, elem_cstm.parameters)
         self.assertEqual(1, elem_cstm.requires_stop_call_counter)
         self.assertEqual(0, elem_cstm.build_call_counter)
         
@@ -171,15 +160,13 @@ class SequencerTest(unittest.TestCase):
         sequencer = Sequencer(dummy_hardware)
     
         elem = DummySequencingElement(False)
-        tps = {'foo': ConstantParameter(1)}
-        vps = {'bar': ConstantParameter(7.3)}
-        sequencer.push(elem, tps, vps)
+        ps = {'foo': ConstantParameter(1), 'bar': ConstantParameter(7.3)}
+        sequencer.push(elem, ps)
         block = sequencer.build()
         
         self.assertTrue(sequencer.has_finished())
         self.assertIs(block, elem.target_block)
-        self.assertEqual(tps, elem.time_parameters)
-        self.assertEqual(vps, elem.voltage_parameters)
+        self.assertEqual(ps, elem.parameters)
         self.assertEqual(1, elem.requires_stop_call_counter)
         self.assertEqual(1, elem.build_call_counter)
         
@@ -187,23 +174,20 @@ class SequencerTest(unittest.TestCase):
         dummy_hardware = DummySequencingHardware()
         sequencer = Sequencer(dummy_hardware)
     
-        tps = {'foo': ConstantParameter(1)}
-        vps = {'bar': ConstantParameter(7.3)}
+        ps = {'foo': ConstantParameter(1), 'bar': ConstantParameter(7.3)}
         target_block = InstructionBlock()
         elem1 = DummySequencingElement(False)
         elem2 = DummySequencingElement(True)
-        sequencer.push(elem2, tps, vps)
-        sequencer.push(elem1, tps, vps)
+        sequencer.push(elem2, ps)
+        sequencer.push(elem1, ps)
         block = sequencer.build()
         
         self.assertFalse(sequencer.has_finished())
         self.assertIs(block, elem1.target_block)
-        self.assertEqual(tps, elem1.time_parameters)
-        self.assertEqual(vps, elem1.voltage_parameters)
+        self.assertEqual(ps, elem1.parameters)
         self.assertEqual(1, elem1.requires_stop_call_counter)
         self.assertEqual(1, elem1.build_call_counter)
-        self.assertEqual(tps, elem2.time_parameters)
-        self.assertEqual(vps, elem2.voltage_parameters)
+        self.assertEqual(ps, elem2.parameters)
         self.assertEqual(2, elem2.requires_stop_call_counter)
         self.assertEqual(0, elem2.build_call_counter)
         
@@ -211,23 +195,20 @@ class SequencerTest(unittest.TestCase):
         dummy_hardware = DummySequencingHardware()
         sequencer = Sequencer(dummy_hardware)
     
-        tps = {'foo': ConstantParameter(1)}
-        vps = {'bar': ConstantParameter(7.3)}
+        ps = {'foo': ConstantParameter(1), 'bar': ConstantParameter(7.3)}
         elem1 = DummySequencingElement(False)
         elem2 = DummySequencingElement(False)
-        sequencer.push(elem2, tps, vps)
-        sequencer.push(elem1, tps, vps)
+        sequencer.push(elem2, ps)
+        sequencer.push(elem1, ps)
         block = sequencer.build()
         
         self.assertTrue(sequencer.has_finished())
         self.assertIs(block, elem1.target_block)
-        self.assertEqual(tps, elem1.time_parameters)
-        self.assertEqual(vps, elem1.voltage_parameters)
+        self.assertEqual(ps, elem1.parameters)
         self.assertEqual(1, elem1.requires_stop_call_counter)
         self.assertEqual(1, elem1.build_call_counter)
         self.assertIs(block, elem2.target_block)
-        self.assertEqual(tps, elem2.time_parameters)
-        self.assertEqual(vps, elem2.voltage_parameters)
+        self.assertEqual(ps, elem2.parameters)
         self.assertEqual(1, elem2.requires_stop_call_counter)
         self.assertEqual(1, elem2.build_call_counter)
         
@@ -235,25 +216,22 @@ class SequencerTest(unittest.TestCase):
         dummy_hardware = DummySequencingHardware()
         sequencer = Sequencer(dummy_hardware)
     
-        tps = {'foo': ConstantParameter(1)}
-        vps = {'bar': ConstantParameter(7.3)}
+        ps = {'foo': ConstantParameter(1), 'bar': ConstantParameter(7.3)}
         
         new_block = InstructionBlock()
         new_elem = DummySequencingElement(True)
         
         elem = DummySequencingElement(False, (new_block, [new_elem]))
-        sequencer.push(elem, tps, vps)
+        sequencer.push(elem, ps)
 
         block = sequencer.build()
         
         self.assertFalse(sequencer.has_finished())
         self.assertIs(block, elem.target_block)
-        self.assertEqual(tps, elem.time_parameters)
-        self.assertEqual(vps, elem.voltage_parameters)
+        self.assertEqual(ps, elem.parameters)
         self.assertEqual(1, elem.requires_stop_call_counter)
         self.assertEqual(1, elem.build_call_counter)
-        self.assertEqual(tps, new_elem.time_parameters)
-        self.assertEqual(vps, new_elem.voltage_parameters)
+        self.assertEqual(ps, new_elem.parameters)
         self.assertEqual(1, new_elem.requires_stop_call_counter)
         self.assertEqual(0, new_elem.build_call_counter)
         
@@ -261,31 +239,27 @@ class SequencerTest(unittest.TestCase):
         dummy_hardware = DummySequencingHardware()
         sequencer = Sequencer(dummy_hardware)
     
-        tps = {'foo': ConstantParameter(1)}
-        vps = {'bar': ConstantParameter(7.3)}
+        ps = {'foo': ConstantParameter(1), 'bar': ConstantParameter(7.3)}
         
         new_block = InstructionBlock()
         new_elem = DummySequencingElement(True)
         
         elem1 = DummySequencingElement(False, (new_block, [new_elem]))
         elem2 = DummySequencingElement(True)
-        sequencer.push(elem2, tps, vps)
-        sequencer.push(elem1, tps, vps)
+        sequencer.push(elem2, ps)
+        sequencer.push(elem1, ps)
 
         block = sequencer.build()
         
         self.assertFalse(sequencer.has_finished())
         self.assertIs(block, elem1.target_block)
-        self.assertEqual(tps, elem1.time_parameters)
-        self.assertEqual(vps, elem1.voltage_parameters)
+        self.assertEqual(ps, elem1.parameters)
         self.assertEqual(1, elem1.requires_stop_call_counter)
         self.assertEqual(1, elem1.build_call_counter)
-        self.assertEqual(tps, elem2.time_parameters)
-        self.assertEqual(vps, elem2.voltage_parameters)
+        self.assertEqual(ps, elem2.parameters)
         self.assertEqual(2, elem2.requires_stop_call_counter)
         self.assertEqual(0, elem2.build_call_counter)
-        self.assertEqual(tps, new_elem.time_parameters)
-        self.assertEqual(vps, new_elem.voltage_parameters)
+        self.assertEqual(ps, new_elem.parameters)
         self.assertEqual(1, new_elem.requires_stop_call_counter)
         self.assertEqual(0, new_elem.build_call_counter)
         
@@ -293,19 +267,17 @@ class SequencerTest(unittest.TestCase):
         dummy_hardware = DummySequencingHardware()
         sequencer = Sequencer(dummy_hardware)
                 
-        tps = {'foo': ConstantParameter(1)}
-        vps = {'bar': ConstantParameter(7.3)}
+        ps = {'foo': ConstantParameter(1), 'bar': ConstantParameter(7.3)}
         
         target_block = InstructionBlock()
         elem = DummySequencingElement(False)
-        sequencer.push(elem, tps, vps, target_block)
+        sequencer.push(elem, ps, target_block)
         
         block = sequencer.build()
         
         self.assertTrue(sequencer.has_finished())
         self.assertIs(target_block, elem.target_block)
-        self.assertEqual(tps, elem.time_parameters)
-        self.assertEqual(vps, elem.voltage_parameters)
+        self.assertEqual(ps, elem.parameters)
         self.assertEqual(1, elem.requires_stop_call_counter)
         self.assertEqual(1, elem.build_call_counter)
         
@@ -314,26 +286,23 @@ class SequencerTest(unittest.TestCase):
         dummy_hardware = DummySequencingHardware()
         sequencer = Sequencer(dummy_hardware)
                 
-        tps = {'foo': ConstantParameter(1)}
-        vps = {'bar': ConstantParameter(7.3)}
+        ps = {'foo': ConstantParameter(1), 'bar': ConstantParameter(7.3)}
         
         elem_main = DummySequencingElement(True)
-        sequencer.push(elem_main, tps, vps)
+        sequencer.push(elem_main, ps)
         
         target_block = InstructionBlock()
         elem_cstm = DummySequencingElement(False)
-        sequencer.push(elem_cstm, tps, vps, target_block)
+        sequencer.push(elem_cstm, ps, target_block)
         
         block = sequencer.build()
         
         self.assertFalse(sequencer.has_finished())
-        self.assertEqual(tps, elem_main.time_parameters)
-        self.assertEqual(vps, elem_main.voltage_parameters)
+        self.assertEqual(ps, elem_main.parameters)
         self.assertEqual(2, elem_main.requires_stop_call_counter)
         self.assertEqual(0, elem_main.build_call_counter)
         self.assertIs(target_block, elem_cstm.target_block)
-        self.assertEqual(tps, elem_cstm.time_parameters)
-        self.assertEqual(vps, elem_cstm.voltage_parameters)
+        self.assertEqual(ps, elem_cstm.parameters)
         self.assertEqual(1, elem_cstm.requires_stop_call_counter)
         self.assertEqual(1, elem_cstm.build_call_counter)
         
@@ -341,27 +310,24 @@ class SequencerTest(unittest.TestCase):
         dummy_hardware = DummySequencingHardware()
         sequencer = Sequencer(dummy_hardware)
                 
-        tps = {'foo': ConstantParameter(1)}
-        vps = {'bar': ConstantParameter(7.3)}
+        ps = {'foo': ConstantParameter(1), 'bar': ConstantParameter(7.3)}
         
         elem_main = DummySequencingElement(False)
-        sequencer.push(elem_main, tps, vps)
+        sequencer.push(elem_main, ps)
         
         target_block = InstructionBlock()
         elem_cstm = DummySequencingElement(False)
-        sequencer.push(elem_cstm, tps, vps, target_block)
+        sequencer.push(elem_cstm, ps, target_block)
         
         block = sequencer.build()
         
         self.assertTrue(sequencer.has_finished())
         self.assertIs(block, elem_main.target_block)
-        self.assertEqual(tps, elem_main.time_parameters)
-        self.assertEqual(vps, elem_main.voltage_parameters)
+        self.assertEqual(ps, elem_main.parameters)
         self.assertEqual(1, elem_main.requires_stop_call_counter)
         self.assertEqual(1, elem_main.build_call_counter)
         self.assertIs(target_block, elem_cstm.target_block)
-        self.assertEqual(tps, elem_cstm.time_parameters)
-        self.assertEqual(vps, elem_cstm.voltage_parameters)
+        self.assertEqual(ps, elem_cstm.parameters)
         self.assertEqual(1, elem_cstm.requires_stop_call_counter)
         self.assertEqual(1, elem_cstm.build_call_counter)
         
@@ -369,26 +335,23 @@ class SequencerTest(unittest.TestCase):
         dummy_hardware = DummySequencingHardware()
         sequencer = Sequencer(dummy_hardware)
                 
-        tps = {'foo': ConstantParameter(1)}
-        vps = {'bar': ConstantParameter(7.3)}
+        ps = {'foo': ConstantParameter(1), 'bar': ConstantParameter(7.3)}
         
         target_block = InstructionBlock()
         elem2 = DummySequencingElement(True)
-        sequencer.push(elem2, tps, vps, target_block)
+        sequencer.push(elem2, ps, target_block)
         
         elem1 = DummySequencingElement(False)
-        sequencer.push(elem1, tps, vps, target_block)
+        sequencer.push(elem1, ps, target_block)
         
         block = sequencer.build()
         
         self.assertFalse(sequencer.has_finished())
         self.assertIs(target_block, elem1.target_block)
-        self.assertEqual(tps, elem1.time_parameters)
-        self.assertEqual(vps, elem1.voltage_parameters)
+        self.assertEqual(ps, elem1.parameters)
         self.assertEqual(1, elem1.requires_stop_call_counter)
         self.assertEqual(1, elem1.build_call_counter)
-        self.assertEqual(tps, elem2.time_parameters)
-        self.assertEqual(vps, elem2.voltage_parameters)
+        self.assertEqual(ps, elem2.parameters)
         self.assertEqual(2, elem2.requires_stop_call_counter)
         self.assertEqual(0, elem2.build_call_counter)
         
@@ -396,27 +359,24 @@ class SequencerTest(unittest.TestCase):
         dummy_hardware = DummySequencingHardware()
         sequencer = Sequencer(dummy_hardware)
                 
-        tps = {'foo': ConstantParameter(1)}
-        vps = {'bar': ConstantParameter(7.3)}
+        ps = {'foo': ConstantParameter(1), 'bar': ConstantParameter(7.3)}
         
         target_block = InstructionBlock()
         elem2 = DummySequencingElement(False)
-        sequencer.push(elem2, tps, vps, target_block)
+        sequencer.push(elem2, ps, target_block)
         
         elem1 = DummySequencingElement(False)
-        sequencer.push(elem1, tps, vps, target_block)
+        sequencer.push(elem1, ps, target_block)
         
         block = sequencer.build()
         
         self.assertTrue(sequencer.has_finished())
         self.assertIs(target_block, elem1.target_block)
-        self.assertEqual(tps, elem1.time_parameters)
-        self.assertEqual(vps, elem1.voltage_parameters)
+        self.assertEqual(ps, elem1.parameters)
         self.assertEqual(1, elem1.requires_stop_call_counter)
         self.assertEqual(1, elem1.build_call_counter)
         self.assertIs(target_block, elem2.target_block)
-        self.assertEqual(tps, elem2.time_parameters)
-        self.assertEqual(vps, elem2.voltage_parameters)
+        self.assertEqual(ps, elem2.parameters)
         self.assertEqual(1, elem2.requires_stop_call_counter)
         self.assertEqual(1, elem2.build_call_counter)
         
@@ -424,33 +384,29 @@ class SequencerTest(unittest.TestCase):
         dummy_hardware = DummySequencingHardware()
         sequencer = Sequencer(dummy_hardware)
                 
-        tps = {'foo': ConstantParameter(1)}
-        vps = {'bar': ConstantParameter(7.3)}
+        ps = {'foo': ConstantParameter(1), 'bar': ConstantParameter(7.3)}
         
         target_block = InstructionBlock()
         elem2 = DummySequencingElement(True)
-        sequencer.push(elem2, tps, vps, target_block)
+        sequencer.push(elem2, ps, target_block)
         
         elem1 = DummySequencingElement(False)
-        sequencer.push(elem1, tps, vps, target_block)
+        sequencer.push(elem1, ps, target_block)
         
         elem_main = DummySequencingElement(True)
-        sequencer.push(elem_main, tps, vps)
+        sequencer.push(elem_main, ps)
         
         block = sequencer.build()
         
         self.assertFalse(sequencer.has_finished())
         self.assertIs(target_block, elem1.target_block)
-        self.assertEqual(tps, elem1.time_parameters)
-        self.assertEqual(vps, elem1.voltage_parameters)
+        self.assertEqual(ps, elem1.parameters)
         self.assertEqual(1, elem1.requires_stop_call_counter)
         self.assertEqual(1, elem1.build_call_counter)
-        self.assertEqual(tps, elem2.time_parameters)
-        self.assertEqual(vps, elem2.voltage_parameters)
+        self.assertEqual(ps, elem2.parameters)
         self.assertEqual(2, elem2.requires_stop_call_counter)
         self.assertEqual(0, elem2.build_call_counter)
-        self.assertEqual(tps, elem_main.time_parameters)
-        self.assertEqual(vps, elem_main.voltage_parameters)
+        self.assertEqual(ps, elem_main.parameters)
         self.assertEqual(2, elem_main.requires_stop_call_counter)
         self.assertEqual(0, elem_main.build_call_counter)
         
@@ -458,34 +414,30 @@ class SequencerTest(unittest.TestCase):
         dummy_hardware = DummySequencingHardware()
         sequencer = Sequencer(dummy_hardware)
                 
-        tps = {'foo': ConstantParameter(1)}
-        vps = {'bar': ConstantParameter(7.3)}
+        ps = {'foo': ConstantParameter(1), 'bar': ConstantParameter(7.3)}
         
         target_block = InstructionBlock()
         elem2 = DummySequencingElement(True)
-        sequencer.push(elem2, tps, vps, target_block)
+        sequencer.push(elem2, ps, target_block)
         
         elem1 = DummySequencingElement(False)
-        sequencer.push(elem1, tps, vps, target_block)
+        sequencer.push(elem1, ps, target_block)
         
         elem_main = DummySequencingElement(False)
-        sequencer.push(elem_main, tps, vps)
+        sequencer.push(elem_main, ps)
         
         block = sequencer.build()
         
         self.assertFalse(sequencer.has_finished())
         self.assertIs(target_block, elem1.target_block)
-        self.assertEqual(tps, elem1.time_parameters)
-        self.assertEqual(vps, elem1.voltage_parameters)
+        self.assertEqual(ps, elem1.parameters)
         self.assertEqual(1, elem1.requires_stop_call_counter)
         self.assertEqual(1, elem1.build_call_counter)
-        self.assertEqual(tps, elem2.time_parameters)
-        self.assertEqual(vps, elem2.voltage_parameters)
+        self.assertEqual(ps, elem2.parameters)
         self.assertEqual(2, elem2.requires_stop_call_counter)
         self.assertEqual(0, elem2.build_call_counter)
         self.assertIs(block, elem_main.target_block)
-        self.assertEqual(tps, elem_main.time_parameters)
-        self.assertEqual(vps, elem_main.voltage_parameters)
+        self.assertEqual(ps, elem_main.parameters)
         self.assertEqual(1, elem_main.requires_stop_call_counter)
         self.assertEqual(1, elem_main.build_call_counter)
         
@@ -493,35 +445,31 @@ class SequencerTest(unittest.TestCase):
         dummy_hardware = DummySequencingHardware()
         sequencer = Sequencer(dummy_hardware)
                 
-        tps = {'foo': ConstantParameter(1)}
-        vps = {'bar': ConstantParameter(7.3)}
+        ps = {'foo': ConstantParameter(1), 'bar': ConstantParameter(7.3)}
         
         target_block = InstructionBlock()
         elem2 = DummySequencingElement(False)
-        sequencer.push(elem2, tps, vps, target_block)
+        sequencer.push(elem2, ps, target_block)
         
         elem1 = DummySequencingElement(False)
-        sequencer.push(elem1, tps, vps, target_block)
+        sequencer.push(elem1, ps, target_block)
         
         elem_main = DummySequencingElement(False)
-        sequencer.push(elem_main, tps, vps)
+        sequencer.push(elem_main, ps)
         
         block = sequencer.build()
         
         self.assertTrue(sequencer.has_finished())
         self.assertIs(target_block, elem1.target_block)
-        self.assertEqual(tps, elem1.time_parameters)
-        self.assertEqual(vps, elem1.voltage_parameters)
+        self.assertEqual(ps, elem1.parameters)
         self.assertEqual(1, elem1.requires_stop_call_counter)
         self.assertEqual(1, elem1.build_call_counter)
         self.assertIs(target_block, elem2.target_block)
-        self.assertEqual(tps, elem2.time_parameters)
-        self.assertEqual(vps, elem2.voltage_parameters)
+        self.assertEqual(ps, elem2.parameters)
         self.assertEqual(1, elem2.requires_stop_call_counter)
         self.assertEqual(1, elem2.build_call_counter)
         self.assertIs(block, elem_main.target_block)
-        self.assertEqual(tps, elem_main.time_parameters)
-        self.assertEqual(vps, elem_main.voltage_parameters)
+        self.assertEqual(ps, elem_main.parameters)
         self.assertEqual(1, elem_main.requires_stop_call_counter)
         self.assertEqual(1, elem_main.build_call_counter)
         
@@ -529,41 +477,36 @@ class SequencerTest(unittest.TestCase):
         dummy_hardware = DummySequencingHardware()
         sequencer = Sequencer(dummy_hardware)
                 
-        tps = {'foo': ConstantParameter(1)}
-        vps = {'bar': ConstantParameter(7.3)}
+        ps = {'foo': ConstantParameter(1), 'bar': ConstantParameter(7.3)}
         
         target_block = InstructionBlock()
         elem2 = DummySequencingElement(True)
-        sequencer.push(elem2, tps, vps, target_block)
+        sequencer.push(elem2, ps, target_block)
         
         elem1 = DummySequencingElement(False)
-        sequencer.push(elem1, tps, vps, target_block)
+        sequencer.push(elem1, ps, target_block)
         
         elem_main2 = DummySequencingElement(True)
-        sequencer.push(elem_main2, tps, vps)
+        sequencer.push(elem_main2, ps)
         
         elem_main1 = DummySequencingElement(False)
-        sequencer.push(elem_main1, tps, vps)
+        sequencer.push(elem_main1, ps)
         
         block = sequencer.build()
         
         self.assertFalse(sequencer.has_finished())
         self.assertIs(target_block, elem1.target_block)
-        self.assertEqual(tps, elem1.time_parameters)
-        self.assertEqual(vps, elem1.voltage_parameters)
+        self.assertEqual(ps, elem1.parameters)
         self.assertEqual(1, elem1.requires_stop_call_counter)
         self.assertEqual(1, elem1.build_call_counter)
-        self.assertEqual(tps, elem2.time_parameters)
-        self.assertEqual(vps, elem2.voltage_parameters)
+        self.assertEqual(ps, elem2.parameters)
         self.assertEqual(2, elem2.requires_stop_call_counter)
         self.assertEqual(0, elem2.build_call_counter)
         self.assertIs(block, elem_main1.target_block)
-        self.assertEqual(tps, elem_main1.time_parameters)
-        self.assertEqual(vps, elem_main1.voltage_parameters)
+        self.assertEqual(ps, elem_main1.parameters)
         self.assertEqual(1, elem_main1.requires_stop_call_counter)
         self.assertEqual(1, elem_main1.build_call_counter)
-        self.assertEqual(tps, elem_main2.time_parameters)
-        self.assertEqual(vps, elem_main2.voltage_parameters)
+        self.assertEqual(ps, elem_main2.parameters)
         self.assertEqual(2, elem_main2.requires_stop_call_counter)
         self.assertEqual(0, elem_main2.build_call_counter)
         
@@ -572,42 +515,37 @@ class SequencerTest(unittest.TestCase):
         dummy_hardware = DummySequencingHardware()
         sequencer = Sequencer(dummy_hardware)
                 
-        tps = {'foo': ConstantParameter(1)}
-        vps = {'bar': ConstantParameter(7.3)}
+        ps = {'foo': ConstantParameter(1), 'bar': ConstantParameter(7.3)}
         
         target_block = InstructionBlock()
         elem2 = DummySequencingElement(True)
-        sequencer.push(elem2, tps, vps, target_block)
+        sequencer.push(elem2, ps, target_block)
         
         elem1 = DummySequencingElement(False)
-        sequencer.push(elem1, tps, vps, target_block)
+        sequencer.push(elem1, ps, target_block)
         
         elem_main2 = DummySequencingElement(False)
-        sequencer.push(elem_main2, tps, vps)
+        sequencer.push(elem_main2, ps)
         
         elem_main1 = DummySequencingElement(False)
-        sequencer.push(elem_main1, tps, vps)
+        sequencer.push(elem_main1, ps)
         
         block = sequencer.build()
         
         self.assertFalse(sequencer.has_finished())
         self.assertIs(target_block, elem1.target_block)
-        self.assertEqual(tps, elem1.time_parameters)
-        self.assertEqual(vps, elem1.voltage_parameters)
+        self.assertEqual(ps, elem1.parameters)
         self.assertEqual(1, elem1.requires_stop_call_counter)
         self.assertEqual(1, elem1.build_call_counter)
-        self.assertEqual(tps, elem2.time_parameters)
-        self.assertEqual(vps, elem2.voltage_parameters)
+        self.assertEqual(ps, elem2.parameters)
         self.assertEqual(2, elem2.requires_stop_call_counter)
         self.assertEqual(0, elem2.build_call_counter)
         self.assertIs(block, elem_main1.target_block)
-        self.assertEqual(tps, elem_main1.time_parameters)
-        self.assertEqual(vps, elem_main1.voltage_parameters)
+        self.assertEqual(ps, elem_main1.parameters)
         self.assertEqual(1, elem_main1.requires_stop_call_counter)
         self.assertEqual(1, elem_main1.build_call_counter)
         self.assertIs(block, elem_main2.target_block)
-        self.assertEqual(tps, elem_main2.time_parameters)
-        self.assertEqual(vps, elem_main2.voltage_parameters)
+        self.assertEqual(ps, elem_main2.parameters)
         self.assertEqual(1, elem_main2.requires_stop_call_counter)
         self.assertEqual(1, elem_main2.build_call_counter)
         
@@ -615,43 +553,38 @@ class SequencerTest(unittest.TestCase):
         dummy_hardware = DummySequencingHardware()
         sequencer = Sequencer(dummy_hardware)
                 
-        tps = {'foo': ConstantParameter(1)}
-        vps = {'bar': ConstantParameter(7.3)}
+        ps = {'foo': ConstantParameter(1), 'bar': ConstantParameter(7.3)}
         
         target_block = InstructionBlock()
         elem2 = DummySequencingElement(False)
-        sequencer.push(elem2, tps, vps, target_block)
+        sequencer.push(elem2, ps, target_block)
         
         elem1 = DummySequencingElement(False)
-        sequencer.push(elem1, tps, vps, target_block)
+        sequencer.push(elem1, ps, target_block)
         
         elem_main2 = DummySequencingElement(False)
-        sequencer.push(elem_main2, tps, vps)
+        sequencer.push(elem_main2, ps)
         
         elem_main1 = DummySequencingElement(False)
-        sequencer.push(elem_main1, tps, vps)
+        sequencer.push(elem_main1, ps)
         
         block = sequencer.build()
         
         self.assertTrue(sequencer.has_finished())
         self.assertIs(target_block, elem1.target_block)
-        self.assertEqual(tps, elem1.time_parameters)
-        self.assertEqual(vps, elem1.voltage_parameters)
+        self.assertEqual(ps, elem1.parameters)
         self.assertEqual(1, elem1.requires_stop_call_counter)
         self.assertEqual(1, elem1.build_call_counter)
         self.assertIs(target_block, elem2.target_block)
-        self.assertEqual(tps, elem2.time_parameters)
-        self.assertEqual(vps, elem2.voltage_parameters)
+        self.assertEqual(ps, elem2.parameters)
         self.assertEqual(1, elem2.requires_stop_call_counter)
         self.assertEqual(1, elem2.build_call_counter)
         self.assertIs(block, elem_main1.target_block)
-        self.assertEqual(tps, elem_main1.time_parameters)
-        self.assertEqual(vps, elem_main1.voltage_parameters)
+        self.assertEqual(ps, elem_main1.parameters)
         self.assertEqual(1, elem_main1.requires_stop_call_counter)
         self.assertEqual(1, elem_main1.build_call_counter)
         self.assertIs(block, elem_main2.target_block)
-        self.assertEqual(tps, elem_main2.time_parameters)
-        self.assertEqual(vps, elem_main2.voltage_parameters)
+        self.assertEqual(ps, elem_main2.parameters)
         self.assertEqual(1, elem_main2.requires_stop_call_counter)
         self.assertEqual(1, elem_main2.build_call_counter)
                 

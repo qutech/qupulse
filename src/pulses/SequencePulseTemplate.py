@@ -6,8 +6,8 @@ from functools import partial
 
 """LOCAL IMPORTS"""
 
-from .PulseTemplate import PulseTemplate
-from .Parameter import ImmutableParameterDeclaration, Parameter
+from .PulseTemplate import PulseTemplate, MeasurementWindow
+from .Parameter import ParameterDeclaration, Parameter
 
 
 logger = logging.getLogger(__name__)
@@ -36,54 +36,43 @@ class SequencePulseTemplate(PulseTemplate):
         self.subtemplates = [] # type: List[PulseTemplate]
         self.mapping = Mapping() #type: Mapping
         self.__is_interruptable = None
-        
-    def get_time_parameter_names(self) -> Set[str]:
-        time_parameter_names = set()
-        for subtemplate in self.subtemplates:
-            for time_parameter_name in subtemplate.get_time_parameter_names():
-                if time_parameter_name in self.mapping.get_targets():
-                    time_parameter_names.add(self.mapping.get_targets()[time_parameter_name])
-                else:
-                    time_parameter_names.add(time_parameter_name)
-        return time_parameter_names
-        
-    def get_voltage_parameter_names(self) -> Set[str]:
-        voltage_parameter_names = set()
-        for subtemplate in self.subtemplates:
-            for voltage_parameter_name in subtemplate.get_time_parameter_names():
-                if voltage_parameter_name in self.mapping.get_targets():
-                    voltage_parameter_names.add(self.mapping.get_targets()[voltage_parameter_name])
-                else:
-                    voltage_parameter_names.add(voltage_parameter_name)
-        return voltage_parameter_names
     
-    def get_time_parameter_declaration(self) -> Dict[str, ImmutableParameterDeclaration]:
-        time_parameter_declaration = {}
+    @property
+    def parameter_names(self) -> Set[str]:
+        parameter_names = set()
         for subtemplate in self.subtemplates:
-            for parameter,declaration in subtemplate.get_time_parameter_declaration():
-                if parameter in self.mapping.get_targets():
-                    #Rename the parameter according to the mapping. The target name becomes the source name.
-                    time_parameter_declaration[self.mapping.get_targets()[parameter]] = declaration
+            for parameter_name in subtemplate.parameter_names:
+                if parameter_name in self.mapping.get_targets():
+                    parameter_names.add(self.mapping.get_targets()[parameter_name])
                 else:
-                    time_parameter_declaration[parameter] = declaration
-        return time_parameter_declaration
-           
-    def get_voltage_parameter_declarations(self) -> Dict[str, ImmutableParameterDeclaration]:
-        voltage_parameter_declaration = {}
+                    parameter_names.add(parameter_name)
+        return parameter_names
+                    
+    @property
+    def parameter_declarations(self) -> Set[ParameterDeclaration]:
+        parameter_declarations = set()
         for subtemplate in self.subtemplates:
-            for parameter,declaration in subtemplate.get_voltage_parameter_declaration():
-                if parameter in self.mapping.get_targets():
+            for declaration in subtemplate.parameter_declarations:
+                if declaration.name in self.mapping.get_targets():
                     #Rename the parameter according to the mapping. The target name becomes the source name.
-                    voltage_parameter_declaration[self.mapping.get_targets()[parameter]] = declaration
-                else:
-                    voltage_parameter_declaration[parameter] = declaration
+                    declaration = ParameterDeclaration(
+                                                       self.mapping.get_targets()[declaration.name], 
+                                                       min=declaration.min_value, 
+                                                       max=declaration.max_value, 
+                                                       default=declaration.default_value
+                                                       ) 
+                    # TODO: min, max and default values might have to be mapped to? especially in the case that min, max are ParameterDeclarations as well
+                parameter_declarations.add(declaration)
+        return parameter_declarations
           
-    def get_measurement_windows(self) -> List[Tuple[float, float]]:
-        measuerement_windows = []
+    def get_measurement_windows(self, parameters: Dict[str, Parameter] = None) -> List[MeasurementWindow]:
+        measurement_windows = []
         for subtemplate in self.subtemplates:
-            measuerement_windows = measuerement_windows + subtemplate.get_measurement_windows()
-        return measuerement_windows
+            # TODO: parameters might have to be mapped
+            measurement_windows = measurement_windows + subtemplate.get_measurement_windows(parameters)
+        return measurement_windows
     
+    @property
     def is_interruptable(self) -> bool:
         interruptable = True
         for subtemplate in self.subtemplates:
