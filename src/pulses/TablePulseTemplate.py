@@ -1,7 +1,7 @@
 """STANDARD LIBRARY IMPORTS"""
-from logging import getLogger, Logger
-from typing import Union, Dict, List, Set, Tuple, Optional
 import logging
+from typing import Union, Dict, List, Set, Tuple, Optional
+import numbers
 
 """RELATED THIRD PARTY IMPORTS"""
 
@@ -56,7 +56,7 @@ class TablePulseTemplate(PulseTemplate):
                 
         # if time is (now) a ParameterDeclaration, verify it, insert it and establish references/dependencies to previous entries if necessary
         if isinstance(time, ParameterDeclaration):
-            if time.name not in self.__time_parameter_declarations and time not in self.__voltage_parameter_declarations:
+            if time.name not in self.__time_parameter_declarations and time.name not in self.__voltage_parameter_declarations:
                 if isinstance(time.min_value, ParameterDeclaration):
                     raise ValueError('A ParamterDeclaration for a time parameter may not have a minimum value reference to another ParameterDeclaration object.')
                 if isinstance(time.max_value, ParameterDeclaration):
@@ -93,7 +93,7 @@ class TablePulseTemplate(PulseTemplate):
             
         # no special action if voltage is a real number
         # finally, add the new entry to the table 
-        self.__entries.add((time, voltage))
+        self.__entries.append((time, voltage))
         
 #    def __get_entry_sort_value(self, entry: TableEntry) -> float:
 #        """Determine the value of an entry for sorting purposes.
@@ -128,16 +128,18 @@ class TablePulseTemplate(PulseTemplate):
 #         self.__entries = sorted(self.__entries, key=self.__get_entry_sort_value)
 #         self.__is_sorted = True
         
-    def get_entries(self) -> List[TableEntry]:
+    @property
+    def entries(self) -> List[TableEntry]:
         """Return an immutable copies of this TablePulseTemplate's entries."""
-        entries = []
-        for (time, voltage) in self.__entries:
-            if isinstance(time, ParameterDeclaration):
-                time = ImmutableParameterDeclaration(time)
-            if isinstance(voltage, ParameterDeclaration):
-                voltage = ImmutableParameterDeclaration(voltage)
-            entries.add((time, voltage))
-        return entries
+        return self.__entries.copy()
+#         entries = []
+#         for (time, voltage) in self.__entries:
+#             if isinstance(time, ParameterDeclaration):
+#                 time = ImmutableParameterDeclaration(time)
+#             if isinstance(voltage, ParameterDeclaration):
+#                 voltage = ImmutableParameterDeclaration(voltage)
+#             entries.append((time, voltage))
+#         return entries
         
 #    def remove_entry(self, entry: TableEntry) -> None:
 #        """Removes an entry from this TablePulseTemplate by its index."""
