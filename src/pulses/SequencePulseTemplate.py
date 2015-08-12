@@ -1,4 +1,3 @@
-"""STANDARD LIBRARY IMPORTS"""
 import logging
 from typing import Dict, List, Tuple, Set, Callable
 from functools import partial
@@ -13,7 +12,8 @@ from .Parameter import ParameterDeclaration, TimeParameterDeclaration, Parameter
 logger = logging.getLogger(__name__)
 
 class SequencePulseTemplate(PulseTemplate):
-    """A sequence of different PulseTemplates.
+    """
+    A sequence of different PulseTemplates.
     
     SequencePulseTemplate allows to group smaller
     PulseTemplates (subtemplates) into on larger sequence,
