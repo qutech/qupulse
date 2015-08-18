@@ -28,7 +28,7 @@ class TablePulseTemplate(PulseTemplate):
     measurement window.
     """
     
-    TableValue = Union[int, str]
+    TableValue = Union[float, ParameterDeclaration]
     TableEntry = Tuple[TableValue, TableValue]
     
     def __init__(self) -> None:
@@ -39,90 +39,131 @@ class TablePulseTemplate(PulseTemplate):
         self.__voltage_parameter_declarations = {} # type: Dict[str, ParameterDeclaration]
         self.__is_measurement_pulse = False # type: bool
         
-    def add_entry(self, time: TableValue, voltage: TableValue) -> None:
+    def add_entry(self, time: Union[float, str, ParameterDeclaration], voltage: Union[float, str, ParameterDeclaration]) -> None:
         """Add an entry to this TablePulseTemplate.
         
         The arguments time and voltage may either be real numbers or a string which
         references a parameter declaration by name. If a non-existing parameter declaration
         is referenced, it is created.
         """
+        last_entry = (0, 0)
+        if self.__entries:
+            last_entry = self.__entries[-1]
+        
+        # construct a ParameterDeclaration if time is a parameter name string
         if isinstance(time, str):
             if time not in self.__time_parameter_declarations:
-                self.declare_time_parameter(time)
-        else:
-            if time < 0:
-                raise ValueError("Argument time must be positive, was: {}!".format(time))
+                time = ParameterDeclaration(time)
                 
-        if isinstance(voltage, str) and voltage not in self.__voltage_parameter_declarations:
-            self.declare_voltage_parameter(voltage)
-        self.__is_sorted = False
+        # if time is (now) a ParameterDeclaration, verify it, insert it and establish references/dependencies to previous entries if necessary
+        if isinstance(time, ParameterDeclaration):
+            if time.name not in self.__time_parameter_declarations:
+                if isinstance(time.min_value, ParameterDeclaration):
+                    raise ValueError('A ParamterDeclaration for a time parameter may not have a minimum value reference to another ParameterDeclaration object.')
+                if isinstance(time.max_value, ParameterDeclaration):
+                    raise ValueError('A ParamterDeclaration for a time parameter may not have a maximum value reference to another ParameterDeclaration object.')
+                    
+                time.min_value = last_entry[0]
+                if (isinstance(last_entry[0], ParameterDeclaration) 
+                        and (isinstance(last_entry[0].max_value, ParameterDeclaration) or last_entry[0].max_value > time.max_value)): 
+                    last_entry[0].max_entry = declaration
+                    
+                self.__time_parameter_declarations[time.name] = time
+            else:
+                raise ValueError("A parameter with the name {} already exists.".format(time.name))
+        # if time is a real number, ensure that is it not less than the previous entry
+        elif isinstance(time, numbers.Real):
+            if isinstance(last_entry[0], ParameterDeclaration) and time <= last_entry[0].absolute_max_value or time <= last_entry[0]:
+                raise ValueError("Argument time must be greater than previous time value {0}, was: {1}!".format(last_entry[0], time))
+                
+        # construct a ParameterDeclaration if voltage is a parameter name string
+        if isinstance(voltage, str):
+            voltage = ParameterDeclaration(voltage)
+            
+        # if voltage is (now) a ParameterDeclaration, make use of it
+        if isinstance(voltage, ParameterDeclaration):
+            # check whether a ParameterDeclaration with the same name already exists and, if so, use that instead
+            # such that the same object is used consistently for one declaration
+            if voltage.name in self.__voltage_parameter_declarations:
+                voltage = self.__voltage_parameter_declarations[voltage.name]
+
+            self.__voltage_parameter_declarations[voltage.name] = voltage
+            
+        # no special action if voltage is a real number
+        # finally, add the new entry to the table 
         self.__entries.add((time, voltage))
         
-    def __get_entry_sort_value(self, entry: TableEntry) -> float:
-        """@brief Determine the value of an entry for sorting purposes.
-        
-        If the time value is a constant float, that is returned.
-        If the time value is a parameter reference, the returned value is the first
-        value of default, minimum or maximum which is defined in the parameter declaration.
-        If all these values are None, the result is inf to ensure that the entry will
-        appear at the end of a sorted list.
-        """
-        if isinstance(entry[0]):
-            return entry[0]
-        parameter_declaration = self.__parameter_declarations[entry[0]]
-        if parameter_declaration.default_value is not None:
-            return parameter_declaration.default_value
-        if parameter_declaration.min_value is not None:
-            return parameter_declaration.min_value
-        if parameter_declaration.max_value is not None:
-            return parameter_declaration.max_value
-        return float('inf')
-        
-    def __sort_entries(self) -> None:
-        """Sort this TablePulseTemplate's entries according to their time value.
-        
-        If the time value is a parameter reference it is placed in the sorted list
-        according to the parameter declarations default, minimum or maximum value
-        (with this precedence, i.e., if no default value is given, the minimum value
-        is chosen). If none of these values is set, the entry is appended to the end.
-        """
-        if self.__is_sorted:
-            return
-        self.__entries = sorted(self.__entries, key=self.__get_entry_sort_value)
-        self.__is_sorted = True
+#    def __get_entry_sort_value(self, entry: TableEntry) -> float:
+#        """Determine the value of an entry for sorting purposes.
+#        
+#        If the time value is a constant float, that is returned.
+#        If the time value is a parameter reference, the returned value is the first
+#         value of default, minimum or maximum which is defined in the parameter declaration.
+#         If all these values are None, the result is inf to ensure that the entry will
+#         appear at the end of a sorted list.
+#         """
+#         if isinstance(entry[0]):
+#             return entry[0]
+#         parameter_declaration = self.__parameter_declarations[entry[0]]
+#         if parameter_declaration.default_value is not None:
+#             return parameter_declaration.default_value
+#         if parameter_declaration.min_value is not None:
+#             return parameter_declaration.min_value
+#         if parameter_declaration.max_value is not None:
+#             return parameter_declaration.max_value
+#         return float('inf')
+#         
+#     def __sort_entries(self) -> None:
+#         """Sort this TablePulseTemplate's entries according to their time value.
+#         
+#         If the time value is a parameter reference it is placed in the sorted list
+#         according to the parameter declarations default, minimum or maximum value
+#         (with this precedence, i.e., if no default value is given, the minimum value
+#         is chosen). If none of these values is set, the entry is appended to the end.
+#         """
+#         if self.__is_sorted:
+#             return
+#         self.__entries = sorted(self.__entries, key=self.__get_entry_sort_value)
+#         self.__is_sorted = True
         
     def get_entries(self) -> List[TableEntry]:
         """Return a sorted copy of this TablePulseTemplate's entries."""
-        self.__sort_entries()
-        return self.__entries.copy()
+        entries = []
+        for (time, voltage) in self.__entries:
+            if isinstance(time, ParameterDeclaration):
+                time = ImmutableParameterDeclaration(time)
+            if isinstance(voltage, ParameterDeclaration):
+                voltage = ImmutableParameterDeclaration(voltage)
+            entries.add((time, voltage))
+        return entries
         
-    def remove_entry(self, entry: TableEntry) -> None:
-        """Removes an entry from this TablePulseTemplate by its index."""
-        self.__entries.remove(entry)
+#    def remove_entry(self, entry: TableEntry) -> None:
+#        """Removes an entry from this TablePulseTemplate by its index."""
+#        self.__entries.remove(entry)
         
-    def declare_time_parameter(self, name: str, **kwargs) -> None:
-        """Declare a new parameter for usage as time value in this TablePulseTemplate.
+ #   def declare_time_parameter(self, name: str, **kwargs) -> None:
+ #       """Declare a new parameter for usage as time value in this TablePulseTemplate.
+ #       
+ #       If a time parameter declaration for the given name exists, it is overwritten.
+ #       
+ #       Keyword Arguments:
+ #       min -- An optional real number specifying the minimum value allowed for the .
+ #       max -- An optional real number specifying the maximum value allowed.
+ #       default -- An optional real number specifying a default value for the declared pulse template parameter.
+ #       """
+ #       self.__time_parameter_declarations[name] = TimeParameterDeclaration(**kwargs)
         
-        If a time parameter declaration for the given name exists, it is overwritten.
-        
-        Keyword Arguments:
-        min -- An optional real number specifying the minimum value allowed for the .
-        max -- An optional real number specifying the maximum value allowed.
-        default -- An optional real number specifying a default value for the declared pulse template parameter.
-        """
-        self.__time_parameter_declarations[name] = TimeParameterDeclaration(**kwargs)
-        
-    def declare_voltage_parameter(self, name:str, **kwargs) -> None:
-        """Declare a new parameter for usage as voltage value in this TablePulseTemplate.
-        
-        If a voltage parameter declaration for the given name exists, it is overwritten.
-        
-        Keyword Arguments:
-        min -- An optional real number specifying the minimum value allowed for the .
-        max -- An optional real number specifying the maximum value allowed.
-        default -- An optional real number specifying a default value for the declared pulse template parameter.
-        """
-        self.__voltage_parameter_declarations[name] = ParameterDeclaration(**kwargs)
+#     def declare_voltage_parameter(self, name:str, **kwargs) -> None:
+#         """Declare a new parameter for usage as voltage value in this TablePulseTemplate.
+#         
+#         If a voltage parameter declaration for the given name exists, it is overwritten.
+#         
+#         Keyword Arguments:
+#         min -- An optional real number specifying the minimum value allowed for the .
+#         max -- An optional real number specifying the maximum value allowed.
+#         default -- An optional real number specifying a default value for the declared pulse template parameter.
+#         """
+#         self.__voltage_parameter_declarations[name] = ParameterDeclaration(**kwargs)
         
     def get_time_parameter_declaration(self, name: str) -> ImmutableParameterDeclaration:
         """Return ParameterDeclaration as an immutable object associated with the given parameter name."""
@@ -135,7 +176,7 @@ class TablePulseTemplate(PulseTemplate):
     def remove_time_parameter_declaration(self, name: str) -> None:
         """Remove an existing time parameter declaration from this TablePulseTemplate."""
         for entry in self.__entries:
-            if (isinstance(entry[0], str)) and (name == entry[0]):
+            if (isinstance(entry[0], ParameterDeclaration)) and (name == entry[0]):
                 raise ParameterDeclarationInUseException(name)
         self.__time_parameter_declarations.remove(name)
         
@@ -195,54 +236,37 @@ class TablePulseTemplate(PulseTemplate):
         """Return true, if this PulseTemplate contains points at which it can halt if interrupted."""
         return False
         
-    def __get_entries_instantiated(self, time_parameters: Dict[str, Parameter], voltage_parameters: Optional[Dict[str, Parameter]] = None) -> List[Tuple[int, TableValue]]:
+    def __get_entries_instantiated(self, time_parameters: Dict[str, Parameter], voltage_parameters: Optional[Dict[str, Parameter]] = None) -> List[Tuple[float, TableValue]]:
         """Return a sorted list of all table entries with concrete values provided by the given parameters.
         
         The voltageParameters argument may be None in which case voltage parameter references are not resolved.
         """
-        instantiated_entries = [] # type: List[Tuple[int, VoltageValue]]
+        instantiated_entries = [] # type: List[Tuple[float, VoltageValue]]
         for entry in self.__entries:
-            time_value = None # type: int
+            time_value = None # type: float
             voltage_value = None # type: VoltageValue
             # resolve time parameter references
-            if isinstance(entry[0], str):
-                parameter_declaration = self.__time_parameter_declarations[entry[0]] # type: ParameterDeclaration
-                if entry[0] in time_parameters:
-                    parameter = time_parameters[entry[0]]
-                    if not parameter_declaration.is_parameter_valid(parameter):
-                        raise ParameterValueIllegalException(entry[0], parameter, parameter_declaration)
-                    time_value = parameter.get_value()
-                elif parameter_declaration.default_value is not None:
-                    time_value = parameter_declaration.defaultValue
-                else:
-                    raise ParameterNotProvidedException(entry[0])
+            if isinstance(entry[0], ParameterDeclaration):
+                parameter_declaration = entry[0] # type: ParameterDeclaration
+                if not parameter_declaration.check_parameter_set_valid(time_parameters):
+                    raise ParameterValueIllegalException(parameter_declaration, parameter, parameter_declaration)
+                
+                time_value = parameter_declaration.get_value(time_parameters)
             else:
                 time_value = entry[0]
             # resolve voltage parameter references only if voltageParameters argument is not None, otherwise they are irrelevant
-            if isinstance(entry[1], str) and voltage_parameters is not None:
-                parameter_declaration = self.__voltage_parameter_declarations[entry[1]] # type: ParameterDeclaration
-                if entry[1] in voltage_parameters:
-                    parameter = voltage_parameters[entry[1]]
-                    if not parameter_declaration.is_parameter_valid(parameter):
-                        raise ParameterValueIllegalException(entry[1], parameter, parameter_declaration)
-                    voltage_value = parameter.get_value()
-                elif parameter_declaration.default_value is not None:
-                    voltage_value = parameter_declaration.default_value
-                else:
-                    raise ParameterNotProvidedException(entry[1])
+            if isinstance(entry[1], ParameterDeclaration) and voltage_parameters is not None:
+                parameter_declaration = entry[1] # type: ParameterDeclaration
+                if not parameter_declaration.check_parameter_set_valid(voltage_parameters):
+                    raise ParameterValueIllegalException(parameter_declaration, parameter, parameter_declaration)
+                
+                time_value = parameter_declaration.get_value(voltage_parameters)
             else:
                 voltage_value = entry[1]
             
             instantiated_entries.add((time_value, voltage_value))
             
-        # sanity check: no time value must occur more than once
-        last_time = -1 # type: int
-        for entry in instantiated_entries:
-            if entry[0] <= last_time:
-                raise DuplicatedTimeEntryException(entry[0])
-            last_time = entry[0]
-            
-        return tuple(sorted(instantiated_entries))
+        return tuple(instantiated_entries)
         
     def build_sequence(self, sequencer: Sequencer, time_parameters: Dict[str, Parameter], voltage_parameters: Dict[str, Parameter], instruction_block: InstructionBlock) -> None:
         waveform = sequencer.register_waveform(self._get_entries_instantiated(time_parameters, voltage_parameters))
@@ -260,27 +284,7 @@ class ParameterDeclarationInUseException(Exception):
         
     def __str__(self) -> str:
         return "The parameter declaration {0} is in use and cannot be deleted.".format(self.declaration_name)
-        
-class ParameterNotDeclaredException(Exception):
-    """Indicates that a parameter has not been declared in a TablePulseTemplate."""
-    
-    def __init__(self, parameter_name: str) -> None:
-        super().__init__()
-        self.parameter_name = parameter_name
-        
-    def __str__(self) -> str:
-        return "The parameter {0} has not been declared in the PulseTemplate.".format(self.parameter_name)
-
-class ParameterNotProvidedException(Exception):
-    """Indicates that a required parameter value was not provided."""
-    
-    def __init__(self, parameter_name: str) -> None:
-        super().__init__()
-        self.parameter_name = parameter_name
-        
-    def __str__(self) -> str:
-        return "No value was provided for parameter {0} and no default value was specified.".format(self.parameter_name)
-        
+                
 class ParameterValueIllegalException(Exception):
     """Indicates that the value provided for a parameter is illegal, i.e., is outside the parameter's bounds or of wrong type."""
     
@@ -293,13 +297,3 @@ class ParameterValueIllegalException(Exception):
     def __str__(self) -> str:
         return "The value {0} provided for parameter {1} is illegal (min = {2}, max = {3})".format(
             self.parameter_name, self.parameter.get_value(), self.parameter_declaration.min_value, self.parameter_declaration.max_value)
-            
-class DuplicatedTimeEntryException(Exception):
-    """Indicates that a time value occurred twice in TablePulseTemplate instantiation."""
-    
-    def __init__(self, value: int) -> None:
-        super().__init__()
-        self.value = value
-        
-    def __str__(self) -> str:
-        return "The time value {0} occurred twice.".format(self.value)
