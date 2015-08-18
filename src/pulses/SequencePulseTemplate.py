@@ -33,8 +33,8 @@ class SequencePulseTemplate(PulseTemplate):
     
     def __init__(self) -> None:
         super().__init__()
-        self.subtemplates = [] # type: List[PulseTemplate]
-        self.mapping = Mapping() #type: Mapping
+        self.subtemplates = []  # type: List[PulseTemplate]
+        self.mapping = Mapping()  # type: Mapping
         self.__is_interruptable = None
     
     @property
@@ -74,19 +74,19 @@ class SequencePulseTemplate(PulseTemplate):
     
     @property
     def is_interruptable(self) -> bool:
-        interruptable = True
         for subtemplate in self.subtemplates:
-            interruptable = interruptable and subtemplate.is_interruptable()
-        return interruptable
+            if not subtemplate.is_interruptable():
+                return False
+        return True
 
-    def get_mapping(self) -> 'Mapping':
+    def get_mapping(self) -> Mapping:
         return self.mapping
     
 class Mapping(object):
     def __init__(self) -> None:
         super().__init__()
-        self.functions = {}
-        self.__targets = {}
+        self.functions = {}  # type: Dict[str, Dict[str, Callable]]
+        self.__targets = {}  # type: Dict[str, str]
     
     def add_mapping_function(self,source:str,target:str,func:Callable,*args,**kwargs) -> None:
         if source not in self.functions:

@@ -103,9 +103,16 @@ class TablePulseTemplate(PulseTemplate):
         self.__time_parameter_declarations = {} # type: Dict[str, ParameterDeclaration]
         self.__voltage_parameter_declarations = {} # type: Dict[str, ParameterDeclaration]
         self.__is_measurement_pulse = False # type: bool
-        self.__interpolation_strategies = {'linear': LinearInterpolationStrategy(), 'hold': HoldInterpolationStrategy(), 'jump': JumpInterpolationStrategy()}
+        self.__interpolation_strategies = {
+                                           'linear': LinearInterpolationStrategy(), 
+                                           'hold': HoldInterpolationStrategy(), 
+                                           'jump': JumpInterpolationStrategy()
+                                          }
         
-    def add_entry(self, time: Union[float, str, ParameterDeclaration], voltage: Union[float, str, ParameterDeclaration], interpolation: str = 'hold') -> None:
+    def add_entry(self, 
+                  time: Union[float, str, ParameterDeclaration], 
+                  voltage: Union[float, str, ParameterDeclaration], 
+                  interpolation: str = 'hold') -> None:
         """Add an entry to this TablePulseTemplate.
         
         The arguments time and voltage may either be real numbers or a string which
@@ -142,9 +149,11 @@ class TablePulseTemplate(PulseTemplate):
                 raise ValueError("Cannot use already declared voltage parameter '{}' in time domain.".format(time.name))
             if time.name not in self.__time_parameter_declarations:
                 if isinstance(time.min_value, ParameterDeclaration):
-                    raise ValueError('A ParamterDeclaration for a time parameter may not have a minimum value reference to another ParameterDeclaration object.')
+                    raise ValueError("A ParamterDeclaration for a time parameter may not have a minimum value reference" \
+                                     " to another ParameterDeclaration object.")
                 if isinstance(time.max_value, ParameterDeclaration):
-                    raise ValueError('A ParamterDeclaration for a time parameter may not have a maximum value reference to another ParameterDeclaration object.')
+                    raise ValueError("A ParamterDeclaration for a time parameter may not have a maximum value reference" \
+                                     " to another ParameterDeclaration object.")
                     
                 # set minimum value if not previously set
                 if time.min_value == float('-inf'):
@@ -156,10 +165,12 @@ class TablePulseTemplate(PulseTemplate):
                         last_entry[0].max_entry = declaration
                         
                     if time.min_value < last_entry[0].absolute_min_value:
-                        raise ValueError("Argument time's minimum value must be no smaller than the previous time parameter declaration's minimum value. Parameter '{0}', Minimum {1}, Provided {2}."
+                        raise ValueError("Argument time's minimum value must be no smaller than the previous time" \
+                                         "parameter declaration's minimum value. Parameter '{0}', Minimum {1}, Provided {2}."
                                          .format(last_entry[0].name, last_entry[0].absolute_min_value, time.min_value))
                     if time.max_value < last_entry[1].absolute_max_value:
-                        raise ValueError("Argument time's maximum value must be no smaller than the previous time parameter declaration's maximum value. Parameter '{0}', Maximum {1}, Provided {2}."
+                        raise ValueError("Argument time's maximum value must be no smaller than the previous time" \
+                                         " parameter declaration's maximum value. Parameter '{0}', Maximum {1}, Provided {2}."
                                          .format(last_entry[0].name, last_entry[0].absolute_max_value, time.max_value))
                     
                 self.__time_parameter_declarations[time.name] = time
@@ -173,7 +184,8 @@ class TablePulseTemplate(PulseTemplate):
                     last_entry[0].max_entry = time
                     
                 if time < last_entry[0].absolute_max_value:
-                    raise ValueError("Argument time must be no smaller than previous time parameter declaration's maximum value. Parameter '{0}', Maximum {1}, Provided: {2}."
+                    raise ValueError("Argument time must be no smaller than previous time parameter declaration's" \
+                                     " maximum value. Parameter '{0}', Maximum {1}, Provided: {2}."
                                      .format(last_entry[0].name, last_entry[0].absolute_max_value, time))
                 
             elif time <= last_entry[0]:
@@ -370,4 +382,5 @@ class ParameterValueIllegalException(Exception):
         
     def __str__(self) -> str:
         return "The value {0} provided for parameter {1} is illegal (min = {2}, max = {3})".format(
-            self.parameter_name, self.parameter.get_value(), self.parameter_declaration.min_value, self.parameter_declaration.max_value)
+            self.parameter_name, self.parameter.get_value(), self.parameter_declaration.min_value,
+            self.parameter_declaration.max_value)

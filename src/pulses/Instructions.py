@@ -107,7 +107,7 @@ class CJMPInstruction(Instruction):
         return 'cjmp'
         
     def __eq__(self, other) -> bool:
-        return ((isinstance(other, CJMPInstruction)) and (self.trigger == other.trigger) and (self.target == other.target))
+        return (isinstance(other, CJMPInstruction)) and (self.trigger == other.trigger) and (self.target == other.target)
         
     def __ne__(self, other) -> bool:
         return not self == other
