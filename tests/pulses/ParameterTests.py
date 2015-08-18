@@ -7,13 +7,37 @@ from typing import Union, Optional
 srcPath = os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1)[0] + 'src'
 sys.path.insert(0,srcPath)
 
-from pulses.Parameter import ConstantParameter, ParameterDeclaration, ImmutableParameterDeclaration, ParameterNotProvidedException
+from pulses.Parameter import Parameter, ConstantParameter, ParameterDeclaration, ImmutableParameterDeclaration, ParameterNotProvidedException
+
+class DummyParameter(Parameter):
+        
+        def __init__(self) -> None:
+            self.value = 252.13
+            
+        def get_value(self) -> float:
+            return self.value
+        
+        @property
+        def requires_stop(self) -> bool:
+            return False
+    
+
+class ParameterTest(unittest.TestCase):
+    
+    def test_float_conversion_method(self) -> None:
+        parameter = DummyParameter()
+        self.assertEqual(parameter.value, float(parameter))
     
 class ConstantParameterTest(unittest.TestCase):
+    
+    def test_float_is_constant_parameter(self) -> None:
+        self.assertTrue(issubclass(numbers.Real, ConstantParameter))
+        self.assertTrue(isinstance(0.1, ConstantParameter))
 
     def __test_valid_params(self, value: float) -> None:
         constant_parameter = ConstantParameter(value)
         self.assertEqual(value, constant_parameter.get_value())
+        self.assertEqual(value, float(constant_parameter))
         
     def test_float_values(self) -> None:
         self.__test_valid_params(-0.3)

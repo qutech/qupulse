@@ -29,6 +29,9 @@ class Parameter(metaclass = ABCMeta):
     @abstractproperty
     def requires_stop(self) -> bool:
         pass
+    
+    def __float__(self) -> float:
+        return float(self.get_value())
         
         
 class ConstantParameter(Parameter):
@@ -44,6 +47,8 @@ class ConstantParameter(Parameter):
     @property
     def requires_stop(self) -> bool:
         return False
+    
+ConstantParameter.register(numbers.Real)
       
 class ParameterValueProvider(metaclass = ABCMeta):
     
@@ -167,7 +172,7 @@ class ParameterDeclaration(ParameterValueProvider):
         - If the declaration specifies a minimum value, the parameter's value must be greater or equal
         - If the declaration specifies a maximum value, the parameter's value must be less or equal
         """
-        parameter_value = p.get_value()
+        parameter_value = float(p)
         is_valid = True
         is_valid &= self.absolute_min_value <= parameter_value
         is_valid &= self.absolute_max_value >= parameter_value
@@ -189,7 +194,7 @@ class ParameterDeclaration(ParameterValueProvider):
     
     def get_value(self, parameters: Dict[str, Parameter]) -> float:
         try:
-            return parameters[self.__name].get_value()
+            return float(parameters[self.__name]) # float() wraps get_value for Parameters and works for normal floats also
         except KeyError:
             if self.default_value is not None:
                 return self.default_value
