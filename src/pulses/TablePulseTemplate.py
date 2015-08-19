@@ -106,8 +106,24 @@ class TablePulseTemplate(PulseTemplate):
                                            'hold': HoldInterpolationStrategy(), 
                                            'jump': JumpInterpolationStrategy()
                                           }
-        
-    def add_entry(self, 
+
+    @staticmethod
+    def from_array(self, times: np.ndarray, voltages: np.ndarray):
+        """Static constructor to build a TablePulse from numpy arrays.
+
+        Args:
+            times: 1D numpy array with time values
+            voltages: 1d numpy array with voltage values
+
+        Returns:
+            TablePulseTemplate with the given values, hold interpolation everywhere and no free parameters.
+        """
+        res = TablePulseTemplate()
+        for t, v in zip(times, voltages):
+            res.add_entry(t,v, interpolation='hold')
+        return res
+
+    def add_entry(self,
                   time: Union[float, str, ParameterDeclaration], 
                   voltage: Union[float, str, ParameterDeclaration], 
                   interpolation: str = 'hold') -> None:
