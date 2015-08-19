@@ -47,6 +47,9 @@ class ConstantParameter(Parameter):
     @property
     def requires_stop(self) -> bool:
         return False
+
+    def __repr__(self):
+        return "<ConstantParameter {0}>".format(self.__value)
     
 ConstantParameter.register(numbers.Real)
       
@@ -202,7 +205,10 @@ class ParameterDeclaration(ParameterValueProvider):
                 raise ParameterNotProvidedException(self.__name)
 
     def __str__(self) -> str:
-        return "ParameterDeclaration {0}, range ({1}, {2}), default {3}".format(self.__name, self.min_value, self.max_value, self.default_value)
+        return 'ParameterDeclaration "{0}", range ({1}, {2}), default {3}'.format(self.__name, self.min_value, self.max_value, self.default_value)
+
+    def __repr__(self) -> str:
+        return "<"+self.__str__()+">"
     
     def __eq__(self, other) -> bool:
         return isinstance(other, ParameterDeclaration) and self.name == other.name
