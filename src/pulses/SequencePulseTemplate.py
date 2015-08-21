@@ -26,8 +26,8 @@ class Mapping(object):
             self.__targets[target] = source
         else:
             raise DoubleMappingException(target)
-    
-    def get_mapping_function(self,source:str,target:str)-> Callable:
+    @property
+    def mapping_function(self,source:str,target:str)-> Callable:
         return self.functions[source][target]
     
     def remove_mapping_function(self,source:str,target:str) -> None:
@@ -37,11 +37,12 @@ class Mapping(object):
     def set_mapping_function(self,source:str, target:str,func:Callable,*args,**kwargs) -> None:
         self.functions[source][target] = partial(func,*args,**kwargs)
 
-                
-    def get_sources(self) -> List[str]:
+    @property    
+    def sources(self) -> List[str]:
         return self.functions.keys()
     
-    def get_targets(self) -> List[str]:
+    @property
+    def targets(self) -> List[str]:
         return self.__targets.keys()
     
 
@@ -68,7 +69,7 @@ class SequencePulseTemplate(PulseTemplate):
         super().__init__()
         self.subtemplates = []  # type: List[PulseTemplate]
         self.mapping = Mapping()  # type: Mapping
-        self.__is_interruptable = None
+        self.__is_interruptable = True
     
     @property
     def parameter_names(self) -> Set[str]:
@@ -97,20 +98,22 @@ class SequencePulseTemplate(PulseTemplate):
                     # TODO: min, max and default values might have to be mapped to? especially in the case that min, max are ParameterDeclarations as well
                 parameter_declarations.add(declaration)
         return parameter_declarations
-          
-    def get_measurement_windows(self, parameters: Dict[str, Parameter] = None) -> List[MeasurementWindow]:
+    
+    @property
+    def measurement_windows(self, parameters: Dict[str, Parameter] = None) -> List[MeasurementWindow]:
         measurement_windows = []
         for subtemplate in self.subtemplates:
             # TODO: parameters might have to be mapped
-            measurement_windows = measurement_windows + subtemplate.get_measurement_windows(parameters)
+            measurement_windows = measurement_windows + subtemplate.measurement_windows(parameters)
         return measurement_windows
     
     @property
     def is_interruptable(self) -> bool:
-        for subtemplate in self.subtemplates:
-            if not subtemplate.is_interruptable():
-                return False
-        return True
+        return self.__is_interruptable
+    
+    @is_interruptable.setter
+    def is_interruptable(self, new_value: bool):
+        self.__is_interruptable
 
     def get_mapping(self) -> Mapping:
         return self.mapping
