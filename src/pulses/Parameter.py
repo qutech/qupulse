@@ -241,7 +241,9 @@ class ParameterDeclaration(ParameterValueProvider):
         return "<"+self.__str__()+">"
     
     def __eq__(self, other) -> bool:
-        return isinstance(other, ParameterDeclaration) and self.name == other.name
+        return (isinstance(other, ParameterDeclaration) and self.name == other.name 
+                and self.min_value == other.min_value and self.max_value == other.max_value
+                and self.default_value == other.default_value) 
         
 class ImmutableParameterDeclaration(ParameterDeclaration):
     
