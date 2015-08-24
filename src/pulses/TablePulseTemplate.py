@@ -5,6 +5,7 @@ import numbers
 import numpy as np
 from scipy.interpolate import interp1d
 import copy
+import collections
 from abc import ABCMeta, abstractmethod
 
 """RELATED THIRD PARTY IMPORTS"""
@@ -39,6 +40,9 @@ class LinearInterpolationStrategy(InterpolationStrategy):
         interpolator = interp1d(xs, ys, kind='linear', copy=False) # No extra error checking needed, interp1d throws errors for times out of bounds
         return interpolator(times)
 
+    def to_json(self):
+        return 'linear'
+
     def __repr__(self):
         return "<Linear Interpolation>"
 
@@ -56,6 +60,9 @@ class HoldInterpolationStrategy(InterpolationStrategy):
         voltages = np.ones_like(times) * start[1]
         return voltages
 
+    def to_json(self):
+        return 'hold'
+
     def __repr__(self):
         return "<Hold Interpolation>"
 
@@ -72,6 +79,9 @@ class JumpInterpolationStrategy(InterpolationStrategy):
 
         voltages = np.ones_like(times) * end[1]
         return voltages
+
+    def to_json(self):
+        return 'jump'
 
     def __repr__(self):
         return "<Jump Interpolation>"
@@ -101,11 +111,17 @@ class TablePulseTemplate(PulseTemplate):
         self.__time_parameter_declarations = {} # type: Dict[str, ParameterDeclaration]
         self.__voltage_parameter_declarations = {} # type: Dict[str, ParameterDeclaration]
         self.__is_measurement_pulse = False # type: bool
-        self.__interpolation_strategies = {
-                                           'linear': LinearInterpolationStrategy(), 
+        self.__interpolation_strategies = {'linear': LinearInterpolationStrategy(),
                                            'hold': HoldInterpolationStrategy(), 
                                            'jump': JumpInterpolationStrategy()
                                           }
+    def to_json(self):
+        root = {}
+        root['voltage_parameter_declarations'] = self.__voltage_parameter_declarations
+        root['time_parameter_declarations'] = self.__time_parameter_declarations
+        root['is_measurement_pulse'] = self.__is_measurement_pulse
+        root['entries'] = self.__entries
+        return root
 
     @staticmethod
     def from_array(self, times: np.ndarray, voltages: np.ndarray):
