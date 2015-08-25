@@ -47,6 +47,9 @@ class PulseTemplate(SequencingElement, metaclass = ABCMeta):
         """Return true, if this PulseTemplate contains points at which it can halt if interrupted."""
         pass
 
+    @abstractmethod
+    def to_json(self) -> object:
+        """Returns a representation of the template in terms of primitive data types (that can be encoded to json)."""
 
 class ParameterNotInPulseTemplateException(Exception):
     """Indicates that a provided parameter was not declared in a PulseTemplate."""

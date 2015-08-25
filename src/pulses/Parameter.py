@@ -11,6 +11,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 class Parameter(metaclass = ABCMeta):
+    # TODO: Missing interfaces: method for rendering the pulse, method to get the pulse length
     """A parameter for pulses.
     
     Parameter specifies a concrete value which is inserted instead
@@ -18,7 +19,7 @@ class Parameter(metaclass = ABCMeta):
     the minimum and maximum boundary of the corresponding ParameterDeclaration.
     Implementations of Parameter may provide a single constant value or
     obtain values by computation (e.g. from measurement results).
-    """
+        """
     def __init__(self) -> None:
         super().__init__()
 
@@ -47,6 +48,13 @@ class ConstantParameter(Parameter):
     @property
     def requires_stop(self) -> bool:
         return False
+
+    def __repr__(self):
+        return "<ConstantParameter {0}>".format(self.__value)
+
+    def to_json(self):
+        return ['Constant', self.__value]
+
     
 ConstantParameter.register(numbers.Real)
       
@@ -202,7 +210,18 @@ class ParameterDeclaration(ParameterValueProvider):
                 raise ParameterNotProvidedException(self.__name)
 
     def __str__(self) -> str:
-        return "ParameterDeclaration {0}, range ({1}, {2}), default {3}".format(self.__name, self.min_value, self.max_value, self.default_value)
+        return 'ParameterDeclaration "{0}", range ({1}, {2}), default {3}'.format(self.__name, self.min_value, self.max_value, self.default_value)
+
+    def __repr__(self) -> str:
+        return "<"+self.__str__()+">"
+
+    def to_json(self):
+        root = {}
+        root['name'] = self.__name
+        root['min'] = self.min_value
+        root['max'] = self.max_value
+        root['default'] = self.default_value
+        return root
     
     def __eq__(self, other) -> bool:
         return isinstance(other, ParameterDeclaration) and self.name == other.name
