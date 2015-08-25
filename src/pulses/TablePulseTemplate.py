@@ -5,6 +5,7 @@ import numbers
 import copy
 import collections
 from abc import ABCMeta, abstractmethod
+import numpy as np
 
 """RELATED THIRD PARTY IMPORTS"""
 

@@ -1,5 +1,7 @@
 import numpy as np
 from scipy.interpolate import interp1d
+from abc import ABCMeta, abstractmethod
+from typing import Tuple
 
 
 class InterpolationStrategy(metaclass = ABCMeta):
