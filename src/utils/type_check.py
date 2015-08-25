@@ -8,7 +8,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 def __equalTypes(x, y, same_length: bool = True) -> bool:
-    """!@brief Test whether x and y are of (or reference to) the same type or not.
+    """Test whether x and y are of (or reference to) the same type or not.
     
     This strictly internal function compares the type of two variables and the returned
     value (bool) is True if they have the same type or if one is the type of the other.
@@ -55,7 +55,7 @@ def __equalTypes(x, y, same_length: bool = True) -> bool:
     return True   
 
 def typecheck(same_length: bool = False, raise_on_error: bool = False, log: bool = True):
-    """!@brief Decorator for functions, invokes typechecking on their annotation
+    """Decorator for functions, invokes typechecking on their annotation
     
     This function invokes the typechecking on functions which uses the annotations of
     python3. This type check will happen in runtime.
@@ -104,7 +104,7 @@ def typecheck(same_length: bool = False, raise_on_error: bool = False, log: bool
     return check
 
 class MismatchingTypesException(Exception):
-    """!@brief Exception raised when a type error occurs in "type_check"
+    """Exception raised when a type error occurs in "type_check"
     
     Has the behaviour of an default Exception due inheritance of the self. 
     

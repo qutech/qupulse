@@ -1,12 +1,12 @@
 """STANDARD LIBRARY IMPORTS"""
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta, abstractmethod, abstractproperty
 from typing import Dict, List, Tuple, Set
 import logging
 
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
-from .Parameter import ParameterDeclaration, TimeParameterDeclaration, Parameter
+from .Parameter import ParameterDeclaration, Parameter
 from .Sequencer import SequencingElement
 
 logger = logging.getLogger(__name__)
@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 MeasurementWindow = Tuple[int, int]
 
 class PulseTemplate(SequencingElement, metaclass = ABCMeta):
-    """!@brief A PulseTemplate represents the parametrized general structure of a pulse.
+    """A PulseTemplate represents the parameterized general structure of a pulse.
     
     A PulseTemplate described a pulse in an abstract way: It defines the structure of a pulse
     but might leave some timings or voltage levels undefined, thus declaring parameters.
@@ -27,43 +27,29 @@ class PulseTemplate(SequencingElement, metaclass = ABCMeta):
     def __init__(self) -> None:
         super().__init__()
 
-    @abstractmethod
-    def __str__(self) -> str:
+    @abstractproperty
+    def parameter_names(self) -> Set[str]:
+        """Return the set of names of declared parameters."""
         pass
     
-    @abstractmethod
-    def get_time_parameter_names(self) -> Set[str]:
-        """!@brief Return the set of names of declared time parameters."""
-        pass
-        
-    @abstractmethod
-    def get_voltage_parameter_names(self) -> Set[str]:
-        """!@brief Return the set of names of declared voltage parameters."""
-        pass
-        
-    @abstractmethod
-    def get_time_parameter_declarations(self) -> Dict[str, TimeParameterDeclaration]:
-        """!@brief Return a copy of the dictionary containing the time parameter declarations of this PulseTemplate."""
-        pass
-        
-    @abstractmethod
-    def get_voltage_parameter_declarations(self) -> Dict[str, ParameterDeclaration]:
-        """!@brief Return a copy of the dictionary containing the voltage parameter declarations of this PulseTemplate."""
+    @abstractproperty
+    def parameter_declarations(self) -> Set[ParameterDeclaration]:
+        """Return the set of ParameterDeclarations."""
         pass
 
     @abstractmethod
-    def get_measurement_windows(self, time_parameters: Dict[str, Parameter] = None) -> List[MeasurementWindow]:
-        """!@brief Return all measurement windows defined in this PulseTemplate."""
+    def get_measurement_windows(self, parameters: Dict[str, Parameter] = None) -> List[MeasurementWindow]:
+        """Return all measurement windows defined in this PulseTemplate."""
         pass
 
-    @abstractmethod
+    @abstractproperty
     def is_interruptable(self) -> bool:
-        """!@brief Return true, if this PulseTemplate contains points at which it can halt if interrupted."""
+        """Return true, if this PulseTemplate contains points at which it can halt if interrupted."""
         pass
 
 
 class ParameterNotInPulseTemplateException(Exception):
-    """!@brief Indicates that a provided parameter was not declared in a PulseTemplate."""
+    """Indicates that a provided parameter was not declared in a PulseTemplate."""
     
     def __init__(self, name: str, pulse_template: PulseTemplate) -> None:
         super().__init__()
