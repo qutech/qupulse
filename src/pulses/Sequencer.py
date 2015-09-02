@@ -42,7 +42,7 @@ class SequencingElement(metaclass = ABCMeta):
 class SequencingHardwareInterface(metaclass = ABCMeta):
     """A hardware interface used by Sequencer to register waveforms."""
 
-    def __init(self) -> None:
+    def __init__(self) -> None:
         super().__init__()
     
     @abstractmethod
@@ -127,3 +127,23 @@ class Sequencer:
             waveform = self.__hardware_interface.register_waveform(waveform_table)
             self.__waveforms[waveform_table_hash] = waveform
         return waveform
+
+class DummySequencingHardware(SequencingHardwareInterface):
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.waveforms = [] # type: List[WaveformTable]
+
+    def register_waveform(self, waveform_table: WaveformTable) -> Waveform:
+        self.waveforms.append(waveform_table)
+        return Waveform(len(waveform_table))
+
+class PlottingSequencer(Sequencer):
+    def __init__(self):
+        self.hardware = DummySequencingHardware()
+        super().__init__(self.hardware)
+
+    def plot(self):
+        data = self.build()
+        pass
+

@@ -261,11 +261,13 @@ class TablePulseTemplate(PulseTemplate):
         return voltages
 
     def build_sequence(self, sequencer: Sequencer, parameters: Dict[str, Parameter], instruction_block: InstructionBlock) -> None:
-        waveform = sequencer.register_waveform(self.get_entries_instantiated(parameters))
+        instantiated = self.get_entries_instantiated(parameters)
+        instantiated = tuple(instantiated)
+        waveform = sequencer.register_waveform(instantiated)
         instruction_block.add_instruction_exec(waveform)
-        
+
     def requires_stop(self, parameters: Dict[str, Parameter]) -> bool: 
-        return any(parameter.requires_stop for parameter in parameters.values())
+        return any(parameter.requires_stop for parameter in parameters.values() if isinstance(parameter, ParameterDeclaration))
 
 class ParameterDeclarationInUseException(Exception):
     """Indicates that a parameter declaration which should be deleted is in use."""

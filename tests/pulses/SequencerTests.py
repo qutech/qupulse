@@ -9,7 +9,7 @@ sys.path.insert(0,srcPath)
 
 from pulses.Parameter import Parameter, ConstantParameter
 from pulses.Instructions import InstructionBlock, Waveform, WaveformTable
-from pulses.Sequencer import SequencingElement, SequencingHardwareInterface, Sequencer
+from pulses.Sequencer import SequencingElement, SequencingHardwareInterface, Sequencer, DummySequencingHardware
 
 class DummySequencingElement(SequencingElement):
 
@@ -35,19 +35,7 @@ class DummySequencingElement(SequencingElement):
         self.parameters = parameters
         return self.requires_stop_
 
-        
-class DummySequencingHardware(SequencingHardwareInterface):
 
-    def __init__(self) -> None:
-        super().__init__()
-        self.waveforms = [] # type: List[WaveformTable]
-        
-
-    def register_waveform(self, waveform_table: WaveformTable) -> Waveform:
-        self.waveforms.append(waveform_table)
-        return Waveform(len(waveform_table))
-        
-        
 class SequencerTest(unittest.TestCase):
     
     def test_initialization(self) -> None:

@@ -133,8 +133,17 @@ class SequencePulseTemplate(PulseTemplate):
     def requires_stop(self, parameters: Dict[str, Parameter]) -> bool:
         pass
 
-    def build_sequence(self, sequencer: "Sequencer", parameters: Dict[str, Parameter], instruction_block: InstructionBlock):
-        pass
+    def build_sequence(self, sequencer: "Sequencer", parameters: Dict[str, Parameter], instruction_block: InstructionBlock) -> None:
+        missing = self.parameter_names - set(parameters)
+        for m in missing:
+            raise ParameterNotProvidedException(m)
+        unnecessary = set(parameters) - self.parameter_names
+        for un in unnecessary:
+            raise ParameterNotInPulseTemplateException(un, self)
+
+        for template, mappings in self.subtemplates:
+            inner_parameters = {name: mappings[name](parameters) for name in template.parameter_names}
+            sequencer.push(template, inner_parameters, instruction_block)
 
 class MissingMappingException(Exception):
     def __init__(self, template, key) -> None:
