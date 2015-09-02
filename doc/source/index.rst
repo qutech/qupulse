@@ -10,9 +10,12 @@ Contents:
 
 .. toctree::
    :maxdepth: 2
+   :numbered:
 
-.. automodule:: pulses
-.. automodule:: utils
+   TablePulseTemplate_example
+
+.. automodule::pulses
+.. automodule::utils
 
 Indices and tables
 ==================

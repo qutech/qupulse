@@ -1,3 +1,5 @@
+.. _TablePulseTemplate_example:
+
 Creating a New Pulse Template
 =============================
 
