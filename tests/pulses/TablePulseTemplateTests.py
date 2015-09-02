@@ -10,22 +10,6 @@ from pulses.Parameter import ParameterDeclaration, Parameter
 from pulses.Interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy, JumpInterpolationStrategy
 
 class TablePulseTemplateTest(unittest.TestCase):
-    def test_add_entry_for_values(self) -> None:
-        table = TablePulseTemplate()
-
-        # No Negative numbers
-        self.assertRaises(ValueError, table.add_entry, -2, 0)
-        table.add_entry(2, 2.1)
-        self.assertEqual([TableEntry(0, 0, HoldInterpolationStrategy()), TableEntry(2, 2.1, HoldInterpolationStrategy())], table.entries)
-
-        # No value in between two already declared
-        self.assertRaises(ValueError, table.add_entry, 1.3, 763)
-
-        table.add_entry('foo', -2)
-        self.assertEqual([(0, 0, HoldInterpolationStrategy()),
-                          (2, 2.1, HoldInterpolationStrategy()),
-                          (ParameterDeclaration('foo'), -2, HoldInterpolationStrategy())],
-                         table.entries)
 
     def test_add_entry_for_interpolation(self) -> None:
         table = TablePulseTemplate()
@@ -64,6 +48,26 @@ class TablePulseTemplateTest(unittest.TestCase):
         parameters = dict(length=100)
         windows = pulse.get_measurement_windows(parameters)
         self.assertEqual(windows, [(0, 100)])
+        
+    def test_add_entry_empty_time_is_negative(self) -> None:
+        table = TablePulseTemplate()
+        self.assertRaises(ValueError, table.add_entry, -2, 0)
+        
+    def test_add_entry_empty_time_is_0(self) -> None:
+        table = TablePulseTemplate()
+        table.add_entry(0, 3.1)
+        self.assertEqual([(0, 3.1, HoldInterpolationStrategy())], table.entries)
+        
+    def test_add_entry_empty_time_is_positive(self) -> None:
+        table = TablePulseTemplate()
+        table.add_entry(2, -254.67)
+        self.assertEqual([(0, 0, HoldInterpolationStrategy()), (2, -254.67, HoldInterpolationStrategy())], table.entries)
+        
+    def test_add_entry_empty_time_is_str(self) -> None:
+        table = TablePulseTemplate()
+        table.add_entry('t', 0)
+        decl = ParameterDeclaration('t', min=0)
+        self.assertEqual([(0, 0, HoldInterpolationStrategy()), (decl, 0, HoldInterpolationStrategy())], table.entries)
 
 class CleanEntriesTests(unittest.TestCase):
     def empty_list_test(self):
