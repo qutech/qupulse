@@ -11,7 +11,7 @@ from .Sequencer import SequencingElement
 
 logger = logging.getLogger(__name__)
 
-MeasurementWindow = Tuple[int, int]
+MeasurementWindow = Tuple[float, float]
 
 class PulseTemplate(SequencingElement, metaclass = ABCMeta):
     """A PulseTemplate represents the parameterized general structure of a pulse.
@@ -57,4 +57,4 @@ class ParameterNotInPulseTemplateException(Exception):
         self.pulse_template = pulse_template
 
     def __str__(self) -> str:
-        return "Parameter {1} not found".format(self.name)
+        return "Parameter {1} not found in pulse template {2}".format(self.name, self.pulse_template)

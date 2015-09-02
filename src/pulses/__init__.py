@@ -1,4 +1,5 @@
 from pkgutil import extend_path
+
 __path__ = extend_path(__path__, __name__)
 __all__ = ["BranchPulseTemplate",
            "Condition",
@@ -9,4 +10,5 @@ __all__ = ["BranchPulseTemplate",
            "Raw",
            "SequencePulseTemplate",
            "Sequencer",
-           "TablePulseTemplate"]
+           "TablePulseTemplate",
+           "Interpolation"]

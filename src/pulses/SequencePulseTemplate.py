@@ -6,45 +6,21 @@ from functools import partial
 
 """LOCAL IMPORTS"""
 
-from .PulseTemplate import PulseTemplate, MeasurementWindow
-from .Parameter import ParameterDeclaration, Parameter
+from .PulseTemplate import PulseTemplate, MeasurementWindow, ParameterNotInPulseTemplateException
+from .Parameter import ParameterDeclaration, Parameter, ConstantParameter, ParameterNotProvidedException
+from .Sequencer import InstructionBlock, Sequencer
+from .Instructions import WaveformTable, Waveform
+from .TablePulseTemplate import TableEntry, TablePulseTemplate
+from .Interpolation import HoldInterpolationStrategy
 
 
 logger = logging.getLogger(__name__)
 
-class Mapping(object):
-    def __init__(self) -> None:
-        super().__init__()
-        self.functions = {}  # type: Dict[str, Dict[str, Callable]]
-        self.__targets = {}  # type: Dict[str, str]
-    
-    def add_mapping_function(self,source:str,target:str,func:Callable,*args,**kwargs) -> None:
-        if source not in self.functions:
-            self.functions[source] = {}
-        if target not in self.__targets:
-            self.functions[source][target] = partial(func,*args,**kwargs)
-            self.__targets[target] = source
-        else:
-            raise DoubleMappingException(target)
-    @property
-    def mapping_function(self,source:str,target:str)-> Callable:
-        return self.functions[source][target]
-    
-    def remove_mapping_function(self,source:str,target:str) -> None:
-        self.functions[source].pop(target)
-        self.__targets.pop(target)
-        
-    def set_mapping_function(self,source:str, target:str,func:Callable,*args,**kwargs) -> None:
-        self.functions[source][target] = partial(func,*args,**kwargs)
-
-    @property    
-    def sources(self) -> List[str]:
-        return self.functions.keys()
-    
-    @property
-    def targets(self) -> List[str]:
-        return self.__targets.keys()
-    
+# type signatures used in this module
+# a MappingFunction takes a dictionary with parameter declarations, keyed with strings and returns a float
+MappingFunction = Callable[[Dict[str, ParameterDeclaration]], float]
+# a subtemplate consists of a pulse template and mapping functions for its "internal" parameters
+Subtemplate = Tuple[PulseTemplate, Dict[str, MappingFunction]]
 
 class SequencePulseTemplate(PulseTemplate):
     """A sequence of different PulseTemplates.
@@ -64,24 +40,28 @@ class SequencePulseTemplate(PulseTemplate):
     more restricitive is chosen, if possible. Otherwise, an error
     is thrown and an explicit mapping must be specified.
     """
-    
-    def __init__(self) -> None:
+
+    def __init__(self, subtemplates: List[Subtemplate], external_parameters: List[str]) -> None:
         super().__init__()
-        self.subtemplates = []  # type: List[PulseTemplate]
-        self.mapping = Mapping()  # type: Mapping
+        self._parameter_names = frozenset(external_parameters)
+        for template, mapfuns in subtemplates:
+            # Consistency checks
+            open_parameters = template.parameter_names
+            mapped_parameters = set(mapfuns.keys())
+            missing_parameters = open_parameters - mapped_parameters
+            for m in missing_parameters:
+                raise MissingMappingException(template, m)
+            unnecessary_parameters = mapped_parameters - open_parameters
+            for m in unnecessary_parameters:
+                raise UnnecessaryMappingException(template, m)
+
+        self.subtemplates = subtemplates  # type: List[Subtemplate]
         self.__is_interruptable = True
-    
+
     @property
     def parameter_names(self) -> Set[str]:
-        parameter_names = set()
-        for subtemplate in self.subtemplates:
-            for parameter_name in subtemplate.parameter_names:
-                if parameter_name in self.mapping.get_targets():
-                    parameter_names.add(self.mapping.get_targets()[parameter_name])
-                else:
-                    parameter_names.add(parameter_name)
-        return parameter_names
-                    
+        return self._parameter_names
+
     @property
     def parameter_declarations(self) -> Set[ParameterDeclaration]:
         parameter_declarations = set()
@@ -98,15 +78,50 @@ class SequencePulseTemplate(PulseTemplate):
                     # TODO: min, max and default values might have to be mapped to? especially in the case that min, max are ParameterDeclarations as well
                 parameter_declarations.add(declaration)
         return parameter_declarations
-    
+
+    def get_entries_instantiated(self, outer_parameters: Dict[str, ParameterDeclaration]) -> List[TableEntry]:
+        """Applies mappings to the subtemplates, returns a list of "rendered" subtemplates without parameters."""
+        # Consistency checks:
+        missing = self.parameter_names - set(outer_parameters)
+        for m in missing:
+            raise ParameterNotProvidedException(m)
+        unnecessary = set(outer_parameters) - self.parameter_names
+        for un in unnecessary:
+            raise ParameterNotInPulseTemplateException(un, self)
+
+        # do work
+        new_list = []
+        # check supported types:
+        typecheck = lambda x: isinstance(x, TablePulseTemplate) or isinstance(x, SequencePulseTemplate)
+        if all(typecheck(a[0]) for a in self.subtemplates):
+            for template, mappings in self.subtemplates:
+                inner_parameters = {name: mappings[name](outer_parameters) for name in template.parameter_names}
+                new_list.append(template.get_entries_instantiated(inner_parameters))
+            total_length = 0
+            if new_list:
+                entries = [TableEntry(0,0,HoldInterpolationStrategy())] # List[TableEntry]
+                for pulse in new_list:
+                    for point in pulse:
+                        new_time = point.t + total_length
+                        if new_time != total_length: # skip the automatic (0,0) point
+                            entries.append(TableEntry(new_time, point.v, point.interp))
+                    total_length += pulse[-1].t
+                return entries
+            else:
+                return []
+        else:
+            raise NotImplementedError('Instantiating SequencePulseTemplates is only supported for those consisting only of TablePulseTemplates and SequencePulseTemplates')
+
     @property
     def measurement_windows(self, parameters: Dict[str, Parameter] = None) -> List[MeasurementWindow]:
         measurement_windows = []
-        for subtemplate in self.subtemplates:
-            # TODO: parameters might have to be mapped
+        for subtemplate, _ in self.subtemplates:
             measurement_windows = measurement_windows + subtemplate.measurement_windows(parameters)
         return measurement_windows
-    
+
+    def get_measurement_windows(self, parameters: Dict[str, Parameter] = None):
+        return self.measurement_windows
+
     @property
     def is_interruptable(self) -> bool:
         return self.__is_interruptable
@@ -115,16 +130,26 @@ class SequencePulseTemplate(PulseTemplate):
     def is_interruptable(self, new_value: bool):
         self.__is_interruptable
 
-    def get_mapping(self) -> Mapping:
-        return self.mapping
-    
-    
-class DoubleMappingException(Exception):
-    def __init__(self,key) -> None:
+    def requires_stop(self, parameters: Dict[str, Parameter]) -> bool:
+        pass
+
+    def build_sequence(self, sequencer: "Sequencer", parameters: Dict[str, Parameter], instruction_block: InstructionBlock):
+        pass
+
+class MissingMappingException(Exception):
+    def __init__(self, template, key) -> None:
         super().__init__()
         self.key = key
-    
+        self.template = template
+
     def __str__(self) -> str:
-        return "The targed {} can not assigned twice".format(self.key)
-    
-        
+        return "The template {} needs a mapping function for parameter {}". format(self.template, self.key)
+
+class UnnecessaryMappingException(Exception):
+    def __init__(self, template, key):
+        super().__init__()
+        self.template = template
+        self.key = key
+
+    def __str__(self) -> str:
+        return "Mapping function for parameter '{}', which template {} does not need".format(self.key, self.template)

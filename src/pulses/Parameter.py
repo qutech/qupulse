@@ -47,6 +47,10 @@ class ConstantParameter(Parameter):
     @property
     def requires_stop(self) -> bool:
         return False
+
+    def __repr__(self):
+        return "<ConstantParameter {0}>".format(self.__value)
+
     
 ConstantParameter.register(numbers.Real)
       
@@ -114,6 +118,18 @@ class ParameterDeclaration(ParameterValueProvider):
         """Set this ParameterDeclaration's minimum value or reference."""
         old_value = self.__min_value
         self.__min_value = value
+        if (isinstance(value, ParameterDeclaration) and  
+                (isinstance(value.max_value, ParameterDeclaration) or value.absolute_max_value > self.absolute_max_value)):
+            value.__internal_set_max_value(self)
+        try:
+            self.__assert_values_valid()
+        except:
+            self.__min_value = old_value
+            raise
+        
+    def __internal_set_min_value(self, value: Union['ParameterDeclaration', float]) -> None:
+        old_value = self.__min_value
+        self.__min_value = self
         try:
             self.__assert_values_valid()
         except:
@@ -128,6 +144,18 @@ class ParameterDeclaration(ParameterValueProvider):
     @max_value.setter
     def max_value(self, value: Union['ParameterDeclaration', float]) -> None:
         """Set this ParameterDeclaration's maximum value or reference."""
+        old_value = self.__max_value
+        self.__max_value = value
+        if (isinstance(value, ParameterDeclaration) and 
+                (isinstance(value.min_value, ParameterDeclaration) or value.absolute_min_value < self.absolute_min_value)):
+            value.__internal_set_min_value(self)
+        try:
+            self.__assert_values_valid()
+        except:
+            self.__max_value = old_value
+            raise
+        
+    def __internal_set_max_value(self, value: Union['ParameterDeclaration', float]) -> None:
         old_value = self.__max_value
         self.__max_value = value
         try:
@@ -148,11 +176,10 @@ class ParameterDeclaration(ParameterValueProvider):
         If the minimum value of this ParameterDeclaration instance is a reference to another
         instance, references are resolved until a concrete value or None is obtained.
         """ 
-        try:
+        if isinstance(self.min_value, ParameterDeclaration):
             return self.min_value.absolute_min_value
-        except AttributeError:
+        else:
             return self.min_value
-            
     @property
     def absolute_max_value(self) -> float:
         """Return this ParameterDeclaration's maximum value.
@@ -160,9 +187,9 @@ class ParameterDeclaration(ParameterValueProvider):
         If the maximum value of this ParameterDeclaration instance is a reference to another
         instance, references are resolved until a concrete value or None is obtained.
         """
-        try:
+        if isinstance(self.max_value, ParameterDeclaration):
             return self.max_value.absolute_max_value
-        except AttributeError:
+        else:
             return self.max_value
 
     def is_parameter_valid(self, p: Parameter) -> bool:
@@ -202,7 +229,16 @@ class ParameterDeclaration(ParameterValueProvider):
                 raise ParameterNotProvidedException(self.__name)
 
     def __str__(self) -> str:
-        return "ParameterDeclaration {0}, range ({1}, {2}), default {3}".format(self.__name, self.min_value, self.max_value, self.default_value)
+        min_value_str = self.absolute_min_value
+        if isinstance(self.min_value, ParameterDeclaration):
+            min_value_str = "Parameter '{0}' (min {1})".format(self.min_value.name, min_value_str)
+        max_value_str = self.absolute_max_value
+        if isinstance(self.max_value, ParameterDeclaration):
+            max_value_str = "Parameter '{0}' (max {1})".format(self.max_value.name, max_value_str)
+        return "ParameterDeclaration '{0}', range ({1}, {2}), default {3}".format(self.__name, min_value_str, max_value_str, self.default_value)
+
+    def __repr__(self) -> str:
+        return "<"+self.__str__()+">"
     
     def __eq__(self, other) -> bool:
         return isinstance(other, ParameterDeclaration) and self.name == other.name

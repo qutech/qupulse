@@ -64,7 +64,7 @@ class DocumentationTest(unittest.TestCase):
                                     if imported.__doc__ is None:
                                         print("The docstring should not be empty. Module: {}, Class: {}".format(package,name))
                                 for method in methods[name]:
-                                    if hasattr(imported, method):
+                                    if hasattr(imported, method) and method is not "__init__":
                                         if raiseonerror:
                                             self.assertIsNotNone(getattr(imported, method).__doc__, "The docstring should not be empty. Module: {}, Class: {}, Method: {}".format(package,name,method))
                                         else:
