@@ -104,9 +104,6 @@ class SequencePulseTemplate(PulseTemplate):
         missing = self.parameter_names - set(parameters)
         for m in missing:
             raise ParameterNotProvidedException(m)
-        unnecessary = set(parameters) - self.parameter_names
-        for un in unnecessary:
-            raise ParameterNotInPulseTemplateException(un, self)
 
         # push subtemplates to sequencing stack with mapped parameters
         for template, mappings in reversed(self.subtemplates):
