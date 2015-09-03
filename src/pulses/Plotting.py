@@ -47,9 +47,12 @@ class PlottingSequencer(Sequencer):
             voltages[indices] = entry2.interp(entry1, entry2, ts[indices]) # evaluate interpolation at each time
         return ts, voltages
 
-def plot(pulse: SequencingElement, parameters):
+def plot(pulse: SequencingElement, parameters={}):
     plotter = PlottingSequencer()
-    plotter.push(pulse)
+    if parameters:
+        plotter.push(pulse, parameters)
+    else:
+        plotter.push(pulse)
     plotter.build()
     if not plotter.has_finished():
         raise PlottingNotPossibleException(pulse)
