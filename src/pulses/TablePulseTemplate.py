@@ -269,27 +269,6 @@ class TablePulseTemplate(PulseTemplate):
     def requires_stop(self, parameters: Dict[str, Parameter]) -> bool: 
         return any(parameters[name].requires_stop for name in parameters.keys() if (name in self.parameter_names))
 
-class ParameterDeclarationInUseException(Exception):
-    """Indicates that a parameter declaration which should be deleted is in use."""
-
-    def __init__(self, declaration_name: str) -> None:
-        super().__init__()
-        self.declaration_name = declaration_name
-
-    def __str__(self) -> str:
-        return "The parameter declaration {0} is in use and cannot be deleted.".format(self.declaration_name)
-
-
-class ParameterNotDeclaredException(Exception):
-    """Indicates that a parameter was not declared."""
-
-    def __init__(self, parameter_name: str) -> None:
-        super().__init__()
-        self.parameter_name = parameter_name
-
-    def __str__(self) -> str:
-        return "A parameter with the name <{}> was not declared.".format(self.parameter_name)
-
 
 class ParameterValueIllegalException(Exception):
     """Indicates that the value provided for a parameter is illegal, i.e., is outside the parameter's bounds or of wrong type."""
