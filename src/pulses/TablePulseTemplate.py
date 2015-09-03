@@ -92,14 +92,13 @@ class TablePulseTemplate(PulseTemplate):
         if not self.__entries:
             # if the first entry has a time that is either > 0 or a parameter declaration, insert a start point (0, 0)
             if not isinstance(time, numbers.Real) or time > 0:
-                self.__entries.append(TableEntry(0, 0, self.__interpolation_strategies['hold'])) # interpolation strategy for first entry is disregarded, could be anything
-                last_entry = self.__entries[-1]
+                #self.__entries.append(TableEntry(0, 0, self.__interpolation_strategies['hold'])) # interpolation strategy for first entry is disregarded, could be anything
+                last_entry = TableEntry(0, 0, self.__interpolation_strategies['hold'])
             # ensure that the first entry is not negative
             elif isinstance(time, numbers.Real) and time < 0:
                 raise ValueError("Time value must not be negative, was {}.".format(time))
             elif time == 0:
-                self.__entries.append(TableEntry(0, voltage, interpolation))
-                return
+                last_entry = TableEntry(-1, 0, self.__interpolation_strategies['hold'])
         else:
             last_entry = self.__entries[-1]
 
@@ -110,7 +109,7 @@ class TablePulseTemplate(PulseTemplate):
             if isinstance(last_entry.t, ParameterDeclaration):
                 # set maximum value of previous entry if not already set
                 if last_entry.t.max_value == float('+inf'):
-                    last_entry.t.max_entry = time
+                    last_entry.t.max_value = time
 
                 if time < last_entry.t.absolute_max_value:
                     raise ValueError("Argument time must be no smaller than previous time parameter declaration's" \
@@ -123,7 +122,7 @@ class TablePulseTemplate(PulseTemplate):
 
         # second case: time is a string -> Create a new ParameterDeclaration and continue third case
         elif isinstance(time, str):
-                time = ParameterDeclaration(time)
+            time = ParameterDeclaration(time)
 
         # third case: time is a ParameterDeclaration
         # if time is (now) a ParameterDeclaration, verify it, insert it and establish references/dependencies to previous entries if necessary
@@ -137,6 +136,9 @@ class TablePulseTemplate(PulseTemplate):
                 if isinstance(time.max_value, ParameterDeclaration):
                     raise ValueError("A ParameterDeclaration for a time parameter may not have a maximum value reference" \
                                      " to another ParameterDeclaration object.")
+
+                # make a (shallow) copy of the ParameterDeclaration to ensure that it can't be changed from outside the Table
+                time = ParameterDeclaration(time.name, min=time.min_value, max=time.max_value, default=time.default_value)
                 # set minimum value if not previously set
                 # if last_entry.t is a ParameterDeclaration, its max_value field will be set accordingly by the min_value setter,
                 #  ensuring a correct boundary relationship between both declarations 
@@ -154,6 +156,10 @@ class TablePulseTemplate(PulseTemplate):
                         raise ValueError("Argument time's maximum value must be no smaller than the previous time" \
                                          " parameter declaration's maximum value. Parameter '{0}', Maximum {1}, Provided {2}."
                                          .format(last_entry.t.name, last_entry.t.absolute_max_value, time.max_value))
+                else:
+                    if time.min_value < last_entry.t:
+                        raise ValueError("Argument time's minimum value {0} must be no smaller than the previous time value {1}."
+                                         .format(time.min_value, last_entry.t))
                     
                 self.__time_parameter_declarations[time.name] = time
             else:
@@ -178,6 +184,10 @@ class TablePulseTemplate(PulseTemplate):
                     raise ValueError("Argument voltage <{}> must not refer to a time parameter declaration.".format(voltage.name))
             
         # no special action if voltage is a real number
+
+        # in case we need a time 0 entry previous to the new entry
+        if not self.__entries and (not isinstance(time, numbers.Real) or time > 0):
+                self.__entries.append(last_entry)
         # finally, add the new entry to the table 
         self.__entries.append(TableEntry(time, voltage, interpolation))
         

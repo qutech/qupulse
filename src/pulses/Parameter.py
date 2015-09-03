@@ -1,6 +1,6 @@
 """STANDARD LIBRARY IMPORTS"""
 from abc import ABCMeta, abstractmethod, abstractproperty
-from typing import Optional, Union, Dict
+from typing import Optional, Union, Dict, Tuple
 import numbers
 import logging
 
@@ -118,10 +118,12 @@ class ParameterDeclaration(ParameterValueProvider):
         """Set this ParameterDeclaration's minimum value or reference."""
         old_value = self.__min_value
         self.__min_value = value
-        if (isinstance(value, ParameterDeclaration) and  
-                (isinstance(value.max_value, ParameterDeclaration) or value.absolute_max_value > self.absolute_max_value)):
-            value.__internal_set_max_value(self)
         try:
+            if (isinstance(value, ParameterDeclaration) and
+                    (isinstance(value.max_value, ParameterDeclaration) or
+                     value.absolute_max_value > self.absolute_max_value or
+                     value.absolute_max_value == float('+inf'))):
+                value.__internal_set_max_value(self)
             self.__assert_values_valid()
         except:
             self.__min_value = old_value
@@ -129,7 +131,7 @@ class ParameterDeclaration(ParameterValueProvider):
         
     def __internal_set_min_value(self, value: Union['ParameterDeclaration', float]) -> None:
         old_value = self.__min_value
-        self.__min_value = self
+        self.__min_value = value
         try:
             self.__assert_values_valid()
         except:
@@ -146,10 +148,12 @@ class ParameterDeclaration(ParameterValueProvider):
         """Set this ParameterDeclaration's maximum value or reference."""
         old_value = self.__max_value
         self.__max_value = value
-        if (isinstance(value, ParameterDeclaration) and 
-                (isinstance(value.min_value, ParameterDeclaration) or value.absolute_min_value < self.absolute_min_value)):
-            value.__internal_set_min_value(self)
         try:
+            if (isinstance(value, ParameterDeclaration) and
+                    (isinstance(value.min_value, ParameterDeclaration) or
+                     value.absolute_min_value < self.absolute_min_value or
+                     value.absolute_min_value == float('-inf'))):
+                value.__internal_set_min_value(self)
             self.__assert_values_valid()
         except:
             self.__max_value = old_value
@@ -239,11 +243,22 @@ class ParameterDeclaration(ParameterValueProvider):
 
     def __repr__(self) -> str:
         return "<"+self.__str__()+">"
-    
+
+    def __compute_compare_key(self) -> Tuple[str, Union[float, str], Union[float, str], Optional[float]]:
+        min_value = self.min_value
+        if isinstance(min_value, ParameterDeclaration):
+            min_value = min_value.name
+        max_value = self.max_value
+        if isinstance(max_value, ParameterDeclaration):
+            max_value = max_value.name
+        return (self.name, min_value, max_value, self.default_value)
+
     def __eq__(self, other) -> bool:
-        return (isinstance(other, ParameterDeclaration) and self.name == other.name 
-                and self.min_value == other.min_value and self.max_value == other.max_value
-                and self.default_value == other.default_value) 
+        return (isinstance(other, ParameterDeclaration) and
+                self.__compute_compare_key() == other.__compute_compare_key())
+
+    def __hash__(self) -> int:
+        return hash(self.__compute_compare_key())
         
 class ImmutableParameterDeclaration(ParameterDeclaration):
     
