@@ -1,6 +1,6 @@
 """STANDARD LIBRARY IMPORTS"""
 import logging
-from typing import Union, Dict, List, Set, Tuple, Optional, NamedTuple
+from typing import Union, Dict, List, Set,  Optional, NamedTuple
 import numbers
 import copy
 import numpy as np
@@ -8,10 +8,9 @@ import numpy as np
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
-from .Parameter import ParameterDeclaration, ImmutableParameterDeclaration, Parameter
+from .Parameter import ParameterDeclaration, Parameter
 from .PulseTemplate import PulseTemplate, MeasurementWindow
 from .Sequencer import InstructionBlock, Sequencer
-from .Instructions import WaveformTable, Waveform
 from .Interpolation import InterpolationStrategy, LinearInterpolationStrategy, HoldInterpolationStrategy, JumpInterpolationStrategy
 
 logger = logging.getLogger(__name__)
@@ -227,7 +226,7 @@ class TablePulseTemplate(PulseTemplate):
     def get_entries_instantiated(self, parameters: Dict[str, Parameter]) -> List[TableEntry]:
         """Return a list of all table entries with concrete values provided by the given parameters.
         """
-        instantiated_entries = [] # type: List[Tuple[float, float]]
+        instantiated_entries = [] # type: List[TableEntry]
         for entry in self.__entries:
             time_value = None # type: float
             voltage_value = None # type: float
@@ -268,7 +267,7 @@ class TablePulseTemplate(PulseTemplate):
         instruction_block.add_instruction_exec(waveform)
 
     def requires_stop(self, parameters: Dict[str, Parameter]) -> bool: 
-        return any(parameter.requires_stop for parameter in parameters.values() if isinstance(parameter, ParameterDeclaration))
+        return any(parameters[name].requires_stop for name in parameters.keys() if (name in self.parameter_names))
 
 class ParameterDeclarationInUseException(Exception):
     """Indicates that a parameter declaration which should be deleted is in use."""
