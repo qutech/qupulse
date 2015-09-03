@@ -108,7 +108,7 @@ class SequencePulseTemplate(PulseTemplate):
         for un in unnecessary:
             raise ParameterNotInPulseTemplateException(un, self)
 
-        for template, mappings in self.subtemplates:
+        for template, mappings in reversed(self.subtemplates):
             inner_parameters = {name: mappings[name](parameters) for name in template.parameter_names}
             sequencer.push(template, inner_parameters, instruction_block)
 
