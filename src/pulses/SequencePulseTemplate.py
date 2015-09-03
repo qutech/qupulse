@@ -79,39 +79,6 @@ class SequencePulseTemplate(PulseTemplate):
                 parameter_declarations.add(declaration)
         return parameter_declarations
 
-    def get_entries_instantiated(self, outer_parameters: Dict[str, ParameterDeclaration]) -> List[TableEntry]:
-        """Applies mappings to the subtemplates, returns a list of "rendered" subtemplates without parameters."""
-        # Consistency checks:
-        missing = self.parameter_names - set(outer_parameters)
-        for m in missing:
-            raise ParameterNotProvidedException(m)
-        unnecessary = set(outer_parameters) - self.parameter_names
-        for un in unnecessary:
-            raise ParameterNotInPulseTemplateException(un, self)
-
-        # do work
-        new_list = []
-        # check supported types:
-        typecheck = lambda x: isinstance(x, TablePulseTemplate) or isinstance(x, SequencePulseTemplate)
-        if all(typecheck(a[0]) for a in self.subtemplates):
-            for template, mappings in self.subtemplates:
-                inner_parameters = {name: mappings[name](outer_parameters) for name in template.parameter_names}
-                new_list.append(template.get_entries_instantiated(inner_parameters))
-            total_length = 0
-            if new_list:
-                entries = [TableEntry(0,0,HoldInterpolationStrategy())] # List[TableEntry]
-                for pulse in new_list:
-                    for point in pulse:
-                        new_time = point.t + total_length
-                        if new_time != total_length: # skip the automatic (0,0) point
-                            entries.append(TableEntry(new_time, point.v, point.interp))
-                    total_length += pulse[-1].t
-                return entries
-            else:
-                return []
-        else:
-            raise NotImplementedError('Instantiating SequencePulseTemplates is only supported for those consisting only of TablePulseTemplates and SequencePulseTemplates')
-
     @property
     def measurement_windows(self, parameters: Dict[str, Parameter] = None) -> List[MeasurementWindow]:
         measurement_windows = []

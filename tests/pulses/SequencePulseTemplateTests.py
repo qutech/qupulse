@@ -54,51 +54,5 @@ class SequencePulseTemplateTest(unittest.TestCase):
         with self.assertRaises(UnnecessaryMappingException):
             SequencePulseTemplate(subtemplates, self.outer_parameters)
 
-    def test_simple_instantiating(self):
-        subtemplates = [(self.square, self.mapping1)]
-        sequence = SequencePulseTemplate(subtemplates, self.outer_parameters)
-
-        entries = sequence.get_entries_instantiated(self.parameters)
-        entries_manual = [TableEntry(0,0,HoldInterpolationStrategy()),
-                          TableEntry(5,10,HoldInterpolationStrategy()),
-                          TableEntry(15,0,HoldInterpolationStrategy()),
-                          TableEntry(50,0,HoldInterpolationStrategy())]
-        self.assertEqual(entries, entries_manual)
-
-    def test_nested_instantiating(self):
-        mapping = {}
-        mapping['uptime'] = lambda ps: ps['up']
-        mapping['pulse-length'] = lambda ps: 100
-        mapping['length'] = lambda ps: 10
-        mapping['voltage'] = lambda ps: ps['voltage']
-
-        outer_parameters = ['up', 'voltage']
-        subtemplates = [(self.sequence, mapping),
-                        (self.sequence, mapping)]
-        sequence = SequencePulseTemplate(subtemplates, outer_parameters)
-        parameters = dict(up=20, voltage=10)
-        entries = sequence.get_entries_instantiated(parameters)
-        entries_manual = [TableEntry(0,0,HoldInterpolationStrategy()),
-                          TableEntry(20,10,HoldInterpolationStrategy()),
-                          TableEntry(30,0,HoldInterpolationStrategy()),
-                          TableEntry(50,0,HoldInterpolationStrategy()),
-                          TableEntry(70,10,HoldInterpolationStrategy()),
-                          TableEntry(80,0,HoldInterpolationStrategy()),
-                          TableEntry(100,0,HoldInterpolationStrategy())]
-        self.assertEqual(entries, entries_manual)
-
-    def test_instantiating_incomplete_parameters(self):
-        parameters = copy.copy(self.parameters)
-        parameters.pop('uptime')
-
-        with self.assertRaises(ParameterNotProvidedException):
-            self.sequence.get_entries_instantiated(parameters)
-
-    def test_instantiating_unnecessary_parameters(self):
-        parameters = copy.copy(self.parameters)
-        parameters['extra'] = 300
-        with self.assertRaises(ParameterNotInPulseTemplateException):
-            self.sequence.get_entries_instantiated(parameters)
-
 if __name__ == "__main__":
     unittest.main(verbosity=2)

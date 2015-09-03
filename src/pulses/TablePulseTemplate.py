@@ -251,15 +251,6 @@ class TablePulseTemplate(PulseTemplate):
             
         return instantiated_entries
 
-    def render(self, parameters: Dict[str, Parameter], ts: np.ndarray):
-        """Instantiates using parameters and evaluates the voltage curve at times ts."""
-        instantiated = self.get_entries_instantiated(parameters)
-        voltages = np.empty_like(ts) # prepare voltage vector
-        for entry1, entry2 in zip(instantiated[:-1], instantiated[1:]): # iterate over interpolated areas
-            indices = np.logical_and(ts >= entry1.t, ts <= entry2.t)
-            voltages[indices] = entry2.interp(entry1, entry2, ts[indices]) # evaluate interpolation at each time
-        return voltages
-
     def build_sequence(self, sequencer: Sequencer, parameters: Dict[str, Parameter], instruction_block: InstructionBlock) -> None:
         instantiated = self.get_entries_instantiated(parameters)
         instantiated = tuple(instantiated)
