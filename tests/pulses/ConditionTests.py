@@ -1,68 +1,15 @@
 import unittest
 import os
 import sys
-from typing import Dict, Optional
+from typing import Optional
 
 srcPath = os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1)[0] + 'src'
 sys.path.insert(0,srcPath)
 
-from pulses.Parameter import Parameter
-from pulses.Sequencer import SequencingElement, Sequencer
-from pulses.Instructions import InstructionBlock, InstructionPointer, Trigger, WaveformTable, Waveform, CJMPInstruction, GOTOInstruction, STOPInstruction
+from tests.pulses.SequencingDummies import DummySequencingElement, DummySequencer, DummyInstructionBlock
+
+from pulses.Instructions import InstructionPointer, Trigger, CJMPInstruction, GOTOInstruction
 from pulses.Condition import HardwareCondition, SoftwareCondition, ConditionEvaluationException
-
-
-class DummySequencingElement(SequencingElement):
-    
-    def build_sequence(self, sequencer: Sequencer, time_parameters: Dict[str, Parameter], voltage_parameters: Dict[str, Parameter], instruction_block: InstructionBlock) -> None:
-        raise NotImplementedError()
-        
-    def requires_stop(self, time_parameters: Dict[str, Parameter], voltage_parameters: Dict[str, Parameter]) -> bool:
-        raise NotImplementedError()
-    
-    def __eq__(self, other) -> bool:
-        return self is other
-    
-    def __ne__(self, other) -> bool:
-        return not self == other
-    
-    def __hash__(self) -> int:
-        return hash(id(self))
-    
-class DummySequencer(Sequencer):
-    
-    def __init__(self) -> None:
-        super().__init__(None)
-        self.sequencing_stacks = {} #type: Dict[InstructionBlock, List[StackElement]]
-        
-    def push(self, sequencing_element: SequencingElement, parameters: Dict[str, Parameter], target_block: InstructionBlock = None) -> None:
-        if target_block is None:
-            target_block = self.__main_block
-            
-        if not target_block in self.sequencing_stacks:
-            self.sequencing_stacks[target_block] = []
-            
-        self.sequencing_stacks[target_block].append((sequencing_element, parameters))
-        
-    def build(self) -> InstructionBlock:
-        raise NotImplementedError()
-        
-    def has_finished(self):
-        raise NotImplementedError()
-        
-    def register_waveform(self, waveform_table: WaveformTable) -> Waveform:
-        raise NotImplementedError()
-    
-class DummyInstructionBlock(InstructionBlock):
-    
-    def __init__(self, outerBlock: InstructionBlock = None) -> None:
-        super().__init__(outerBlock)
-        self.embedded_blocks = [] # type: Collection[InstructionBlock]
-        
-    def create_embedded_block(self) -> InstructionBlock:
-        block = InstructionBlock(self)
-        self.embedded_blocks.append(block)
-        return block
 
 class HardwareConditionTest(unittest.TestCase):
     
