@@ -1,6 +1,6 @@
 # qc-toolkit: Quantum Computing Toolkit
 [![Coverage Status](https://coveralls.io/repos/qutech/qc-toolkit/badge.svg?branch=master&service=github)](https://coveralls.io/github/qutech/qc-toolkit?branch=master)
-[![Build Status](https://travis-ci.org/qutech/qc-toolkit.svg)](https://travis-ci.org/qutech/qc-toolkit)
+[![Build Status](https://travis-ci.org/qutech/qc-toolkit.svg?branch=master)](https://travis-ci.org/qutech/qc-toolkit)
 
 
 The qc-toolkit project aims to produce a software toolkit facilitating experiments (or productive use of) involving pulse driven state manipulation of physical qubits.
