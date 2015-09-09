@@ -45,19 +45,19 @@ class TablePulseTemplate(PulseTemplate):
                                           }
 
     @staticmethod
-    def from_array(self, times: np.ndarray, voltages: np.ndarray, measurement=False):
+    def from_array(times: np.ndarray, voltages: np.ndarray, measurement=False):
         """Static constructor to build a TablePulse from numpy arrays.
 
         Args:
             times: 1D numpy array with time values
-            voltages: 1d numpy array with voltage values
+            voltages: 1D numpy array with voltage values
 
         Returns:
             TablePulseTemplate with the given values, hold interpolation everywhere and no free parameters.
         """
         res = TablePulseTemplate(measurement=measurement)
         for t, v in zip(times, voltages):
-            res.add_entry(t,v, interpolation='hold')
+            res.add_entry(t, v, interpolation='hold')
         return res
 
     def add_entry(self,
@@ -159,8 +159,6 @@ class TablePulseTemplate(PulseTemplate):
                     if time.min_value < last_entry.t:
                         raise ValueError("Argument time's minimum value {0} must be no smaller than the previous time value {1}."
                                          .format(time.min_value, last_entry.t))
-                    
-                self.__time_parameter_declarations[time.name] = time
             else:
                 raise ValueError("A time parameter with the name {} already exists.".format(time.name))
 
@@ -176,14 +174,17 @@ class TablePulseTemplate(PulseTemplate):
             # such that the same object is used consistently for one declaration
             if voltage.name in self.__voltage_parameter_declarations:
                 voltage = self.__voltage_parameter_declarations[voltage.name]
-            else:
-                if voltage.name not in self.__time_parameter_declarations:
-                    self.__voltage_parameter_declarations[voltage.name] = voltage
-                else:
+            elif (voltage.name in self.__time_parameter_declarations or
+                        (isinstance(time, ParameterDeclaration) and voltage.name == time.name)):
                     raise ValueError("Argument voltage <{}> must not refer to a time parameter declaration.".format(voltage.name))
             
         # no special action if voltage is a real number
 
+        # add declaration if necessary
+        if isinstance(time, ParameterDeclaration):
+            self.__time_parameter_declarations[time.name] = time
+        if isinstance(voltage, ParameterDeclaration):
+            self.__voltage_parameter_declarations[voltage.name] = voltage
         # in case we need a time 0 entry previous to the new entry
         if not self.__entries and (not isinstance(time, numbers.Real) or time > 0):
                 self.__entries.append(last_entry)

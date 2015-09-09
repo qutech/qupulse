@@ -79,9 +79,11 @@ class ParameterDeclaration(ParameterValueProvider):
             default (float): An optional real number specifying a default value for the declared pulse template parameter.
         """
         self.__name = name
-        self.__min_value = min # type: BoundaryValue
-        self.__max_value = max # type: BoundaryValue
-        self.__default_value = default # type: Optional[float]            
+        self.__min_value = float('-inf')
+        self.__max_value = float('+inf')
+        self.__default_value = default # type: Optional[float]
+        self.min_value = min # type: BoundaryValue
+        self.max_value = max # type: BoundaryValue
             
         self.__assert_values_valid()
         
@@ -109,19 +111,18 @@ class ParameterDeclaration(ParameterValueProvider):
         return self.__name
         
     @property
-    def min_value(self) -> Union['ParameterDeclaration', float]:
+    def min_value(self) -> BoundaryValue:
         """Return this ParameterDeclaration's minimum value or reference."""
         return self.__min_value
     
     @min_value.setter
-    def min_value(self, value: Union['ParameterDeclaration', float]) -> None:
+    def min_value(self, value: BoundaryValue) -> None:
         """Set this ParameterDeclaration's minimum value or reference."""
         old_value = self.__min_value
         self.__min_value = value
         try:
             if (isinstance(value, ParameterDeclaration) and
                     (isinstance(value.max_value, ParameterDeclaration) or
-                     value.absolute_max_value > self.absolute_max_value or
                      value.absolute_max_value == float('+inf'))):
                 value.__internal_set_max_value(self)
             self.__assert_values_valid()
@@ -129,7 +130,7 @@ class ParameterDeclaration(ParameterValueProvider):
             self.__min_value = old_value
             raise
         
-    def __internal_set_min_value(self, value: Union['ParameterDeclaration', float]) -> None:
+    def __internal_set_min_value(self, value: BoundaryValue) -> None:
         old_value = self.__min_value
         self.__min_value = value
         try:
@@ -139,19 +140,18 @@ class ParameterDeclaration(ParameterValueProvider):
             raise
     
     @property
-    def max_value(self) ->  Union['ParameterDeclaration', float]:
+    def max_value(self) ->  BoundaryValue:
         """Return this ParameterDeclaration's maximum value or reference."""
         return self.__max_value
     
     @max_value.setter
-    def max_value(self, value: Union['ParameterDeclaration', float]) -> None:
+    def max_value(self, value: BoundaryValue) -> None:
         """Set this ParameterDeclaration's maximum value or reference."""
         old_value = self.__max_value
         self.__max_value = value
         try:
             if (isinstance(value, ParameterDeclaration) and
                     (isinstance(value.min_value, ParameterDeclaration) or
-                     value.absolute_min_value < self.absolute_min_value or
                      value.absolute_min_value == float('-inf'))):
                 value.__internal_set_min_value(self)
             self.__assert_values_valid()
@@ -159,7 +159,7 @@ class ParameterDeclaration(ParameterValueProvider):
             self.__max_value = old_value
             raise
         
-    def __internal_set_max_value(self, value: Union['ParameterDeclaration', float]) -> None:
+    def __internal_set_max_value(self, value: BoundaryValue) -> None:
         old_value = self.__max_value
         self.__max_value = value
         try:
@@ -239,7 +239,7 @@ class ParameterDeclaration(ParameterValueProvider):
         max_value_str = self.absolute_max_value
         if isinstance(self.max_value, ParameterDeclaration):
             max_value_str = "Parameter '{0}' (max {1})".format(self.max_value.name, max_value_str)
-        return "ParameterDeclaration '{0}', range ({1}, {2}), default {3}".format(self.__name, min_value_str, max_value_str, self.default_value)
+        return "{4} '{0}', range ({1}, {2}), default {3}".format(self.__name, min_value_str, max_value_str, self.default_value, type(self))
 
     def __repr__(self) -> str:
         return "<"+self.__str__()+">"
@@ -260,46 +260,46 @@ class ParameterDeclaration(ParameterValueProvider):
     def __hash__(self) -> int:
         return hash(self.__compute_compare_key())
         
-class ImmutableParameterDeclaration(ParameterDeclaration):
-    
-    def __init__(self, parameter_declaration: ParameterDeclaration) -> None:
-        self.__parameter_declaration = parameter_declaration
-        super().__init__(parameter_declaration.name)
-        
-    @property
-    def name(self) -> str:
-        return self.__parameter_declaration.name
-        
-    @property
-    def min_value(self) -> Union['ParameterDeclaration', float]:
-        """Return this ParameterDeclaration's minimum value or reference."""
-        min_value = self.__parameter_declaration.min_value
-        if isinstance(min_value, ParameterDeclaration):
-            min_value = ImmutableParameterDeclaration(min_value)
-        return min_value
-    
-    @min_value.setter
-    def min_value(self, value: Union['ParameterDeclaration', float]) -> None:
-        """Set this ParameterDeclaration's minimum value or reference."""
-        raise Exception("An immutableParameterDeclaration may not be changed.")
-    
-    @property
-    def max_value(self) ->  Union['ParameterDeclaration', float]:
-        """Return this ParameterDeclaration's maximum value or reference."""
-        max_value = self.__parameter_declaration.max_value
-        if isinstance(max_value, ParameterDeclaration):
-            max_value = ImmutableParameterDeclaration(max_value)
-        return max_value
-    
-    @max_value.setter
-    def max_value(self, value: Union['ParameterDeclaration', float]) -> None:
-        """Set this ParameterDeclaration's maximum value or reference."""
-        raise Exception("An immutableParameterDeclaration may not be changed.")
-        
-    @property
-    def default_value(self) -> Optional[float]:
-        """Return this ParameterDeclaration's default value."""
-        return self.__parameter_declaration.default_value
+# class ImmutableParameterDeclaration(ParameterDeclaration):
+#
+#     def __init__(self, parameter_declaration: ParameterDeclaration) -> None:
+#         self.__parameter_declaration = parameter_declaration
+#         super().__init__(parameter_declaration.name)
+#
+#     @property
+#     def name(self) -> str:
+#         return self.__parameter_declaration.name
+#
+#     @property
+#     def min_value(self) -> ParameterDeclaration.BoundaryValue:
+#         """Return this ParameterDeclaration's minimum value or reference."""
+#         min_value = self.__parameter_declaration.min_value
+#         if isinstance(min_value, ParameterDeclaration):
+#             min_value = ImmutableParameterDeclaration(min_value)
+#         return min_value
+#
+#     @min_value.setter
+#     def min_value(self, value: ParameterDeclaration.BoundaryValue) -> None:
+#         """Set this ParameterDeclaration's minimum value or reference."""
+#         raise Exception("An ImmutableParameterDeclaration may not be changed.")
+#
+#     @property
+#     def max_value(self) ->  ParameterDeclaration.BoundaryValue:
+#         """Return this ParameterDeclaration's maximum value or reference."""
+#         max_value = self.__parameter_declaration.max_value
+#         if isinstance(max_value, ParameterDeclaration):
+#             max_value = ImmutableParameterDeclaration(max_value)
+#         return max_value
+#
+#     @max_value.setter
+#     def max_value(self, value: ParameterDeclaration.BoundaryValue) -> None:
+#         """Set this ParameterDeclaration's maximum value or reference."""
+#         raise Exception("An ImmutableParameterDeclaration may not be changed.")
+#
+#     @property
+#     def default_value(self) -> Optional[float]:
+#         """Return this ParameterDeclaration's default value."""
+#         return self.__parameter_declaration.default_value
         
         
 class ParameterNotProvidedException(Exception):
