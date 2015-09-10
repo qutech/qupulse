@@ -5,7 +5,6 @@ from functools import partial
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
-
 from .PulseTemplate import PulseTemplate, MeasurementWindow, ParameterNotInPulseTemplateException
 from .Parameter import ParameterDeclaration, Parameter, ConstantParameter, ParameterNotProvidedException
 from .Sequencer import InstructionBlock, Sequencer

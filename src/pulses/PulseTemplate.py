@@ -2,18 +2,20 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
 from typing import Dict, List, Tuple, Set, Optional
 import logging
+from src.pulses.Serializer import Serializable
 
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
 from .Parameter import ParameterDeclaration, Parameter
 from .Sequencer import SequencingElement
+from .Serializer import Serializable
 
 logger = logging.getLogger(__name__)
 
 MeasurementWindow = Tuple[float, float]
 
-class PulseTemplate(SequencingElement, metaclass = ABCMeta):
+class PulseTemplate(SequencingElement, metaclass = ABCMeta, Serializable):
     """A PulseTemplate represents the parameterized general structure of a pulse.
     
     A PulseTemplate described a pulse in an abstract way: It defines the structure of a pulse
