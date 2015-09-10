@@ -1,25 +1,26 @@
 """STANDARD LIBRARY IMPORTS"""
 import logging
-from typing import Dict, List, Tuple, Set, Callable, Optional
+from typing import Dict, List, Tuple, Set, Callable, Optional, Any
 from functools import partial
+from inspect import getsource
+import copy
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
 from .PulseTemplate import PulseTemplate, MeasurementWindow, ParameterNotInPulseTemplateException
 from .Parameter import ParameterDeclaration, Parameter, ConstantParameter, ParameterNotProvidedException
 from .Sequencer import InstructionBlock, Sequencer
-from .Instructions import WaveformTable, Waveform
-from .TablePulseTemplate import TableEntry, TablePulseTemplate
-from .Interpolation import HoldInterpolationStrategy
+from .Serializer import Serializer
 
 
 logger = logging.getLogger(__name__)
 
 # type signatures used in this module
 # a MappingFunction takes a dictionary with parameter declarations, keyed with strings and returns a float
-MappingFunction = Callable[[Dict[str, ParameterDeclaration]], float]
+# temporarily obsolete: MappingFunction = Callable[[Dict[str, ParameterDeclaration]], float]
+
 # a subtemplate consists of a pulse template and mapping functions for its "internal" parameters
-Subtemplate = Tuple[PulseTemplate, Dict[str, MappingFunction]]
+Subtemplate = Tuple[PulseTemplate, Dict[str, str]]
 
 class SequencePulseTemplate(PulseTemplate):
     """A sequence of different PulseTemplates.
@@ -40,9 +41,9 @@ class SequencePulseTemplate(PulseTemplate):
     is thrown and an explicit mapping must be specified.
     """
 
-    def __init__(self, subtemplates: List[Subtemplate], external_parameters: List[str], identifier:Optional[str]=None) -> None:
+    def __init__(self, subtemplates: List[Subtemplate], external_parameters: List[str], identifier: Optional[str]=None) -> None:
         super().__init__(identifier)
-        self._parameter_names = frozenset(external_parameters)
+        self.__parameter_names = frozenset(external_parameters)
         for template, mapfuns in subtemplates:
             # Consistency checks
             open_parameters = template.parameter_names
@@ -59,7 +60,7 @@ class SequencePulseTemplate(PulseTemplate):
 
     @property
     def parameter_names(self) -> Set[str]:
-        return self._parameter_names
+        return self.__parameter_names
 
     @property
     def parameter_declarations(self) -> Set[ParameterDeclaration]:
@@ -110,6 +111,20 @@ class SequencePulseTemplate(PulseTemplate):
         for template, mappings in reversed(self.subtemplates):
             inner_parameters = {name: mappings[name](parameters) for name in template.parameter_names}
             sequencer.push(template, inner_parameters, instruction_block)
+
+    def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
+        data = dict()
+        data['external_parameters'] = self.parameter_names
+        data['is_interruptable'] = self.is_interruptable
+
+        subtemplates = []
+        for (subtemplate, mapping_functions) in self.subtemplates:
+            subtemplate = serializer.serialize(subtemplate)
+            subtemplates.append((subtemplate, copy.deepcopy(mapping_functions)))
+        data['subtemplates'] = subtemplates
+
+        return data
+
 
 class MissingMappingException(Exception):
     def __init__(self, template, key) -> None:

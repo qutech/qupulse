@@ -1,13 +1,13 @@
 """STANDARD LIBRARY IMPORTS"""
 from abc import ABCMeta, abstractmethod, abstractproperty
-from typing import Optional, Union, Dict, Tuple
+from typing import Optional, Union, Dict, Tuple, Any
 import numbers
 import logging
 
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
-from .Serializer import Serializable
+from .Serializer import Serializable, Serializer
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +79,8 @@ class ParameterDeclaration(Serializable, ParameterValueProvider):
             max (float, ParameterDeclaration): An optional real number or ParameterDeclaration object specifying the maximum value allowed.
             default (float): An optional real number specifying a default value for the declared pulse template parameter.
         """
-        super().__init__(name)
+        super().__init__(None)
+        self.__name = name
         self.__min_value = float('-inf')
         self.__max_value = float('+inf')
         self.__default_value = default # type: Optional[float]
@@ -108,7 +109,7 @@ class ParameterDeclaration(Serializable, ParameterValueProvider):
         
     @property
     def name(self) -> str:
-        return self.identifier
+        return self.__name
         
     @property
     def min_value(self) -> BoundaryValue:
@@ -259,6 +260,24 @@ class ParameterDeclaration(Serializable, ParameterValueProvider):
 
     def __hash__(self) -> int:
         return hash(self.__compute_compare_key())
+
+    def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
+        data = dict()
+
+        min_value = self.min_value
+        if isinstance(min_value, ParameterDeclaration):
+            min_value = min_value.name
+
+        max_value = self.max_value
+        if isinstance(max_value, ParameterDeclaration):
+            max_value = max_value.name
+
+        data['name'] = self.name
+        data['min_value'] = min_value
+        data['max_value'] = max_value
+        data['default_value'] = self.default_value
+
+        return data
         
 # class ImmutableParameterDeclaration(ParameterDeclaration):
 #

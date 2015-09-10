@@ -1,6 +1,6 @@
 """STANDARD LIBRARY IMPORTS"""
 import logging
-from typing import Union, Dict, List, Set,  Optional, NamedTuple
+from typing import Union, Dict, List, Set,  Optional, NamedTuple, Any
 import numbers
 import copy
 import numpy as np
@@ -12,6 +12,7 @@ from .Parameter import ParameterDeclaration, Parameter
 from .PulseTemplate import PulseTemplate, MeasurementWindow
 from .Sequencer import InstructionBlock, Sequencer
 from .Interpolation import InterpolationStrategy, LinearInterpolationStrategy, HoldInterpolationStrategy, JumpInterpolationStrategy
+from .Serializer import Serializer
 
 logger = logging.getLogger(__name__)
 
@@ -270,6 +271,19 @@ class TablePulseTemplate(PulseTemplate):
     def requires_stop(self, parameters: Dict[str, Parameter]) -> bool: 
         return any(parameters[name].requires_stop for name in parameters.keys() if (name in self.parameter_names))
 
+    def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
+        data = dict()
+        data['is_measurement_pulse'] = self.__is_measurement_pulse
+        data['time_parameter_declarations'] = [serializer.serialize(decl) for decl in self.__time_parameter_declarations.values()]
+        data['voltage_parameter_declarations'] = [serializer.serialize(decl) for decl in self.__voltage_parameter_declarations.values()]
+        entries = []
+        for (time, voltage, interpolation) in self.__entries:
+            if isinstance(time, ParameterDeclaration):
+                time = time.name
+            if isinstance(voltage, ParameterDeclaration):
+                voltage = voltage.name
+            entries.append((time, voltage, str(interpolation)))
+        return data
 
 class ParameterValueIllegalException(Exception):
     """Indicates that the value provided for a parameter is illegal, i.e., is outside the parameter's bounds or of wrong type."""

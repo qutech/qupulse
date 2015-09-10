@@ -37,7 +37,7 @@ class LinearInterpolationStrategy(InterpolationStrategy):
         interpolator = lambda t: m * (t - start[0]) + start[1]
         return interpolator(times)
 
-    def to_json(self):
+    def __str__(self) -> str:
         return 'linear'
 
     def __repr__(self):
@@ -57,7 +57,7 @@ class HoldInterpolationStrategy(InterpolationStrategy):
         voltages = np.ones_like(times) * start[1]
         return voltages
 
-    def to_json(self):
+    def __str__(self) -> str:
         return 'hold'
 
     def __repr__(self):
@@ -77,7 +77,7 @@ class JumpInterpolationStrategy(InterpolationStrategy):
         voltages = np.ones_like(times) * end[1]
         return voltages
 
-    def to_json(self):
+    def __str__(self) -> str:
         return 'jump'
 
     def __repr__(self):
