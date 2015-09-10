@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 MeasurementWindow = Tuple[float, float]
 
-class PulseTemplate(SequencingElement, metaclass = ABCMeta, Serializable):
+class PulseTemplate(Serializable, SequencingElement, metaclass = ABCMeta):
     """A PulseTemplate represents the parameterized general structure of a pulse.
     
     A PulseTemplate described a pulse in an abstract way: It defines the structure of a pulse
@@ -26,9 +26,8 @@ class PulseTemplate(SequencingElement, metaclass = ABCMeta, Serializable):
     called instantiation of the PulseTemplate.
     """
     
-    def __init__(self, identifier:Optional[str]=None) -> None:
-        super().__init__()
-        self.__identifier = identifier
+    def __init__(self, identifier: Optional[str]=None) -> None:
+        super().__init__(identifier)
 
     @abstractproperty
     def parameter_names(self) -> Set[str]:
@@ -45,11 +44,6 @@ class PulseTemplate(SequencingElement, metaclass = ABCMeta, Serializable):
     @abstractproperty
     def is_interruptable(self) -> bool:
         """Return true, if this PulseTemplate contains points at which it can halt if interrupted."""
-    
-    @property
-    def identifier(self) -> Optional[str]:
-        """Return a human readable unique identifier for the pulse."""
-        return self.__identifier
 
 
 class ParameterNotInPulseTemplateException(Exception):

@@ -6,7 +6,8 @@ import logging
 
 """RELATED THIRD PARTY IMPORTS"""
 
-"""LOCAL IMPORTS"""    
+"""LOCAL IMPORTS"""
+from .Serializer import Serializable
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +61,7 @@ class ParameterValueProvider(metaclass = ABCMeta):
     def get_value(self, parameters: Dict[str, Parameter]) -> float:
         pass
       
-class ParameterDeclaration(ParameterValueProvider):
+class ParameterDeclaration(Serializable, ParameterValueProvider):
     """A declaration of a parameter required by a pulse template.
     
     PulseTemplates may declare parameters to allow for variations of values in an otherwise
@@ -78,7 +79,7 @@ class ParameterDeclaration(ParameterValueProvider):
             max (float, ParameterDeclaration): An optional real number or ParameterDeclaration object specifying the maximum value allowed.
             default (float): An optional real number specifying a default value for the declared pulse template parameter.
         """
-        self.__name = name
+        super().__init__(name)
         self.__min_value = float('-inf')
         self.__max_value = float('+inf')
         self.__default_value = default # type: Optional[float]
@@ -86,8 +87,7 @@ class ParameterDeclaration(ParameterValueProvider):
         self.max_value = max # type: BoundaryValue
             
         self.__assert_values_valid()
-        
-        
+
     def __assert_values_valid(self) -> None:
         if self.absolute_min_value > self.absolute_max_value:
             raise ValueError("Max value ({0}) is less than min value ({1}).".format(self.max_value, self.min_value))
@@ -108,7 +108,7 @@ class ParameterDeclaration(ParameterValueProvider):
         
     @property
     def name(self) -> str:
-        return self.__name
+        return self.identifier
         
     @property
     def min_value(self) -> BoundaryValue:
@@ -225,12 +225,12 @@ class ParameterDeclaration(ParameterValueProvider):
     
     def get_value(self, parameters: Dict[str, Parameter]) -> float:
         try:
-            return float(parameters[self.__name]) # float() wraps get_value for Parameters and works for normal floats also
+            return float(parameters[self.name]) # float() wraps get_value for Parameters and works for normal floats also
         except KeyError:
             if self.default_value is not None:
                 return self.default_value
             else:
-                raise ParameterNotProvidedException(self.__name)
+                raise ParameterNotProvidedException(self.name)
 
     def __str__(self) -> str:
         min_value_str = self.absolute_min_value
@@ -239,7 +239,7 @@ class ParameterDeclaration(ParameterValueProvider):
         max_value_str = self.absolute_max_value
         if isinstance(self.max_value, ParameterDeclaration):
             max_value_str = "Parameter '{0}' (max {1})".format(self.max_value.name, max_value_str)
-        return "{4} '{0}', range ({1}, {2}), default {3}".format(self.__name, min_value_str, max_value_str, self.default_value, type(self))
+        return "{4} '{0}', range ({1}, {2}), default {3}".format(self.name, min_value_str, max_value_str, self.default_value, type(self))
 
     def __repr__(self) -> str:
         return "<"+self.__str__()+">"
