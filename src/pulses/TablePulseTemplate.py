@@ -1,6 +1,6 @@
 """STANDARD LIBRARY IMPORTS"""
 import logging
-from typing import Union, Dict, List, Set, Tuple, Optional, NamedTuple
+from typing import Union, Dict, List, Set,  Optional, NamedTuple
 import numbers
 import copy
 import numpy as np
@@ -8,10 +8,9 @@ import numpy as np
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
-from .Parameter import ParameterDeclaration, ImmutableParameterDeclaration, Parameter
+from .Parameter import ParameterDeclaration, Parameter
 from .PulseTemplate import PulseTemplate, MeasurementWindow
 from .Sequencer import InstructionBlock, Sequencer
-from .Instructions import WaveformTable, Waveform
 from .Interpolation import InterpolationStrategy, LinearInterpolationStrategy, HoldInterpolationStrategy, JumpInterpolationStrategy
 
 logger = logging.getLogger(__name__)
@@ -46,19 +45,19 @@ class TablePulseTemplate(PulseTemplate):
                                           }
 
     @staticmethod
-    def from_array(self, times: np.ndarray, voltages: np.ndarray, measurement=False):
+    def from_array(times: np.ndarray, voltages: np.ndarray, measurement=False):
         """Static constructor to build a TablePulse from numpy arrays.
 
         Args:
             times: 1D numpy array with time values
-            voltages: 1d numpy array with voltage values
+            voltages: 1D numpy array with voltage values
 
         Returns:
             TablePulseTemplate with the given values, hold interpolation everywhere and no free parameters.
         """
         res = TablePulseTemplate(measurement=measurement)
         for t, v in zip(times, voltages):
-            res.add_entry(t,v, interpolation='hold')
+            res.add_entry(t, v, interpolation='hold')
         return res
 
     def add_entry(self,
@@ -92,14 +91,13 @@ class TablePulseTemplate(PulseTemplate):
         if not self.__entries:
             # if the first entry has a time that is either > 0 or a parameter declaration, insert a start point (0, 0)
             if not isinstance(time, numbers.Real) or time > 0:
-                self.__entries.append(TableEntry(0, 0, self.__interpolation_strategies['hold'])) # interpolation strategy for first entry is disregarded, could be anything
-                last_entry = self.__entries[-1]
+                #self.__entries.append(TableEntry(0, 0, self.__interpolation_strategies['hold'])) # interpolation strategy for first entry is disregarded, could be anything
+                last_entry = TableEntry(0, 0, self.__interpolation_strategies['hold'])
             # ensure that the first entry is not negative
             elif isinstance(time, numbers.Real) and time < 0:
                 raise ValueError("Time value must not be negative, was {}.".format(time))
             elif time == 0:
-                self.__entries.append(TableEntry(0, voltage, interpolation))
-                return
+                last_entry = TableEntry(-1, 0, self.__interpolation_strategies['hold'])
         else:
             last_entry = self.__entries[-1]
 
@@ -110,7 +108,7 @@ class TablePulseTemplate(PulseTemplate):
             if isinstance(last_entry.t, ParameterDeclaration):
                 # set maximum value of previous entry if not already set
                 if last_entry.t.max_value == float('+inf'):
-                    last_entry.t.max_entry = time
+                    last_entry.t.max_value = time
 
                 if time < last_entry.t.absolute_max_value:
                     raise ValueError("Argument time must be no smaller than previous time parameter declaration's" \
@@ -123,7 +121,7 @@ class TablePulseTemplate(PulseTemplate):
 
         # second case: time is a string -> Create a new ParameterDeclaration and continue third case
         elif isinstance(time, str):
-                time = ParameterDeclaration(time)
+            time = ParameterDeclaration(time)
 
         # third case: time is a ParameterDeclaration
         # if time is (now) a ParameterDeclaration, verify it, insert it and establish references/dependencies to previous entries if necessary
@@ -137,6 +135,9 @@ class TablePulseTemplate(PulseTemplate):
                 if isinstance(time.max_value, ParameterDeclaration):
                     raise ValueError("A ParameterDeclaration for a time parameter may not have a maximum value reference" \
                                      " to another ParameterDeclaration object.")
+
+                # make a (shallow) copy of the ParameterDeclaration to ensure that it can't be changed from outside the Table
+                time = ParameterDeclaration(time.name, min=time.min_value, max=time.max_value, default=time.default_value)
                 # set minimum value if not previously set
                 # if last_entry.t is a ParameterDeclaration, its max_value field will be set accordingly by the min_value setter,
                 #  ensuring a correct boundary relationship between both declarations 
@@ -154,8 +155,10 @@ class TablePulseTemplate(PulseTemplate):
                         raise ValueError("Argument time's maximum value must be no smaller than the previous time" \
                                          " parameter declaration's maximum value. Parameter '{0}', Maximum {1}, Provided {2}."
                                          .format(last_entry.t.name, last_entry.t.absolute_max_value, time.max_value))
-                    
-                self.__time_parameter_declarations[time.name] = time
+                else:
+                    if time.min_value < last_entry.t:
+                        raise ValueError("Argument time's minimum value {0} must be no smaller than the previous time value {1}."
+                                         .format(time.min_value, last_entry.t))
             else:
                 raise ValueError("A time parameter with the name {} already exists.".format(time.name))
 
@@ -171,13 +174,20 @@ class TablePulseTemplate(PulseTemplate):
             # such that the same object is used consistently for one declaration
             if voltage.name in self.__voltage_parameter_declarations:
                 voltage = self.__voltage_parameter_declarations[voltage.name]
-            else:
-                if voltage.name not in self.__time_parameter_declarations:
-                    self.__voltage_parameter_declarations[voltage.name] = voltage
-                else:
+            elif (voltage.name in self.__time_parameter_declarations or
+                        (isinstance(time, ParameterDeclaration) and voltage.name == time.name)):
                     raise ValueError("Argument voltage <{}> must not refer to a time parameter declaration.".format(voltage.name))
             
         # no special action if voltage is a real number
+
+        # add declaration if necessary
+        if isinstance(time, ParameterDeclaration):
+            self.__time_parameter_declarations[time.name] = time
+        if isinstance(voltage, ParameterDeclaration):
+            self.__voltage_parameter_declarations[voltage.name] = voltage
+        # in case we need a time 0 entry previous to the new entry
+        if not self.__entries and (not isinstance(time, numbers.Real) or time > 0):
+                self.__entries.append(last_entry)
         # finally, add the new entry to the table 
         self.__entries.append(TableEntry(time, voltage, interpolation))
         
@@ -217,7 +227,7 @@ class TablePulseTemplate(PulseTemplate):
     def get_entries_instantiated(self, parameters: Dict[str, Parameter]) -> List[TableEntry]:
         """Return a list of all table entries with concrete values provided by the given parameters.
         """
-        instantiated_entries = [] # type: List[Tuple[float, float]]
+        instantiated_entries = [] # type: List[TableEntry]
         for entry in self.__entries:
             time_value = None # type: float
             voltage_value = None # type: float
@@ -258,28 +268,7 @@ class TablePulseTemplate(PulseTemplate):
         instruction_block.add_instruction_exec(waveform)
 
     def requires_stop(self, parameters: Dict[str, Parameter]) -> bool: 
-        return any(parameter.requires_stop for parameter in parameters.values() if isinstance(parameter, ParameterDeclaration))
-
-class ParameterDeclarationInUseException(Exception):
-    """Indicates that a parameter declaration which should be deleted is in use."""
-
-    def __init__(self, declaration_name: str) -> None:
-        super().__init__()
-        self.declaration_name = declaration_name
-
-    def __str__(self) -> str:
-        return "The parameter declaration {0} is in use and cannot be deleted.".format(self.declaration_name)
-
-
-class ParameterNotDeclaredException(Exception):
-    """Indicates that a parameter was not declared."""
-
-    def __init__(self, parameter_name: str) -> None:
-        super().__init__()
-        self.parameter_name = parameter_name
-
-    def __str__(self) -> str:
-        return "A parameter with the name <{}> was not declared.".format(self.parameter_name)
+        return any(parameters[name].requires_stop for name in parameters.keys() if (name in self.parameter_names))
 
 
 class ParameterValueIllegalException(Exception):

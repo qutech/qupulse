@@ -19,7 +19,7 @@ WaveformTable = Tuple[WaveformTableEntry, ...]
 
 class Waveform:
     
-    def __init__(self, length: int= 0) -> None:
+    def __init__(self, length: float = 0) -> None:
         super().__init__()
         if length < 0:
             raise ValueError("length must be a non-negative integer (was {})".format(length))

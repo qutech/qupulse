@@ -1,40 +1,15 @@
 import unittest
 import os
 import sys
-from typing import Dict, Tuple, List
 
 srcPath = os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1)[0] + 'src'
 sys.path.insert(0,srcPath)
 
+from tests.pulses.SequencingDummies import DummySequencingElement, DummySequencingHardware
 
-from pulses.Parameter import Parameter, ConstantParameter
-from pulses.Instructions import InstructionBlock, Waveform, WaveformTable
-from pulses.Sequencer import SequencingElement, SequencingHardwareInterface, Sequencer, DummySequencingHardware
-
-class DummySequencingElement(SequencingElement):
-
-    def __init__(self, requires_stop: bool = False, push_elements: Tuple[InstructionBlock, List[SequencingElement]] = None) -> None:
-        super().__init__()
-        self.build_call_counter = 0
-        self.requires_stop_call_counter = 0
-        self.target_block = None
-        self.parameters = None
-        self.requires_stop_ = requires_stop
-        self.push_elements = push_elements
-    
-    def build_sequence(self, sequencer: Sequencer, parameters: Dict[str, Parameter], instruction_block: InstructionBlock) -> None:
-        self.build_call_counter += 1
-        self.target_block = instruction_block
-        self.parameters = parameters
-        if self.push_elements is not None:
-            for element in self.push_elements[1]:
-                sequencer.push(element, parameters, self.push_elements[0])
-        
-    def requires_stop(self, parameters: Dict[str, Parameter]) -> bool:
-        self.requires_stop_call_counter += 1
-        self.parameters = parameters
-        return self.requires_stop_
-
+from pulses.Parameter import  ConstantParameter
+from pulses.Instructions import InstructionBlock
+from pulses.Sequencer import Sequencer
 
 class SequencerTest(unittest.TestCase):
     

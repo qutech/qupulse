@@ -7,7 +7,7 @@ from typing import Union, Optional
 srcPath = os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1)[0] + 'src'
 sys.path.insert(0,srcPath)
 
-from pulses.Parameter import Parameter, ConstantParameter, ParameterDeclaration, ImmutableParameterDeclaration, ParameterNotProvidedException
+from pulses.Parameter import Parameter, ConstantParameter, ParameterDeclaration, ParameterNotProvidedException
 
 class DummyParameter(Parameter):
         
@@ -171,7 +171,7 @@ class ParameterDeclarationTest(unittest.TestCase):
         self.__test_valid_values(max=ParameterDeclaration('foo', min=-17.3, max=-0.1), default=-4.2, min=-17.3)
         self.__test_valid_values(max=ParameterDeclaration('foo', min=-17.3, max=-0.1), default=-0.1, min=-22.2)
         self.__test_valid_values(max=ParameterDeclaration('foo', min=-17.3, max=-0.1), default=-0.1, min=-17.3)
-        
+
         self.assertRaises(ValueError, ParameterDeclaration, 'test', max=ParameterDeclaration('foo', min=-17.3, max=-0.1), min=-0.2)
         self.assertRaises(ValueError, ParameterDeclaration, 'test', max=ParameterDeclaration('foo', min=-17.3, max=-0.1), default=0.01)
         self.assertRaises(ValueError, ParameterDeclaration, 'test', max=ParameterDeclaration('foo', min=-17.3, max=-0.1), default=-0.01, min=-20.9)
@@ -209,9 +209,9 @@ class ParameterDeclarationTest(unittest.TestCase):
         
         self.assertRaises(ValueError, ParameterDeclaration, 'test', min=ParameterDeclaration('fooi', min=0.3, max=3.5), max=ParameterDeclaration('fooa', min=0.2, max=13.2))
         self.assertRaises(ValueError, ParameterDeclaration, 'test', min=ParameterDeclaration('fooi', min=0.3, max=13.5), max=ParameterDeclaration('fooa', min=4.2, max=13.2))
-        self.assertRaises(ValueError, ParameterDeclaration, 'test', min=ParameterDeclaration('fooi', min=0.3), max=ParameterDeclaration('fooa', min=4.2, max=13.2))
-        self.assertRaises(ValueError, ParameterDeclaration, 'test', min=ParameterDeclaration('fooi', min=0.3, max=3.5), max=ParameterDeclaration('fooa', max=13.2))
-        self.assertRaises(ValueError, ParameterDeclaration, 'test', min=ParameterDeclaration('fooi', min=0.3), max=ParameterDeclaration('fooa', max=13.2))
+        self.__test_valid_values(min=ParameterDeclaration('fooi', min=0.3), max=ParameterDeclaration('fooa', min=4.2, max=13.2))
+        self.__test_valid_values(min=ParameterDeclaration('fooi', min=0.3, max=3.5), max=ParameterDeclaration('fooa', max=13.2))
+        self.__test_valid_values(min=ParameterDeclaration('fooi', min=0.3), max=ParameterDeclaration('fooa', max=13.2))
         
         self.assertRaises(ValueError, ParameterDeclaration, 'test', min=ParameterDeclaration('fooi', min=0.3, max=3.5), default=-0.2, max=ParameterDeclaration('fooa', min=4.2, max=13.2))
         self.assertRaises(ValueError, ParameterDeclaration, 'test', min=ParameterDeclaration('fooi', min=0.3, max=3.5), default=22.1, max=ParameterDeclaration('fooa', min=4.2, max=13.2))
@@ -262,46 +262,46 @@ class ParameterDeclarationTest(unittest.TestCase):
         self.assertFalse(decl.check_parameter_set_valid({'min': min_param, 'max': max_param, 'foo': ConstantParameter(17.2)}))
           
         
-class ImmutableParameterDeclarationTest(unittest.TestCase):
-    
-    def test_init(self) -> None:
-        param_decl = ParameterDeclaration('hugo', min=13.2, max=15.3, default=None)
-        immutable = ImmutableParameterDeclaration(param_decl)
-        self.assertEqual(param_decl, immutable)
-        self.assertEqual(param_decl.name, immutable.name)
-        self.assertEqual(param_decl.min_value, immutable.min_value)
-        self.assertEqual(param_decl.absolute_min_value, immutable.absolute_min_value)
-        self.assertEqual(param_decl.max_value, immutable.max_value)
-        self.assertEqual(param_decl.absolute_max_value, immutable.absolute_max_value)
-        self.assertEqual(param_decl.default_value, immutable.default_value)
-        
-    def test_reference_values(self) -> None:
-        min_decl = ParameterDeclaration('min', min=-0.1, max=34.7)
-        max_decl = ParameterDeclaration('max', min=23.1)
-        param_decl = ParameterDeclaration('foo', min=min_decl, max=max_decl, default=2.4)
-        immutable = ImmutableParameterDeclaration(param_decl)
-        
-        self.assertEqual(param_decl, immutable)
-        self.assertEqual(param_decl.name, immutable.name)
-        self.assertEqual(param_decl.min_value, immutable.min_value)
-        self.assertEqual(param_decl.absolute_min_value, immutable.absolute_min_value)
-        self.assertEqual(param_decl.max_value, immutable.max_value)
-        self.assertEqual(param_decl.absolute_max_value, immutable.absolute_max_value)
-        self.assertEqual(param_decl.default_value, immutable.default_value)
-        self.assertIsInstance(immutable.min_value, ImmutableParameterDeclaration)
-        self.assertIsInstance(immutable.max_value, ImmutableParameterDeclaration)
-        
-    def test_immutability(self) -> None:
-        param_decl = ParameterDeclaration('hugo', min=13.2, max=15.3, default=None)
-        immutable = ImmutableParameterDeclaration(param_decl)
-        
-        self.assertRaises(Exception, immutable.min_value, 2.1)
-        self.assertEqual(13.2, immutable.min_value)
-        self.assertEqual(13.2, param_decl.min_value)
-        
-        self.assertRaises(Exception, immutable.max_value, 14.1)
-        self.assertEqual(15.3, immutable.max_value)
-        self.assertEqual(15.3, param_decl.max_value)
+# class ImmutableParameterDeclarationTest(unittest.TestCase):
+#
+#     def test_init(self) -> None:
+#         param_decl = ParameterDeclaration('hugo', min=13.2, max=15.3, default=None)
+#         immutable = ImmutableParameterDeclaration(param_decl)
+#         self.assertEqual(param_decl, immutable)
+#         self.assertEqual(param_decl.name, immutable.name)
+#         self.assertEqual(param_decl.min_value, immutable.min_value)
+#         self.assertEqual(param_decl.absolute_min_value, immutable.absolute_min_value)
+#         self.assertEqual(param_decl.max_value, immutable.max_value)
+#         self.assertEqual(param_decl.absolute_max_value, immutable.absolute_max_value)
+#         self.assertEqual(param_decl.default_value, immutable.default_value)
+#
+#     def test_reference_values(self) -> None:
+#         min_decl = ParameterDeclaration('min', min=-0.1, max=34.7)
+#         max_decl = ParameterDeclaration('max', min=23.1)
+#         param_decl = ParameterDeclaration('foo', min=min_decl, max=max_decl, default=2.4)
+#         immutable = ImmutableParameterDeclaration(param_decl)
+#
+#         self.assertEqual(param_decl, immutable)
+#         self.assertEqual(param_decl.name, immutable.name)
+#         self.assertEqual(param_decl.min_value, immutable.min_value)
+#         self.assertEqual(param_decl.absolute_min_value, immutable.absolute_min_value)
+#         self.assertEqual(param_decl.max_value, immutable.max_value)
+#         self.assertEqual(param_decl.absolute_max_value, immutable.absolute_max_value)
+#         self.assertEqual(param_decl.default_value, immutable.default_value)
+#         self.assertIsInstance(immutable.min_value, ImmutableParameterDeclaration)
+#         self.assertIsInstance(immutable.max_value, ImmutableParameterDeclaration)
+#
+#     def test_immutability(self) -> None:
+#         param_decl = ParameterDeclaration('hugo', min=13.2, max=15.3, default=None)
+#         immutable = ImmutableParameterDeclaration(param_decl)
+#
+#         self.assertRaises(Exception, immutable.min_value, 2.1)
+#         self.assertEqual(13.2, immutable.min_value)
+#         self.assertEqual(13.2, param_decl.min_value)
+#
+#         self.assertRaises(Exception, immutable.max_value, 14.1)
+#         self.assertEqual(15.3, immutable.max_value)
+#         self.assertEqual(15.3, param_decl.max_value)
         
 if __name__ == "__main__":
     unittest.main(verbosity=2)
