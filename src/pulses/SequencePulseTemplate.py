@@ -1,6 +1,6 @@
 """STANDARD LIBRARY IMPORTS"""
 import logging
-from typing import Dict, List, Tuple, Set, Callable
+from typing import Dict, List, Tuple, Set, Callable, Optional
 from functools import partial
 """RELATED THIRD PARTY IMPORTS"""
 
@@ -41,8 +41,8 @@ class SequencePulseTemplate(PulseTemplate):
     is thrown and an explicit mapping must be specified.
     """
 
-    def __init__(self, subtemplates: List[Subtemplate], external_parameters: List[str]) -> None:
-        super().__init__()
+    def __init__(self, subtemplates: List[Subtemplate], external_parameters: List[str], identifier:Optional[str]=None) -> None:
+        super().__init__(identifier)
         self._parameter_names = frozenset(external_parameters)
         for template, mapfuns in subtemplates:
             # Consistency checks

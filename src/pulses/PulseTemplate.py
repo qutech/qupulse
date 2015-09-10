@@ -1,6 +1,6 @@
 """STANDARD LIBRARY IMPORTS"""
 from abc import ABCMeta, abstractmethod, abstractproperty
-from typing import Dict, List, Tuple, Set
+from typing import Dict, List, Tuple, Set, Optional
 import logging
 
 """RELATED THIRD PARTY IMPORTS"""
@@ -24,28 +24,30 @@ class PulseTemplate(SequencingElement, metaclass = ABCMeta):
     called instantiation of the PulseTemplate.
     """
     
-    def __init__(self) -> None:
+    def __init__(self, identifier:Optional[str]=None) -> None:
         super().__init__()
+        self.__identifier = identifier
 
     @abstractproperty
     def parameter_names(self) -> Set[str]:
         """Return the set of names of declared parameters."""
-        pass
     
     @abstractproperty
     def parameter_declarations(self) -> Set[ParameterDeclaration]:
         """Return the set of ParameterDeclarations."""
-        pass
 
     @abstractmethod
     def get_measurement_windows(self, parameters: Dict[str, Parameter] = None) -> List[MeasurementWindow]:
         """Return all measurement windows defined in this PulseTemplate."""
-        pass
 
     @abstractproperty
     def is_interruptable(self) -> bool:
         """Return true, if this PulseTemplate contains points at which it can halt if interrupted."""
-        pass
+    
+    @property
+    def identifier(self) -> Optional[str]:
+        """Return a human readable unique identifier for the pulse."""
+        return self.__identifier
 
 
 class ParameterNotInPulseTemplateException(Exception):

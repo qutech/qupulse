@@ -33,8 +33,8 @@ class TablePulseTemplate(PulseTemplate):
     measurement window.
     """
 
-    def __init__(self, measurement=False) -> None:
-        super().__init__()
+    def __init__(self, measurement=False, identifier:Optional[str]=None) -> None:
+        super().__init__(identifier)
         self.__entries = [] # type: List[TableEntry]
         self.__time_parameter_declarations = {} # type: Dict[str, ParameterDeclaration]
         self.__voltage_parameter_declarations = {} # type: Dict[str, ParameterDeclaration]
