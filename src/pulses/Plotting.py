@@ -1,35 +1,30 @@
 import numpy as np
 from matplotlib import pyplot as plt
-from itertools import chain
+from typing import Dict
 
+from .Parameter import Parameter
 from .Sequencer import Sequencer, SequencingHardwareInterface, SequencingElement
-from .Instructions import EXECInstruction, Waveform, WaveformTable
+from .Instructions import EXECInstruction, Waveform, WaveformTable, InstructionBlock
 from .TablePulseTemplate import clean_entries, TableEntry
 
-class PlottingDummySequencingHardware(SequencingHardwareInterface):
-    def __init__(self):
-        super().__init__()
-        self.database = {}
 
-    def register_waveform(self, waveform_table: WaveformTable):
+class Plotter(SequencingHardwareInterface):
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.__database = {}
+
+    def register_waveform(self, waveform_table: WaveformTable) -> None:
         waveform = Waveform(len(waveform_table))
-        wfid = hash(waveform)
-        if wfid not in self.database.keys():
-            self.database[wfid] = waveform_table
+        waveform_id = hash(waveform)
+        if waveform_id not in self.__database.keys():
+            self.__database[waveform_id] = waveform_table
         return waveform
 
-
-class PlottingSequencer(Sequencer):
-    def __init__(self):
-        self.hardware = PlottingDummySequencingHardware()
-        super().__init__(self.hardware)
-
-    def render(self):
-        block = self.build()
-        typecheck = lambda x: isinstance(x, EXECInstruction)
-        if not all(map(typecheck, block.instructions)):
+    def render(self, block: InstructionBlock) -> None:
+        if not all(map(lambda x: isinstance(x, EXECInstruction), block.instructions)):
             raise NotImplementedError('Can only plot waveforms without branching so far.')
-        waveforms = [self.hardware.database[hash(a.waveform)] for a in block.instructions]
+        waveforms = [self.__database[hash(a.waveform)] for a in block.instructions]
         total_time = 0
         total_waveform = [waveforms[0][0]]
         for wf in waveforms:
@@ -47,25 +42,28 @@ class PlottingSequencer(Sequencer):
             voltages[indices] = entry2.interp(entry1, entry2, ts[indices]) # evaluate interpolation at each time
         return ts, voltages
 
-def plot(pulse: SequencingElement, parameters={}):
-    plotter = PlottingSequencer()
+
+def plot(pulse: SequencingElement, parameters: Dict[str, Parameter]={}) -> None:
+    plotter = Plotter()
+    sequencer = Sequencer(plotter)
     if parameters:
-        plotter.push(pulse, parameters)
+        sequencer.push(pulse, parameters)
     else:
-        plotter.push(pulse)
-    plotter.build()
-    if not plotter.has_finished():
+        sequencer.push(pulse)
+    block = sequencer.build()
+    if not sequencer.has_finished():
         raise PlottingNotPossibleException(pulse)
-    times, voltages = plotter.render()
+    times, voltages = plotter.render(block)
     f = plt.figure()
     ax = f.add_subplot(111)
     ax.step(times, voltages, where='post')
     f.show()
 
+
 class PlottingNotPossibleException(Exception):
-    def __init__(self, pulse):
+    def __init__(self, pulse) -> None:
         self.pulse = pulse
 
-    def __str__(self):
+    def __str__(self) -> str:
         return "Plotting is not possible. {} can not be rendered for pulses that have branching.".format(self.pulse)
 
