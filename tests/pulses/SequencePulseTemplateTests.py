@@ -54,5 +54,11 @@ class SequencePulseTemplateTest(unittest.TestCase):
         with self.assertRaises(UnnecessaryMappingException):
             SequencePulseTemplate(subtemplates, self.outer_parameters)
 
+    def test_identifier(self):
+        identifier = 'some name'
+        pulse = SequencePulseTemplate([], [], identifier=identifier)
+        self.assertEqual(identifier, pulse.identifier)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

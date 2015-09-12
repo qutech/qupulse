@@ -1,6 +1,6 @@
 """STANDARD LIBRARY IMPORTS"""
 import logging
-from typing import Dict, List, Tuple, Set, Callable
+from typing import Dict, List, Tuple, Set, Callable, Any
 from functools import partial
 """RELATED THIRD PARTY IMPORTS"""
 
@@ -12,6 +12,7 @@ from .Sequencer import InstructionBlock, Sequencer
 from .Instructions import WaveformTable, Waveform
 from .TablePulseTemplate import TableEntry, TablePulseTemplate
 from .Interpolation import HoldInterpolationStrategy
+from .Serializer import Serializable
 
 
 logger = logging.getLogger(__name__)
@@ -41,8 +42,9 @@ class SequencePulseTemplate(PulseTemplate):
     is thrown and an explicit mapping must be specified.
     """
 
-    def __init__(self, subtemplates: List[Subtemplate], external_parameters: List[str]) -> None:
+    def __init__(self, subtemplates: List[Subtemplate], external_parameters: List[str], identifier: str = '') -> None:
         super().__init__()
+        self.__identifier = identifier
         self._parameter_names = frozenset(external_parameters)
         for template, mapfuns in subtemplates:
             # Consistency checks
@@ -112,6 +114,19 @@ class SequencePulseTemplate(PulseTemplate):
             inner_parameters = {name: mappings[name](parameters) for name in template.parameter_names}
             sequencer.push(template, inner_parameters, instruction_block)
 
+    @property
+    def identifier(self) -> str:
+        return self.__identifier
+
+    def get_serialization_data(self) -> Dict[str, Any]:
+        root = {}
+        # TODO: there should be a method to reference subpulses by identifier.
+        # For now this approach includes all the substructure of all subtemplates
+        root['subtemplates'] = [(template.get_serialization_data(), serialize_lambda(mapping)) \
+                for template, mapping in self.subtemplates]
+        root['external_parameters'] = self._parameter_names
+        return root
+
 class MissingMappingException(Exception):
     def __init__(self, template, key) -> None:
         super().__init__()
@@ -129,3 +144,6 @@ class UnnecessaryMappingException(Exception):
 
     def __str__(self) -> str:
         return "Mapping function for parameter '{}', which template {} does not need".format(self.key, self.template)
+
+def serialize_lambda(function):
+    return '<Lambda Function>'

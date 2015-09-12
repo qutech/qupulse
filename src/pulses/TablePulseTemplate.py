@@ -1,6 +1,6 @@
 """STANDARD LIBRARY IMPORTS"""
 import logging
-from typing import Union, Dict, List, Set, Tuple, Optional, NamedTuple
+from typing import Union, Dict, List, Set, Tuple, Optional, NamedTuple, Any
 import numbers
 import copy
 import numpy as np
@@ -13,13 +13,14 @@ from .PulseTemplate import PulseTemplate, MeasurementWindow
 from .Sequencer import InstructionBlock, Sequencer
 from .Instructions import WaveformTable, Waveform
 from .Interpolation import InterpolationStrategy, LinearInterpolationStrategy, HoldInterpolationStrategy, JumpInterpolationStrategy
+from .Serializer import Serializable
 
 logger = logging.getLogger(__name__)
 
 TableValue = Union[float, ParameterDeclaration]
 TableEntry = NamedTuple("TableEntry", [('t', TableValue), ('v', TableValue), ('interp', InterpolationStrategy)])
 
-class TablePulseTemplate(PulseTemplate):
+class TablePulseTemplate(PulseTemplate, Serializable):
     """Defines a pulse via linear interpolation of a sequence of (time,voltage)-pairs.
     
     TablePulseTemplate stores a list of (time,voltage)-pairs (the table) which is sorted
@@ -34,8 +35,9 @@ class TablePulseTemplate(PulseTemplate):
     measurement window.
     """
 
-    def __init__(self, measurement=False) -> None:
+    def __init__(self, measurement: bool =False, identifier: str ='') -> None:
         super().__init__()
+        self.__identifier = identifier
         self.__entries = [] # type: List[TableEntry]
         self.__time_parameter_declarations = {} # type: Dict[str, ParameterDeclaration]
         self.__voltage_parameter_declarations = {} # type: Dict[str, ParameterDeclaration]
@@ -259,6 +261,19 @@ class TablePulseTemplate(PulseTemplate):
 
     def requires_stop(self, parameters: Dict[str, Parameter]) -> bool: 
         return any(parameter.requires_stop for parameter in parameters.values() if isinstance(parameter, ParameterDeclaration))
+
+    @property
+    def identifier(self) -> str:
+        return self.__identifier
+
+    def get_serialization_data(self) -> Dict[str, Any]:
+        root = {}
+        root['identifier'] = self.__identifier
+        root['entries'] = self.__entries
+        root['is_measurement_pulse'] = self.__is_measurement_pulse
+        root['time_parameter_declarations'] = self.__time_parameter_declarations
+        root['voltage_parameter_declarations'] = self.__voltage_parameter_declarations
+        return root
 
 class ParameterDeclarationInUseException(Exception):
     """Indicates that a parameter declaration which should be deleted is in use."""

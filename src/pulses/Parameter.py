@@ -7,10 +7,11 @@ import logging
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""    
+from .Serializer import Serializable
 
 logger = logging.getLogger(__name__)
 
-class Parameter(metaclass = ABCMeta):
+class Parameter(Serializable, metaclass = ABCMeta):
     """A parameter for pulses.
     
     Parameter specifies a concrete value which is inserted instead
@@ -51,6 +52,11 @@ class ConstantParameter(Parameter):
     def __repr__(self):
         return "<ConstantParameter {0}>".format(self.__value)
 
+    def get_serialization_data(self):
+        root = {}
+        root['value'] = self.__value
+        return root
+
     
 ConstantParameter.register(numbers.Real)
       
@@ -60,7 +66,7 @@ class ParameterValueProvider(metaclass = ABCMeta):
     def get_value(self, parameters: Dict[str, Parameter]) -> float:
         pass
       
-class ParameterDeclaration(ParameterValueProvider):
+class ParameterDeclaration(Serializable, ParameterValueProvider):
     """A declaration of a parameter required by a pulse template.
     
     PulseTemplates may declare parameters to allow for variations of values in an otherwise
@@ -242,6 +248,18 @@ class ParameterDeclaration(ParameterValueProvider):
     
     def __eq__(self, other) -> bool:
         return isinstance(other, ParameterDeclaration) and self.name == other.name
+
+    def get_serialization_data(self):
+        #TODO: implement
+        root = []
+        # root['min'] = self.__min_value
+        # root['max'] = self.__max_value
+        # root['default'] = self.__default_value
+        return root
+
+    @property
+    def identifier(self):
+        return self.__name
         
 class ImmutableParameterDeclaration(ParameterDeclaration):
     

@@ -2,8 +2,10 @@ from abc import ABCMeta, abstractmethod
 import numpy as np
 from typing import Tuple
 
+from .Serializer import Serializable
+
 # We could think about using an Enum from the enum package (standard library) instead and separate code and data
-class InterpolationStrategy(metaclass = ABCMeta):
+class InterpolationStrategy(Serializable, metaclass = ABCMeta):
     
     @abstractmethod
     def __call__(self, start: Tuple[float, float], end: Tuple[float, float], times: np.ndarray) -> np.ndarray:
@@ -28,6 +30,13 @@ class InterpolationStrategy(metaclass = ABCMeta):
 
     def __hash__(self):
         return hash(self.__repr__())
+    
+    @property
+    def identifier(self):
+        return self.__repr__()
+
+    def get_serialization_data(self):
+        return dict(interpolation=self.__repr__())
     
 class LinearInterpolationStrategy(InterpolationStrategy):
     """Interpolates linearly."""

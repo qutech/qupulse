@@ -65,6 +65,11 @@ class TablePulseTemplateTest(unittest.TestCase):
         windows = pulse.get_measurement_windows(parameters)
         self.assertEqual(windows, [(0, 100)])
 
+    def test_identifier(self):
+        identifier = 'some name'
+        pulse = TablePulseTemplate(identifier=identifier)
+        self.assertEqual(pulse.identifier, identifier)
+
 class CleanEntriesTests(unittest.TestCase):
     def empty_list_test(self):
         self.assertEqual([], clean_entries([]))
