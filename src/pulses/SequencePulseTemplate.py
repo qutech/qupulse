@@ -125,6 +125,7 @@ class SequencePulseTemplate(PulseTemplate):
             subtemplates.append((subtemplate, copy.deepcopy(mapping_functions)))
         data['subtemplates'] = subtemplates
 
+        data['type'] = str(self.__class__)
         return data
 
 

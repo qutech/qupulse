@@ -284,6 +284,7 @@ class TablePulseTemplate(PulseTemplate):
             if isinstance(voltage, ParameterDeclaration):
                 voltage = voltage.name
             entries.append((time, voltage, str(interpolation)))
+        data['type'] = str(self.__class__)
         return data
 
 class ParameterValueIllegalException(Exception):
