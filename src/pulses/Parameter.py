@@ -24,11 +24,12 @@ class Parameter(metaclass = ABCMeta):
 
     @abstractmethod
     def get_value(self) -> float:
-        pass
+        """Compute and return the parameter value."""
 
     @abstractproperty
     def requires_stop(self) -> bool:
-        pass
+        """Return True if the evaluation of this Parameter instance requires a stop in execution/sequencing, e.g., because it
+        depends on data that is only measured in during the next execution."""
     
     def __float__(self) -> float:
         return float(self.get_value())
@@ -51,16 +52,17 @@ class ConstantParameter(Parameter):
     def __repr__(self):
         return "<ConstantParameter {0}>".format(self.__value)
 
-    
 ConstantParameter.register(numbers.Real)
-      
-class ParameterValueProvider(metaclass = ABCMeta):
-    
-    @abstractmethod
-    def get_value(self, parameters: Dict[str, Parameter]) -> float:
-        pass
-      
-class ParameterDeclaration(ParameterValueProvider):
+
+
+#class ParameterValueProvider(metaclass = ABCMeta):
+#
+#    @abstractmethod
+#    def get_value(self, parameters: Dict[str, Parameter]) -> float:
+#        pass
+
+
+class ParameterDeclaration:
     """A declaration of a parameter required by a pulse template.
     
     PulseTemplates may declare parameters to allow for variations of values in an otherwise
@@ -86,8 +88,7 @@ class ParameterDeclaration(ParameterValueProvider):
         self.max_value = max # type: BoundaryValue
             
         self.__assert_values_valid()
-        
-        
+
     def __assert_values_valid(self) -> None:
         if self.absolute_min_value > self.absolute_max_value:
             raise ValueError("Max value ({0}) is less than min value ({1}).".format(self.max_value, self.min_value))
@@ -310,4 +311,4 @@ class ParameterNotProvidedException(Exception):
         self.parameter_name = parameter_name
         
     def __str__(self) -> str:
-        return "No value was provided for parameter {0} and no default value was specified.".format(self.parameter_name)
+        return "No value was provided for parameter '{0}' and no default value was specified.".format(self.parameter_name)
