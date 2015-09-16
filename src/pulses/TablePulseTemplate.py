@@ -274,8 +274,8 @@ class TablePulseTemplate(PulseTemplate):
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
         data = dict()
         data['is_measurement_pulse'] = self.__is_measurement_pulse
-        data['time_parameter_declarations'] = [serializer.serialize(decl) for decl in self.__time_parameter_declarations.values()]
-        data['voltage_parameter_declarations'] = [serializer.serialize(decl) for decl in self.__voltage_parameter_declarations.values()]
+        data['time_parameter_declarations'] = [serializer._serialize_subpulse(decl) for decl in self.__time_parameter_declarations.values()]
+        data['voltage_parameter_declarations'] = [serializer._serialize_subpulse(decl) for decl in self.__voltage_parameter_declarations.values()]
         entries = []
         for (time, voltage, interpolation) in self.__entries:
             if isinstance(time, ParameterDeclaration):

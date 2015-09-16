@@ -114,12 +114,12 @@ class SequencePulseTemplate(PulseTemplate):
 
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
         data = dict()
-        data['external_parameters'] = self.parameter_names
+        data['external_parameters'] = list(self.parameter_names)
         data['is_interruptable'] = self.is_interruptable
 
         subtemplates = []
         for (subtemplate, mapping_functions) in self.subtemplates:
-            subtemplate = serializer.serialize(subtemplate)
+            subtemplate = serializer._serialize_subpulse(subtemplate)
             subtemplates.append((subtemplate, copy.deepcopy(mapping_functions)))
         data['subtemplates'] = subtemplates
 
