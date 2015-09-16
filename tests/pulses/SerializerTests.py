@@ -32,7 +32,6 @@ class FileSystemBackendTest(unittest.TestCase):
     def test_fsbackend(self):
         # first put the data
         self.backend.put(self.testdata, self.identifier)
-        print('Testing backend')
 
         # then retrieve it again
         data = self.backend.get(self.identifier)
@@ -72,8 +71,8 @@ class SerializerTests(unittest.TestCase):
         seq = SequencePulseTemplate(subtemplates, [])
         serializer = Serializer()
         result = serializer.serialize(seq)
-        import ipdb
-        ipdb.set_trace()
+        #import ipdb
+        #ipdb.set_trace()
 
     def test_SequencePulseTemplate(self):
         seq = SequencePulseTemplate([], [], identifier='sequence')
