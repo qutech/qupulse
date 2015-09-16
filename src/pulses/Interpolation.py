@@ -36,7 +36,7 @@ class InterpolationStrategy(Serializable, metaclass = ABCMeta):
         return self.__repr__()
 
     def get_serialization_data(self):
-        return dict(interpolation=self.__repr__())
+        return dict(type='Interpolation', interpolation=self.__repr__())
     
 class LinearInterpolationStrategy(InterpolationStrategy):
     """Interpolates linearly."""

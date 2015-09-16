@@ -52,6 +52,10 @@ class ConstantParameter(Parameter):
     def __repr__(self):
         return "<ConstantParameter {0}>".format(self.__value)
 
+    @property
+    def identifier(self):
+        return ''
+
     
 ConstantParameter.register(numbers.Real)
       

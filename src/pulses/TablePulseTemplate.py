@@ -278,6 +278,7 @@ class TablePulseTemplate(PulseTemplate, Serializable):
 
     def get_serialization_data(self) -> Dict[str, Any]:
         root = {}
+        root['type'] = 'TablePulseTemplate'
         root['identifier'] = self.__identifier
         root['entries'] = self.__entries
         root['is_measurement_pulse'] = self.__is_measurement_pulse
