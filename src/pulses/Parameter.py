@@ -54,8 +54,13 @@ class ConstantParameter(Parameter):
 
     def get_serialization_data(self):
         root = {}
+        root['type'] = 'ConstantParameter'
         root['value'] = self.__value
         return root
+
+    @property
+    def identifier(self):
+        return ''
 
     
 ConstantParameter.register(numbers.Real)

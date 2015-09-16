@@ -120,6 +120,7 @@ class SequencePulseTemplate(PulseTemplate):
 
     def get_serialization_data(self) -> Dict[str, Any]:
         root = {}
+        root['type'] = 'SequencePulseTemplate'
         # TODO: there should be a method to reference subpulses by identifier.
         # For now this approach includes all the substructure of all subtemplates
         root['subtemplates'] = [(template.get_serialization_data(), serialize_lambda(mapping)) \
