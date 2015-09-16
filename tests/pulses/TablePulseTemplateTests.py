@@ -431,10 +431,13 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
         for expected_result, parameter_set in test_sets:
             self.assertEqual(expected_result, table.requires_stop(parameter_set))
 
+    def test_identifier(self):
+        identifier = 'some name'
+        pulse = TablePulseTemplate(identifier=identifier)
+        self.assertEqual(pulse.identifier, identifier)
 
-class CleanEntriesTest(unittest.TestCase):
-
-    def test_empty_list(self) -> None:
+class CleanEntriesTests(unittest.TestCase):
+    def empty_list_test(self):
         self.assertEqual([], clean_entries([]))
 
     def test_small_list_unchanged(self) -> None:

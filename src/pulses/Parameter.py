@@ -8,6 +8,7 @@ import logging
 
 """LOCAL IMPORTS"""
 from .Serializer import Serializable, Serializer
+from .Serializer import Serializable
 
 logger = logging.getLogger(__name__)
 
@@ -242,8 +243,17 @@ class ParameterDeclaration(Serializable, ParameterValueProvider):
             max_value_str = "Parameter '{0}' (max {1})".format(self.max_value.name, max_value_str)
         return "{4} '{0}', range ({1}, {2}), default {3}".format(self.name, min_value_str, max_value_str, self.default_value, type(self))
 
-    def __repr__(self) -> str:
-        return "<"+self.__str__()+">"
+    def get_serialization_data(self):
+        #TODO: implement
+        root = []
+        # root['min'] = self.__min_value
+        # root['max'] = self.__max_value
+        # root['default'] = self.__default_value
+        return root
+
+    @property
+    def identifier(self):
+        return self.__name
 
     def __compute_compare_key(self) -> Tuple[str, Union[float, str], Union[float, str], Optional[float]]:
         min_value = self.min_value
@@ -253,6 +263,10 @@ class ParameterDeclaration(Serializable, ParameterValueProvider):
         if isinstance(max_value, ParameterDeclaration):
             max_value = max_value.name
         return (self.name, min_value, max_value, self.default_value)
+
+    def __repr__(self) -> str:
+        return "<"+self.__str__()+">"
+        min_value = self.__parameter_declaration.min_value
 
     def __eq__(self, other) -> bool:
         return (isinstance(other, ParameterDeclaration) and

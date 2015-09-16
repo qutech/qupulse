@@ -101,6 +101,7 @@ class SequencePulseTemplate(PulseTemplate):
         pass
 
     def build_sequence(self, sequencer: "Sequencer", parameters: Dict[str, Parameter], instruction_block: InstructionBlock) -> None:
+        # detect missing or unnecessary parameters
         missing = self.parameter_names - set(parameters)
         for m in missing:
             raise ParameterNotProvidedException(m)
@@ -108,6 +109,7 @@ class SequencePulseTemplate(PulseTemplate):
         for un in unnecessary:
             raise ParameterNotInPulseTemplateException(un, self)
 
+        # push subtemplates to sequencing stack with mapped parameters
         for template, mappings in reversed(self.subtemplates):
             inner_parameters = {name: mappings[name](parameters) for name in template.parameter_names}
             sequencer.push(template, inner_parameters, instruction_block)
@@ -143,3 +145,6 @@ class UnnecessaryMappingException(Exception):
 
     def __str__(self) -> str:
         return "Mapping function for parameter '{}', which template {} does not need".format(self.key, self.template)
+
+def serialize_lambda(function):
+    return '<Lambda Function>'

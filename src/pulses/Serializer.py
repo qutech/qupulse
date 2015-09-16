@@ -1,11 +1,11 @@
-from abc import ABCMeta
+from abc import ABCMeta, abstractmethod
 from typing import Dict, Any, Optional, NamedTuple, Union
-import json
+import os.path
 
 
 class Serializable(metaclass = ABCMeta):
 
-    def __init__(self, identifier: Optional[str]) -> None:
+    def __init__(self, identifier: Optional[str] = None) -> None:
         super().__init__()
         self.__identifier = identifier
 
@@ -51,3 +51,51 @@ class Serializer(object):
             filedict[''] = repr_
         return filedict
 
+
+class StorageBackend(metaclass = ABCMeta):
+
+    @abstractmethod
+    def put(data: str, identifier: str):
+        '''store the data string identified by identifier'''
+
+    @abstractmethod
+    def get(identifier: str) -> str:
+        '''Retrieves the data string with the given identifier'''
+        pass
+
+
+class FilesystemBackend(StorageBackend):
+
+    def __init__(self, root='.'):
+        if not os.path.isdir(root):
+            raise Exception
+        self.__root = os.path.abspath(root)
+
+    def put(self, data: str, identifier: str):
+        path = os.path.join(self.__root, identifier)
+        if os.path.isfile(path):
+            raise Exception # file already exists
+        with open(path, 'w') as f:
+            f.write(data)
+
+    def get(self, identifier):
+        path = os.path.join(self.__root, identifier)
+        with open(path) as f:
+            return f.read()
+
+
+class CachingBackend(StorageBackend):
+
+    def __init__(self, backend):
+        self.backend = backend
+        self.cache = {}
+
+    def put(self, data: str, identifier: str):
+        self.cache[identifier] = data
+        self.backend.put(data, identifier)
+
+    def get(self, identifier):
+        if identifier in self.cache.keys():
+            return self.cache[identifier]
+        else:
+            self.backend.get(identifier)
