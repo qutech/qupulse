@@ -8,7 +8,8 @@ sys.path.insert(0,srcPath)
 
 from pulses.TablePulseTemplate import TablePulseTemplate, TableEntry
 from pulses.SequencePulseTemplate import SequencePulseTemplate, MissingMappingException, UnnecessaryMappingException, RuntimeMappingError
-from pulses.PulseTemplate import ParameterNotInPulseTemplateException
+from pulses.PulseTemplate import ParameterNotInPulseTemplateException,\
+    PulseTemplate
 from pulses.Parameter import ParameterDeclaration, Parameter, ParameterNotProvidedException
 from pulses.Instructions import EXECInstruction
 from tests.pulses.SequencingDummies import DummySequencer, DummyInstructionBlock, DummySequencingElement
@@ -108,5 +109,26 @@ class SequencePulseTemplateSequencingTests(SequencePulseTemplateTest):
         with self.assertRaises(RuntimeMappingError):
             sequence.build_sequence(sequencer, self.parameters, block)
 
+class SequencePulseTemplateStringTest(unittest.TestCase):
+    def test_str(self):
+        T = TablePulseTemplate()
+        a = [RuntimeMappingError(T,T,"c","d"),
+             UnnecessaryMappingException(T,"b"),
+             MissingMappingException(T,"b")]
+        
+        b = [x.__str__() for x in a]
+        for s in b:
+            self.assertIsInstance(s, str)
+            
+class SequencePulseTemplateTestProperties(SequencePulseTemplateTest):
+    def test_is_interruptable(self):
+        self.assertTrue(self.sequence.is_interruptable)
+        self.sequence.is_interruptable = False
+        self.assertFalse(self.sequence.is_interruptable)
+        
+    def test_parameter_declarations(self):
+        #FIXME
+        decl = self.sequence.parameter_declarations
+        pass
 if __name__ == "__main__":
     unittest.main(verbosity=2)

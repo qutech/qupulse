@@ -94,10 +94,10 @@ class SequencePulseTemplate(PulseTemplate):
     
     @is_interruptable.setter
     def is_interruptable(self, new_value: bool):
-        self.__is_interruptable
+        self.__is_interruptable = new_value
 
     def requires_stop(self, parameters: Dict[str, Parameter]) -> bool:
-        pass
+       """IMPLEMENT ME!"""
 
     def build_sequence(self, sequencer: "Sequencer", parameters: Dict[str, Parameter], instruction_block: InstructionBlock) -> None:
         # detect missing or unnecessary parameters
