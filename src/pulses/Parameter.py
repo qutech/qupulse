@@ -8,11 +8,11 @@ import logging
 
 """LOCAL IMPORTS"""
 from .Serializer import Serializable, Serializer
-from .Serializer import Serializable
 
 logger = logging.getLogger(__name__)
 
-class Parameter(metaclass = ABCMeta):
+
+class Parameter(Serializable, metaclass = ABCMeta):
     """A parameter for pulses.
     
     Parameter specifies a concrete value which is inserted instead
@@ -22,7 +22,7 @@ class Parameter(metaclass = ABCMeta):
     obtain values by computation (e.g. from measurement results).
     """
     def __init__(self) -> None:
-        super().__init__()
+        super().__init__(None)
 
     @abstractmethod
     def get_value(self) -> float:
@@ -53,16 +53,19 @@ class ConstantParameter(Parameter):
     def __repr__(self):
         return "<ConstantParameter {0}>".format(self.__value)
 
+    def get_serialization_data(self, serializer: Serializer) -> None:
+        return dict(type=str(ConstantParameter.__class__), constant=self.__value)
+
     
 ConstantParameter.register(numbers.Real)
       
-class ParameterValueProvider(metaclass = ABCMeta):
-    
-    @abstractmethod
-    def get_value(self, parameters: Dict[str, Parameter]) -> float:
-        pass
+#class ParameterValueProvider(metaclass = ABCMeta):
+#
+#    @abstractmethod
+#    def get_value(self, parameters: Dict[str, Parameter]) -> float:
+#        pass
       
-class ParameterDeclaration(Serializable, ParameterValueProvider):
+class ParameterDeclaration(Serializable):
     """A declaration of a parameter required by a pulse template.
     
     PulseTemplates may declare parameters to allow for variations of values in an otherwise
@@ -243,18 +246,6 @@ class ParameterDeclaration(Serializable, ParameterValueProvider):
             max_value_str = "Parameter '{0}' (max {1})".format(self.max_value.name, max_value_str)
         return "{4} '{0}', range ({1}, {2}), default {3}".format(self.name, min_value_str, max_value_str, self.default_value, type(self))
 
-    def get_serialization_data(self):
-        #TODO: implement
-        root = []
-        # root['min'] = self.__min_value
-        # root['max'] = self.__max_value
-        # root['default'] = self.__default_value
-        return root
-
-    @property
-    def identifier(self):
-        return self.__name
-
     def __compute_compare_key(self) -> Tuple[str, Union[float, str], Union[float, str], Optional[float]]:
         min_value = self.min_value
         if isinstance(min_value, ParameterDeclaration):
@@ -266,7 +257,6 @@ class ParameterDeclaration(Serializable, ParameterValueProvider):
 
     def __repr__(self) -> str:
         return "<"+self.__str__()+">"
-        min_value = self.__parameter_declaration.min_value
 
     def __eq__(self, other) -> bool:
         return (isinstance(other, ParameterDeclaration) and

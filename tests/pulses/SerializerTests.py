@@ -39,7 +39,7 @@ class FileSystemBackendTest(unittest.TestCase):
 
 
 class SerializerTests(unittest.TestCase):
-
+    pass
 
     #def test_serialization(self) -> None:
         #table_foo = TablePulseTemplate(identifier='foo')
