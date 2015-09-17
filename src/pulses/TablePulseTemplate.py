@@ -268,7 +268,7 @@ class TablePulseTemplate(PulseTemplate):
         instruction_block.add_instruction_exec(waveform)
 
     def requires_stop(self, parameters: Dict[str, Parameter]) -> bool: 
-        return any(parameters[name].requires_stop for name in parameters.keys() if (name in self.parameter_names))
+        return any(parameters[name].requires_stop for name in parameters.keys() if (name in self.parameter_names) and not isinstance(parameters[name], numbers.Number))
 
 
 class ParameterValueIllegalException(Exception):
