@@ -1,6 +1,6 @@
 """STANDARD LIBRARY IMPORTS"""
 import logging
-from typing import Union, Dict, List, Set, Tuple, Optional, NamedTuple, Any
+from typing import Union, Dict, List, Set, Optional, NamedTuple, Any, Iterable
 import numbers
 import copy
 import numpy as np
@@ -34,7 +34,7 @@ class TablePulseTemplate(PulseTemplate):
     measurement window.
     """
 
-    def __init__(self, measurement=False, identifier:Optional[str]=None) -> None:
+    def __init__(self, measurement=False, identifier: Optional[str]=None) -> None:
         super().__init__(identifier)
         self.__identifier = identifier
         self.__entries = [] # type: List[TableEntry]
@@ -284,6 +284,7 @@ class TablePulseTemplate(PulseTemplate):
             if isinstance(voltage, ParameterDeclaration):
                 voltage = voltage.name
             entries.append((time, voltage, str(interpolation)))
+        data['entries'] = entries
         data['type'] = str(self.__class__)
         return data
 

@@ -1,6 +1,6 @@
 """STANDARD LIBRARY IMPORTS"""
 import logging
-from typing import Dict, List, Tuple, Set, Callable, Optional, Any
+from typing import Dict, List, Tuple, Set, Callable, Optional, Any, Iterable
 from functools import partial
 from inspect import getsource
 import copy
@@ -8,7 +8,7 @@ import copy
 
 """LOCAL IMPORTS"""
 from .PulseTemplate import PulseTemplate, MeasurementWindow, ParameterNotInPulseTemplateException
-from .Parameter import ParameterDeclaration, Parameter, ConstantParameter, ParameterNotProvidedException
+from .Parameter import ParameterDeclaration, Parameter, ParameterNotProvidedException
 from .Sequencer import InstructionBlock, Sequencer
 from .Serializer import Serializer
 
@@ -122,7 +122,8 @@ class SequencePulseTemplate(PulseTemplate):
         subtemplates = []
         for (subtemplate, mapping_functions) in self.subtemplates:
             subtemplate = serializer._serialize_subpulse(subtemplate)
-            subtemplates.append((subtemplate, copy.deepcopy(mapping_functions)))
+            #subtemplates.append((subtemplate, copy.deepcopy(mapping_functions)))
+            subtemplates.append((subtemplate, ['<lambda>' for p in mapping_functions]))
         data['subtemplates'] = subtemplates
 
         data['type'] = str(self.__class__)
