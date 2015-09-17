@@ -8,6 +8,7 @@ srcPath = os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1)[0] + 'src
 sys.path.insert(0,srcPath)
 
 from pulses.Parameter import Parameter, ConstantParameter, ParameterDeclaration, ParameterNotProvidedException
+from pulses.Serializer import Serializer
 
 class DummyParameter(Parameter):
         
@@ -20,6 +21,13 @@ class DummyParameter(Parameter):
         @property
         def requires_stop(self) -> bool:
             return False
+
+        def get_serialization_data(self, serializer: Serializer) -> None:
+            raise NotImplemented()
+
+        @staticmethod
+        def deserialize(serializer: Serializer) -> 'DummyParameter':
+            raise NotImplemented()
     
 
 class ParameterTest(unittest.TestCase):

@@ -8,9 +8,10 @@ from tempfile import TemporaryDirectory
 srcPath = os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1)[0] + 'src'
 sys.path.insert(0,srcPath)
 
-from pulses.Serializer import FilesystemBackend, Serializer
+from pulses.Serializer import FilesystemBackend, Serializer, StorageBackend
 from pulses.TablePulseTemplate import TablePulseTemplate
 from pulses.SequencePulseTemplate import SequencePulseTemplate
+from pulses.Parameter import ParameterDeclaration
 
 
 class FileSystemBackendTest(unittest.TestCase):
@@ -38,17 +39,47 @@ class FileSystemBackendTest(unittest.TestCase):
         self.assertEqual(data, self.testdata)
 
 
-class SerializerTests(unittest.TestCase):
-    pass
+class DummyStorageBackend(StorageBackend):
 
-    #def test_serialization(self) -> None:
-        #table_foo = TablePulseTemplate(identifier='foo')
-        #table = TablePulseTemplate(measurement=True)
-        #sequence = SequencePulseTemplate([(table_foo, {}), (table, {})], [], identifier=None)
-        #serializer = Serializer(FilesystemBackend())
-        #serializer.serialize(sequence)
-        #self.fail() # TODO: instead of printing, compare against expected values
-        #print(json.dumps(serialized, indent=4))
+    def __init__(self) -> None:
+        self.stored_items = dict()
+
+    def get(self, identifier: str) -> str:
+        return self.stored_items[identifier]
+
+    def put(self, data: str, identifier: str) -> None:
+        self.stored_items[identifier] = data
+
+class SerializerTests(unittest.TestCase):
+
+    def test_serialization(self) -> None:
+        table_foo = TablePulseTemplate(identifier='foo')
+        table_foo.add_entry('hugo', 2)
+        table_foo.add_entry(ParameterDeclaration('albert', max=9.1), 'voltage')
+        table = TablePulseTemplate(measurement=True)
+        f_ident = lambda x: x
+        foo_mappings = dict(hugo=f_ident, albert=f_ident, voltage=f_ident)
+        sequence = SequencePulseTemplate([(table_foo, foo_mappings), (table, {})], [], identifier=None)
+
+        storage = DummyStorageBackend()
+        serializer = Serializer(storage)
+        serializer.serialize(sequence)
+
+        serialized_foo = storage.stored_items['foo']
+        serialized_sequence = storage.stored_items['main']
+
+        deserialized_sequence = serializer.deserialize('main')
+        storage.stored_items = dict()
+        serializer.serialize(deserialized_sequence)
+
+        self.assertEqual(serialized_foo, storage.stored_items['foo'])
+        self.assertEqual(serialized_sequence, storage.stored_items['main'])
+
+
+    #def test_deserialization(self) -> None:
+    #    serializer = Serializer(FilesystemBackend())
+    #    obj = serializer.deserialize('main')
+    #    print("hoooray")
 
     # def test_TablePulseTemplate(self):
     #     tpt = TablePulseTemplate()

@@ -1,6 +1,6 @@
 """STANDARD LIBRARY IMPORTS"""
 import logging
-from typing import Dict, List, Tuple, Set, Callable, Optional, Any, Iterable
+from typing import Dict, List, Tuple, Set, Callable, Optional, Any, Iterable, Union
 from functools import partial
 from inspect import getsource
 import copy
@@ -123,11 +123,23 @@ class SequencePulseTemplate(PulseTemplate):
         for (subtemplate, mapping_functions) in self.subtemplates:
             subtemplate = serializer._serialize_subpulse(subtemplate)
             #subtemplates.append((subtemplate, copy.deepcopy(mapping_functions)))
-            subtemplates.append((subtemplate, ['<lambda>' for p in mapping_functions]))
+            subtemplates.append((subtemplate, {k: '<lambda>' for (k, m) in mapping_functions.items()}))
         data['subtemplates'] = subtemplates
 
-        data['type'] = str(self.__class__)
+        data['type'] = serializer.get_type_identifier(self)
         return data
+
+    @staticmethod
+    def deserialize(serializer: Serializer,
+                    is_interruptable: bool,
+                    subtemplates: Iterable[Tuple[Union[str, Dict[str, Any]], Dict[str, str]]],
+                    external_parameters: Iterable[str],
+                    identifier: Optional[str]=None) -> 'SequencePulseTemplate':
+        subtemplates = [(serializer.deserialize(subtemplate), {k: lambda x: x for k, m in parameter_mappings.items()}) for subtemplate, parameter_mappings in subtemplates]
+
+        template = SequencePulseTemplate(subtemplates, external_parameters, identifier=identifier)
+        template.is_interruptable = is_interruptable
+        return template
 
 
 class MissingMappingException(Exception):

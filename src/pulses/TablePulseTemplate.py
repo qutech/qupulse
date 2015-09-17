@@ -285,8 +285,29 @@ class TablePulseTemplate(PulseTemplate):
                 voltage = voltage.name
             entries.append((time, voltage, str(interpolation)))
         data['entries'] = entries
-        data['type'] = str(self.__class__)
+        data['type'] = serializer.get_type_identifier(self)
         return data
+
+    @staticmethod
+    def deserialize(serializer: Serializer,
+                    time_parameter_declarations: Iterable[Any],
+                    voltage_parameter_declarations: Iterable[Any],
+                    entries: Iterable[Any],
+                    is_measurement_pulse: bool,
+                    identifier: Optional[str]=None) -> 'TablePulseTemplate':
+        time_parameter_declarations = {declaration['name']: serializer.deserialize(declaration) for declaration in time_parameter_declarations}
+        voltage_parameter_declarations = {declaration['name']: serializer.deserialize(declaration) for declaration in voltage_parameter_declarations}
+
+        template = TablePulseTemplate(is_measurement_pulse, identifier=identifier)
+
+        for (time, voltage, interpolation) in entries:
+            if isinstance(time, str):
+                time = time_parameter_declarations[time]
+            if isinstance(voltage, str):
+                voltage = voltage_parameter_declarations[voltage]
+            template.add_entry(time, voltage, interpolation=interpolation)
+
+        return template
 
 class ParameterValueIllegalException(Exception):
     """Indicates that the value provided for a parameter is illegal, i.e., is outside the parameter's bounds or of wrong type."""

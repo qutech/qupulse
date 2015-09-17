@@ -1,4 +1,4 @@
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta, abstractmethod, abstractstaticmethod
 from typing import Dict, Any, Optional, NamedTuple, Union
 import os.path
 import json
@@ -7,12 +7,11 @@ class StorageBackend(metaclass = ABCMeta):
 
     @abstractmethod
     def put(data: str, identifier: str):
-        '''store the data string identified by identifier'''
+        """Store the data string identified by identifier."""
 
     @abstractmethod
     def get(identifier: str) -> str:
-        '''Retrieves the data string with the given identifier'''
-        pass
+        """Retrieve the data string with the given identifier."""
 
 
 class FilesystemBackend(StorageBackend):
@@ -64,8 +63,13 @@ class Serializable(metaclass = ABCMeta):
             raise ValueError("Identifier must not be empty.")
         return self.__identifier
 
+    @abstractmethod
     def get_serialization_data(self, serializer: 'Serializer') -> Dict[str, Any]:
-        return self.__dict__
+        """Return all data relevant for serialization as a dictionary containing only base types."""
+
+    @abstractstaticmethod
+    def deserialize(serializer: 'Serializer', **kwargs) -> 'Serializable':
+        """Reconstruct the Serializable object from a dictionary containing all relevant information as obtained from get_serialization_data."""
 
 
 class Serializer(object):
@@ -99,6 +103,10 @@ class Serializer(object):
             filedict[''] = repr_
         return filedict
 
+    @staticmethod
+    def get_type_identifier(obj: Any) -> str:
+        return "{}.{}".format(obj.__module__, obj.__class__.__name__)
+
     def serialize(self, serializable: Serializable) -> None:
         repr_ = self.dictify(serializable)
         for identifier in repr_:
@@ -106,3 +114,26 @@ class Serializer(object):
                 self.__storage_backend.put(json.dumps(repr_[identifier], indent=4), 'main')
             else:
                 self.__storage_backend.put(json.dumps(repr_[identifier], indent=4), identifier)
+
+    # def _deserialize_subpulse(self, representation: Dict[str, Any]) -> Serializable:
+    #     repr_ = dict(representation)
+    #     module_name, class_name = repr_['type'].rsplit('.', 1)
+    #     module = __import__(module_name, fromlist=[class_name])
+    #     class_ = getattr(module, class_name)
+    #
+    #     repr_.pop('type')
+    #     return class_.deserialize(**repr_)
+
+    def deserialize(self, representation: Union[str, Dict[str, Any]]) -> Serializable:
+        if isinstance(representation, str):
+            repr_ = json.loads(self.__storage_backend.get(representation))
+            repr_['identifier'] = representation
+        else:
+            repr_ = dict(representation)
+
+        module_name, class_name = repr_['type'].rsplit('.', 1)
+        module = __import__(module_name, fromlist=[class_name])
+        class_ = getattr(module, class_name)
+
+        repr_.pop('type')
+        return class_.deserialize(self, **repr_)

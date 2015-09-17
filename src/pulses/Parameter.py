@@ -54,7 +54,11 @@ class ConstantParameter(Parameter):
         return "<ConstantParameter {0}>".format(self.__value)
 
     def get_serialization_data(self, serializer: Serializer) -> None:
-        return dict(type=str(ConstantParameter.__class__), constant=self.__value)
+        return dict(type=serializer.get_type_identifier(self), constant=self.__value)
+
+    @staticmethod
+    def deserialize(serializer: Serializer, constant: float) -> 'ConstantParameter':
+        return ConstantParameter(constant)
 
     
 ConstantParameter.register(numbers.Real)
@@ -280,8 +284,21 @@ class ParameterDeclaration(Serializable):
         data['min_value'] = min_value
         data['max_value'] = max_value
         data['default_value'] = self.default_value
+        data['type'] = serializer.get_type_identifier(self)
 
         return data
+
+    @staticmethod
+    def deserialize(serializer: Serializer,
+                    name: str,
+                    min_value: Union[str, float],
+                    max_value: Union[str, float],
+                    default_value: float) -> 'ParameterDeclaration':
+        if isinstance(min_value, str):
+            min_value = float("-inf")
+        if isinstance(max_value, str):
+            max_value = float("+inf")
+        return ParameterDeclaration(name, min=min_value, max=max_value, default=default_value)
         
 # class ImmutableParameterDeclaration(ParameterDeclaration):
 #
