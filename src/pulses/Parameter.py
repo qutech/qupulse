@@ -1,4 +1,3 @@
-"""STANDARD LIBRARY IMPORTS"""
 from abc import ABCMeta, abstractmethod, abstractproperty
 from typing import Optional, Union, Dict, Tuple
 import numbers
