@@ -1,15 +1,10 @@
 from abc import ABCMeta, abstractmethod
 import numpy as np
-from typing import Tuple, Any, Dict
-
-from .Serializer import Serializable, Serializer
+from typing import Tuple
 
 # We could think about using an Enum from the enum package (standard library) instead and separate code and data
-class InterpolationStrategy(Serializable, metaclass = ABCMeta):
+class InterpolationStrategy(metaclass = ABCMeta):
 
-    def __init__(self) -> None:
-        super().__init__(None)
-    
     @abstractmethod
     def __call__(self, start: Tuple[float, float], end: Tuple[float, float], times: np.ndarray) -> np.ndarray:
         """Return a sequence of voltage values for the time slot between the previous and the current point (given as (time, value) pairs)
@@ -33,9 +28,6 @@ class InterpolationStrategy(Serializable, metaclass = ABCMeta):
 
     def __hash__(self):
         return hash(self.__repr__())
-
-    def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
-        return dict(type=str(self.__class__))
 
     
 class LinearInterpolationStrategy(InterpolationStrategy):
