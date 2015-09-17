@@ -111,8 +111,8 @@ class Sequencer:
         Note that has_finished that has_finished will return False, if there are stack elements that require a stop. In this case, calling build will only
         have an effect if these elements no longer require a stop, e.g. when required measurement results have been acquired since the last translation.
         """
-        return all(not stack for stack in self.__sequencing_stacks.values())
-        
+        return not any(self.__sequencing_stacks.values())
+
     def register_waveform(self, waveform_table: WaveformTable) -> Waveform:
         """Register a waveform with the sequencer.
         
