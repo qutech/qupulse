@@ -1,6 +1,7 @@
 from src.pulses.TablePulseTemplate import TablePulseTemplate
 from src.pulses.SequencePulseTemplate import SequencePulseTemplate
-from src.pulses.Plotting import PlottingSequencer, plot
+from src.pulses.Plotting import Plotter, plot
+from src.pulses.Sequencer import Sequencer
 from matplotlib import pyplot as plt
 
 #
@@ -72,10 +73,11 @@ nested_pulse = SequencePulseTemplate([(doubleSquare, nested_mapping),
 
 params2 = dict(start=10, length=100, pulse_length=1000)
 
-# Instead of calling the convenience plot function, we can also use the PlottingSequencer directly
-# This is also an instructive example on how to use sequencers.
-plotter = PlottingSequencer()
-plotter.push(nested_pulse, params2)
-times, voltages = plotter.render()
-plt.step(times, voltages)
-plt.show() # eh voila, a sequence of four pulses
+# # Instead of calling the convenience plot function, we can also use the PlottingSequencer directly
+# # This is also an instructive example on how to use sequencers.
+# plotter = Plotter()
+# sequencer = Sequencer(plotter)
+# sequencer.push(nested_pulse, params2)
+# times, voltages = plotter.render()
+# plt.step(times, voltages)
+# plt.show() # eh voila, a sequence of four pulses
