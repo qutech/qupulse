@@ -21,6 +21,7 @@ class DummySequencingElement(SequencingElement):
         self.parameters = None
         self.requires_stop_ = requires_stop
         self.push_elements = push_elements
+        self.parameter_names = set()
 
     def build_sequence(self, sequencer: Sequencer, parameters: Dict[str, Parameter], instruction_block: InstructionBlock) -> None:
         self.build_call_counter += 1

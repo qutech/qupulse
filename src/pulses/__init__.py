@@ -11,4 +11,5 @@ __all__ = ["BranchPulseTemplate",
            "SequencePulseTemplate",
            "Sequencer",
            "TablePulseTemplate",
-           "Interpolation"]
+           "Interpolation",
+           "Plotting"]

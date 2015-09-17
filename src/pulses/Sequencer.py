@@ -1,4 +1,3 @@
-"""STANDARD LIBRARY IMPORTS"""
 from abc import ABCMeta, abstractmethod
 from typing import Tuple, Dict
 
@@ -22,7 +21,6 @@ class SequencingElement(metaclass = ABCMeta):
         Implementation guide: Use instruction_block methods to add instructions or create new InstructionBlocks.
         Use sequencer to push child elements to the translation stack.
         """
-        pass
         
     @abstractmethod
     def requires_stop(self, parameters: Dict[str, Parameter]) -> bool: 
@@ -37,7 +35,6 @@ class SequencingElement(metaclass = ABCMeta):
         If this SequencingElement contains a child element which requires a stop, this information will be
         regarded during translation of that element.
         """ 
-        pass
     
 class SequencingHardwareInterface(metaclass = ABCMeta):
     """A hardware interface used by Sequencer to register waveforms."""
@@ -55,7 +52,6 @@ class SequencingHardwareInterface(metaclass = ABCMeta):
         The function ensures that the resulting waveform is known by the device and returns a Waveform
         object representing a handle to the waveform on the device.
         """
-        pass
     
 class Sequencer:
     """Translates tree structures of SequencingElement objects to linear instruction sequences contained in a InstructionBlock.""" 
@@ -111,8 +107,8 @@ class Sequencer:
         Note that has_finished that has_finished will return False, if there are stack elements that require a stop. In this case, calling build will only
         have an effect if these elements no longer require a stop, e.g. when required measurement results have been acquired since the last translation.
         """
-        return all(not stack for stack in self.__sequencing_stacks.values())
-        
+        return not any(self.__sequencing_stacks.values())
+
     def register_waveform(self, waveform_table: WaveformTable) -> Waveform:
         """Register a waveform with the sequencer.
         

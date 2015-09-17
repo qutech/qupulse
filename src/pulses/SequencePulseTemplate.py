@@ -1,4 +1,3 @@
-"""STANDARD LIBRARY IMPORTS"""
 import logging
 from typing import Dict, List, Tuple, Set, Callable, Optional, Any, Iterable, Union
 from functools import partial
@@ -95,23 +94,27 @@ class SequencePulseTemplate(PulseTemplate):
     
     @is_interruptable.setter
     def is_interruptable(self, new_value: bool):
-        self.__is_interruptable
+        self.__is_interruptable = new_value
 
     def requires_stop(self, parameters: Dict[str, Parameter]) -> bool:
-        pass
+       """IMPLEMENT ME!"""
 
     def build_sequence(self, sequencer: "Sequencer", parameters: Dict[str, Parameter], instruction_block: InstructionBlock) -> None:
         # detect missing or unnecessary parameters
         missing = self.parameter_names - set(parameters)
         for m in missing:
             raise ParameterNotProvidedException(m)
-        unnecessary = set(parameters) - self.parameter_names
-        for un in unnecessary:
-            raise ParameterNotInPulseTemplateException(un, self)
 
         # push subtemplates to sequencing stack with mapped parameters
         for template, mappings in reversed(self.subtemplates):
-            inner_parameters = {name: mappings[name](parameters) for name in template.parameter_names}
+            # explicit looping for better error handling
+            inner_parameters = {}
+            for name in template.parameter_names:
+                try:
+                    value = mappings[name](parameters)
+                except KeyError as e:
+                    raise RuntimeMappingError(self, template, e.args[0], name) from e
+                inner_parameters[name] = value
             sequencer.push(template, inner_parameters, instruction_block)
 
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
@@ -160,5 +163,14 @@ class UnnecessaryMappingException(Exception):
     def __str__(self) -> str:
         return "Mapping function for parameter '{}', which template {} does not need".format(self.key, self.template)
 
-def serialize_lambda(function):
-    return '<Lambda Function>'
+class RuntimeMappingError(Exception):
+    def __init__(self, template, subtemplate, outer_key, inner_key):
+        self.template = template
+        self.subtemplate = subtemplate
+        self.outer_key = outer_key
+        self.inner_key = inner_key
+
+    def __str__(self):
+        return ("An error occurred in the mapping function from {} to {}."
+                " The mapping function for inner parameter '{}' requested"
+                " outer parameter '{}', which was not provided.").format(self.template, self.subtemplate, self.inner_key, self.outer_key)

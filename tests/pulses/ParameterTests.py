@@ -35,7 +35,8 @@ class ParameterTest(unittest.TestCase):
     def test_float_conversion_method(self) -> None:
         parameter = DummyParameter()
         self.assertEqual(parameter.value, float(parameter))
-    
+
+
 class ConstantParameterTest(unittest.TestCase):
     
     def test_float_is_constant_parameter(self) -> None:
@@ -51,12 +52,14 @@ class ConstantParameterTest(unittest.TestCase):
         self.__test_valid_params(-0.3)
         self.__test_valid_params(0)
         self.__test_valid_params(0.3)
-        
-    # invalid arguments (non floats) should be excluded by type checks
-        
+
     def test_requires_stop(self) -> None:
         constant_parameter = ConstantParameter(0.3)
         self.assertFalse(constant_parameter.requires_stop)
+
+    def test_repr(self) -> None:
+        constant_parameter = ConstantParameter(0.2)
+        self.assertEqual("<ConstantParameter 0.2>", repr(constant_parameter))
     
 class ParameterDeclarationTest(unittest.TestCase):
     
@@ -268,7 +271,63 @@ class ParameterDeclarationTest(unittest.TestCase):
         self.assertFalse(decl.check_parameter_set_valid({'min': min_param, 'max': max_param, 'foo': ConstantParameter(3.5)}))
         self.assertFalse(decl.check_parameter_set_valid({'min': min_param, 'max': max_param, 'foo': ConstantParameter(5.1)}))
         self.assertFalse(decl.check_parameter_set_valid({'min': min_param, 'max': max_param, 'foo': ConstantParameter(17.2)}))
-          
+
+    def __assign_min_value(self, left_value: ParameterDeclaration, right_value: ParameterDeclaration) -> None:
+        left_value.min_value = right_value
+
+    def test_internal_set_value_exception_branches(self) -> None:
+        foo = ParameterDeclaration('foo', min=2.1, max=2.6)
+        bar = ParameterDeclaration('bar', min=foo, max=foo)
+        self.assertRaises(ValueError, ParameterDeclaration, 'foobar', min=3.1, max=bar)
+
+        bar = ParameterDeclaration('bar', min=foo, max=foo)
+        foobar = ParameterDeclaration('foobar', max=1.1)
+        self.assertRaises(ValueError, self.__assign_min_value, foobar, bar)
+
+    def test_is_parameter_valid_no_bounds(self) -> None:
+        decl = ParameterDeclaration('foo')
+        param = ConstantParameter(2.4)
+        self.assertTrue(decl.is_parameter_valid(param))
+
+    def test_is_parameter_valid_min_bound(self) -> None:
+        decl = ParameterDeclaration('foobar', min=-0.1)
+        params = [(False, -0.5), (True, -0.1), (True, 0), (True, 17.3)]
+        for expected, param in params:
+            self.assertEqual(expected, decl.is_parameter_valid(param))
+
+    def test_is_parameter_valid_max_bound(self) -> None:
+        decl = ParameterDeclaration('foobar', max=-0.1)
+        params = [(True, -0.5), (True, -0.1), (False, 0), (False, 17.3)]
+        for expected, param in params:
+            self.assertEqual(expected, decl.is_parameter_valid(param))
+
+    def test_is_parameter_valid_min_max_bound(self) -> None:
+        decl = ParameterDeclaration('foobar', min=-0.1, max=13.2)
+        params = [(False, -0.5), (True, -0.1), (True, 0), (True, 7.9), (True, 13.2), (False, 17.3)]
+        for expected, param in params:
+            self.assertEqual(expected, decl.is_parameter_valid(param))
+
+    def test_str_and_repr(self) -> None:
+        decl = ParameterDeclaration('foo', min=0.1)
+        self.assertEqual("{} 'foo', range (0.1, inf), default None".format(type(decl)), str(decl))
+        self.assertEqual("<{} 'foo', range (0.1, inf), default None>".format(type(decl)), repr(decl))
+        min_decl = ParameterDeclaration('minifoo', min=0.2)
+        max_decl = ParameterDeclaration('maxifoo', max=1.1)
+        decl = ParameterDeclaration('foo', min=min_decl)
+        self.assertEqual("{} 'foo', range (Parameter 'minifoo' (min 0.2), inf), default None".format(type(decl)), str(decl))
+        self.assertEqual("<{} 'foo', range (Parameter 'minifoo' (min 0.2), inf), default None>".format(type(decl)), repr(decl))
+        decl = ParameterDeclaration('foo', max=max_decl)
+        self.assertEqual("{} 'foo', range (-inf, Parameter 'maxifoo' (max 1.1)), default None".format(type(decl)), str(decl))
+        self.assertEqual("<{} 'foo', range (-inf, Parameter 'maxifoo' (max 1.1)), default None>".format(type(decl)), repr(decl))
+        decl = ParameterDeclaration('foo', min=min_decl, max=max_decl)
+        self.assertEqual("{} 'foo', range (Parameter 'minifoo' (min 0.2), Parameter 'maxifoo' (max 1.1)), default None".format(type(decl)), str(decl))
+        self.assertEqual("<{} 'foo', range (Parameter 'minifoo' (min 0.2), Parameter 'maxifoo' (max 1.1)), default None>".format(type(decl)), repr(decl))
+
+class ParameterNotProvidedExceptionTests(unittest.TestCase):
+
+    def test(self) -> None:
+        exc = ParameterNotProvidedException('foo')
+        self.assertEqual("No value was provided for parameter 'foo' and no default value was specified.", str(exc))
         
 # class ImmutableParameterDeclarationTest(unittest.TestCase):
 #

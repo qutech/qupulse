@@ -1,4 +1,3 @@
-"""STANDARD LIBRARY IMPORTS"""
 from abc import ABCMeta, abstractmethod, abstractproperty
 from typing import Optional, Union, Dict, Tuple, Any
 import numbers
@@ -26,11 +25,12 @@ class Parameter(Serializable, metaclass = ABCMeta):
 
     @abstractmethod
     def get_value(self) -> float:
-        pass
+        """Compute and return the parameter value."""
 
     @abstractproperty
     def requires_stop(self) -> bool:
-        pass
+        """Return True if the evaluation of this Parameter instance requires a stop in execution/sequencing, e.g., because it
+        depends on data that is only measured in during the next execution."""
     
     def __float__(self) -> float:
         return float(self.get_value())
@@ -350,4 +350,4 @@ class ParameterNotProvidedException(Exception):
         self.parameter_name = parameter_name
         
     def __str__(self) -> str:
-        return "No value was provided for parameter {0} and no default value was specified.".format(self.parameter_name)
+        return "No value was provided for parameter '{0}' and no default value was specified.".format(self.parameter_name)

@@ -1,11 +1,10 @@
-"""STANDARD LIBRARY IMPORTS"""
 import logging
 from typing import Dict, Set, List
 
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
-from .Parameter import ImmutableParameterDeclaration, Parameter
+from .Parameter import Parameter
 from .PulseTemplate import PulseTemplate, MeasurementWindow
 
 logger = logging.getLogger(__name__)

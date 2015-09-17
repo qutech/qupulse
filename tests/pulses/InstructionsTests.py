@@ -5,7 +5,7 @@ import sys
 srcPath = os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1)[0] + 'src'
 sys.path.insert(0,srcPath)
 
-from pulses.Instructions import *
+from pulses.Instructions import InstructionBlockAlreadyFinalizedException, InstructionBlock, InstructionPointer, InstructionBlockNotYetPlacedException, Waveform, Trigger, CJMPInstruction, GOTOInstruction,EXECInstruction, STOPInstruction, MissingReturnAddressException,InstructionSequence
  
 class InstructionPointerTest(unittest.TestCase):
 
@@ -352,6 +352,29 @@ class InstructionBlockTest(unittest.TestCase):
         self.assertEqual(block1, block1)
         self.assertNotEqual(block1, block2)
         self.assertNotEqual(hash(block1), hash(block2))
+
+class InstructionStringRepresentation(unittest.TestCase):
+    def test_str(self):
+        IB = InstructionBlock()
+        T = Trigger()
+        W = Waveform()
+        
+        a = [W,
+             T,
+             InstructionPointer(IB,1),
+             CJMPInstruction(T,IB),
+             GOTOInstruction(IB),
+             EXECInstruction(W),
+             InstructionBlockAlreadyFinalizedException(),
+             InstructionBlockNotYetPlacedException(),
+             MissingReturnAddressException(),
+             IB
+             ]
+        
+        b = [x.__str__() for x in a]
+        
+        for s in b:
+            self.assertIsInstance(s, str)
         
 if __name__ == "__main__":
     unittest.main(verbosity=2)
