@@ -146,6 +146,9 @@ class TablePulseTemplate(PulseTemplate):
 
                 # Check dependencies between successive time parameters
                 if isinstance(last_entry.t, ParameterDeclaration):
+                    
+                    if last_entry.t.max_value == float('inf'):
+                        last_entry.t.max_value = time
 
                     if time.absolute_min_value < last_entry.t.absolute_min_value:
                         raise ValueError("Argument time's minimum value must be no smaller than the previous time" \
