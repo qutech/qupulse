@@ -99,7 +99,7 @@ class SequencePulseTemplateSerializationTests(unittest.TestCase):
 
         expected_data = dict(
             type=self.serializer.get_type_identifier(sequence),
-            external_parameters={'ilse', 'albert', 'voltage'},
+            external_parameters=['albert', 'ilse', 'voltage'],
             is_interruptable=True,
             subtemplates = [
                 dict(template=str(id(self.table_foo)), mappings=self.foo_mappings),
@@ -107,7 +107,6 @@ class SequencePulseTemplateSerializationTests(unittest.TestCase):
             ]
         )
         data = sequence.get_serialization_data(self.serializer)
-        data['external_parameters'] = set(data['external_parameters']) # for easier comparing, order is irrelevant
         self.assertEqual(expected_data, data)
 
     def test_deserialize(self) -> None:
@@ -173,6 +172,7 @@ class SequencePulseTemplateSequencingTests(SequencePulseTemplateTest):
         with self.assertRaises(MissingParameterDeclarationException):
             sequence = SequencePulseTemplate(subtemplates, self.outer_parameters)
 
+
 class SequencePulseTemplateStringTest(unittest.TestCase):
     def test_str(self):
         T = TablePulseTemplate()
@@ -184,7 +184,8 @@ class SequencePulseTemplateStringTest(unittest.TestCase):
         b = [x.__str__() for x in a]
         for s in b:
             self.assertIsInstance(s, str)
-            
+
+
 class SequencePulseTemplateTestProperties(SequencePulseTemplateTest):
     def test_is_interruptable(self):
         self.assertTrue(self.sequence.is_interruptable)

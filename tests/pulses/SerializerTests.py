@@ -305,7 +305,6 @@ class SerializerTests(unittest.TestCase):
         self.assertIsInstance(deserialized, DummySerializable)
         self.assertEqual(self.deserialization_data['data'], deserialized.data)
 
-
     def test_serialization_and_deserialization_combined(self) -> None:
         table_foo = TablePulseTemplate(identifier='foo')
         table_foo.add_entry('hugo', 2)
@@ -327,26 +326,6 @@ class SerializerTests(unittest.TestCase):
 
         self.assertEqual(serialized_foo, storage.stored_items['foo'])
         self.assertEqual(serialized_sequence, storage.stored_items['main'])
-
-
-    #def test_deserialization(self) -> None:
-    #    serializer = Serializer(FilesystemBackend())
-    #    obj = serializer.deserialize('main')
-    #    print("hoooray")
-
-    # def test_TablePulseTemplate(self):
-    #     tpt = TablePulseTemplate()
-    #     tpt.add_entry(1,1)
-    #     tpt.add_entry('time', 'voltage')
-    #     serializer = Serializer()
-    #     result = serializer.serialize(tpt)
-    #     self.fail() # TODO: this test was not complete when merged
-    #
-    # def test_SequencePulseTemplate(self):
-    #     seq = SequencePulseTemplate([], [], identifier='sequence')
-    #     serializer = Serializer()
-    #     result = serializer.serialize(seq)
-    #     self.fail() # TODO: this test was not complete when merged
 
 
 if __name__ == "__main__":
