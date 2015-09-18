@@ -126,7 +126,7 @@ class Serializer(object):
             storage_identifier = identifier
             if identifier == '':
                 storage_identifier = 'main'
-            self.__storage_backend.put(storage_identifier, json.dumps(repr_[identifier], indent=4))
+            self.__storage_backend.put(storage_identifier, json.dumps(repr_[identifier], indent=4, sort_keys=True))
 
     def deserialize(self, representation: Union[str, Dict[str, Any]]) -> Serializable:
         if isinstance(representation, str):
