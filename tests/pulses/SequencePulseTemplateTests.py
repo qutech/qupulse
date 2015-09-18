@@ -127,8 +127,7 @@ class SequencePulseTemplateTestProperties(SequencePulseTemplateTest):
         self.assertFalse(self.sequence.is_interruptable)
         
     def test_parameter_declarations(self):
-        #FIXME
-        decl = self.sequence.parameter_declarations
+        #decl = self.sequence.parameter_declarations
         pass
 if __name__ == "__main__":
     unittest.main(verbosity=2)
