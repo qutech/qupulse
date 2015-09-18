@@ -9,10 +9,11 @@ from typing import Optional
 srcPath = os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1)[0] + 'src'
 sys.path.insert(0,srcPath)
 
-from pulses.Serializer import FilesystemBackend, Serializer, StorageBackend, CachingBackend, Serializable
+from pulses.Serializer import FilesystemBackend, Serializer, CachingBackend, Serializable
 from pulses.TablePulseTemplate import TablePulseTemplate
 from pulses.SequencePulseTemplate import SequencePulseTemplate
 from pulses.Parameter import ParameterDeclaration
+from tests.pulses.SerializationDummies import DummyStorageBackend
 
 
 class DummySerializable(Serializable):
@@ -37,30 +38,6 @@ class SerializableTests(unittest.TestCase):
             self.assertEqual(identifier, DummySerializable(identifier=identifier).identifier)
         with self.assertRaises(ValueError):
             DummySerializable('')
-
-class DummyStorageBackend(StorageBackend):
-
-    def __init__(self) -> None:
-        self.stored_items = dict()
-        self.times_get_called = 0
-        self.times_put_called = 0
-        self.times_exists_called = 0
-
-    def get(self, identifier: str) -> str:
-        self.times_get_called += 1
-        if identifier not in self.stored_items:
-            raise FileNotFoundError()
-        return self.stored_items[identifier]
-
-    def put(self, identifier: str, data: str, overwrite: bool=False) -> None:
-        self.times_put_called += 1
-        if identifier in self.stored_items and not overwrite:
-            raise FileExistsError()
-        self.stored_items[identifier] = data
-
-    def exists(self, identifier: str) -> bool:
-        self.times_exists_called += 1
-        return identifier in self.stored_items
 
 
 class FileSystemBackendTest(unittest.TestCase):

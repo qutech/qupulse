@@ -65,7 +65,8 @@ class ConstantParameter(Parameter):
 #    @abstractmethod
 #    def get_value(self, parameters: Dict[str, Parameter]) -> float:
 #        pass
-      
+
+
 class ParameterDeclaration(Serializable):
     """A declaration of a parameter required by a pulse template.
     

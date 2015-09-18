@@ -8,6 +8,7 @@ srcPath = os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1)[0] + 'src
 sys.path.insert(0,srcPath)
 
 from tests.pulses.SequencingDummies import DummySequencer, DummyInstructionBlock
+from tests.pulses.SerializationDummies import DummySerializer
 
 from pulses.Instructions import EXECInstruction
 from pulses.TablePulseTemplate import TablePulseTemplate, clean_entries, ParameterValueIllegalException
@@ -405,6 +406,56 @@ class TablePulseTemplateTest(unittest.TestCase):
         for (time, voltage) in zip(times, voltages):
             entries.append((time, voltage, HoldInterpolationStrategy()))
         self.assertEqual(entries, pulse.entries)
+
+
+class TablePulseTemplateSerializationTests(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.serializer = DummySerializer(lambda x: dict(name=x.name), lambda x: x.name, lambda x: x['name'])
+        self.template = TablePulseTemplate(measurement=True, identifier='foo')
+        self.expected_data = dict(type=self.serializer.get_type_identifier(self.template))
+
+    def test_get_serialization_data(self) -> None:
+        self.template.add_entry('foo', 2)
+        self.template.add_entry('hugo', 'ilse', interpolation='linear')
+
+        self.expected_data['is_measurement_pulse'] = True
+        self.expected_data['time_parameter_declarations'] = [dict(name='foo'), dict(name='hugo')]
+        self.expected_data['voltage_parameter_declarations'] = [dict(name='ilse')]
+        self.expected_data['entries'] = [(0, 0, 'hold'), ('foo', 2, 'hold'), ('hugo', 'ilse', 'linear')]
+        self.assertEqual(self.expected_data, self.template.get_serialization_data(self.serializer))
+
+    def test_deserialize(self) -> None:
+        data = dict(is_measurement_pulse=True,
+                    time_parameter_declarations=[dict(name='hugo'), dict(name='foo')],
+                    voltage_parameter_declarations=[dict(name='ilse')],
+                    entries=[(0, 0, 'hold'), ('foo', 2, 'hold'), ('hugo', 'ilse', 'linear')],
+                    identifier='foo')
+
+        # prepare dependencies for deserialization
+        self.serializer.subelements['foo'] = ParameterDeclaration('foo')
+        self.serializer.subelements['hugo'] = ParameterDeclaration('hugo')
+        self.serializer.subelements['ilse'] = ParameterDeclaration('ilse')
+
+        # deserialize
+        template = TablePulseTemplate.deserialize(self.serializer, **data)
+
+        # prepare expected parameter declarations
+        self.serializer.subelements['foo'].min_value = 0
+        self.serializer.subelements['foo'].max_value = self.serializer.subelements['hugo']
+        all_declarations = set(self.serializer.subelements.values())
+
+        # prepare expected entries
+        entries = [(0, 0, HoldInterpolationStrategy()),
+                   (self.serializer.subelements['foo'], 2, HoldInterpolationStrategy()),
+                   (self.serializer.subelements['hugo'], self.serializer.subelements['ilse'], LinearInterpolationStrategy())]
+
+        # compare!
+        self.assertEqual(all_declarations, template.parameter_declarations)
+        self.assertEqual({'foo', 'hugo', 'ilse'}, template.parameter_names)
+        self.assertEqual(entries, template.entries)
+        self.assertEqual('foo', template.identifier)
+
 
 
 class TablePulseTemplateSequencingTests(unittest.TestCase):

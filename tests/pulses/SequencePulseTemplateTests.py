@@ -13,6 +13,7 @@ from pulses.PulseTemplate import ParameterNotInPulseTemplateException,\
 from pulses.Parameter import ParameterDeclaration, Parameter, ParameterNotProvidedException, ConstantParameter
 from pulses.Instructions import EXECInstruction
 from tests.pulses.SequencingDummies import DummySequencer, DummyInstructionBlock, DummySequencingElement
+from tests.pulses.SerializationDummies import DummySerializer
 
 
 class DummyParameter(Parameter):
@@ -79,8 +80,67 @@ class SequencePulseTemplateTest(unittest.TestCase):
         self.assertEqual(identifier, pulse.identifier)
 
 
+class SequencePulseTemplateSerializationTests(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.serializer = DummySerializer()
+
+        self.table_foo = TablePulseTemplate(identifier='foo')
+        self.table_foo.add_entry('hugo', 2)
+        self.table_foo.add_entry(ParameterDeclaration('albert', max=9.1), 'voltage')
+
+        self.table = TablePulseTemplate(measurement=True)
+        self.foo_mappings = dict(hugo='ilse', albert='albert', voltage='voltage')
+
+    def test_get_serialization_data(self) -> None:
+        sequence = SequencePulseTemplate([(self.table_foo, self.foo_mappings), (self.table, {})],
+                                         ['ilse', 'albert', 'voltage'],
+                                         identifier='foo')
+
+        expected_data = dict(
+            type=self.serializer.get_type_identifier(sequence),
+            external_parameters={'ilse', 'albert', 'voltage'},
+            is_interruptable=True,
+            subtemplates = [
+                dict(template=str(id(self.table_foo)), mappings=self.foo_mappings),
+                dict(template=str(id(self.table)), mappings=dict())
+            ]
+        )
+        data = sequence.get_serialization_data(self.serializer)
+        data['external_parameters'] = set(data['external_parameters']) # for easier comparing, order is irrelevant
+        self.assertEqual(expected_data, data)
+
+    def test_deserialize(self) -> None:
+        data = dict(
+            external_parameters={'ilse', 'albert', 'voltage'},
+            is_interruptable=True,
+            subtemplates = [
+                dict(template=str(id(self.table_foo)), mappings=self.foo_mappings),
+                dict(template=str(id(self.table)), mappings=dict())
+            ],
+            identifier='foo'
+        )
+
+        # prepare dependencies for deserialization
+        self.serializer.subelements[str(id(self.table_foo))] = self.table_foo
+        self.serializer.subelements[str(id(self.table))] = self.table
+
+        # deserialize
+        sequence = SequencePulseTemplate.deserialize(self.serializer, **data)
+
+        # compare!
+        self.assertEqual(data['external_parameters'], sequence.parameter_names)
+        self.assertEqual({ParameterDeclaration('ilse'), ParameterDeclaration('albert'), ParameterDeclaration('voltage')},
+                         sequence.parameter_declarations)
+        self.assertIs(self.table_foo, sequence.subtemplates[0][0])
+        self.assertIs(self.table, sequence.subtemplates[1][0])
+        self.assertEqual(self.foo_mappings, sequence.subtemplates[0][1])
+        self.assertEqual(dict(), sequence.subtemplates[1][1])
+        self.assertEqual(data['identifier'], sequence.identifier)
+
 
 class SequencePulseTemplateSequencingTests(SequencePulseTemplateTest):
+
     def test_missing_parameter(self):
         sequencer = DummySequencer()
         block = DummyInstructionBlock()
