@@ -256,10 +256,12 @@ class TablePulseTemplateTest(unittest.TestCase):
 
     def test_add_entry_time_declaration_lower_bound_after_declaration_no_upper_bound(self) -> None:
         table = TablePulseTemplate()
+        self.maxDiff = None
         bar_decl = ParameterDeclaration('bar', min=1)
         foo_decl = ParameterDeclaration('foo', min=1)
         table.add_entry(bar_decl, -3)
         table.add_entry(foo_decl, 0.1)
+        bar_decl.max_value = foo_decl
         self.assertEqual([(0, 0, HoldInterpolationStrategy()), (bar_decl, -3, HoldInterpolationStrategy()), (foo_decl, 0.1, HoldInterpolationStrategy())], table.entries)
         self.assertEqual({'foo', 'bar'}, table.parameter_names)
         self.assertEqual({foo_decl, bar_decl}, table.parameter_declarations)
