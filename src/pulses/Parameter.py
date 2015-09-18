@@ -59,9 +59,6 @@ class ConstantParameter(Parameter):
     @staticmethod
     def deserialize(serializer: Serializer, constant: float) -> 'ConstantParameter':
         return ConstantParameter(constant)
-
-    
-ConstantParameter.register(numbers.Real)
       
 #class ParameterValueProvider(metaclass = ABCMeta):
 #

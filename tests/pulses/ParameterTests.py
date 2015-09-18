@@ -38,11 +38,6 @@ class ParameterTest(unittest.TestCase):
 
 
 class ConstantParameterTest(unittest.TestCase):
-    
-    def test_float_is_constant_parameter(self) -> None:
-        self.assertTrue(issubclass(numbers.Real, ConstantParameter))
-        self.assertTrue(isinstance(0.1, ConstantParameter))
-
     def __test_valid_params(self, value: float) -> None:
         constant_parameter = ConstantParameter(value)
         self.assertEqual(value, constant_parameter.get_value())

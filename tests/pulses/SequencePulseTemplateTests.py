@@ -10,7 +10,7 @@ from pulses.TablePulseTemplate import TablePulseTemplate, TableEntry
 from pulses.SequencePulseTemplate import SequencePulseTemplate, MissingMappingException, UnnecessaryMappingException, MissingParameterDeclarationException, RuntimeMappingError
 from pulses.PulseTemplate import ParameterNotInPulseTemplateException,\
     PulseTemplate
-from pulses.Parameter import ParameterDeclaration, Parameter, ParameterNotProvidedException
+from pulses.Parameter import ParameterDeclaration, Parameter, ParameterNotProvidedException, ConstantParameter
 from pulses.Instructions import EXECInstruction
 from tests.pulses.SequencingDummies import DummySequencer, DummyInstructionBlock, DummySequencingElement
 
@@ -50,10 +50,10 @@ class SequencePulseTemplateTest(unittest.TestCase):
         self.outer_parameters = ['uptime', 'length', 'pulse_length', 'voltage']
 
         self.parameters = {}
-        self.parameters['uptime'] = 5
-        self.parameters['length'] = 10
-        self.parameters['pulse_length'] = 100
-        self.parameters['voltage'] = 10
+        self.parameters['uptime'] = ConstantParameter(5)
+        self.parameters['length'] = ConstantParameter(10)
+        self.parameters['pulse_length'] = ConstantParameter(100)
+        self.parameters['voltage'] = ConstantParameter(10)
 
         self.sequence = SequencePulseTemplate([(self.square, self.mapping1)], self.outer_parameters)
 
@@ -134,6 +134,6 @@ class SequencePulseTemplateTestProperties(SequencePulseTemplateTest):
     def test_parameter_declarations(self):
         #FIXME
         decl = self.sequence.parameter_declarations
-        pass
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from typing import Tuple, Dict
+from typing import Tuple, Dict, Union
 import numbers
 
 """RELATED THIRD PARTY IMPORTS"""
@@ -66,7 +66,7 @@ class Sequencer:
         self.__main_block = InstructionBlock()
         self.__sequencing_stacks = {self.__main_block: []} #type: Dict[InstructionBlock, List[StackElement]]
         
-    def push(self, sequencing_element: SequencingElement, parameters: Dict[str, Parameter], target_block: InstructionBlock = None) -> None:
+    def push(self, sequencing_element: SequencingElement, parameters: Dict[str, Union[Parameter, float]], target_block: InstructionBlock = None) -> None:
         """Add an element to the translation stack of the target_block with the given set of parameters.
         
         The element will be on top of the stack, i.e., it is the first to be translated if no subsequent calls to push with the same target_block occur.
@@ -78,7 +78,7 @@ class Sequencer:
             if isinstance(value, numbers.Real):
                 parameters[key] = ConstantParameter(value)
             
-        if not target_block in self.__sequencing_stacks:
+        if target_block not in self.__sequencing_stacks:
             self.__sequencing_stacks[target_block] = []
             
         self.__sequencing_stacks[target_block].append((sequencing_element, parameters))
