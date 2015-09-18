@@ -19,10 +19,10 @@ class GenericPlottingTest(unittest.TestCase):
         self.square.add_entry('length', 0)
 
         self.mapping1 = {
-            'up': 'lambda uptime: uptime',
-            'down': 'lambda uptime, length: uptime + length',
-            'v': 'lambda voltage: voltage',
-            'length': 'lambda pulse_length: 0.5 * pulse_length'
+            'up': 'uptime',
+            'down': 'uptime + length',
+            'v': 'voltage',
+            'length': '0.5 * pulse_length'
         }
 
         self.outer_parameters = ['uptime', 'length', 'pulse_length', 'voltage']

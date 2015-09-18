@@ -5,6 +5,7 @@ from inspect import getsource
 import copy
 from inspect import getargspec
 """RELATED THIRD PARTY IMPORTS"""
+from py_expression_eval import Parser
 
 """LOCAL IMPORTS"""
 from .PulseTemplate import PulseTemplate, MeasurementWindow, ParameterNotInPulseTemplateException
@@ -57,8 +58,8 @@ class SequencePulseTemplate(PulseTemplate):
                 raise UnnecessaryMappingException(template, m)
 
             for mapping_function in mapping_functions.values():
-                mapping_function = eval(mapping_function)
-                required_externals = set(getargspec(mapping_function).args)
+                mapping_function = Parser().parse(mapping_function)
+                required_externals = set(mapping_function.variables())
                 non_declared_externals = required_externals - self.__parameter_names
                 if non_declared_externals:
                     raise MissingParameterDeclarationException(template, non_declared_externals.pop())
@@ -96,17 +97,17 @@ class SequencePulseTemplate(PulseTemplate):
         # collect all parameters required to compute the mappings for the first subtemplate
         external_parameters = set()
         for mapping_function in mapping_functions.values():
-            mapping_function = eval(mapping_function)
-            external_parameters = external_parameters | set(parameters[x] for x in getargspec(mapping_function).args)
+            mapping_function = Parser().parse(mapping_function)
+            external_parameters = external_parameters | set([parameters[x] for x in mapping_function.variables()])
 
         # return True only if none of these requires a stop
         return any([p.requires_stop for p in external_parameters])
 
     def __map_parameter(self, mapping_function: str, parameters: Dict[str, Parameter]) -> Parameter:
-        mapping_function = eval(mapping_function)
-        external_parameters = getargspec(mapping_function).args
+        mapping_function = Parser().parse(mapping_function)
+        external_parameters = mapping_function.variables()
         external_values = {name: float(parameters[name]) for name in external_parameters}
-        return mapping_function(**external_values)
+        return mapping_function.evaluate(external_values)
 
     def build_sequence(self, sequencer: Sequencer, parameters: Dict[str, Parameter], instruction_block: InstructionBlock) -> None:
         # detect missing or unnecessary parameters

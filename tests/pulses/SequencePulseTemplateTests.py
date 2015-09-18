@@ -41,10 +41,10 @@ class SequencePulseTemplateTest(unittest.TestCase):
         self.square.add_entry('length', 0)
 
         self.mapping1 = {
-            'up': 'lambda uptime: uptime',
-            'down': 'lambda uptime, length: uptime + length',
-            'v': 'lambda voltage: voltage',
-            'length': 'lambda pulse_length: 0.5 * pulse_length'
+            'up': 'uptime',
+            'down': 'uptime + length',
+            'v': 'voltage',
+            'length': '0.5 * pulse_length'
         }
 
         self.outer_parameters = ['uptime', 'length', 'pulse_length', 'voltage']
@@ -107,7 +107,7 @@ class SequencePulseTemplateSequencingTests(SequencePulseTemplateTest):
 
     def test_runtime_mapping_exception(self):
         mapping = self.mapping1
-        mapping['up'] = "lambda foo: foo"
+        mapping['up'] = "foo"
 
         subtemplates = [(self.square, mapping)]
         with self.assertRaises(MissingParameterDeclarationException):
