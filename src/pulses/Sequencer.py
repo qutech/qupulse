@@ -1,11 +1,12 @@
 from abc import ABCMeta, abstractmethod
 from typing import Tuple, Dict
+import numbers
 
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
 from .Instructions import InstructionBlock, Waveform, WaveformTable
-from .Parameter import Parameter
+from .Parameter import Parameter, ConstantParameter
 
     
 class SequencingElement(metaclass = ABCMeta):
@@ -72,6 +73,10 @@ class Sequencer:
         """
         if target_block is None:
             target_block = self.__main_block
+
+        for (key, value) in parameters.items():
+            if isinstance(value, numbers.Real):
+                parameters[key] = ConstantParameter(value)
             
         if not target_block in self.__sequencing_stacks:
             self.__sequencing_stacks[target_block] = []
