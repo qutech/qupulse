@@ -7,7 +7,7 @@ srcPath = os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1)[0] + 'src
 sys.path.insert(0,srcPath)
 
 from pulses.TablePulseTemplate import TablePulseTemplate, TableEntry
-from pulses.SequencePulseTemplate import SequencePulseTemplate, MissingMappingException, UnnecessaryMappingException, RuntimeMappingError
+from pulses.SequencePulseTemplate import SequencePulseTemplate, MissingMappingException, UnnecessaryMappingException, MissingParameterDeclarationException, RuntimeMappingError
 from pulses.PulseTemplate import ParameterNotInPulseTemplateException,\
     PulseTemplate
 from pulses.Parameter import ParameterDeclaration, Parameter, ParameterNotProvidedException
@@ -40,18 +40,19 @@ class SequencePulseTemplateTest(unittest.TestCase):
         self.square.add_entry('down', 0, 'hold')
         self.square.add_entry('length', 0)
 
-        self.mapping1 = {}
-        self.mapping1['up'] = lambda ps: ps['uptime']
-        self.mapping1['down'] = lambda ps: ps['uptime'] + ps['length']
-        self.mapping1['v'] = lambda ps: ps['voltage']
-        self.mapping1['length'] = lambda ps: ps['pulse-length'] * 0.5
+        self.mapping1 = {
+            'up': 'lambda uptime: uptime',
+            'down': 'lambda uptime, length: uptime + length',
+            'v': 'lambda voltage: voltage',
+            'length': 'lambda pulse_length: 0.5 * pulse_length'
+        }
 
-        self.outer_parameters = ['uptime', 'length', 'pulse-length', 'voltage']
+        self.outer_parameters = ['uptime', 'length', 'pulse_length', 'voltage']
 
         self.parameters = {}
         self.parameters['uptime'] = 5
         self.parameters['length'] = 10
-        self.parameters['pulse-length'] = 100
+        self.parameters['pulse_length'] = 100
         self.parameters['voltage'] = 10
 
         self.sequence = SequencePulseTemplate([(self.square, self.mapping1)], self.outer_parameters)
@@ -97,7 +98,7 @@ class SequencePulseTemplateSequencingTests(SequencePulseTemplateTest):
         mapping = {}
         subtemplates = [(self.square, self.mapping1),
                         (element2, mapping)]
-        sequence = SequencePulseTemplate(subtemplates, [])
+        sequence = SequencePulseTemplate(subtemplates, self.parameters.keys())
         sequence.build_sequence(sequencer, self.parameters, instruction_block)
         # TODO: use real sequencer and check output
 
@@ -106,21 +107,19 @@ class SequencePulseTemplateSequencingTests(SequencePulseTemplateTest):
 
     def test_runtime_mapping_exception(self):
         mapping = self.mapping1
-        mapping['up'] = lambda ps: ps['parameter that does not exist']
+        mapping['up'] = "lambda foo: foo"
 
         subtemplates = [(self.square, mapping)]
-        sequence = SequencePulseTemplate(subtemplates, self.outer_parameters)
-        sequencer = DummySequencer()
-        block = DummyInstructionBlock()
-        with self.assertRaises(RuntimeMappingError):
-            sequence.build_sequence(sequencer, self.parameters, block)
+        with self.assertRaises(MissingParameterDeclarationException):
+            sequence = SequencePulseTemplate(subtemplates, self.outer_parameters)
 
 class SequencePulseTemplateStringTest(unittest.TestCase):
     def test_str(self):
         T = TablePulseTemplate()
         a = [RuntimeMappingError(T,T,"c","d"),
              UnnecessaryMappingException(T,"b"),
-             MissingMappingException(T,"b")]
+             MissingMappingException(T,"b"),
+             MissingParameterDeclarationException(T, "c")]
         
         b = [x.__str__() for x in a]
         for s in b:

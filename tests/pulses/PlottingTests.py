@@ -18,18 +18,19 @@ class GenericPlottingTest(unittest.TestCase):
         self.square.add_entry('down', 0, 'hold')
         self.square.add_entry('length', 0)
 
-        self.mapping1 = {}
-        self.mapping1['up'] = lambda ps: ps['uptime']
-        self.mapping1['down'] = lambda ps: ps['uptime'] + ps['length']
-        self.mapping1['v'] = lambda ps: ps['voltage']
-        self.mapping1['length'] = lambda ps: ps['pulse-length'] * 0.5
+        self.mapping1 = {
+            'up': 'lambda uptime: uptime',
+            'down': 'lambda uptime, length: uptime + length',
+            'v': 'lambda voltage: voltage',
+            'length': 'lambda pulse_length: 0.5 * pulse_length'
+        }
 
-        self.outer_parameters = ['uptime', 'length', 'pulse-length', 'voltage']
+        self.outer_parameters = ['uptime', 'length', 'pulse_length', 'voltage']
 
         self.parameters = {}
         self.parameters['uptime'] = 5
         self.parameters['length'] = 10
-        self.parameters['pulse-length'] = 100
+        self.parameters['pulse_length'] = 100
         self.parameters['voltage'] = 10
 
         self.sequence = SequencePulseTemplate([(self.square, self.mapping1)], self.outer_parameters)
