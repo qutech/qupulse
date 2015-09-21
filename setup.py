@@ -13,7 +13,7 @@ setup(name='qctoolkit',
     package_dir = {'': 'src'},
     packages=['pulses', 'utils'],
     tests_require=['pytest'],
-    install_requires= [] + requires_typing,
+    install_requires= ['py_expression_eval'] + requires_typing,
     extras_require={
         'testing' : ['pytest'],
         'plotting' : ['matplotlib']

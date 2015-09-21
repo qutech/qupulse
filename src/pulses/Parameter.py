@@ -1,15 +1,17 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
-from typing import Optional, Union, Dict, Tuple
+from typing import Optional, Union, Dict, Tuple, Any
 import numbers
 import logging
 
 """RELATED THIRD PARTY IMPORTS"""
 
-"""LOCAL IMPORTS"""    
+"""LOCAL IMPORTS"""
+from .Serializer import Serializable, Serializer
 
 logger = logging.getLogger(__name__)
 
-class Parameter(metaclass = ABCMeta):
+
+class Parameter(Serializable, metaclass = ABCMeta):
     """A parameter for pulses.
     
     Parameter specifies a concrete value which is inserted instead
@@ -19,7 +21,7 @@ class Parameter(metaclass = ABCMeta):
     obtain values by computation (e.g. from measurement results).
     """
     def __init__(self) -> None:
-        super().__init__()
+        super().__init__(None)
 
     @abstractmethod
     def get_value(self) -> float:
@@ -51,9 +53,13 @@ class ConstantParameter(Parameter):
     def __repr__(self):
         return "<ConstantParameter {0}>".format(self.__value)
 
-ConstantParameter.register(numbers.Real)
+    def get_serialization_data(self, serializer: Serializer) -> None:
+        return dict(type=serializer.get_type_identifier(self), constant=self.__value)
 
-
+    @staticmethod
+    def deserialize(serializer: Serializer, constant: float) -> 'ConstantParameter':
+        return ConstantParameter(constant)
+      
 #class ParameterValueProvider(metaclass = ABCMeta):
 #
 #    @abstractmethod
@@ -61,7 +67,7 @@ ConstantParameter.register(numbers.Real)
 #        pass
 
 
-class ParameterDeclaration:
+class ParameterDeclaration(Serializable):
     """A declaration of a parameter required by a pulse template.
     
     PulseTemplates may declare parameters to allow for variations of values in an otherwise
@@ -79,6 +85,7 @@ class ParameterDeclaration:
             max (float, ParameterDeclaration): An optional real number or ParameterDeclaration object specifying the maximum value allowed.
             default (float): An optional real number specifying a default value for the declared pulse template parameter.
         """
+        super().__init__(None)
         self.__name = name
         self.__min_value = float('-inf')
         self.__max_value = float('+inf')
@@ -225,12 +232,12 @@ class ParameterDeclaration:
     
     def get_value(self, parameters: Dict[str, Parameter]) -> float:
         try:
-            return float(parameters[self.__name]) # float() wraps get_value for Parameters and works for normal floats also
+            return float(parameters[self.name]) # float() wraps get_value for Parameters and works for normal floats also
         except KeyError:
             if self.default_value is not None:
                 return self.default_value
             else:
-                raise ParameterNotProvidedException(self.__name)
+                raise ParameterNotProvidedException(self.name)
 
     def __str__(self) -> str:
         min_value_str = self.absolute_min_value
@@ -239,10 +246,7 @@ class ParameterDeclaration:
         max_value_str = self.absolute_max_value
         if isinstance(self.max_value, ParameterDeclaration):
             max_value_str = "Parameter '{0}' (max {1})".format(self.max_value.name, max_value_str)
-        return "{4} '{0}', range ({1}, {2}), default {3}".format(self.__name, min_value_str, max_value_str, self.default_value, type(self))
-
-    def __repr__(self) -> str:
-        return "<"+self.__str__()+">"
+        return "{4} '{0}', range ({1}, {2}), default {3}".format(self.name, min_value_str, max_value_str, self.default_value, type(self))
 
     def __compute_compare_key(self) -> Tuple[str, Union[float, str], Union[float, str], Optional[float]]:
         min_value = self.min_value
@@ -253,12 +257,46 @@ class ParameterDeclaration:
             max_value = max_value.name
         return (self.name, min_value, max_value, self.default_value)
 
+    def __repr__(self) -> str:
+        return "<"+self.__str__()+">"
+
     def __eq__(self, other) -> bool:
         return (isinstance(other, ParameterDeclaration) and
                 self.__compute_compare_key() == other.__compute_compare_key())
 
     def __hash__(self) -> int:
         return hash(self.__compute_compare_key())
+
+    def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
+        data = dict()
+
+        min_value = self.min_value
+        if isinstance(min_value, ParameterDeclaration):
+            min_value = min_value.name
+
+        max_value = self.max_value
+        if isinstance(max_value, ParameterDeclaration):
+            max_value = max_value.name
+
+        data['name'] = self.name
+        data['min_value'] = min_value
+        data['max_value'] = max_value
+        data['default_value'] = self.default_value
+        data['type'] = serializer.get_type_identifier(self)
+
+        return data
+
+    @staticmethod
+    def deserialize(serializer: Serializer,
+                    name: str,
+                    min_value: Union[str, float],
+                    max_value: Union[str, float],
+                    default_value: float) -> 'ParameterDeclaration':
+        if isinstance(min_value, str):
+            min_value = float("-inf")
+        if isinstance(max_value, str):
+            max_value = float("+inf")
+        return ParameterDeclaration(name, min=min_value, max=max_value, default=default_value)
         
 # class ImmutableParameterDeclaration(ParameterDeclaration):
 #

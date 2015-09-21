@@ -21,7 +21,7 @@ class Plotter(SequencingHardwareInterface):
             self.__database[waveform_id] = waveform_table
         return waveform
 
-    def render(self, block: InstructionBlock) -> None:
+    def render(self, block: InstructionBlock) -> (np.array, np.array):
         if not all(map(lambda x: isinstance(x, EXECInstruction), block.instructions)):
             raise NotImplementedError('Can only plot waveforms without branching so far.')
         waveforms = [self.__database[hash(a.waveform)] for a in block.instructions]
@@ -43,7 +43,7 @@ class Plotter(SequencingHardwareInterface):
         return ts, voltages
 
 
-def plot(pulse: SequencingElement, parameters: Dict[str, Parameter]={}) -> None:
+def plot(pulse: SequencingElement, parameters: Dict[str, Parameter]={}) -> None: # pragma: no cover
     plotter = Plotter()
     sequencer = Sequencer(plotter)
     if parameters:

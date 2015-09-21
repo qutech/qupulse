@@ -1,6 +1,6 @@
 
 import logging
-from typing import Union, Dict, List, Set,  Optional, NamedTuple
+from typing import Union, Dict, List, Set, Optional, NamedTuple, Any, Iterable
 import numbers
 import copy
 import numpy as np
@@ -12,6 +12,7 @@ from .Parameter import ParameterDeclaration, Parameter
 from .PulseTemplate import PulseTemplate, MeasurementWindow
 from .Sequencer import InstructionBlock, Sequencer
 from .Interpolation import InterpolationStrategy, LinearInterpolationStrategy, HoldInterpolationStrategy, JumpInterpolationStrategy
+from .Serializer import Serializer
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +34,9 @@ class TablePulseTemplate(PulseTemplate):
     measurement window.
     """
 
-    def __init__(self, measurement: bool=False) -> None:
-        super().__init__()
+    def __init__(self, measurement=False, identifier: Optional[str]=None) -> None:
+        super().__init__(identifier)
+        self.__identifier = identifier
         self.__entries = [] # type: List[TableEntry]
         self.__time_parameter_declarations = {} # type: Dict[str, ParameterDeclaration]
         self.__voltage_parameter_declarations = {} # type: Dict[str, ParameterDeclaration]
@@ -273,6 +275,42 @@ class TablePulseTemplate(PulseTemplate):
     def requires_stop(self, parameters: Dict[str, Parameter]) -> bool: 
         return any(parameters[name].requires_stop for name in parameters.keys() if (name in self.parameter_names) and not isinstance(parameters[name], numbers.Number))
 
+    def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
+        data = dict()
+        data['is_measurement_pulse'] = self.__is_measurement_pulse
+        data['time_parameter_declarations'] = [serializer._serialize_subpulse(self.__time_parameter_declarations[key]) for key in sorted(self.__time_parameter_declarations.keys())]
+        data['voltage_parameter_declarations'] = [serializer._serialize_subpulse(self.__voltage_parameter_declarations[key]) for key in sorted(self.__voltage_parameter_declarations.keys())]
+        entries = []
+        for (time, voltage, interpolation) in self.__entries:
+            if isinstance(time, ParameterDeclaration):
+                time = time.name
+            if isinstance(voltage, ParameterDeclaration):
+                voltage = voltage.name
+            entries.append((time, voltage, str(interpolation)))
+        data['entries'] = entries
+        data['type'] = serializer.get_type_identifier(self)
+        return data
+
+    @staticmethod
+    def deserialize(serializer: Serializer,
+                    time_parameter_declarations: Iterable[Any],
+                    voltage_parameter_declarations: Iterable[Any],
+                    entries: Iterable[Any],
+                    is_measurement_pulse: bool,
+                    identifier: Optional[str]=None) -> 'TablePulseTemplate':
+        time_parameter_declarations = {declaration['name']: serializer.deserialize(declaration) for declaration in time_parameter_declarations}
+        voltage_parameter_declarations = {declaration['name']: serializer.deserialize(declaration) for declaration in voltage_parameter_declarations}
+
+        template = TablePulseTemplate(is_measurement_pulse, identifier=identifier)
+
+        for (time, voltage, interpolation) in entries:
+            if isinstance(time, str):
+                time = time_parameter_declarations[time]
+            if isinstance(voltage, str):
+                voltage = voltage_parameter_declarations[voltage]
+            template.add_entry(time, voltage, interpolation=interpolation)
+
+        return template
 
 class ParameterValueIllegalException(Exception):
     """Indicates that the value provided for a parameter is illegal, i.e., is outside the parameter's bounds or of wrong type."""
