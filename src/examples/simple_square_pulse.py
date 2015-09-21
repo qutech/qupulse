@@ -43,11 +43,11 @@ plot(squarePulse, parameters)
 # for mapping its own parameters onto children parameters.
 
 mapping = {}
-mapping['t_up'] = lambda ps: ps['start']
-mapping['t_down'] = lambda ps: ps['start'] + ps['length']
-mapping['value1'] = lambda ps: ps['value1']
-mapping['value2'] = lambda ps: ps['value2']
-mapping['end'] = lambda ps: ps['pulse_length'] * 0.5
+mapping['t_up']   = 'start'
+mapping['t_down'] = 'start + length'
+mapping['value1'] = 'value1'
+mapping['value2'] = 'value2'
+mapping['end']    = 'pulse_length * 0.5'
 
 doubleSquare = SequencePulseTemplate([(squarePulse, mapping),
                                       (squarePulse, mapping)], # dictionaries with mapping functions from external parameters to subtemplate parameters
@@ -61,11 +61,11 @@ params = dict(start=5,
 
 plot(doubleSquare, params)
 
-nested_mapping = dict(start=lambda ps: ps['start'],
-                      length=lambda ps: ps['length'],
-                      value1=lambda ps: 10,
-                      value2=lambda ps: 20,
-                      pulse_length=lambda ps: ps['pulse_length'] * 0.5)
+nested_mapping = dict(start='start',
+                      length='length',
+                      value1='10',
+                      value2='20',
+                      pulse_length='pulse_length * 0.5')
 
 nested_pulse = SequencePulseTemplate([(doubleSquare, nested_mapping),
                                       (doubleSquare, nested_mapping)],

@@ -46,11 +46,11 @@ the new/outer ones and collect them in a dictionary.
 ::
 
     mapping = {}
-    mapping['ta'] = lambda ps: ps['start']
-    mapping['tb'] = lambda ps: ps['start'] + ps['length']
-    mapping['end'] = lambda ps: ps['pulse_length'] * 0.5
-    mapping['value1'] = lambda ps: ps['value1']
-    mapping['value2'] = lambda ps: ps['value2']
+    mapping['t_up']   = 'start'
+    mapping['t_down'] = 'start + length'
+    mapping['value1'] = 'value1'
+    mapping['value2'] = 'value2'
+    mapping['end']    = 'pulse_length * 0.5'
 
 The mapping functions get called with one argument, a dictionary of *outer parameters*, and return a value for the *inner parameter*.
 This example uses lambda functions, but you are free to use any python function.
@@ -79,11 +79,11 @@ Just like with the simple pulse we can instantiate our new double pulse by provi
 Because `doubleSquare` is a pulse template we can just wrap it again, for convenience. The following block shows you how to define a nested pulse template
 and how to use the low level plotting function to get the pulse shape as a numpy array::
 
-    nested_mapping = dict(start=lambda ps: ps['start'],
-                          length=lambda ps: ps['length'],
-                          value1=lambda ps: 10, # You can fix parameters by giving a function that always returns the same value
-                          value2=lambda ps: 20,
-                          pulse_length=lambda ps: ps['pulse_length'] * 0.5)
+    nested_mapping = dict(start='start',
+                          length='length',
+                          value1='10',
+                          value2='20',
+                          pulse_length='pulse_length * 0.5')
 
     nested_pulse = SequencePulseTemplate([(doubleSquare, nested_mapping),
                                           (doubleSquare, nested_mapping)],
