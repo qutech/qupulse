@@ -21,10 +21,12 @@ class Plotter(SequencingHardwareInterface):
             self.__database[waveform_id] = waveform_table
         return waveform
 
-    def render(self, block: InstructionBlock) -> (np.array, np.array):
+    def render(self, block: InstructionBlock, sample_rate: int=10) -> (np.array, np.array):
         if not all(map(lambda x: isinstance(x, EXECInstruction), block.instructions)):
             raise NotImplementedError('Can only plot waveforms without branching so far.')
         waveforms = [self.__database[hash(a.waveform)] for a in block.instructions]
+        if not waveforms:
+            return np.array([0]), np.array([0])
         total_time = 0
         total_waveform = [waveforms[0][0]]
         for wf in waveforms:
@@ -34,7 +36,9 @@ class Plotter(SequencingHardwareInterface):
                     total_waveform.append(TableEntry(new_time, point.v, point.interp))
             total_time += wf[-1].t
         entries = clean_entries(total_waveform)
-        ts = np.arange(0, entries[-1].t, 1)
+
+        sample_count = entries[-1].t * sample_rate
+        ts = np.linspace(0, entries[-1].t, num=sample_count)
 
         voltages = np.empty_like(ts) # prepare voltage vector
         for entry1, entry2 in zip(entries[:-1], entries[1:]): # iterate over interpolated areas
@@ -43,20 +47,25 @@ class Plotter(SequencingHardwareInterface):
         return ts, voltages
 
 
-def plot(pulse: SequencingElement, parameters: Dict[str, Parameter]={}) -> None: # pragma: no cover
+def plot(pulse: SequencingElement, parameters: Dict[str, Parameter]={}, sample_rate: int=10) -> None: # pragma: no cover
     plotter = Plotter()
     sequencer = Sequencer(plotter)
-    if parameters:
-        sequencer.push(pulse, parameters)
-    else:
-        sequencer.push(pulse)
+    sequencer.push(pulse, parameters)
     block = sequencer.build()
     if not sequencer.has_finished():
         raise PlottingNotPossibleException(pulse)
-    times, voltages = plotter.render(block)
+    times, voltages = plotter.render(block, sample_rate)
+
+    # plot!
     f = plt.figure()
     ax = f.add_subplot(111)
     ax.step(times, voltages, where='post')
+
+    # add some margins in the presentation
+    plt.plot()
+    plt.xlim( -0.5, times[-1] + 0.5)
+    plt.ylim(min(voltages) - 0.5, max(voltages) + 0.5)
+
     f.show()
 
 
