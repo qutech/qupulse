@@ -8,6 +8,8 @@ sys.path.insert(0,srcPath)
 from tests.pulses.SequencingDummies import DummyCondition, DummyPulseTemplate, DummySequencer, DummySequencingHardware, DummyInstructionBlock
 
 from pulses.LoopPulseTemplate import LoopPulseTemplate
+from pulses.Sequencer import Sequencer
+from pulses.Instructions import EXECInstruction
 
 
 class LoopPulseTemplateTest(unittest.TestCase):
@@ -31,6 +33,16 @@ class LoopPulseTemplateTest(unittest.TestCase):
 
         body.is_interruptable_ = True
         self.assertTrue(t.is_interruptable)
+
+    def test_create_constant_for_loop(self) -> None:
+        body = DummyPulseTemplate()
+        t = LoopPulseTemplate.create_constant_for_loop(10, body)
+        hardware = DummySequencingHardware()
+        sequencer = Sequencer(hardware)
+        block = DummyInstructionBlock()
+        sequencer.push(t, {}, block)
+        sequencer.build()
+        self.assertEqual(10, body.build_sequence_calls)
 
 
 class LoopPulseTemplateSequencingTests(unittest.TestCase):

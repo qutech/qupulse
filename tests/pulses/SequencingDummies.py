@@ -196,7 +196,6 @@ class DummyCondition(Condition):
         self.loop_call_data = {}
         self.branch_call_data = {}
 
-    @property
     def requires_stop(self) -> bool:
         return self.requires_stop_
 
@@ -238,6 +237,7 @@ class DummyPulseTemplate(PulseTemplate):
         self.requires_stop_ = requires_stop
         self.is_interruptable_ = is_interruptable
         self.parameter_names_ = parameter_names
+        self.build_sequence_calls = 0
 
     @property
     def parameter_names(self) -> Set[str]:
@@ -256,7 +256,7 @@ class DummyPulseTemplate(PulseTemplate):
         return self.is_interruptable_
 
     def build_sequence(self, sequencer: Sequencer, parameters: Dict[str, Parameter], instruction_block: InstructionBlock):
-        NotImplementedError()
+        self.build_sequence_calls += 1
 
     def requires_stop(self, parameters: Dict[str, Parameter]):
         return self.requires_stop_

@@ -6,7 +6,7 @@ from typing import Dict, Set, List, Optional, Any
 """LOCAL IMPORTS"""
 from .Parameter import Parameter
 from .PulseTemplate import PulseTemplate, MeasurementWindow
-from .Condition import Condition
+from .Condition import Condition, SoftwareCondition
 from .Instructions import InstructionBlock
 from .Sequencer import Sequencer
 from .Serializer import Serializer
@@ -25,6 +25,11 @@ class LoopPulseTemplate(PulseTemplate):
         super().__init__(identifier=identifier)
         self.__condition = condition
         self.__body = body
+
+    @staticmethod
+    def create_constant_for_loop(count: int, body: PulseTemplate, identifier: Optional[str]=None) -> 'LoopPulseTemplate':
+        for_condition = SoftwareCondition(lambda i, count=count: i < count)
+        return LoopPulseTemplate(for_condition, body, identifier=identifier)
 
     def __str__(self) -> str:
         raise NotImplementedError()
@@ -49,7 +54,7 @@ class LoopPulseTemplate(PulseTemplate):
         self.__condition.build_sequence_loop(self, self.__body, sequencer, parameters, instruction_block)
 
     def requires_stop(self, parameters: Dict[str, Parameter]):
-        return self.__condition.requires_stop
+        return self.__condition.requires_stop()
 
     def get_serialization_data(self, serializer: Serializer):
         data = dict(
