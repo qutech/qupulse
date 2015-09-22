@@ -1,9 +1,5 @@
 import logging
-from typing import Dict, List, Tuple, Set, Callable, Optional, Any, Iterable, Union
-from functools import partial
-from inspect import getsource
-import copy
-from inspect import getargspec
+from typing import Dict, List, Tuple, Set, Optional, Any, Iterable, Union
 """RELATED THIRD PARTY IMPORTS"""
 from py_expression_eval import Parser
 
@@ -13,13 +9,9 @@ from .Parameter import ParameterDeclaration, Parameter, ParameterNotProvidedExce
 from .Sequencer import InstructionBlock, Sequencer
 from .Serializer import Serializer
 
-
 logger = logging.getLogger(__name__)
 
 # type signatures used in this module
-# a MappingFunction takes a dictionary with parameter declarations, keyed with strings and returns a float
-# temporarily obsolete: MappingFunction = Callable[[Dict[str, ParameterDeclaration]], float]
-
 # a subtemplate consists of a pulse template and mapping functions for its "internal" parameters
 Subtemplate = Tuple[PulseTemplate, Dict[str, str]]
 

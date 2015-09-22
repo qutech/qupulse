@@ -90,7 +90,7 @@ class Serializer(object):
     FileEntry = NamedTuple("FileEntry", [('serialization', str), ('serializable', Serializable)])
 
     def __init__(self, storage_backend: StorageBackend) -> None:
-        self.__subpulses = dict() # type: Dict[str, FileEntry]
+        self.__subpulses = dict() # type: Dict[str, Serializer.FileEntry]
         self.__storage_backend = storage_backend
 
     def _serialize_subpulse(self, serializable: Serializable) -> Union[str, Dict[str, Any]]:
