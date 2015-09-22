@@ -8,11 +8,8 @@ sys.path.insert(0,srcPath)
 
 from pulses.TablePulseTemplate import TablePulseTemplate, TableEntry
 from pulses.SequencePulseTemplate import SequencePulseTemplate, MissingMappingException, UnnecessaryMappingException, MissingParameterDeclarationException, RuntimeMappingError
-from pulses.PulseTemplate import ParameterNotInPulseTemplateException,\
-    PulseTemplate
 from pulses.Parameter import ParameterDeclaration, Parameter, ParameterNotProvidedException, ConstantParameter
-from pulses.Instructions import EXECInstruction
-from tests.pulses.SequencingDummies import DummySequencer, DummyInstructionBlock, DummySequencingElement
+from tests.pulses.SequencingDummies import DummySequencer, DummyInstructionBlock, DummySequencingElement, DummySequencingHardware
 from tests.pulses.SerializationDummies import DummySerializer
 
 
@@ -141,7 +138,7 @@ class SequencePulseTemplateSerializationTests(unittest.TestCase):
 class SequencePulseTemplateSequencingTests(SequencePulseTemplateTest):
 
     def test_missing_parameter(self):
-        sequencer = DummySequencer()
+        sequencer = DummySequencer(DummySequencingHardware())
         block = DummyInstructionBlock()
         parameters = copy.deepcopy(self.parameters)
         parameters.pop('uptime')
@@ -149,7 +146,7 @@ class SequencePulseTemplateSequencingTests(SequencePulseTemplateTest):
             self.sequence.build_sequence(sequencer, parameters, block)
 
     def test_build_sequence(self) -> None:
-        sequencer = DummySequencer()
+        sequencer = DummySequencer(DummySequencingHardware())
         instruction_block = DummyInstructionBlock()
         block = DummyInstructionBlock()
         element1 = DummySequencingElement(push_elements=(block, [self.square]))

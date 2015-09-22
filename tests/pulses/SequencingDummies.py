@@ -67,7 +67,7 @@ class DummyWaveform(Waveform):
 
 class DummySequencer(Sequencer):
 
-    def __init__(self, sequencing_hardware: Optional[DummySequencingHardware] = DummySequencingHardware()) -> None:
+    def __init__(self, sequencing_hardware: DummySequencingHardware) -> None:
         super().__init__(None)
         self.sequencing_stacks = {} #type: Dict[InstructionBlock, List[StackElement]]
         self.hardware = sequencing_hardware

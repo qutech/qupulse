@@ -7,7 +7,7 @@ import numpy as np
 srcPath = os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1)[0] + 'src'
 sys.path.insert(0,srcPath)
 
-from tests.pulses.SequencingDummies import DummySequencer, DummyInstructionBlock
+from tests.pulses.SequencingDummies import DummySequencer, DummyInstructionBlock, DummySequencingHardware
 from tests.pulses.SerializationDummies import DummySerializer
 
 from pulses.Instructions import EXECInstruction
@@ -469,7 +469,7 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
         table.add_entry(bar_decl, 0, 'jump')
         parameters = {'v': 2.3, 'foo': 1, 'bar': 4}
         instantiated_entries = tuple(table.get_entries_instantiated(parameters))
-        sequencer = DummySequencer()
+        sequencer = DummySequencer(DummySequencingHardware())
         instruction_block = DummyInstructionBlock()
         table.build_sequence(sequencer, parameters, instruction_block)
         self.assertEqual([instantiated_entries], sequencer.hardware.waveforms)
@@ -480,7 +480,8 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
 
     def test_build_sequence_empty(self) -> None:
         table = TablePulseTemplate()
-        sequencer = DummySequencer()
+        hardware = DummySequencingHardware()
+        sequencer = DummySequencer(hardware)
         instruction_block = DummyInstructionBlock()
         table.build_sequence(sequencer, {}, instruction_block)
         self.assertFalse(sequencer.hardware.waveforms)
