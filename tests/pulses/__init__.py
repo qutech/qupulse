@@ -8,9 +8,11 @@ __all__ = [
     'ParameterTests',
     'PlottingTests',
     'RepetitionPulseTemplateTests',
+    'SamplePulseGenerator',
     'SequencePulseTemplateTests',
     'SequencerTests',
     'SequencingDummies',
+    'SerializationDummies',
     'SerializerTests',
     'TablePulseTemplateTests']
 __path__ = extend_path(__path__, __name__)
