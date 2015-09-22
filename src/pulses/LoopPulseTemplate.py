@@ -1,12 +1,12 @@
 import logging
-from typing import Dict, Set, List, Optional, Any
+from typing import Dict, Set, List, Optional, Any, Union
 
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
 from .Parameter import Parameter
 from .PulseTemplate import PulseTemplate, MeasurementWindow
-from .Condition import Condition, SoftwareCondition
+from .Condition import Condition, SoftwareCondition, ProxyCondition
 from .Instructions import InstructionBlock
 from .Sequencer import Sequencer
 from .Serializer import Serializer
@@ -21,8 +21,10 @@ class LoopPulseTemplate(PulseTemplate):
     during execution as long as a certain condition holds.
     """
     
-    def __init__(self, condition: Condition, body: PulseTemplate, identifier: Optional[str]=None) -> None:
+    def __init__(self, condition: Union[Condition, str], body: PulseTemplate, identifier: Optional[str]=None) -> None:
         super().__init__(identifier=identifier)
+        if isinstance(condition, str):
+            condition = ProxyCondition(condition)
         self.__condition = condition
         self.__body = body
 

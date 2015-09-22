@@ -177,6 +177,43 @@ class SoftwareCondition(Condition):
             sequencer.push(else_branch, parameters, instruction_block)
 
 
+class ProxyCondition(Condition):
+
+    def __init__(self, condition_name: str) -> None:
+        super().__init__()
+        self.__condition_name = condition_name
+        self.__condition = None # type: Condition
+
+    def acquire_proxied(self, conditions: Dict[str, Condition]) -> None:
+        self.__condition = conditions[self.__condition_name]
+
+    def requires_stop(self) -> bool:
+        if self.__condition is None:
+            raise Exception("The Condition reference '{}' has not been resolved.".format(self.__condition_name))
+        return self.__condition.requires_stop()
+
+    def build_sequence_loop(self,
+                            delegator: SequencingElement,
+                            body: SequencingElement,
+                            sequencer: Sequencer,
+                            parameters: Dict[str, Parameter],
+                            instruction_block: InstructionBlock) -> None:
+        if self.__condition is None:
+            raise Exception("The Condition reference '{}' has not been resolved.".format(self.__condition_name))
+        self.__condition.build_sequence_loop(delegator, body, sequencer, parameters, instruction_block)
+
+    def build_sequence_branch(self,
+                              delegator: SequencingElement,
+                              if_branch: SequencingElement,
+                              else_branch: SequencingElement,
+                              sequencer: Sequencer,
+                              parameters: Dict[str, Parameter],
+                              instruction_block: InstructionBlock) -> None:
+        if self.__condition is None:
+            raise Exception("The Condition reference '{}' has not been resolved.".format(self.__condition_name))
+        self.__condition.build_sequence_branch(delegator, if_branch, else_branch, sequencer, parameters, instruction_block)
+
+
 class ConditionEvaluationException(Exception):
     """Indicates that a SoftwareCondition cannot be evaluated yet."""
     
