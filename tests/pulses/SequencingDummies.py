@@ -9,6 +9,7 @@ from pulses.Parameter import Parameter, ParameterDeclaration
 from pulses.Serializer import Serializer
 from pulses.PulseTemplate import PulseTemplate, MeasurementWindow
 from pulses.Interpolation import InterpolationStrategy
+from pulses.Condition import Condition
 
 
 class DummyParameter(Parameter):
@@ -185,3 +186,87 @@ class DummyInterpolationStrategy(InterpolationStrategy):
 
     def __repr__(self) -> str:
         return "DummyInterpolationStrategy {}".format(id(self))
+
+
+class DummyCondition(Condition):
+
+    def __init__(self, requires_stop: bool=False):
+        super().__init__()
+        self.requires_stop_ = requires_stop
+        self.loop_call_data = {}
+        self.branch_call_data = {}
+
+    @property
+    def requires_stop(self) -> bool:
+        return self.requires_stop_
+
+    def build_sequence_loop(self,
+                            delegator: SequencingElement,
+                            body: SequencingElement,
+                            sequencer: Sequencer,
+                            parameters: Dict[str, Parameter],
+                            instruction_block: InstructionBlock) -> None:
+        self.loop_call_data = dict(
+            delegator=delegator,
+            body=body,
+            sequencer=sequencer,
+            parameters=parameters,
+            instruction_block=instruction_block
+        )
+
+    def build_sequence_branch(self,
+                              delegator: SequencingElement,
+                              if_branch: SequencingElement,
+                              else_branch: SequencingElement,
+                              sequencer: Sequencer,
+                              parameters: Dict[str, Parameter],
+                              instruction_block: InstructionBlock) -> None:
+        self.branch_call_data = dict(
+            delegator=delegator,
+            if_branch=if_branch,
+            else_branch=else_branch,
+            sequencer=sequencer,
+            parameters=parameters,
+            instruction_block=instruction_block
+        )
+
+
+class DummyPulseTemplate(PulseTemplate):
+
+    def __init__(self, requires_stop: bool=False, is_interruptable: bool=False, parameter_names: Set[str]={}) -> None:
+        super().__init__()
+        self.requires_stop_ = requires_stop
+        self.is_interruptable_ = is_interruptable
+        self.parameter_names_ = parameter_names
+
+    @property
+    def parameter_names(self) -> Set[str]:
+        return self.parameter_names_
+
+    @property
+    def parameter_declarations(self) -> Set[str]:
+        return [ParameterDeclaration(name) for name in self.parameter_names]
+
+    def get_measurement_windows(self, parameters: Dict[str, Parameter] = None) -> List[MeasurementWindow]:
+        """Return all measurement windows defined in this PulseTemplate."""
+        raise NotImplementedError()
+
+    @property
+    def is_interruptable(self) -> bool:
+        return self.is_interruptable_
+
+    def build_sequence(self, sequencer: Sequencer, parameters: Dict[str, Parameter], instruction_block: InstructionBlock):
+        NotImplementedError()
+
+    def requires_stop(self, parameters: Dict[str, Parameter]):
+        return self.requires_stop_
+
+    def get_serialization_data(self, serializer: Serializer):
+        raise NotImplementedError()
+
+    @staticmethod
+    def deserialize(serializer: Serializer,
+                    condition: Dict[str, Any],
+                    body: Dict[str, Any],
+                    identifier: Optional[str]=None):
+        raise NotImplementedError()
