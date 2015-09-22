@@ -459,7 +459,6 @@ class TablePulseTemplateSerializationTests(unittest.TestCase):
         self.assertEqual('foo', template.identifier)
 
 
-
 class TablePulseTemplateSequencingTests(unittest.TestCase):
 
     def test_build_sequence(self) -> None:
@@ -478,6 +477,14 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
         instruction = instruction_block.instructions[0]
         self.assertIsInstance(instruction, EXECInstruction)
         self.assertEqual(instantiated_entries, instruction.waveform.waveform_table)
+
+    def test_build_sequence_empty(self) -> None:
+        table = TablePulseTemplate()
+        sequencer = DummySequencer()
+        instruction_block = DummyInstructionBlock()
+        table.build_sequence(sequencer, {}, instruction_block)
+        self.assertFalse(sequencer.hardware.waveforms)
+        self.assertFalse(instruction_block.instructions)
 
     def test_requires_stop(self) -> None:
         table = TablePulseTemplate()

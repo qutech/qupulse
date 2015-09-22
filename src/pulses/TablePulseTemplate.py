@@ -268,9 +268,10 @@ class TablePulseTemplate(PulseTemplate):
 
     def build_sequence(self, sequencer: Sequencer, parameters: Dict[str, Parameter], instruction_block: InstructionBlock) -> None:
         instantiated = self.get_entries_instantiated(parameters)
-        instantiated = tuple(instantiated)
-        waveform = sequencer.register_waveform(instantiated)
-        instruction_block.add_instruction_exec(waveform)
+        if instantiated:
+            instantiated = tuple(instantiated)
+            waveform = sequencer.register_waveform(instantiated)
+            instruction_block.add_instruction_exec(waveform)
 
     def requires_stop(self, parameters: Dict[str, Parameter]) -> bool: 
         return any(parameters[name].requires_stop for name in parameters.keys() if (name in self.parameter_names) and not isinstance(parameters[name], numbers.Number))
@@ -312,6 +313,7 @@ class TablePulseTemplate(PulseTemplate):
 
         return template
 
+
 class ParameterValueIllegalException(Exception):
     """Indicates that the value provided for a parameter is illegal, i.e., is outside the parameter's bounds or of wrong type."""
 
@@ -324,6 +326,7 @@ class ParameterValueIllegalException(Exception):
         return "The value {0} provided for parameter {1} is illegal (min = {2}, max = {3})".format(
             float(self.parameter), self.parameter_declaration.name, self.parameter_declaration.min_value,
             self.parameter_declaration.max_value)
+
 
 def clean_entries(entries: List[TableEntry]) -> List[TableEntry]:
     """ Checks if two subsequent values have the same voltage value. If so, the second is redundant and removed in-place."""
