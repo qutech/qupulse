@@ -46,6 +46,18 @@ class SequencerTest(unittest.TestCase):
         
         sequencer.push(elem, ps)
         self.assertFalse(sequencer.has_finished())
+
+    def test_push_float_params(self) -> None:
+        dummy_hardware = DummySequencingHardware()
+        sequencer = Sequencer(dummy_hardware)
+
+        ps = {'foo': 1, 'bar': 7.3}
+        elem = DummySequencingElement()
+        sequencer.push(elem, ps)
+        self.assertFalse(sequencer.has_finished())
+        sequencer.build()
+        self.assertIsInstance(elem.parameters['foo'], ConstantParameter)
+        self.assertIsInstance(elem.parameters['bar'], ConstantParameter)
     
 #   The following are methods to test different execution path through the build() method.
 #   Most relevant paths with up to 2 iterations for each loop are covered, excluding "mirror" configurations.

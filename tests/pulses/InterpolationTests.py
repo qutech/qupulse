@@ -28,3 +28,6 @@ class InterpolationTest(unittest.TestCase):
         strat = JumpInterpolationStrategy()
         result = strat(start, end, t)
         self.assertTrue(all(result == 3))
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

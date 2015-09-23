@@ -201,7 +201,7 @@ class InstructionBlock:
     def __init__(self, outerBlock: 'InstructionBlock' = None) -> None:
         super().__init__()
         self.__instruction_list = [] # type: InstructionSequence
-        self.__embedded_blocks = [] # type: Collection[InstructionBlock]
+        self.__embedded_blocks = [] # type: List[InstructionBlock]
         self.__outer_block = outerBlock
         self.__offset = None
         if self.__outer_block is None:

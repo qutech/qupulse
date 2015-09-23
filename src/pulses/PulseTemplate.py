@@ -1,19 +1,21 @@
 
 from abc import ABCMeta, abstractmethod, abstractproperty
-from typing import Dict, List, Tuple, Set
+from typing import Dict, List, Tuple, Set, Optional
 import logging
+from src.pulses.Serializer import Serializable
 
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
 from .Parameter import ParameterDeclaration, Parameter
 from .Sequencer import SequencingElement
+from .Serializer import Serializable
 
 logger = logging.getLogger(__name__)
 
 MeasurementWindow = Tuple[float, float]
 
-class PulseTemplate(SequencingElement, metaclass = ABCMeta):
+class PulseTemplate(Serializable, SequencingElement, metaclass = ABCMeta):
     """A PulseTemplate represents the parameterized general structure of a pulse.
     
     A PulseTemplate described a pulse in an abstract way: It defines the structure of a pulse
@@ -24,28 +26,24 @@ class PulseTemplate(SequencingElement, metaclass = ABCMeta):
     called instantiation of the PulseTemplate.
     """
     
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, identifier: Optional[str]=None) -> None:
+        super().__init__(identifier)
 
     @abstractproperty
     def parameter_names(self) -> Set[str]:
         """Return the set of names of declared parameters."""
-        pass
     
     @abstractproperty
     def parameter_declarations(self) -> Set[ParameterDeclaration]:
         """Return the set of ParameterDeclarations."""
-        pass
 
     @abstractmethod
     def get_measurement_windows(self, parameters: Dict[str, Parameter] = None) -> List[MeasurementWindow]:
         """Return all measurement windows defined in this PulseTemplate."""
-        pass
 
     @abstractproperty
     def is_interruptable(self) -> bool:
         """Return true, if this PulseTemplate contains points at which it can halt if interrupted."""
-        pass
 
 
 class ParameterNotInPulseTemplateException(Exception):

@@ -6,7 +6,7 @@ from typing import Optional
 srcPath = os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1)[0] + 'src'
 sys.path.insert(0,srcPath)
 
-from tests.pulses.SequencingDummies import DummySequencingElement, DummySequencer, DummyInstructionBlock
+from tests.pulses.SequencingDummies import DummySequencingElement, DummySequencer, DummyInstructionBlock, DummySequencingHardware
 
 from pulses.Instructions import InstructionPointer, Trigger, CJMPInstruction, GOTOInstruction
 from pulses.Condition import HardwareCondition, SoftwareCondition, ConditionEvaluationException
@@ -14,7 +14,7 @@ from pulses.Condition import HardwareCondition, SoftwareCondition, ConditionEval
 class HardwareConditionTest(unittest.TestCase):
     
     def test_build_sequence_loop(self) -> None:        
-        sequencer = DummySequencer()
+        sequencer = DummySequencer(DummySequencingHardware())
         block = DummyInstructionBlock()
         
         delegator = DummySequencingElement()
@@ -33,7 +33,7 @@ class HardwareConditionTest(unittest.TestCase):
         
     
     def test_build_sequence_branch(self) -> None:
-        sequencer = DummySequencer()
+        sequencer = DummySequencer(DummySequencingHardware())
         block = DummyInstructionBlock()
         
         delegator = DummySequencingElement()
@@ -69,7 +69,7 @@ class IterationCallbackDummy:
 class SoftwareConditionTest(unittest.TestCase):
     
     def test_build_cannot_evaluate(self) -> None:
-        sequencer = DummySequencer()
+        sequencer = DummySequencer(DummySequencingHardware())
         block = DummyInstructionBlock()
         
         delegator = DummySequencingElement()
@@ -82,7 +82,7 @@ class SoftwareConditionTest(unittest.TestCase):
         self.assertRaises(ConditionEvaluationException, condition.build_sequence_branch, delegator, body, body, sequencer, [], block)
     
     def test_build_sequence_loop_true(self) -> None:
-        sequencer = DummySequencer()
+        sequencer = DummySequencer(DummySequencingHardware())
         block = DummyInstructionBlock()
         
         delegator = DummySequencingElement()
@@ -100,7 +100,7 @@ class SoftwareConditionTest(unittest.TestCase):
         self.assertEqual(1, callback.loop_iteration)
         
     def test_build_sequence_loop_false(self):
-        sequencer = DummySequencer()
+        sequencer = DummySequencer(DummySequencingHardware())
         block = DummyInstructionBlock()
         
         delegator = DummySequencingElement()
@@ -118,7 +118,7 @@ class SoftwareConditionTest(unittest.TestCase):
         self.assertEqual(0, callback.loop_iteration)
         
     def test_build_sequence_branch_true(self):
-        sequencer = DummySequencer()
+        sequencer = DummySequencer(DummySequencingHardware())
         block = DummyInstructionBlock()
         
         delegator = DummySequencingElement()
@@ -138,7 +138,7 @@ class SoftwareConditionTest(unittest.TestCase):
         
         
     def test_build_sequence_branch_false(self):
-        sequencer = DummySequencer()
+        sequencer = DummySequencer(DummySequencingHardware())
         block = DummyInstructionBlock()
         
         delegator = DummySequencingElement()

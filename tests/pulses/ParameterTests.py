@@ -1,26 +1,34 @@
 import unittest
 import os
 import sys
-import numbers
-from typing import Union, Optional
+from typing import Union
 
 srcPath = os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1)[0] + 'src'
 sys.path.insert(0,srcPath)
 
 from pulses.Parameter import Parameter, ConstantParameter, ParameterDeclaration, ParameterNotProvidedException
+from pulses.Serializer import Serializer
+from tests.pulses.SerializationDummies import DummySerializer
 
 class DummyParameter(Parameter):
         
-        def __init__(self) -> None:
-            self.value = 252.13
-            
-        def get_value(self) -> float:
-            return self.value
-        
-        @property
-        def requires_stop(self) -> bool:
-            return False
-    
+    def __init__(self) -> None:
+        self.value = 252.13
+
+    def get_value(self) -> float:
+        return self.value
+
+    @property
+    def requires_stop(self) -> bool:
+        return False
+
+    def get_serialization_data(self, serializer: Serializer) -> None:
+        raise NotImplemented()
+
+    @staticmethod
+    def deserialize(serializer: Serializer) -> 'DummyParameter':
+        raise NotImplemented()
+
 
 class ParameterTest(unittest.TestCase):
     
@@ -30,11 +38,6 @@ class ParameterTest(unittest.TestCase):
 
 
 class ConstantParameterTest(unittest.TestCase):
-    
-    def test_float_is_constant_parameter(self) -> None:
-        self.assertTrue(issubclass(numbers.Real, ConstantParameter))
-        self.assertTrue(isinstance(0.1, ConstantParameter))
-
     def __test_valid_params(self, value: float) -> None:
         constant_parameter = ConstantParameter(value)
         self.assertEqual(value, constant_parameter.get_value())
@@ -52,6 +55,19 @@ class ConstantParameterTest(unittest.TestCase):
     def test_repr(self) -> None:
         constant_parameter = ConstantParameter(0.2)
         self.assertEqual("<ConstantParameter 0.2>", repr(constant_parameter))
+
+    def test_get_serialization_data(self) -> None:
+        constant_parameter = ConstantParameter(-0.2)
+        serializer = DummySerializer()
+        data = constant_parameter.get_serialization_data(serializer)
+        self.assertEqual(dict(type=serializer.get_type_identifier(constant_parameter), constant=-0.2), data)
+
+    def test_deserialize(self) -> None:
+        serializer = DummySerializer()
+        constant_parameter = ConstantParameter.deserialize(serializer, constant=3.1)
+        self.assertEqual(3.1, constant_parameter.get_value())
+        self.assertIsNone(constant_parameter.identifier)
+
     
 class ParameterDeclarationTest(unittest.TestCase):
     
@@ -314,6 +330,65 @@ class ParameterDeclarationTest(unittest.TestCase):
         decl = ParameterDeclaration('foo', min=min_decl, max=max_decl)
         self.assertEqual("{} 'foo', range (Parameter 'minifoo' (min 0.2), Parameter 'maxifoo' (max 1.1)), default None".format(type(decl)), str(decl))
         self.assertEqual("<{} 'foo', range (Parameter 'minifoo' (min 0.2), Parameter 'maxifoo' (max 1.1)), default None>".format(type(decl)), repr(decl))
+
+
+class ParameterDeclarationSerializationTests(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.serializer = DummySerializer()
+        self.declaration = ParameterDeclaration('foo')
+        self.expected_data = dict(name='foo', type=self.serializer.get_type_identifier(self.declaration))
+
+    def test_get_serialization_data_all_default(self) -> None:
+        self.expected_data['min_value'] = float('-inf')
+        self.expected_data['max_value'] = float('+inf')
+        self.expected_data['default_value'] = None
+        self.assertEqual(self.expected_data, self.declaration.get_serialization_data(self.serializer))
+
+    def test_get_serialization_data_all_floats(self) -> None:
+        self.declaration = ParameterDeclaration('foo', min=-3.1, max=4.3, default=0.2)
+        self.expected_data['min_value'] = -3.1
+        self.expected_data['max_value'] = 4.3
+        self.expected_data['default_value'] = 0.2
+        self.assertEqual(self.expected_data, self.declaration.get_serialization_data(self.serializer))
+
+    def test_get_serialization_data_min_max_references(self) -> None:
+        bar_min = ParameterDeclaration('bar_min')
+        bar_max = ParameterDeclaration('bar_max')
+        self.declaration.min_value = bar_min
+        self.declaration.max_value = bar_max
+        self.expected_data['min_value'] = 'bar_min'
+        self.expected_data['max_value'] = 'bar_max'
+        self.expected_data['default_value'] = None
+        self.assertEqual(self.expected_data, self.declaration.get_serialization_data(self.serializer))
+
+    def test_deserialize_all_default(self) -> None:
+        data = dict(min_value=float('-inf'), max_value=float('+inf'), default_value=None, name='foo')
+        declaration = ParameterDeclaration.deserialize(self.serializer, **data)
+        self.assertEqual(data['min_value'], declaration.min_value)
+        self.assertEqual(data['max_value'], declaration.max_value)
+        self.assertEqual(data['default_value'], declaration.default_value)
+        self.assertEqual(data['name'], declaration.name)
+        self.assertIsNone(declaration.identifier)
+
+    def test_deserialize_all_floats(self) -> None:
+        data = dict(min_value=33.3, max_value=44, default_value=41.1, name='foo')
+        declaration = ParameterDeclaration.deserialize(self.serializer, **data)
+        self.assertEqual(data['min_value'], declaration.min_value)
+        self.assertEqual(data['max_value'], declaration.max_value)
+        self.assertEqual(data['default_value'], declaration.default_value)
+        self.assertEqual(data['name'], declaration.name)
+        self.assertIsNone(declaration.identifier)
+
+    def test_deserialize_min_max_references(self) -> None:
+        data = dict(min_value='bar_min', max_value='bar_max', default_value=-23.5, name='foo')
+        declaration = ParameterDeclaration.deserialize(self.serializer, **data)
+        self.assertEqual(float('-inf'), declaration.min_value)
+        self.assertEqual(float('+inf'), declaration.max_value)
+        self.assertEqual(data['default_value'], declaration.default_value)
+        self.assertEqual(data['name'], declaration.name)
+        self.assertIsNone(declaration.identifier)
+
 
 class ParameterNotProvidedExceptionTests(unittest.TestCase):
 
