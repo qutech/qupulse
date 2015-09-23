@@ -56,10 +56,6 @@ class SequencingHardwareInterface(metaclass = ABCMeta):
         object representing a handle to the waveform on the device.
         """
 
-    @abstractproperty
-    def sample_rate(self) -> float:
-        """Return the sample rate of the hardware device in samples per unit of time."""
-
 
 class Sequencer:
     """Translates tree structures of SequencingElement objects to linear instruction sequences contained
@@ -138,7 +134,3 @@ class Sequencer:
         if waveform_hash not in self.__waveforms:
             self.__hardware_interface.register_waveform(waveform)
             self.__waveforms[waveform_hash] = waveform
-
-    @property
-    def sample_rate(self) -> float:
-        return self.__hardware_interface.sample_rate
