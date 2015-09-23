@@ -5,7 +5,7 @@ import numbers
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
-from .Instructions import InstructionBlock, Waveform, WaveformData
+from .Instructions import InstructionBlock, WaveformData
 from .Parameter import Parameter, ConstantParameter
 
     
@@ -46,7 +46,7 @@ class SequencingHardwareInterface(metaclass = ABCMeta):
         super().__init__()
     
     @abstractmethod
-    def register_waveform(self, waveform_data: WaveformData) -> Waveform:
+    def register_waveform(self, waveform_data: WaveformData) -> None:
         """Register a waveform with the device.
         
         The waveform is given as a waveform_table of (time, voltage) tuples of type (int >= 0, float).
@@ -127,21 +127,17 @@ class Sequencer:
         """
         return not any(self.__sequencing_stacks.values())
 
-    def register_waveform(self, waveform_data: WaveformData) -> Waveform:
+    def register_waveform(self, waveform: WaveformData) -> None:
         """Register a waveform with the sequencer.
         
         Forwards waveform registration to the actual hardware (using its SequencingHardwareInterface instance)
         but ensures that identical waveforms are only registered once by maintaining a hash table of previously
         registered waveforms.
         """
-        waveform_data_hash = hash(waveform_data)
-        waveform = None
-        if waveform_data_hash in self.__waveforms:
-            waveform = self.__waveforms[waveform_data_hash]
-        else:
-            waveform = self.__hardware_interface.register_waveform(waveform_data)
-            self.__waveforms[waveform_data_hash] = waveform
-        return waveform
+        waveform_hash = hash(waveform)
+        if waveform_hash not in self.__waveforms:
+            self.__hardware_interface.register_waveform(waveform)
+            self.__waveforms[waveform_hash] = waveform
 
     @property
     def sample_rate(self) -> float:

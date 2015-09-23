@@ -11,7 +11,7 @@ from tests.pulses.SequencingDummies import DummySequencer, DummyInstructionBlock
 from tests.pulses.SerializationDummies import DummySerializer
 
 from pulses.Instructions import EXECInstruction
-from pulses.TablePulseTemplate import TablePulseTemplate, clean_entries, ParameterValueIllegalException
+from pulses.TablePulseTemplate import TablePulseTemplate, clean_entries, ParameterValueIllegalException, TableWaveformData
 from pulses.Parameter import ParameterDeclaration, Parameter, ParameterNotProvidedException
 from pulses.Interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy, JumpInterpolationStrategy
 from pulses.Serializer import Serializer
@@ -472,11 +472,12 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
         sequencer = DummySequencer(DummySequencingHardware())
         instruction_block = DummyInstructionBlock()
         table.build_sequence(sequencer, parameters, instruction_block)
-        self.assertEqual([instantiated_entries], sequencer.hardware.waveforms)
+        waveform = TableWaveformData(instantiated_entries)
+        self.assertEqual([waveform], sequencer.hardware.waveforms)
         self.assertEqual(1, len(instruction_block.instructions))
         instruction = instruction_block.instructions[0]
         self.assertIsInstance(instruction, EXECInstruction)
-        self.assertEqual(instantiated_entries, instruction.waveform.waveform_data)
+        self.assertEqual(waveform, instruction.waveform)
 
     def test_build_sequence_empty(self) -> None:
         table = TablePulseTemplate()

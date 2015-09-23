@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
-from typing import List, Tuple
+from typing import List, Tuple, Any
 import numpy
 
 """RELATED THIRD PARTY IMPORTS"""
@@ -21,10 +21,6 @@ WaveformTable = List[WaveformTableEntry]
 class WaveformData(metaclass=ABCMeta):
 
     @abstractmethod
-    def __hash__(self) -> int:
-        """Return a unique hash for use in dictionaries."""
-
-    @abstractmethod
     def get_sample_count(self, sample_rate: float) -> int:
         """Return the amount of samples generated if the waveform is sampled with a given sample rate."""
 
@@ -36,30 +32,18 @@ class WaveformData(metaclass=ABCMeta):
     def sample(self, sample_rate: float) -> numpy.ndarray:
         """Sample the waveform."""
 
+    @abstractproperty
+    def _compare_key(self) -> Any:
+        """Return a unique key used in comparison and hashing operations."""
 
-class Waveform:
-    
-    def __init__(self, length: int = 0) -> None:
-        super().__init__()
-        if length < 0:
-            raise ValueError("length must be a non-negative integer (was {})".format(length))
-        self.__length = length
-        
-    def __len__(self) -> int:
-        """Return the number of samples of the waveform."""
-        return self.__length
-        
-    def __eq__(self, other) -> bool:
-        return self is other
-        
-    def __ne__(self, other) -> bool:
-        return not self == other
-        
     def __hash__(self) -> int:
-        return id(self)
-        
-    def __str__(self) -> str:
-        return str(hash(self))
+        return hash(self._compare_key)
+
+    def __eq__(self, other: Any) -> bool:
+        return isinstance(other, WaveformData) and self._compare_key == other._compare_key
+
+    def __ne__(self, other: Any) -> bool:
+        return not self == other
 
 
 class Trigger:
@@ -168,7 +152,7 @@ class GOTOInstruction(Instruction):
 
 class EXECInstruction(Instruction):
 
-    def __init__(self, waveform: Waveform) -> None:
+    def __init__(self, waveform: WaveformData) -> None:
         super().__init__()
         self.waveform = waveform
         
@@ -248,7 +232,7 @@ class InstructionBlock:
                 block.__offset = None 
         self.__instruction_list.append(instruction)
             
-    def add_instruction_exec(self, waveform: Waveform) -> None:
+    def add_instruction_exec(self, waveform: WaveformData) -> None:
         self.__add_instruction(EXECInstruction(waveform))
         
     def add_instruction_goto(self, target_block: 'InstructionBlock', offset: int = 0) -> None:

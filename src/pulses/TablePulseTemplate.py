@@ -28,8 +28,9 @@ class TableWaveformData(WaveformData):
         super().__init__()
         self.__table = waveform_table
 
-    def __hash__(self) -> int:
-        return hash(self.__table)
+    @property
+    def _compare_key(self) -> Any:
+        return self.__table
 
     def get_sample_count(self, sample_rate: float) -> int:
         return floor(sample_rate * self.duration) + 1
@@ -300,8 +301,8 @@ class TablePulseTemplate(PulseTemplate):
         if instantiated:
             instantiated = clean_entries(instantiated)
             waveform_data = TableWaveformData(tuple(instantiated))
-            waveform = sequencer.register_waveform(waveform_data)
-            instruction_block.add_instruction_exec(waveform)
+            sequencer.register_waveform(waveform_data)
+            instruction_block.add_instruction_exec(waveform_data)
 
     def requires_stop(self, parameters: Dict[str, Parameter]) -> bool: 
         return any(parameters[name].requires_stop for name in parameters.keys() if (name in self.parameter_names) and not isinstance(parameters[name], numbers.Number))

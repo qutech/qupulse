@@ -4,18 +4,18 @@ from typing import Dict, Tuple
 
 from .Parameter import Parameter
 from .Sequencer import Sequencer, SequencingHardwareInterface, SequencingElement
-from .Instructions import EXECInstruction, Waveform, WaveformData, InstructionBlock
+from .Instructions import EXECInstruction, WaveformData, InstructionBlock
 
 
-class PlottingWaveform(Waveform):
-
-    def __init__(self, waveform_data: WaveformData) -> None:
-        super().__init__(waveform_data.duration)
-        self.__waveform_data = waveform_data
-
-    @property
-    def waveform_data(self) -> WaveformData:
-        return self.__waveform_data
+# class PlottingWaveform(Waveform):
+#
+#     def __init__(self, waveform_data: WaveformData) -> None:
+#         super().__init__(waveform_data.duration)
+#         self.__waveform_data = waveform_data
+#
+#     @property
+#     def waveform_data(self) -> WaveformData:
+#         return self.__waveform_data
 
 
 class Plotter(SequencingHardwareInterface):
@@ -24,8 +24,8 @@ class Plotter(SequencingHardwareInterface):
         super().__init__()
         self.__sample_rate = sample_rate
 
-    def register_waveform(self, waveform_data: WaveformData) -> None:
-        return PlottingWaveform(waveform_data)
+    def register_waveform(self, waveform: WaveformData) -> None:
+        pass
 
     @property
     def sample_rate(self) -> float:
@@ -38,17 +38,15 @@ class Plotter(SequencingHardwareInterface):
         waveforms = [instruction.waveform for instruction in block.instructions]
         if not waveforms:
             return np.array([0]), np.array([0])
-        total_time = sum([waveform.waveform_data.duration for waveform in waveforms])
+        total_time = sum([waveform.duration for waveform in waveforms])
 
         sample_count = total_time * self.__sample_rate + 1
         ts = np.linspace(0, total_time, num=sample_count)
         voltages = np.empty_like(ts)
         sample = 0
         for waveform in waveforms:
-            if not isinstance(waveform, PlottingWaveform):
-                raise Exception("Plotter.render only supports InstructionBlocks created using a Plotter as SequencingHardwareInterface.")
-            voltages[sample:sample + waveform.waveform_data.get_sample_count(self.sample_rate)] = waveform.waveform_data.sample(self.sample_rate)
-            sample += waveform.waveform_data.get_sample_count(self.sample_rate) - 1
+            voltages[sample:sample + waveform.get_sample_count(self.sample_rate)] = waveform.sample(self.sample_rate)
+            sample += waveform.get_sample_count(self.sample_rate) - 1
         return ts, voltages
 
 

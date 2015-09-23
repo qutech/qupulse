@@ -5,7 +5,10 @@ import sys
 srcPath = os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1)[0] + 'src'
 sys.path.insert(0,srcPath)
 
-from pulses.Instructions import InstructionBlockAlreadyFinalizedException, InstructionBlock, InstructionPointer, InstructionBlockNotYetPlacedException, Waveform, Trigger, CJMPInstruction, GOTOInstruction,EXECInstruction, STOPInstruction, MissingReturnAddressException,InstructionSequence
+from tests.pulses.SequencingDummies import DummyWaveformData
+
+from pulses.Instructions import InstructionBlockAlreadyFinalizedException, InstructionBlock, InstructionPointer, InstructionBlockNotYetPlacedException, Trigger, CJMPInstruction, GOTOInstruction,EXECInstruction, STOPInstruction, MissingReturnAddressException,InstructionSequence
+
  
 class InstructionPointerTest(unittest.TestCase):
 
@@ -45,24 +48,24 @@ class InstructionPointerTest(unittest.TestCase):
                 ips.append(ip)
             
 
-class WaveformTest(unittest.TestCase):
-    
-    def test_initialization(self):
-        waveform = Waveform()
-        self.assertEqual(0, len(waveform))
-        for value in [0, 1, 22]:
-            waveform = Waveform(value)
-            self.assertEqual(value, len(waveform))
-        self.assertRaises(ValueError, Waveform, -1)
-        self.assertRaises(ValueError, Waveform, -22)
-        
-    def test_equality(self):
-        wf1 = Waveform()
-        wf2 = Waveform()
-        self.assertEqual(wf1, wf1)
-        self.assertNotEqual(wf1, wf2)
-        self.assertNotEqual(wf2, wf1)
-        self.assertNotEqual(hash(wf1), hash(wf2))
+# class WaveformTest(unittest.TestCase):
+#
+#     def test_initialization(self):
+#         waveform = Waveform()
+#         self.assertEqual(0, len(waveform))
+#         for value in [0, 1, 22]:
+#             waveform = Waveform(value)
+#             self.assertEqual(value, len(waveform))
+#         self.assertRaises(ValueError, Waveform, -1)
+#         self.assertRaises(ValueError, Waveform, -22)
+#
+#     def test_equality(self):
+#         wf1 = Waveform()
+#         wf2 = Waveform()
+#         self.assertEqual(wf1, wf1)
+#         self.assertNotEqual(wf1, wf2)
+#         self.assertNotEqual(wf2, wf1)
+#         self.assertNotEqual(hash(wf1), hash(wf2))
         
 class TriggerTest(unittest.TestCase):
     
@@ -132,18 +135,19 @@ class GOTOInstructionTest(unittest.TestCase):
                     self.assertNotEqual(other, instruction)
                     self.assertNotEqual(hash(instruction), hash(other))
                 instrs.append(instruction)
-            
+
+
 class EXECInstructionTest(unittest.TestCase):
     
     def test_initialization(self):
-        waveform = Waveform()
+        waveform = DummyWaveformData()
         instr = EXECInstruction(waveform)
         self.assertEqual('exec', instr.get_instruction_code())
         self.assertIs(waveform, instr.waveform)
         
     def test_equality(self):
-        wf1 = Waveform()
-        wf2 = Waveform()
+        wf1 = DummyWaveformData()
+        wf2 = DummyWaveformData()
         instr11 = EXECInstruction(wf1)
         instr12 = EXECInstruction(wf1)
         instr20 = EXECInstruction(wf2)
@@ -214,7 +218,7 @@ class InstructionBlockTest(unittest.TestCase):
         block = InstructionBlock()
         expected_instructions = []
         
-        waveforms = [Waveform(), Waveform(), Waveform()]
+        waveforms = [DummyWaveformData(), DummyWaveformData(), DummyWaveformData()]
         LOOKUP = [0, 1, 1, 0, 2, 1, 0, 0, 0, 1, 2, 2]
         for id in LOOKUP:
             waveform = waveforms[id]
@@ -275,7 +279,7 @@ class InstructionBlockTest(unittest.TestCase):
         
         blocks = []
             
-        waveforms = [Waveform(), Waveform(), Waveform()]
+        waveforms = [DummyWaveformData(), DummyWaveformData(), DummyWaveformData()]
         
         main_block.add_instruction_exec(waveforms[0])
         expected_instructions[0].append(EXECInstruction(waveforms[0]))
@@ -357,8 +361,8 @@ class InstructionStringRepresentation(unittest.TestCase):
     def test_str(self):
         IB = InstructionBlock()
         T = Trigger()
-        W = Waveform()
-        
+        W = DummyWaveformData()
+
         a = [W,
              T,
              InstructionPointer(IB,1),

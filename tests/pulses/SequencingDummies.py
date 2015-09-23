@@ -1,5 +1,5 @@
 """STANDARD LIBRARY IMPORTS"""
-from typing import Tuple, List, Dict, Optional
+from typing import Tuple, List, Dict, Optional, Any
 import os
 import sys
 
@@ -7,7 +7,7 @@ srcPath = os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1)[0] + 'src
 sys.path.insert(0,srcPath)
 
 """LOCAL IMPORTS"""
-from pulses.Instructions import WaveformData, Waveform
+from pulses.Instructions import WaveformData
 from pulses.Sequencer import Sequencer, InstructionBlock, SequencingHardwareInterface, SequencingElement
 from pulses.Parameter import Parameter
 
@@ -45,9 +45,9 @@ class DummySequencingHardware(SequencingHardwareInterface):
         self.waveforms = [] # type: List[WaveformTable]
         self.sample_rate_ = sample_rate
 
-    def register_waveform(self, waveform_data: WaveformData) -> Waveform:
+    def register_waveform(self, waveform_data: WaveformData) -> None:
         self.waveforms.append(waveform_data)
-        return DummyWaveform(waveform_data)
+        #return DummyWaveform(waveform_data)
 
     @property
     def sample_rate(self) -> float:
@@ -66,11 +66,28 @@ class DummyInstructionBlock(InstructionBlock):
         return block
 
 
-class DummyWaveform(Waveform):
+# class DummyWaveform(Waveform):
+#
+#     def __init__(self, waveform_data: WaveformData) -> None:
+#         super().__init__(len(waveform_data))
+#         self.waveform_data = waveform_data
 
-    def __init__(self, waveform_data: WaveformData) -> None:
-        super().__init__(len(waveform_data))
-        self.waveform_data = waveform_data
+
+class DummyWaveformData(WaveformData):
+
+    @property
+    def _compare_key(self) -> Any:
+        return id(self)
+
+    @property
+    def duration(self) -> float:
+        return 0
+
+    def get_sample_count(self, sample_rate: float) -> int:
+        return 0
+
+    def sample(self, sample_rate: float) -> None:
+        raise NotImplementedError()
 
 
 class DummySequencer(Sequencer):
@@ -95,5 +112,5 @@ class DummySequencer(Sequencer):
     def has_finished(self):
         raise NotImplementedError()
 
-    def register_waveform(self, waveform_table: WaveformData) -> Waveform:
-        return self.hardware.register_waveform(waveform_table)
+    def register_waveform(self, waveform: WaveformData) -> None:
+        self.hardware.register_waveform(waveform)
