@@ -44,6 +44,12 @@ class LoopPulseTemplateTest(unittest.TestCase):
         sequencer.build()
         self.assertEqual(10, body.build_sequence_calls)
 
+    def test_str(self) -> None:
+        condition = DummyCondition()
+        body = DummyPulseTemplate()
+        t = LoopPulseTemplate(condition, body)
+        self.assertIsInstance(str(t), str)
+
 
 class LoopPulseTemplateSequencingTests(unittest.TestCase):
 

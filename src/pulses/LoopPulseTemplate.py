@@ -34,7 +34,7 @@ class LoopPulseTemplate(PulseTemplate):
         return LoopPulseTemplate(for_condition, body, identifier=identifier)
 
     def __str__(self) -> str:
-        raise NotImplementedError()
+        return "LoopPulseTemplate: Condition <{}>, Body <{}>".format(self.__condition, self.__body)
 
     @property
     def parameter_names(self) -> Set[str]:
