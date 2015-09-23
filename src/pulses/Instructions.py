@@ -1,24 +1,25 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
-from typing import List, Tuple, Any, Optional
+from typing import List, Tuple, Any, NamedTuple
 import numpy
 
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
+from .Interpolation import InterpolationStrategy
 
 # TODO lumip: add docstrings
 
 
-__all__ = ['WaveformTableEntry', 'WaveformData', 'Waveform', 'Trigger', 'InstructionPointer', 'InstructionSequence',
+__all__ = ['WaveformTableEntry', 'Waveform', 'Waveform', 'Trigger', 'InstructionPointer', 'InstructionSequence',
             'InstructionBlockNotYetPlacedException', 'MissingReturnAddressException', 'InstructionBlock',
             'Instruction', 'EXECInstruction', 'CJMPInstruction', 'GOTOInstruction', 'STOPInstruction'
           ]
 
-WaveformTableEntry = Tuple[float, float]
-WaveformTable = List[WaveformTableEntry]
+WaveformTableEntry = NamedTuple("WaveformTableEntry", [('t', float), ('v', float), ('interp', InterpolationStrategy)])
+WaveformTable = Tuple[WaveformTableEntry, ...]
 
 
-class WaveformData(metaclass=ABCMeta):
+class Waveform(metaclass=ABCMeta):
 
     @abstractproperty
     def duration(self) -> float:
@@ -42,7 +43,7 @@ class WaveformData(metaclass=ABCMeta):
         return hash(self._compare_key)
 
     def __eq__(self, other: Any) -> bool:
-        return isinstance(other, WaveformData) and self._compare_key == other._compare_key
+        return isinstance(other, Waveform) and self._compare_key == other._compare_key
 
     def __ne__(self, other: Any) -> bool:
         return not self == other
@@ -154,7 +155,7 @@ class GOTOInstruction(Instruction):
 
 class EXECInstruction(Instruction):
 
-    def __init__(self, waveform: WaveformData) -> None:
+    def __init__(self, waveform: Waveform) -> None:
         super().__init__()
         self.waveform = waveform
         
@@ -234,7 +235,7 @@ class InstructionBlock:
                 block.__offset = None 
         self.__instruction_list.append(instruction)
             
-    def add_instruction_exec(self, waveform: WaveformData) -> None:
+    def add_instruction_exec(self, waveform: Waveform) -> None:
         self.__add_instruction(EXECInstruction(waveform))
         
     def add_instruction_goto(self, target_block: 'InstructionBlock', offset: int = 0) -> None:

@@ -5,7 +5,7 @@ import sys
 srcPath = os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1)[0] + 'src'
 sys.path.insert(0,srcPath)
 
-from tests.pulses.SequencingDummies import DummySequencingElement, DummySequencingHardware, DummyWaveformData
+from tests.pulses.SequencingDummies import DummySequencingElement, DummySequencingHardware, DummyWaveform
 
 from pulses.Parameter import  ConstantParameter
 from pulses.Instructions import InstructionBlock
@@ -23,10 +23,10 @@ class SequencerTest(unittest.TestCase):
         dummy_hardware = DummySequencingHardware()
         sequencer = Sequencer(dummy_hardware)
 
-        w1 = DummyWaveformData()
+        w1 = DummyWaveform()
         sequencer.register_waveform(w1)
         
-        w2 = DummyWaveformData()
+        w2 = DummyWaveform()
         sequencer.register_waveform(w2)
 
         sequencer.register_waveform(w1)

@@ -5,7 +5,7 @@ import sys
 srcPath = os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1)[0] + 'src'
 sys.path.insert(0,srcPath)
 
-from tests.pulses.SequencingDummies import DummyWaveformData
+from tests.pulses.SequencingDummies import DummyWaveform
 
 from pulses.Instructions import InstructionBlockAlreadyFinalizedException, InstructionBlock, InstructionPointer, InstructionBlockNotYetPlacedException, Trigger, CJMPInstruction, GOTOInstruction,EXECInstruction, STOPInstruction, MissingReturnAddressException,InstructionSequence
 
@@ -140,14 +140,14 @@ class GOTOInstructionTest(unittest.TestCase):
 class EXECInstructionTest(unittest.TestCase):
     
     def test_initialization(self):
-        waveform = DummyWaveformData()
+        waveform = DummyWaveform()
         instr = EXECInstruction(waveform)
         self.assertEqual('exec', instr.get_instruction_code())
         self.assertIs(waveform, instr.waveform)
         
     def test_equality(self):
-        wf1 = DummyWaveformData()
-        wf2 = DummyWaveformData()
+        wf1 = DummyWaveform()
+        wf2 = DummyWaveform()
         instr11 = EXECInstruction(wf1)
         instr12 = EXECInstruction(wf1)
         instr20 = EXECInstruction(wf2)
@@ -218,7 +218,7 @@ class InstructionBlockTest(unittest.TestCase):
         block = InstructionBlock()
         expected_instructions = []
         
-        waveforms = [DummyWaveformData(), DummyWaveformData(), DummyWaveformData()]
+        waveforms = [DummyWaveform(), DummyWaveform(), DummyWaveform()]
         LOOKUP = [0, 1, 1, 0, 2, 1, 0, 0, 0, 1, 2, 2]
         for id in LOOKUP:
             waveform = waveforms[id]
@@ -279,7 +279,7 @@ class InstructionBlockTest(unittest.TestCase):
         
         blocks = []
             
-        waveforms = [DummyWaveformData(), DummyWaveformData(), DummyWaveformData()]
+        waveforms = [DummyWaveform(), DummyWaveform(), DummyWaveform()]
         
         main_block.add_instruction_exec(waveforms[0])
         expected_instructions[0].append(EXECInstruction(waveforms[0]))
@@ -361,7 +361,7 @@ class InstructionStringRepresentation(unittest.TestCase):
     def test_str(self):
         IB = InstructionBlock()
         T = Trigger()
-        W = DummyWaveformData()
+        W = DummyWaveform()
 
         a = [W,
              T,

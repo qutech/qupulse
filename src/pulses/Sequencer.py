@@ -5,7 +5,7 @@ import numbers
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
-from .Instructions import InstructionBlock, WaveformData
+from .Instructions import InstructionBlock, Waveform
 from .Parameter import Parameter, ConstantParameter
 
     
@@ -46,7 +46,7 @@ class SequencingHardwareInterface(metaclass = ABCMeta):
         super().__init__()
     
     @abstractmethod
-    def register_waveform(self, waveform_data: WaveformData) -> None:
+    def register_waveform(self, waveform: Waveform) -> None:
         """Register a waveform with the device.
         
         The waveform is given as a waveform_table of (time, voltage) tuples of type (int >= 0, float).
@@ -127,7 +127,7 @@ class Sequencer:
         """
         return not any(self.__sequencing_stacks.values())
 
-    def register_waveform(self, waveform: WaveformData) -> None:
+    def register_waveform(self, waveform: Waveform) -> None:
         """Register a waveform with the sequencer.
         
         Forwards waveform registration to the actual hardware (using its SequencingHardwareInterface instance)

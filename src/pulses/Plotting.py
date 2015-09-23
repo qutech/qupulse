@@ -4,7 +4,7 @@ from typing import Dict, Tuple
 
 from .Parameter import Parameter
 from .Sequencer import Sequencer, SequencingHardwareInterface, SequencingElement
-from .Instructions import EXECInstruction, WaveformData, InstructionBlock
+from .Instructions import EXECInstruction, Waveform, InstructionBlock
 
 
 # class PlottingWaveform(Waveform):
@@ -24,7 +24,7 @@ class Plotter(SequencingHardwareInterface):
         super().__init__()
         self.__sample_rate = sample_rate
 
-    def register_waveform(self, waveform: WaveformData) -> None:
+    def register_waveform(self, waveform: Waveform) -> None:
         pass
 
     @property

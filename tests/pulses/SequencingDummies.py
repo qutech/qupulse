@@ -8,9 +8,10 @@ srcPath = os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1)[0] + 'src
 sys.path.insert(0,srcPath)
 
 """LOCAL IMPORTS"""
-from pulses.Instructions import WaveformData
+from pulses.Instructions import Waveform
 from pulses.Sequencer import Sequencer, InstructionBlock, SequencingHardwareInterface, SequencingElement
 from pulses.Parameter import Parameter
+from pulses.Interpolation import InterpolationStrategy
 
 
 class DummySequencingElement(SequencingElement):
@@ -46,9 +47,8 @@ class DummySequencingHardware(SequencingHardwareInterface):
         self.waveforms = [] # type: List[WaveformTable]
         self.sample_rate_ = sample_rate
 
-    def register_waveform(self, waveform_data: WaveformData) -> None:
-        self.waveforms.append(waveform_data)
-        #return DummyWaveform(waveform_data)
+    def register_waveform(self, waveform: Waveform) -> None:
+        self.waveforms.append(waveform)
 
     @property
     def sample_rate(self) -> float:
@@ -67,14 +67,7 @@ class DummyInstructionBlock(InstructionBlock):
         return block
 
 
-# class DummyWaveform(Waveform):
-#
-#     def __init__(self, waveform_data: WaveformData) -> None:
-#         super().__init__(len(waveform_data))
-#         self.waveform_data = waveform_data
-
-
-class DummyWaveformData(WaveformData):
+class DummyWaveform(Waveform):
 
     @property
     def _compare_key(self) -> Any:
@@ -110,5 +103,18 @@ class DummySequencer(Sequencer):
     def has_finished(self):
         raise NotImplementedError()
 
-    def register_waveform(self, waveform: WaveformData) -> None:
+    def register_waveform(self, waveform: Waveform) -> None:
         self.hardware.register_waveform(waveform)
+
+
+class DummyInterpolationStrategy(InterpolationStrategy):
+
+    def __init__(self) -> None:
+        self.call_arguments = []
+
+    def __call__(self, start: Tuple[float, float], end: Tuple[float, float], times: numpy.ndarray) -> numpy.ndarray:
+        self.call_arguments.append((start, end, list(times)))
+        return times
+
+    def __repr__(self) -> str:
+        return "DummyInterpolationStrategy {}".format(id(self))

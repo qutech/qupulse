@@ -14,7 +14,7 @@ from .PulseTemplate import PulseTemplate, MeasurementWindow
 from .Sequencer import InstructionBlock, Sequencer
 from .Interpolation import InterpolationStrategy, LinearInterpolationStrategy, HoldInterpolationStrategy, JumpInterpolationStrategy
 from .Serializer import Serializer
-from .Instructions import WaveformData, WaveformTable
+from .Instructions import Waveform, WaveformTable
 
 logger = logging.getLogger(__name__)
 
@@ -22,9 +22,11 @@ TableValue = Union[float, ParameterDeclaration]
 TableEntry = NamedTuple("TableEntry", [('t', TableValue), ('v', TableValue), ('interp', InterpolationStrategy)])
 
 
-class TableWaveformData(WaveformData):
+class TableWaveform(Waveform):
 
     def __init__(self, waveform_table: WaveformTable) -> None:
+        if len(waveform_table) < 2:
+            raise ValueError("The given WaveformTable has less than two entries.")
         super().__init__()
         self.__table = waveform_table
 
@@ -41,7 +43,7 @@ class TableWaveformData(WaveformData):
         voltages = np.empty_like(sample_times)
         for entry1, entry2 in zip(self.__table[:-1], self.__table[1:]): # iterate over interpolated areas
             indices = np.logical_and(sample_times >= entry1.t, sample_times <= entry2.t)
-            voltages[indices] = entry2.interp(entry1, entry2, sample_times[indices]) # evaluate interpolation at each time
+            voltages[indices] = entry2.interp((entry1.t, entry1.v), (entry2.t, entry2.v), sample_times[indices]) # evaluate interpolation at each time
         return voltages
 
 
@@ -296,9 +298,9 @@ class TablePulseTemplate(PulseTemplate):
         instantiated = self.get_entries_instantiated(parameters)
         if instantiated:
             instantiated = clean_entries(instantiated)
-            waveform_data = TableWaveformData(tuple(instantiated))
-            sequencer.register_waveform(waveform_data)
-            instruction_block.add_instruction_exec(waveform_data)
+            waveform = TableWaveform(tuple(instantiated))
+            sequencer.register_waveform(waveform)
+            instruction_block.add_instruction_exec(waveform)
 
     def requires_stop(self, parameters: Dict[str, Parameter]) -> bool: 
         return any(parameters[name].requires_stop for name in parameters.keys() if (name in self.parameter_names) and not isinstance(parameters[name], numbers.Number))
