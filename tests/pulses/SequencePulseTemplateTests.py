@@ -65,7 +65,7 @@ class SequencePulseTemplateTest(unittest.TestCase):
 
     def test_unnecessary_mapping(self):
         mapping = self.mapping1
-        mapping['unnecessary'] = lambda ps: ps['voltage']
+        mapping['unnecessary'] = 'voltage'
 
         subtemplates = [(self.square, mapping)]
         with self.assertRaises(UnnecessaryMappingException):
@@ -130,7 +130,7 @@ class SequencePulseTemplateSerializationTests(unittest.TestCase):
                          sequence.parameter_declarations)
         self.assertIs(self.table_foo, sequence.subtemplates[0][0])
         self.assertIs(self.table, sequence.subtemplates[1][0])
-        self.assertEqual(self.foo_mappings, sequence.subtemplates[0][1])
+        self.assertEqual(self.foo_mappings, {k: m.string for k,m in sequence.subtemplates[0][1].items()})
         self.assertEqual(dict(), sequence.subtemplates[1][1])
         self.assertEqual(data['identifier'], sequence.identifier)
 
@@ -162,7 +162,7 @@ class SequencePulseTemplateSequencingTests(SequencePulseTemplateTest):
         pass #TODO: implement
 
     def test_runtime_mapping_exception(self):
-        mapping = self.mapping1
+        mapping = copy.deepcopy(self.mapping1)
         mapping['up'] = "foo"
 
         subtemplates = [(self.square, mapping)]

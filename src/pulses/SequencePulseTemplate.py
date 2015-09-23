@@ -1,17 +1,21 @@
 import logging
-from typing import Dict, List, Tuple, Set, Optional, Any, Iterable, Union
-"""RELATED THIRD PARTY IMPORTS"""
-from py_expression_eval import Parser
+from typing import Dict, List, Tuple, Set, Callable, Optional, Any, Iterable, Union
+import copy
 
 """LOCAL IMPORTS"""
 from .PulseTemplate import PulseTemplate, MeasurementWindow, ParameterNotInPulseTemplateException
 from .Parameter import ParameterDeclaration, Parameter, ParameterNotProvidedException
 from .Sequencer import InstructionBlock, Sequencer
 from .Serializer import Serializer
+from .Expressions import Expression
+
 
 logger = logging.getLogger(__name__)
 
 # type signatures used in this module
+# a MappingFunction takes a dictionary with parameter declarations, keyed with strings and returns a float
+# temporarily obsolete: MappingFunction = Callable[[Dict[str, ParameterDeclaration]], float]
+
 # a subtemplate consists of a pulse template and mapping functions for its "internal" parameters
 Subtemplate = Tuple[PulseTemplate, Dict[str, str]]
 
@@ -38,6 +42,10 @@ class SequencePulseTemplate(PulseTemplate):
     def __init__(self, subtemplates: List[Subtemplate], external_parameters: List[str], identifier: Optional[str]=None) -> None:
         super().__init__(identifier)
         self.__parameter_names = frozenset(external_parameters)
+        # convert all mapping strings to expressions
+        for i, (template, mappings) in enumerate(subtemplates):
+            subtemplates[i] = (template, {k: Expression(v) for k, v in mappings.items()})
+
         for template, mapping_functions in subtemplates:
             # Consistency checks
             open_parameters = template.parameter_names
@@ -49,8 +57,8 @@ class SequencePulseTemplate(PulseTemplate):
             for m in unnecessary_parameters:
                 raise UnnecessaryMappingException(template, m)
 
-            for mapping_function in mapping_functions.values():
-                mapping_function = Parser().parse(mapping_function)
+            for key, mapping_function in mapping_functions.items():
+                mapping_function = mapping_functions[key]
                 required_externals = set(mapping_function.variables())
                 non_declared_externals = required_externals - self.__parameter_names
                 if non_declared_externals:
@@ -89,14 +97,12 @@ class SequencePulseTemplate(PulseTemplate):
         # collect all parameters required to compute the mappings for the first subtemplate
         external_parameters = set()
         for mapping_function in mapping_functions.values():
-            mapping_function = Parser().parse(mapping_function)
             external_parameters = external_parameters | set([parameters[x] for x in mapping_function.variables()])
 
         # return True only if none of these requires a stop
         return any([p.requires_stop for p in external_parameters])
 
     def __map_parameter(self, mapping_function: str, parameters: Dict[str, Parameter]) -> Parameter:
-        mapping_function = Parser().parse(mapping_function)
         external_parameters = mapping_function.variables()
         external_values = {name: float(parameters[name]) for name in external_parameters}
         return mapping_function.evaluate(external_values)
@@ -119,8 +125,9 @@ class SequencePulseTemplate(PulseTemplate):
 
         subtemplates = []
         for (subtemplate, mapping_functions) in self.subtemplates:
+            mapping_functions_strings = {k: m.string for k, m in mapping_functions.items()}
             subtemplate = serializer._serialize_subpulse(subtemplate)
-            subtemplates.append(dict(template=subtemplate, mappings=dict(mapping_functions)))
+            subtemplates.append(dict(template=subtemplate, mappings=copy.deepcopy(mapping_functions_strings)))
         data['subtemplates'] = subtemplates
 
         data['type'] = serializer.get_type_identifier(self)

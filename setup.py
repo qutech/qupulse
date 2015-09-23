@@ -16,7 +16,8 @@ setup(name='qctoolkit',
     install_requires= ['py_expression_eval'] + requires_typing,
     extras_require={
         'testing' : ['pytest'],
-        'plotting' : ['matplotlib']
+        'plotting' : ['matplotlib'],
+        'faster expressions' : ['numexpr']
     },
     test_suite="tests",
 )
