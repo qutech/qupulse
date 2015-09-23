@@ -476,7 +476,7 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
         self.assertEqual(1, len(instruction_block.instructions))
         instruction = instruction_block.instructions[0]
         self.assertIsInstance(instruction, EXECInstruction)
-        self.assertEqual(instantiated_entries, instruction.waveform.waveform_table)
+        self.assertEqual(instantiated_entries, instruction.waveform.waveform_data)
 
     def test_build_sequence_empty(self) -> None:
         table = TablePulseTemplate()

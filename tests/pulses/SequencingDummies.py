@@ -7,9 +7,10 @@ srcPath = os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1)[0] + 'src
 sys.path.insert(0,srcPath)
 
 """LOCAL IMPORTS"""
-from pulses.Instructions import WaveformTable, Waveform
+from pulses.Instructions import WaveformData, Waveform
 from pulses.Sequencer import Sequencer, InstructionBlock, SequencingHardwareInterface, SequencingElement
 from pulses.Parameter import Parameter
+
 
 class DummySequencingElement(SequencingElement):
 
@@ -39,14 +40,19 @@ class DummySequencingElement(SequencingElement):
 
 class DummySequencingHardware(SequencingHardwareInterface):
 
-    def __init__(self) -> None:
+    def __init__(self, sample_rate: float=1) -> None:
         super().__init__()
         self.waveforms = [] # type: List[WaveformTable]
+        self.sample_rate_ = sample_rate
 
+    def register_waveform(self, waveform_data: WaveformData) -> Waveform:
+        self.waveforms.append(waveform_data)
+        return DummyWaveform(waveform_data)
 
-    def register_waveform(self, waveform_table: WaveformTable) -> Waveform:
-        self.waveforms.append(waveform_table)
-        return DummyWaveform(waveform_table)
+    @property
+    def sample_rate(self) -> float:
+        return self.sample_rate_
+
 
 class DummyInstructionBlock(InstructionBlock):
 
@@ -59,11 +65,13 @@ class DummyInstructionBlock(InstructionBlock):
         self.embedded_blocks.append(block)
         return block
 
+
 class DummyWaveform(Waveform):
 
-    def __init__(self, waveform_table: WaveformTable) -> None:
-        super().__init__(len(waveform_table))
-        self.waveform_table = waveform_table
+    def __init__(self, waveform_data: WaveformData) -> None:
+        super().__init__(len(waveform_data))
+        self.waveform_data = waveform_data
+
 
 class DummySequencer(Sequencer):
 
@@ -87,5 +95,5 @@ class DummySequencer(Sequencer):
     def has_finished(self):
         raise NotImplementedError()
 
-    def register_waveform(self, waveform_table: WaveformTable) -> Waveform:
+    def register_waveform(self, waveform_table: WaveformData) -> Waveform:
         return self.hardware.register_waveform(waveform_table)

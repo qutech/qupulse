@@ -2,7 +2,6 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
 from typing import Dict, List, Tuple, Set, Optional
 import logging
-from src.pulses.Serializer import Serializable
 
 """RELATED THIRD PARTY IMPORTS"""
 
@@ -15,9 +14,10 @@ logger = logging.getLogger(__name__)
 
 MeasurementWindow = Tuple[float, float]
 
+
 class PulseTemplate(Serializable, SequencingElement, metaclass = ABCMeta):
     """A PulseTemplate represents the parameterized general structure of a pulse.
-    
+
     A PulseTemplate described a pulse in an abstract way: It defines the structure of a pulse
     but might leave some timings or voltage levels undefined, thus declaring parameters.
     This allows to reuse a PulseTemplate for several pulses which have the same overall structure
@@ -25,14 +25,14 @@ class PulseTemplate(Serializable, SequencingElement, metaclass = ABCMeta):
     Obtaining an actual pulse which can be executed by specifying values for these parameters is
     called instantiation of the PulseTemplate.
     """
-    
+
     def __init__(self, identifier: Optional[str]=None) -> None:
         super().__init__(identifier)
 
     @abstractproperty
     def parameter_names(self) -> Set[str]:
         """Return the set of names of declared parameters."""
-    
+
     @abstractproperty
     def parameter_declarations(self) -> Set[ParameterDeclaration]:
         """Return the set of ParameterDeclarations."""
@@ -48,7 +48,7 @@ class PulseTemplate(Serializable, SequencingElement, metaclass = ABCMeta):
 
 class ParameterNotInPulseTemplateException(Exception):
     """Indicates that a provided parameter was not declared in a PulseTemplate."""
-    
+
     def __init__(self, name: str, pulse_template: PulseTemplate) -> None:
         super().__init__()
         self.name = name

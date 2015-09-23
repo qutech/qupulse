@@ -1,60 +1,66 @@
 import numpy as np
 from matplotlib import pyplot as plt
-from typing import Dict
+from typing import Dict, Tuple
 
 from .Parameter import Parameter
 from .Sequencer import Sequencer, SequencingHardwareInterface, SequencingElement
-from .Instructions import EXECInstruction, Waveform, WaveformTable, InstructionBlock
-from .TablePulseTemplate import clean_entries, TableEntry
+from .Instructions import EXECInstruction, Waveform, WaveformData, InstructionBlock
+
+
+class PlottingWaveform(Waveform):
+
+    def __init__(self, waveform_data: WaveformData) -> None:
+        super().__init__(waveform_data.duration)
+        self.__waveform_data = waveform_data
+
+    @property
+    def waveform_data(self) -> WaveformData:
+        return self.__waveform_data
 
 
 class Plotter(SequencingHardwareInterface):
 
-    def __init__(self) -> None:
+    def __init__(self, sample_rate: float=10) -> None:
         super().__init__()
-        self.__database = {}
+        self.__sample_rate = sample_rate
 
-    def register_waveform(self, waveform_table: WaveformTable) -> None:
-        waveform = Waveform(len(waveform_table))
-        waveform_id = hash(waveform)
-        if waveform_id not in self.__database.keys():
-            self.__database[waveform_id] = waveform_table
-        return waveform
+    def register_waveform(self, waveform_data: WaveformData) -> None:
+        return PlottingWaveform(waveform_data)
 
-    def render(self, block: InstructionBlock, sample_rate: int=10) -> (np.array, np.array):
+    @property
+    def sample_rate(self) -> float:
+        return self.__sample_rate
+
+    def render(self, block: InstructionBlock) -> Tuple[np.ndarray, np.ndarray]:
         if not all(map(lambda x: isinstance(x, EXECInstruction), block.instructions)):
             raise NotImplementedError('Can only plot waveforms without branching so far.')
-        waveforms = [self.__database[hash(a.waveform)] for a in block.instructions]
+
+        waveforms = [instruction.waveform for instruction in block.instructions]
         if not waveforms:
             return np.array([0]), np.array([0])
-        total_time = 0
-        total_waveform = [waveforms[0][0]]
-        for wf in waveforms:
-            for point in wf:
-                new_time = point.t + total_time
-                if new_time != total_time:
-                    total_waveform.append(TableEntry(new_time, point.v, point.interp))
-            total_time += wf[-1].t
-        entries = clean_entries(total_waveform)
+        total_time = sum([waveform.waveform_data.duration for waveform in waveforms])
 
-        sample_count = entries[-1].t * sample_rate
-        ts = np.linspace(0, entries[-1].t, num=sample_count)
-
-        voltages = np.empty_like(ts) # prepare voltage vector
-        for entry1, entry2 in zip(entries[:-1], entries[1:]): # iterate over interpolated areas
-            indices = np.logical_and(ts >= entry1.t, ts <= entry2.t)
-            voltages[indices] = entry2.interp(entry1, entry2, ts[indices]) # evaluate interpolation at each time
+        sample_count = total_time * self.__sample_rate + 1
+        ts = np.linspace(0, total_time, num=sample_count)
+        voltages = np.empty_like(ts)
+        sample = 0
+        for waveform in waveforms:
+            if not isinstance(waveform, PlottingWaveform):
+                raise Exception("Plotter.render only supports InstructionBlocks created using a Plotter as SequencingHardwareInterface.")
+            voltages[sample:sample + waveform.waveform_data.get_sample_count(self.sample_rate)] = waveform.waveform_data.sample(self.sample_rate)
+            sample += waveform.waveform_data.get_sample_count(self.sample_rate) - 1
         return ts, voltages
 
 
+
 def plot(pulse: SequencingElement, parameters: Dict[str, Parameter]={}, sample_rate: int=10) -> None: # pragma: no cover
-    plotter = Plotter()
+    plotter = Plotter(sample_rate=sample_rate)
     sequencer = Sequencer(plotter)
     sequencer.push(pulse, parameters)
     block = sequencer.build()
     if not sequencer.has_finished():
         raise PlottingNotPossibleException(pulse)
-    times, voltages = plotter.render(block, sample_rate)
+    times, voltages = plotter.render(block)
 
     # plot!
     f = plt.figure()

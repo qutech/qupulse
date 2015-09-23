@@ -1,5 +1,6 @@
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta, abstractmethod, abstractproperty
 from typing import List, Tuple
+import numpy
 
 """RELATED THIRD PARTY IMPORTS"""
 
@@ -8,23 +9,44 @@ from typing import List, Tuple
 # TODO lumip: add docstrings
 
 
-__all__ = ['WaveformTableEntry', 'WaveformTable', 'Waveform', 'Trigger', 'InstructionPointer', 'InstructionSequence',
+__all__ = ['WaveformTableEntry', 'WaveformData', 'Waveform', 'Trigger', 'InstructionPointer', 'InstructionSequence',
             'InstructionBlockNotYetPlacedException', 'MissingReturnAddressException', 'InstructionBlock',
             'Instruction', 'EXECInstruction', 'CJMPInstruction', 'GOTOInstruction', 'STOPInstruction'
           ]
 
-WaveformTableEntry = Tuple[int, float]
-WaveformTable = Tuple[WaveformTableEntry, ...]
+WaveformTableEntry = Tuple[float, float]
+WaveformTable = List[WaveformTableEntry]
+
+
+class WaveformData(metaclass=ABCMeta):
+
+    @abstractmethod
+    def __hash__(self) -> int:
+        """Return a unique hash for use in dictionaries."""
+
+    @abstractmethod
+    def get_sample_count(self, sample_rate: float) -> int:
+        """Return the amount of samples generated if the waveform is sampled with a given sample rate."""
+
+    @abstractproperty
+    def duration(self) -> float:
+        """Return the duration of the waveform in time units."""
+
+    @abstractmethod
+    def sample(self, sample_rate: float) -> numpy.ndarray:
+        """Sample the waveform."""
+
 
 class Waveform:
     
-    def __init__(self, length: float = 0) -> None:
+    def __init__(self, length: int = 0) -> None:
         super().__init__()
         if length < 0:
             raise ValueError("length must be a non-negative integer (was {})".format(length))
         self.__length = length
         
     def __len__(self) -> int:
+        """Return the number of samples of the waveform."""
         return self.__length
         
     def __eq__(self, other) -> bool:
@@ -38,7 +60,8 @@ class Waveform:
         
     def __str__(self) -> str:
         return str(hash(self))
-    
+
+
 class Trigger:
         
     def __init__(self) -> None:
@@ -55,7 +78,8 @@ class Trigger:
     
     def __str__(self) -> str:
         return "Trigger {}".format(hash(self))
-        
+
+
 class InstructionPointer:
     
     def __init__(self, block: 'InstructionBlock', offset: int) -> None:
@@ -82,7 +106,8 @@ class InstructionPointer:
             return "{}".format(self.get_absolute_address())
         finally:
             return "IP:{0}#{1}".format(self.block, self.offset)
-        
+
+
 class Instruction(metaclass = ABCMeta):
 
     def __init__(self) -> None:
@@ -94,7 +119,8 @@ class Instruction(metaclass = ABCMeta):
         
     def __str__(self) -> str:
         return self.get_instruction_code()
-        
+
+
 class CJMPInstruction(Instruction):
 
     def __init__(self, trigger: Trigger, block: 'InstructionBlock', offset: int = 0) -> None:
@@ -116,7 +142,8 @@ class CJMPInstruction(Instruction):
         
     def __str__(self) -> str:
         return "{0} to {1} on {2}".format(self.get_instruction_code(), self.target, self.trigger)
-        
+
+
 class GOTOInstruction(Instruction):
     
     def __init__(self, block: 'InstructionBlock', offset: int = 0) -> None:
@@ -137,7 +164,8 @@ class GOTOInstruction(Instruction):
         
     def __str__(self) -> str:
         return "{0} to {1}".format(self.get_instruction_code(), self.target)
-        
+
+
 class EXECInstruction(Instruction):
 
     def __init__(self, waveform: Waveform) -> None:
@@ -158,7 +186,8 @@ class EXECInstruction(Instruction):
         
     def __str__(self) -> str:
         return "{0} {1}".format(self.get_instruction_code(), self.waveform)
-        
+
+
 class STOPInstruction(Instruction):
 
     def __init__(self) -> None:
@@ -187,7 +216,8 @@ class InstructionBlockNotYetPlacedException(Exception):
     """Indicates that an attempt was made to obtain the start address of an InstructionBlock that was not yet placed inside the corresponding outer block."""
     def __str__(self) -> str:
         return "An attempt was made to obtain the start address of an InstructionBlock that was not yet finally placed inside the corresponding outer block."
-        
+
+
 class MissingReturnAddressException(Exception):
     """Indicates that an inner InstructionBlock has no return address."""
     def __str__(self) -> str:
@@ -195,14 +225,15 @@ class MissingReturnAddressException(Exception):
         
         
 InstructionSequence = List[Instruction]
-        
+
+
 class InstructionBlock:
     
-    def __init__(self, outerBlock: 'InstructionBlock' = None) -> None:
+    def __init__(self, outer_block: 'InstructionBlock' = None) -> None:
         super().__init__()
         self.__instruction_list = [] # type: InstructionSequence
         self.__embedded_blocks = [] # type: List[InstructionBlock]
-        self.__outer_block = outerBlock
+        self.__outer_block = outer_block
         self.__offset = None
         if self.__outer_block is None:
             self.__offset = 0

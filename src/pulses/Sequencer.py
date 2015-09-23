@@ -1,11 +1,11 @@
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta, abstractmethod, abstractproperty
 from typing import Tuple, Dict, Union
 import numbers
 
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
-from .Instructions import InstructionBlock, Waveform, WaveformTable
+from .Instructions import InstructionBlock, Waveform, WaveformData
 from .Parameter import Parameter, ConstantParameter
 
     
@@ -17,7 +17,8 @@ class SequencingElement(metaclass = ABCMeta):
         
     @abstractmethod
     def build_sequence(self, sequencer: "Sequencer", parameters: Dict[str, Parameter], instruction_block: InstructionBlock) -> None:
-        """Translate this SequencingElement into an instruction sequence for the given instruction_block using sequencer and the given parameter sets.
+        """Translate this SequencingElement into an instruction sequence for the given instruction_block
+        using sequencer and the given parameter sets.
         
         Implementation guide: Use instruction_block methods to add instructions or create new InstructionBlocks.
         Use sequencer to push child elements to the translation stack.
@@ -36,7 +37,8 @@ class SequencingElement(metaclass = ABCMeta):
         If this SequencingElement contains a child element which requires a stop, this information will be
         regarded during translation of that element.
         """ 
-    
+
+
 class SequencingHardwareInterface(metaclass = ABCMeta):
     """A hardware interface used by Sequencer to register waveforms."""
 
@@ -44,7 +46,7 @@ class SequencingHardwareInterface(metaclass = ABCMeta):
         super().__init__()
     
     @abstractmethod
-    def register_waveform(self, waveform_table: WaveformTable) -> Waveform:
+    def register_waveform(self, waveform_data: WaveformData) -> Waveform:
         """Register a waveform with the device.
         
         The waveform is given as a waveform_table of (time, voltage) tuples of type (int >= 0, float).
@@ -53,9 +55,16 @@ class SequencingHardwareInterface(metaclass = ABCMeta):
         The function ensures that the resulting waveform is known by the device and returns a Waveform
         object representing a handle to the waveform on the device.
         """
-    
+
+    @abstractproperty
+    def sample_rate(self) -> float:
+        """Return the sample rate of the hardware device in samples per unit of time."""
+
+
 class Sequencer:
-    """Translates tree structures of SequencingElement objects to linear instruction sequences contained in a InstructionBlock.""" 
+    """Translates tree structures of SequencingElement objects to linear instruction sequences contained
+    in a InstructionBlock.
+    """
 
     StackElement = Tuple[SequencingElement, Dict[str, Parameter]]
 
@@ -69,7 +78,8 @@ class Sequencer:
     def push(self, sequencing_element: SequencingElement, parameters: Dict[str, Union[Parameter, float]], target_block: InstructionBlock = None) -> None:
         """Add an element to the translation stack of the target_block with the given set of parameters.
         
-        The element will be on top of the stack, i.e., it is the first to be translated if no subsequent calls to push with the same target_block occur.
+        The element will be on top of the stack, i.e., it is the first to be translated if no subsequent calls
+        to push with the same target_block occur.
         """
         if target_block is None:
             target_block = self.__main_block
@@ -84,11 +94,13 @@ class Sequencer:
         self.__sequencing_stacks[target_block].append((sequencing_element, parameters))
         
     def build(self) -> InstructionBlock:
-        """Start the translation process. Translate all elements currently on the translation stacks into a sequence and return the InstructionBlock of the main sequence.
+        """Start the translation process. Translate all elements currently on the translation stacks into a sequence
+         and return the InstructionBlock of the main sequence.
         
-        Processes all stacks (for each InstructionBlock) until each stack is either empty or its topmost element requires a stop.
-        If build is called after a previous translation process where some elements required a stop (i.e., has_finished returned False)
-        it will append new modify the previously generated and returned main InstructionBlock. Make sure not to rely on that being unchanged.
+        Processes all stacks (for each InstructionBlock) until each stack is either empty or its topmost element
+        requires a stop. If build is called after a previous translation process where some elements required a stop
+        (i.e., has_finished returned False), it will append new modify the previously generated and returned main
+        InstructionBlock. Make sure not to rely on that being unchanged.
         """
         if not self.has_finished():            
             shall_continue = True # shall_continue will only be False, if the first element on all stacks requires a stop or all stacks are empty
@@ -109,22 +121,28 @@ class Sequencer:
     def has_finished(self) -> bool:
         """Returns True, if all translation stacks are empty. Indicates that the translation is complete.
         
-        Note that has_finished that has_finished will return False, if there are stack elements that require a stop. In this case, calling build will only
-        have an effect if these elements no longer require a stop, e.g. when required measurement results have been acquired since the last translation.
+        Note that has_finished that has_finished will return False, if there are stack elements that require a stop.
+        In this case, calling build will only have an effect if these elements no longer require a stop,
+        e.g. when required measurement results have been acquired since the last translation.
         """
         return not any(self.__sequencing_stacks.values())
 
-    def register_waveform(self, waveform_table: WaveformTable) -> Waveform:
+    def register_waveform(self, waveform_data: WaveformData) -> Waveform:
         """Register a waveform with the sequencer.
         
-        Forwards waveform registration to the actual hardware (using its SequencingHardwareInterface instance) but ensures that identical waveforms
-        are only registered once by maintaining a hash table of previously registered waveforms.
+        Forwards waveform registration to the actual hardware (using its SequencingHardwareInterface instance)
+        but ensures that identical waveforms are only registered once by maintaining a hash table of previously
+        registered waveforms.
         """
-        waveform_table_hash = hash(waveform_table)
+        waveform_data_hash = hash(waveform_data)
         waveform = None
-        if waveform_table_hash in self.__waveforms:
-            waveform = self.__waveforms[waveform_table_hash]
+        if waveform_data_hash in self.__waveforms:
+            waveform = self.__waveforms[waveform_data_hash]
         else:
-            waveform = self.__hardware_interface.register_waveform(waveform_table)
-            self.__waveforms[waveform_table_hash] = waveform
+            waveform = self.__hardware_interface.register_waveform(waveform_data)
+            self.__waveforms[waveform_data_hash] = waveform
         return waveform
+
+    @property
+    def sample_rate(self) -> float:
+        return self.__hardware_interface.sample_rate
