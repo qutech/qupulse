@@ -277,7 +277,7 @@ class TablePulseTemplateTest(unittest.TestCase):
 
     def test_add_entry_time_declaration_lower_bound_too_small_after_declaration_no_upper_bound(self) -> None:
         table = TablePulseTemplate()
-        bar_decl = ParameterDeclaration('bar', min=1)
+        bar_decl = ParameterDeclaration('bar', min=1, max=5)
         foo_decl = ParameterDeclaration('foo', min=0)
         table.add_entry(bar_decl, -3)
         self.assertRaises(ValueError, table.add_entry, foo_decl, 0.1)
