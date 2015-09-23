@@ -13,21 +13,6 @@ from tests.pulses.SequencingDummies import DummySequencer, DummyInstructionBlock
 from tests.pulses.SerializationDummies import DummySerializer
 
 
-class DummyParameter(Parameter):
-
-    def __init__(self, value: float = 0, requires_stop: bool = False) -> None:
-        super().__init__()
-        self.__value = value
-        self.__requires_stop = requires_stop
-
-    def get_value(self) -> float:
-        return self.__value
-
-    @property
-    def requires_stop(self) -> bool:
-        return self.__requires_stop
-
-
 class SequencePulseTemplateTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

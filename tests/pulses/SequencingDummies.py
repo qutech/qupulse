@@ -11,6 +11,28 @@ from pulses.PulseTemplate import PulseTemplate, MeasurementWindow
 from pulses.Interpolation import InterpolationStrategy
 
 
+class DummyParameter(Parameter):
+
+    def __init__(self, value: float = 0, requires_stop: bool = False) -> None:
+        super().__init__()
+        self.value = value
+        self.requires_stop_ = requires_stop
+
+    def get_value(self) -> float:
+        return self.value
+
+    @property
+    def requires_stop(self) -> bool:
+        return self.requires_stop_
+
+    def get_serialization_data(self, serializer: Serializer) -> None:
+            raise NotImplemented()
+
+    @staticmethod
+    def deserialize(serializer: Serializer) -> 'DummyParameter':
+        raise NotImplemented()
+
+
 class DummySequencingElement(SequencingElement):
 
     def __init__(self, requires_stop: bool = False, push_elements: Tuple[InstructionBlock, List[SequencingElement]] = None) -> None:
