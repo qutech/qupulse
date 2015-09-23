@@ -7,17 +7,6 @@ from .Sequencer import Sequencer, SequencingHardwareInterface, SequencingElement
 from .Instructions import EXECInstruction, Waveform, InstructionBlock
 
 
-# class PlottingWaveform(Waveform):
-#
-#     def __init__(self, waveform_data: WaveformData) -> None:
-#         super().__init__(waveform_data.duration)
-#         self.__waveform_data = waveform_data
-#
-#     @property
-#     def waveform_data(self) -> WaveformData:
-#         return self.__waveform_data
-
-
 class Plotter(SequencingHardwareInterface):
 
     def __init__(self, sample_rate: float=10) -> None:
@@ -25,11 +14,7 @@ class Plotter(SequencingHardwareInterface):
         self.__sample_rate = sample_rate
 
     def register_waveform(self, waveform: Waveform) -> None:
-        pass
-
-    @property
-    def sample_rate(self) -> float:
-        return self.__sample_rate
+        """Registering waveforms is not required for plotting, leaving this method to do precisely nothing."""
 
     def render(self, block: InstructionBlock) -> Tuple[np.ndarray, np.ndarray]:
         if not all(map(lambda x: isinstance(x, EXECInstruction), block.instructions)):
@@ -37,7 +22,7 @@ class Plotter(SequencingHardwareInterface):
 
         waveforms = [instruction.waveform for instruction in block.instructions]
         if not waveforms:
-            return np.array([0]), np.array([0])
+            return [], []
         total_time = sum([waveform.duration for waveform in waveforms])
 
         sample_count = total_time * self.__sample_rate + 1
@@ -77,9 +62,10 @@ def plot(pulse: SequencingElement, parameters: Dict[str, Parameter]={}, sample_r
 
 
 class PlottingNotPossibleException(Exception):
+
     def __init__(self, pulse) -> None:
         self.pulse = pulse
 
     def __str__(self) -> str:
-        return "Plotting is not possible. {} can not be rendered for pulses that have branching.".format(self.pulse)
+        return "Plotting is not possible. There are parameters which cannot be computed."
 

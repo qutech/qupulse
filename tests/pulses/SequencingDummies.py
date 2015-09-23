@@ -57,8 +57,8 @@ class DummySequencingHardware(SequencingHardwareInterface):
 
 class DummyInstructionBlock(InstructionBlock):
 
-    def __init__(self, outerBlock: InstructionBlock = None) -> None:
-        super().__init__(outerBlock)
+    def __init__(self, outer_block: InstructionBlock = None) -> None:
+        super().__init__(outer_block)
         self.embedded_blocks = [] # type: Collection[InstructionBlock]
 
     def create_embedded_block(self) -> InstructionBlock:
@@ -69,16 +69,22 @@ class DummyInstructionBlock(InstructionBlock):
 
 class DummyWaveform(Waveform):
 
+    def __init__(self, duration: float=0) -> None:
+        super().__init__()
+        self.duration_ = duration
+        self.sample_calls = []
+
     @property
     def _compare_key(self) -> Any:
         return id(self)
 
     @property
     def duration(self) -> float:
-        return 0
+        return self.duration_
 
     def sample(self, sample_times: numpy.ndarray, first_offset: float=0) -> numpy.ndarray:
-        raise NotImplementedError()
+        self.sample_calls.append((list(sample_times), first_offset))
+        return sample_times
 
 
 class DummySequencer(Sequencer):
