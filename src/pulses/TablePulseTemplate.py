@@ -32,20 +32,16 @@ class TableWaveformData(WaveformData):
     def _compare_key(self) -> Any:
         return self.__table
 
-    def get_sample_count(self, sample_rate: float) -> int:
-        return floor(sample_rate * self.duration) + 1
-
     @property
     def duration(self) -> float:
         return self.__table[-1].t
 
-    def sample(self, sample_rate: float) -> np.ndarray:
-        sample_count = self.get_sample_count(sample_rate)
-        ts = np.linspace(0, self.__table[-1].t, sample_count)
-        voltages = np.empty_like(ts)
+    def sample(self, sample_times: np.ndarray, first_offset: float=0) -> np.ndarray:
+        sample_times -= (sample_times[0] - first_offset)
+        voltages = np.empty_like(sample_times)
         for entry1, entry2 in zip(self.__table[:-1], self.__table[1:]): # iterate over interpolated areas
-            indices = np.logical_and(ts >= entry1.t, ts <= entry2.t)
-            voltages[indices] = entry2.interp(entry1, entry2, ts[indices]) # evaluate interpolation at each time
+            indices = np.logical_and(sample_times >= entry1.t, sample_times <= entry2.t)
+            voltages[indices] = entry2.interp(entry1, entry2, sample_times[indices]) # evaluate interpolation at each time
         return voltages
 
 

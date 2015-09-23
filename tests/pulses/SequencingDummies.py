@@ -2,6 +2,7 @@
 from typing import Tuple, List, Dict, Optional, Any
 import os
 import sys
+import numpy
 
 srcPath = os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1)[0] + 'src'
 sys.path.insert(0,srcPath)
@@ -83,10 +84,7 @@ class DummyWaveformData(WaveformData):
     def duration(self) -> float:
         return 0
 
-    def get_sample_count(self, sample_rate: float) -> int:
-        return 0
-
-    def sample(self, sample_rate: float) -> None:
+    def sample(self, sample_times: numpy.ndarray, first_offset: float=0) -> numpy.ndarray:
         raise NotImplementedError()
 
 

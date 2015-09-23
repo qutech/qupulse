@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
-from typing import List, Tuple, Any
+from typing import List, Tuple, Any, Optional
 import numpy
 
 """RELATED THIRD PARTY IMPORTS"""
@@ -20,17 +20,19 @@ WaveformTable = List[WaveformTableEntry]
 
 class WaveformData(metaclass=ABCMeta):
 
-    @abstractmethod
-    def get_sample_count(self, sample_rate: float) -> int:
-        """Return the amount of samples generated if the waveform is sampled with a given sample rate."""
-
     @abstractproperty
     def duration(self) -> float:
         """Return the duration of the waveform in time units."""
 
     @abstractmethod
-    def sample(self, sample_rate: float) -> numpy.ndarray:
-        """Sample the waveform."""
+    def sample(self, sample_times: numpy.ndarray, first_offset: float=0) -> numpy.ndarray:
+        """Sample the waveform.
+
+        Will be sampled at the given sample_times. These, however, will be normalized such that the lie in the range
+        [0, waveform.duration] for interpolation.
+        first_offset is the offset of the discrete first sample from the actual beginning of the waveform
+        in a continuous time domain.
+        """
 
     @abstractproperty
     def _compare_key(self) -> Any:

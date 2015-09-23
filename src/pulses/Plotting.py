@@ -43,12 +43,15 @@ class Plotter(SequencingHardwareInterface):
         sample_count = total_time * self.__sample_rate + 1
         ts = np.linspace(0, total_time, num=sample_count)
         voltages = np.empty_like(ts)
-        sample = 0
+        time = 0
         for waveform in waveforms:
-            voltages[sample:sample + waveform.get_sample_count(self.sample_rate)] = waveform.sample(self.sample_rate)
-            sample += waveform.get_sample_count(self.sample_rate) - 1
+            indices = np.logical_and(ts >= time, ts <= time + waveform.duration)
+            sample_times = ts[indices]
+            offset = ts[indices][0] - time
+            w_voltages = waveform.sample(sample_times, offset)
+            voltages[indices] = w_voltages
+            time += waveform.duration
         return ts, voltages
-
 
 
 def plot(pulse: SequencingElement, parameters: Dict[str, Parameter]={}, sample_rate: int=10) -> None: # pragma: no cover
