@@ -19,7 +19,23 @@ WaveformTableEntry = NamedTuple("WaveformTableEntry", [('t', float), ('v', float
 WaveformTable = Tuple[WaveformTableEntry, ...]
 
 
-class Waveform(metaclass=ABCMeta):
+class Comparable(metaclass=ABCMeta):
+
+    @abstractproperty
+    def _compare_key(self) -> Any:
+        """Return a unique key used in comparison and hashing operations."""
+
+    def __hash__(self) -> int:
+        return hash(self._compare_key)
+
+    def __eq__(self, other: Any) -> bool:
+        return isinstance(other, self.__class__) and self._compare_key == other._compare_key
+
+    def __ne__(self, other: Any) -> bool:
+        return not self == other
+
+
+class Waveform(Comparable, metaclass=ABCMeta):
 
     @abstractproperty
     def duration(self) -> float:
@@ -35,32 +51,14 @@ class Waveform(metaclass=ABCMeta):
         in a continuous time domain.
         """
 
-    @abstractproperty
-    def _compare_key(self) -> Any:
-        """Return a unique key used in comparison and hashing operations."""
 
-    def __hash__(self) -> int:
-        return hash(self._compare_key)
-
-    def __eq__(self, other: Any) -> bool:
-        return isinstance(other, Waveform) and self._compare_key == other._compare_key
-
-    def __ne__(self, other: Any) -> bool:
-        return not self == other
-
-
-class Trigger:
+class Trigger(Comparable):
         
     def __init__(self) -> None:
         super().__init__()
-        
-    def __eq__(self, other) -> bool:
-        return self is other
-    
-    def __ne__(self, other) -> bool:
-        return not self == other
-    
-    def __hash__(self) -> int:
+
+    @property
+    def _compare_key(self) -> Any:
         return id(self)
     
     def __str__(self) -> str:
@@ -95,7 +93,7 @@ class InstructionPointer:
             return "IP:{0}#{1}".format(self.block, self.offset)
 
 
-class Instruction(metaclass = ABCMeta):
+class Instruction(Comparable, metaclass = ABCMeta):
 
     def __init__(self) -> None:
         super().__init__()
@@ -117,15 +115,10 @@ class CJMPInstruction(Instruction):
 
     def get_instruction_code(self) -> str:
         return 'cjmp'
-        
-    def __eq__(self, other) -> bool:
-        return (isinstance(other, CJMPInstruction)) and (self.trigger == other.trigger) and (self.target == other.target)
-        
-    def __ne__(self, other) -> bool:
-        return not self == other
-        
-    def __hash__(self) -> int:
-        return hash((self.trigger, self.target))
+
+    @property
+    def _compare_key(self) -> Any:
+        return self.trigger, self.target
         
     def __str__(self) -> str:
         return "{0} to {1} on {2}".format(self.get_instruction_code(), self.target, self.trigger)
@@ -139,16 +132,11 @@ class GOTOInstruction(Instruction):
         
     def get_instruction_code(self) -> str:
         return 'goto'
-        
-    def __eq__(self, other) -> bool:
-        return (isinstance(other, GOTOInstruction)) and (self.target == other.target)
-        
-    def __ne__(self, other) -> bool:
-        return not self == other
-        
-    def __hash__(self) -> int:
-        return hash(self.target)
-        
+
+    @property
+    def _compare_key(self) -> Any:
+        return self.target
+
     def __str__(self) -> str:
         return "{0} to {1}".format(self.get_instruction_code(), self.target)
 
@@ -161,16 +149,11 @@ class EXECInstruction(Instruction):
         
     def get_instruction_code(self) -> str:
         return 'exec'
-        
-    def __eq__(self, other) -> bool:
-        return (isinstance(other, EXECInstruction)) and (self.waveform == other.waveform)
-        
-    def __ne__(self, other) -> bool:
-        return not self == other
-        
-    def __hash__(self) -> int:
-        return hash(self.waveform)
-        
+
+    @property
+    def _compare_key(self) -> Any:
+        return self.waveform
+
     def __str__(self) -> str:
         return "{0} {1}".format(self.get_instruction_code(), self.waveform)
 
@@ -182,14 +165,9 @@ class STOPInstruction(Instruction):
 
     def get_instruction_code(self) -> str:
         return 'stop'
-        
-    def __eq__(self, other) -> bool:
-        return isinstance(other, STOPInstruction)
-        
-    def __ne__(self, other) -> bool:
-        return not self == other
-        
-    def __hash__(self) -> int:
+
+    @property
+    def _compare_key(self) -> Any:
         return 0
         
         

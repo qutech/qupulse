@@ -1,13 +1,44 @@
 import unittest
 import os
 import sys
+from typing import Any
 
 srcPath = os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1)[0] + 'src'
 sys.path.insert(0,srcPath)
 
 from tests.pulses.SequencingDummies import DummyWaveform
 
-from pulses.Instructions import InstructionBlockAlreadyFinalizedException, InstructionBlock, InstructionPointer, InstructionBlockNotYetPlacedException, Trigger, CJMPInstruction, GOTOInstruction,EXECInstruction, STOPInstruction, MissingReturnAddressException,InstructionSequence
+from pulses.Instructions import InstructionBlockAlreadyFinalizedException,InstructionBlock, InstructionPointer,\
+    InstructionBlockNotYetPlacedException, Trigger, CJMPInstruction, GOTOInstruction,EXECInstruction, STOPInstruction,\
+    MissingReturnAddressException, InstructionSequence, Comparable
+
+
+class DummyComparable(Comparable):
+
+    def __init__(self, compare_key: Any) -> None:
+        super().__init__()
+        self.compare_key_ = compare_key
+
+    @property
+    def _compare_key(self) -> Any:
+        return self.compare_key_
+
+
+class ComparableTests(unittest.TestCase):
+
+    def test_hash(self) -> None:
+        comp_a = DummyComparable(17)
+        self.assertEqual(hash(17), hash(comp_a))
+
+    def test_eq(self) -> None:
+        comp_a = DummyComparable(17)
+        comp_b = DummyComparable(18)
+        comp_c = DummyComparable(18)
+        self.assertNotEqual(comp_a, comp_b)
+        self.assertNotEqual(comp_b, comp_a)
+        self.assertEqual(comp_b, comp_c)
+        self.assertNotEqual(comp_a, "foo")
+        self.assertNotEqual("foo", comp_a)
 
  
 class InstructionPointerTest(unittest.TestCase):
@@ -46,26 +77,7 @@ class InstructionPointerTest(unittest.TestCase):
                     self.assertNotEqual(other, ip)
                     self.assertNotEqual(hash(ip), hash(other))
                 ips.append(ip)
-            
 
-# class WaveformTest(unittest.TestCase):
-#
-#     def test_initialization(self):
-#         waveform = Waveform()
-#         self.assertEqual(0, len(waveform))
-#         for value in [0, 1, 22]:
-#             waveform = Waveform(value)
-#             self.assertEqual(value, len(waveform))
-#         self.assertRaises(ValueError, Waveform, -1)
-#         self.assertRaises(ValueError, Waveform, -22)
-#
-#     def test_equality(self):
-#         wf1 = Waveform()
-#         wf2 = Waveform()
-#         self.assertEqual(wf1, wf1)
-#         self.assertNotEqual(wf1, wf2)
-#         self.assertNotEqual(wf2, wf1)
-#         self.assertNotEqual(hash(wf1), hash(wf2))
         
 class TriggerTest(unittest.TestCase):
     
@@ -158,7 +170,8 @@ class EXECInstructionTest(unittest.TestCase):
         self.assertNotEqual(instr20, instr11)
         self.assertEqual(hash(instr11), hash(instr12))
         self.assertNotEqual(hash(instr11), hash(instr20))
-            
+
+
 class STOPInstructionTest(unittest.TestCase):
     
     def test_initialization(self):
@@ -172,7 +185,8 @@ class STOPInstructionTest(unittest.TestCase):
         self.assertEqual(instr1, instr2)
         self.assertEqual(instr2, instr1)
         self.assertEqual(hash(instr1), hash(instr2))
-            
+
+
 class InstructionBlockTest(unittest.TestCase):
 
     def __verify_block(self, block: InstructionBlock, expected_instructions: InstructionSequence, expected_compiled_instructions: InstructionSequence) -> None:
@@ -356,6 +370,7 @@ class InstructionBlockTest(unittest.TestCase):
         self.assertEqual(block1, block1)
         self.assertNotEqual(block1, block2)
         self.assertNotEqual(hash(block1), hash(block2))
+
 
 class InstructionStringRepresentation(unittest.TestCase):
     def test_str(self):
