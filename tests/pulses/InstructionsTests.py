@@ -6,7 +6,7 @@ from typing import Any
 srcPath = os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1)[0] + 'src'
 sys.path.insert(0,srcPath)
 
-from tests.pulses.SequencingDummies import DummyWaveform
+from tests.pulses.SequencingDummies import DummyWaveform, DummyInstructionBlock
 
 from pulses.Instructions import InstructionBlockAlreadyFinalizedException,InstructionBlock, InstructionPointer,\
     InstructionBlockNotYetPlacedException, Trigger, CJMPInstruction, GOTOInstruction,EXECInstruction, STOPInstruction,\
@@ -88,7 +88,8 @@ class TriggerTest(unittest.TestCase):
         self.assertNotEqual(t1, t2)
         self.assertNotEqual(t2, t1)
         self.assertNotEqual(hash(t1), hash(t2))
-        
+
+
 class CJMPInstructionTest(unittest.TestCase):
     
     def test_initialization(self):
@@ -96,7 +97,6 @@ class CJMPInstructionTest(unittest.TestCase):
         trigger = Trigger()
         for offset in [0, 1, 23]:
             instr = CJMPInstruction(trigger, block, offset)
-            self.assertEqual('cjmp', instr.get_instruction_code())
             self.assertEqual(trigger, instr.trigger)
             self.assertEqual(block, instr.target.block)
             self.assertEqual(offset, instr.target.offset)
@@ -119,18 +119,24 @@ class CJMPInstructionTest(unittest.TestCase):
                         self.assertNotEqual(other, instruction)
                         self.assertNotEqual(hash(instruction), hash(other))
                     instrs.append(instruction)
-        
+
+    def test_str(self) -> None:
+        block = DummyInstructionBlock()
+        trigger = Trigger()
+        instr = CJMPInstruction(trigger, block, 3)
+        self.assertEqual("cjmp to {} on {}".format(InstructionPointer(block, 3), trigger), str(instr))
+
+
 class GOTOInstructionTest(unittest.TestCase):
     
-    def test_initialization(self):
+    def test_initialization(self) -> None:
         block = InstructionBlock()
         for offset in [0, 1, 23]:
             instr = GOTOInstruction(block, offset)
-            self.assertEqual('goto', instr.get_instruction_code())
             self.assertIs(block, instr.target.block)
             self.assertEqual(offset, instr.target.offset)
         
-    def test_equality(self):
+    def test_equality(self) -> None:
         blocks = [InstructionBlock(), InstructionBlock()]
         for offset in [0, 1, 23]:
             instrA = GOTOInstruction(blocks[0], offset)
@@ -148,13 +154,17 @@ class GOTOInstructionTest(unittest.TestCase):
                     self.assertNotEqual(hash(instruction), hash(other))
                 instrs.append(instruction)
 
+    def test_str(self) -> None:
+        block = DummyInstructionBlock()
+        instr = GOTOInstruction(block, 3)
+        self.assertEqual("goto to {}".format(str(InstructionPointer(block, 3))), str(instr))
+
 
 class EXECInstructionTest(unittest.TestCase):
     
     def test_initialization(self):
         waveform = DummyWaveform()
         instr = EXECInstruction(waveform)
-        self.assertEqual('exec', instr.get_instruction_code())
         self.assertIs(waveform, instr.waveform)
         
     def test_equality(self):
@@ -171,12 +181,17 @@ class EXECInstructionTest(unittest.TestCase):
         self.assertEqual(hash(instr11), hash(instr12))
         self.assertNotEqual(hash(instr11), hash(instr20))
 
+    def test_str(self) -> None:
+        wf = DummyWaveform()
+        instr = EXECInstruction(wf)
+        self.assertEqual("exec {}".format(str(wf)), str(instr))
+
 
 class STOPInstructionTest(unittest.TestCase):
     
-    def test_initialization(self):
+    def test_str(self):
         instr = STOPInstruction()
-        self.assertEqual('stop', instr.get_instruction_code())
+        self.assertEqual('stop', str(instr))
         
     def test_equality(self):
         instr1 = STOPInstruction()
@@ -362,7 +377,6 @@ class InstructionBlockTest(unittest.TestCase):
         for instruction in main_block.instructions:
             if isinstance(instruction, GOTOInstruction) or isinstance(instruction, CJMPInstruction):
                 self.assertIsInstance(instruction.target.get_absolute_address(), int)
-       
        
     def test_equality(self):
         block1 = InstructionBlock()

@@ -98,13 +98,6 @@ class Instruction(Comparable, metaclass = ABCMeta):
     def __init__(self) -> None:
         super().__init__()
 
-    @abstractmethod
-    def get_instruction_code(self) -> str:
-        pass
-        
-    def __str__(self) -> str:
-        return self.get_instruction_code()
-
 
 class CJMPInstruction(Instruction):
 
@@ -113,15 +106,12 @@ class CJMPInstruction(Instruction):
         self.trigger = trigger
         self.target = InstructionPointer(block, offset)
 
-    def get_instruction_code(self) -> str:
-        return 'cjmp'
-
     @property
     def _compare_key(self) -> Any:
         return self.trigger, self.target
         
     def __str__(self) -> str:
-        return "{0} to {1} on {2}".format(self.get_instruction_code(), self.target, self.trigger)
+        return "cjmp to {} on {}".format(self.target, self.trigger)
 
 
 class GOTOInstruction(Instruction):
@@ -129,16 +119,13 @@ class GOTOInstruction(Instruction):
     def __init__(self, block: 'InstructionBlock', offset: int = 0) -> None:
         super().__init__()
         self.target = InstructionPointer(block, offset)
-        
-    def get_instruction_code(self) -> str:
-        return 'goto'
 
     @property
     def _compare_key(self) -> Any:
         return self.target
 
     def __str__(self) -> str:
-        return "{0} to {1}".format(self.get_instruction_code(), self.target)
+        return "goto to {}".format(self.target)
 
 
 class EXECInstruction(Instruction):
@@ -146,16 +133,13 @@ class EXECInstruction(Instruction):
     def __init__(self, waveform: Waveform) -> None:
         super().__init__()
         self.waveform = waveform
-        
-    def get_instruction_code(self) -> str:
-        return 'exec'
 
     @property
     def _compare_key(self) -> Any:
         return self.waveform
 
     def __str__(self) -> str:
-        return "{0} {1}".format(self.get_instruction_code(), self.waveform)
+        return "exec {}".format(self.waveform)
 
 
 class STOPInstruction(Instruction):
@@ -163,12 +147,12 @@ class STOPInstruction(Instruction):
     def __init__(self) -> None:
         super().__init__()
 
-    def get_instruction_code(self) -> str:
-        return 'stop'
-
     @property
     def _compare_key(self) -> Any:
         return 0
+
+    def __str__(self) -> str:
+        return "stop"
         
         
 class InstructionBlockAlreadyFinalizedException(Exception):
