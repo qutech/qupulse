@@ -1,7 +1,6 @@
 import logging
 from typing import Union, Dict, List, Set,  Optional, NamedTuple, Callable, Any
 import numbers
-from py_expression_eval import Parser
 
 """RELATED THIRD PARTY IMPORTS"""
 
@@ -9,6 +8,9 @@ from py_expression_eval import Parser
 from .Parameter import ParameterDeclaration, Parameter
 from .PulseTemplate import PulseTemplate, MeasurementWindow
 from .Sequencer import InstructionBlock, Sequencer
+from .Expressions import Expression
+from .SequencePulseTemplate import ParameterNotProvidedException
+from .Serializer import Serializer
 
 logger = logging.getLogger(__name__)
 
@@ -26,13 +28,10 @@ class FunctionPulseTemplate(PulseTemplate):
 
     def __init__(self, expression: str, duration_expression: str, measurement: bool=False) -> None:
         super().__init__()
-        parser = Parser()
-        self.__expression = parser.parse(expression.replace('**', '^'))
-        self.__duration_expression = parser.parse(duration_expression.replace('**', '^'))
-        self.__expression_string = expression
-        self.__duration_expression_string = duration_expression
+        self.__expression = Expression(expression)
+        self.__duration_expression = Expression(duration_expression)
         self.__is_measurement_pulse = measurement # type: bool
-        self.__parameter_names = set(self.duration_expression.variables() + self.expression.variables()) - set(['t'])
+        self.__parameter_names = set(self.__duration_expression.variables() + self.__expression.variables()) - set(['t'])
 
     @property
     def parameter_names(self) -> Set[str]:
@@ -68,7 +67,7 @@ class FunctionPulseTemplate(PulseTemplate):
         return False
         
     def build_sequence(self, sequencer: Sequencer, parameters: Dict[str, Parameter], instruction_block: InstructionBlock) -> None:
-        # FIXME: to instantiate we need the sampling frequency.
+        # TODO: implement this
         dt = 1
         instantiated = self.__expression(dt, **parameters)
         instantiated = self.get_entries_instantiated(parameters)
@@ -83,6 +82,12 @@ class FunctionPulseTemplate(PulseTemplate):
         root = dict()
         root['type'] = 'FunctionPulseTemplate'
         root['parameter_names'] = self.__parameter_names
-        root['duration_expression'] = self.duration_expression_string
-        root['expression'] = self.__expression_string
+        root['duration_expression'] = self.__duration_expression.string
+        root['expression'] = self.__expression.string
+        root['measurement'] = self.__is_measurement_pulse
+        return root
+
+    @staticmethod
+    def deserialize(serializer: 'Serializer', **kwargs):
+        return FunctionPulseTemplate(kwargs['expression'], kwargs['duration_expression'], kwargs['Measurement'])
 
