@@ -1,15 +1,13 @@
 """STANDARD LIBRARY IMPORTS"""
-from typing import Tuple, List, Dict, Optional
-import os
-import sys
-
-srcPath = os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1)[0] + 'src'
-sys.path.insert(0,srcPath)
+from typing import Tuple, List, Dict, Optional, Set, Any
 
 """LOCAL IMPORTS"""
 from pulses.Instructions import WaveformTable, Waveform
 from pulses.Sequencer import Sequencer, InstructionBlock, SequencingHardwareInterface, SequencingElement
-from pulses.Parameter import Parameter
+from pulses.Parameter import Parameter, ParameterDeclaration
+from pulses.Serializer import Serializer
+from pulses.PulseTemplate import PulseTemplate, MeasurementWindow
+
 
 class DummySequencingElement(SequencingElement):
 
@@ -89,3 +87,45 @@ class DummySequencer(Sequencer):
 
     def register_waveform(self, waveform_table: WaveformTable) -> Waveform:
         return self.hardware.register_waveform(waveform_table)
+
+
+class DummyPulseTemplate(PulseTemplate):
+
+    def __init__(self, requires_stop: bool=False, is_interruptable: bool=False, parameter_names: Set[str]={}) -> None:
+        super().__init__()
+        self.requires_stop_ = requires_stop
+        self.is_interruptable_ = is_interruptable
+        self.parameter_names_ = parameter_names
+        self.build_sequence_calls = 0
+
+    @property
+    def parameter_names(self) -> Set[str]:
+        return self.parameter_names_
+
+    @property
+    def parameter_declarations(self) -> Set[str]:
+        return [ParameterDeclaration(name) for name in self.parameter_names]
+
+    def get_measurement_windows(self, parameters: Dict[str, Parameter] = None) -> List[MeasurementWindow]:
+        """Return all measurement windows defined in this PulseTemplate."""
+        raise NotImplementedError()
+
+    @property
+    def is_interruptable(self) -> bool:
+        return self.is_interruptable_
+
+    def build_sequence(self, sequencer: Sequencer, parameters: Dict[str, Parameter], instruction_block: InstructionBlock):
+        self.build_sequence_calls += 1
+
+    def requires_stop(self, parameters: Dict[str, Parameter]):
+        return self.requires_stop_
+
+    def get_serialization_data(self, serializer: Serializer):
+        raise NotImplementedError()
+
+    @staticmethod
+    def deserialize(serializer: Serializer,
+                    condition: Dict[str, Any],
+                    body: Dict[str, Any],
+                    identifier: Optional[str]=None):
+        raise NotImplementedError()
