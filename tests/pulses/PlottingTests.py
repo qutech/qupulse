@@ -1,45 +1,91 @@
 import unittest
-import os
-import sys
-from src.pulses.Plotting import plot, PlottingNotPossibleException
+import numpy
+
+from src.pulses.Plotting import Plotter, PlottingNotPossibleException
+from src.pulses.Instructions import InstructionBlock
+from tests.pulses.SequencingDummies import DummyWaveform
 from src.pulses.TablePulseTemplate import TablePulseTemplate
 from src.pulses.SequencePulseTemplate import SequencePulseTemplate
+from src.pulses.Sequencer import Sequencer
 
-srcPath = os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1)[0] + 'src'
-sys.path.insert(0,srcPath)
 
-class GenericPlottingTest(unittest.TestCase):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+class PlotterTests(unittest.TestCase):
 
+    def test_render_unsupported_instructions(self) -> None:
+        block = InstructionBlock()
+        block.add_instruction_stop()
+        plotter = Plotter()
+        with self.assertRaises(NotImplementedError):
+            plotter.render(block)
+
+    def test_render_no_waveforms(self) -> None:
+        self.assertEqual(([], []), Plotter().render(InstructionBlock()))
+
+    def test_render(self) -> None:
+        wf1 = DummyWaveform(duration=19)
+        wf2 = DummyWaveform(duration=21)
+
+        block = InstructionBlock()
+        block.add_instruction_exec(wf1)
+        block.add_instruction_exec(wf2)
+
+        plotter = Plotter(sample_rate=0.5)
+        times, voltages = plotter.render(block)
+
+        wf1_expected = [([0, 2, 4, 6, 8, 10, 12, 14, 16, 18], 0)]
+        wf2_expected = [([20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40], 1)]
+        expected_result = list(range(0, 41, 2))
+        self.assertEqual(wf1_expected, wf1.sample_calls)
+        self.assertEqual(wf2_expected, wf2.sample_calls)
+        self.assertEqual(expected_result, list(times))
+        self.assertEqual(expected_result, list(voltages))
+
+    def integrated_test_with_sequencer_and_pulse_templates(self) -> None:
         # Setup test data
-        self.square = TablePulseTemplate()
-        self.square.add_entry('up', 'v', 'hold')
-        self.square.add_entry('down', 0, 'hold')
-        self.square.add_entry('length', 0)
+        square = TablePulseTemplate()
+        square.add_entry('up', 'v', 'hold')
+        square.add_entry('down', 0, 'hold')
+        square.add_entry('length', 0)
 
-        self.mapping1 = {
+        mapping1 = {
             'up': 'uptime',
             'down': 'uptime + length',
             'v': 'voltage',
             'length': '0.5 * pulse_length'
         }
 
-        self.outer_parameters = ['uptime', 'length', 'pulse_length', 'voltage']
+        outer_parameters = ['uptime', 'length', 'pulse_length', 'voltage']
 
-        self.parameters = {}
-        self.parameters['uptime'] = 5
-        self.parameters['length'] = 10
-        self.parameters['pulse_length'] = 100
-        self.parameters['voltage'] = 10
+        parameters = {}
+        parameters['uptime'] = 5
+        parameters['length'] = 10
+        parameters['pulse_length'] = 100
+        parameters['voltage'] = 10
 
-        self.sequence = SequencePulseTemplate([(self.square, self.mapping1)], self.outer_parameters)
+        sequence = SequencePulseTemplate([(square, mapping1), (square, mapping1)], outer_parameters)
 
-    # do not test the plot method. it will open a GUI window and draw in it, which breaks travis tests.
-    #def test_plotting(self):
-        #plot(self.sequence,self.parameters)
-        
-    def test_exceptions(self):
-        
-        a = PlottingNotPossibleException(self.square)
-        self.assertIsInstance(a.__str__(), str)
+        # run the sequencer and render the plot
+        sample_rate = 20
+        plotter = Plotter(sample_rate=sample_rate)
+        sequencer = Sequencer(plotter)
+        sequencer.push(sequence, parameters)
+        block = sequencer.build()
+        times, voltages = plotter.render(block)
+
+        # compute expected values
+        expected_times = numpy.linspace(0, 100, sample_rate)
+        expected_voltages = numpy.zeros_like(expected_times)
+        expected_voltages[100:300] = numpy.ones(200) * parameters['voltage']
+
+        # compare
+        self.assertEqual(expected_times, times)
+        self.assertEqual(expected_voltages, voltages)
+
+
+class PlottingNotPossibleExceptionTests(unittest.TestCase):
+
+    def test(self) -> None:
+        t = TablePulseTemplate()
+        exception = PlottingNotPossibleException(t)
+        self.assertIs(t, exception.pulse)
+        self.assertIsInstance(str(exception), str)

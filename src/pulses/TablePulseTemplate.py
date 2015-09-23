@@ -4,6 +4,7 @@ from typing import Union, Dict, List, Set, Optional, NamedTuple, Any, Iterable
 import numbers
 import copy
 import numpy as np
+from math import floor
 
 """RELATED THIRD PARTY IMPORTS"""
 
@@ -13,11 +14,38 @@ from .PulseTemplate import PulseTemplate, MeasurementWindow
 from .Sequencer import InstructionBlock, Sequencer
 from .Interpolation import InterpolationStrategy, LinearInterpolationStrategy, HoldInterpolationStrategy, JumpInterpolationStrategy
 from .Serializer import Serializer
+from .Instructions import Waveform, WaveformTable
 
 logger = logging.getLogger(__name__)
 
 TableValue = Union[float, ParameterDeclaration]
 TableEntry = NamedTuple("TableEntry", [('t', TableValue), ('v', TableValue), ('interp', InterpolationStrategy)])
+
+
+class TableWaveform(Waveform):
+
+    def __init__(self, waveform_table: WaveformTable) -> None:
+        if len(waveform_table) < 2:
+            raise ValueError("The given WaveformTable has less than two entries.")
+        super().__init__()
+        self.__table = waveform_table
+
+    @property
+    def _compare_key(self) -> Any:
+        return self.__table
+
+    @property
+    def duration(self) -> float:
+        return self.__table[-1].t
+
+    def sample(self, sample_times: np.ndarray, first_offset: float=0) -> np.ndarray:
+        sample_times -= (sample_times[0] - first_offset)
+        voltages = np.empty_like(sample_times)
+        for entry1, entry2 in zip(self.__table[:-1], self.__table[1:]): # iterate over interpolated areas
+            indices = np.logical_and(sample_times >= entry1.t, sample_times <= entry2.t)
+            voltages[indices] = entry2.interp((entry1.t, entry1.v), (entry2.t, entry2.v), sample_times[indices]) # evaluate interpolation at each time
+        return voltages
+
 
 class TablePulseTemplate(PulseTemplate):
     """Defines a pulse via linear interpolation of a sequence of (time,voltage)-pairs.
@@ -269,8 +297,9 @@ class TablePulseTemplate(PulseTemplate):
     def build_sequence(self, sequencer: Sequencer, parameters: Dict[str, Parameter], instruction_block: InstructionBlock) -> None:
         instantiated = self.get_entries_instantiated(parameters)
         if instantiated:
-            instantiated = tuple(instantiated)
-            waveform = sequencer.register_waveform(instantiated)
+            instantiated = clean_entries(instantiated)
+            waveform = TableWaveform(tuple(instantiated))
+            sequencer.register_waveform(waveform)
             instruction_block.add_instruction_exec(waveform)
 
     def requires_stop(self, parameters: Dict[str, Parameter]) -> bool: 

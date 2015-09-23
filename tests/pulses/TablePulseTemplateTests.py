@@ -7,11 +7,11 @@ import numpy as np
 srcPath = os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1)[0] + 'src'
 sys.path.insert(0,srcPath)
 
-from tests.pulses.SequencingDummies import DummySequencer, DummyInstructionBlock, DummySequencingHardware
+from tests.pulses.SequencingDummies import DummySequencer, DummyInstructionBlock, DummySequencingHardware, DummyInterpolationStrategy
 from tests.pulses.SerializationDummies import DummySerializer
 
-from pulses.Instructions import EXECInstruction
-from pulses.TablePulseTemplate import TablePulseTemplate, clean_entries, ParameterValueIllegalException
+from pulses.Instructions import EXECInstruction, WaveformTableEntry
+from pulses.TablePulseTemplate import TablePulseTemplate, clean_entries, ParameterValueIllegalException, TableWaveform
 from pulses.Parameter import ParameterDeclaration, Parameter, ParameterNotProvidedException
 from pulses.Interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy, JumpInterpolationStrategy
 from pulses.Serializer import Serializer
@@ -277,7 +277,7 @@ class TablePulseTemplateTest(unittest.TestCase):
 
     def test_add_entry_time_declaration_lower_bound_too_small_after_declaration_no_upper_bound(self) -> None:
         table = TablePulseTemplate()
-        bar_decl = ParameterDeclaration('bar', min=1)
+        bar_decl = ParameterDeclaration('bar', min=1, max=5)
         foo_decl = ParameterDeclaration('foo', min=0)
         table.add_entry(bar_decl, -3)
         self.assertRaises(ValueError, table.add_entry, foo_decl, 0.1)
@@ -472,11 +472,12 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
         sequencer = DummySequencer(DummySequencingHardware())
         instruction_block = DummyInstructionBlock()
         table.build_sequence(sequencer, parameters, instruction_block)
-        self.assertEqual([instantiated_entries], sequencer.hardware.waveforms)
+        waveform = TableWaveform(instantiated_entries)
+        self.assertEqual([waveform], sequencer.hardware.waveforms)
         self.assertEqual(1, len(instruction_block.instructions))
         instruction = instruction_block.instructions[0]
         self.assertIsInstance(instruction, EXECInstruction)
-        self.assertEqual(instantiated_entries, instruction.waveform.waveform_table)
+        self.assertEqual(waveform, instruction.waveform)
 
     def test_build_sequence_empty(self) -> None:
         table = TablePulseTemplate()
@@ -504,6 +505,34 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
         identifier = 'some name'
         pulse = TablePulseTemplate(identifier=identifier)
         self.assertEqual(pulse.identifier, identifier)
+
+
+class TableWaveformDataTests(unittest.TestCase):
+
+    def test_duration(self) -> None:
+        entries = [WaveformTableEntry(0, 0, HoldInterpolationStrategy()), WaveformTableEntry(5, 1, HoldInterpolationStrategy())]
+        waveform = TableWaveform(tuple(entries))
+        self.assertEqual(5, waveform.duration)
+
+    def test_few_entries(self) -> None:
+        with self.assertRaises(ValueError):
+            TableWaveform(tuple([]))
+            TableWaveform(tuple([WaveformTableEntry(0, 0, HoldInterpolationStrategy())]))
+
+    def test_sample(self) -> None:
+        interp = DummyInterpolationStrategy()
+        entries = tuple([WaveformTableEntry(0, 0, interp),
+                         WaveformTableEntry(2.1, -33.2, interp),
+                         WaveformTableEntry(5.7, 123.4, interp)
+                         ])
+        waveform = TableWaveform(entries)
+        sample_times = np.linspace(98.5, 103.5, num=11)
+        offset = 0.5
+        result = waveform.sample(sample_times, offset)
+        expected_data = [((0, 0), (2.1, -33.2), [0.5, 1.0, 1.5, 2.0]),
+                         ((2.1, -33.2), (5.7, 123.4), [2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5])]
+        self.assertEqual(expected_data, interp.call_arguments)
+        self.assertEqual(list(sample_times), list(result))
 
 
 class CleanEntriesTests(unittest.TestCase):

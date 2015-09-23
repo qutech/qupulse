@@ -193,5 +193,6 @@ class SequencePulseTemplateTestProperties(SequencePulseTemplateTest):
         #FIXME
         decl = self.sequence.parameter_declarations
 
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -1,12 +1,14 @@
 """STANDARD LIBRARY IMPORTS"""
 from typing import Tuple, List, Dict, Optional, Set, Any
+import numpy
 
 """LOCAL IMPORTS"""
-from pulses.Instructions import WaveformTable, Waveform
+from pulses.Instructions import Waveform
 from pulses.Sequencer import Sequencer, InstructionBlock, SequencingHardwareInterface, SequencingElement
 from pulses.Parameter import Parameter, ParameterDeclaration
 from pulses.Serializer import Serializer
 from pulses.PulseTemplate import PulseTemplate, MeasurementWindow
+from pulses.Interpolation import InterpolationStrategy
 
 
 class DummySequencingElement(SequencingElement):
@@ -37,19 +39,23 @@ class DummySequencingElement(SequencingElement):
 
 class DummySequencingHardware(SequencingHardwareInterface):
 
-    def __init__(self) -> None:
+    def __init__(self, sample_rate: float=1) -> None:
         super().__init__()
         self.waveforms = [] # type: List[WaveformTable]
+        self.sample_rate_ = sample_rate
 
+    def register_waveform(self, waveform: Waveform) -> None:
+        self.waveforms.append(waveform)
 
-    def register_waveform(self, waveform_table: WaveformTable) -> Waveform:
-        self.waveforms.append(waveform_table)
-        return DummyWaveform(waveform_table)
+    @property
+    def sample_rate(self) -> float:
+        return self.sample_rate_
+
 
 class DummyInstructionBlock(InstructionBlock):
 
-    def __init__(self, outerBlock: InstructionBlock = None) -> None:
-        super().__init__(outerBlock)
+    def __init__(self, outer_block: InstructionBlock = None) -> None:
+        super().__init__(outer_block)
         self.embedded_blocks = [] # type: Collection[InstructionBlock]
 
     def create_embedded_block(self) -> InstructionBlock:
@@ -57,11 +63,26 @@ class DummyInstructionBlock(InstructionBlock):
         self.embedded_blocks.append(block)
         return block
 
+
 class DummyWaveform(Waveform):
 
-    def __init__(self, waveform_table: WaveformTable) -> None:
-        super().__init__(len(waveform_table))
-        self.waveform_table = waveform_table
+    def __init__(self, duration: float=0) -> None:
+        super().__init__()
+        self.duration_ = duration
+        self.sample_calls = []
+
+    @property
+    def _compare_key(self) -> Any:
+        return id(self)
+
+    @property
+    def duration(self) -> float:
+        return self.duration_
+
+    def sample(self, sample_times: numpy.ndarray, first_offset: float=0) -> numpy.ndarray:
+        self.sample_calls.append((list(sample_times), first_offset))
+        return sample_times
+
 
 class DummySequencer(Sequencer):
 
@@ -85,8 +106,8 @@ class DummySequencer(Sequencer):
     def has_finished(self):
         raise NotImplementedError()
 
-    def register_waveform(self, waveform_table: WaveformTable) -> Waveform:
-        return self.hardware.register_waveform(waveform_table)
+    def register_waveform(self, waveform: Waveform) -> None:
+        self.hardware.register_waveform(waveform)
 
 
 class DummyPulseTemplate(PulseTemplate):
@@ -129,3 +150,16 @@ class DummyPulseTemplate(PulseTemplate):
                     body: Dict[str, Any],
                     identifier: Optional[str]=None):
         raise NotImplementedError()
+
+
+class DummyInterpolationStrategy(InterpolationStrategy):
+
+    def __init__(self) -> None:
+        self.call_arguments = []
+
+    def __call__(self, start: Tuple[float, float], end: Tuple[float, float], times: numpy.ndarray) -> numpy.ndarray:
+        self.call_arguments.append((start, end, list(times)))
+        return times
+
+    def __repr__(self) -> str:
+        return "DummyInterpolationStrategy {}".format(id(self))

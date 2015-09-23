@@ -5,7 +5,7 @@ import sys
 srcPath = os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1)[0] + 'src'
 sys.path.insert(0,srcPath)
 
-from tests.pulses.SequencingDummies import DummySequencingElement, DummySequencingHardware
+from tests.pulses.SequencingDummies import DummySequencingElement, DummySequencingHardware, DummyWaveform
 
 from pulses.Parameter import  ConstantParameter
 from pulses.Instructions import InstructionBlock
@@ -22,19 +22,16 @@ class SequencerTest(unittest.TestCase):
     def test_register_waveform(self) -> None:
         dummy_hardware = DummySequencingHardware()
         sequencer = Sequencer(dummy_hardware)
+
+        w1 = DummyWaveform()
+        sequencer.register_waveform(w1)
         
-        wt1 = ((0, 0), (2, 3.5), (5, 3.8))
-        wf1 = sequencer.register_waveform(wt1)
-        
-        wt2 = ((0, 0), (1, 2.7), (2, 3.5))
-        wf2 = sequencer.register_waveform(wt2)
-        
-        wt1b = wt1
-        wf1b = sequencer.register_waveform(wt1b)
-        
-        self.assertIs(wf1, wf1b)
-        self.assertNotEqual(wf1, wf2)
-        self.assertEqual([wt1, wt2], dummy_hardware.waveforms)
+        w2 = DummyWaveform()
+        sequencer.register_waveform(w2)
+
+        sequencer.register_waveform(w1)
+
+        self.assertEqual([w1, w2], dummy_hardware.waveforms)
         self.assertTrue(sequencer.has_finished())
         
     def test_push(self) -> None:

@@ -1,61 +1,70 @@
-from abc import ABCMeta, abstractmethod
-from typing import List, Tuple
+from abc import ABCMeta, abstractmethod, abstractproperty
+from typing import List, Tuple, Any, NamedTuple
+import numpy
 
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
+from .Interpolation import InterpolationStrategy
 
 # TODO lumip: add docstrings
 
 
-__all__ = ['WaveformTableEntry', 'WaveformTable', 'Waveform', 'Trigger', 'InstructionPointer', 'InstructionSequence',
+__all__ = ['WaveformTableEntry', 'Waveform', 'Waveform', 'Trigger', 'InstructionPointer', 'InstructionSequence',
             'InstructionBlockNotYetPlacedException', 'MissingReturnAddressException', 'InstructionBlock',
             'Instruction', 'EXECInstruction', 'CJMPInstruction', 'GOTOInstruction', 'STOPInstruction'
           ]
 
-WaveformTableEntry = Tuple[int, float]
+WaveformTableEntry = NamedTuple("WaveformTableEntry", [('t', float), ('v', float), ('interp', InterpolationStrategy)])
 WaveformTable = Tuple[WaveformTableEntry, ...]
 
-class Waveform:
-    
-    def __init__(self, length: float = 0) -> None:
-        super().__init__()
-        if length < 0:
-            raise ValueError("length must be a non-negative integer (was {})".format(length))
-        self.__length = length
-        
-    def __len__(self) -> int:
-        return self.__length
-        
-    def __eq__(self, other) -> bool:
-        return self is other
-        
-    def __ne__(self, other) -> bool:
-        return not self == other
-        
+
+class Comparable(metaclass=ABCMeta):
+
+    @abstractproperty
+    def _compare_key(self) -> Any:
+        """Return a unique key used in comparison and hashing operations."""
+
     def __hash__(self) -> int:
-        return id(self)
-        
-    def __str__(self) -> str:
-        return str(hash(self))
-    
-class Trigger:
+        return hash(self._compare_key)
+
+    def __eq__(self, other: Any) -> bool:
+        return isinstance(other, self.__class__) and self._compare_key == other._compare_key
+
+    def __ne__(self, other: Any) -> bool:
+        return not self == other
+
+
+class Waveform(Comparable, metaclass=ABCMeta):
+
+    @abstractproperty
+    def duration(self) -> float:
+        """Return the duration of the waveform in time units."""
+
+    @abstractmethod
+    def sample(self, sample_times: numpy.ndarray, first_offset: float=0) -> numpy.ndarray:
+        """Sample the waveform.
+
+        Will be sampled at the given sample_times. These, however, will be normalized such that the lie in the range
+        [0, waveform.duration] for interpolation.
+        first_offset is the offset of the discrete first sample from the actual beginning of the waveform
+        in a continuous time domain.
+        """
+
+
+class Trigger(Comparable):
         
     def __init__(self) -> None:
         super().__init__()
-        
-    def __eq__(self, other) -> bool:
-        return self is other
-    
-    def __ne__(self, other) -> bool:
-        return not self == other
-    
-    def __hash__(self) -> int:
+
+    @property
+    def _compare_key(self) -> Any:
         return id(self)
     
     def __str__(self) -> str:
         return "Trigger {}".format(hash(self))
-        
+
+
 class InstructionPointer:
     
     def __init__(self, block: 'InstructionBlock', offset: int) -> None:
@@ -82,19 +91,14 @@ class InstructionPointer:
             return "{}".format(self.get_absolute_address())
         finally:
             return "IP:{0}#{1}".format(self.block, self.offset)
-        
-class Instruction(metaclass = ABCMeta):
+
+
+class Instruction(Comparable, metaclass = ABCMeta):
 
     def __init__(self) -> None:
         super().__init__()
 
-    @abstractmethod
-    def get_instruction_code(self) -> str:
-        pass
-        
-    def __str__(self) -> str:
-        return self.get_instruction_code()
-        
+
 class CJMPInstruction(Instruction):
 
     def __init__(self, trigger: Trigger, block: 'InstructionBlock', offset: int = 0) -> None:
@@ -102,79 +106,53 @@ class CJMPInstruction(Instruction):
         self.trigger = trigger
         self.target = InstructionPointer(block, offset)
 
-    def get_instruction_code(self) -> str:
-        return 'cjmp'
-        
-    def __eq__(self, other) -> bool:
-        return (isinstance(other, CJMPInstruction)) and (self.trigger == other.trigger) and (self.target == other.target)
-        
-    def __ne__(self, other) -> bool:
-        return not self == other
-        
-    def __hash__(self) -> int:
-        return hash((self.trigger, self.target))
+    @property
+    def _compare_key(self) -> Any:
+        return self.trigger, self.target
         
     def __str__(self) -> str:
-        return "{0} to {1} on {2}".format(self.get_instruction_code(), self.target, self.trigger)
-        
+        return "cjmp to {} on {}".format(self.target, self.trigger)
+
+
 class GOTOInstruction(Instruction):
     
     def __init__(self, block: 'InstructionBlock', offset: int = 0) -> None:
         super().__init__()
         self.target = InstructionPointer(block, offset)
-        
-    def get_instruction_code(self) -> str:
-        return 'goto'
-        
-    def __eq__(self, other) -> bool:
-        return (isinstance(other, GOTOInstruction)) and (self.target == other.target)
-        
-    def __ne__(self, other) -> bool:
-        return not self == other
-        
-    def __hash__(self) -> int:
-        return hash(self.target)
-        
+
+    @property
+    def _compare_key(self) -> Any:
+        return self.target
+
     def __str__(self) -> str:
-        return "{0} to {1}".format(self.get_instruction_code(), self.target)
-        
+        return "goto to {}".format(self.target)
+
+
 class EXECInstruction(Instruction):
 
     def __init__(self, waveform: Waveform) -> None:
         super().__init__()
         self.waveform = waveform
-        
-    def get_instruction_code(self) -> str:
-        return 'exec'
-        
-    def __eq__(self, other) -> bool:
-        return (isinstance(other, EXECInstruction)) and (self.waveform == other.waveform)
-        
-    def __ne__(self, other) -> bool:
-        return not self == other
-        
-    def __hash__(self) -> int:
-        return hash(self.waveform)
-        
+
+    @property
+    def _compare_key(self) -> Any:
+        return self.waveform
+
     def __str__(self) -> str:
-        return "{0} {1}".format(self.get_instruction_code(), self.waveform)
-        
+        return "exec {}".format(self.waveform)
+
+
 class STOPInstruction(Instruction):
 
     def __init__(self) -> None:
         super().__init__()
 
-    def get_instruction_code(self) -> str:
-        return 'stop'
-        
-    def __eq__(self, other) -> bool:
-        return isinstance(other, STOPInstruction)
-        
-    def __ne__(self, other) -> bool:
-        return not self == other
-        
-    def __hash__(self) -> int:
+    @property
+    def _compare_key(self) -> Any:
         return 0
+
+    def __str__(self) -> str:
+        return "stop"
         
         
 class InstructionBlockAlreadyFinalizedException(Exception):
@@ -187,7 +165,8 @@ class InstructionBlockNotYetPlacedException(Exception):
     """Indicates that an attempt was made to obtain the start address of an InstructionBlock that was not yet placed inside the corresponding outer block."""
     def __str__(self) -> str:
         return "An attempt was made to obtain the start address of an InstructionBlock that was not yet finally placed inside the corresponding outer block."
-        
+
+
 class MissingReturnAddressException(Exception):
     """Indicates that an inner InstructionBlock has no return address."""
     def __str__(self) -> str:
@@ -195,14 +174,15 @@ class MissingReturnAddressException(Exception):
         
         
 InstructionSequence = List[Instruction]
-        
+
+
 class InstructionBlock:
     
-    def __init__(self, outerBlock: 'InstructionBlock' = None) -> None:
+    def __init__(self, outer_block: 'InstructionBlock' = None) -> None:
         super().__init__()
         self.__instruction_list = [] # type: InstructionSequence
         self.__embedded_blocks = [] # type: List[InstructionBlock]
-        self.__outer_block = outerBlock
+        self.__outer_block = outer_block
         self.__offset = None
         if self.__outer_block is None:
             self.__offset = 0

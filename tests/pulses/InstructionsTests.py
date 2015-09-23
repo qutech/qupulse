@@ -1,11 +1,45 @@
 import unittest
 import os
 import sys
+from typing import Any
 
 srcPath = os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1)[0] + 'src'
 sys.path.insert(0,srcPath)
 
-from pulses.Instructions import InstructionBlockAlreadyFinalizedException, InstructionBlock, InstructionPointer, InstructionBlockNotYetPlacedException, Waveform, Trigger, CJMPInstruction, GOTOInstruction,EXECInstruction, STOPInstruction, MissingReturnAddressException,InstructionSequence
+from tests.pulses.SequencingDummies import DummyWaveform, DummyInstructionBlock
+
+from pulses.Instructions import InstructionBlockAlreadyFinalizedException,InstructionBlock, InstructionPointer,\
+    InstructionBlockNotYetPlacedException, Trigger, CJMPInstruction, GOTOInstruction,EXECInstruction, STOPInstruction,\
+    MissingReturnAddressException, InstructionSequence, Comparable
+
+
+class DummyComparable(Comparable):
+
+    def __init__(self, compare_key: Any) -> None:
+        super().__init__()
+        self.compare_key_ = compare_key
+
+    @property
+    def _compare_key(self) -> Any:
+        return self.compare_key_
+
+
+class ComparableTests(unittest.TestCase):
+
+    def test_hash(self) -> None:
+        comp_a = DummyComparable(17)
+        self.assertEqual(hash(17), hash(comp_a))
+
+    def test_eq(self) -> None:
+        comp_a = DummyComparable(17)
+        comp_b = DummyComparable(18)
+        comp_c = DummyComparable(18)
+        self.assertNotEqual(comp_a, comp_b)
+        self.assertNotEqual(comp_b, comp_a)
+        self.assertEqual(comp_b, comp_c)
+        self.assertNotEqual(comp_a, "foo")
+        self.assertNotEqual("foo", comp_a)
+
  
 class InstructionPointerTest(unittest.TestCase):
 
@@ -43,26 +77,7 @@ class InstructionPointerTest(unittest.TestCase):
                     self.assertNotEqual(other, ip)
                     self.assertNotEqual(hash(ip), hash(other))
                 ips.append(ip)
-            
 
-class WaveformTest(unittest.TestCase):
-    
-    def test_initialization(self):
-        waveform = Waveform()
-        self.assertEqual(0, len(waveform))
-        for value in [0, 1, 22]:
-            waveform = Waveform(value)
-            self.assertEqual(value, len(waveform))
-        self.assertRaises(ValueError, Waveform, -1)
-        self.assertRaises(ValueError, Waveform, -22)
-        
-    def test_equality(self):
-        wf1 = Waveform()
-        wf2 = Waveform()
-        self.assertEqual(wf1, wf1)
-        self.assertNotEqual(wf1, wf2)
-        self.assertNotEqual(wf2, wf1)
-        self.assertNotEqual(hash(wf1), hash(wf2))
         
 class TriggerTest(unittest.TestCase):
     
@@ -73,7 +88,8 @@ class TriggerTest(unittest.TestCase):
         self.assertNotEqual(t1, t2)
         self.assertNotEqual(t2, t1)
         self.assertNotEqual(hash(t1), hash(t2))
-        
+
+
 class CJMPInstructionTest(unittest.TestCase):
     
     def test_initialization(self):
@@ -81,7 +97,6 @@ class CJMPInstructionTest(unittest.TestCase):
         trigger = Trigger()
         for offset in [0, 1, 23]:
             instr = CJMPInstruction(trigger, block, offset)
-            self.assertEqual('cjmp', instr.get_instruction_code())
             self.assertEqual(trigger, instr.trigger)
             self.assertEqual(block, instr.target.block)
             self.assertEqual(offset, instr.target.offset)
@@ -104,18 +119,24 @@ class CJMPInstructionTest(unittest.TestCase):
                         self.assertNotEqual(other, instruction)
                         self.assertNotEqual(hash(instruction), hash(other))
                     instrs.append(instruction)
-        
+
+    def test_str(self) -> None:
+        block = DummyInstructionBlock()
+        trigger = Trigger()
+        instr = CJMPInstruction(trigger, block, 3)
+        self.assertEqual("cjmp to {} on {}".format(InstructionPointer(block, 3), trigger), str(instr))
+
+
 class GOTOInstructionTest(unittest.TestCase):
     
-    def test_initialization(self):
+    def test_initialization(self) -> None:
         block = InstructionBlock()
         for offset in [0, 1, 23]:
             instr = GOTOInstruction(block, offset)
-            self.assertEqual('goto', instr.get_instruction_code())
             self.assertIs(block, instr.target.block)
             self.assertEqual(offset, instr.target.offset)
         
-    def test_equality(self):
+    def test_equality(self) -> None:
         blocks = [InstructionBlock(), InstructionBlock()]
         for offset in [0, 1, 23]:
             instrA = GOTOInstruction(blocks[0], offset)
@@ -132,18 +153,23 @@ class GOTOInstructionTest(unittest.TestCase):
                     self.assertNotEqual(other, instruction)
                     self.assertNotEqual(hash(instruction), hash(other))
                 instrs.append(instruction)
-            
+
+    def test_str(self) -> None:
+        block = DummyInstructionBlock()
+        instr = GOTOInstruction(block, 3)
+        self.assertEqual("goto to {}".format(str(InstructionPointer(block, 3))), str(instr))
+
+
 class EXECInstructionTest(unittest.TestCase):
     
     def test_initialization(self):
-        waveform = Waveform()
+        waveform = DummyWaveform()
         instr = EXECInstruction(waveform)
-        self.assertEqual('exec', instr.get_instruction_code())
         self.assertIs(waveform, instr.waveform)
         
     def test_equality(self):
-        wf1 = Waveform()
-        wf2 = Waveform()
+        wf1 = DummyWaveform()
+        wf2 = DummyWaveform()
         instr11 = EXECInstruction(wf1)
         instr12 = EXECInstruction(wf1)
         instr20 = EXECInstruction(wf2)
@@ -154,12 +180,18 @@ class EXECInstructionTest(unittest.TestCase):
         self.assertNotEqual(instr20, instr11)
         self.assertEqual(hash(instr11), hash(instr12))
         self.assertNotEqual(hash(instr11), hash(instr20))
-            
+
+    def test_str(self) -> None:
+        wf = DummyWaveform()
+        instr = EXECInstruction(wf)
+        self.assertEqual("exec {}".format(str(wf)), str(instr))
+
+
 class STOPInstructionTest(unittest.TestCase):
     
-    def test_initialization(self):
+    def test_str(self):
         instr = STOPInstruction()
-        self.assertEqual('stop', instr.get_instruction_code())
+        self.assertEqual('stop', str(instr))
         
     def test_equality(self):
         instr1 = STOPInstruction()
@@ -168,7 +200,8 @@ class STOPInstructionTest(unittest.TestCase):
         self.assertEqual(instr1, instr2)
         self.assertEqual(instr2, instr1)
         self.assertEqual(hash(instr1), hash(instr2))
-            
+
+
 class InstructionBlockTest(unittest.TestCase):
 
     def __verify_block(self, block: InstructionBlock, expected_instructions: InstructionSequence, expected_compiled_instructions: InstructionSequence) -> None:
@@ -214,7 +247,7 @@ class InstructionBlockTest(unittest.TestCase):
         block = InstructionBlock()
         expected_instructions = []
         
-        waveforms = [Waveform(), Waveform(), Waveform()]
+        waveforms = [DummyWaveform(), DummyWaveform(), DummyWaveform()]
         LOOKUP = [0, 1, 1, 0, 2, 1, 0, 0, 0, 1, 2, 2]
         for id in LOOKUP:
             waveform = waveforms[id]
@@ -275,7 +308,7 @@ class InstructionBlockTest(unittest.TestCase):
         
         blocks = []
             
-        waveforms = [Waveform(), Waveform(), Waveform()]
+        waveforms = [DummyWaveform(), DummyWaveform(), DummyWaveform()]
         
         main_block.add_instruction_exec(waveforms[0])
         expected_instructions[0].append(EXECInstruction(waveforms[0]))
@@ -345,7 +378,6 @@ class InstructionBlockTest(unittest.TestCase):
             if isinstance(instruction, GOTOInstruction) or isinstance(instruction, CJMPInstruction):
                 self.assertIsInstance(instruction.target.get_absolute_address(), int)
        
-       
     def test_equality(self):
         block1 = InstructionBlock()
         block2 = InstructionBlock()
@@ -353,12 +385,13 @@ class InstructionBlockTest(unittest.TestCase):
         self.assertNotEqual(block1, block2)
         self.assertNotEqual(hash(block1), hash(block2))
 
+
 class InstructionStringRepresentation(unittest.TestCase):
     def test_str(self):
         IB = InstructionBlock()
         T = Trigger()
-        W = Waveform()
-        
+        W = DummyWaveform()
+
         a = [W,
              T,
              InstructionPointer(IB,1),
