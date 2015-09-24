@@ -10,6 +10,7 @@ from .Serializer import Serializable
 
 class Expression(Serializable):
     def __init__(self, ex: str):
+        ex = str(ex)
         self._string = ex
         self._expression = Parser().parse(ex.replace('**', '^'))
 
