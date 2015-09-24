@@ -7,7 +7,7 @@ import numpy as np
 srcPath = os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1)[0] + 'src'
 sys.path.insert(0,srcPath)
 
-from tests.pulses.SequencingDummies import DummySequencer, DummyInstructionBlock, DummySequencingHardware, DummyInterpolationStrategy
+from tests.pulses.SequencingDummies import DummySequencer, DummyInstructionBlock, DummySequencingHardware, DummyInterpolationStrategy, DummyParameter
 from tests.pulses.SerializationDummies import DummySerializer
 
 from pulses.Instructions import EXECInstruction, WaveformTableEntry
@@ -15,28 +15,6 @@ from pulses.TablePulseTemplate import TablePulseTemplate, clean_entries, Paramet
 from pulses.Parameter import ParameterDeclaration, Parameter, ParameterNotProvidedException
 from pulses.Interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy, JumpInterpolationStrategy
 from pulses.Serializer import Serializer
-
-
-class DummyParameter(Parameter):
-
-    def __init__(self, value: float = 0, requires_stop: bool = False) -> None:
-        super().__init__()
-        self.__value = value
-        self.__requires_stop = requires_stop
-
-    def get_value(self) -> float:
-        return self.__value
-
-    @property
-    def requires_stop(self) -> bool:
-        return self.__requires_stop
-
-    def get_serialization_data(self, serializer: Serializer) -> None:
-            raise NotImplemented()
-
-    @staticmethod
-    def deserialize(serializer: Serializer) -> 'DummyParameter':
-        raise NotImplemented()
 
 
 class TablePulseTemplateTest(unittest.TestCase):

@@ -9,25 +9,7 @@ sys.path.insert(0,srcPath)
 from pulses.Parameter import Parameter, ConstantParameter, ParameterDeclaration, ParameterNotProvidedException
 from pulses.Serializer import Serializer
 from tests.pulses.SerializationDummies import DummySerializer
-
-class DummyParameter(Parameter):
-        
-    def __init__(self) -> None:
-        self.value = 252.13
-
-    def get_value(self) -> float:
-        return self.value
-
-    @property
-    def requires_stop(self) -> bool:
-        return False
-
-    def get_serialization_data(self, serializer: Serializer) -> None:
-        raise NotImplemented()
-
-    @staticmethod
-    def deserialize(serializer: Serializer) -> 'DummyParameter':
-        raise NotImplemented()
+from tests.pulses.SequencingDummies import DummyParameter
 
 
 class ParameterTest(unittest.TestCase):
