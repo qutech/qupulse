@@ -1,5 +1,7 @@
 import logging
 from typing import Dict, List, Tuple, Set, Callable, Optional, Any, Iterable, Union
+import numpy as np
+import numbers
 import copy
 
 """LOCAL IMPORTS"""
@@ -97,7 +99,7 @@ class SequencePulseTemplate(PulseTemplate):
         # collect all parameters required to compute the mappings for the first subtemplate
         external_parameters = set()
         for mapping_function in mapping_functions.values():
-            external_parameters = external_parameters | set([parameters[x] for x in mapping_function.variables()])
+            external_parameters = external_parameters | set(mapping_function.variables())
 
         # return True only if none of these requires a stop
         return any([p.requires_stop for p in external_parameters])
