@@ -2,24 +2,30 @@ language: python
 python:
   - "3.3"
   - "3.4"
-#  - "3.5.0b3"
+  - "3.5"
+
+#use container based infrastructure
+sudo: false
+
+#these directories are persistent
+cache:
+  directories:
+    - $HOME/.cache/pip
+    - $HOME/.cache/miniconda3_pkgs
+    - $HOME/Downloads
+
 # Setup anaconda
 before_install:
-  - wget http://repo.continuum.io/miniconda/Miniconda-latest-Linux-x86_64.sh -O miniconda.sh
-  - chmod +x miniconda.sh
-  - ./miniconda.sh -b
-  - export PATH=/home/travis/miniconda/bin:$PATH
+# install miniconda with symlink of pkg dir to cache
+  - chmod +x ./install_miniconda3.sh
+  - ./install_miniconda3.sh
+#
+  - export PATH=$HOME/miniconda3/bin:$PATH
   - conda update --yes conda
-  # The next couple lines fix a crash with multiprocessing on Travis and are not specific to using Miniconda
-  - sudo rm -rf /dev/shm
-  - sudo ln -s /run/shm /dev/shm
-# Install packages
+  - conda install --yes python=$TRAVIS_PYTHON_VERSION pip atlas numpy scipy matplotlib
+  - pip install pyflakes coverage coveralls
 install:
-  - conda install --yes python=$TRAVIS_PYTHON_VERSION atlas numpy scipy matplotlib
   - python setup.py install
-  - "pip install pyflakes"
-  - "pip install coverage"
-  - "pip install coveralls"
 script:
   - "coverage run --source=src --rcfile=coverage.ini setup.py test"
 after_success:
