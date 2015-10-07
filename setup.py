@@ -1,6 +1,11 @@
 from setuptools import setup
 import sys
 
+if sys.version_info < (3, 3):
+    sys.stderr.write('ERROR: You need Python 3.3 or later '
+                     'to install the qctoolkit package.\n')
+    exit(1)
+
 if sys.version_info < (3, 5):
     requires_typing = ['typing==3.5.0']
 else:
