@@ -2,7 +2,7 @@ from setuptools import setup
 import sys
 
 if sys.version_info < (3, 5):
-    requires_typing = ['typing==3.5.0b1']
+    requires_typing = ['typing==3.5.0']
 else:
     requires_typing = []
 
