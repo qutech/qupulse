@@ -2,7 +2,6 @@ import unittest
 import numpy as np
 
 from pulses.Interpolation import LinearInterpolationStrategy, HoldInterpolationStrategy, JumpInterpolationStrategy
-from sqlalchemy.engine.strategies import strategies
 
 class InterpolationTest(unittest.TestCase):
 
