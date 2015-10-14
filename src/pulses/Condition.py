@@ -26,7 +26,6 @@ class Condition(metaclass = ABCMeta):
     @abstractmethod
     def requires_stop(self) -> bool:
         """Return True if evaluating this Condition is not possible in the current translation process."""
-        pass
         
     @abstractmethod
     def build_sequence_loop(self, 
@@ -40,7 +39,6 @@ class Condition(metaclass = ABCMeta):
         delegator refers to the SequencingElement which has delegated the invocation of build_sequence to this Condition object. body is the loop body element.
         See also SequencingElement.build_sequence().
         """
-        pass
     
     @abstractmethod
     def build_sequence_branch(self,
@@ -56,7 +54,6 @@ class Condition(metaclass = ABCMeta):
         be translated into if and else branch instructions.
         See also SequencingElement.build_sequence().
         """
-        pass
 
 
 class HardwareCondition(Condition):

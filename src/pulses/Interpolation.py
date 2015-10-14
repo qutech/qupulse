@@ -13,11 +13,10 @@ class InterpolationStrategy(metaclass = ABCMeta):
         The resulting sequence includes the sample for the time of the current point and start at the sample just after the previous point, i.e., 
         is of the form [f(sample(previous_point_time)+1), f(sample(previous_point_time)+2), ... f(sample(current_point_time))].
         """
-        pass
 
     @abstractmethod
     def __repr__(self):
-        pass
+        """String representation of the Interpolation Strategy Class"""
 
     def __eq__(self, other):
         # Interpolations are the same, if their type is the same
