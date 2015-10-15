@@ -13,3 +13,6 @@ class PulseControlInterfaceTests(unittest.TestCase):
 
     def setUp(self) -> None:
         self.pulse_control_interface = PulseControlInterface(lambda x: 1, 1.2e9)
+
+    def test_nothing(self) -> None:
+        pass
