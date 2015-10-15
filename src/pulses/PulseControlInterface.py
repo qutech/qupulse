@@ -15,7 +15,7 @@ class PulseControlInterface(SequencingHardwareInterface):
     def create_matlab_connected_interface(matlab_engine: MatlabEngine,
                                           sample_rate: float,
                                           time_scaling: float=0.001) -> "PulseControlInterface": #pragma: nocover
-        register_pulse_callback = lambda x: matlab_engine.plsreg(matlab_engine.plsdefault(x))
+        register_pulse_callback = lambda x: matlab_engine.plsreg(x)
         return PulseControlInterface(register_pulse_callback, sample_rate, time_scaling)
 
     def __init__(self, register_pulse_callback: Callable[[Dict[str, Any]], int], sample_rate: float, time_scaling: float=0.001) -> None:
