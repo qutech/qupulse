@@ -10,6 +10,7 @@ __all__ = ["BranchPulseTemplate",
            "Raw",
            "SequencePulseTemplate",
            "Sequencer",
+           "PulseControlInterface",
            "TablePulseTemplate",
            "Interpolation",
            "Plotting"]

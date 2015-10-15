@@ -1,1 +1,1 @@
-__all__ = ["hardware","pulses","utils"]
+__all__ = ["hardware","pulses","utils","qcmatlab"]

@@ -1,43 +1,24 @@
 from math import floor
 import numpy
-import scipy.io
-import os.path
 from typing import Dict, Any, Callable
-from abc import abstractmethod, ABCMeta
+from matlab.engine import MatlabEngine
 
 from .Sequencer import SequencingHardwareInterface, InstructionBlock
 from .Instructions import Waveform, EXECInstruction
 
-
-class PulseControlWrappingInterface(metaclass=ABCMeta):
-
-    @abstractmethod
-    def register_pulse(self, waveform: Waveform) -> int:
-        pass
-
-
-class PulseControlWrapper(PulseControlWrappingInterface):
-    # A wrapper for live MATLAB interaction?
-    # The idea is to use the PulseControlInterface from a MATLAB workspace and obtaining the pulse structs
-    # directly from the create_waveform, create_pulse_group functions. However, I am not yet sure how to do this
-    # best and my current MATLAB version (R2015a) seems not to support workspace sharing (or I am doing it wrong).
-
-    def __init__(self) -> None:
-        super().__init__()
-        #self.engine = matlab.engine.connect_matlab()
-
-    def __del__(self) -> None:
-        pass
-        #self.engine.quit()
-
-    def register_pulse(self, waveform: Waveform) -> int:
-        pass
-        #self.engine.
+__all__ = ["PulseControlInterface"]
 
 
 class PulseControlInterface(SequencingHardwareInterface):
 
-    def __init__(self, pulse_registration_function: Callable[[Dict[str, Any]], int], sample_rate: float, time_scaling: float=0.001) -> None:
+    @staticmethod
+    def create_matlab_connected_interface(matlab_engine: MatlabEngine,
+                                          sample_rate: float,
+                                          time_scaling: float=0.001) -> "PulseControlInterface": #pragma: nocover
+        register_pulse_callback = lambda x: matlab_engine.plsreg(matlab_engine.plsdefault(x))
+        return PulseControlInterface(register_pulse_callback, sample_rate, time_scaling)
+
+    def __init__(self, register_pulse_callback: Callable[[Dict[str, Any]], int], sample_rate: float, time_scaling: float=0.001) -> None:
         """Initialize PulseControlInterface.
 
         Arguments:
@@ -49,7 +30,7 @@ class PulseControlInterface(SequencingHardwareInterface):
         super().__init__()
         self.__sample_rate = sample_rate
         self.__time_scaling = time_scaling
-        self.__pulse_registration_function = pulse_registration_function
+        self.__register_pulse_callback = register_pulse_callback
 
     def __get_waveform_name(self, waveform: Waveform) -> str:
         return 'wf_{}'.format(hash(waveform))
@@ -72,8 +53,8 @@ class PulseControlInterface(SequencingHardwareInterface):
         sample_times = numpy.linspace(0, waveform.duration, sample_count)
         sampled_waveform = waveform.sample(sample_times)
         struct = dict(name=name,
-                      data=dict(wf=sampled_waveform,
-                                marker=numpy.zeros_like(sampled_waveform),
+                      data=dict(wf=sampled_waveform.tolist(),
+                                marker=numpy.zeros_like(sampled_waveform).tolist(),
                                 clk=self.__sample_rate))
         # TODO: how to deal with the second channel expected in waveform structs in pulse control?
         return struct
@@ -111,7 +92,7 @@ class PulseControlInterface(SequencingHardwareInterface):
             if waveform not in registered_waveforms:
                 name = self.__get_waveform_name(waveform)
                 waveform_struct = self.create_waveform_struct(waveform, name)
-                registered_waveforms[waveform] = self.__pulse_registration_function(waveform_struct)
+                registered_waveforms[waveform] = self.__register_pulse_callback(waveform_struct)
             if pulse_group['pulses'] and pulse_group['pulses'][-1] == registered_waveforms[waveform]:
                 pulse_group['nrep'][-1] += 1
             else:
@@ -119,30 +100,3 @@ class PulseControlInterface(SequencingHardwareInterface):
                 pulse_group['nrep'].append(1)
 
         return pulse_group
-
-    # def create_pulse_group(self, block: InstructionBlock, name: str) -> str:
-    #     if not all(map(lambda x: isinstance(x, EXECInstruction), block.instructions)):
-    #         raise Exception("Hardware based branching is not supported by pulse-control.")
-    #
-    #     waveforms = [instruction.waveform for instruction in block.instructions]
-    #     if not waveforms:
-    #         return ""
-    #
-    #     pulse_group_code = '% Set up pulse group structure \'{0}\'\r\n' \
-    #                        'clear {0};\r\n' \
-    #                        '{0}.pulses = [];\r\n' \
-    #                        '{0}.nrep = [];\r\n' \
-    #                        '{0}.name = \'main\';\r\n' \
-    #                        '{0}.chan = 1;\r\n' \
-    #                        '{0}.ctrl = \'notrig\';\r\n\r\n'.format(name)
-    #
-    #     pulse_group_code += '% Load waveforms, register them and add them to the group\r\n'.format(name)
-    #     for waveform in waveforms:
-    #         waveform_name = self.__get_waveform_name(waveform)
-    #         pulse_group_code += 'clear {0};\r\n' \
-    #                         '{0} = load(\'{0}\');\r\n' \
-    #                         '{0} = plsdefault({0});\r\n' \
-    #                         '{1}.pulses(end + 1) = plsreg({0});\r\n' \
-    #                         '{1}.nrep(end + 1) = 1;\r\n'.format(waveform_name, name)
-    #
-    #     return pulse_group_code
