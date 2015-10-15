@@ -7,7 +7,6 @@ __all__ = [
     'LoopPulseTemplateTests',
     'ParameterTests',
     'PlottingTests',
-    'PulseControlInterfaceTests',
     'RepetitionPulseTemplateTests',
     'SequencePulseTemplateTests',
     'SequencerTests',
