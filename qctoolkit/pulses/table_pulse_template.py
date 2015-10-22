@@ -19,7 +19,7 @@ from .instructions import Waveform, WaveformTable
 logger = logging.getLogger(__name__)
 
 
-__all__ = ["TablePulseTemplate", "ParameterValueIllegalException"]
+__all__ = ["TablePulseTemplate"]
 
 
 TableValue = Union[float, ParameterDeclaration]
@@ -270,20 +270,12 @@ class TablePulseTemplate(PulseTemplate):
             voltage_value = None # type: float
             # resolve time parameter references
             if isinstance(entry.t, ParameterDeclaration):
-                parameter_declaration = entry.t # type: ParameterDeclaration
-                if not parameter_declaration.check_parameter_set_valid(parameters):
-                    raise ParameterValueIllegalException(parameter_declaration, parameters[parameter_declaration.name])
-                
-                time_value = parameter_declaration.get_value(parameters)
+                time_value = entry.t.get_value(parameters)
             else:
                 time_value = entry.t
             # resolve voltage parameter references only if voltageParameters argument is not None, otherwise they are irrelevant
             if isinstance(entry.v, ParameterDeclaration):
-                parameter_declaration = entry.v # type: ParameterDeclaration
-                if not parameter_declaration.check_parameter_set_valid(parameters):
-                    raise ParameterValueIllegalException(parameter_declaration, parameters[parameter_declaration.name])
-                
-                voltage_value= parameter_declaration.get_value(parameters)
+                voltage_value= entry.v.get_value(parameters)
             else:
                 voltage_value = entry.v
             
@@ -345,20 +337,6 @@ class TablePulseTemplate(PulseTemplate):
             template.add_entry(time, voltage, interpolation=interpolation)
 
         return template
-
-
-class ParameterValueIllegalException(Exception):
-    """Indicates that the value provided for a parameter is illegal, i.e., is outside the parameter's bounds or of wrong type."""
-
-    def __init__(self, parameter_declaration: ParameterDeclaration, parameter: Parameter) -> None:
-        super().__init__()
-        self.parameter = parameter
-        self.parameter_declaration = parameter_declaration
-
-    def __str__(self) -> str:
-        return "The value {0} provided for parameter {1} is illegal (min = {2}, max = {3})".format(
-            float(self.parameter), self.parameter_declaration.name, self.parameter_declaration.min_value,
-            self.parameter_declaration.max_value)
 
 
 def clean_entries(entries: List[TableEntry]) -> List[TableEntry]:

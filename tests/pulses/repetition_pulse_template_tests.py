@@ -1,8 +1,7 @@
 import unittest
 
-from qctoolkit.pulses.table_pulse_template import ParameterValueIllegalException
 from qctoolkit.pulses.repetition_pulse_template import RepetitionPulseTemplate,ParameterNotIntegerException
-from qctoolkit.pulses.parameters import ParameterDeclaration, ParameterNotProvidedException
+from qctoolkit.pulses.parameters import ParameterDeclaration, ParameterNotProvidedException, ParameterValueIllegalException
 
 from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummySequencer, DummySequencingHardware, DummyInstructionBlock, DummyParameter
 from tests.serialization_dummies import DummySerializer

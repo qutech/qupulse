@@ -3,7 +3,6 @@ from typing import Dict, List, Set, Optional, Union, Any
 from qctoolkit.serialization import Serializer
 
 from .pulse_template import PulseTemplate, MeasurementWindow
-from .table_pulse_template import ParameterValueIllegalException
 from .sequencing import Sequencer
 from .instructions import InstructionBlock
 from .parameters import ParameterDeclaration, Parameter
@@ -49,8 +48,6 @@ class RepetitionPulseTemplate(PulseTemplate):
     def build_sequence(self, sequencer: Sequencer, parameters: Dict[str, Parameter], instruction_block: InstructionBlock):
         repetition_count = self.__repetition_count
         if isinstance(repetition_count, ParameterDeclaration):
-            if not repetition_count.check_parameter_set_valid(parameters):
-                raise ParameterValueIllegalException(repetition_count, parameters[repetition_count.name])
             repetition_count = repetition_count.get_value(parameters)
             if not repetition_count.is_integer():
                 raise ParameterNotIntegerException(self.__repetition_count.name, repetition_count)

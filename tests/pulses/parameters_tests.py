@@ -1,7 +1,7 @@
 import unittest
 from typing import Union
 
-from qctoolkit.pulses.parameters import ConstantParameter, ParameterDeclaration, ParameterNotProvidedException
+from qctoolkit.pulses.parameters import ConstantParameter, ParameterDeclaration, ParameterNotProvidedException, ParameterValueIllegalException
 
 from tests.serialization_dummies import DummySerializer
 from tests.pulses.sequencing_dummies import DummyParameter
@@ -220,41 +220,40 @@ class ParameterDeclarationTest(unittest.TestCase):
         
         decl = ParameterDeclaration('foo', default=2.7)
         self.assertEqual(decl.default_value, decl.get_value({}))
-        
-    def test_check_parameter_set_valid(self) -> None:
+
+        decl = ParameterDeclaration('foo', min=1.3)
+        self.assertEqual(1.4, decl.get_value({'foo': ConstantParameter(1.4)}))
+        self.assertEqual(1.3, decl.get_value({'foo': ConstantParameter(1.3)}))
+        self.assertRaises(ParameterValueIllegalException, decl.get_value, {'foo': ConstantParameter(1.1)})
+
+        decl = ParameterDeclaration('foo', max=2.3)
+        self.assertTrue(1.4, decl.get_value({'foo': ConstantParameter(1.4)}))
+        self.assertTrue(2.3, decl.get_value({'foo': ConstantParameter(2.3)}))
+        self.assertRaises(ParameterValueIllegalException, decl.get_value, {'foo': ConstantParameter(3.1)})
+
+        decl = ParameterDeclaration('foo', min=1.3, max=2.3)
+        self.assertRaises(ParameterValueIllegalException, decl.get_value, {'foo': ConstantParameter(0.9)})
+        self.assertEqual(1.3, decl.get_value({'foo': ConstantParameter(1.3)}))
+        self.assertEqual(1.4, decl.get_value({'foo': ConstantParameter(1.4)}))
+        self.assertEqual(2.3, decl.get_value({'foo': ConstantParameter(2.3)}))
+        self.assertRaises(ParameterValueIllegalException, decl.get_value, {'foo': ConstantParameter(3.1)})
+
         min_decl = ParameterDeclaration('min', min=1.2, max=2.3)
         max_decl = ParameterDeclaration('max', min=1.2, max=5.1)
-        
+
         min_param = ConstantParameter(1.3)
         max_param = ConstantParameter(2.3)
-        
-        decl = ParameterDeclaration('foo', min=1.3)
-        self.assertTrue(decl.check_parameter_set_valid({'foo': ConstantParameter(1.4)}))
-        self.assertTrue(decl.check_parameter_set_valid({'foo': ConstantParameter(1.3)}))
-        self.assertFalse(decl.check_parameter_set_valid({'foo': ConstantParameter(1.1)}))
-        
-        decl = ParameterDeclaration('foo', max=2.3)
-        self.assertTrue(decl.check_parameter_set_valid({'foo': ConstantParameter(1.4)}))
-        self.assertTrue(decl.check_parameter_set_valid({'foo': ConstantParameter(2.3)}))
-        self.assertFalse(decl.check_parameter_set_valid({'foo': ConstantParameter(3.1)}))
-        
-        decl = ParameterDeclaration('foo', min=1.3, max=2.3)
-        self.assertFalse(decl.check_parameter_set_valid({'foo': ConstantParameter(0.9)}))
-        self.assertTrue(decl.check_parameter_set_valid({'foo': ConstantParameter(1.3)}))
-        self.assertTrue(decl.check_parameter_set_valid({'foo': ConstantParameter(1.4)}))
-        self.assertTrue(decl.check_parameter_set_valid({'foo': ConstantParameter(2.3)}))
-        self.assertFalse(decl.check_parameter_set_valid({'foo': ConstantParameter(3.1)}))
-        
+
         decl = ParameterDeclaration('foo', min=min_decl, max=max_decl)
-        self.assertFalse(decl.check_parameter_set_valid({'min': min_param, 'max': max_param, 'foo': ConstantParameter(0.9)}))
-        self.assertFalse(decl.check_parameter_set_valid({'min': min_param, 'max': max_param, 'foo': ConstantParameter(1.2)}))
-        self.assertFalse(decl.check_parameter_set_valid({'min': min_param, 'max': max_param, 'foo': ConstantParameter(1.25)}))
-        self.assertTrue(decl.check_parameter_set_valid({'min': min_param, 'max': max_param, 'foo': ConstantParameter(1.3)}))
-        self.assertTrue(decl.check_parameter_set_valid({'min': min_param, 'max': max_param, 'foo': ConstantParameter(1.7)}))
-        self.assertTrue(decl.check_parameter_set_valid({'min': min_param, 'max': max_param, 'foo': ConstantParameter(2.3)}))
-        self.assertFalse(decl.check_parameter_set_valid({'min': min_param, 'max': max_param, 'foo': ConstantParameter(3.5)}))
-        self.assertFalse(decl.check_parameter_set_valid({'min': min_param, 'max': max_param, 'foo': ConstantParameter(5.1)}))
-        self.assertFalse(decl.check_parameter_set_valid({'min': min_param, 'max': max_param, 'foo': ConstantParameter(17.2)}))
+        self.assertRaises(ParameterValueIllegalException, decl.get_value, {'min': min_param, 'max': max_param, 'foo': ConstantParameter(0.9)})
+        self.assertRaises(ParameterValueIllegalException, decl.get_value, {'min': min_param, 'max': max_param, 'foo': ConstantParameter(1.2)})
+        self.assertRaises(ParameterValueIllegalException, decl.get_value, {'min': min_param, 'max': max_param, 'foo': ConstantParameter(1.25)})
+        self.assertEqual(1.3, decl.get_value({'min': min_param, 'max': max_param, 'foo': ConstantParameter(1.3)}))
+        self.assertEqual(1.7, decl.get_value({'min': min_param, 'max': max_param, 'foo': ConstantParameter(1.7)}))
+        self.assertEqual(2.3, decl.get_value({'min': min_param, 'max': max_param, 'foo': ConstantParameter(2.3)}))
+        self.assertRaises(ParameterValueIllegalException, decl.get_value, {'min': min_param, 'max': max_param, 'foo': ConstantParameter(3.5)})
+        self.assertRaises(ParameterValueIllegalException, decl.get_value, {'min': min_param, 'max': max_param, 'foo': ConstantParameter(5.1)})
+        self.assertRaises(ParameterValueIllegalException, decl.get_value, {'min': min_param, 'max': max_param, 'foo': ConstantParameter(17.2)})
 
     def __assign_min_value(self, left_value: ParameterDeclaration, right_value: ParameterDeclaration) -> None:
         left_value.min_value = right_value

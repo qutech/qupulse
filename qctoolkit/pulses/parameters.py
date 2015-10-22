@@ -10,7 +10,7 @@ from qctoolkit.serialization import Serializable, Serializer
 logger = logging.getLogger(__name__)
 
 
-__all__ = ["Parameter", "ParameterDeclaration", "ConstantParameter", "ParameterNotProvidedException"]
+__all__ = ["Parameter", "ParameterDeclaration", "ConstantParameter", "ParameterNotProvidedException", "ParameterValueIllegalException"]
 
 
 class Parameter(Serializable, metaclass = ABCMeta):
@@ -218,21 +218,27 @@ class ParameterDeclaration(Serializable):
         is_valid &= self.absolute_max_value >= parameter_value
         return is_valid
     
-    def check_parameter_set_valid(self, parameters: Dict[str, Parameter]) -> bool:
-        parameter_value = self.get_value(parameters)
-        
+    def get_value(self, parameters: Dict[str, Parameter]) -> float:
+        value = self.__get_value_internal(parameters)
+        if not self.__check_parameter_set_valid(parameters):
+            raise ParameterValueIllegalException(self, value)
+        return value
+
+    def __check_parameter_set_valid(self, parameters: Dict[str, Parameter]) -> bool:
+        parameter_value = self.__get_value_internal(parameters)
+
         # get actual instantiated values for boundaries.
         min_value = self.min_value
         if isinstance(min_value, ParameterDeclaration):
-            min_value = min_value.get_value(parameters)
-            
+            min_value = min_value.__get_value_internal(parameters)
+
         max_value = self.max_value
         if isinstance(max_value, ParameterDeclaration):
-            max_value = max_value.get_value(parameters)
-            
+            max_value = max_value.__get_value_internal(parameters)
+
         return min_value <= parameter_value and max_value >= parameter_value
-    
-    def get_value(self, parameters: Dict[str, Parameter]) -> float:
+
+    def __get_value_internal(self, parameters: Dict[str, Parameter]) -> float:
         try:
             return float(parameters[self.name]) # float() wraps get_value for Parameters and works for normal floats also
         except KeyError:
@@ -299,48 +305,7 @@ class ParameterDeclaration(Serializable):
         if isinstance(max_value, str):
             max_value = float("+inf")
         return ParameterDeclaration(name, min=min_value, max=max_value, default=default_value)
-        
-# class ImmutableParameterDeclaration(ParameterDeclaration):
-#
-#     def __init__(self, parameter_declaration: ParameterDeclaration) -> None:
-#         self.__parameter_declaration = parameter_declaration
-#         super().__init__(parameter_declaration.name)
-#
-#     @property
-#     def name(self) -> str:
-#         return self.__parameter_declaration.name
-#
-#     @property
-#     def min_value(self) -> ParameterDeclaration.BoundaryValue:
-#         """Return this ParameterDeclaration's minimum value or reference."""
-#         min_value = self.__parameter_declaration.min_value
-#         if isinstance(min_value, ParameterDeclaration):
-#             min_value = ImmutableParameterDeclaration(min_value)
-#         return min_value
-#
-#     @min_value.setter
-#     def min_value(self, value: ParameterDeclaration.BoundaryValue) -> None:
-#         """Set this ParameterDeclaration's minimum value or reference."""
-#         raise Exception("An ImmutableParameterDeclaration may not be changed.")
-#
-#     @property
-#     def max_value(self) ->  ParameterDeclaration.BoundaryValue:
-#         """Return this ParameterDeclaration's maximum value or reference."""
-#         max_value = self.__parameter_declaration.max_value
-#         if isinstance(max_value, ParameterDeclaration):
-#             max_value = ImmutableParameterDeclaration(max_value)
-#         return max_value
-#
-#     @max_value.setter
-#     def max_value(self, value: ParameterDeclaration.BoundaryValue) -> None:
-#         """Set this ParameterDeclaration's maximum value or reference."""
-#         raise Exception("An ImmutableParameterDeclaration may not be changed.")
-#
-#     @property
-#     def default_value(self) -> Optional[float]:
-#         """Return this ParameterDeclaration's default value."""
-#         return self.__parameter_declaration.default_value
-        
+
         
 class ParameterNotProvidedException(Exception):
     """Indicates that a required parameter value was not provided."""
@@ -351,3 +316,17 @@ class ParameterNotProvidedException(Exception):
         
     def __str__(self) -> str:
         return "No value was provided for parameter '{0}' and no default value was specified.".format(self.parameter_name)
+
+
+class ParameterValueIllegalException(Exception):
+    """Indicates that the value provided for a parameter is illegal, i.e., is outside the parameter's bounds or of wrong type."""
+
+    def __init__(self, parameter_declaration: ParameterDeclaration, parameter_value: float) -> None:
+        super().__init__()
+        self.parameter_value = parameter_value
+        self.parameter_declaration = parameter_declaration
+
+    def __str__(self) -> str:
+        return "The value {0} provided for parameter {1} is illegal (min = {2}, max = {3})".format(
+            self.parameter_value, self.parameter_declaration.name, self.parameter_declaration.min_value,
+            self.parameter_declaration.max_value)
