@@ -9,6 +9,10 @@ from .pulse_template import PulseTemplate, MeasurementWindow
 
 logger = logging.getLogger(__name__)
 
+
+__all__ = ["LoopPulseTemplate"]
+
+
 class LoopPulseTemplate(PulseTemplate):
     """Conditional looping in a pulse.
     

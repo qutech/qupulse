@@ -10,12 +10,12 @@ from .pulse_template import PulseTemplate, MeasurementWindow
 from .parameters import ParameterDeclaration, Parameter, ParameterNotProvidedException
 from .sequencing import InstructionBlock, Sequencer
 
-
 logger = logging.getLogger(__name__)
 
-# type signatures used in this module
-# a MappingFunction takes a dictionary with parameter declarations, keyed with strings and returns a float
-# temporarily obsolete: MappingFunction = Callable[[Dict[str, ParameterDeclaration]], float]
+
+__all__ = ["SequencePulseTemplate", "MissingMappingException", "MissingParameterDeclarationException",
+           "UnnecessaryMappingException", "RuntimeMappingError"]
+
 
 # a subtemplate consists of a pulse template and mapping functions for its "internal" parameters
 Subtemplate = Tuple[PulseTemplate, Dict[str, str]]

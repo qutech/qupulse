@@ -9,6 +9,9 @@ from .instructions import InstructionBlock
 from .parameters import ParameterDeclaration, Parameter
 
 
+__all__ = ["RepetitionPulseTemplate", "ParameterNotIntegerException"]
+
+
 class RepetitionPulseTemplate(PulseTemplate):
 
     def __init__(self, body: PulseTemplate, repetition_count: Union[int, ParameterDeclaration], identifier: Optional[str]=None) -> None:

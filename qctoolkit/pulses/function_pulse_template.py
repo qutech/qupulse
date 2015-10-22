@@ -15,6 +15,8 @@ from .sequence_pulse_template import ParameterNotProvidedException
 
 logger = logging.getLogger(__name__)
 
+__all__ = ["FunctionPulseTemplate"]
+
 class FunctionPulseTemplate(PulseTemplate):
     """Defines a pulse via a time-domain expression.
 

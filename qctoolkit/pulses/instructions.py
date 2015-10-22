@@ -5,34 +5,23 @@ import numpy
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
+from qctoolkit.comparable import Comparable
+
 from .interpolation import InterpolationStrategy
 
 # TODO lumip: add docstrings
 
 
-__all__ = ['WaveformTableEntry', 'Waveform', 'Waveform', 'Trigger', 'InstructionPointer', 'InstructionSequence',
-            'InstructionBlockNotYetPlacedException', 'MissingReturnAddressException', 'InstructionBlock',
-            'Instruction', 'EXECInstruction', 'CJMPInstruction', 'GOTOInstruction', 'STOPInstruction'
+
+__all__ = ["WaveformTable", "WaveformTableEntry", "Waveform", "Trigger", "InstructionPointer", "Instruction",
+           "CJMPInstruction", "EXECInstruction", "GOTOInstruction", "STOPInstruction", "InstructionBlock",
+           "InstructionSequence", "InstructionBlockNotYetPlacedException", "InstructionBlockAlreadyFinalizedException",
+           "MissingReturnAddressException"
           ]
+
 
 WaveformTableEntry = NamedTuple("WaveformTableEntry", [('t', float), ('v', float), ('interp', InterpolationStrategy)])
 WaveformTable = Tuple[WaveformTableEntry, ...]
-
-
-class Comparable(metaclass=ABCMeta):
-
-    @abstractproperty
-    def _compare_key(self) -> Any:
-        """Return a unique key used in comparison and hashing operations."""
-
-    def __hash__(self) -> int:
-        return hash(self._compare_key)
-
-    def __eq__(self, other: Any) -> bool:
-        return isinstance(other, self.__class__) and self._compare_key == other._compare_key
-
-    def __ne__(self, other: Any) -> bool:
-        return not self == other
 
 
 class Waveform(Comparable, metaclass=ABCMeta):

@@ -18,6 +18,10 @@ from .instructions import Waveform, WaveformTable
 
 logger = logging.getLogger(__name__)
 
+
+__all__ = ["TablePulseTemplate", "ParameterValueIllegalException"]
+
+
 TableValue = Union[float, ParameterDeclaration]
 TableEntry = NamedTuple("TableEntry", [('t', TableValue), ('v', TableValue), ('interp', InterpolationStrategy)])
 

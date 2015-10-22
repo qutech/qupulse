@@ -8,6 +8,9 @@ from py_expression_eval import Parser
 from qctoolkit.serialization import Serializable
 
 
+__all__ = ["Expression"]
+
+
 class Expression(Serializable):
     def __init__(self, ex: str):
         ex = str(ex)

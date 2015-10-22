@@ -7,6 +7,9 @@ from .sequencing import Sequencer, SequencingHardwareInterface, SequencingElemen
 from .instructions import EXECInstruction, Waveform, InstructionBlock
 
 
+__all__ = ["Plotter", "plot", "PlottingNotPossibleException"]
+
+
 class Plotter(SequencingHardwareInterface):
 
     def __init__(self, sample_rate: float=10) -> None:

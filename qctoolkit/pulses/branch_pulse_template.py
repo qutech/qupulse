@@ -7,6 +7,8 @@ from typing import Dict, Set, List
 from .parameters import Parameter
 from .pulse_template import PulseTemplate, MeasurementWindow
 
+__all__ = ["BranchPulseTemplate"]
+
 logger = logging.getLogger(__name__)
 
 class BranchPulseTemplate(PulseTemplate):

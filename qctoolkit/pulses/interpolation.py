@@ -2,7 +2,10 @@ from abc import ABCMeta, abstractmethod
 import numpy as np
 from typing import Tuple
 
-# We could think about using an Enum from the enum package (standard library) instead and separate code and data
+
+__all__ = ["InterpolationStrategy", "HoldInterpolationStrategy", "JumpInterpolationStrategy", "LinearInterpolationStrategy"]
+
+
 class InterpolationStrategy(metaclass = ABCMeta):
 
     @abstractmethod
