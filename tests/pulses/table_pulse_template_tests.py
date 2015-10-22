@@ -1,8 +1,8 @@
 import unittest
-import numpy as np
+import numpy
 
 from qctoolkit.pulses.instructions import EXECInstruction, WaveformTableEntry
-from qctoolkit.pulses.table_pulse_template import TablePulseTemplate, clean_entries, TableWaveform
+from qctoolkit.pulses.table_pulse_template import TablePulseTemplate, TableWaveform, TableEntry
 from qctoolkit.pulses.parameters import ParameterDeclaration, ParameterNotProvidedException, ParameterValueIllegalException
 from qctoolkit.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy, JumpInterpolationStrategy
 
@@ -371,9 +371,63 @@ class TablePulseTemplateTest(unittest.TestCase):
         self.assertEqual([(0, 0, HoldInterpolationStrategy()), (1, 2.3, LinearInterpolationStrategy()), (4, 0, JumpInterpolationStrategy())], instantiated_entries)
         self.assertRaises(Exception, table.get_entries_instantiated, {'v': 2.3, 'foo': 2, 'bar': 1.5})
 
+    def test_get_entries_instantiated_empty(self) -> None:
+        table = TablePulseTemplate()
+        self.assertFalse(table.get_entries_instantiated({}))
+
+    def test_get_entries_instantiated_two_equal_entries(self) -> None:
+        table = TablePulseTemplate()
+        table.add_entry(0, 0)
+        table.add_entry(1, 5)
+        table.add_entry(3, 5)
+        table.add_entry(5, 1)
+        entries = table.get_entries_instantiated({})
+        expected = [
+            TableEntry(0, 0, HoldInterpolationStrategy()),
+            TableEntry(1, 5, HoldInterpolationStrategy()),
+            TableEntry(3, 5, HoldInterpolationStrategy()),
+            TableEntry(5, 1, HoldInterpolationStrategy())
+        ]
+        self.assertEqual(expected, entries)
+
+    def test_get_entries_instantiated_removal_for_three_subsequent_equal_entries(self) -> None:
+        table = TablePulseTemplate()
+        table.add_entry(1, 5)
+        table.add_entry(1.5, 5)
+        table.add_entry(2, 5)
+        table.add_entry(3, 0)
+        entries = table.get_entries_instantiated({})
+        expected = [
+            TableEntry(0, 0, HoldInterpolationStrategy()),
+            TableEntry(1, 5, HoldInterpolationStrategy()),
+            TableEntry(2, 5, HoldInterpolationStrategy()),
+            TableEntry(3, 0, HoldInterpolationStrategy())
+        ]
+        self.assertEqual(expected, entries)
+
+    def test_get_entries_instantiated_removal_for_three_subsequent_equal_entries_does_not_destroy_linear_interpolation(self) -> None:
+        table = TablePulseTemplate()
+        table.add_entry(0, 5)
+        table.add_entry(2, 5, 'linear')
+        table.add_entry(5, 5)
+        table.add_entry(10, 0, 'linear')
+
+        entries = table.get_entries_instantiated({})
+
+        expected = [
+            TableEntry(0, 5, HoldInterpolationStrategy()),
+            TableEntry(5, 5, HoldInterpolationStrategy()),
+            TableEntry(10, 0, LinearInterpolationStrategy())
+        ]
+        self.assertEqual(expected, entries)
+
+        result_sampled = TableWaveform(entries).sample(numpy.linspace(0, 10, 11), 0)
+
+        self.assertEqual([5, 5, 5, 5, 5, 5, 4, 3, 2, 1, 0], result_sampled.tolist())
+
     def test_from_array(self) -> None:
-        times = np.array([0, 1, 3])
-        voltages = np.array([5, 0, 5])
+        times = numpy.array([0, 1, 3])
+        voltages = numpy.array([5, 0, 5])
         pulse = TablePulseTemplate.from_array(times, voltages)
         entries = []
         for (time, voltage) in zip(times, voltages):
@@ -497,41 +551,13 @@ class TableWaveformDataTests(unittest.TestCase):
                          WaveformTableEntry(5.7, 123.4, interp)
                          ])
         waveform = TableWaveform(entries)
-        sample_times = np.linspace(98.5, 103.5, num=11)
+        sample_times = numpy.linspace(98.5, 103.5, num=11)
         offset = 0.5
         result = waveform.sample(sample_times, offset)
         expected_data = [((0, 0), (2.1, -33.2), [0.5, 1.0, 1.5, 2.0]),
                          ((2.1, -33.2), (5.7, 123.4), [2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5])]
         self.assertEqual(expected_data, interp.call_arguments)
         self.assertEqual(list(sample_times), list(result))
-
-
-class CleanEntriesTests(unittest.TestCase):
-
-    def test_empty_list(self) -> None:
-        self.assertEqual([], clean_entries([]))
-
-    def test_small_list_unchanged(self) -> None:
-        table = TablePulseTemplate()
-        table.add_entry(0, 5)
-        table.add_entry(5, 5)
-        clean = clean_entries(table.entries)
-        self.assertEqual(clean, table.entries)
-
-    def test_point_removal(self) -> None:
-        table = TablePulseTemplate()
-        table.add_entry(1,5)
-        table.add_entry(1.5,5)
-        table.add_entry(2,5)
-        table.add_entry(3,0)
-        clean = clean_entries(table.entries)
-
-        table2 = TablePulseTemplate()
-        table2.add_entry(1,5)
-        table2.add_entry(2,5)
-        table2.add_entry(3,0)
-
-        self.assertEqual(clean, table2.entries)
 
 
 class ParameterValueIllegalExceptionTest(unittest.TestCase):

@@ -288,12 +288,30 @@ class TablePulseTemplate(PulseTemplate):
                 raise Exception("Time value {0} is smaller than the previous value {1}.".format(time, previous_time))
             previous_time = time
             
-        return instantiated_entries
+        return TablePulseTemplate.__clean_entries(instantiated_entries)
+
+    @staticmethod
+    def __clean_entries(entries: List[TableEntry]) -> List[TableEntry]:
+        """ Checks if three subsequent values have the same voltage value. If so, the intermediate is redundant and removed in-place."""
+        if not entries:
+            return entries
+
+        length = len(entries)
+        if length < 3: # for less than 3 points all are necessary
+           return entries
+        r = list(range(length-2, 0, -1))
+        for index in range(length-2, 0, -1):
+            previous_step = entries[index - 1]
+            step = entries[index]
+            next_step = entries[index + 1]
+            if step.v == previous_step.v and step.v == next_step.v:
+                entries.pop(index)
+        return entries
 
     def build_sequence(self, sequencer: Sequencer, parameters: Dict[str, Parameter], instruction_block: InstructionBlock) -> None:
         instantiated = self.get_entries_instantiated(parameters)
         if instantiated:
-            instantiated = clean_entries(instantiated)
+            instantiated = instantiated
             waveform = TableWaveform(tuple(instantiated))
             sequencer.register_waveform(waveform)
             instruction_block.add_instruction_exec(waveform)
@@ -337,21 +355,4 @@ class TablePulseTemplate(PulseTemplate):
             template.add_entry(time, voltage, interpolation=interpolation)
 
         return template
-
-
-def clean_entries(entries: List[TableEntry]) -> List[TableEntry]:
-    """ Checks if two subsequent values have the same voltage value. If so, the second is redundant and removed in-place."""
-    if not entries:
-        return []
-    length = len(entries)
-    if length < 3: # for less than 3 points all are necessary
-       return entries
-    for index in range(length-2, 1, -1):
-        previous_step = entries[index - 1]
-        step = entries[index]
-        next_step = entries[index + 1]
-        if step.v == previous_step.v:
-            if step.v == next_step.v:
-                entries.pop(index)
-    return entries
 
