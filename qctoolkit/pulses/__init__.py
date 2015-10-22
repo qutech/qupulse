@@ -8,7 +8,6 @@ from .instructions import *
 from .loop_pulse_template import *
 from .parameters import *
 from .plotting import *
-from .pulse_control import *
 from .pulse_template import *
 from .repetition_pulse_template import *
 from .sequence_pulse_template import *

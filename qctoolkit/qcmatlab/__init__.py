@@ -1,1 +1,1 @@
-__all__ = ['Manager']
+__all__ = ['manager', 'pulse_control']

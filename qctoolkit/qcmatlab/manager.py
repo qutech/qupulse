@@ -1,19 +1,26 @@
 import matlab.engine
 """ Start a MATLAB session or connect to a connect to an existing one. """
 
+from .pulse_control import PulseControlInterface
+
 __all__ = ["Manager",
            "EngineNotFound",
            "NoConnectionSupported"]
 
+
 class NoConnectionSupported(Exception):
     pass
 
+
 class EngineNotFound(Exception):
+
     def __init__(self,searched_engine: str) -> None:
         self.searched_engine = searched_engine
+
     def __str__(self) -> str:
         return "Could not find the MATLAB engine with name {}".format(self.searched_engine)
-        
+
+
 class Manager():
     __engine_name = 'qc_toolkit_session'
     __engine_store = []
@@ -43,7 +50,7 @@ class Manager():
             raise EngineNotFound(names)
      
     @staticmethod
-    def connectTo( engine_name: str ) -> None:
+    def connect_to( engine_name: str ) -> None:
         
         if Manager.__engine_store is matlab.engine.matlabengine.MatlabEngine:
             if Manager.__engine_name == engine_name:
@@ -60,11 +67,10 @@ class Manager():
             raise EngineNotFound(searched_engine=engine_name)
         
     @staticmethod
-    def getEngine() -> matlab.engine.matlabengine.MatlabEngine:
+    def get_engine() -> matlab.engine.matlabengine.MatlabEngine:
         if Manager.__engine_store is matlab.engine.matlabengine.MatlabEngine:
             return Manager.__engine_store
-        
-        
+
         try:
             Manager.__connect_to_existing_matlab_engine()
         except NoConnectionSupported:
@@ -76,3 +82,8 @@ class Manager():
         
         assert( isinstance(Manager.__engine_store, matlab.engine.matlabengine.MatlabEngine) )
         return Manager.__engine_store
+
+    @staticmethod
+    def create_pulse_control_interface(sample_rate: float, time_scaling: float=0.001) -> PulseControlInterface:
+        register_pulse_callback = lambda x: Manager.getEngine().plsreg(x)
+        return PulseControlInterface(register_pulse_callback, sample_rate, time_scaling)

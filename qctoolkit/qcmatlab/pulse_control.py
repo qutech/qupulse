@@ -1,22 +1,14 @@
 from math import floor
 import numpy
 from typing import Dict, Any, Callable
-from matlab.engine import MatlabEngine
 
-from .sequencing import SequencingHardwareInterface, InstructionBlock
-from .instructions import Waveform, EXECInstruction
+from pulses.sequencing import SequencingHardwareInterface, InstructionBlock
+from pulses.instructions import Waveform, EXECInstruction
 
 __all__ = ["PulseControlInterface"]
 
 
 class PulseControlInterface(SequencingHardwareInterface):
-
-    @staticmethod
-    def create_matlab_connected_interface(matlab_engine: MatlabEngine,
-                                          sample_rate: float,
-                                          time_scaling: float=0.001) -> "PulseControlInterface": #pragma: nocover
-        register_pulse_callback = lambda x: matlab_engine.plsreg(x)
-        return PulseControlInterface(register_pulse_callback, sample_rate, time_scaling)
 
     def __init__(self, register_pulse_callback: Callable[[Dict[str, Any]], int], sample_rate: float, time_scaling: float=0.001) -> None:
         """Initialize PulseControlInterface.
