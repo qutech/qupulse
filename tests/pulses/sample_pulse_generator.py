@@ -1,4 +1,5 @@
 import random
+
 from qctoolkit.pulses.parameters import ConstantParameter
 from qctoolkit.pulses.parameters import ParameterDeclaration
 from qctoolkit.pulses.table_pulse_template import TablePulseTemplate

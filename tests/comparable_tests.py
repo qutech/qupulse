@@ -1,12 +1,7 @@
 import unittest
-import os
-import sys
 from typing import Any
 
-srcPath = os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1)[0] + 'qctoolkit'
-sys.path.insert(0,srcPath)
-
-from comparable import Comparable
+from qctoolkit.comparable import Comparable
 
 class DummyComparable(Comparable):
 

@@ -1,12 +1,8 @@
 import unittest
-import os
-import sys
 from typing import Union
 
-srcPath = os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1)[0] + 'qctoolkit'
-sys.path.insert(0,srcPath)
+from qctoolkit.pulses.parameters import ConstantParameter, ParameterDeclaration, ParameterNotProvidedException
 
-from pulses.parameters import ConstantParameter, ParameterDeclaration, ParameterNotProvidedException
 from tests.serialization_dummies import DummySerializer
 from tests.pulses.sequencing_dummies import DummyParameter
 

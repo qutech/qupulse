@@ -3,10 +3,11 @@ import numpy
 
 from qctoolkit.pulses.plotting import Plotter, PlottingNotPossibleException
 from qctoolkit.pulses.instructions import InstructionBlock
-from tests.pulses.sequencing_dummies import DummyWaveform
 from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
 from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
 from qctoolkit.pulses.sequencing import Sequencer
+
+from tests.pulses.sequencing_dummies import DummyWaveform
 
 
 class PlotterTests(unittest.TestCase):

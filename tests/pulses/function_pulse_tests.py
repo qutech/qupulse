@@ -1,6 +1,7 @@
 import unittest
 
 from qctoolkit.pulses.function_pulse_template import FunctionPulseTemplate
+
 from tests.serialization_dummies import DummySerializer
 
 class FunctionPulseTest(unittest.TestCase):

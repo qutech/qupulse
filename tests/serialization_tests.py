@@ -1,18 +1,14 @@
 import unittest
-import sys
-import os
 import os.path
 import json
 from tempfile import TemporaryDirectory
 from typing import Optional, Dict, Any
 
-srcPath = os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1)[0] + 'qctoolkit'
-sys.path.insert(0,srcPath)
+from qctoolkit.serialization import FilesystemBackend, Serializer, CachingBackend, Serializable
+from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
+from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
+from qctoolkit.pulses.parameters import ParameterDeclaration
 
-from serialization import FilesystemBackend, Serializer, CachingBackend, Serializable
-from pulses.table_pulse_template import TablePulseTemplate
-from pulses.sequence_pulse_template import SequencePulseTemplate
-from pulses.parameters import ParameterDeclaration
 from tests.serialization_dummies import DummyStorageBackend
 
 

@@ -4,12 +4,12 @@ from typing import Tuple, List, Dict, Optional, Set, Any
 import numpy
 
 """LOCAL IMPORTS"""
-from pulses.instructions import Waveform
-from pulses.sequencing import Sequencer, InstructionBlock, SequencingHardwareInterface, SequencingElement
-from pulses.parameters import Parameter, ParameterDeclaration
-from serialization import Serializer
-from pulses.pulse_template import PulseTemplate, MeasurementWindow
-from pulses.interpolation import InterpolationStrategy
+from qctoolkit.serialization import Serializer
+from qctoolkit.pulses.instructions import Waveform
+from qctoolkit.pulses.sequencing import Sequencer, InstructionBlock, SequencingHardwareInterface, SequencingElement
+from qctoolkit.pulses.parameters import Parameter, ParameterDeclaration
+from qctoolkit.pulses.pulse_template import PulseTemplate, MeasurementWindow
+from qctoolkit.pulses.interpolation import InterpolationStrategy
 
 
 class DummyParameter(Parameter):

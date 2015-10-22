@@ -1,15 +1,11 @@
 import unittest
-import os
-import sys
 
-srcPath = os.path.dirname(os.path.abspath(__file__)).rsplit('tests',1)[0] + 'qctoolkit'
-sys.path.insert(0,srcPath)
+from qctoolkit.pulses.instructions import InstructionBlockAlreadyFinalizedException,InstructionBlock, InstructionPointer,\
+    InstructionBlockNotYetPlacedException, Trigger, CJMPInstruction, GOTOInstruction,EXECInstruction, STOPInstruction,\
+    MissingReturnAddressException, InstructionSequence
 
 from tests.pulses.sequencing_dummies import DummyWaveform, DummyInstructionBlock
 
-from pulses.instructions import InstructionBlockAlreadyFinalizedException,InstructionBlock, InstructionPointer,\
-    InstructionBlockNotYetPlacedException, Trigger, CJMPInstruction, GOTOInstruction,EXECInstruction, STOPInstruction,\
-    MissingReturnAddressException, InstructionSequence
  
 class InstructionPointerTest(unittest.TestCase):
 

@@ -1,7 +1,8 @@
 import unittest
 import numpy as np
 
-from pulses.interpolation import LinearInterpolationStrategy, HoldInterpolationStrategy, JumpInterpolationStrategy
+from qctoolkit.pulses.interpolation import LinearInterpolationStrategy, HoldInterpolationStrategy, JumpInterpolationStrategy
+
 
 class InterpolationTest(unittest.TestCase):
 
