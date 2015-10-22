@@ -1,8 +1,6 @@
 from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
 from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
-from qctoolkit.pulses.plotting import Plotter, plot
-from qctoolkit.pulses.sequencing import Sequencer
-from matplotlib import pyplot as plt
+from qctoolkit.pulses.plotting import plot
 
 #
 #               c

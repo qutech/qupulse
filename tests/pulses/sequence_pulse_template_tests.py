@@ -5,7 +5,7 @@ from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
 from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate, MissingMappingException, UnnecessaryMappingException, MissingParameterDeclarationException, RuntimeMappingError
 from qctoolkit.pulses.parameters import ParameterDeclaration, ParameterNotProvidedException, ConstantParameter
 
-from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummySequencingElement, DummySequencingHardware
+from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummySequencingHardware
 from tests.serialization_dummies import DummySerializer
 
 
@@ -127,17 +127,7 @@ class SequencePulseTemplateSequencingTests(SequencePulseTemplateTest):
             self.sequence.build_sequence(sequencer, parameters, block)
 
     def test_build_sequence(self) -> None:
-        sequencer = DummySequencer(DummySequencingHardware())
-        instruction_block = DummyInstructionBlock()
-        block = DummyInstructionBlock()
-        element1 = DummySequencingElement(push_elements=(block, [self.square]))
-        element2 = DummySequencingElement()
-        mapping = {}
-        subtemplates = [(self.square, self.mapping1),
-                        (element2, mapping)]
-        sequence = SequencePulseTemplate(subtemplates, self.parameters.keys())
-        sequence.build_sequence(sequencer, self.parameters, instruction_block)
-        # TODO: use real sequencer and check output
+        pass #TODO: implement
 
     def test_requires_stop(self) -> None:
         pass #TODO: implement
@@ -148,7 +138,7 @@ class SequencePulseTemplateSequencingTests(SequencePulseTemplateTest):
 
         subtemplates = [(self.square, mapping)]
         with self.assertRaises(MissingParameterDeclarationException):
-            sequence = SequencePulseTemplate(subtemplates, self.outer_parameters)
+            SequencePulseTemplate(subtemplates, self.outer_parameters)
 
 
 class SequencePulseTemplateStringTest(unittest.TestCase):

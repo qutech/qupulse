@@ -46,7 +46,7 @@ class Manager():
     def connectTo( engine_name: str ) -> None:
         
         if Manager.__engine_store is matlab.engine.matlabengine.MatlabEngine:
-            if __engine_name == engine_name:
+            if Manager.__engine_name == engine_name:
                 print('Already connected to engine {name}.'.format(name=engine_name))
                 return
         

@@ -68,7 +68,7 @@ class SequencerTest(unittest.TestCase):
         dummy_hardware = DummySequencingHardware()
         sequencer = Sequencer(dummy_hardware)
         
-        block = sequencer.build()
+        sequencer.build()
         self.assertTrue(sequencer.has_finished())
         
     def test_build_path_o1_m1_i1_f_single_element_requires_stop_main_block(self) -> None:
@@ -78,7 +78,7 @@ class SequencerTest(unittest.TestCase):
         elem = DummySequencingElement(True)
         ps = {'foo': ConstantParameter(1), 'bar': ConstantParameter(7.3)}
         sequencer.push(elem, ps)
-        block = sequencer.build()
+        sequencer.build()
         
         self.assertFalse(sequencer.has_finished())
         self.assertEqual(ps, elem.parameters)
@@ -93,7 +93,7 @@ class SequencerTest(unittest.TestCase):
         ps = {'foo': ConstantParameter(1), 'bar': ConstantParameter(7.3)}
         target_block = InstructionBlock()
         sequencer.push(elem, ps, target_block)
-        block = sequencer.build()
+        sequencer.build()
         
         self.assertFalse(sequencer.has_finished())
         self.assertEqual(ps, elem.parameters)
@@ -113,7 +113,7 @@ class SequencerTest(unittest.TestCase):
         target_block = InstructionBlock()
         sequencer.push(elem_cstm, ps, target_block)
         
-        block = sequencer.build()
+        sequencer.build()
         
         self.assertFalse(sequencer.has_finished())
         self.assertEqual(ps, elem_main.parameters)
@@ -143,7 +143,6 @@ class SequencerTest(unittest.TestCase):
         sequencer = Sequencer(dummy_hardware)
     
         ps = {'foo': ConstantParameter(1), 'bar': ConstantParameter(7.3)}
-        target_block = InstructionBlock()
         elem1 = DummySequencingElement(False)
         elem2 = DummySequencingElement(True)
         sequencer.push(elem2, ps)
@@ -241,7 +240,7 @@ class SequencerTest(unittest.TestCase):
         elem = DummySequencingElement(False)
         sequencer.push(elem, ps, target_block)
         
-        block = sequencer.build()
+        sequencer.build()
         
         self.assertTrue(sequencer.has_finished())
         self.assertIs(target_block, elem.target_block)
@@ -263,7 +262,7 @@ class SequencerTest(unittest.TestCase):
         elem_cstm = DummySequencingElement(False)
         sequencer.push(elem_cstm, ps, target_block)
         
-        block = sequencer.build()
+        sequencer.build()
         
         self.assertFalse(sequencer.has_finished())
         self.assertEqual(ps, elem_main.parameters)
@@ -312,7 +311,7 @@ class SequencerTest(unittest.TestCase):
         elem1 = DummySequencingElement(False)
         sequencer.push(elem1, ps, target_block)
         
-        block = sequencer.build()
+        sequencer.build()
         
         self.assertFalse(sequencer.has_finished())
         self.assertIs(target_block, elem1.target_block)
@@ -336,7 +335,7 @@ class SequencerTest(unittest.TestCase):
         elem1 = DummySequencingElement(False)
         sequencer.push(elem1, ps, target_block)
         
-        block = sequencer.build()
+        sequencer.build()
         
         self.assertTrue(sequencer.has_finished())
         self.assertIs(target_block, elem1.target_block)
@@ -364,7 +363,7 @@ class SequencerTest(unittest.TestCase):
         elem_main = DummySequencingElement(True)
         sequencer.push(elem_main, ps)
         
-        block = sequencer.build()
+        sequencer.build()
         
         self.assertFalse(sequencer.has_finished())
         self.assertIs(target_block, elem1.target_block)

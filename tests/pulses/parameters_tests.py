@@ -227,7 +227,6 @@ class ParameterDeclarationTest(unittest.TestCase):
         
         min_param = ConstantParameter(1.3)
         max_param = ConstantParameter(2.3)
-        parameters = {'min': min_param, 'max': max_param}
         
         decl = ParameterDeclaration('foo', min=1.3)
         self.assertTrue(decl.check_parameter_set_valid({'foo': ConstantParameter(1.4)}))

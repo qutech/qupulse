@@ -51,9 +51,6 @@ class HoldInterpolationStrategy(InterpolationStrategy):
     """Holds previous value and jumps to the current value at the last sample."""
 
     def __call__(self, start: Tuple[float, float], end: Tuple[float, float], times: np.ndarray) -> np.ndarray:
-        xs = [start[0], end[0]]
-        ys = [start[1], end[1]]
-
         if np.any(times < start[0]) or np.any(times > end[0]):
             raise ValueError("Time Value for interpolation out of bounds. Must be between {0} and {1}.".format(start[0], end[0]))
 
@@ -71,9 +68,6 @@ class JumpInterpolationStrategy(InterpolationStrategy):
     # TODO: better name than jump
 
     def __call__(self, start: Tuple[float, float], end: Tuple[float, float], times: np.ndarray) -> np.ndarray:
-        xs = [start[0], end[0]]
-        ys = [start[1], end[1]]
-
         if np.any(times < start[0]) or np.any(times > end[0]):
            raise ValueError("Time Value for interpolation out of bounds. Must be between {0} and {1}.".format(start[0], end[0]))
 

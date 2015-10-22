@@ -22,7 +22,7 @@ class DocumentationTest(unittest.TestCase):
     def _test_attribute(self,package,name):
         try:
             bool = hasattr(__import__(package, fromlist=[name]), name)
-        except ImportError as e:
+        except ImportError:
             return False
         else:
             return bool
@@ -116,7 +116,7 @@ class AnnotationTest(unittest.TestCase):
     def _test_attribute(self,package,name):
         try:
             bool = hasattr(__import__(package, fromlist=[name]), name)
-        except ImportError as e:
+        except ImportError:
             return False
         else:
             return bool
