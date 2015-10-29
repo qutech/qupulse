@@ -299,7 +299,6 @@ class TablePulseTemplate(PulseTemplate):
         length = len(entries)
         if length < 3: # for less than 3 points all are necessary
            return entries
-        r = list(range(length-2, 0, -1))
         for index in range(length-2, 0, -1):
             previous_step = entries[index - 1]
             step = entries[index]
