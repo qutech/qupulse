@@ -1,4 +1,3 @@
-from pkgutil import extend_path
 __all__ = [
     'branch_pulse_template_tests',
     'conditions_tests',
@@ -15,4 +14,3 @@ __all__ = [
     'sequencing_tests',
     'table_pulse_template_tests'
 ]
-__path__ = extend_path(__path__, __name__)
