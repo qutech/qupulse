@@ -89,9 +89,10 @@ class DummyInstructionBlock(InstructionBlock):
 
 class DummyWaveform(Waveform):
 
-    def __init__(self, duration: float=0) -> None:
+    def __init__(self, duration: float=0, sample_output: numpy.ndarray=None) -> None:
         super().__init__()
         self.duration_ = duration
+        self.sample_output = sample_output
         self.sample_calls = []
 
     @property
@@ -104,6 +105,8 @@ class DummyWaveform(Waveform):
 
     def sample(self, sample_times: numpy.ndarray, first_offset: float=0) -> numpy.ndarray:
         self.sample_calls.append((list(sample_times), first_offset))
+        if self.sample_output is not None:
+            return self.sample_output
         return sample_times
 
 

@@ -2,8 +2,8 @@ from math import floor
 import numpy
 from typing import Dict, Any, Callable
 
-from pulses.sequencing import SequencingHardwareInterface, InstructionBlock
-from pulses.instructions import Waveform, EXECInstruction
+from qctoolkit.pulses.sequencing import SequencingHardwareInterface
+from qctoolkit.pulses.instructions import Waveform, EXECInstruction, STOPInstruction, InstructionSequence
 
 __all__ = ["PulseControlInterface"]
 
@@ -24,19 +24,20 @@ class PulseControlInterface(SequencingHardwareInterface):
         self.__time_scaling = time_scaling
         self.__register_pulse_callback = register_pulse_callback
 
-    def __get_waveform_name(self, waveform: Waveform) -> str:
+    @staticmethod
+    def __get_waveform_name(waveform: Waveform) -> str:
         return 'wf_{}'.format(hash(waveform))
 
     def register_waveform(self, waveform: Waveform) -> None:
-        # Due to recent changes, Waveforms can always be recovered from the EXEC-Instructions.
-        # Thus, register_waveform seems to have become obsolete (and with it the whole SequencingHardwareInterface).
-        # Simply processing the InstructionBlock obtained from Sequencer seems to be sufficient.
-        # However, before removing the Interface entirely, I would like to see whether or not this is still true
-        # for real hardware interfaces.
-        pass
+        """ Due to recent changes, Waveforms can always be recovered from the EXEC-Instructions.
+        Thus, register_waveform seems to have become obsolete (and with it the whole SequencingHardwareInterface).
+        Simply processing the InstructionBlock obtained from Sequencer seems to be sufficient.
+        However, before removing the Interface entirely, I would like to see whether or not this is still true
+        for real hardware interfaces
+        """
 
     def create_waveform_struct(self, waveform: Waveform, name: str) -> Dict[str, Any]:
-        """Construct a dictonary adhering to the waveform struct definition in pulse control.
+        """Construct a dictionary adhering to the waveform struct definition in pulse control.
 
         Arguments:
         waveform -- The Waveform object to convert.
@@ -51,8 +52,8 @@ class PulseControlInterface(SequencingHardwareInterface):
         # TODO: how to deal with the second channel expected in waveform structs in pulse control?
         return struct
 
-    def create_pulse_group(self, block: InstructionBlock, name: str) -> Dict[str, Any]:
-        """Construct a dictonary adhering to the pulse group struct definition in pulse control.
+    def create_pulse_group(self, sequence: InstructionSequence, name: str) -> Dict[str, Any]:
+        """Construct a dictionary adhering to the pulse group struct definition in pulse control.
 
         All waveforms in the given InstructionBlock are converted to waveform pulse structs and registered in
         pulse control with the pulse registration function held by the class. create_pulse_group detects
@@ -62,15 +63,13 @@ class PulseControlInterface(SequencingHardwareInterface):
         which are not supported by pulse control.
 
         Arguments:
-        block -- The InstructionBlock to convert.
+        sequence -- The InstructionSequence to convert.
         name -- Value for the name field in the resulting pulse group dictionary.
         """
-        if not all(map(lambda x: isinstance(x, EXECInstruction), block.instructions)):
+        if not all(map(lambda x: isinstance(x, (EXECInstruction, STOPInstruction)), sequence)):
             raise Exception("Hardware based branching is not supported by pulse-control.")
 
-        waveforms = [instruction.waveform for instruction in block.instructions]
-        if not waveforms:
-            return ""
+        waveforms = [instruction.waveform for instruction in sequence if isinstance(instruction, EXECInstruction)]
 
         pulse_group = dict(pulses=[],
                            nrep=[],
