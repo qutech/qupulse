@@ -4,3 +4,5 @@ doc/build/*
 .*project
 .eggs*
 *.egg-info*
+build/*
+dist/*
