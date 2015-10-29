@@ -183,7 +183,7 @@ class InstructionBlock:
         if self.__compiled_sequence is not None:
             self.__compiled_sequence = None
             for block in self.__embedded_blocks:
-                block.__offset = None 
+                block.__offset = None
         self.__instruction_list.append(instruction)
             
     def add_instruction_exec(self, waveform: Waveform) -> None:
@@ -206,12 +206,6 @@ class InstructionBlock:
         block = InstructionBlock(self)
         self.__embedded_blocks.append(block)
         return block
-        
-    def __get_sequence_length(self) -> int:
-        sequence_length = len(self) + 1
-        for block in self.__embedded_blocks:
-            sequence_length += block.__get_sequence_length()
-        return sequence_length        
         
     def compile_sequence(self) -> InstructionSequence:
         # do not recompile if no changes happened
