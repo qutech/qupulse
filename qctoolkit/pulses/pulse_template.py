@@ -14,7 +14,7 @@ from .sequencing import SequencingElement
 logger = logging.getLogger(__name__)
 
 
-__all__ = ["MeasurementWindow", "PulseTemplate", "ParameterNotInPulseTemplateException"]
+__all__ = ["MeasurementWindow", "PulseTemplate"]
 
 
 MeasurementWindow = Tuple[float, float]
@@ -49,15 +49,3 @@ class PulseTemplate(Serializable, SequencingElement, metaclass = ABCMeta):
     @abstractproperty
     def is_interruptable(self) -> bool:
         """Return true, if this PulseTemplate contains points at which it can halt if interrupted."""
-
-
-class ParameterNotInPulseTemplateException(Exception):
-    """Indicates that a provided parameter was not declared in a PulseTemplate."""
-
-    def __init__(self, name: str, pulse_template: PulseTemplate) -> None:
-        super().__init__()
-        self.name = name
-        self.pulse_template = pulse_template
-
-    def __str__(self) -> str:
-        return "Parameter {1} not found in pulse template {2}".format(self.name, self.pulse_template)
