@@ -82,7 +82,10 @@ class DummyWaveform(Waveform):
 
     @property
     def _compare_key(self) -> Any:
-        return id(self)
+        if self.sample_output is not None:
+            return tuple(self.sample_output.tolist())
+        else:
+            return id(self)
 
     @property
     def duration(self) -> float:
