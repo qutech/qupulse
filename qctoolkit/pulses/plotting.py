@@ -4,7 +4,7 @@ from typing import Dict, Tuple
 
 from .parameters import Parameter
 from .sequencing import Sequencer, SequencingElement
-from .instructions import EXECInstruction, Waveform, InstructionBlock
+from .instructions import EXECInstruction, STOPInstruction, InstructionSequence
 
 
 __all__ = ["Plotter", "plot", "PlottingNotPossibleException"]
@@ -16,11 +16,11 @@ class Plotter:
         super().__init__()
         self.__sample_rate = sample_rate
 
-    def render(self, block: InstructionBlock) -> Tuple[np.ndarray, np.ndarray]:
-        if not all(map(lambda x: isinstance(x, EXECInstruction), block.instructions)):
+    def render(self, sequence: InstructionSequence) -> Tuple[np.ndarray, np.ndarray]:
+        if not all(map(lambda x: isinstance(x, (EXECInstruction, STOPInstruction)), sequence)):
             raise NotImplementedError('Can only plot waveforms without branching so far.')
 
-        waveforms = [instruction.waveform for instruction in block.instructions]
+        waveforms = [instruction.waveform for instruction in sequence if isinstance(instruction, EXECInstruction)]
         if not waveforms:
             return [], []
         total_time = sum([waveform.duration for waveform in waveforms])
@@ -43,10 +43,10 @@ def plot(pulse: SequencingElement, parameters: Dict[str, Parameter]={}, sample_r
     plotter = Plotter(sample_rate=sample_rate)
     sequencer = Sequencer()
     sequencer.push(pulse, parameters)
-    block = sequencer.build()
+    sequence = sequencer.build()
     if not sequencer.has_finished():
         raise PlottingNotPossibleException(pulse)
-    times, voltages = plotter.render(block)
+    times, voltages = plotter.render(sequence)
 
     # plot!
     f = plt.figure()

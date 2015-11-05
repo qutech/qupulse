@@ -178,7 +178,7 @@ class InstructionBlock:
         self.return_ip = None
         self.__compiled_sequence = None # type: InstructionSequence
         
-    def __add_instruction(self, instruction: Instruction) -> None:
+    def add_instruction(self, instruction: Instruction) -> None:
         # change to instructions -> invalidate cached compiled sequence
         if self.__compiled_sequence is not None:
             self.__compiled_sequence = None
@@ -187,16 +187,16 @@ class InstructionBlock:
         self.__instruction_list.append(instruction)
             
     def add_instruction_exec(self, waveform: Waveform) -> None:
-        self.__add_instruction(EXECInstruction(waveform))
+        self.add_instruction(EXECInstruction(waveform))
         
     def add_instruction_goto(self, target_block: 'InstructionBlock', offset: int = 0) -> None:
-        self.__add_instruction(GOTOInstruction(target_block, offset))
+        self.add_instruction(GOTOInstruction(target_block, offset))
         
     def add_instruction_cjmp(self, trigger: Trigger, target_block: 'InstructionBlock', offset: int = 0) -> None:
-        self.__add_instruction(CJMPInstruction(trigger, target_block, offset))
+        self.add_instruction(CJMPInstruction(trigger, target_block, offset))
         
     def add_instruction_stop(self) -> None:
-        self.__add_instruction(STOPInstruction())
+        self.add_instruction(STOPInstruction())
       
     @property
     def instructions(self) -> InstructionSequence:

@@ -5,7 +5,7 @@ import numpy
 
 """LOCAL IMPORTS"""
 from qctoolkit.serialization import Serializer
-from qctoolkit.pulses.instructions import Waveform
+from qctoolkit.pulses.instructions import Waveform, Instruction
 from qctoolkit.pulses.sequencing import Sequencer, InstructionBlock, SequencingElement
 from qctoolkit.pulses.parameters import Parameter, ParameterDeclaration
 from qctoolkit.pulses.pulse_template import PulseTemplate, MeasurementWindow
@@ -49,6 +49,7 @@ class DummySequencingElement(SequencingElement):
     def build_sequence(self, sequencer: Sequencer, parameters: Dict[str, Parameter], instruction_block: InstructionBlock) -> None:
         self.build_call_counter += 1
         self.target_block = instruction_block
+        instruction_block.add_instruction(DummyInstruction(self))
         self.parameters = parameters
         if self.push_elements is not None:
             for element in self.push_elements[1]:
@@ -58,6 +59,17 @@ class DummySequencingElement(SequencingElement):
         self.requires_stop_call_counter += 1
         self.parameters = parameters
         return self.requires_stop_
+
+
+class DummyInstruction(Instruction):
+
+    def __init__(self, elem: DummySequencingElement = None) -> None:
+        super().__init__()
+        self.elem = elem
+
+    @property
+    def _compare_key(self) -> Any:
+        return self.elem
 
 
 class DummyInstructionBlock(InstructionBlock):

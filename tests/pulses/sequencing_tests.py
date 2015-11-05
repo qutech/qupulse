@@ -1,10 +1,10 @@
 import unittest
 
 from qctoolkit.pulses.parameters import  ConstantParameter
-from qctoolkit.pulses.instructions import InstructionBlock
+from qctoolkit.pulses.instructions import InstructionBlock, STOPInstruction
 from qctoolkit.pulses.sequencing import Sequencer
 
-from tests.pulses.sequencing_dummies import DummySequencingElement, DummyWaveform
+from tests.pulses.sequencing_dummies import DummySequencingElement
 
 
 class SequencerTest(unittest.TestCase):
@@ -106,13 +106,15 @@ class SequencerTest(unittest.TestCase):
         elem = DummySequencingElement(False)
         ps = {'foo': ConstantParameter(1), 'bar': ConstantParameter(7.3)}
         sequencer.push(elem, ps)
-        block = sequencer.build()
+        sequence = sequencer.build()
         
         self.assertTrue(sequencer.has_finished())
-        self.assertIs(block, elem.target_block)
+        self.assertIs(elem, sequence[0].elem)
         self.assertEqual(ps, elem.parameters)
         self.assertEqual(1, elem.requires_stop_call_counter)
         self.assertEqual(1, elem.build_call_counter)
+        self.assertEqual(STOPInstruction(), sequence[1])
+        self.assertEqual(2, len(sequence))
         
     def test_build_path_o2_m1_i2_tf_m1_i1_f_two_elements_main_block_last_requires_stop(self) -> None:
         sequencer = Sequencer()
@@ -122,16 +124,19 @@ class SequencerTest(unittest.TestCase):
         elem2 = DummySequencingElement(True)
         sequencer.push(elem2, ps)
         sequencer.push(elem1, ps)
-        block = sequencer.build()
+
+        sequence = sequencer.build()
         
         self.assertFalse(sequencer.has_finished())
-        self.assertIs(block, elem1.target_block)
+        self.assertIs(elem1, sequence[0].elem)
         self.assertEqual(ps, elem1.parameters)
         self.assertEqual(1, elem1.requires_stop_call_counter)
         self.assertEqual(1, elem1.build_call_counter)
         self.assertEqual(ps, elem2.parameters)
         self.assertEqual(2, elem2.requires_stop_call_counter)
         self.assertEqual(0, elem2.build_call_counter)
+        self.assertEqual(STOPInstruction(), sequence[1])
+        self.assertEqual(2, len(sequence))
         
     def test_build_path_o2_m1_i2_tt_m1_i0_two_elements_main_block(self) -> None:
         sequencer = Sequencer()
@@ -141,17 +146,20 @@ class SequencerTest(unittest.TestCase):
         elem2 = DummySequencingElement(False)
         sequencer.push(elem2, ps)
         sequencer.push(elem1, ps)
-        block = sequencer.build()
+
+        sequence = sequencer.build()
         
         self.assertTrue(sequencer.has_finished())
-        self.assertIs(block, elem1.target_block)
+        self.assertIs(elem1, sequence[0].elem)
         self.assertEqual(ps, elem1.parameters)
         self.assertEqual(1, elem1.requires_stop_call_counter)
         self.assertEqual(1, elem1.build_call_counter)
-        self.assertIs(block, elem2.target_block)
+        self.assertIs(elem2, sequence[1].elem)
         self.assertEqual(ps, elem2.parameters)
         self.assertEqual(1, elem2.requires_stop_call_counter)
         self.assertEqual(1, elem2.build_call_counter)
+        self.assertEqual(STOPInstruction(), sequence[2])
+        self.assertEqual(3, len(sequence))
         
     def test_build_path_o2_m1_i1_t_m2_i0_i1_f_one_element_main_block_adds_one_element_requires_stop_new_block(self) -> None:
         sequencer = Sequencer()
@@ -164,16 +172,18 @@ class SequencerTest(unittest.TestCase):
         elem = DummySequencingElement(False, (new_block, [new_elem]))
         sequencer.push(elem, ps)
 
-        block = sequencer.build()
+        sequence = sequencer.build()
         
         self.assertFalse(sequencer.has_finished())
-        self.assertIs(block, elem.target_block)
+        self.assertIs(elem, sequence[0].elem)
         self.assertEqual(ps, elem.parameters)
         self.assertEqual(1, elem.requires_stop_call_counter)
         self.assertEqual(1, elem.build_call_counter)
         self.assertEqual(ps, new_elem.parameters)
         self.assertEqual(1, new_elem.requires_stop_call_counter)
         self.assertEqual(0, new_elem.build_call_counter)
+        self.assertEqual(STOPInstruction(), sequence[1])
+        self.assertEqual(2, len(sequence))
         
     def test_build_path_o2_m1_i2_tf_m2_i1_f_i1_f_two_elements_main_block_last_requires_stop_add_one_element_requires_stop_new_block(self) -> None:
         sequencer = Sequencer()
@@ -188,10 +198,10 @@ class SequencerTest(unittest.TestCase):
         sequencer.push(elem2, ps)
         sequencer.push(elem1, ps)
 
-        block = sequencer.build()
+        sequence = sequencer.build()
         
         self.assertFalse(sequencer.has_finished())
-        self.assertIs(block, elem1.target_block)
+        self.assertIs(elem1, sequence[0].elem)
         self.assertEqual(ps, elem1.parameters)
         self.assertEqual(1, elem1.requires_stop_call_counter)
         self.assertEqual(1, elem1.build_call_counter)
@@ -201,6 +211,8 @@ class SequencerTest(unittest.TestCase):
         self.assertEqual(ps, new_elem.parameters)
         self.assertEqual(1, new_elem.requires_stop_call_counter)
         self.assertEqual(0, new_elem.build_call_counter)
+        self.assertEqual(STOPInstruction(), sequence[1])
+        self.assertEqual(2, len(sequence))
         
     def test_build_path_o2_m2_i0_i1_t_m2_i0_i0_one_element_custom_block(self) -> None:
         sequencer = Sequencer()
@@ -255,10 +267,10 @@ class SequencerTest(unittest.TestCase):
         elem_cstm = DummySequencingElement(False)
         sequencer.push(elem_cstm, ps, target_block)
         
-        block = sequencer.build()
+        sequence = sequencer.build()
         
         self.assertTrue(sequencer.has_finished())
-        self.assertIs(block, elem_main.target_block)
+        self.assertIs(elem_main, sequence[0].elem)
         self.assertEqual(ps, elem_main.parameters)
         self.assertEqual(1, elem_main.requires_stop_call_counter)
         self.assertEqual(1, elem_main.build_call_counter)
@@ -266,6 +278,8 @@ class SequencerTest(unittest.TestCase):
         self.assertEqual(ps, elem_cstm.parameters)
         self.assertEqual(1, elem_cstm.requires_stop_call_counter)
         self.assertEqual(1, elem_cstm.build_call_counter)
+        self.assertEqual(STOPInstruction(), sequence[1])
+        self.assertEqual(2, len(sequence))
         
     def test_build_path_o2_m2_i0_i2_tf_m2_i0_i1_f_two_elements_custom_block_last_requires_stop(self) -> None:
         sequencer = Sequencer()
@@ -358,7 +372,7 @@ class SequencerTest(unittest.TestCase):
         elem_main = DummySequencingElement(False)
         sequencer.push(elem_main, ps)
         
-        block = sequencer.build()
+        sequence = sequencer.build()
         
         self.assertFalse(sequencer.has_finished())
         self.assertIs(target_block, elem1.target_block)
@@ -368,10 +382,12 @@ class SequencerTest(unittest.TestCase):
         self.assertEqual(ps, elem2.parameters)
         self.assertEqual(2, elem2.requires_stop_call_counter)
         self.assertEqual(0, elem2.build_call_counter)
-        self.assertIs(block, elem_main.target_block)
+        self.assertIs(elem_main, sequence[0].elem)
         self.assertEqual(ps, elem_main.parameters)
         self.assertEqual(1, elem_main.requires_stop_call_counter)
         self.assertEqual(1, elem_main.build_call_counter)
+        self.assertEqual(STOPInstruction(), sequence[1])
+        self.assertEqual(2, len(sequence))
         
     def test_build_path_o2_m2_i1_t_i2_tt_m2_i0_i0_two_elements_custom_block_one_element_main_block(self) -> None:
         sequencer = Sequencer()
@@ -388,7 +404,7 @@ class SequencerTest(unittest.TestCase):
         elem_main = DummySequencingElement(False)
         sequencer.push(elem_main, ps)
         
-        block = sequencer.build()
+        sequence = sequencer.build()
         
         self.assertTrue(sequencer.has_finished())
         self.assertIs(target_block, elem1.target_block)
@@ -399,10 +415,12 @@ class SequencerTest(unittest.TestCase):
         self.assertEqual(ps, elem2.parameters)
         self.assertEqual(1, elem2.requires_stop_call_counter)
         self.assertEqual(1, elem2.build_call_counter)
-        self.assertIs(block, elem_main.target_block)
+        self.assertIs(elem_main, sequence[0].elem)
         self.assertEqual(ps, elem_main.parameters)
         self.assertEqual(1, elem_main.requires_stop_call_counter)
         self.assertEqual(1, elem_main.build_call_counter)
+        self.assertEqual(STOPInstruction(), sequence[1])
+        self.assertEqual(2, len(sequence))
         
     def test_build_path_o2_m2_i2_tf_t_i2_tf_m2_i1_f_i1_f_two_elements_custom_block_last_requires_stop_two_element_main_block_last_requires_stop(self) -> None:
         sequencer = Sequencer()
@@ -422,7 +440,7 @@ class SequencerTest(unittest.TestCase):
         elem_main1 = DummySequencingElement(False)
         sequencer.push(elem_main1, ps)
         
-        block = sequencer.build()
+        sequence = sequencer.build()
         
         self.assertFalse(sequencer.has_finished())
         self.assertIs(target_block, elem1.target_block)
@@ -432,13 +450,15 @@ class SequencerTest(unittest.TestCase):
         self.assertEqual(ps, elem2.parameters)
         self.assertEqual(2, elem2.requires_stop_call_counter)
         self.assertEqual(0, elem2.build_call_counter)
-        self.assertIs(block, elem_main1.target_block)
+        self.assertIs(elem_main1, sequence[0].elem)
         self.assertEqual(ps, elem_main1.parameters)
         self.assertEqual(1, elem_main1.requires_stop_call_counter)
         self.assertEqual(1, elem_main1.build_call_counter)
         self.assertEqual(ps, elem_main2.parameters)
         self.assertEqual(2, elem_main2.requires_stop_call_counter)
         self.assertEqual(0, elem_main2.build_call_counter)
+        self.assertEqual(STOPInstruction(), sequence[1])
+        self.assertEqual(2, len(sequence))
         
     # which block contains the element that requires a stop is considered a mirror configuration and only tested for this example
     def test_build_path_o2_m2_i2_tt_t_i2_tf_m2_i0_i1_f_two_elements_custom_block_last_requires_stop_two_element_main_block(self) -> None:
@@ -459,7 +479,7 @@ class SequencerTest(unittest.TestCase):
         elem_main1 = DummySequencingElement(False)
         sequencer.push(elem_main1, ps)
         
-        block = sequencer.build()
+        sequence = sequencer.build()
         
         self.assertFalse(sequencer.has_finished())
         self.assertIs(target_block, elem1.target_block)
@@ -469,14 +489,16 @@ class SequencerTest(unittest.TestCase):
         self.assertEqual(ps, elem2.parameters)
         self.assertEqual(2, elem2.requires_stop_call_counter)
         self.assertEqual(0, elem2.build_call_counter)
-        self.assertIs(block, elem_main1.target_block)
+        self.assertIs(elem_main1, sequence[0].elem)
         self.assertEqual(ps, elem_main1.parameters)
         self.assertEqual(1, elem_main1.requires_stop_call_counter)
         self.assertEqual(1, elem_main1.build_call_counter)
-        self.assertIs(block, elem_main2.target_block)
+        self.assertIs(elem_main2, sequence[1].elem)
         self.assertEqual(ps, elem_main2.parameters)
         self.assertEqual(1, elem_main2.requires_stop_call_counter)
         self.assertEqual(1, elem_main2.build_call_counter)
+        self.assertEqual(STOPInstruction(), sequence[2])
+        self.assertEqual(3, len(sequence))
         
     def test_build_path_o2_m2_i2_tt_t_i2_tt_m2_i0_i0_two_elements_custom_block_two_element_main_block(self) -> None:
         sequencer = Sequencer()
@@ -496,7 +518,7 @@ class SequencerTest(unittest.TestCase):
         elem_main1 = DummySequencingElement(False)
         sequencer.push(elem_main1, ps)
         
-        block = sequencer.build()
+        sequence = sequencer.build()
         
         self.assertTrue(sequencer.has_finished())
         self.assertIs(target_block, elem1.target_block)
@@ -507,14 +529,16 @@ class SequencerTest(unittest.TestCase):
         self.assertEqual(ps, elem2.parameters)
         self.assertEqual(1, elem2.requires_stop_call_counter)
         self.assertEqual(1, elem2.build_call_counter)
-        self.assertIs(block, elem_main1.target_block)
+        self.assertIs(elem_main1, sequence[0].elem)
         self.assertEqual(ps, elem_main1.parameters)
         self.assertEqual(1, elem_main1.requires_stop_call_counter)
         self.assertEqual(1, elem_main1.build_call_counter)
-        self.assertIs(block, elem_main2.target_block)
+        self.assertIs(elem_main2, sequence[1].elem)
         self.assertEqual(ps, elem_main2.parameters)
         self.assertEqual(1, elem_main2.requires_stop_call_counter)
         self.assertEqual(1, elem_main2.build_call_counter)
+        self.assertEqual(STOPInstruction(), sequence[2])
+        self.assertEqual(3, len(sequence))
                 
     # path 1_2_3_4_5_6_7_8_5_3_9 can never occur: 8 sets shall_continue = True, so 3 cannot evaluate to False
         

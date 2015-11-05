@@ -95,8 +95,7 @@ class Sequencer:
                             element.build_sequence(self, parameters, target_block)
                         else: break
         
-        self.__main_block.compile_sequence()
-        return self.__main_block
+        return self.__main_block.compile_sequence()
         
     def has_finished(self) -> bool:
         """Returns True, if all translation stacks are empty. Indicates that the translation is complete.
