@@ -74,7 +74,7 @@ class Sequencer:
         self.__main_block = InstructionBlock()
         self.__sequencing_stacks = {self.__main_block: []} #type: Dict[InstructionBlock, List[StackElement]]
         
-    def push(self, sequencing_element: SequencingElement, parameters: Dict[str, Union[Parameter, float]], target_block: InstructionBlock = None) -> None:
+    def push(self, sequencing_element: SequencingElement, parameters: Dict[str, Union[Parameter, float]] = dict(), target_block: InstructionBlock = None) -> None:
         """Add an element to the translation stack of the target_block with the given set of parameters.
         
         The element will be on top of the stack, i.e., it is the first to be translated if no subsequent calls
