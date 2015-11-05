@@ -16,9 +16,6 @@ class Plotter:
         super().__init__()
         self.__sample_rate = sample_rate
 
-    def register_waveform(self, waveform: Waveform) -> None:
-        """Registering waveforms is not required for plotting, leaving this method to do precisely nothing."""
-
     def render(self, block: InstructionBlock) -> Tuple[np.ndarray, np.ndarray]:
         if not all(map(lambda x: isinstance(x, EXECInstruction), block.instructions)):
             raise NotImplementedError('Can only plot waveforms without branching so far.')
@@ -44,7 +41,7 @@ class Plotter:
 
 def plot(pulse: SequencingElement, parameters: Dict[str, Parameter]={}, sample_rate: int=10) -> None: # pragma: no cover
     plotter = Plotter(sample_rate=sample_rate)
-    sequencer = Sequencer(plotter)
+    sequencer = Sequencer()
     sequencer.push(pulse, parameters)
     block = sequencer.build()
     if not sequencer.has_finished():
