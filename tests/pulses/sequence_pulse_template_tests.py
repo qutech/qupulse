@@ -5,7 +5,7 @@ from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
 from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate, MissingMappingException, UnnecessaryMappingException, MissingParameterDeclarationException, RuntimeMappingError
 from qctoolkit.pulses.parameters import ParameterDeclaration, ParameterNotProvidedException, ConstantParameter
 
-from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummySequencingHardware
+from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock
 from tests.serialization_dummies import DummySerializer
 
 
@@ -119,7 +119,7 @@ class SequencePulseTemplateSerializationTests(unittest.TestCase):
 class SequencePulseTemplateSequencingTests(SequencePulseTemplateTest):
 
     def test_missing_parameter(self):
-        sequencer = DummySequencer(DummySequencingHardware())
+        sequencer = DummySequencer()
         block = DummyInstructionBlock()
         parameters = copy.deepcopy(self.parameters)
         parameters.pop('uptime')
@@ -127,10 +127,10 @@ class SequencePulseTemplateSequencingTests(SequencePulseTemplateTest):
             self.sequence.build_sequence(sequencer, parameters, block)
 
     def test_build_sequence(self) -> None:
-        pass #TODO: implement
+        pass
 
     def test_requires_stop(self) -> None:
-        pass #TODO: implement
+        pass
 
     def test_runtime_mapping_exception(self):
         mapping = copy.deepcopy(self.mapping1)

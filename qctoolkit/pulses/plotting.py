@@ -3,14 +3,14 @@ from matplotlib import pyplot as plt
 from typing import Dict, Tuple
 
 from .parameters import Parameter
-from .sequencing import Sequencer, SequencingHardwareInterface, SequencingElement
+from .sequencing import Sequencer, SequencingElement
 from .instructions import EXECInstruction, Waveform, InstructionBlock
 
 
 __all__ = ["Plotter", "plot", "PlottingNotPossibleException"]
 
 
-class Plotter(SequencingHardwareInterface):
+class Plotter:
 
     def __init__(self, sample_rate: float=10) -> None:
         super().__init__()

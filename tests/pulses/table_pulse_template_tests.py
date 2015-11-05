@@ -6,7 +6,7 @@ from qctoolkit.pulses.table_pulse_template import TablePulseTemplate, TableWavef
 from qctoolkit.pulses.parameters import ParameterDeclaration, ParameterNotProvidedException, ParameterValueIllegalException
 from qctoolkit.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy, JumpInterpolationStrategy
 
-from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummySequencingHardware, DummyInterpolationStrategy, DummyParameter
+from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyInterpolationStrategy, DummyParameter
 from tests.serialization_dummies import DummySerializer
 
 
@@ -494,11 +494,10 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
         table.add_entry(bar_decl, 0, 'jump')
         parameters = {'v': 2.3, 'foo': 1, 'bar': 4}
         instantiated_entries = tuple(table.get_entries_instantiated(parameters))
-        sequencer = DummySequencer(DummySequencingHardware())
+        sequencer = DummySequencer()
         instruction_block = DummyInstructionBlock()
         table.build_sequence(sequencer, parameters, instruction_block)
         waveform = TableWaveform(instantiated_entries)
-        self.assertEqual([waveform], sequencer.hardware.waveforms)
         self.assertEqual(1, len(instruction_block.instructions))
         instruction = instruction_block.instructions[0]
         self.assertIsInstance(instruction, EXECInstruction)
@@ -506,11 +505,9 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
 
     def test_build_sequence_empty(self) -> None:
         table = TablePulseTemplate()
-        hardware = DummySequencingHardware()
-        sequencer = DummySequencer(hardware)
+        sequencer = DummySequencer()
         instruction_block = DummyInstructionBlock()
         table.build_sequence(sequencer, {}, instruction_block)
-        self.assertFalse(sequencer.hardware.waveforms)
         self.assertFalse(instruction_block.instructions)
 
     def test_requires_stop(self) -> None:

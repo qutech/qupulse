@@ -312,7 +312,6 @@ class TablePulseTemplate(PulseTemplate):
         if instantiated:
             instantiated = instantiated
             waveform = TableWaveform(tuple(instantiated))
-            sequencer.register_waveform(waveform)
             instruction_block.add_instruction_exec(waveform)
 
     def requires_stop(self, parameters: Dict[str, Parameter]) -> bool: 

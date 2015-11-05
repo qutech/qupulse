@@ -4,13 +4,13 @@ from typing import Optional
 from qctoolkit.pulses.instructions import InstructionPointer, Trigger, CJMPInstruction, GOTOInstruction
 from qctoolkit.pulses.conditions import HardwareCondition, SoftwareCondition, ConditionEvaluationException
 
-from tests.pulses.sequencing_dummies import DummySequencingElement, DummySequencer, DummyInstructionBlock, DummySequencingHardware
+from tests.pulses.sequencing_dummies import DummySequencingElement, DummySequencer, DummyInstructionBlock
 
 
 class HardwareConditionTest(unittest.TestCase):
     
     def test_build_sequence_loop(self) -> None:        
-        sequencer = DummySequencer(DummySequencingHardware())
+        sequencer = DummySequencer()
         block = DummyInstructionBlock()
         
         delegator = DummySequencingElement()
@@ -29,7 +29,7 @@ class HardwareConditionTest(unittest.TestCase):
         self.assertFalse(condition.requires_stop())
     
     def test_build_sequence_branch(self) -> None:
-        sequencer = DummySequencer(DummySequencingHardware())
+        sequencer = DummySequencer()
         block = DummyInstructionBlock()
         
         delegator = DummySequencingElement()
@@ -65,7 +65,7 @@ class IterationCallbackDummy:
 class SoftwareConditionTest(unittest.TestCase):
     
     def test_build_cannot_evaluate(self) -> None:
-        sequencer = DummySequencer(DummySequencingHardware())
+        sequencer = DummySequencer()
         block = DummyInstructionBlock()
         
         delegator = DummySequencingElement()
@@ -79,7 +79,7 @@ class SoftwareConditionTest(unittest.TestCase):
         self.assertEqual(str(ConditionEvaluationException()), "The Condition can currently not be evaluated.")
         
     def test_build_sequence_loop_true(self) -> None:
-        sequencer = DummySequencer(DummySequencingHardware())
+        sequencer = DummySequencer()
         block = DummyInstructionBlock()
         
         delegator = DummySequencingElement()
@@ -97,7 +97,7 @@ class SoftwareConditionTest(unittest.TestCase):
         self.assertEqual(1, callback.loop_iteration)
         
     def test_build_sequence_loop_false(self):
-        sequencer = DummySequencer(DummySequencingHardware())
+        sequencer = DummySequencer()
         block = DummyInstructionBlock()
         
         delegator = DummySequencingElement()
@@ -115,7 +115,7 @@ class SoftwareConditionTest(unittest.TestCase):
         self.assertEqual(0, callback.loop_iteration)
         
     def test_build_sequence_branch_true(self):
-        sequencer = DummySequencer(DummySequencingHardware())
+        sequencer = DummySequencer()
         block = DummyInstructionBlock()
         
         delegator = DummySequencingElement()
@@ -135,7 +135,7 @@ class SoftwareConditionTest(unittest.TestCase):
         
         
     def test_build_sequence_branch_false(self):
-        sequencer = DummySequencer(DummySequencingHardware())
+        sequencer = DummySequencer()
         block = DummyInstructionBlock()
         
         delegator = DummySequencingElement()

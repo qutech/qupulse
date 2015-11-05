@@ -5,11 +5,11 @@ import numbers
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
-from .instructions import InstructionBlock, Waveform
+from .instructions import InstructionBlock
 from .parameters import Parameter, ConstantParameter
 
 
-__all__ = ["SequencingElement", "Sequencer", "SequencingHardwareInterface"]
+__all__ = ["SequencingElement", "Sequencer"]
 
     
 class SequencingElement(metaclass = ABCMeta):
@@ -39,24 +39,6 @@ class SequencingElement(metaclass = ABCMeta):
         possible child elements.
         If this SequencingElement contains a child element which requires a stop, this information will be
         regarded during translation of that element.
-        """ 
-
-
-class SequencingHardwareInterface(metaclass = ABCMeta):
-    """A hardware interface used by Sequencer to register waveforms."""
-
-    def __init__(self) -> None:
-        super().__init__()
-    
-    @abstractmethod
-    def register_waveform(self, waveform: Waveform) -> None:
-        """Register a waveform with the device.
-        
-        The waveform is given as a waveform_table of (time, voltage) tuples of type (int >= 0, float).
-        register_waveform converts this into a sequence of voltages per tick (depending on the hardware
-        output frequency) and for this purpose interpolates between entries.
-        The function ensures that the resulting waveform is known by the device and returns a Waveform
-        object representing a handle to the waveform on the device.
         """
 
 
@@ -67,9 +49,8 @@ class Sequencer:
 
     StackElement = Tuple[SequencingElement, Dict[str, Parameter]]
 
-    def __init__(self, hardware_interface: SequencingHardwareInterface) -> None:
+    def __init__(self) -> None:
         super().__init__()
-        self.__hardware_interface = hardware_interface
         self.__waveforms = dict() #type: Dict[int, Waveform]
         self.__main_block = InstructionBlock()
         self.__sequencing_stacks = {self.__main_block: []} #type: Dict[InstructionBlock, List[StackElement]]
@@ -125,15 +106,3 @@ class Sequencer:
         e.g. when required measurement results have been acquired since the last translation.
         """
         return not any(self.__sequencing_stacks.values())
-
-    def register_waveform(self, waveform: Waveform) -> None:
-        """Register a waveform with the sequencer.
-        
-        Forwards waveform registration to the actual hardware (using its SequencingHardwareInterface instance)
-        but ensures that identical waveforms are only registered once by maintaining a hash table of previously
-        registered waveforms.
-        """
-        waveform_hash = hash(waveform)
-        if waveform_hash not in self.__waveforms:
-            self.__hardware_interface.register_waveform(waveform)
-            self.__waveforms[waveform_hash] = waveform

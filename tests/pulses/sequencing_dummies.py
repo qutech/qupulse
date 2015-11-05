@@ -6,7 +6,7 @@ import numpy
 """LOCAL IMPORTS"""
 from qctoolkit.serialization import Serializer
 from qctoolkit.pulses.instructions import Waveform
-from qctoolkit.pulses.sequencing import Sequencer, InstructionBlock, SequencingHardwareInterface, SequencingElement
+from qctoolkit.pulses.sequencing import Sequencer, InstructionBlock, SequencingElement
 from qctoolkit.pulses.parameters import Parameter, ParameterDeclaration
 from qctoolkit.pulses.pulse_template import PulseTemplate, MeasurementWindow
 from qctoolkit.pulses.interpolation import InterpolationStrategy
@@ -60,21 +60,6 @@ class DummySequencingElement(SequencingElement):
         return self.requires_stop_
 
 
-class DummySequencingHardware(SequencingHardwareInterface):
-
-    def __init__(self, sample_rate: float=1) -> None:
-        super().__init__()
-        self.waveforms = [] # type: List[WaveformTable]
-        self.sample_rate_ = sample_rate
-
-    def register_waveform(self, waveform: Waveform) -> None:
-        self.waveforms.append(waveform)
-
-    @property
-    def sample_rate(self) -> float:
-        return self.sample_rate_
-
-
 class DummyInstructionBlock(InstructionBlock):
 
     def __init__(self, outer_block: InstructionBlock = None) -> None:
@@ -112,10 +97,9 @@ class DummyWaveform(Waveform):
 
 class DummySequencer(Sequencer):
 
-    def __init__(self, sequencing_hardware: DummySequencingHardware) -> None:
-        super().__init__(None)
+    def __init__(self) -> None:
+        super().__init__()
         self.sequencing_stacks = {} #type: Dict[InstructionBlock, List[StackElement]]
-        self.hardware = sequencing_hardware
 
     def push(self, sequencing_element: SequencingElement, parameters: Dict[str, Parameter], target_block: InstructionBlock = None) -> None:
         if target_block is None:
@@ -131,9 +115,6 @@ class DummySequencer(Sequencer):
 
     def has_finished(self):
         raise NotImplementedError()
-
-    def register_waveform(self, waveform: Waveform) -> None:
-        self.hardware.register_waveform(waveform)
 
 
 class DummyPulseTemplate(PulseTemplate):

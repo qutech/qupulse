@@ -2,13 +2,12 @@ from math import floor
 import numpy
 from typing import Dict, Any, Callable
 
-from qctoolkit.pulses.sequencing import SequencingHardwareInterface
 from qctoolkit.pulses.instructions import Waveform, EXECInstruction, STOPInstruction, InstructionSequence
 
 __all__ = ["PulseControlInterface"]
 
 
-class PulseControlInterface(SequencingHardwareInterface):
+class PulseControlInterface:
 
     def __init__(self, register_pulse_callback: Callable[[Dict[str, Any]], int], sample_rate: float, time_scaling: float=0.001) -> None:
         """Initialize PulseControlInterface.
@@ -27,14 +26,6 @@ class PulseControlInterface(SequencingHardwareInterface):
     @staticmethod
     def __get_waveform_name(waveform: Waveform) -> str:
         return 'wf_{}'.format(hash(waveform))
-
-    def register_waveform(self, waveform: Waveform) -> None:
-        """ Due to recent changes, Waveforms can always be recovered from the EXEC-Instructions.
-        Thus, register_waveform seems to have become obsolete (and with it the whole SequencingHardwareInterface).
-        Simply processing the InstructionBlock obtained from Sequencer seems to be sufficient.
-        However, before removing the Interface entirely, I would like to see whether or not this is still true
-        for real hardware interfaces
-        """
 
     def create_waveform_struct(self, waveform: Waveform, name: str) -> Dict[str, Any]:
         """Construct a dictionary adhering to the waveform struct definition in pulse control.

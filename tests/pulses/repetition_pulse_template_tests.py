@@ -3,7 +3,7 @@ import unittest
 from qctoolkit.pulses.repetition_pulse_template import RepetitionPulseTemplate,ParameterNotIntegerException
 from qctoolkit.pulses.parameters import ParameterDeclaration, ParameterNotProvidedException, ParameterValueIllegalException
 
-from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummySequencer, DummySequencingHardware, DummyInstructionBlock, DummyParameter
+from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummySequencer, DummyInstructionBlock, DummyParameter
 from tests.serialization_dummies import DummySerializer
 
 
@@ -78,7 +78,7 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
         self.body = DummyPulseTemplate()
         self.repetitions = ParameterDeclaration('foo', max=5)
         self.template = RepetitionPulseTemplate(self.body, self.repetitions)
-        self.sequencer = DummySequencer(DummySequencingHardware())
+        self.sequencer = DummySequencer()
         self.block = DummyInstructionBlock()
 
     def test_build_sequence_constant(self) -> None:
