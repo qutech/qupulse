@@ -152,6 +152,6 @@ class SoftwareConditionTest(unittest.TestCase):
         
         condition.build_sequence_branch(delegator, if_branch, else_branch, sequencer, [], block)
         self.assertEqual(0, callback.loop_iteration)
-    
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
