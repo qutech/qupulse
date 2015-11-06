@@ -33,7 +33,7 @@ class LoopPulseTemplateTest(unittest.TestCase):
         t = LoopPulseTemplate.create_constant_for_loop(10, body)
         sequencer = Sequencer()
         block = DummyInstructionBlock()
-        sequencer.push(t, {}, block)
+        sequencer.push(t, {}, {}, block)
         sequencer.build()
         self.assertEqual(10, body.build_sequence_calls)
 
@@ -50,14 +50,14 @@ class LoopPulseTemplateSequencingTests(unittest.TestCase):
         condition = DummyCondition(requires_stop=False)
         body = DummyPulseTemplate(requires_stop=False)
         t = LoopPulseTemplate(condition, body)
-        self.assertFalse(t.requires_stop({}))
+        self.assertFalse(t.requires_stop({}, {}))
 
         condition.requires_stop_ = True
-        self.assertTrue(t.requires_stop({}))
+        self.assertTrue(t.requires_stop({}, {}))
 
         body.requires_stop_ = True
         condition.requires_stop_ = False
-        self.assertFalse(t.requires_stop({}))
+        self.assertFalse(t.requires_stop({}, {}))
 
     def test_build_sequence(self) -> None:
         condition = DummyCondition()
@@ -66,12 +66,14 @@ class LoopPulseTemplateSequencingTests(unittest.TestCase):
         sequencer = DummySequencer()
         block = DummyInstructionBlock()
         parameters = {}
-        t.build_sequence(sequencer, parameters, block)
+        conditions = {}
+        t.build_sequence(sequencer, parameters, conditions, block)
         expected_data = dict(
             delegator=t,
             body=body,
             sequencer=sequencer,
             parameters=parameters,
+            conditions=conditions,
             instruction_block=block
         )
         self.assertEqual(expected_data, condition.loop_call_data)

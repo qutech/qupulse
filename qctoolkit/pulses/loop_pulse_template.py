@@ -40,22 +40,25 @@ class LoopPulseTemplate(PulseTemplate):
     def parameter_names(self) -> Set[str]:
         return self.__body.parameter_names
 
+    def get_measurement_windows(self, parameters: Dict[str, Parameter] = None):
+        raise NotImplemented()
+
     @property
     def parameter_declarations(self) -> Set[str]:
         return self.__body.parameter_declarations
-
-    def get_measurement_windows(self, parameters: Dict[str, Parameter] = None) -> List[MeasurementWindow]:
-        """Return all measurement windows defined in this PulseTemplate."""
-        raise NotImplementedError()
 
     @property
     def is_interruptable(self) -> bool:
         return self.__body.is_interruptable
 
-    def build_sequence(self, sequencer: Sequencer, parameters: Dict[str, Parameter], instruction_block: InstructionBlock):
-        self.__condition.build_sequence_loop(self, self.__body, sequencer, parameters, instruction_block)
+    def build_sequence(self,
+                       sequencer: Sequencer,
+                       parameters: Dict[str, Parameter],
+                       conditions: Dict[str, Condition],
+                       instruction_block: InstructionBlock) -> None:
+        self.__condition.build_sequence_loop(self, self.__body, sequencer, parameters, conditions, instruction_block)
 
-    def requires_stop(self, parameters: Dict[str, Parameter]):
+    def requires_stop(self, parameters: Dict[str, Parameter], conditions: Dict[str, 'Condition']) -> bool:
         return self.__condition.requires_stop()
 
     def get_serialization_data(self, serializer: Serializer):

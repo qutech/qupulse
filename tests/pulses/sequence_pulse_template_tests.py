@@ -124,7 +124,7 @@ class SequencePulseTemplateSequencingTests(SequencePulseTemplateTest):
         parameters = copy.deepcopy(self.parameters)
         parameters.pop('uptime')
         with self.assertRaises(ParameterNotProvidedException):
-            self.sequence.build_sequence(sequencer, parameters, block)
+            self.sequence.build_sequence(sequencer, parameters, {}, block)
 
     def test_build_sequence(self) -> None:
         pass
@@ -166,7 +166,7 @@ class SequencePulseTemplateTestProperties(SequencePulseTemplateTest):
         
     def test_requires_stop(self):
         seq = SequencePulseTemplate([],[])
-        self.assertFalse(seq.requires_stop({}))
+        self.assertFalse(seq.requires_stop({}, {}))
         #self.assertFalse(self.sequence.requires_stop({}))
 
 

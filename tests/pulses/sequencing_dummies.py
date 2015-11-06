@@ -43,22 +43,30 @@ class DummySequencingElement(SequencingElement):
         self.requires_stop_call_counter = 0
         self.target_block = None
         self.parameters = None
+        self.conditions = None
         self.requires_stop_ = requires_stop
         self.push_elements = push_elements
         self.parameter_names = set()
+        self.condition_names = set()
 
-    def build_sequence(self, sequencer: Sequencer, parameters: Dict[str, Parameter], instruction_block: InstructionBlock) -> None:
+    def build_sequence(self,
+                       sequencer: Sequencer,
+                       parameters: Dict[str, Parameter],
+                       conditions: Dict[str, 'Condition'],
+                       instruction_block: InstructionBlock) -> None:
         self.build_call_counter += 1
         self.target_block = instruction_block
         instruction_block.add_instruction(DummyInstruction(self))
         self.parameters = parameters
+        self.conditions = conditions
         if self.push_elements is not None:
             for element in self.push_elements[1]:
-                sequencer.push(element, parameters, self.push_elements[0])
+                sequencer.push(element, parameters, conditions, self.push_elements[0])
 
-    def requires_stop(self, parameters: Dict[str, Parameter]) -> bool:
+    def requires_stop(self, parameters: Dict[str, Parameter], conditions: Dict[str, 'Conditions']) -> bool:
         self.requires_stop_call_counter += 1
         self.parameters = parameters
+        self.conditions = conditions
         return self.requires_stop_
 
 
@@ -114,61 +122,23 @@ class DummySequencer(Sequencer):
         super().__init__()
         self.sequencing_stacks = {} #type: Dict[InstructionBlock, List[StackElement]]
 
-    def push(self, sequencing_element: SequencingElement, parameters: Dict[str, Parameter], target_block: InstructionBlock = None) -> None:
+    def push(self,
+             sequencing_element: SequencingElement,
+             parameters: Dict[str, Parameter],
+             conditions: Dict[str, 'Conditon'],
+             target_block: InstructionBlock = None) -> None:
         if target_block is None:
             target_block = self.__main_block
 
         if not target_block in self.sequencing_stacks:
             self.sequencing_stacks[target_block] = []
 
-        self.sequencing_stacks[target_block].append((sequencing_element, parameters))
+        self.sequencing_stacks[target_block].append((sequencing_element, parameters, conditions))
 
     def build(self) -> InstructionBlock:
         raise NotImplementedError()
 
     def has_finished(self):
-        raise NotImplementedError()
-
-
-class DummyPulseTemplate(PulseTemplate):
-
-    def __init__(self, requires_stop: bool=False, is_interruptable: bool=False, parameter_names: Set[str]={}) -> None:
-        super().__init__()
-        self.requires_stop_ = requires_stop
-        self.is_interruptable_ = is_interruptable
-        self.parameter_names_ = parameter_names
-        self.build_sequence_calls = 0
-
-    @property
-    def parameter_names(self) -> Set[str]:
-        return self.parameter_names_
-
-    @property
-    def parameter_declarations(self) -> Set[str]:
-        return [ParameterDeclaration(name) for name in self.parameter_names]
-
-    def get_measurement_windows(self, parameters: Dict[str, Parameter] = None) -> List[MeasurementWindow]:
-        """Return all measurement windows defined in this PulseTemplate."""
-        raise NotImplementedError()
-
-    @property
-    def is_interruptable(self) -> bool:
-        return self.is_interruptable_
-
-    def build_sequence(self, sequencer: Sequencer, parameters: Dict[str, Parameter], instruction_block: InstructionBlock):
-        self.build_sequence_calls += 1
-
-    def requires_stop(self, parameters: Dict[str, Parameter]):
-        return self.requires_stop_
-
-    def get_serialization_data(self, serializer: Serializer):
-        raise NotImplementedError()
-
-    @staticmethod
-    def deserialize(serializer: Serializer,
-                    condition: Dict[str, Any],
-                    body: Dict[str, Any],
-                    identifier: Optional[str]=None):
         raise NotImplementedError()
 
 
@@ -201,12 +171,14 @@ class DummyCondition(Condition):
                             body: SequencingElement,
                             sequencer: Sequencer,
                             parameters: Dict[str, Parameter],
+                            conditions: Dict[str, Condition],
                             instruction_block: InstructionBlock) -> None:
         self.loop_call_data = dict(
             delegator=delegator,
             body=body,
             sequencer=sequencer,
             parameters=parameters,
+            conditions=conditions,
             instruction_block=instruction_block
         )
 
@@ -216,6 +188,7 @@ class DummyCondition(Condition):
                               else_branch: SequencingElement,
                               sequencer: Sequencer,
                               parameters: Dict[str, Parameter],
+                              conditions: Dict[str, Condition],
                               instruction_block: InstructionBlock) -> None:
         self.branch_call_data = dict(
             delegator=delegator,
@@ -223,6 +196,7 @@ class DummyCondition(Condition):
             else_branch=else_branch,
             sequencer=sequencer,
             parameters=parameters,
+            conditions=conditions,
             instruction_block=instruction_block
         )
 
@@ -252,10 +226,14 @@ class DummyPulseTemplate(PulseTemplate):
     def is_interruptable(self) -> bool:
         return self.is_interruptable_
 
-    def build_sequence(self, sequencer: Sequencer, parameters: Dict[str, Parameter], instruction_block: InstructionBlock):
+    def build_sequence(self,
+                       sequencer: Sequencer,
+                       parameters: Dict[str, Parameter],
+                       conditions: Dict[str, Condition],
+                       instruction_block: InstructionBlock):
         self.build_sequence_calls += 1
 
-    def requires_stop(self, parameters: Dict[str, Parameter]):
+    def requires_stop(self, parameters: Dict[str, Parameter], conditions: Dict[str, Condition]) -> bool:
         return self.requires_stop_
 
     def get_serialization_data(self, serializer: Serializer):

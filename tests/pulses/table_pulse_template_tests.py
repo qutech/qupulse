@@ -6,7 +6,7 @@ from qctoolkit.pulses.table_pulse_template import TablePulseTemplate, TableWavef
 from qctoolkit.pulses.parameters import ParameterDeclaration, ParameterNotProvidedException, ParameterValueIllegalException
 from qctoolkit.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy, JumpInterpolationStrategy
 
-from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyInterpolationStrategy, DummyParameter
+from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyInterpolationStrategy, DummyParameter, DummyCondition
 from tests.serialization_dummies import DummySerializer
 
 
@@ -496,7 +496,7 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
         instantiated_entries = tuple(table.get_entries_instantiated(parameters))
         sequencer = DummySequencer()
         instruction_block = DummyInstructionBlock()
-        table.build_sequence(sequencer, parameters, instruction_block)
+        table.build_sequence(sequencer, parameters, {}, instruction_block)
         waveform = TableWaveform(instantiated_entries)
         self.assertEqual(1, len(instruction_block.instructions))
         instruction = instruction_block.instructions[0]
@@ -507,7 +507,7 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
         table = TablePulseTemplate()
         sequencer = DummySequencer()
         instruction_block = DummyInstructionBlock()
-        table.build_sequence(sequencer, {}, instruction_block)
+        table.build_sequence(sequencer, {}, {}, instruction_block)
         self.assertFalse(instruction_block.instructions)
 
     def test_requires_stop(self) -> None:
@@ -516,12 +516,16 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
         bar_decl = ParameterDeclaration('bar')
         table.add_entry(foo_decl, 'v', 'linear')
         table.add_entry(bar_decl, 0, 'jump')
-        test_sets = [(False, {'foo': DummyParameter(0, False), 'bar': DummyParameter(0, False), 'v': DummyParameter(0, False)}),
-                     (True, {'foo': DummyParameter(0, True), 'bar': DummyParameter(0, False), 'v': DummyParameter(0, False)}),
-                     (True, {'foo': DummyParameter(0, False), 'bar': DummyParameter(0, False), 'v': DummyParameter(0, True)}),
-                     (True, {'foo': DummyParameter(0, True), 'bar': DummyParameter(0, True), 'v': DummyParameter(0, True)})]
-        for expected_result, parameter_set in test_sets:
-            self.assertEqual(expected_result, table.requires_stop(parameter_set))
+        test_sets = [(False, {'foo': DummyParameter(0, False), 'bar': DummyParameter(0, False), 'v': DummyParameter(0, False)}, {'foo': DummyCondition(False)}),
+                     (False, {'foo': DummyParameter(0, False), 'bar': DummyParameter(0, False), 'v': DummyParameter(0, False)}, {'foo': DummyCondition(True)}),
+                     (True, {'foo': DummyParameter(0, True), 'bar': DummyParameter(0, False), 'v': DummyParameter(0, False)}, {'foo': DummyCondition(False)}),
+                     (True, {'foo': DummyParameter(0, True), 'bar': DummyParameter(0, False), 'v': DummyParameter(0, False)}, {'foo': DummyCondition(True)}),
+                     (True, {'foo': DummyParameter(0, False), 'bar': DummyParameter(0, False), 'v': DummyParameter(0, True)}, {'foo': DummyCondition(False)}),
+                     (True, {'foo': DummyParameter(0, False), 'bar': DummyParameter(0, False), 'v': DummyParameter(0, True)}, {'foo': DummyCondition(True)}),
+                     (True, {'foo': DummyParameter(0, True), 'bar': DummyParameter(0, True), 'v': DummyParameter(0, True)}, {'foo': DummyCondition(False)}),
+                     (True, {'foo': DummyParameter(0, True), 'bar': DummyParameter(0, True), 'v': DummyParameter(0, True)}, {'foo': DummyCondition(True)})]
+        for expected_result, parameter_set, condition_set in test_sets:
+            self.assertEqual(expected_result, table.requires_stop(parameter_set, condition_set))
 
     def test_identifier(self):
         identifier = 'some name'

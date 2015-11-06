@@ -6,6 +6,7 @@ from .pulse_template import PulseTemplate, MeasurementWindow
 from .sequencing import Sequencer
 from .instructions import InstructionBlock
 from .parameters import ParameterDeclaration, Parameter
+from .conditions import Condition
 
 
 __all__ = ["RepetitionPulseTemplate", "ParameterNotIntegerException"]
@@ -45,7 +46,11 @@ class RepetitionPulseTemplate(PulseTemplate):
     def is_interruptable(self) -> bool:
         return self.__body.is_interruptable
 
-    def build_sequence(self, sequencer: Sequencer, parameters: Dict[str, Parameter], instruction_block: InstructionBlock):
+    def build_sequence(self,
+                       sequencer: Sequencer,
+                       parameters: Dict[str, Parameter],
+                       conditions: Dict[str, Condition],
+                       instruction_block: InstructionBlock) -> None:
         repetition_count = self.__repetition_count
         if isinstance(repetition_count, ParameterDeclaration):
             repetition_count = repetition_count.get_value(parameters)
@@ -53,9 +58,9 @@ class RepetitionPulseTemplate(PulseTemplate):
                 raise ParameterNotIntegerException(self.__repetition_count.name, repetition_count)
 
         for i in range(0, int(repetition_count), 1):
-            sequencer.push(self.__body, parameters, instruction_block)
+            sequencer.push(self.__body, parameters, conditions, instruction_block)
 
-    def requires_stop(self, parameters: Dict[str, Parameter]):
+    def requires_stop(self, parameters: Dict[str, Parameter], conditions: Dict[str, 'Condition']) -> bool:
         if isinstance(self.__repetition_count, ParameterDeclaration):
             if parameters[self.__repetition_count.name].requires_stop:
                 return True

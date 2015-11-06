@@ -9,6 +9,7 @@ from qctoolkit.expressions import Expression
 from .pulse_template import PulseTemplate, MeasurementWindow
 from .parameters import ParameterDeclaration, Parameter, ParameterNotProvidedException
 from .sequencing import InstructionBlock, Sequencer
+from .conditions import Condition
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +89,7 @@ class SequencePulseTemplate(PulseTemplate):
     def is_interruptable(self, new_value: bool):
         self.__is_interruptable = new_value
 
-    def requires_stop(self, parameters: Dict[str, Parameter]) -> bool:
+    def requires_stop(self, parameters: Dict[str, Parameter], conditions: Dict[str, 'Condition']) -> bool:
         if not self.subtemplates:
             return False
 
@@ -108,7 +109,11 @@ class SequencePulseTemplate(PulseTemplate):
         external_values = {name: float(parameters[name]) for name in external_parameters}
         return mapping_function.evaluate(external_values)
 
-    def build_sequence(self, sequencer: Sequencer, parameters: Dict[str, Parameter], instruction_block: InstructionBlock) -> None:
+    def build_sequence(self,
+                       sequencer: Sequencer,
+                       parameters: Dict[str, Parameter],
+                       conditions: Dict[str, Condition],
+                       instruction_block: InstructionBlock) -> None:
         # detect missing or unnecessary parameters
         missing = self.parameter_names - set(parameters)
         for m in missing:
