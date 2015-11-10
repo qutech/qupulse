@@ -1,6 +1,8 @@
 import logging
 from typing import Dict, List, Set,  Optional
 import numbers
+import numpy as np
+from typing import Any
 
 """RELATED THIRD PARTY IMPORTS"""
 
@@ -12,6 +14,7 @@ from .parameters import ParameterDeclaration, Parameter
 from .pulse_template import PulseTemplate, MeasurementWindow
 from .sequencing import InstructionBlock, Sequencer
 from .sequence_pulse_template import ParameterNotProvidedException
+from .instructions import Waveform
 
 logger = logging.getLogger(__name__)
 
@@ -70,11 +73,7 @@ class FunctionPulseTemplate(PulseTemplate):
         return False
         
     def build_sequence(self, sequencer: Sequencer, parameters: Dict[str, Parameter], instruction_block: InstructionBlock) -> None:
-        # TODO: implement this
-        dt = 1
-        instantiated = self.__expression(dt, **parameters)
-        instantiated = self.get_entries_instantiated(parameters)
-        instantiated = tuple(instantiated)
+        instantiated = FunctionWaveform(parameters,self.__expression,self.__duration_expression)
         waveform = sequencer.register_waveform(instantiated)
         instruction_block.add_instruction_exec(waveform)
 
@@ -94,3 +93,31 @@ class FunctionPulseTemplate(PulseTemplate):
     def deserialize(serializer: 'Serializer', **kwargs):
         return FunctionPulseTemplate(kwargs['expression'], kwargs['duration_expression'], kwargs['Measurement'])
 
+class FunctionWaveform(Waveform):
+
+    def __init__(self, parameters:Dict[str,Parameter],expression,duration_expression) -> None:
+        super().__init__()
+        self.__expression = expression
+        self.__duration_expression = duration_expression
+        self.__parameters = parameters
+        
+    @property
+    def _compare_key(self) -> Any:
+        return self.__expression
+
+    @property
+    def duration(self) -> float:
+        return self.__duration_expression.evaluate(self.__parameters)
+
+    def sample(self, sample_times: np.ndarray, first_offset: float=0) -> np.ndarray:
+        # TODO: implement this
+        
+        voltages = np.empty_like(sample_times)
+        sample_times -= (sample_times[0] - first_offset)
+        
+        #voltages[sample_times] = self.__expression(self.__parameters.update("t":sample_times))
+        
+        #for entry1, entry2 in zip(self.__table[:-1], self.__table[1:]): # iterate over interpolated areas
+        #    indices = np.logical_and(sample_times >= entry1.t, sample_times <= entry2.t)
+        #    voltages[indices] = entry2.interp((entry1.t, entry1.v), (entry2.t, entry2.v), sample_times[indices]) # evaluate interpolation at each time
+        return voltages
