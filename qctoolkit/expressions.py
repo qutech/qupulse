@@ -4,39 +4,40 @@ try:
 except ImportError:
     USE_NUMEXPR = False
 from py_expression_eval import Parser
+from typing import Any, Dict, Iterable, Optional
 
 from qctoolkit.serialization import Serializable
-
+from qctoolkit.pulses.parameters import Parameter
 
 __all__ = ["Expression"]
 
 
 class Expression(Serializable):
-    def __init__(self, ex: str):
-        ex = str(ex)
-        self._string = ex
-        self._expression = Parser().parse(ex.replace('**', '^'))
+
+    def __init__(self, ex: str) -> None:
+        self.__string = str(ex) # type: str
+        self.__expression = Parser().parse(ex.replace('**', '^')) # type: py_expression_eval.Expression
 
     @property
-    def string(self):
-        return self._string
+    def string(self) -> str:
+        return self.__string
 
-    def variables(self):
-        return self._expression.variables()
+    def variables(self) -> Iterable[str]:
+        return self.__expression.variables()
 
-    def evaluate(self, parameters):
+    def evaluate(self, parameters: Dict[str, Parameter]) -> float:
         if USE_NUMEXPR:
-            return numexpr.evaluate(self._string, global_dict={}, local_dict=parameters)
+            return numexpr.evaluate(self.__string, global_dict={}, local_dict=parameters)
         else:
-            return self._expression.evaluate(parameters)
+            return self.__expression.evaluate(parameters)
 
-    def get_serialization_data(self, serializer: 'Serializer'):
-        return dict(type='Expression', expression=self._string)
+    def get_serialization_data(self, serializer: 'Serializer') -> Dict[str, Any]:
+        return dict(type='Expression', expression=self.__string)
 
     @staticmethod
-    def deserialize(serializer: 'Serializer', **kwargs):
+    def deserialize(serializer: 'Serializer', **kwargs) -> Serializable:
         return Expression(kwargs['expression'])
 
     @property
-    def identifier(self):
+    def identifier(self) -> Optional[str]:
         return None

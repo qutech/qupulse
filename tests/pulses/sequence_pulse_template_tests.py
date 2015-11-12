@@ -2,7 +2,7 @@ import unittest
 import copy
 
 from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
-from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate, MissingMappingException, UnnecessaryMappingException, MissingParameterDeclarationException, RuntimeMappingError
+from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate, MissingMappingException, UnnecessaryMappingException, MissingParameterDeclarationException
 from qctoolkit.pulses.parameters import ParameterDeclaration, ParameterNotProvidedException, ConstantParameter
 
 from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock
@@ -144,8 +144,7 @@ class SequencePulseTemplateSequencingTests(SequencePulseTemplateTest):
 class SequencePulseTemplateStringTest(unittest.TestCase):
     def test_str(self):
         T = TablePulseTemplate()
-        a = [RuntimeMappingError(T,T,"c","d"),
-             UnnecessaryMappingException(T,"b"),
+        a = [UnnecessaryMappingException(T,"b"),
              MissingMappingException(T,"b"),
              MissingParameterDeclarationException(T, "c")]
         

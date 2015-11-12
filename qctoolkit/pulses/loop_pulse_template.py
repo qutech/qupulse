@@ -1,17 +1,16 @@
-import logging
-from typing import Dict, Set, List, Optional, Any, Union
+from typing import Dict, Set, Optional, Any
 
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
 from .parameters import Parameter
 from .pulse_template import PulseTemplate, MeasurementWindow
-from .conditions import Condition, SoftwareCondition, ProxyCondition
+from .conditions import Condition
 from .instructions import InstructionBlock
 from .sequencing import Sequencer
 from qctoolkit.serialization import Serializer
 
-logger = logging.getLogger(__name__)
+__all__ = ['LoopPulseTemplate', 'ConditionMissingException']
 
 
 class LoopPulseTemplate(PulseTemplate):
@@ -41,7 +40,7 @@ class LoopPulseTemplate(PulseTemplate):
     def parameter_names(self) -> Set[str]:
         return self.__body.parameter_names
 
-    def get_measurement_windows(self, parameters: Dict[str, Parameter] = None):
+    def get_measurement_windows(self, parameters: Dict[str, Parameter] = None) -> MeasurementWindow:
         raise NotImplemented()
 
     @property

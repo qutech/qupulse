@@ -18,7 +18,8 @@ from .instructions import Waveform
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["FunctionPulseTemplate"]
+__all__ = ["FunctionPulseTemplate", "FunctionWaveform"]
+
 
 class FunctionPulseTemplate(PulseTemplate):
     """Defines a pulse via a time-domain expression.
@@ -49,7 +50,7 @@ class FunctionPulseTemplate(PulseTemplate):
         """Return a set of all parameter declaration objects of this TablePulseTemplate."""
         return set()
 
-    def get_pulse_length(self, parameters):
+    def get_pulse_length(self, parameters) -> float:
         """Return the length of this pulse for the given parameters."""
         missing = self.__parameter_names - set(parameters.keys())
         for m in missing:
@@ -94,12 +95,13 @@ class FunctionPulseTemplate(PulseTemplate):
         return root
 
     @staticmethod
-    def deserialize(serializer: 'Serializer', **kwargs):
+    def deserialize(serializer: 'Serializer', **kwargs) -> 'Serializable':
         return FunctionPulseTemplate(kwargs['expression'], kwargs['duration_expression'], kwargs['Measurement'])
+
 
 class FunctionWaveform(Waveform):
 
-    def __init__(self, parameters:Dict[str,Parameter],expression,duration_expression) -> None:
+    def __init__(self, parameters: Dict[str, Parameter], expression: Expression, duration_expression: Expression) -> None:
         super().__init__()
         self.__expression = expression
         self.__duration_expression = duration_expression

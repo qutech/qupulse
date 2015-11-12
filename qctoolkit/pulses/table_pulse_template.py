@@ -80,7 +80,7 @@ class TablePulseTemplate(PulseTemplate):
                                           }
 
     @staticmethod
-    def from_array(times: np.ndarray, voltages: np.ndarray, measurement=False):
+    def from_array(times: np.ndarray, voltages: np.ndarray, measurement=False) -> 'TablePulseTemplate':
         """Static constructor to build a TablePulse from numpy arrays.
 
         Args:

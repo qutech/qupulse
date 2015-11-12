@@ -52,7 +52,7 @@ class ConstantParameter(Parameter):
     def requires_stop(self) -> bool:
         return False
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "<ConstantParameter {0}>".format(self.__value)
 
     def get_serialization_data(self, serializer: Serializer) -> None:
@@ -61,7 +61,7 @@ class ConstantParameter(Parameter):
     @staticmethod
     def deserialize(serializer: Serializer, constant: float) -> 'ConstantParameter':
         return ConstantParameter(constant)
-      
+
 #class ParameterValueProvider(metaclass = ABCMeta):
 #
 #    @abstractmethod

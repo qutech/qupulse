@@ -4,7 +4,7 @@ from typing import Optional
 from qctoolkit.pulses.instructions import InstructionPointer, Trigger, CJMPInstruction, GOTOInstruction
 from qctoolkit.pulses.conditions import HardwareCondition, SoftwareCondition, ConditionEvaluationException
 
-from tests.pulses.sequencing_dummies import DummySequencingElement, DummySequencer, DummyInstructionBlock, DummyCondition
+from tests.pulses.sequencing_dummies import DummySequencingElement, DummySequencer, DummyInstructionBlock
 
 
 class HardwareConditionTest(unittest.TestCase):
