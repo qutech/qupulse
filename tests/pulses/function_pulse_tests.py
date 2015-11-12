@@ -3,6 +3,7 @@ import unittest
 from qctoolkit.pulses.function_pulse_template import FunctionPulseTemplate
 
 from tests.serialization_dummies import DummySerializer
+from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyInterpolationStrategy, DummyParameter
 
 class FunctionPulseTest(unittest.TestCase):
     def setUp(self):
@@ -28,6 +29,16 @@ class FunctionPulseTest(unittest.TestCase):
                              measurement=False)
         self.assertEqual(expected_data, self.fpt.get_serialization_data(DummySerializer()))
 
-
-
-
+class FunctionPulseSequencingTest(unittest.TestCase):
+    def setUp(self):
+        unittest.TestCase.setUp(self)
+        self.f = "a + t"
+        self.duration = "y"
+        self.args = dict(a=1,y=3)
+        self.fpt = FunctionPulseTemplate(self.f, self.duration)
+    
+    def test_build_sequence(self):
+        ib = DummyInstructionBlock()
+        self.fpt.build_sequence(DummySequencer(), self.args, ib)
+        self.assertTrue(self.args["y"],len(ib))
+        

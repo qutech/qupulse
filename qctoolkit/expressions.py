@@ -24,11 +24,11 @@ class Expression(Serializable):
     def variables(self):
         return self._expression.variables()
 
-    def evaluate(self, parameters):
+    def evaluate(self, **kwargs):
         if USE_NUMEXPR:
-            return numexpr.evaluate(self._string, global_dict={}, local_dict=parameters)
+            return numexpr.evaluate(self._string, global_dict={}, local_dict=kwargs)
         else:
-            return self._expression.evaluate(parameters)
+            return self._expression.evaluate(kwargs)
 
     def get_serialization_data(self, serializer: 'Serializer'):
         return dict(type='Expression', expression=self._string)

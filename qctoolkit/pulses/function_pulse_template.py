@@ -3,6 +3,7 @@ from typing import Dict, List, Set,  Optional
 import numbers
 import numpy as np
 from typing import Any
+from functools import partial
 
 """RELATED THIRD PARTY IMPORTS"""
 
@@ -54,7 +55,7 @@ class FunctionPulseTemplate(PulseTemplate):
         missing = self.__parameter_names - set(parameters.keys())
         for m in missing:
             raise ParameterNotProvidedException(m)
-        return self.__duration_expression.evaluate(parameters)
+        return self.__duration_expression.evaluate(**parameters)
 
     def get_measurement_windows(self, parameters: Optional[Dict[str, Parameter]] = {}) -> List[MeasurementWindow]:
         """Return all measurement windows defined in this PulseTemplate.
@@ -74,8 +75,7 @@ class FunctionPulseTemplate(PulseTemplate):
         
     def build_sequence(self, sequencer: Sequencer, parameters: Dict[str, Parameter], instruction_block: InstructionBlock) -> None:
         instantiated = FunctionWaveform(parameters,self.__expression,self.__duration_expression)
-        waveform = sequencer.register_waveform(instantiated)
-        instruction_block.add_instruction_exec(waveform)
+        instruction_block.add_instruction_exec(instantiated)
 
     def requires_stop(self, parameters: Dict[str, Parameter]) -> bool: 
         return any(parameters[name].requires_stop for name in parameters.keys() if (name in self.parameter_names) and not isinstance(parameters[name], numbers.Number))
@@ -98,24 +98,27 @@ class FunctionWaveform(Waveform):
     def __init__(self, parameters:Dict[str,Parameter],expression,duration_expression) -> None:
         super().__init__()
         self.__expression = expression
-        self.__duration_expression = duration_expression
         self.__parameters = parameters
-        
+        self.__duration_expression = duration_expression
+        self.__partial_expression = self.__partial
+    
+    def __partial (self,t):
+        params = self.__parameters.update({"t":t})
+        return self.__expression(**params)
+    
     @property
     def _compare_key(self) -> Any:
         return self.__expression
 
     @property
     def duration(self) -> float:
-        return self.__duration_expression.evaluate(self.__parameters)
+        return self.__duration_expression.evaluate(**self.__parameters)
 
     def sample(self, sample_times: np.ndarray, first_offset: float=0) -> np.ndarray:
-        # TODO: implement this
-        
         voltages = np.empty_like(sample_times)
         sample_times -= (sample_times[0] - first_offset)
-        
-        #voltages[sample_times] = self.__expression(self.__parameters.update("t":sample_times))
+        func = np.vectorize(self.__partial_expression)
+        voltages[sample_times] = func(sample_times)
         
         #for entry1, entry2 in zip(self.__table[:-1], self.__table[1:]): # iterate over interpolated areas
         #    indices = np.logical_and(sample_times >= entry1.t, sample_times <= entry2.t)
