@@ -3,7 +3,7 @@ import unittest
 from qctoolkit.pulses.loop_pulse_template import LoopPulseTemplate, ConditionMissingException
 
 from tests.pulses.sequencing_dummies import DummyCondition, DummyPulseTemplate, DummySequencer, DummyInstructionBlock
-from tests.serialization_dummies import DummySerializer, DummyStorageBackend
+from tests.serialization_dummies import DummySerializer
 
 class LoopPulseTemplateTest(unittest.TestCase):
 

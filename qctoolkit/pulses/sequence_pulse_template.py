@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 __all__ = ["SequencePulseTemplate", "MissingMappingException", "MissingParameterDeclarationException",
-           "UnnecessaryMappingException", "RuntimeMappingError"]
+           "UnnecessaryMappingException"]
 
 
 # a subtemplate consists of a pulse template and mapping functions for its "internal" parameters
@@ -179,22 +179,10 @@ class MissingMappingException(Exception):
 
 class UnnecessaryMappingException(Exception):
 
-    def __init__(self, template, key):
+    def __init__(self, template: PulseTemplate, key: str) -> None:
         super().__init__()
         self.template = template
         self.key = key
 
     def __str__(self) -> str:
         return "Mapping function for parameter '{}', which template {} does not need".format(self.key, self.template)
-
-class RuntimeMappingError(Exception):
-    def __init__(self, template, subtemplate, outer_key, inner_key):
-        self.template = template
-        self.subtemplate = subtemplate
-        self.outer_key = outer_key
-        self.inner_key = inner_key
-
-    def __str__(self):
-        return ("An error occurred in the mapping function from {} to {}."
-                " The mapping function for inner parameter '{}' requested"
-                " outer parameter '{}', which was not provided.").format(self.template, self.subtemplate, self.inner_key, self.outer_key)
