@@ -28,15 +28,6 @@ class LoopPulseTemplateTest(unittest.TestCase):
         body.is_interruptable_ = True
         self.assertTrue(t.is_interruptable)
 
-    def test_create_constant_for_loop(self) -> None:
-        body = DummyPulseTemplate()
-        t = LoopPulseTemplate.create_constant_for_loop(10, body)
-        sequencer = Sequencer()
-        block = DummyInstructionBlock()
-        sequencer.push(t, {}, {}, block)
-        sequencer.build()
-        self.assertEqual(10, body.build_sequence_calls)
-
     def test_str(self) -> None:
         condition = DummyCondition()
         body = DummyPulseTemplate()
@@ -48,25 +39,26 @@ class LoopPulseTemplateSequencingTests(unittest.TestCase):
 
     def test_requires_stop(self) -> None:
         condition = DummyCondition(requires_stop=False)
+        conditions = {'foo_cond': condition}
         body = DummyPulseTemplate(requires_stop=False)
-        t = LoopPulseTemplate(condition, body)
-        self.assertFalse(t.requires_stop({}, {}))
+        t = LoopPulseTemplate('foo_cond', body)
+        self.assertFalse(t.requires_stop({}, conditions))
 
         condition.requires_stop_ = True
-        self.assertTrue(t.requires_stop({}, {}))
+        self.assertTrue(t.requires_stop({}, conditions))
 
         body.requires_stop_ = True
         condition.requires_stop_ = False
-        self.assertFalse(t.requires_stop({}, {}))
+        self.assertFalse(t.requires_stop({}, conditions))
 
     def test_build_sequence(self) -> None:
         condition = DummyCondition()
         body = DummyPulseTemplate()
-        t = LoopPulseTemplate(condition, body)
+        t = LoopPulseTemplate('foo_cond', body)
         sequencer = DummySequencer()
         block = DummyInstructionBlock()
         parameters = {}
-        conditions = {}
+        conditions = {'foo_cond': condition}
         t.build_sequence(sequencer, parameters, conditions, block)
         expected_data = dict(
             delegator=t,
