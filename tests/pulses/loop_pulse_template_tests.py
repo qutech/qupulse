@@ -1,10 +1,9 @@
 import unittest
 
-from qctoolkit.pulses.loop_pulse_template import LoopPulseTemplate
-from qctoolkit.pulses.sequencing import Sequencer
+from qctoolkit.pulses.loop_pulse_template import LoopPulseTemplate, ConditionMissingException
 
 from tests.pulses.sequencing_dummies import DummyCondition, DummyPulseTemplate, DummySequencer, DummyInstructionBlock
-
+from tests.serialization_dummies import DummySerializer, DummyStorageBackend
 
 class LoopPulseTemplateTest(unittest.TestCase):
 
@@ -72,9 +71,58 @@ class LoopPulseTemplateSequencingTests(unittest.TestCase):
         self.assertFalse(condition.branch_call_data)
         self.assertFalse(sequencer.sequencing_stacks)
 
+    def test_condition_missing(self) -> None:
+        body = DummyPulseTemplate(requires_stop=False)
+        t = LoopPulseTemplate('foo_cond', body)
+        sequencer = DummySequencer()
+        block = DummyInstructionBlock()
+        with self.assertRaises(ConditionMissingException):
+            t.requires_stop({}, {})
+            t.build_sequence(sequencer, {}, {}, block)
 
-class GenericLoopPulseTemplateTest(unittest.TestCase):
-    pass
+
+class LoopPulseTemplateSerializationTests(unittest.TestCase):
+
+    def test_get_serialization_data(self) -> None:
+        body = DummyPulseTemplate()
+        condition_name = 'foo_cond'
+        identifier = 'foo_loop'
+        t = LoopPulseTemplate(condition_name, body, identifier=identifier)
+
+        serializer = DummySerializer()
+        expected_data = dict(type=serializer.get_type_identifier(t),
+                             body=str(id(body)),
+                             condition=condition_name)
+
+        data = t.get_serialization_data(serializer)
+        self.assertEqual(expected_data, data)
+
+    def test_deserialize(self) -> None:
+        data = dict(
+            identifier='foo_loop',
+            condition='foo_cond',
+            body='bodyDummyPulse'
+        )
+
+        # prepare dependencies for deserialization
+        serializer = DummySerializer()
+        serializer.subelements[data['body']] = DummyPulseTemplate()
+
+        # deserialize
+        result = LoopPulseTemplate.deserialize(serializer, **data)
+
+        # compare
+        self.assertIs(serializer.subelements[data['body']], result.body)
+        self.assertEqual(data['condition'], result.condition)
+        self.assertEqual(data['identifier'], result.identifier)
+
+
+class ConditionMissingExceptionTest(unittest.TestCase):
+
+    def test(self) -> None:
+        exc = ConditionMissingException('foo')
+        self.assertIsInstance(str(exc), str)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

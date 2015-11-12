@@ -30,6 +30,14 @@ class LoopPulseTemplate(PulseTemplate):
         return "LoopPulseTemplate: Condition <{}>, Body <{}>".format(self.__condition, self.__body)
 
     @property
+    def body(self) -> PulseTemplate:
+        return self.__body
+
+    @property
+    def condition(self) -> str:
+        return self.__condition
+
+    @property
     def parameter_names(self) -> Set[str]:
         return self.__body.parameter_names
 
