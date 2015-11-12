@@ -10,6 +10,7 @@ from qctoolkit.pulses.sequencing import Sequencer, InstructionBlock, SequencingE
 from qctoolkit.pulses.parameters import Parameter, ParameterDeclaration
 from qctoolkit.pulses.pulse_template import PulseTemplate, MeasurementWindow
 from qctoolkit.pulses.interpolation import InterpolationStrategy
+from qctoolkit.pulses.conditions import Condition
 
 
 class DummyParameter(Parameter):
@@ -42,22 +43,30 @@ class DummySequencingElement(SequencingElement):
         self.requires_stop_call_counter = 0
         self.target_block = None
         self.parameters = None
+        self.conditions = None
         self.requires_stop_ = requires_stop
         self.push_elements = push_elements
         self.parameter_names = set()
+        self.condition_names = set()
 
-    def build_sequence(self, sequencer: Sequencer, parameters: Dict[str, Parameter], instruction_block: InstructionBlock) -> None:
+    def build_sequence(self,
+                       sequencer: Sequencer,
+                       parameters: Dict[str, Parameter],
+                       conditions: Dict[str, 'Condition'],
+                       instruction_block: InstructionBlock) -> None:
         self.build_call_counter += 1
         self.target_block = instruction_block
         instruction_block.add_instruction(DummyInstruction(self))
         self.parameters = parameters
+        self.conditions = conditions
         if self.push_elements is not None:
             for element in self.push_elements[1]:
-                sequencer.push(element, parameters, self.push_elements[0])
+                sequencer.push(element, parameters, conditions, self.push_elements[0])
 
-    def requires_stop(self, parameters: Dict[str, Parameter]) -> bool:
+    def requires_stop(self, parameters: Dict[str, Parameter], conditions: Dict[str, 'Conditions']) -> bool:
         self.requires_stop_call_counter += 1
         self.parameters = parameters
+        self.conditions = conditions
         return self.requires_stop_
 
 
@@ -113,20 +122,83 @@ class DummySequencer(Sequencer):
         super().__init__()
         self.sequencing_stacks = {} #type: Dict[InstructionBlock, List[StackElement]]
 
-    def push(self, sequencing_element: SequencingElement, parameters: Dict[str, Parameter], target_block: InstructionBlock = None) -> None:
+    def push(self,
+             sequencing_element: SequencingElement,
+             parameters: Dict[str, Parameter],
+             conditions: Dict[str, 'Conditon'],
+             target_block: InstructionBlock = None) -> None:
         if target_block is None:
             target_block = self.__main_block
 
         if not target_block in self.sequencing_stacks:
             self.sequencing_stacks[target_block] = []
 
-        self.sequencing_stacks[target_block].append((sequencing_element, parameters))
+        self.sequencing_stacks[target_block].append((sequencing_element, parameters, conditions))
 
     def build(self) -> InstructionBlock:
         raise NotImplementedError()
 
     def has_finished(self):
         raise NotImplementedError()
+
+
+class DummyInterpolationStrategy(InterpolationStrategy):
+
+    def __init__(self) -> None:
+        self.call_arguments = []
+
+    def __call__(self, start: Tuple[float, float], end: Tuple[float, float], times: numpy.ndarray) -> numpy.ndarray:
+        self.call_arguments.append((start, end, list(times)))
+        return times
+
+    def __repr__(self) -> str:
+        return "DummyInterpolationStrategy {}".format(id(self))
+
+
+class DummyCondition(Condition):
+
+    def __init__(self, requires_stop: bool=False):
+        super().__init__()
+        self.requires_stop_ = requires_stop
+        self.loop_call_data = {}
+        self.branch_call_data = {}
+
+    def requires_stop(self) -> bool:
+        return self.requires_stop_
+
+    def build_sequence_loop(self,
+                            delegator: SequencingElement,
+                            body: SequencingElement,
+                            sequencer: Sequencer,
+                            parameters: Dict[str, Parameter],
+                            conditions: Dict[str, Condition],
+                            instruction_block: InstructionBlock) -> None:
+        self.loop_call_data = dict(
+            delegator=delegator,
+            body=body,
+            sequencer=sequencer,
+            parameters=parameters,
+            conditions=conditions,
+            instruction_block=instruction_block
+        )
+
+    def build_sequence_branch(self,
+                              delegator: SequencingElement,
+                              if_branch: SequencingElement,
+                              else_branch: SequencingElement,
+                              sequencer: Sequencer,
+                              parameters: Dict[str, Parameter],
+                              conditions: Dict[str, Condition],
+                              instruction_block: InstructionBlock) -> None:
+        self.branch_call_data = dict(
+            delegator=delegator,
+            if_branch=if_branch,
+            else_branch=else_branch,
+            sequencer=sequencer,
+            parameters=parameters,
+            conditions=conditions,
+            instruction_block=instruction_block
+        )
 
 
 class DummyPulseTemplate(PulseTemplate):
@@ -154,10 +226,14 @@ class DummyPulseTemplate(PulseTemplate):
     def is_interruptable(self) -> bool:
         return self.is_interruptable_
 
-    def build_sequence(self, sequencer: Sequencer, parameters: Dict[str, Parameter], instruction_block: InstructionBlock):
+    def build_sequence(self,
+                       sequencer: Sequencer,
+                       parameters: Dict[str, Parameter],
+                       conditions: Dict[str, Condition],
+                       instruction_block: InstructionBlock):
         self.build_sequence_calls += 1
 
-    def requires_stop(self, parameters: Dict[str, Parameter]):
+    def requires_stop(self, parameters: Dict[str, Parameter], conditions: Dict[str, Condition]) -> bool:
         return self.requires_stop_
 
     def get_serialization_data(self, serializer: Serializer):
@@ -169,16 +245,3 @@ class DummyPulseTemplate(PulseTemplate):
                     body: Dict[str, Any],
                     identifier: Optional[str]=None):
         raise NotImplementedError()
-
-
-class DummyInterpolationStrategy(InterpolationStrategy):
-
-    def __init__(self) -> None:
-        self.call_arguments = []
-
-    def __call__(self, start: Tuple[float, float], end: Tuple[float, float], times: numpy.ndarray) -> numpy.ndarray:
-        self.call_arguments.append((start, end, list(times)))
-        return times
-
-    def __repr__(self) -> str:
-        return "DummyInterpolationStrategy {}".format(id(self))

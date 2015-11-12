@@ -72,12 +72,16 @@ class FunctionPulseTemplate(PulseTemplate):
         """Return true, if this PulseTemplate contains points at which it can halt if interrupted."""
         return False
         
-    def build_sequence(self, sequencer: Sequencer, parameters: Dict[str, Parameter], instruction_block: InstructionBlock) -> None:
+    def build_sequence(self,
+                       sequencer: Sequencer,
+                       parameters: Dict[str, Parameter],
+                       conditions: Dict[str, 'Condition'],
+                       instruction_block: InstructionBlock) -> None:
         instantiated = FunctionWaveform(parameters,self.__expression,self.__duration_expression)
         waveform = sequencer.register_waveform(instantiated)
         instruction_block.add_instruction_exec(waveform)
 
-    def requires_stop(self, parameters: Dict[str, Parameter]) -> bool: 
+    def requires_stop(self, parameters: Dict[str, Parameter], conditions: Dict[str, 'Condition']) -> bool:
         return any(parameters[name].requires_stop for name in parameters.keys() if (name in self.parameter_names) and not isinstance(parameters[name], numbers.Number))
 
     def get_serialization_data(self, serializer: Serializer) -> None:

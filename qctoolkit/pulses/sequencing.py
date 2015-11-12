@@ -19,7 +19,11 @@ class SequencingElement(metaclass = ABCMeta):
         super().__init__()
         
     @abstractmethod
-    def build_sequence(self, sequencer: "Sequencer", parameters: Dict[str, Parameter], instruction_block: InstructionBlock) -> None:
+    def build_sequence(self,
+                       sequencer: "Sequencer",
+                       parameters: Dict[str, Parameter],
+                       conditions: Dict[str, 'Condition'],
+                       instruction_block: InstructionBlock) -> None:
         """Translate this SequencingElement into an instruction sequence for the given instruction_block
         using sequencer and the given parameter sets.
         
@@ -28,7 +32,7 @@ class SequencingElement(metaclass = ABCMeta):
         """
         
     @abstractmethod
-    def requires_stop(self, parameters: Dict[str, Parameter]) -> bool: 
+    def requires_stop(self, parameters: Dict[str, Parameter], conditions: Dict[str, 'Condition']) -> bool:
         """Return True if this SequencingElement cannot be translated yet.
         
         Sequencer will check requires_stop() before calling build_sequence(). If requires_stop() returns True,
@@ -47,7 +51,7 @@ class Sequencer:
     in a InstructionBlock.
     """
 
-    StackElement = Tuple[SequencingElement, Dict[str, Parameter]]
+    StackElement = Tuple[SequencingElement, Dict[str, Parameter], Dict[str, 'Condition']]
 
     def __init__(self) -> None:
         super().__init__()
@@ -55,7 +59,11 @@ class Sequencer:
         self.__main_block = InstructionBlock()
         self.__sequencing_stacks = {self.__main_block: []} #type: Dict[InstructionBlock, List[StackElement]]
         
-    def push(self, sequencing_element: SequencingElement, parameters: Dict[str, Union[Parameter, float]] = dict(), target_block: InstructionBlock = None) -> None:
+    def push(self,
+             sequencing_element: SequencingElement,
+             parameters: Dict[str, Union[Parameter, float]] = dict(),
+             conditions: Dict[str, 'Condition'] = dict(),
+             target_block: InstructionBlock = None) -> None:
         """Add an element to the translation stack of the target_block with the given set of parameters.
         
         The element will be on top of the stack, i.e., it is the first to be translated if no subsequent calls
@@ -71,7 +79,7 @@ class Sequencer:
         if target_block not in self.__sequencing_stacks:
             self.__sequencing_stacks[target_block] = []
             
-        self.__sequencing_stacks[target_block].append((sequencing_element, parameters))
+        self.__sequencing_stacks[target_block].append((sequencing_element, parameters, conditions))
         
     def build(self) -> InstructionBlock:
         """Start the translation process. Translate all elements currently on the translation stacks into a sequence
@@ -88,11 +96,11 @@ class Sequencer:
                 shall_continue = False
                 for target_block, sequencing_stack in self.__sequencing_stacks.copy().items():
                     while sequencing_stack:
-                        (element, parameters) = sequencing_stack[-1]
-                        if not element.requires_stop(parameters):
+                        (element, parameters, conditions) = sequencing_stack[-1]
+                        if not element.requires_stop(parameters, conditions):
                             shall_continue |= True
                             sequencing_stack.pop()
-                            element.build_sequence(self, parameters, target_block)
+                            element.build_sequence(self, parameters, conditions, target_block)
                         else: break
         
         return self.__main_block.compile_sequence()

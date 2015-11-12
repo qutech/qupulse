@@ -3,7 +3,7 @@ import unittest
 from qctoolkit.pulses.repetition_pulse_template import RepetitionPulseTemplate,ParameterNotIntegerException
 from qctoolkit.pulses.parameters import ParameterDeclaration, ParameterNotProvidedException, ParameterValueIllegalException
 
-from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummySequencer, DummyInstructionBlock, DummyParameter
+from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummySequencer, DummyInstructionBlock, DummyParameter, DummyCondition
 from tests.serialization_dummies import DummySerializer
 
 
@@ -52,9 +52,9 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
     def test_requires_stop_constant(self) -> None:
         body = DummyPulseTemplate(requires_stop=False)
         t = RepetitionPulseTemplate(body, 2)
-        self.assertFalse(t.requires_stop({}))
+        self.assertFalse(t.requires_stop({}, {}))
         body.requires_stop_ = True
-        self.assertFalse(t.requires_stop({}))
+        self.assertFalse(t.requires_stop({}, {}))
 
     def test_requires_stop_declaration(self) -> None:
         body = DummyPulseTemplate(requires_stop=False)
@@ -62,17 +62,16 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
 
         parameter = DummyParameter()
         parameters = dict(foo=parameter)
+        condition = DummyCondition()
+        conditions = dict(foo=condition)
 
-        parameter.requires_stop_ = False
-        self.assertFalse(t.requires_stop(parameters))
-        parameter.requires_stop_ = True
-        self.assertTrue(t.requires_stop(parameters))
-
-        body.requires_stop_ = True
-        parameter.requires_stop_ = False
-        self.assertFalse(t.requires_stop(parameters))
-        parameter.requires_stop_ = True
-        self.assertTrue(t.requires_stop(parameters))
+        for body_requires_stop in [True, False]:
+            for condition_requires_stop in [True, False]:
+                for parameter_requires_stop in [True, False]:
+                    body.requires_stop_ = body_requires_stop
+                    condition.requires_stop_ = condition_requires_stop
+                    parameter.requires_stop_ = parameter_requires_stop
+                    self.assertEqual(parameter_requires_stop, t.requires_stop(parameters, conditions))
 
     def setUp(self) -> None:
         self.body = DummyPulseTemplate()
@@ -85,32 +84,37 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
         repetitions = 3
         t = RepetitionPulseTemplate(self.body, repetitions)
         parameters = {}
-        t.build_sequence(self.sequencer, parameters, self.block)
-        self.assertEqual([(self.body, parameters), (self.body, parameters), (self.body, parameters)],
+        conditions = dict(foo=DummyCondition(requires_stop=True))
+        t.build_sequence(self.sequencer, parameters, conditions, self.block)
+        self.assertEqual([(self.body, parameters, conditions), (self.body, parameters, conditions), (self.body, parameters, conditions)],
                          self.sequencer.sequencing_stacks[self.block])
 
     def test_build_sequence_declaration_success(self) -> None:
         parameters = dict(foo=3)
-        self.template.build_sequence(self.sequencer, parameters, self.block)
-        self.assertEqual([(self.body, parameters), (self.body, parameters), (self.body, parameters)],
+        conditions = dict(foo=DummyCondition(requires_stop=True))
+        self.template.build_sequence(self.sequencer, parameters, conditions, self.block)
+        self.assertEqual([(self.body, parameters, conditions), (self.body, parameters, conditions), (self.body, parameters, conditions)],
                          self.sequencer.sequencing_stacks[self.block])
 
     def test_build_sequence_declaration_exceeds_bounds(self) -> None:
         parameters = dict(foo=9)
+        conditions = dict(foo=DummyCondition(requires_stop=True))
         with self.assertRaises(ParameterValueIllegalException):
-            self.template.build_sequence(self.sequencer, parameters, self.block)
+            self.template.build_sequence(self.sequencer, parameters, conditions, self.block)
         self.assertFalse(self.sequencer.sequencing_stacks)
 
     def test_build_sequence_declaration_parameter_missing(self) -> None:
         parameters = {}
+        conditions = dict(foo=DummyCondition(requires_stop=True))
         with self.assertRaises(ParameterNotProvidedException):
-            self.template.build_sequence(self.sequencer, parameters, self.block)
+            self.template.build_sequence(self.sequencer, parameters, conditions, self.block)
         self.assertFalse(self.sequencer.sequencing_stacks)
 
     def test_build_sequence_declaration_parameter_value_not_whole(self) -> None:
         parameters = dict(foo=3.3)
+        conditions = dict(foo=DummyCondition(requires_stop=True))
         with self.assertRaises(ParameterNotIntegerException):
-            self.template.build_sequence(self.sequencer, parameters, self.block)
+            self.template.build_sequence(self.sequencer, parameters, conditions, self.block)
         self.assertFalse(self.sequencer.sequencing_stacks)
 
 

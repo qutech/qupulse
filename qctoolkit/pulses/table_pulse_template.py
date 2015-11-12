@@ -15,6 +15,7 @@ from .pulse_template import PulseTemplate, MeasurementWindow
 from .sequencing import InstructionBlock, Sequencer
 from .interpolation import InterpolationStrategy, LinearInterpolationStrategy, HoldInterpolationStrategy, JumpInterpolationStrategy
 from .instructions import Waveform, WaveformTable
+from .conditions import Condition
 
 logger = logging.getLogger(__name__)
 
@@ -307,14 +308,18 @@ class TablePulseTemplate(PulseTemplate):
                 entries.pop(index)
         return entries
 
-    def build_sequence(self, sequencer: Sequencer, parameters: Dict[str, Parameter], instruction_block: InstructionBlock) -> None:
+    def build_sequence(self,
+                       sequencer: Sequencer,
+                       parameters: Dict[str, Parameter],
+                       conditions: Dict[str, Condition],
+                       instruction_block: InstructionBlock) -> None:
         instantiated = self.get_entries_instantiated(parameters)
         if instantiated:
             instantiated = instantiated
             waveform = TableWaveform(tuple(instantiated))
             instruction_block.add_instruction_exec(waveform)
 
-    def requires_stop(self, parameters: Dict[str, Parameter]) -> bool: 
+    def requires_stop(self, parameters: Dict[str, Parameter], conditions: Dict[str, 'Condition']) -> bool:
         return any(parameters[name].requires_stop for name in parameters.keys() if (name in self.parameter_names) and not isinstance(parameters[name], numbers.Number))
 
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
