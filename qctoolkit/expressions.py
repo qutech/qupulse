@@ -29,7 +29,7 @@ class Expression(Serializable):
         if USE_NUMEXPR:
             return numexpr.evaluate(self.__string, global_dict={}, local_dict=kwargs)
         else:
-            return self._expression.evaluate(kwargs)
+            return self.__expression.evaluate(kwargs)
 
     def get_serialization_data(self, serializer: 'Serializer') -> Dict[str, Any]:
         return dict(type='Expression', expression=self.__string)
