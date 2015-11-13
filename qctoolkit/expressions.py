@@ -27,7 +27,7 @@ class Expression(Serializable):
 
     def evaluate(self, **kwargs):
         if USE_NUMEXPR:
-            return numexpr.evaluate(self._string, global_dict={}, local_dict=kwargs)
+            return numexpr.evaluate(self.__string, global_dict={}, local_dict=kwargs)
         else:
             return self._expression.evaluate(kwargs)
 

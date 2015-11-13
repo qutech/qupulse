@@ -47,7 +47,8 @@ class FunctionPulseSequencingTest(unittest.TestCase):
     def test_build_sequence(self):
         ib = InstructionBlock()
         seq = Sequencer()
-        self.fpt.build_sequence(seq, self.args, ib)
+        cond = None
+        self.fpt.build_sequence(seq, self.args, cond, ib)
         
 class FunctionWaveformTest(unittest.TestCase):
     def test_sample(self):
