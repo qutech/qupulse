@@ -116,11 +116,6 @@ class FunctionWaveform(Waveform):
 
     def sample(self, sample_times: np.ndarray, first_offset: float=0) -> np.ndarray:
         sample_times -= (sample_times[0] - first_offset)
-        
         func = np.vectorize(self.__partial_expression)
         voltages = func(sample_times)
-        
-        #for entry1, entry2 in zip(self.__table[:-1], self.__table[1:]): # iterate over interpolated areas
-        #    indices = np.logical_and(sample_times >= entry1.t, sample_times <= entry2.t)
-        #    voltages[indices] = entry2.interp((entry1.t, entry1.v), (entry2.t, entry2.v), sample_times[indices]) # evaluate interpolation at each time
         return voltages
