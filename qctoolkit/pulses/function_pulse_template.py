@@ -3,7 +3,6 @@ from typing import Dict, List, Set,  Optional
 import numbers
 import numpy as np
 from typing import Any
-from functools import partial
 
 """RELATED THIRD PARTY IMPORTS"""
 
@@ -103,8 +102,9 @@ class FunctionWaveform(Waveform):
         self.__partial_expression = self.__partial
     
     def __partial (self,t):
-        params = self.__parameters.update({"t":t})
-        return self.__expression(**params)
+        params = self.__parameters.copy()
+        params.update({"t":t})
+        return self.__expression.evaluate(**params)
     
     @property
     def _compare_key(self) -> Any:
@@ -115,10 +115,10 @@ class FunctionWaveform(Waveform):
         return self.__duration_expression.evaluate(**self.__parameters)
 
     def sample(self, sample_times: np.ndarray, first_offset: float=0) -> np.ndarray:
-        voltages = np.empty_like(sample_times)
         sample_times -= (sample_times[0] - first_offset)
+        
         func = np.vectorize(self.__partial_expression)
-        voltages[sample_times] = func(sample_times)
+        voltages = func(sample_times)
         
         #for entry1, entry2 in zip(self.__table[:-1], self.__table[1:]): # iterate over interpolated areas
         #    indices = np.logical_and(sample_times >= entry1.t, sample_times <= entry2.t)
