@@ -5,8 +5,8 @@ Creating a New Pulse Template
 
 This example goes through the workflow of creating a new type of pulse from scratch using the `TablePulseTemplate` class.
 
-.. figure:: _static/example_pulse.*
-    :width: 12cm
+.. figure:: ../_static/example_pulse.svg
+    :width: 35%
     :align: center
     :alt: Example pulse
 
