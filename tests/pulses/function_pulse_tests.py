@@ -3,11 +3,9 @@ import unittest
 from qctoolkit.pulses.function_pulse_template import FunctionPulseTemplate,\
     FunctionWaveform
 from qctoolkit.pulses.sequencing import Sequencer
-from qctoolkit.pulses.plotting import Plotter
 from qctoolkit.pulses.instructions import InstructionBlock
 
 from tests.serialization_dummies import DummySerializer
-from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyInterpolationStrategy, DummyParameter
 from qctoolkit.expressions import Expression
 
 import numpy as np

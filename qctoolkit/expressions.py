@@ -7,7 +7,6 @@ from py_expression_eval import Parser
 from typing import Any, Dict, Iterable, Optional
 
 from qctoolkit.serialization import Serializable
-from qctoolkit.pulses.parameters import Parameter
 
 __all__ = ["Expression"]
 
@@ -25,7 +24,7 @@ class Expression(Serializable):
     def variables(self) -> Iterable[str]:
         return self.__expression.variables()
 
-    def evaluate(self, **kwargs):
+    def evaluate(self, **kwargs) -> float:
         if USE_NUMEXPR:
             return numexpr.evaluate(self.__string, global_dict={}, local_dict=kwargs)
         else:
