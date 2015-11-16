@@ -78,8 +78,7 @@ class FunctionPulseTemplate(PulseTemplate):
                        parameters: Dict[str, Parameter],
                        conditions: Dict[str, 'Condition'],
                        instruction_block: InstructionBlock) -> None:
-        instantiated = FunctionWaveform(parameters,self.__expression,self.__duration_expression)
-        waveform = sequencer.register_waveform(instantiated)
+        waveform = FunctionWaveform(parameters, self.__expression, self.__duration_expression)
         instruction_block.add_instruction_exec(waveform)
 
     def requires_stop(self, parameters: Dict[str, Parameter], conditions: Dict[str, 'Condition']) -> bool:

@@ -315,7 +315,6 @@ class TablePulseTemplate(PulseTemplate):
                        instruction_block: InstructionBlock) -> None:
         instantiated = self.get_entries_instantiated(parameters)
         if instantiated:
-            instantiated = instantiated
             waveform = TableWaveform(tuple(instantiated))
             instruction_block.add_instruction_exec(waveform)
 
