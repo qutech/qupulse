@@ -10,12 +10,12 @@ import numpy as np
 """LOCAL IMPORTS"""
 from qctoolkit.serialization import Serializer
 
-from .parameters import ParameterDeclaration, Parameter
-from .pulse_template import PulseTemplate, MeasurementWindow
-from .sequencing import InstructionBlock, Sequencer
-from .interpolation import InterpolationStrategy, LinearInterpolationStrategy, HoldInterpolationStrategy, JumpInterpolationStrategy
-from .instructions import Waveform, WaveformTable
-from .conditions import Condition
+from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter
+from qctoolkit.pulses.pulse_template import PulseTemplate, MeasurementWindow
+from qctoolkit.pulses.sequencing import InstructionBlock, Sequencer
+from qctoolkit.pulses.interpolation import InterpolationStrategy, LinearInterpolationStrategy, HoldInterpolationStrategy, JumpInterpolationStrategy
+from qctoolkit.pulses.instructions import Waveform, WaveformTable
+from qctoolkit.pulses.conditions import Condition
 
 logger = logging.getLogger(__name__)
 

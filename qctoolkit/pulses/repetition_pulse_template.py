@@ -2,11 +2,11 @@ from typing import Dict, List, Set, Optional, Union, Any
 
 from qctoolkit.serialization import Serializer
 
-from .pulse_template import PulseTemplate, MeasurementWindow
-from .sequencing import Sequencer
-from .instructions import InstructionBlock
-from .parameters import ParameterDeclaration, Parameter
-from .conditions import Condition
+from qctoolkit.pulses.pulse_template import PulseTemplate, MeasurementWindow
+from qctoolkit.pulses.sequencing import Sequencer
+from qctoolkit.pulses.instructions import InstructionBlock
+from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter
+from qctoolkit.pulses.conditions import Condition
 
 
 __all__ = ["RepetitionPulseTemplate", "ParameterNotIntegerException"]

@@ -6,10 +6,10 @@ import copy
 from qctoolkit.serialization import Serializer
 from qctoolkit.expressions import Expression
 
-from .pulse_template import PulseTemplate, MeasurementWindow
-from .parameters import ParameterDeclaration, Parameter, ParameterNotProvidedException
-from .sequencing import InstructionBlock, Sequencer
-from .conditions import Condition
+from qctoolkit.pulses.pulse_template import PulseTemplate, MeasurementWindow
+from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter, ParameterNotProvidedException
+from qctoolkit.pulses.sequencing import InstructionBlock, Sequencer
+from qctoolkit.pulses.conditions import Condition
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +106,7 @@ class SequencePulseTemplate(PulseTemplate):
 
     def __map_parameter(self, mapping_function: str, parameters: Dict[str, Parameter]) -> Parameter:
         external_parameters = mapping_function.variables()
-        external_values = {name: float(parameters[name]) for name in external_parameters}
+        external_values = {name: parameters[name].get_value() for name in external_parameters}
         return mapping_function.evaluate(external_values)
 
     def build_sequence(self,

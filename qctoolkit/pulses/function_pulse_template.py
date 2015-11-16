@@ -10,11 +10,11 @@ from typing import Any
 from qctoolkit.expressions import Expression
 from qctoolkit.serialization import Serializer
 
-from .parameters import ParameterDeclaration, Parameter
-from .pulse_template import PulseTemplate, MeasurementWindow
-from .sequencing import InstructionBlock, Sequencer
-from .sequence_pulse_template import ParameterNotProvidedException
-from .instructions import Waveform
+from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter
+from qctoolkit.pulses.pulse_template import PulseTemplate, MeasurementWindow
+from qctoolkit.pulses.sequencing import InstructionBlock, Sequencer
+from qctoolkit.pulses.sequence_pulse_template import ParameterNotProvidedException
+from qctoolkit.pulses.instructions import Waveform
 
 logger = logging.getLogger(__name__)
 

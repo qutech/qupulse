@@ -3,12 +3,13 @@ from typing import Dict, Set, Optional, Any
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
-from .parameters import Parameter
-from .pulse_template import PulseTemplate, MeasurementWindow
-from .conditions import Condition
-from .instructions import InstructionBlock
-from .sequencing import Sequencer
 from qctoolkit.serialization import Serializer
+
+from qctoolkit.pulses.parameters import Parameter
+from qctoolkit.pulses.pulse_template import PulseTemplate, MeasurementWindow
+from qctoolkit.pulses.conditions import Condition
+from qctoolkit.pulses.instructions import InstructionBlock
+from qctoolkit.pulses.sequencing import Sequencer
 
 __all__ = ['LoopPulseTemplate', 'ConditionMissingException']
 

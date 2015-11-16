@@ -7,7 +7,7 @@ import numpy
 """LOCAL IMPORTS"""
 from qctoolkit.comparable import Comparable
 
-from .interpolation import InterpolationStrategy
+from qctoolkit.pulses.interpolation import InterpolationStrategy
 
 # TODO lumip: add docstrings
 
