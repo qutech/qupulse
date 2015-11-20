@@ -1,8 +1,9 @@
 import logging
-from typing import Dict, List, Set,  Optional
 import numbers
+
 import numpy as np
 from typing import Any
+from typing import Dict, Set
 
 """RELATED THIRD PARTY IMPORTS"""
 
@@ -11,7 +12,8 @@ from qctoolkit.expressions import Expression
 from qctoolkit.serialization import Serializer
 
 from .parameters import ParameterDeclaration, Parameter
-from .pulse_template import PulseTemplate, MeasurementWindow
+from .pulse_template import PulseTemplate
+from .measurements import Measurement
 from .sequencing import InstructionBlock, Sequencer
 from .sequence_pulse_template import ParameterNotProvidedException
 from .instructions import Waveform
@@ -39,6 +41,7 @@ class FunctionPulseTemplate(PulseTemplate):
         self.__duration_expression = Expression(duration_expression)
         self.__is_measurement_pulse = measurement # type: bool
         self.__parameter_names = set(self.__duration_expression.variables() + self.__expression.variables()) - set(['t'])
+        self.__measurement = Measurement(self)
 
     @property
     def parameter_names(self) -> Set[str]:
@@ -57,17 +60,6 @@ class FunctionPulseTemplate(PulseTemplate):
             raise ParameterNotProvidedException(m)
         return self.__duration_expression.evaluate(**parameters)
 
-    def get_measurement_windows(self, parameters: Optional[Dict[str, Parameter]] = {}) -> List[MeasurementWindow]:
-        """Return all measurement windows defined in this PulseTemplate.
-       
-        A ExpressionPulseTemplate specifies either no measurement windows or exactly one that spans its entire duration,
-        depending on whether the measurement_pulse flag was given during construction.
-        """
-        if not self.__is_measurement_pulse:
-            return
-        else:
-            return [(0, self.get_pulse_length(parameters))]
-
     @property
     def is_interruptable(self) -> bool:
         """Return true, if this PulseTemplate contains points at which it can halt if interrupted."""
@@ -78,7 +70,9 @@ class FunctionPulseTemplate(PulseTemplate):
                        parameters: Dict[str, Parameter],
                        conditions: Dict[str, 'Condition'],
                        instruction_block: InstructionBlock) -> None:
-        waveform = FunctionWaveform(parameters, self.__expression, self.__duration_expression)
+        if self.__is_measurement_pulse:
+            self.measurement.measure(self.get_pulse_length(parameters))
+        waveform = FunctionWaveform(parameters, self.__expression, self.__duration_expression, self.__measurement)
         instruction_block.add_instruction_exec(waveform)
 
     def requires_stop(self, parameters: Dict[str, Parameter], conditions: Dict[str, 'Condition']) -> bool:
@@ -99,13 +93,17 @@ class FunctionPulseTemplate(PulseTemplate):
 
 
 class FunctionWaveform(Waveform):
-
-    def __init__(self, parameters: Dict[str, Parameter], expression: Expression, duration_expression: Expression) -> None:
+    def __init__(self, parameters: Dict[str, Parameter], expression: Expression, duration_expression: Expression,
+                 measurement: Measurement = None) -> None:
         super().__init__()
         self.__expression = expression
         self.__parameters = parameters
         self.__duration_expression = duration_expression
         self.__partial_expression = self.__partial
+        if measurement == None:
+            self.__measurement = FunctionPulseTemplate(self.__expression, self.__duration_expression).measurement
+        else:
+            self.__measurement = measurement
     
     def __partial (self,t):
         params = self.__parameters.copy()
@@ -125,3 +123,16 @@ class FunctionWaveform(Waveform):
         func = np.vectorize(self.__partial_expression)
         voltages = func(sample_times)
         return voltages
+
+    @property
+    def measurement(self):
+        return self.__measurement
+
+    @property
+    def offset(self):
+        return self.__first_offset
+
+    @offset.setter
+    def offset(self, value):
+        self.__first_offset = value
+        self.__measurement.offset = value

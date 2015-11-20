@@ -14,10 +14,7 @@ from .sequencing import SequencingElement
 logger = logging.getLogger(__name__)
 
 
-__all__ = ["MeasurementWindow", "PulseTemplate"]
-
-
-MeasurementWindow = Tuple[float, float]
+__all__ = ["PulseTemplate"]
 
 
 class PulseTemplate(Serializable, SequencingElement, metaclass = ABCMeta):
@@ -41,10 +38,6 @@ class PulseTemplate(Serializable, SequencingElement, metaclass = ABCMeta):
     @abstractproperty
     def parameter_declarations(self) -> Set[ParameterDeclaration]:
         """Return the set of ParameterDeclarations."""
-
-    @abstractmethod
-    def get_measurement_windows(self, parameters: Dict[str, Parameter] = None) -> List[MeasurementWindow]:
-        """Return all measurement windows defined in this PulseTemplate."""
 
     @abstractproperty
     def is_interruptable(self) -> bool:

@@ -1,15 +1,16 @@
 import logging
-from typing import Dict, Set, List
+
+from typing import Set
 
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
-from .parameters import Parameter
-from .pulse_template import PulseTemplate, MeasurementWindow
+from .pulse_template import PulseTemplate
 
 __all__ = ["BranchPulseTemplate"]
 
 logger = logging.getLogger(__name__)
+
 
 class BranchPulseTemplate(PulseTemplate):
     """Conditional branching in a pulse.
@@ -43,10 +44,6 @@ class BranchPulseTemplate(PulseTemplate):
     @property
     def parameter_declarations(self) -> Set[str]:
         """Return the set of ParameterDeclarations."""
-        raise NotImplementedError()
-
-    def get_measurement_windows(self, parameters: Dict[str, Parameter] = None) -> List[MeasurementWindow]:
-        """Return all measurement windows defined in this PulseTemplate."""
         raise NotImplementedError()
 
     @property

@@ -1,12 +1,11 @@
-from typing import Dict, List, Set, Optional, Union, Any
+from typing import Dict, Set, Optional, Union, Any
 
 from qctoolkit.serialization import Serializer
-
-from .pulse_template import PulseTemplate, MeasurementWindow
-from .sequencing import Sequencer
+from .conditions import Condition
 from .instructions import InstructionBlock
 from .parameters import ParameterDeclaration, Parameter
-from .conditions import Condition
+from .pulse_template import PulseTemplate
+from .sequencing import Sequencer
 
 
 __all__ = ["RepetitionPulseTemplate", "ParameterNotIntegerException"]
@@ -37,10 +36,6 @@ class RepetitionPulseTemplate(PulseTemplate):
     @property
     def parameter_declarations(self) -> Set[str]:
         return self.__body.parameter_declarations
-
-    def get_measurement_windows(self, parameters: Dict[str, Parameter] = None) -> List[MeasurementWindow]:
-        """Return all measurement windows defined in this PulseTemplate."""
-        raise NotImplementedError()
 
     @property
     def is_interruptable(self) -> bool:

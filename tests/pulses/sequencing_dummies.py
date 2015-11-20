@@ -1,16 +1,16 @@
 """STANDARD LIBRARY IMPORTS"""
-from typing import Tuple, List, Dict, Optional, Set, Any
-
 import numpy
+from typing import Tuple, List, Dict, Optional, Set, Any
 
 """LOCAL IMPORTS"""
 from qctoolkit.serialization import Serializer
 from qctoolkit.pulses.instructions import Waveform, Instruction
 from qctoolkit.pulses.sequencing import Sequencer, InstructionBlock, SequencingElement
 from qctoolkit.pulses.parameters import Parameter, ParameterDeclaration
-from qctoolkit.pulses.pulse_template import PulseTemplate, MeasurementWindow
+from qctoolkit.pulses.pulse_template import PulseTemplate
 from qctoolkit.pulses.interpolation import InterpolationStrategy
 from qctoolkit.pulses.conditions import Condition
+from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
 
 
 class DummyParameter(Parameter):
@@ -118,7 +118,13 @@ class DummyWaveform(Waveform):
             return self.sample_output
         return sample_times
 
+    @property
+    def offset(self):
+        return 0
 
+    def measurement(self):
+        return TablePulseTemplate().measurement
+    
 class DummySequencer(Sequencer):
 
     def __init__(self) -> None:
@@ -220,10 +226,6 @@ class DummyPulseTemplate(PulseTemplate):
     @property
     def parameter_declarations(self) -> Set[str]:
         return [ParameterDeclaration(name) for name in self.parameter_names]
-
-    def get_measurement_windows(self, parameters: Dict[str, Parameter] = None) -> List[MeasurementWindow]:
-        """Return all measurement windows defined in this PulseTemplate."""
-        raise NotImplementedError()
 
     @property
     def is_interruptable(self) -> bool:

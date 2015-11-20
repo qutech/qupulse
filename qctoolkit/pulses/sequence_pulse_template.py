@@ -1,12 +1,12 @@
-import logging
-from typing import Dict, List, Tuple, Set, Optional, Any, Iterable, Union
 import copy
+import logging
+
+from typing import Dict, List, Tuple, Set, Optional, Any, Iterable, Union
 
 """LOCAL IMPORTS"""
 from qctoolkit.serialization import Serializer
 from qctoolkit.expressions import Expression
-
-from .pulse_template import PulseTemplate, MeasurementWindow
+from .pulse_template import PulseTemplate
 from .parameters import ParameterDeclaration, Parameter, ParameterNotProvidedException
 from .sequencing import InstructionBlock, Sequencer
 from .conditions import Condition
@@ -77,9 +77,6 @@ class SequencePulseTemplate(PulseTemplate):
     def parameter_declarations(self) -> Set[ParameterDeclaration]:
         # TODO: min, max, default values not mapped (required?)
         return set([ParameterDeclaration(name) for name in self.__parameter_names])
-
-    def get_measurement_windows(self, parameters: Dict[str, Parameter] = None) -> List[MeasurementWindow]:
-        raise NotImplemented() # will be computed by Sequencer
 
     @property
     def is_interruptable(self) -> bool:

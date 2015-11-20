@@ -4,7 +4,7 @@ from typing import Dict, Set, Optional, Any
 
 """LOCAL IMPORTS"""
 from .parameters import Parameter
-from .pulse_template import PulseTemplate, MeasurementWindow
+from .pulse_template import PulseTemplate
 from .conditions import Condition
 from .instructions import InstructionBlock
 from .sequencing import Sequencer
@@ -39,9 +39,6 @@ class LoopPulseTemplate(PulseTemplate):
     @property
     def parameter_names(self) -> Set[str]:
         return self.__body.parameter_names
-
-    def get_measurement_windows(self, parameters: Dict[str, Parameter] = None) -> MeasurementWindow:
-        raise NotImplemented()
 
     @property
     def parameter_declarations(self) -> Set[str]:

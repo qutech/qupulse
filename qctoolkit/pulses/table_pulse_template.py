@@ -1,9 +1,9 @@
-import logging
-from typing import Union, Dict, List, Set, Optional, NamedTuple, Any, Iterable
-import numbers
 import copy
+import logging
+import numbers
 
 import numpy as np
+from typing import Union, Dict, List, Set, Optional, NamedTuple, Any, Iterable
 
 """RELATED THIRD PARTY IMPORTS"""
 
@@ -11,11 +11,12 @@ import numpy as np
 from qctoolkit.serialization import Serializer
 
 from .parameters import ParameterDeclaration, Parameter
-from .pulse_template import PulseTemplate, MeasurementWindow
+from .pulse_template import PulseTemplate
 from .sequencing import InstructionBlock, Sequencer
 from .interpolation import InterpolationStrategy, LinearInterpolationStrategy, HoldInterpolationStrategy, JumpInterpolationStrategy
 from .instructions import Waveform, WaveformTable
 from .conditions import Condition
+from .measurements import Measurement
 
 logger = logging.getLogger(__name__)
 
@@ -25,31 +26,6 @@ __all__ = ["TablePulseTemplate"]
 
 TableValue = Union[float, ParameterDeclaration]
 TableEntry = NamedTuple("TableEntry", [('t', TableValue), ('v', TableValue), ('interp', InterpolationStrategy)])
-
-
-class TableWaveform(Waveform):
-
-    def __init__(self, waveform_table: WaveformTable) -> None:
-        if len(waveform_table) < 2:
-            raise ValueError("The given WaveformTable has less than two entries.")
-        super().__init__()
-        self.__table = waveform_table
-
-    @property
-    def _compare_key(self) -> Any:
-        return self.__table
-
-    @property
-    def duration(self) -> float:
-        return self.__table[-1].t
-
-    def sample(self, sample_times: np.ndarray, first_offset: float=0) -> np.ndarray:
-        sample_times -= (sample_times[0] - first_offset)
-        voltages = np.empty_like(sample_times)
-        for entry1, entry2 in zip(self.__table[:-1], self.__table[1:]): # iterate over interpolated areas
-            indices = np.logical_and(sample_times >= entry1.t, sample_times <= entry2.t)
-            voltages[indices] = entry2.interp((entry1.t, entry1.v), (entry2.t, entry2.v), sample_times[indices]) # evaluate interpolation at each time
-        return voltages
 
 
 class TablePulseTemplate(PulseTemplate):
@@ -73,11 +49,12 @@ class TablePulseTemplate(PulseTemplate):
         self.__entries = [] # type: List[TableEntry]
         self.__time_parameter_declarations = {} # type: Dict[str, ParameterDeclaration]
         self.__voltage_parameter_declarations = {} # type: Dict[str, ParameterDeclaration]
-        self.__is_measurement_pulse = measurement# type: bool
+        self.__is_measurement_pulse = measurement # type: bool
         self.__interpolation_strategies = {'linear': LinearInterpolationStrategy(),
                                            'hold': HoldInterpolationStrategy(), 
                                            'jump': JumpInterpolationStrategy()
                                           }
+        self.measurement = Measurement(self)
 
     @staticmethod
     def from_array(times: np.ndarray, voltages: np.ndarray, measurement=False) -> 'TablePulseTemplate':
@@ -243,19 +220,6 @@ class TablePulseTemplate(PulseTemplate):
     def parameter_declarations(self) -> Set[ParameterDeclaration]:
         """Return a set of all parameter declaration objects of this TablePulseTemplate."""
         return set(self.__time_parameter_declarations.values()) | set(self.__voltage_parameter_declarations.values())
-
-    def get_measurement_windows(self, parameters: Optional[Dict[str, Parameter]] = {}) -> List[MeasurementWindow]: # TODO: not very robust
-        """Return all measurement windows defined in this PulseTemplate.
-        
-        A TablePulseTemplate specifies either no measurement windows or exactly one that spans its entire duration,
-        depending on whether set_is_measurement_pulse(True) was called or not.
-        """
-
-        if not self.__is_measurement_pulse:
-            return []
-        else:
-            instantiated_entries = self.get_entries_instantiated(parameters)
-            return [(0, instantiated_entries[-1].t)]
     
     @property
     def is_interruptable(self) -> bool:
@@ -315,7 +279,9 @@ class TablePulseTemplate(PulseTemplate):
                        instruction_block: InstructionBlock) -> None:
         instantiated = self.get_entries_instantiated(parameters)
         if instantiated:
-            waveform = TableWaveform(tuple(instantiated))
+            if self.__is_measurement_pulse:
+                self.measurement.measure(instantiated[-1].t)
+            waveform = TableWaveform(tuple(instantiated), self.measurement)
             instruction_block.add_instruction_exec(waveform)
 
     def requires_stop(self, parameters: Dict[str, Parameter], conditions: Dict[str, 'Condition']) -> bool:
@@ -358,3 +324,47 @@ class TablePulseTemplate(PulseTemplate):
 
         return template
 
+
+class TableWaveform(Waveform):
+    def __init__(self, waveform_table: WaveformTable, measurement: Measurement = None) -> None:
+        if len(waveform_table) < 2:
+            raise ValueError("The given WaveformTable has less than two entries.")
+        super().__init__()
+        self.__table = waveform_table
+        if measurement == None:
+            self.__measurement = TablePulseTemplate().measurement
+        else:
+            self.__measurement = measurement
+        self.__first_offset = 0
+
+    @property
+    def _compare_key(self) -> Any:
+        return self.__table
+
+    @property
+    def duration(self) -> float:
+        return self.__table[-1].t
+
+    def sample(self, sample_times: np.ndarray, offset: float = None) -> np.ndarray:
+        if offset:
+            self.offset = offset
+        sample_times -= (sample_times[0] - self.__first_offset)
+        voltages = np.empty_like(sample_times)
+        for entry1, entry2 in zip(self.__table[:-1], self.__table[1:]):  # iterate over interpolated areas
+            indices = np.logical_and(sample_times >= entry1.t, sample_times <= entry2.t)
+            voltages[indices] = entry2.interp((entry1.t, entry1.v), (entry2.t, entry2.v),
+                                              sample_times[indices])  # evaluate interpolation at each time
+        return voltages
+
+    @property
+    def measurement(self):
+        return self.__measurement
+
+    @property
+    def offset(self):
+        return self.__first_offset
+
+    @offset.setter
+    def offset(self, value):
+        self.__first_offset = value
+        self.__measurement.offset = value

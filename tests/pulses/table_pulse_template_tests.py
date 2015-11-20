@@ -1,11 +1,13 @@
 import unittest
+
 import numpy
 
 from qctoolkit.pulses.instructions import EXECInstruction, WaveformTableEntry
-from qctoolkit.pulses.table_pulse_template import TablePulseTemplate, TableWaveform, TableEntry
-from qctoolkit.pulses.parameters import ParameterDeclaration, ParameterNotProvidedException, ParameterValueIllegalException
 from qctoolkit.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy, JumpInterpolationStrategy
-
+from qctoolkit.pulses.measurements import Measurement
+from qctoolkit.pulses.parameters import ParameterDeclaration, ParameterNotProvidedException, \
+    ParameterValueIllegalException
+from qctoolkit.pulses.table_pulse_template import TablePulseTemplate, TableWaveform, TableEntry
 from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyInterpolationStrategy, DummyParameter, DummyCondition
 from tests.serialization_dummies import DummySerializer
 
@@ -33,29 +35,6 @@ class TablePulseTemplateTest(unittest.TestCase):
             table.add_entry(2*(i+1), i+1, strategy)
 
         self.assertRaises(ValueError, table.add_entry, 1,2, "bar")
-
-    def test_measurement_windows(self) -> None:
-        pulse = TablePulseTemplate(measurement=True)
-        pulse.add_entry(1, 1)
-        pulse.add_entry(3, 0)
-        pulse.add_entry(5, 0)
-        windows = pulse.get_measurement_windows()
-        self.assertEqual([(0,5)], windows)
-
-    def test_no_measurement_windows(self) -> None:
-        pulse = TablePulseTemplate(measurement=False)
-        pulse.add_entry(1, 1)
-        pulse.add_entry(3, 0)
-        pulse.add_entry(5, 0)
-        windows = pulse.get_measurement_windows()
-        self.assertEqual([], windows)
-
-    def test_measurement_windows_with_parameters(self) -> None:
-        pulse = TablePulseTemplate(measurement=True)
-        pulse.add_entry('length', 0)
-        parameters = dict(length=100)
-        windows = pulse.get_measurement_windows(parameters)
-        self.assertEqual(windows, [(0, 100)])
         
     def test_add_entry_empty_time_is_negative(self) -> None:
         table = TablePulseTemplate()
@@ -421,7 +400,7 @@ class TablePulseTemplateTest(unittest.TestCase):
         ]
         self.assertEqual(expected, entries)
 
-        result_sampled = TableWaveform(entries).sample(numpy.linspace(0, 10, 11), 0)
+        result_sampled = TableWaveform(entries, Measurement(9)).sample(numpy.linspace(0, 10, 11), 0)
 
         self.assertEqual([5, 5, 5, 5, 5, 5, 4, 3, 2, 1, 0], result_sampled.tolist())
 
@@ -497,7 +476,7 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
         sequencer = DummySequencer()
         instruction_block = DummyInstructionBlock()
         table.build_sequence(sequencer, parameters, {}, instruction_block)
-        waveform = TableWaveform(instantiated_entries)
+        waveform = TableWaveform(instantiated_entries, Measurement(10))
         self.assertEqual(1, len(instruction_block.instructions))
         instruction = instruction_block.instructions[0]
         self.assertIsInstance(instruction, EXECInstruction)

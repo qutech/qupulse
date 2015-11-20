@@ -40,6 +40,13 @@ class Waveform(Comparable, metaclass=ABCMeta):
         in a continuous time domain.
         """
 
+    @abstractproperty
+    def measurement(self):
+        """Returns a Measurement-Object which indicates, where the Waveform has to be measured."""
+
+    @abstractproperty
+    def offset(self):
+        """Represents the offset of the waveform relative to the others"""
 
 class Trigger(Comparable):
         
