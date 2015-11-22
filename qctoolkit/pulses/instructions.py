@@ -1,6 +1,7 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
-from typing import List, Tuple, Any, NamedTuple
+
 import numpy
+from typing import List, Tuple, Any, NamedTuple
 
 """RELATED THIRD PARTY IMPORTS"""
 
@@ -43,10 +44,6 @@ class Waveform(Comparable, metaclass=ABCMeta):
     @abstractproperty
     def measurement(self):
         """Returns a Measurement-Object which indicates, where the Waveform has to be measured."""
-
-    @abstractproperty
-    def offset(self):
-        """Represents the offset of the waveform relative to the others"""
 
 class Trigger(Comparable):
         

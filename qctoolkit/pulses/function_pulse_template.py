@@ -100,10 +100,7 @@ class FunctionWaveform(Waveform):
         self.__parameters = parameters
         self.__duration_expression = duration_expression
         self.__partial_expression = self.__partial
-        if measurement == None:
-            self.__measurement = FunctionPulseTemplate(self.__expression, self.__duration_expression).measurement
-        else:
-            self.__measurement = measurement
+        self.__measurement = measurement
     
     def __partial (self,t):
         params = self.__parameters.copy()
@@ -127,12 +124,3 @@ class FunctionWaveform(Waveform):
     @property
     def measurement(self):
         return self.__measurement
-
-    @property
-    def offset(self):
-        return self.__first_offset
-
-    @offset.setter
-    def offset(self, value):
-        self.__first_offset = value
-        self.__measurement.offset = value

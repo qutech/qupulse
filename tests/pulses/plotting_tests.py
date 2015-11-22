@@ -1,12 +1,12 @@
 import unittest
+
 import numpy
 
-from qctoolkit.pulses.plotting import Plotter, PlottingNotPossibleException
 from qctoolkit.pulses.instructions import InstructionBlock
-from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
+from qctoolkit.pulses.plotting import Plotter, PlottingNotPossibleException
 from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
 from qctoolkit.pulses.sequencing import Sequencer
-
+from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
 from tests.pulses.sequencing_dummies import DummyWaveform, DummyInstruction
 
 
@@ -68,7 +68,7 @@ class PlotterTests(unittest.TestCase):
         # run the sequencer and render the plot
         sample_rate = 20
         plotter = Plotter(sample_rate=sample_rate)
-        sequencer = Sequencer(plotter)
+        sequencer = Sequencer()  # TODO: removed plotter argument,fix this
         sequencer.push(sequence, parameters)
         block = sequencer.build()
         times, voltages = plotter.render(block)

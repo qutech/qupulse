@@ -331,11 +331,7 @@ class TableWaveform(Waveform):
             raise ValueError("The given WaveformTable has less than two entries.")
         super().__init__()
         self.__table = waveform_table
-        if measurement == None:
-            self.__measurement = TablePulseTemplate().measurement
-        else:
-            self.__measurement = measurement
-        self.__first_offset = 0
+        self.__measurement = measurement
 
     @property
     def _compare_key(self) -> Any:
@@ -345,10 +341,8 @@ class TableWaveform(Waveform):
     def duration(self) -> float:
         return self.__table[-1].t
 
-    def sample(self, sample_times: np.ndarray, offset: float = None) -> np.ndarray:
-        if offset:
-            self.offset = offset
-        sample_times -= (sample_times[0] - self.__first_offset)
+    def sample(self, sample_times: np.ndarray, offset: float) -> np.ndarray:
+        sample_times -= (sample_times[0] - offset)
         voltages = np.empty_like(sample_times)
         for entry1, entry2 in zip(self.__table[:-1], self.__table[1:]):  # iterate over interpolated areas
             indices = np.logical_and(sample_times >= entry1.t, sample_times <= entry2.t)
@@ -359,12 +353,3 @@ class TableWaveform(Waveform):
     @property
     def measurement(self):
         return self.__measurement
-
-    @property
-    def offset(self):
-        return self.__first_offset
-
-    @offset.setter
-    def offset(self, value):
-        self.__first_offset = value
-        self.__measurement.offset = value

@@ -400,9 +400,22 @@ class TablePulseTemplateTest(unittest.TestCase):
         ]
         self.assertEqual(expected, entries)
 
-        result_sampled = TableWaveform(entries, Measurement(9)).sample(numpy.linspace(0, 10, 11), 0)
+        result_sampled = TableWaveform(entries, Measurement(table)).sample(numpy.linspace(0, 10, 11), 0)
 
         self.assertEqual([5, 5, 5, 5, 5, 5, 4, 3, 2, 1, 0], result_sampled.tolist())
+
+    def test_measurement(self):
+        table_true = TablePulseTemplate(True)
+        table_false = TablePulseTemplate(False)
+        for table in [table_true, table_false]:
+            table.add_entry(0, 5)
+            table.add_entry(2, 5, 'linear')
+            table.add_entry(5, 5)
+            table.add_entry(10, 0, 'linear')
+        tw_true = TableWaveform(table_true.get_entries_instantiated({}))
+        tw_false = TableWaveform(table_false.get_entries_instantiated({}))
+
+
 
     def test_from_array(self) -> None:
         times = numpy.array([0, 1, 3])
