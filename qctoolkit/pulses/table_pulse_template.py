@@ -54,7 +54,7 @@ class TablePulseTemplate(PulseTemplate):
                                            'hold': HoldInterpolationStrategy(), 
                                            'jump': JumpInterpolationStrategy()
                                           }
-        self.measurement = Measurement(self)
+        self.__measurement = Measurement(self)
 
     @staticmethod
     def from_array(times: np.ndarray, voltages: np.ndarray, measurement=False) -> 'TablePulseTemplate':
@@ -280,8 +280,8 @@ class TablePulseTemplate(PulseTemplate):
         instantiated = self.get_entries_instantiated(parameters)
         if instantiated:
             if self.__is_measurement_pulse:
-                self.measurement.measure(instantiated[-1].t)
-            waveform = TableWaveform(tuple(instantiated), self.measurement)
+                self.__measurement.measure(instantiated[-1].t)
+            waveform = TableWaveform(tuple(instantiated), self.__measurement.instantiate(parameters))
             instruction_block.add_instruction_exec(waveform)
 
     def requires_stop(self, parameters: Dict[str, Parameter], conditions: Dict[str, 'Condition']) -> bool:
@@ -351,5 +351,6 @@ class TableWaveform(Waveform):
         return voltages
 
     @property
-    def measurement(self):
-        return self.__measurement
+    def measurement_windows(self, first_offset: float = 0):
+        self.__measurement.offset = first_offset
+        return self.__measurement.build()

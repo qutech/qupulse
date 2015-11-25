@@ -306,7 +306,6 @@ class ParameterDeclaration(Serializable):
             max_value = float("+inf")
         return ParameterDeclaration(name, min=min_value, max=max_value, default=default_value)
 
-        
 class ParameterNotProvidedException(Exception):
     """Indicates that a required parameter value was not provided."""
     

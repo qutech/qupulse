@@ -122,8 +122,8 @@ class DummyWaveform(Waveform):
     def offset(self):
         return 0
 
-    def measurement(self):
-        return TablePulseTemplate().measurement
+    def measurement_windows(self):
+        return [(0,self.duration_)]
     
 class DummySequencer(Sequencer):
 

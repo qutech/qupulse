@@ -68,7 +68,7 @@ class PlotterTests(unittest.TestCase):
         # run the sequencer and render the plot
         sample_rate = 20
         plotter = Plotter(sample_rate=sample_rate)
-        sequencer = Sequencer()  # TODO: removed plotter argument,fix this
+        sequencer = Sequencer(plotter)  # TODO: removed plotter argument,fix this
         sequencer.push(sequence, parameters)
         block = sequencer.build()
         times, voltages = plotter.render(block)

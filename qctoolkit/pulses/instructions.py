@@ -42,8 +42,9 @@ class Waveform(Comparable, metaclass=ABCMeta):
         """
 
     @abstractproperty
-    def measurement(self):
-        """Returns a Measurement-Object which indicates, where the Waveform has to be measured."""
+    def measurement_windows(self, first_offset: float=0):
+        """Returns a list of Tuples, where the first element indicates the "t" of the beginning of the measurement, and
+        the second indicates their ending."""
 
 class Trigger(Comparable):
         
@@ -181,6 +182,7 @@ class InstructionBlock:
             self.__offset = 0
         self.return_ip = None
         self.__compiled_sequence = None # type: InstructionSequence
+        self.__compiled_measurements = None # type: List[Tuple[int]]
         
     def add_instruction(self, instruction: Instruction) -> None:
         # change to instructions -> invalidate cached compiled sequence
@@ -236,7 +238,11 @@ class InstructionBlock:
             self.__compiled_sequence.extend(blockSequence)
             
         return self.__compiled_sequence
-    
+
+    def compile_measurements(self) -> List[Tuple[int]]:
+        self.compile_sequence()
+        return self.__compiled_measurements
+
     def get_start_address(self) -> int:
         if self.__offset is None:
             raise InstructionBlockNotYetPlacedException()

@@ -71,8 +71,8 @@ class FunctionPulseTemplate(PulseTemplate):
                        conditions: Dict[str, 'Condition'],
                        instruction_block: InstructionBlock) -> None:
         if self.__is_measurement_pulse:
-            self.measurement.measure(self.get_pulse_length(parameters))
-        waveform = FunctionWaveform(parameters, self.__expression, self.__duration_expression, self.__measurement)
+            self.__measurement.measure(self.get_pulse_length(parameters))
+        waveform = FunctionWaveform(parameters, self.__expression, self.__duration_expression, self.__measurement.instantiate(parameters))
         instruction_block.add_instruction_exec(waveform)
 
     def requires_stop(self, parameters: Dict[str, Parameter], conditions: Dict[str, 'Condition']) -> bool:
@@ -122,5 +122,6 @@ class FunctionWaveform(Waveform):
         return voltages
 
     @property
-    def measurement(self):
-        return self.__measurement
+    def measurement_windows(self, first_offset: float = 0):
+        self.__measurement.offset = first_offset
+        return self.__measurement.build()
