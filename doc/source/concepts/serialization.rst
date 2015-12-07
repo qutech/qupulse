@@ -20,7 +20,7 @@ To make any new class serializable, it must derive from the :class:`.Serializabl
 
 If class objects should be stored in a separate file, the `identifier` must be a non-empty string. If, on the other hand, class object should be embedded into their parent's serialization (as is the case for, e.g., :class:`.ParameterDeclaration`), must be `None`.
 
-The method `serialize` should return a dictionary of native Python types containing all relevant data. If the class has members that are not native Python types but must be serialized, the must be serializable and the `serialize` method can obtain their serialization by calling :meth:`.Serializer._serialize_subpulse` and then embed this in its result. `serialize` should not include the identifier in the returned dictionary.
+The method `serialize` should return a dictionary of native Python types containing all relevant data. If the class has members that are not native Python types but must be serialized, they must be serializable and the `serialize` method can obtain their serialization as the return value of :meth:`.Serializer._serialize_subpulse` and embed it in its result. The dictionary returned by `serialize` should not include the identifier in the returned dictionary.
 
 The method `deserialize` is invoked with all key-value pairs created by a call to `serialize` as keyword arguments as well as an additional `identifier` keyword argument (which may be `None`) and must return a valid corresponding class instance.
 
