@@ -122,6 +122,7 @@ class AnnotationTest(unittest.TestCase):
             return bool
         
     def test_annotations(self):
+        whitelist = ["__init__"]
         for root, dirs, files in os.walk(srcPath):
             for filename in files:
                 methods = {}
@@ -141,16 +142,18 @@ class AnnotationTest(unittest.TestCase):
                     package = (".".join(os.path.join(root,filename.split(".")[0])[len(srcPath)+1:].split(os.path.sep)))
                     for name in methods:
                         if name == "None":
-                            for method in methods[name]:
-                                if self._test_attribute(package,method):
-                                    imported = getattr(__import__(package, fromlist=[method]), method)
-                                    self.assertIsNotNone(imported.__annotations__,"No Annotation found. Module: {}, Method: {}".format(package,method))
+                            for method in methods[name] :
+                                if method not in whitelist:
+                                    if self._test_attribute(package,method):
+                                        imported = getattr(__import__(package, fromlist=[method]), method)
+                                        self.assertIsNotNone(imported.__annotations__,"No Annotation found. Module: {}, Method: {}".format(package,method))
                         else:
                             if self._test_attribute(package,name):
                                 imported = getattr(__import__(package, fromlist=[name]), name)
                                 for method in methods[name]:
-                                    if hasattr(imported, method):
-                                        loaded_method = getattr(imported, method)
-                                        if hasattr(loaded_method,"__call__"):
-                                            self.assertIn("return",loaded_method.__annotations__,"No Return annotation found for Module: {}, Class: {}, Method: {}".format(package,name,method))
-                                            self.assertNotEqual(len(loaded_method.__annotations__.keys()),0,"No Annotation found. Module: {}, Class: {}, Method: {}".format(package,name,method))
+                                    if method not in whitelist:
+                                        if hasattr(imported, method):
+                                            loaded_method = getattr(imported, method)
+                                            if hasattr(loaded_method,"__call__"):
+                                                self.assertIn("return",loaded_method.__annotations__,"No Return annotation found for Module: {}, Class: {}, Method: {}".format(package,name,method))
+                                                self.assertNotEqual(len(loaded_method.__annotations__.keys()),0,"No Annotation found. Module: {}, Class: {}, Method: {}".format(package,name,method))

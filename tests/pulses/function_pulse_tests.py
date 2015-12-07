@@ -1,8 +1,14 @@
 import unittest
 
-from qctoolkit.pulses.function_pulse_template import FunctionPulseTemplate
+from qctoolkit.pulses.function_pulse_template import FunctionPulseTemplate,\
+    FunctionWaveform
+from qctoolkit.pulses.sequencing import Sequencer
+from qctoolkit.pulses.instructions import InstructionBlock
 
 from tests.serialization_dummies import DummySerializer
+from qctoolkit.expressions import Expression
+
+import numpy as np
 
 class FunctionPulseTest(unittest.TestCase):
     def setUp(self):
@@ -28,6 +34,26 @@ class FunctionPulseTest(unittest.TestCase):
                              measurement=False)
         self.assertEqual(expected_data, self.fpt.get_serialization_data(DummySerializer()))
 
-
-
-
+class FunctionPulseSequencingTest(unittest.TestCase):
+    def setUp(self):
+        unittest.TestCase.setUp(self)
+        self.f = "a * t"
+        self.duration = "y"
+        self.args = dict(a=3,y=1)
+        self.fpt = FunctionPulseTemplate(self.f, self.duration)
+    
+    def test_build_sequence(self):
+        ib = InstructionBlock()
+        seq = Sequencer()
+        cond = None
+        self.fpt.build_sequence(seq, self.args, cond, ib)
+        
+class FunctionWaveformTest(unittest.TestCase):
+    def test_sample(self):
+        f = Expression("(t+1)**b")
+        length = Expression("c**b")
+        par = {"b":2,"c":10}
+        fw = FunctionWaveform(par,f,length)
+        a = np.arange(4)
+        self.assertEqual(list(fw.sample(a)), [1,4,9,16])
+        

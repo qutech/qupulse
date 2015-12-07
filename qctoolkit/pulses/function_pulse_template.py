@@ -55,7 +55,7 @@ class FunctionPulseTemplate(PulseTemplate):
         missing = self.__parameter_names - set(parameters.keys())
         for m in missing:
             raise ParameterNotProvidedException(m)
-        return self.__duration_expression.evaluate(parameters)
+        return self.__duration_expression.evaluate(**parameters)
 
     def get_measurement_windows(self, parameters: Optional[Dict[str, Parameter]] = {}) -> List[MeasurementWindow]:
         """Return all measurement windows defined in this PulseTemplate.
@@ -103,26 +103,25 @@ class FunctionWaveform(Waveform):
     def __init__(self, parameters: Dict[str, Parameter], expression: Expression, duration_expression: Expression) -> None:
         super().__init__()
         self.__expression = expression
-        self.__duration_expression = duration_expression
         self.__parameters = parameters
-        
+        self.__duration_expression = duration_expression
+        self.__partial_expression = self.__partial
+    
+    def __partial (self,t):
+        params = self.__parameters.copy()
+        params.update({"t":t})
+        return self.__expression.evaluate(**params)
+    
     @property
     def _compare_key(self) -> Any:
         return self.__expression
 
     @property
     def duration(self) -> float:
-        return self.__duration_expression.evaluate(self.__parameters)
+        return self.__duration_expression.evaluate(**self.__parameters)
 
     def sample(self, sample_times: np.ndarray, first_offset: float=0) -> np.ndarray:
-        # TODO: implement this
-        
-        voltages = np.empty_like(sample_times)
         sample_times -= (sample_times[0] - first_offset)
-        
-        #voltages[sample_times] = self.__expression(self.__parameters.update("t":sample_times))
-        
-        #for entry1, entry2 in zip(self.__table[:-1], self.__table[1:]): # iterate over interpolated areas
-        #    indices = np.logical_and(sample_times >= entry1.t, sample_times <= entry2.t)
-        #    voltages[indices] = entry2.interp((entry1.t, entry1.v), (entry2.t, entry2.v), sample_times[indices]) # evaluate interpolation at each time
+        func = np.vectorize(self.__partial_expression)
+        voltages = func(sample_times)
         return voltages

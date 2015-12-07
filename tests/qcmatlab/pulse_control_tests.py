@@ -13,7 +13,7 @@ class PulseControlInterfaceTests(unittest.TestCase):
         expected_samples = numpy.random.rand(11)
 
         waveform = DummyWaveform(duration=1, sample_output=expected_samples)
-        pci = PulseControlInterface(None, sample_rate, time_scaling=1)
+        pci = PulseControlInterface(sample_rate, time_scaling=1)
         result = pci.create_waveform_struct(waveform, name=name)
 
         expected_sample_times = numpy.linspace(0, 1, 11).tolist()
@@ -31,8 +31,8 @@ class PulseControlInterfaceTests(unittest.TestCase):
         sample_rate = 10
         block = DummyInstructionBlock()
 
-        pci = PulseControlInterface(None, sample_rate)
-        result = pci.create_pulse_group(block.compile_sequence(), name=name)
+        pci = PulseControlInterface(sample_rate)
+        (result, _) = pci.create_pulse_group(block.compile_sequence(), name=name)
         expected_result = dict(
             name=name,
             nrep=[],
@@ -57,14 +57,15 @@ class PulseControlInterfaceTests(unittest.TestCase):
         block.add_instruction_exec(wf1a)
 
         registering_function = lambda x: x['data']
-        pci = PulseControlInterface(registering_function, sample_rate, time_scaling=1)
-        result = pci.create_pulse_group(block.compile_sequence(), name=name)
+        pci = PulseControlInterface(sample_rate, time_scaling=1)
+        (result, _) = pci.create_pulse_group(block.compile_sequence(), name=name)
         expected_result = dict(
             name=name,
             nrep=[2, 1, 1],
-            pulses=[registering_function(pci.create_waveform_struct(wf1a, name='')),
-                    registering_function(pci.create_waveform_struct(wf2, name='')),
-                    registering_function(pci.create_waveform_struct(wf1a, name=''))],
+            pulses=[0, 1, 0],
+            #pulses=[registering_function(pci.create_waveform_struct(wf1a, name='')),
+            #        registering_function(pci.create_waveform_struct(wf2, name='')),
+            #        registering_function(pci.create_waveform_struct(wf1a, name=''))],
             chan=1,
             ctrl='notrig'
         )
@@ -76,7 +77,7 @@ class PulseControlInterfaceTests(unittest.TestCase):
         block = DummyInstructionBlock()
         block.add_instruction_goto(block.create_embedded_block())
 
-        pci = PulseControlInterface(None, sample_rate)
+        pci = PulseControlInterface(sample_rate)
         with self.assertRaises(Exception):
             pci.create_pulse_group(block.compile_sequence(), name=name)
 

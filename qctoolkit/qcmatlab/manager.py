@@ -1,8 +1,6 @@
 import matlab.engine
 """ Start a MATLAB session or connect to a connect to an existing one. """
 
-from .pulse_control import PulseControlInterface
-
 __all__ = ["Manager",
            "EngineNotFound",
            "NoConnectionSupported"]
@@ -82,8 +80,3 @@ class Manager():
         
         assert( isinstance(Manager.__engine_store, matlab.engine.matlabengine.MatlabEngine) )
         return Manager.__engine_store
-
-    @staticmethod
-    def create_pulse_control_interface(sample_rate: float, time_scaling: float=0.001) -> PulseControlInterface:
-        register_pulse_callback = lambda x: Manager.getEngine().plsreg(x)
-        return PulseControlInterface(register_pulse_callback, sample_rate, time_scaling)
