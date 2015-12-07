@@ -7,7 +7,7 @@ from qctoolkit.serialization import Serializer
 from qctoolkit.expressions import Expression
 
 from qctoolkit.pulses.pulse_template import PulseTemplate, MeasurementWindow
-from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter, ParameterNotProvidedException
+from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter, ParameterNotProvidedException, ConstantParameter
 from qctoolkit.pulses.sequencing import InstructionBlock, Sequencer
 from qctoolkit.pulses.conditions import Condition
 
@@ -93,21 +93,20 @@ class SequencePulseTemplate(PulseTemplate):
         if not self.subtemplates:
             return False
 
-        # obtain first subtemplate
-        (template, mapping_functions) = self.subtemplates[0]
-
-        # collect all parameters required to compute the mappings for the first subtemplate
+        # collect all parameters required to compute the mappings for the subtemplates
         external_parameters = set()
-        for mapping_function in mapping_functions.values():
-            external_parameters = external_parameters | set(mapping_function.variables())
+        for (template, mapping_functions) in self.subtemplates:
+            for mapping_function in mapping_functions.values():
+                external_parameters = external_parameters | \
+                                      {parameters[parameter_name] for parameter_name in mapping_function.variables()}
 
         # return True only if none of these requires a stop
         return any([p.requires_stop for p in external_parameters])
 
-    def __map_parameter(self, mapping_function: str, parameters: Dict[str, Parameter]) -> Parameter:
+    def __map_parameter(self, mapping_function: Expression, parameters: Dict[str, Parameter]) -> Parameter:
         external_parameters = mapping_function.variables()
         external_values = {name: parameters[name].get_value() for name in external_parameters}
-        return mapping_function.evaluate(external_values)
+        return mapping_function.evaluate(**external_values)
 
     def build_sequence(self,
                        sequencer: Sequencer,
@@ -121,8 +120,9 @@ class SequencePulseTemplate(PulseTemplate):
 
         # push subtemplates to sequencing stack with mapped parameters
         for template, mappings in reversed(self.subtemplates):
-            inner_parameters = {name: self.__map_parameter(mapping_function, parameters) for (name, mapping_function) in mappings.items()}
-            sequencer.push(template, inner_parameters, instruction_block)
+            inner_parameters = {name: ConstantParameter(self.__map_parameter(mapping_function, parameters))
+                                for (name, mapping_function) in mappings.items()}
+            sequencer.push(template, inner_parameters, conditions, instruction_block)
 
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
         data = dict()

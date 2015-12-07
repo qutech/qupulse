@@ -5,7 +5,7 @@ from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
 from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate, MissingMappingException, UnnecessaryMappingException, MissingParameterDeclarationException
 from qctoolkit.pulses.parameters import ParameterDeclaration, ParameterNotProvidedException, ConstantParameter
 
-from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock
+from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyPulseTemplate, DummyParameter
 from tests.serialization_dummies import DummySerializer
 
 
@@ -127,18 +127,75 @@ class SequencePulseTemplateSequencingTests(SequencePulseTemplateTest):
             self.sequence.build_sequence(sequencer, parameters, {}, block)
 
     def test_build_sequence(self) -> None:
-        pass
+        subtemplate = DummyPulseTemplate(parameter_names={'hugo'})
+        sequence = SequencePulseTemplate([(subtemplate, {'hugo': 'foo'}),
+                                          (subtemplate, {'hugo': 'bar'})],
+                                         {'foo', 'bar'})
+        params = {
+            'foo': DummyParameter(requires_stop=False),
+            'bar': DummyParameter(requires_stop=False)
+        }
+        self.assertFalse(sequence.requires_stop(params, {}))
+
+        params = {
+            'foo': DummyParameter(requires_stop=False),
+            'bar': DummyParameter(requires_stop=True)
+        }
+        self.assertTrue(sequence.requires_stop(params, {}))
 
     def test_requires_stop(self) -> None:
         pass
 
-    def test_runtime_mapping_exception(self):
+    def test_runtime_mapping_exception(self) -> None:
         mapping = copy.deepcopy(self.mapping1)
         mapping['up'] = "foo"
 
         subtemplates = [(self.square, mapping)]
         with self.assertRaises(MissingParameterDeclarationException):
             SequencePulseTemplate(subtemplates, self.outer_parameters)
+
+    def test_crash(self) -> None:
+        table = TablePulseTemplate(identifier='foo')
+        table.add_entry('ta', 'va', interpolation='hold')
+        table.add_entry('tb', 'vb', interpolation='linear')
+        table.add_entry('tend', 0, interpolation='jump')
+
+        external_parameters = ['ta', 'tb', 'tc', 'td', 'va', 'vb', 'tend']
+        first_mapping = {
+            'ta': 'ta',
+            'tb': 'tb',
+            'va': 'va',
+            'vb': 'vb',
+            'tend': 'tend'
+        }
+        second_mapping = {
+            'ta': 'tc',
+            'tb': 'td',
+            'va': 'vb',
+            'vb': 'va + vb',
+            'tend': '2 * tend'
+        }
+        sequence = SequencePulseTemplate([(table, first_mapping), (table, second_mapping)], external_parameters)
+
+        parameters = {
+            'ta': ConstantParameter(2),
+            'va': ConstantParameter(2),
+            'tb': ConstantParameter(4),
+            'vb': ConstantParameter(3),
+            'tc': ConstantParameter(5),
+            'td': ConstantParameter(11),
+            'tend': ConstantParameter(6)}
+
+        sequencer = DummySequencer()
+        block = DummyInstructionBlock()
+        self.assertFalse(sequence.requires_stop(parameters, {}))
+        sequence.build_sequence(sequencer, parameters, {}, block)
+        from qctoolkit.pulses.plotting import Plotter
+        from qctoolkit.pulses.sequencing import Sequencer
+        s = Sequencer()
+        p = Plotter()
+        s.push(sequence, parameters)
+        s.build()
 
 
 class SequencePulseTemplateStringTest(unittest.TestCase):
