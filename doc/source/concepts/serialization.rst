@@ -26,6 +26,10 @@ The method `deserialize` is invoked with all key-value pairs created by a call t
 
 The following may serve as a simple example:
 ::
+    from qctoolkit.serialization import Serializable, Serializer
+    from qctoolkit.pulses import PulseTemplate
+    from typing import Any, Dict, Optional
+    
     class Foo(Serializable):
     
         def __init__(self, template: PulseTemplate, identifier: Optional[str]=None) -> None:
