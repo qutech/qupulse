@@ -5,7 +5,7 @@ import numbers
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
-from .instructions import InstructionBlock
+from .instructions import InstructionBlock, InstructionSequence
 from .parameters import Parameter, ConstantParameter
 
 
@@ -81,7 +81,7 @@ class Sequencer:
             
         self.__sequencing_stacks[target_block].append((sequencing_element, parameters, conditions))
         
-    def build(self) -> InstructionBlock:
+    def build(self) -> InstructionSequence:
         """Start the translation process. Translate all elements currently on the translation stacks into a sequence
          and return the InstructionBlock of the main sequence.
         
