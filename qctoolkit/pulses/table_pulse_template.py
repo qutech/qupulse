@@ -280,7 +280,7 @@ class TablePulseTemplate(PulseTemplate):
         instantiated = self.get_entries_instantiated(parameters)
         if instantiated:
             if self.__is_measurement_pulse:
-                self.__measurement.measure(instantiated[-1].t)
+                self.__measurement.measure(instantiated[0].t, instantiated[-1].t)
             waveform = TableWaveform(tuple(instantiated), self.__measurement.instantiate(parameters))
             instruction_block.add_instruction_exec(waveform)
 
