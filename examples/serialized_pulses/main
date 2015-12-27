@@ -1,0 +1,65 @@
+{
+    "entries": [
+        [
+            0,
+            0,
+            "hold"
+        ],
+        [
+            "ta",
+            "va",
+            "hold"
+        ],
+        [
+            "tb",
+            "vb",
+            "linear"
+        ],
+        [
+            "tend",
+            0,
+            "jump"
+        ]
+    ],
+    "is_measurement_pulse": false,
+    "time_parameter_declarations": [
+        {
+            "default_value": null,
+            "max_value": "tb",
+            "min_value": 0,
+            "name": "ta",
+            "type": "qctoolkit.pulses.parameters.ParameterDeclaration"
+        },
+        {
+            "default_value": null,
+            "max_value": "tend",
+            "min_value": "ta",
+            "name": "tb",
+            "type": "qctoolkit.pulses.parameters.ParameterDeclaration"
+        },
+        {
+            "default_value": null,
+            "max_value": Infinity,
+            "min_value": "tb",
+            "name": "tend",
+            "type": "qctoolkit.pulses.parameters.ParameterDeclaration"
+        }
+    ],
+    "type": "qctoolkit.pulses.table_pulse_template.TablePulseTemplate",
+    "voltage_parameter_declarations": [
+        {
+            "default_value": null,
+            "max_value": Infinity,
+            "min_value": -Infinity,
+            "name": "va",
+            "type": "qctoolkit.pulses.parameters.ParameterDeclaration"
+        },
+        {
+            "default_value": null,
+            "max_value": Infinity,
+            "min_value": -Infinity,
+            "name": "vb",
+            "type": "qctoolkit.pulses.parameters.ParameterDeclaration"
+        }
+    ]
+}
