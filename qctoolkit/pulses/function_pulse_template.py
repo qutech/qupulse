@@ -33,8 +33,8 @@ class FunctionPulseTemplate(PulseTemplate):
     The independent variable in the expression is called 't' and is given in units of nano-seconds.
     """
 
-    def __init__(self, expression: str, duration_expression: str, measurement: bool=False) -> None:
-        super().__init__()
+    def __init__(self, expression: str, duration_expression: str, measurement: bool=False, identifier: str=None) -> None:
+        super().__init__(identifier)
         self.__expression = Expression(expression)
         self.__duration_expression = Expression(duration_expression)
         self.__is_measurement_pulse = measurement # type: bool
@@ -50,12 +50,12 @@ class FunctionPulseTemplate(PulseTemplate):
         """Return a set of all parameter declaration objects of this TablePulseTemplate."""
         return set()
 
-    def get_pulse_length(self, parameters) -> float:
+    def get_pulse_length(self, parameters: Dict[str, Parameter]) -> float:
         """Return the length of this pulse for the given parameters."""
         missing = self.__parameter_names - set(parameters.keys())
         for m in missing:
             raise ParameterNotProvidedException(m)
-        return self.__duration_expression.evaluate(**parameters)
+        return self.__duration_expression.evaluate(**{parameter_name: parameter.get_value() for (parameter_name, parameter) in parameters.items()})
 
     def get_measurement_windows(self, parameters: Optional[Dict[str, Parameter]] = {}) -> List[MeasurementWindow]:
         """Return all measurement windows defined in this PulseTemplate.
@@ -78,7 +78,7 @@ class FunctionPulseTemplate(PulseTemplate):
                        parameters: Dict[str, Parameter],
                        conditions: Dict[str, 'Condition'],
                        instruction_block: InstructionBlock) -> None:
-        waveform = FunctionWaveform(parameters, self.__expression, self.__duration_expression)
+        waveform = FunctionWaveform({parameter_name: parameter.get_value() for (parameter_name, parameter) in parameters.items()}, self.__expression, self.__duration_expression)
         instruction_block.add_instruction_exec(waveform)
 
     def requires_stop(self, parameters: Dict[str, Parameter], conditions: Dict[str, 'Condition']) -> bool:
@@ -100,7 +100,7 @@ class FunctionPulseTemplate(PulseTemplate):
 
 class FunctionWaveform(Waveform):
 
-    def __init__(self, parameters: Dict[str, Parameter], expression: Expression, duration_expression: Expression) -> None:
+    def __init__(self, parameters: Dict[str, float], expression: Expression, duration_expression: Expression) -> None:
         super().__init__()
         self.__expression = expression
         self.__parameters = parameters
