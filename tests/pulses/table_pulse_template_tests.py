@@ -437,13 +437,42 @@ class TablePulseTemplateTest(unittest.TestCase):
         self.assertEqual(entries, pulse.entries)
 
     def test_from_array_multi(self) -> None:
-        pass
-        # TODO
+        times = numpy.array([0, 1, 3])
+        voltages = numpy.array([[1,2,3],
+                                [2,3,4]]).T
+        pulse = TablePulseTemplate.from_array(times, voltages)
+        entries = [[],[]]
+        for i, channel in enumerate(voltages.T):
+            for (time, voltage) in zip(times, channel):
+                entries[i].append((time, voltage, HoldInterpolationStrategy()))
+        self.assertEqual(entries, pulse.entries)
 
-    def test_multichannel(self) -> None:
-        pass
-        # TODO
+    def test_add_entry_multi_invalid_channel(self):
+        pulse = TablePulseTemplate()
+        with self.assertRaises(ValueError):
+            pulse.add_entry(2,2, channel=1)
 
+    def test_add_entry_multi(self):
+        pulse = TablePulseTemplate(channels=2)
+        pulse.add_entry(1,1, channel=0)
+        pulse.add_entry(1,1, channel=1)
+        entries = [[(0,0,HoldInterpolationStrategy()),
+                    (1,1,HoldInterpolationStrategy())],
+                   [(0,0,HoldInterpolationStrategy()),
+                    (1,1,HoldInterpolationStrategy())]]
+        self.assertEqual(entries, pulse.entries)
+
+    def test_measurement_windows_multi(self) -> None:
+        pulse = TablePulseTemplate(measurement=True, channels=2)
+        pulse.add_entry(1, 1)
+        pulse.add_entry(3, 0)
+        pulse.add_entry(5, 0)
+
+        pulse.add_entry(1, 1, channel=1)
+        pulse.add_entry(3, 0, channel=1)
+        pulse.add_entry(10, 0, channel=1)
+        windows = pulse.get_measurement_windows()
+        self.assertEqual([(0,10)], windows)
 
 class TablePulseTemplateSerializationTests(unittest.TestCase):
 
@@ -571,6 +600,32 @@ class TableWaveformDataTests(unittest.TestCase):
         self.assertEqual(expected_data, interp.call_arguments)
         self.assertEqual(list(sample_times), list(result))
 
+    def test_few_entries_multi(self) -> None:
+        with self.assertRaises(ValueError):
+            TableWaveform([[],[WaveformTableEntry(0, 0, HoldInterpolationStrategy())]])
+
+        with self.assertRaises(ValueError):
+            TableWaveform([[WaveformTableEntry(0, 0, HoldInterpolationStrategy())],[]])
+
+    def test_sample_multi(self) -> None:
+        interp = DummyInterpolationStrategy()
+        entries = [[WaveformTableEntry(0, 0, interp),
+                         WaveformTableEntry(2.1, -33.2, interp),
+                         WaveformTableEntry(5.7, 123.4, interp)
+                         ],
+                   [WaveformTableEntry(0,0,interp),
+                    WaveformTableEntry(2.1,-33.2,interp),
+                    WaveformTableEntry(5.7, 123.4, interp)]]
+        waveform = TableWaveform(entries)
+        sample_times = numpy.linspace(98.5, 103.5, num=11)
+        expected_result = numpy.vstack([sample_times, sample_times]).T
+        offset = 0.5
+        result = waveform.sample(sample_times, offset)
+        expected_data = [((0, 0), (2.1, -33.2), [0.5, 1.0, 1.5, 2.0]),
+                         ((2.1, -33.2), (5.7, 123.4), [2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5]),((0, 0), (2.1, -33.2), [0.5, 1.0, 1.5, 2.0]),
+                         ((2.1, -33.2), (5.7, 123.4), [2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5])]
+        self.assertEqual(expected_data, interp.call_arguments)
+        self.assertTrue(numpy.all(expected_result == result))
 
 class ParameterValueIllegalExceptionTest(unittest.TestCase):
 

@@ -77,7 +77,9 @@ class TablePulseTemplate(PulseTemplate):
     def __init__(self, channels=1, measurement=False, identifier: Optional[str]=None) -> None:
         super().__init__(identifier)
         self.__identifier = identifier
-        self.__entries = [[]]*channels # type: List[List[TableEntry]]
+        self.__entries = []
+        for x in range(channels):
+            self.__entries.append([]) # type: List[List[TableEntry]]
         self.__time_parameter_declarations = {} # type: Dict[str, ParameterDeclaration]
         self.__voltage_parameter_declarations = {} # type: Dict[str, ParameterDeclaration]
         self.__is_measurement_pulse = measurement# type: bool
@@ -93,7 +95,7 @@ class TablePulseTemplate(PulseTemplate):
 
         Args:
             times: 1D numpy array with time values
-            voltages: 1D numpy array with voltage values
+            voltages: 1D or 2D numpy array with voltage values
 
         Returns:
             TablePulseTemplate with the given values, hold interpolation everywhere and no free parameters.
@@ -104,9 +106,10 @@ class TablePulseTemplate(PulseTemplate):
                 res.add_entry(t, v, interpolation='hold')
         elif voltages.ndim == 2:
             channels = voltages.shape[1]
-            for it, t in enumerate(times):
-                for channel, v in enumerate(voltages[:,it]):
-                    res.add_entry(t, v, interpolation='hold', channel=channel)
+            res = TablePulseTemplate(channels=channels, measurement=measurement)
+            for c in range(channels):
+                for t,v in zip(times, voltages[:,c]):
+                    res.add_entry(t, v, interpolation='hold', channel=c)
         return res
 
     def add_entry(self,
@@ -132,7 +135,7 @@ class TablePulseTemplate(PulseTemplate):
         """
         # Check if channel is valid
         if channel < 0 or channel > self.__channels - 1:
-            raise ValueError("Channel number out of bounds. Allowed values: {}".format(', '.join(range(self.__channels))))
+            raise ValueError("Channel number out of bounds. Allowed values: {}".format(', '.join(map(str, range(self.__channels)))))
 
         # Check if interpolation value is valid
         if interpolation not in self.__interpolation_strategies.keys():
@@ -149,7 +152,7 @@ class TablePulseTemplate(PulseTemplate):
             # ensure that the first entry is not negative
             elif isinstance(time, numbers.Real) and time < 0:
                 raise ValueError("Time value must not be negative, was {}.".format(time))
-            elif time == 0:
+            elif time == 0.0:
                 last_entry = TableEntry(-1, 0, self.__interpolation_strategies['hold'])
         else:
             last_entry = entries[-1]
