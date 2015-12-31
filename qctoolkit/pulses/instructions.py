@@ -21,7 +21,7 @@ __all__ = ["WaveformTable", "WaveformTableEntry", "Waveform", "Trigger", "Instru
 
 
 WaveformTableEntry = NamedTuple("WaveformTableEntry", [('t', float), ('v', float), ('interp', InterpolationStrategy)])
-WaveformTable = Tuple[WaveformTableEntry, ...]
+WaveformTable = List[WaveformTableEntry]
 
 
 class Waveform(Comparable, metaclass=ABCMeta):
