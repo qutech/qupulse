@@ -2,7 +2,7 @@ import unittest
 import copy
 
 from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
-from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate, MissingMappingException, UnnecessaryMappingException, MissingParameterDeclarationException
+from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate, MissingMappingException, UnnecessaryMappingException, MissingParameterDeclarationException, IdentityMapping
 from qctoolkit.pulses.parameters import ParameterDeclaration, ParameterNotProvidedException, ConstantParameter
 
 from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock
@@ -167,6 +167,24 @@ class SequencePulseTemplateTestProperties(SequencePulseTemplateTest):
         seq = SequencePulseTemplate([],[])
         self.assertFalse(seq.requires_stop({}, {}))
         #self.assertFalse(self.sequence.requires_stop({}))
+
+class IdentityMappingTests(unittest.TestCase):
+    def setUp(self):
+        self.pulse = TablePulseTemplate()
+        self.pulse.add_entry('foo', 'bar')
+        self.pulse.add_entry('baz', 'ilse')
+        self.idmap = IdentityMapping(self.pulse)
+
+    def test_invalid_key(self):
+        with self.assertRaises(KeyError):
+            self.idmap['invalid']
+
+    def test_valid_key(self):
+        self.assertEqual('foo', self.idmap['foo'])
+
+    def test_iter(self):
+        self.assertEqual(self.pulse.parameter_names,
+                         set(self.idmap.keys()))
 
 
 if __name__ == "__main__":

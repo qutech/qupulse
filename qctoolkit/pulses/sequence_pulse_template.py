@@ -1,6 +1,7 @@
 import logging
 from typing import Dict, List, Tuple, Set, Optional, Any, Iterable, Union
 import copy
+from collections.abc import Mapping
 
 """LOCAL IMPORTS"""
 from qctoolkit.serialization import Serializer
@@ -20,6 +21,25 @@ __all__ = ["SequencePulseTemplate", "MissingMappingException", "MissingParameter
 
 # a subtemplate consists of a pulse template and mapping functions for its "internal" parameters
 Subtemplate = Tuple[PulseTemplate, Dict[str, str]]
+
+class IdentityMapping(Mapping):
+    """A mapping, that translates all internal parameters to external parameters with the same name."""
+
+    def __init__(self, pulse_template):
+        self.__parameters = frozenset(pulse_template.parameter_names)
+
+    def __getitem__(self, key):
+        if key in self.__parameters:
+            return key
+        else:
+            raise KeyError
+
+    def __iter__(self):
+        return self.__parameters.__iter__()
+
+    def __len__(self):
+        return self.__parameters.__len__()
+
 
 class SequencePulseTemplate(PulseTemplate):
     """A sequence of different PulseTemplates.
