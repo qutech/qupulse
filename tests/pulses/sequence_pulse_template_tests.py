@@ -37,7 +37,7 @@ class SequencePulseTemplateTest(unittest.TestCase):
         self.sequence = SequencePulseTemplate([(self.square, self.mapping1)], self.outer_parameters)
 
     def test_missing_mapping(self):
-        mapping = self.mapping1
+        mapping = copy.deepcopy(self.mapping1)
         mapping.pop('v')
 
         subtemplates = [(self.square, mapping)]
@@ -45,7 +45,7 @@ class SequencePulseTemplateTest(unittest.TestCase):
             SequencePulseTemplate(subtemplates, self.outer_parameters)
 
     def test_unnecessary_mapping(self):
-        mapping = self.mapping1
+        mapping = copy.deepcopy(self.mapping1)
         mapping['unnecessary'] = 'voltage'
 
         subtemplates = [(self.square, mapping)]
@@ -56,6 +56,18 @@ class SequencePulseTemplateTest(unittest.TestCase):
         identifier = 'some name'
         pulse = SequencePulseTemplate([], [], identifier=identifier)
         self.assertEqual(identifier, pulse.identifier)
+
+    def test_identity_mapping_tuple(self):
+        mapping = copy.deepcopy(self.mapping1)
+        subtemplates = [(self.square,)]
+        pulse = SequencePulseTemplate(subtemplates, self.square.parameter_names)
+        self.assertEqual(self.square.parameter_names, pulse.parameter_names)
+
+    def test_identity_mapping_direct(self):
+        mapping = copy.deepcopy(self.mapping1)
+        subtemplates = [self.square]
+        pulse = SequencePulseTemplate(subtemplates, self.square.parameter_names)
+        self.assertEqual(self.square.parameter_names, pulse.parameter_names)
 
 
 class SequencePulseTemplateSerializationTests(unittest.TestCase):
@@ -147,7 +159,7 @@ class SequencePulseTemplateStringTest(unittest.TestCase):
         a = [UnnecessaryMappingException(T,"b"),
              MissingMappingException(T,"b"),
              MissingParameterDeclarationException(T, "c")]
-        
+
         b = [x.__str__() for x in a]
         for s in b:
             self.assertIsInstance(s, str)
@@ -158,11 +170,11 @@ class SequencePulseTemplateTestProperties(SequencePulseTemplateTest):
         self.assertTrue(self.sequence.is_interruptable)
         self.sequence.is_interruptable = False
         self.assertFalse(self.sequence.is_interruptable)
-        
+
     def test_parameter_declarations(self):
         decl = self.sequence.parameter_declarations
         self.assertEqual(decl, set([ParameterDeclaration(i) for i in self.outer_parameters]))
-        
+
     def test_requires_stop(self):
         seq = SequencePulseTemplate([],[])
         self.assertFalse(seq.requires_stop({}, {}))

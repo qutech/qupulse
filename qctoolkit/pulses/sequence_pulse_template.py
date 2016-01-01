@@ -43,7 +43,7 @@ class IdentityMapping(Mapping):
 
 class SequencePulseTemplate(PulseTemplate):
     """A sequence of different PulseTemplates.
-    
+
     SequencePulseTemplate allows to group smaller
     PulseTemplates (subtemplates) into on larger sequence,
     i.e., when instantiating a pulse from a SequencePulseTemplate
@@ -64,6 +64,13 @@ class SequencePulseTemplate(PulseTemplate):
     def __init__(self, subtemplates: List[Subtemplate], external_parameters: List[str], identifier: Optional[str]=None) -> None:
         super().__init__(identifier)
         self.__parameter_names = frozenset(external_parameters)
+        # insert identity mappings for entries without explicit mapping
+        for i, entry in enumerate(subtemplates):
+            if type(entry) != tuple:
+                subtemplates[i] = (entry, IdentityMapping(entry))
+            elif type(entry) == tuple and len(entry) == 1:
+                subtemplates[i] = (entry[0], IdentityMapping(entry[0]))
+
         # convert all mapping strings to expressions
         for i, (template, mappings) in enumerate(subtemplates):
             subtemplates[i] = (template, {k: Expression(v) for k, v in mappings.items()})
