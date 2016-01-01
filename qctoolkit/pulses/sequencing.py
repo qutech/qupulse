@@ -11,7 +11,7 @@ from .parameters import Parameter, ConstantParameter
 
 __all__ = ["SequencingElement", "Sequencer"]
 
-    
+
 class SequencingElement(metaclass = ABCMeta):
     """An entity which can be sequenced using Sequencer."""
     
