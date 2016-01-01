@@ -1,10 +1,12 @@
-from typing import Dict
+from typing import Dict, List, Tuple
 import numpy as np
 from itertools import product
 
+
 from qctoolkit.pulses.measurements import Measurement
-from qctoolkit.hardware.awgs import AWG
-from qctoolkit.hardware.dacs import 
+from qctoolkit.pulses.pulse_template import PulseTemplate 
+# from qctoolkit.hardware.awgs import AWG
+# from qctoolkit.hardware.dacs import 
 from qctoolkit.pulses.sequencing import Sequencer
 
 """Experiment class outline
@@ -38,9 +40,19 @@ Measurement:
 * re-arrange the measured/processed data to match the parameter space, this is the experiment result
 """
 
+def expand_parameter_space(parameter_space):
+    """Expand the given parameter space into an array of combinations, with the last axis being the fastest. Returns a tuple of axis names, axis values and combination tuples"""
+    # prepare parameter space, build tuples of all possible combinations in a defined order, last axis is fast.
+    names, vectors = zip(*parameter_space)
+    names = list(names)
+    # create array of tuples
+    parameter_tuples = np.array(list(product(*tuple(vectors))))
+    vectors = list(vectors)
+    return names, vectors, parameter_tuples
+
 class Experiment():
     """An experiment implementing the behaviour that is oulined above."""
-    def __init__(self, awg, dac, pulse_template: PulseTemplate, parameter_space: List[(str, np.ndarray)], downsampling=1):
+    def __init__(self, awg, dac, pulse_template: PulseTemplate, parameter_space: List[Tuple[str, np.ndarray]], downsampling=1):
         self.__template = pulse_template
         self.__parameter_space = parameter_space
         self.__sequencer = Sequencer()
@@ -48,11 +60,7 @@ class Experiment():
         self.__dac = dac
 
     def prepare(self):
-        # prepare parameter space, build tuples of all possible combinations in a defined order, last axis is fast.
-        names, vectors = zip(*self.__parameter_space)
-        vectors = tuple(vectors)
-        # create array of tuples
-        self.__parameter_tuples = np.array(list(it.product(*vectors)))
+        names, vectors, tuples = expand_parameter_space(self.__parameter_space)
         # push everything on the sequencer
         # TODO: make several measurements instead of one
         # maybe things need to be pushed multiple times for downsampling
@@ -68,3 +76,13 @@ class Experiment():
             pass
             # TODO: the number of windows in a block should not change. they are put into an array and afterwards we need a routine that figures out what masks to use and how to configure them
 
+        # upload all pulses (pulses that are already there should result into null-op)
+
+    def run(self):
+        pass
+        # Steps:
+        # 1. configure and arm awg and dac
+        # 2. software trigger the awg
+        # 3. retrieve data from the dac
+        # 4. re-arrange in a meaningful way
+        # 5. return tuple of axis names, axis vectors and data block
