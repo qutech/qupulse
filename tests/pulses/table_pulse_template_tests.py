@@ -593,12 +593,13 @@ class TableWaveformDataTests(unittest.TestCase):
                          ]]
         waveform = TableWaveform(entries)
         sample_times = numpy.linspace(98.5, 103.5, num=11)
+
         offset = 0.5
         result = waveform.sample(sample_times, offset)
         expected_data = [((0, 0), (2.1, -33.2), [0.5, 1.0, 1.5, 2.0]),
                          ((2.1, -33.2), (5.7, 123.4), [2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5])]
         self.assertEqual(expected_data, interp.call_arguments)
-        self.assertEqual(list(sample_times), list(result))
+        self.assertEqual(list(sample_times - 98), list(result))
 
     def test_few_entries_multi(self) -> None:
         with self.assertRaises(ValueError):
@@ -618,7 +619,7 @@ class TableWaveformDataTests(unittest.TestCase):
                     WaveformTableEntry(5.7, 123.4, interp)]]
         waveform = TableWaveform(entries)
         sample_times = numpy.linspace(98.5, 103.5, num=11)
-        expected_result = numpy.vstack([sample_times, sample_times]).T
+        expected_result = numpy.vstack([sample_times, sample_times]).T - 98
         offset = 0.5
         result = waveform.sample(sample_times, offset)
         expected_data = [((0, 0), (2.1, -33.2), [0.5, 1.0, 1.5, 2.0]),

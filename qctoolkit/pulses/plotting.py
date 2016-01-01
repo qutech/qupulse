@@ -27,14 +27,18 @@ class Plotter:
 
         sample_count = total_time * self.__sample_rate + 1
         ts = np.linspace(0, total_time, num=sample_count)
-        voltages = np.empty_like(ts)
+
+        channels = max([waveform.channels for waveform in waveforms])
+        voltages = np.empty((len(ts), channels))
         time = 0
         for waveform in waveforms:
             indices = np.logical_and(ts >= time, ts <= time + waveform.duration)
             sample_times = ts[indices]
             offset = ts[indices][0] - time
             w_voltages = waveform.sample(sample_times, offset)
-            voltages[indices] = w_voltages
+            if w_voltages.ndim == 1:
+                w_voltages = w_voltages.reshape(-1,1)
+            voltages[indices,:] = w_voltages
             time += waveform.duration
         return ts, voltages
 
@@ -47,6 +51,7 @@ def plot(pulse: SequencingElement, parameters: Dict[str, Parameter]={}, sample_r
     if not sequencer.has_finished():
         raise PlottingNotPossibleException(pulse)
     times, voltages = plotter.render(sequence)
+    import ipdb; ipdb.set_trace()
 
     # plot!
     f = plt.figure()

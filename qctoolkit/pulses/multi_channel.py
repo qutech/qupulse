@@ -28,6 +28,10 @@ class MultiChannelWaveform(Waveform):
         return max([wf.duration for wf in self.__waveforms])
 
     @property
+    def channels(self) -> int:
+        return self.__channels
+
+    @property
     def _compare_key(self) -> Any:
         return tuple(self.__waveforms)
 
@@ -42,7 +46,7 @@ class MultiChannelPulseTemplate(SequencePulseTemplate):
     def __init__(self, subtemplates: List[Subtemplate], external_parameters: List[str], identifier: Optional[str]=None) -> None:
         # use the init function from SequencePulseTemplate.
         # That way we profit from all the consistency checks in there regarding the mappings and such.
-        super().__init()__(subtemplates, external_parameters, identifier)
+        super().__init__(subtemplates, external_parameters, identifier)
 
    # def get_measurement_windows(self, parameters: Dict[str, Parameter] = None) -> List[MeasurementWindow]:
    #     raise NotImplemented()

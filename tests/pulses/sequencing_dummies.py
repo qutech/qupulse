@@ -112,6 +112,10 @@ class DummyWaveform(Waveform):
     def duration(self) -> float:
         return self.duration_
 
+    @property
+    def channels(self) -> int:
+        return 1
+
     def sample(self, sample_times: numpy.ndarray, first_offset: float=0) -> numpy.ndarray:
         self.sample_calls.append((list(sample_times), first_offset))
         if self.sample_output is not None:

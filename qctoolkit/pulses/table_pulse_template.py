@@ -41,6 +41,10 @@ class TableWaveform(Waveform):
         return tuple(map(tuple, self.__tables))
 
     @property
+    def channels(self) -> int:
+        return len(self.__tables)
+
+    @property
     def duration(self) -> float:
         if len(self.__tables):
             return max([table[-1].t for table in self.__tables])
@@ -49,6 +53,7 @@ class TableWaveform(Waveform):
 
     def sample(self, sample_times: np.ndarray, first_offset: float=0) -> np.ndarray:
         channels = len(self.__tables)
+        sample_times = sample_times.copy()
         sample_times -= (sample_times[0] - first_offset)
         voltages = np.empty((len(sample_times), channels))
         for channel, table in enumerate(self.__tables):

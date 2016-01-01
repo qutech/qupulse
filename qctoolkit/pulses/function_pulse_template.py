@@ -106,6 +106,10 @@ class FunctionWaveform(Waveform):
         self.__parameters = parameters
         self.__duration_expression = duration_expression
         self.__partial_expression = self.__partial
+
+    @property
+    def channels(self):
+        return 1
     
     def __partial (self,t):
         params = self.__parameters.copy()
