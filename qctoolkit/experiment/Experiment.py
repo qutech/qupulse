@@ -50,6 +50,13 @@ def expand_parameter_space(parameter_space):
     vectors = list(vectors)
     return names, vectors, parameter_tuples
 
+class Configuration():
+    """Holds the configuration for an experiment."""
+    def __init__(self):
+        self.awg_channels = [0,1,2,3]
+        self.dac_channels = [0,1]
+        self.scanline_duration = 500e-3 # in seconds
+
 class Experiment():
     """An experiment implementing the behaviour that is oulined above."""
     def __init__(self, awg, dac, pulse_template: PulseTemplate, parameter_space: List[Tuple[str, np.ndarray]], downsampling=1):
