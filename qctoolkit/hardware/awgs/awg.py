@@ -23,10 +23,10 @@ class AWG(metaclass = ABCMeta):
     def remove(self, name: str, force=False):
         """Take the name of a program and remove it from the AWG, deleting all unneeded waveforms in the process."""
 
+
     @abstractproperty
     def programs(self) -> Set[str]:
         """Return the set of program names, that can currently be executed on the hardware AWG."""
-
     # @abstractmethod
     # def clean(self) -> None:
     #     """Delete all waveforms from the hardware AWG that are not needed by the programs on the machine."""
@@ -35,7 +35,17 @@ class AWG(metaclass = ABCMeta):
     def run(self, name) -> None:
         """Load the program 'name' and either arm the device for running it or run it."""
 
+    @abstractproperty
+    def samplerate(self) -> float:
+        """Returns the AWG samplerate (needed by the sequencer)"""
 
+    @abstractproperty
+    def identifier(self) -> str:
+        """Return a hardware identifier string."""
+
+    @abstractproperty
+    def outputRange(self) -> Tuple(float, float):
+        """Return the minimal/maximal voltage the AWG can produce"""
 
 
 class DummyAWG(AWG):

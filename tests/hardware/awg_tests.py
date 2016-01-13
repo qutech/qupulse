@@ -6,7 +6,6 @@ import qctoolkit.pulses as pls
 
 class DummyAWGTest(unittest.TestCase):
     def setUp(self):
-        self.awg = awg.DummyAWG(10)
         self.pulse_template = pls.TablePulseTemplate()
         self.pulse_template.add_entry('value', 5)
         self.sequencer = pls.Sequencer()
@@ -15,6 +14,22 @@ class DummyAWGTest(unittest.TestCase):
             sequencer.push(self.pulse_template, pars)
         self.program = self.sequencer.build()
 
-    def test_outofmemoryexception(self):
+    def test_OutOfMemoryException(self):
+        dummy = awg.DummyAWG(10)
         with self.assertRaises(awg.OutOfMemoryException):
-            self.awg.upload('program', self.program)
+            dummy.upload('program', self.program)
+
+    def test_ProgramOverwriteException(self):
+        dummy = awg.DummyAWG(10)
+        dummy.upload('program', self.program)
+        with self.assertRaises(awg.ProgramOverwriteException):
+            dummy.upload('program')
+
+    def test_upload(self):
+        dummy = awg.DummyAWG(100)
+        dummy.upload('program',self.program)
+        memory_part = [None for i in range(89)]
+        self.assertEqual(dummy._DummyAWG_waveform_memory[11:], memory_part)
+        self.assertEqual(dummy.programs, set(['program']))
+
+
