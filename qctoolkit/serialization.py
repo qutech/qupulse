@@ -107,7 +107,7 @@ class Serializer(object):
             else:
                 self.__subpulses[identifier] = Serializer.FileEntry(repr_, serializable)
             return identifier
-    
+
     def dictify(self, serializable: Serializable) -> Dict[str, Dict[str, Any]]:
         self.__subpulses = dict()
         repr_ = self._serialize_subpulse(serializable)

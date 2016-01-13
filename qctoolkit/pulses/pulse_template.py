@@ -49,3 +49,7 @@ class PulseTemplate(Serializable, SequencingElement, metaclass = ABCMeta):
     @abstractproperty
     def is_interruptable(self) -> bool:
         """Return true, if this PulseTemplate contains points at which it can halt if interrupted."""
+
+    # @abstractproperty
+    # def num_channels(self) -> int:
+    #     """Returns the number of hardware output channels this PulseTemplate uses."""

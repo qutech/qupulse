@@ -27,5 +27,5 @@ setup(name='qctoolkit',
         'plotting' : ['matplotlib'],
         'faster expressions' : ['numexpr']
     },
-    test_suite="tests",
+    test_suite="tests/pulses",
 )
