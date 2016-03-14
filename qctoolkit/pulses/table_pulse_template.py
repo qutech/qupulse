@@ -354,6 +354,8 @@ class TablePulseTemplate(PulseTemplate):
             instruction_block.add_instruction_exec(waveform)
 
     def requires_stop(self, parameters: Dict[str, Parameter], conditions: Dict[str, 'Condition']) -> bool:
+        if not conditions:
+            return False
         return any(parameters[name].requires_stop for name in parameters.keys() if (name in self.parameter_names) and not isinstance(parameters[name], numbers.Number))
 
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:

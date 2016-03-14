@@ -1,9 +1,8 @@
 
 from abc import ABCMeta, abstractmethod, abstractproperty
-from typing import Dict,List, Tuple, Set
-from collections import Ordered
-import numpy as np
-import logging
+from typing import Set
+from typing import Tuple
+from typing import List
 
 
 from qctoolkit.pulses.instructions import InstructionBlock, EXECInstruction
@@ -40,11 +39,11 @@ class AWG(metaclass = ABCMeta):
         """Returns the AWG samplerate (needed by the sequencer)"""
 
     @abstractproperty
-    def identifier(self) -> str:
+    def identifier(self):
         """Return a hardware identifier string."""
 
     @abstractproperty
-    def outputRange(self) -> Tuple(float, float):
+    def outputRange(self):
         """Return the minimal/maximal voltage the AWG can produce"""
 
 

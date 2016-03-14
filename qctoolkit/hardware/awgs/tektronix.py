@@ -1,8 +1,12 @@
 from bidict import bidict
 import visa
 import datetime
+import numpy as np
+from functools import reduce
+import ipdb
 
 from .awg import AWG, DummyAWG, ProgramOverwriteException, OutOfWaveformMemoryException
+from qctoolkit.pulses.instructions import EXECInstruction
 
 
 __all__ = ['TektronixAWG']
@@ -13,13 +17,30 @@ class TektronixAWG(AWG):
         self.__waveform_memory = set() #map index to waveform
         self.__program_waveforms = {} # maps program names to set of waveforms used by the program
         self.__ip = ip
-        self.rm = visa.ResourceManager()
-        self.inst = rm.open_resource('TCPIP::{0}::INSTR'.format(self.__ip))
+        self.__rm = visa.ResourceManager()
+        self.inst = self.__rm.open_resource('TCPIP::{0}::INSTR'.format(self.__ip))
+        self.__identifier = self.inst.query('*IDN?')
         self.__samplerate = samplerate
         self.__scale = 1.
         self.__offset = 0.
         self.__channel_template = '{0:s}_{1:d}'
         self.__channels = [1] # use 2 channels. TODO: fix this
+
+    @property
+    def outputRange(self):
+        return (-1, 1)
+
+    @property
+    def identifier(self):
+        return self.__identifier
+
+    @property
+    def programs(self):
+        return list(self.__programs.keys())
+
+    @property
+    def samplerate(self):
+        return self.__samplerate
 
     def rescale_data(self, voltages: np.ndarray) -> np.ndarray:
         """Converts an array of voltages to an array of unsigned integers for upload."""
@@ -44,14 +65,15 @@ class TektronixAWG(AWG):
             # first sample the waveform to get an array of data
             ts = np.arange(waveform.duration/self.__samplerate)
             data = waveform.sample(ts, offset)
-            wf_name = waveform2name(waveform)
+            wf_name = self.waveform2name(waveform)
 
             # now create a new waveform on the awg
             total = len(data)
             # TODO: also do this for multiple_channels
             for c in self.__channels:
                 name = channel_template.format(wf_name, c)
-                self.inst.write_ascii_values('WLIST:WAVEFORM:NEW "{0}", {1:d}, INT'.format(name, total))
+                ipdb.set_trace()
+                self.inst.write('WLIST:WAVEFORM:NEW "{0}", {1:d}, INT'.format(name, total))
                 chunksize = 65536
                 for i, chunk in enumerate(np.split(data, chunksize)):
                     """This needs a lot of testing!!!""" #TODO: test
@@ -66,12 +88,14 @@ class TektronixAWG(AWG):
     def build_sequence(self, name):
         '''Puts a new sequence in the AWG sequence memory'''
         length = len(self.__programs[name])
+        program = self.__programs[name]
         self.inst.write('SEQUENCE:LENGTH {0:d}'.format(length)) # create new sequence
         for i in range(length):
-            wf_name = waveform2name(waveform)
+            waveform = program[i]
+            wf_name = self.waveform2name(waveform)
             # set i'th sequence element
             # TODO: for multiple channels write the following line for each channel, respectively
-            for c in __channels:
+            for c in self.__channels:
                 self.inst.write('SEQUENCE:ELEMENT{0:d}:WAVEFORM{1:d} "{2:s}"'.format(i+1, c+1, wf_name))
         # have sequence go back to index 1 after playback of index N
         self.inst.write('SEQUENCE:ELEMENT{0:d}:GOTO:STATE ON'.format(length))
@@ -79,6 +103,7 @@ class TektronixAWG(AWG):
 
     def upload(self, name, program, force=False):
         '''Uploads all necessary waveforms for the program to the AWG and create a corresponding sequence.'''
+        ipdb.set_trace()
         if name in self.programs:
             if not force:
                 raise ProgramOverwriteException(name)
@@ -87,13 +112,13 @@ class TektronixAWG(AWG):
                 self.upload(name, program)
         else:
             self.__programs[name] = program
-            exec_blocks = filter(lambda x: type(x) == EXECInstruction, program)
+            exec_blocks = list(filter(lambda x: type(x) == EXECInstruction, program))
             offset = 0
             for block in exec_blocks:
                 self.add_waveform(block.waveform, offset)
                 offset += block.waveform.duration
             used_waveforms = frozenset([block.waveform for block in exec_blocks])
-            self.__program_wfs[name] = used_waveforms
+            self.__program_waveforms[name] = used_waveforms
             self.build_sequence(name)
 
     def run(self, name, autorun=False):
@@ -106,11 +131,11 @@ class TektronixAWG(AWG):
     def remove(self, name):
         if name in self.programs:
             self.__programs.pop(name)
-            self.program_wfs.pop(name)
+            self.__program_waveforms.pop(name)
             self.clean()
 
     def clean(self):
-        necessary_wfs = reduce(lambda acc, s: acc.union(s), self.__program_wfs.values(), set())
+        necessary_wfs = reduce(lambda acc, s: acc.union(s), self.__program_waveforms.values(), set())
         all_wfs = self.__waveform_memory
         delete = all_wfs - necessary_wfs
         for waveform in delete:
