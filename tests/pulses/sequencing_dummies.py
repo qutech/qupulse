@@ -44,7 +44,7 @@ class DummyNoValueParameter(Parameter):
 
     @property
     def requires_stop(self) -> bool:
-        return False
+        return True
 
     def get_serialization_data(self, serializer: Serializer) -> None:
             raise NotImplementedError()
