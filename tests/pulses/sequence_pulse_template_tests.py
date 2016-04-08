@@ -193,12 +193,6 @@ class SequencePulseTemplateTestProperties(SequencePulseTemplateTest):
     def test_parameter_declarations(self):
         decl = self.sequence.parameter_declarations
         self.assertEqual(decl, set([ParameterDeclaration(i) for i in self.outer_parameters]))
-        
-    def test_requires_stop(self):
-        seq = SequencePulseTemplate([],[])
-        self.assertFalse(seq.requires_stop({}, {}))
-        #self.assertFalse(self.sequence.requires_stop({}))
-
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
