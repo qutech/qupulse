@@ -6,4 +6,4 @@ doc/build/*
 *.egg-info*
 build/*
 dist/*
-examples/.ipynb_checkpoints/*
+doc/source/examples/.ipynb_checkpoints/*
