@@ -10,9 +10,7 @@ The implementation of (de)serialization features :class:`.Serializer` class and 
 
 The essential methods of :class:`.Serializer` are :meth:`.Serializer.serialize` and :meth:`.Serializer.deserialize`. :meth:`.Serializer.serialize` serializes a serializable object (i.e., any object of a class that implements/derives from :class:`.Serializable`) in a recursive process: It invokes the :meth:`.Serializable.get_serialization_data` method of the provided serializable object, which in turn might invoke the :class:`.Sequencer` to obtain a serialization for complex embedded data (such as a :class:`.ParameterDeclaration` in a :class:`.TablePulseTemplate`). In the end, a dictionary representation of the object is obtained which is then converted into a JSON string using built-in Python functionality. The JSON representation is finally stored using a given :class:`.StorageBackend`. Deserialization (:meth:`.Serializer.deserialize`) works analogously and is thus not explained in detail here.
 
-For an example of how to use serialization to store and load pulse templates, see .
-
-.. note:: write examples
+For an example of how to use serialization to store and load pulse templates, see :ref:`examples/03Serialization.ipynb` in the examples section.
 
 Implementing a :class:`.Serializable` Class
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
