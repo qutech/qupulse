@@ -10,7 +10,7 @@ import numpy as np
 """LOCAL IMPORTS"""
 from qctoolkit.serialization import Serializer
 
-from .parameters import ParameterDeclaration, Parameter
+from .parameters import ParameterDeclaration, Parameter, ParameterNotProvidedException
 from .pulse_template import PulseTemplate, MeasurementWindow
 from .sequencing import InstructionBlock, Sequencer
 from .interpolation import InterpolationStrategy, LinearInterpolationStrategy, HoldInterpolationStrategy, JumpInterpolationStrategy
@@ -319,7 +319,10 @@ class TablePulseTemplate(PulseTemplate):
             instruction_block.add_instruction_exec(waveform)
 
     def requires_stop(self, parameters: Dict[str, Parameter], conditions: Dict[str, 'Condition']) -> bool:
-        return any(parameters[name].requires_stop for name in parameters.keys() if (name in self.parameter_names) and not isinstance(parameters[name], numbers.Number))
+        try:
+            return any(parameters[name].requires_stop for name in self.parameter_names if not isinstance(parameters[name], numbers.Number))
+        except KeyError as e:
+            raise ParameterNotProvidedException(str(e)) from e
 
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
         data = dict()

@@ -510,6 +510,12 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
         table.build_sequence(sequencer, {}, {}, instruction_block)
         self.assertFalse(instruction_block.instructions)
 
+    def test_requires_stop_missing_param(self) -> None:
+        table = TablePulseTemplate()
+        foo_decl = ParameterDeclaration('foo')
+        table.add_entry(foo_decl, 'v', 'linear')
+        self.assertRaises(ParameterNotProvidedException, table.requires_stop, {'foo': DummyParameter(0, False)}, {})
+
     def test_requires_stop(self) -> None:
         table = TablePulseTemplate()
         foo_decl = ParameterDeclaration('foo', min=1)

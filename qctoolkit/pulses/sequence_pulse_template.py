@@ -7,7 +7,7 @@ from qctoolkit.serialization import Serializer
 from qctoolkit.expressions import Expression
 
 from .pulse_template import PulseTemplate, MeasurementWindow
-from .parameters import ParameterDeclaration, Parameter, ParameterNotProvidedException
+from .parameters import ParameterDeclaration, Parameter, MappedParameter, ParameterNotProvidedException
 from .sequencing import InstructionBlock, Sequencer
 from .conditions import Condition
 
@@ -90,39 +90,26 @@ class SequencePulseTemplate(PulseTemplate):
         self.__is_interruptable = new_value
 
     def requires_stop(self, parameters: Dict[str, Parameter], conditions: Dict[str, 'Condition']) -> bool:
-        if not self.subtemplates:
-            return False
-
-        # obtain first subtemplate
-        (template, mapping_functions) = self.subtemplates[0]
-
-        # collect all parameters required to compute the mappings for the first subtemplate
-        external_parameters = set()
-        for mapping_function in mapping_functions.values():
-            external_parameters = external_parameters | set(mapping_function.variables())
-
-        # return True only if none of these requires a stop
-        return any([p.requires_stop for p in external_parameters])
-
-    def __map_parameter(self, mapping_function: str, parameters: Dict[str, Parameter]) -> Parameter:
-        external_parameters = mapping_function.variables()
-        external_values = {name: float(parameters[name]) for name in external_parameters}
-        return mapping_function.evaluate(external_values)
+        return False
 
     def build_sequence(self,
                        sequencer: Sequencer,
                        parameters: Dict[str, Parameter],
                        conditions: Dict[str, Condition],
                        instruction_block: InstructionBlock) -> None:
+        # todo: currently ignores is_interruptable
+
         # detect missing or unnecessary parameters
-        missing = self.parameter_names - set(parameters)
-        for m in missing:
-            raise ParameterNotProvidedException(m)
+        missing = list(self.parameter_names - set(parameters))
+        if missing:
+            raise ParameterNotProvidedException(missing[0])
 
         # push subtemplates to sequencing stack with mapped parameters
         for template, mappings in reversed(self.subtemplates):
-            inner_parameters = {name: self.__map_parameter(mapping_function, parameters) for (name, mapping_function) in mappings.items()}
-            sequencer.push(template, inner_parameters, instruction_block)
+            inner_parameters = {name: MappedParameter(mapping_function,
+                                                      {name: parameters[name] for name in mapping_function.variables()})
+                                for (name, mapping_function) in mappings.items()}
+            sequencer.push(template, inner_parameters, conditions, instruction_block)
 
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
         data = dict()

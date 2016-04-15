@@ -1,11 +1,12 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
-from typing import Optional, Union, Dict, Tuple, Any
+from typing import Optional, Union, Dict, Tuple, Any, Iterable
 import logging
 
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
 from qctoolkit.serialization import Serializable, Serializer
+from qctoolkit.expressions import Expression
 
 logger = logging.getLogger(__name__)
 
@@ -55,12 +56,52 @@ class ConstantParameter(Parameter):
     def __repr__(self) -> str:
         return "<ConstantParameter {0}>".format(self.__value)
 
-    def get_serialization_data(self, serializer: Serializer) -> None:
+    def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
         return dict(type=serializer.get_type_identifier(self), constant=self.__value)
 
     @staticmethod
     def deserialize(serializer: Serializer, constant: float) -> 'ConstantParameter':
         return ConstantParameter(constant)
+
+
+class MappedParameter(Parameter):
+    """A pulse parameter whose value is derived from other parameters via some mathematical expression."""
+
+    def __init__(self, expression: Expression, dependencies: Optional[Dict[str, Parameter]]=dict()) -> None:
+        super().__init__()
+        self.__expression = expression
+        self.dependencies = dependencies
+
+    def __collect_dependencies(self) -> Iterable[Parameter]:
+        try:
+            return {dependency_name: self.dependencies[dependency_name] for dependency_name in self.__expression.variables()}
+        except KeyError as e:
+            raise ParameterNotProvidedException(str(e)) from e
+
+    def get_value(self) -> float:
+        if self.requires_stop:
+            raise Exception("Cannot evaluate MappedParameter because at least one dependency cannot be evaluated.")
+        dependencies = self.__collect_dependencies()
+        variables = {k: float(dependencies[k]) for k in dependencies}
+        return self.__expression.evaluate(**variables)
+
+    @property
+    def requires_stop(self) -> bool:
+        try:
+            return any([p.requires_stop for p in self.__collect_dependencies().values()])
+        except:
+            raise
+
+    def __repr__self(self) -> str:
+        return "<MappedParameter {0} depending on {1}>".format(self.__expression, self.__dependencies)
+
+    def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
+        return dict(type=serializer.get_type_identifier(self),
+                    expression=serializer._serialize_subpulse(self.__expression))
+
+    @staticmethod
+    def deserialize(serializer: Serializer, expression: str) -> 'MappedParameter':
+        return MappedParameter(serializer.deserialize(expression))
 
 #class ParameterValueProvider(metaclass = ABCMeta):
 #
