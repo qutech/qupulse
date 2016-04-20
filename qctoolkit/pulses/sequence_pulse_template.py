@@ -7,7 +7,8 @@ from typing import Dict, List, Tuple, Set, Optional, Any, Iterable, Union
 from qctoolkit.serialization import Serializer
 from qctoolkit.expressions import Expression
 
-from qctoolkit.pulses.pulse_template import PulseTemplate, MeasurementWindow
+from qctoolkit.pulses.pulse_template import PulseTemplate, MeasurementWindow, \
+    DoubleParameterNameException
 from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter, \
     ParameterNotProvidedException, MappedParameter
 from qctoolkit.pulses.sequencing import InstructionBlock, Sequencer
@@ -170,6 +171,24 @@ class SequencePulseTemplate(PulseTemplate):
         template = SequencePulseTemplate(subtemplates, external_parameters, identifier=identifier)
         template.is_interruptable = is_interruptable
         return template
+
+    def __matmult__(self, other) -> 'SequencePulseTemplate':
+        """Like in the general PulseTemplate implementation this method enables using the
+        @-operator for concatenating pulses. We need an overloaded method for SequencePulseTemplate
+         to avoid creating unnecessarily nested pulse structures."""
+        if not type(other) == SequencePulseTemplate:
+            return SequencePulseTemplate.__matmult__(self, other)
+        else:
+            # this section is copy-pasted from the PulseTemplate implementation
+            double_parameters = self.parameter_names & other.parameter_names  # intersection
+            if double_parameters:
+                raise DoubleParameterNameException(self, other, double_parameters)
+            else:
+                # this branch differs from what happens in PulseTemplate
+                subtemplates = self.subtemplates + other.subtemplates
+                # the check for conflicting external parameters has already been carried out
+                external_parameters = self.parameter_names | other.parameter_names  # union
+                return SequencePulseTemplate(subtemplates, external_parameters)  # no identifier
 
 
 class MissingParameterDeclarationException(Exception):

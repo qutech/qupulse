@@ -12,7 +12,7 @@ from qctoolkit.serialization import Serializable
 from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter
 from qctoolkit.pulses.sequencing import SequencingElement
 
-__all__ = ["MeasurementWindow", "PulseTemplate"]
+__all__ = ["MeasurementWindow", "PulseTemplate", "DoubleParameterNameException"]
 
 
 MeasurementWindow = Tuple[float, float]
@@ -54,6 +54,37 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=ABCMeta):
 
     @abstractproperty
     def is_interruptable(self) -> bool:
-        """True, if this execution of this PulseTemplate can be interrupted at certain points,
-        i.e., a Sequencer can translate this PulseTemplate partially.
+        """Return true, if this PulseTemplate contains points at which it can halt if interrupted.
         """
+
+    def __matmult__(self, other) -> 'SequencePulseTemplate':
+        """This method enables us to use the @-operator (intended for matrix multiplication) for
+         concatenating pulses"""
+        from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
+        # check if parameter names of the subpulses clash, otherwise construct a default mapping
+        double_parameters = self.parameter_names & other.parameter_names # intersection
+        if double_parameters:
+            # if there are parameter name conflicts, throw an exception
+            raise DoubleParameterNameException(self, other, double_parameters)
+        else:
+            subtemplates = [(self, {p:p for p in self.parameter_names}),
+                            (other, {p:p for p in other.parameter_names})]
+            external_parameters = self.parameter_names | other.parameter_names # union
+            return SequencePulseTemplate(subtemplates, external_parameters)
+
+
+class DoubleParameterNameException(Exception):
+
+    def __init__(self, templateA: PulseTemplate, templateB: PulseTemplate, names: Set[str]) -> None:
+        super().__init__()
+        self.templateA = templateA
+        self.templateB = templateB
+        self.names = names
+
+    def __str__(self) -> str:
+        return "Cannot concatenate pulses '{}' and '{}' with a default parameter mapping. " \
+               "Both define the following parameter names: {}".format(
+            self.templateA, self.templateB, ', '.join(self.names)
+        )
+
+
