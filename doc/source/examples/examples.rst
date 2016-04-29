@@ -15,3 +15,4 @@ All examples are provided as static text in this documentation and, additionally
     06ConditionalExecution
     07PulseControl
     08RealWorldCase
+    09DetailedSequencingWalkthrough
