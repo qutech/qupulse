@@ -188,3 +188,13 @@ class ConditionEvaluationException(Exception):
     
     def __str__(self) -> str:
         return "The Condition can currently not be evaluated."
+
+
+class ConditionMissingException(Exception):
+
+    def __init__(self, condition_name: str) -> None:
+        super().__init__()
+        self.condition_name = condition_name
+
+    def __str__(self) -> str:
+        return "Condition <{}> was referred to but not provided in the conditions dictionary.".format(self.condition_name)
