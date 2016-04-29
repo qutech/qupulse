@@ -59,8 +59,8 @@ master_doc = 'index'
 
 # General information about the project.
 project = 'qc-toolkit'
-copyright = '2015, TODO: Author'
-author = 'TODO: Author'
+copyright = '2015-2016, Quantum Technology Group, RWTH Aachen University'
+author = 'Quantum Technology Group, RWTH Aachen University'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
