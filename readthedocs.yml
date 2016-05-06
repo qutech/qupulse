@@ -2,3 +2,5 @@ requirements_file: doc/requirements.txt
 python:
     setup_py_install: true
     version: 3
+formats:
+    - none
