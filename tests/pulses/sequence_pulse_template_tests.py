@@ -1,13 +1,13 @@
 import unittest
 import copy
 
+from qctoolkit.expressions import Expression
 from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
 from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate, MissingMappingException, UnnecessaryMappingException, MissingParameterDeclarationException
 from qctoolkit.pulses.parameters import ParameterDeclaration, ParameterNotProvidedException, ConstantParameter
 
 from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyPulseTemplate, DummyParameter, DummyNoValueParameter
 from tests.serialization_dummies import DummySerializer
-
 
 class SequencePulseTemplateTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -71,28 +71,30 @@ class SequencePulseTemplateSerializationTests(unittest.TestCase):
         self.foo_mappings = dict(hugo='ilse', albert='albert', voltage='voltage')
 
     def test_get_serialization_data(self) -> None:
+        serializer = DummySerializer(serialize_callback=lambda x: str(x))
+        foo_mappings = {k: Expression(v) for k, v in self.foo_mappings.items()}
         sequence = SequencePulseTemplate([(self.table_foo, self.foo_mappings), (self.table, {})],
                                          ['ilse', 'albert', 'voltage'],
                                          identifier='foo')
-
         expected_data = dict(
-            type=self.serializer.get_type_identifier(sequence),
+            type=serializer.get_type_identifier(sequence),
             external_parameters=['albert', 'ilse', 'voltage'],
             is_interruptable=True,
             subtemplates = [
-                dict(template=str(id(self.table_foo)), mappings=self.foo_mappings),
-                dict(template=str(id(self.table)), mappings=dict())
+                dict(template=str(self.table_foo), mappings={k: str(v) for k, v in foo_mappings.items()}),
+                dict(template=str(self.table), mappings=dict())
             ]
         )
-        data = sequence.get_serialization_data(self.serializer)
+        data = sequence.get_serialization_data(serializer)
         self.assertEqual(expected_data, data)
 
     def test_deserialize(self) -> None:
+        foo_mappings = {k: Expression(v) for k, v in self.foo_mappings.items()}
         data = dict(
             external_parameters={'ilse', 'albert', 'voltage'},
             is_interruptable=True,
             subtemplates = [
-                dict(template=str(id(self.table_foo)), mappings=self.foo_mappings),
+                dict(template=str(id(self.table_foo)), mappings={k: str(id(v)) for k, v in foo_mappings.items()}),
                 dict(template=str(id(self.table)), mappings=dict())
             ],
             identifier='foo'
@@ -101,6 +103,8 @@ class SequencePulseTemplateSerializationTests(unittest.TestCase):
         # prepare dependencies for deserialization
         self.serializer.subelements[str(id(self.table_foo))] = self.table_foo
         self.serializer.subelements[str(id(self.table))] = self.table
+        for v in foo_mappings.values():
+            self.serializer.subelements[str(id(v))] = v
 
         # deserialize
         sequence = SequencePulseTemplate.deserialize(self.serializer, **data)
@@ -111,7 +115,8 @@ class SequencePulseTemplateSerializationTests(unittest.TestCase):
                          sequence.parameter_declarations)
         self.assertIs(self.table_foo, sequence.subtemplates[0][0])
         self.assertIs(self.table, sequence.subtemplates[1][0])
-        self.assertEqual(self.foo_mappings, {k: m.string for k,m in sequence.subtemplates[0][1].items()})
+        #self.assertEqual(self.foo_mappings, {k: m.string for k,m in sequence.subtemplates[0][1].items()})
+        self.assertEqual(foo_mappings, sequence.subtemplates[0][1])
         self.assertEqual(dict(), sequence.subtemplates[1][1])
         self.assertEqual(data['identifier'], sequence.identifier)
 

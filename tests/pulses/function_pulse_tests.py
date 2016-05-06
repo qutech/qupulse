@@ -30,10 +30,11 @@ class FunctionPulseTest(unittest.TestCase):
     def test_serialization_data(self):
         expected_data = dict(type='FunctionPulseTemplate',
                              parameter_names=set(['a', 'b', 'c']),
-                             duration_expression=self.s2,
-                             expression=self.s,
+                             duration_expression=str(self.s2),
+                             expression=str(self.s),
                              measurement=False)
-        self.assertEqual(expected_data, self.fpt.get_serialization_data(DummySerializer()))
+        self.assertEqual(expected_data, self.fpt.get_serialization_data(DummySerializer(serialize_callback=lambda x: str(x))))
+
 
 class FunctionPulseSequencingTest(unittest.TestCase):
     def setUp(self):

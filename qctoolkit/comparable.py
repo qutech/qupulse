@@ -10,7 +10,7 @@ class Comparable(metaclass=ABCMeta):
 
     @abstractproperty
     def _compare_key(self) -> Any:
-        """Return a unique key used in comparison and hashing operations.
+        """Returns a unique key used in comparison and hashing operations.
 
         The key must describe the essential properties of the object. Two objects are equal iff their keys are identical.
         """

@@ -88,8 +88,9 @@ class FunctionPulseTemplate(PulseTemplate):
         root = dict()
         root['type'] = 'FunctionPulseTemplate'
         root['parameter_names'] = self.__parameter_names
-        root['duration_expression'] = self.__duration_expression.string
-        root['expression'] = self.__expression.string
+        root['duration_expression'] = serializer._serialize_subpulse(self.__duration_expression)
+            #self.__duration_expression.string
+        root['expression'] = serializer._serialize_subpulse(self.__expression)
         root['measurement'] = self.__is_measurement_pulse
         return root
 

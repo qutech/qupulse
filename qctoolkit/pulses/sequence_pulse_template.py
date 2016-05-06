@@ -118,9 +118,9 @@ class SequencePulseTemplate(PulseTemplate):
 
         subtemplates = []
         for (subtemplate, mapping_functions) in self.subtemplates:
-            mapping_functions_strings = {k: m.string for k, m in mapping_functions.items()}
+            mapping_functions_strings = {k: serializer._serialize_subpulse(m) for k, m in mapping_functions.items()}
             subtemplate = serializer._serialize_subpulse(subtemplate)
-            subtemplates.append(dict(template=subtemplate, mappings=copy.deepcopy(mapping_functions_strings)))
+            subtemplates.append(dict(template=subtemplate, mappings=mapping_functions_strings))
         data['subtemplates'] = subtemplates
 
         data['type'] = serializer.get_type_identifier(self)
@@ -134,7 +134,7 @@ class SequencePulseTemplate(PulseTemplate):
                     identifier: Optional[str]=None) -> 'SequencePulseTemplate':
         subtemplates = \
             [(serializer.deserialize(d['template']),
-             {k: m for k, m in d['mappings'].items()}) for d in subtemplates]
+             {k: str(serializer.deserialize(m)) for k, m in d['mappings'].items()}) for d in subtemplates]
 
         template = SequencePulseTemplate(subtemplates, external_parameters, identifier=identifier)
         template.is_interruptable = is_interruptable
