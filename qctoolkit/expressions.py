@@ -1,8 +1,3 @@
-try:
-    import numexpr
-    USE_NUMEXPR = True
-except ImportError:
-    USE_NUMEXPR = False
 from py_expression_eval import Parser
 from typing import Any, Dict, Iterable, Optional
 
@@ -25,10 +20,7 @@ class Expression(Serializable):
         return self.__expression.variables()
 
     def evaluate(self, **kwargs) -> float:
-        if USE_NUMEXPR:
-            return numexpr.evaluate(self.__string, global_dict={}, local_dict=kwargs)
-        else:
-            return self.__expression.evaluate(kwargs)
+        return self.__expression.evaluate(kwargs)
 
     def get_serialization_data(self, serializer: 'Serializer') -> Dict[str, Any]:
         return dict(type='Expression', expression=self.__string)

@@ -5,7 +5,7 @@ from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
 from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate, MissingMappingException, UnnecessaryMappingException, MissingParameterDeclarationException
 from qctoolkit.pulses.parameters import ParameterDeclaration, ParameterNotProvidedException, ConstantParameter
 
-from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyPulseTemplate, DummyNoValueParameter
+from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyPulseTemplate, DummyParameter, DummyNoValueParameter
 from tests.serialization_dummies import DummySerializer
 
 
@@ -164,6 +164,55 @@ class SequencePulseTemplateSequencingTests(SequencePulseTemplateTest):
         self.assertFalse(seq.requires_stop(parameters, {}))
 
     def test_missing_parameter_declaration_exception(self):
+        mapping = copy.deepcopy(self.mapping1)
+        mapping['up'] = "foo"
+
+        subtemplates = [(self.square, mapping)]
+        with self.assertRaises(MissingParameterDeclarationException):
+            SequencePulseTemplate(subtemplates, self.outer_parameters)
+
+    def test_crash(self) -> None:
+        table = TablePulseTemplate(identifier='foo')
+        table.add_entry('ta', 'va', interpolation='hold')
+        table.add_entry('tb', 'vb', interpolation='linear')
+        table.add_entry('tend', 0, interpolation='jump')
+
+        external_parameters = ['ta', 'tb', 'tc', 'td', 'va', 'vb', 'tend']
+        first_mapping = {
+            'ta': 'ta',
+            'tb': 'tb',
+            'va': 'va',
+            'vb': 'vb',
+            'tend': 'tend'
+        }
+        second_mapping = {
+            'ta': 'tc',
+            'tb': 'td',
+            'va': 'vb',
+            'vb': 'va + vb',
+            'tend': '2 * tend'
+        }
+        sequence = SequencePulseTemplate([(table, first_mapping), (table, second_mapping)], external_parameters)
+
+        parameters = {
+            'ta': ConstantParameter(2),
+            'va': ConstantParameter(2),
+            'tb': ConstantParameter(4),
+            'vb': ConstantParameter(3),
+            'tc': ConstantParameter(5),
+            'td': ConstantParameter(11),
+            'tend': ConstantParameter(6)}
+
+        sequencer = DummySequencer()
+        block = DummyInstructionBlock()
+        self.assertFalse(sequence.requires_stop(parameters, {}))
+        sequence.build_sequence(sequencer, parameters, {}, block)
+        from qctoolkit.pulses.sequencing import Sequencer
+        s = Sequencer()
+        s.push(sequence, parameters)
+        s.build()
+
+    def test_missing_parameter_declaration_exception(self) -> None:
         mapping = copy.deepcopy(self.mapping1)
         mapping['up'] = "foo"
 

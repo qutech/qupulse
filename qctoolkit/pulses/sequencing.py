@@ -5,8 +5,8 @@ import numbers
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
-from .instructions import InstructionBlock
-from .parameters import Parameter, ConstantParameter
+from qctoolkit.pulses.instructions import InstructionBlock
+from qctoolkit.pulses.parameters import Parameter, ConstantParameter
 
 
 __all__ = ["SequencingElement", "Sequencer"]

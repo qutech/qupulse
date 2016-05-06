@@ -89,10 +89,10 @@ class Serializable(metaclass = ABCMeta):
 
 class Serializer(object):
 
-    FileEntry = NamedTuple("FileEntry", [('serialization', str), ('serializable', Serializable)])
+    __FileEntry = NamedTuple("FileEntry", [('serialization', str), ('serializable', Serializable)])
 
     def __init__(self, storage_backend: StorageBackend) -> None:
-        self.__subpulses = dict() # type: Dict[str, Serializer.FileEntry]
+        self.__subpulses = dict() # type: Dict[str, Serializer.__FileEntry]
         self.__storage_backend = storage_backend
 
     def _serialize_subpulse(self, serializable: Serializable) -> Union[str, Dict[str, Any]]:
@@ -105,7 +105,7 @@ class Serializer(object):
                 if self.__subpulses[identifier].serializable is not serializable:
                     raise Exception("Identifier '{}' assigned twice.".format(identifier))
             else:
-                self.__subpulses[identifier] = Serializer.FileEntry(repr_, serializable)
+                self.__subpulses[identifier] = Serializer.__FileEntry(repr_, serializable)
             return identifier
     
     def dictify(self, serializable: Serializable) -> Dict[str, Dict[str, Any]]:
@@ -128,7 +128,7 @@ class Serializer(object):
             storage_identifier = identifier
             if identifier == '':
                 storage_identifier = 'main'
-            self.__storage_backend.put(storage_identifier, json.dumps(repr_[identifier], indent=4, sort_keys=True))
+            self.__storage_backend.put(storage_identifier, json.dumps(repr_[identifier], indent=4, sort_keys=True), True)
 
     def deserialize(self, representation: Union[str, Dict[str, Any]]) -> Serializable:
         if isinstance(representation, str):

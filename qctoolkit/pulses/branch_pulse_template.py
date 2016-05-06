@@ -1,15 +1,18 @@
 import logging
-from typing import Dict, Set, List
+from typing import Dict, Set, List, Optional, Any
 
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
-from .parameters import Parameter
-from .pulse_template import PulseTemplate, MeasurementWindow
+from qctoolkit.pulses.parameters import Parameter
+from qctoolkit.pulses.pulse_template import PulseTemplate, MeasurementWindow
+from qctoolkit.pulses.conditions import Condition, ConditionMissingException
+from qctoolkit.pulses.sequencing import Sequencer, InstructionBlock
 
 __all__ = ["BranchPulseTemplate"]
 
 logger = logging.getLogger(__name__)
+
 
 class BranchPulseTemplate(PulseTemplate):
     """Conditional branching in a pulse.
@@ -26,14 +29,14 @@ class BranchPulseTemplate(PulseTemplate):
     
     Both branches must be of the same length.
     """
-    def __init__(self) -> None:
-        super().__init__()
-        self.else_branch = None
-        self.if_branch = None
-        raise NotImplementedError()
+    def __init__(self, condition: str, if_branch: PulseTemplate, else_branch: PulseTemplate, identifier: Optional[str]=None) -> None:
+        super().__init__(identifier=identifier)
+        self.__condition = condition
+        self.__if_branch = if_branch
+        self.__else_branch = else_branch
 
     def __str__(self) -> str:
-        raise NotImplementedError()
+        return "BranchPulseTemplate: Condition <{}>, If-Branch <{}>, Else-Branch <{}>".format(self.__condition, self.__if_branch, self.__else_branch)
     
     @property
     def parameter_names(self) -> Set[str]:
@@ -54,4 +57,32 @@ class BranchPulseTemplate(PulseTemplate):
         """Return True, if this PulseTemplate contains points at which it can halt if interrupted."""
         raise NotImplementedError()
 
+    def __obtain_condition_object(self, conditions: Dict[str, Condition]) -> Condition:
+        try:
+            return conditions[self.__condition]
+        except:
+            ConditionMissingException(self.__condition)
+
+    def build_sequence(self,
+                       sequencer: Sequencer,
+                       parameters: Dict[str, Parameter],
+                       conditions: Dict[str, Condition],
+                       instruction_block: InstructionBlock) -> None:
+        self.__obtain_condition_object(conditions).build_sequence_branch(self,
+                                                                         self.__if_branch,
+                                                                         self.__else_branch,
+                                                                         sequencer,
+                                                                         parameters,
+                                                                         conditions,
+                                                                         instruction_block)
+
+    def requires_stop(self, parameters: Dict[str, Parameter], conditions: Dict[str, Condition]) -> bool:
+        return self.__obtain_condition_object(conditions).requires_stop()
+
+    def get_serialization_data(self, serializer: 'Serializer') -> Dict[str, Any]:
+        raise NotImplementedError()
+
+    @staticmethod
+    def deserialize(serializer: 'Serializer', **kwargs) -> 'BranchPulseTemplate':
+        raise NotImplementedError()
 

@@ -2,9 +2,9 @@ import numpy as np
 from matplotlib import pyplot as plt
 from typing import Dict, Tuple
 
-from .parameters import Parameter
-from .sequencing import Sequencer, SequencingElement
-from .instructions import EXECInstruction, STOPInstruction, InstructionSequence
+from qctoolkit.pulses.parameters import Parameter
+from qctoolkit.pulses.sequencing import Sequencer, SequencingElement
+from qctoolkit.pulses.instructions import EXECInstruction, STOPInstruction, InstructionSequence
 
 
 __all__ = ["Plotter", "plot", "PlottingNotPossibleException"]

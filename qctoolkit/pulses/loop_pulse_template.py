@@ -3,12 +3,13 @@ from typing import Dict, Set, Optional, Any
 """RELATED THIRD PARTY IMPORTS"""
 
 """LOCAL IMPORTS"""
-from .parameters import Parameter
-from .pulse_template import PulseTemplate, MeasurementWindow
-from .conditions import Condition
-from .instructions import InstructionBlock
-from .sequencing import Sequencer
 from qctoolkit.serialization import Serializer
+
+from qctoolkit.pulses.parameters import Parameter
+from qctoolkit.pulses.pulse_template import PulseTemplate, MeasurementWindow
+from qctoolkit.pulses.conditions import Condition, ConditionMissingException
+from qctoolkit.pulses.instructions import InstructionBlock
+from qctoolkit.pulses.sequencing import Sequencer
 
 __all__ = ['LoopPulseTemplate', 'ConditionMissingException']
 
@@ -87,13 +88,3 @@ class LoopPulseTemplate(PulseTemplate):
                     identifier: Optional[str]=None) -> 'LoopPulseTemplate':
         body = serializer.deserialize(body)
         return LoopPulseTemplate(condition, body, identifier=identifier)
-
-
-class ConditionMissingException(Exception):
-
-    def __init__(self, condition_name: str) -> None:
-        super().__init__()
-        self.condition_name = condition_name
-
-    def __str__(self) -> str:
-        return "Condition <{}> was referred to but not provided in the conditions dictionary.".format(self.condition_name)

@@ -8,8 +8,8 @@ import logging
 """LOCAL IMPORTS"""
 from qctoolkit.serialization import Serializable
 
-from .parameters import ParameterDeclaration, Parameter
-from .sequencing import SequencingElement
+from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter
+from qctoolkit.pulses.sequencing import SequencingElement
 
 logger = logging.getLogger(__name__)
 

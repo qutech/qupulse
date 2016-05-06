@@ -6,10 +6,10 @@ import copy
 from qctoolkit.serialization import Serializer
 from qctoolkit.expressions import Expression
 
-from .pulse_template import PulseTemplate, MeasurementWindow
-from .parameters import ParameterDeclaration, Parameter, MappedParameter, ParameterNotProvidedException
-from .sequencing import InstructionBlock, Sequencer
-from .conditions import Condition
+from qctoolkit.pulses.pulse_template import PulseTemplate, MeasurementWindow
+from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter, ParameterNotProvidedException, ConstantParameter, MappedParameter
+from qctoolkit.pulses.sequencing import InstructionBlock, Sequencer
+from qctoolkit.pulses.conditions import Condition
 
 logger = logging.getLogger(__name__)
 

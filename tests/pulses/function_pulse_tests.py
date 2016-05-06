@@ -4,6 +4,7 @@ from qctoolkit.pulses.function_pulse_template import FunctionPulseTemplate,\
     FunctionWaveform
 from qctoolkit.pulses.sequencing import Sequencer
 from qctoolkit.pulses.instructions import InstructionBlock
+from qctoolkit.pulses.parameters import ConstantParameter
 
 from tests.serialization_dummies import DummySerializer
 from qctoolkit.expressions import Expression
@@ -14,7 +15,7 @@ class FunctionPulseTest(unittest.TestCase):
     def setUp(self):
         self.s = 'a + b'
         self.s2 = 'c'
-        self.pars = dict(a=1, b=2, c=3)
+        self.pars = dict(a=ConstantParameter(1), b=ConstantParameter(2), c=ConstantParameter(3))
         self.fpt = FunctionPulseTemplate(self.s, self.s2)
 
     def test_get_pulse_length(self):
@@ -39,7 +40,7 @@ class FunctionPulseSequencingTest(unittest.TestCase):
         unittest.TestCase.setUp(self)
         self.f = "a * t"
         self.duration = "y"
-        self.args = dict(a=3,y=1)
+        self.args = dict(a=ConstantParameter(3),y=ConstantParameter(1))
         self.fpt = FunctionPulseTemplate(self.f, self.duration)
     
     def test_build_sequence(self):
