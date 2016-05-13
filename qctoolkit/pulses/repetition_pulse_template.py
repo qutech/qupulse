@@ -69,10 +69,10 @@ class RepetitionPulseTemplate(PulseTemplate):
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
         repetition_count = self.__repetition_count
         if isinstance(repetition_count, ParameterDeclaration):
-            repetition_count = serializer._serialize_subpulse(repetition_count)
+            repetition_count = serializer.dictify(repetition_count)
         return dict(
             type=serializer.get_type_identifier(self),
-            body=serializer._serialize_subpulse(self.__body),
+            body=serializer.dictify(self.__body),
             repetition_count=repetition_count
         )
 

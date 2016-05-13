@@ -47,14 +47,14 @@ class Trigger(Comparable):
         super().__init__()
 
     @property
-    def _compare_key(self) -> Any:
+    def compare_key(self) -> Any:
         return id(self)
     
     def __str__(self) -> str:
         return "Trigger {}".format(hash(self))
 
 
-class InstructionPointer:
+class InstructionPointer(Comparable):
     
     def __init__(self, block: 'InstructionBlock', offset: int) -> None:
         super().__init__()
@@ -65,15 +65,10 @@ class InstructionPointer:
         
     def get_absolute_address(self) -> int:
         return self.block.get_start_address() + self.offset
-        
-    def __eq__(self, other) -> bool:
-        return (isinstance(other, InstructionPointer)) and (self.block is other.block) and (self.offset == other.offset)
-        
-    def __ne__(self, other) -> bool:
-        return not self == other
-        
-    def __hash__(self) -> int:
-        return hash((self.block, self.offset))
+
+    @property
+    def compare_key(self) -> Any:
+        return (id(self.block), self.offset)
         
     def __str__(self) -> str:
         try:
@@ -96,7 +91,7 @@ class CJMPInstruction(Instruction):
         self.target = InstructionPointer(block, offset)
 
     @property
-    def _compare_key(self) -> Any:
+    def compare_key(self) -> Any:
         return self.trigger, self.target
         
     def __str__(self) -> str:
@@ -110,7 +105,7 @@ class GOTOInstruction(Instruction):
         self.target = InstructionPointer(block, offset)
 
     @property
-    def _compare_key(self) -> Any:
+    def compare_key(self) -> Any:
         return self.target
 
     def __str__(self) -> str:
@@ -124,7 +119,7 @@ class EXECInstruction(Instruction):
         self.waveform = waveform
 
     @property
-    def _compare_key(self) -> Any:
+    def compare_key(self) -> Any:
         return self.waveform
 
     def __str__(self) -> str:
@@ -137,7 +132,7 @@ class STOPInstruction(Instruction):
         super().__init__()
 
     @property
-    def _compare_key(self) -> Any:
+    def compare_key(self) -> Any:
         return 0
 
     def __str__(self) -> str:
@@ -165,7 +160,7 @@ class MissingReturnAddressException(Exception):
 InstructionSequence = List[Instruction]
 
 
-class InstructionBlock:
+class InstructionBlock(Comparable):
     
     def __init__(self, outer_block: 'InstructionBlock' = None) -> None:
         super().__init__()
@@ -243,14 +238,9 @@ class InstructionBlock:
     
     def __len__(self) -> int:
         return len(self.__instruction_list)
-    
-    def __eq__(self, other) -> bool:
-        return self is other
-        
-    def __ne__(self, other) -> bool:
-        return not self == other
-    
-    def __hash__(self) -> int:
+
+    @property
+    def compare_key(self) -> Any:
         return id(self)
         
     def __str__(self) -> str:

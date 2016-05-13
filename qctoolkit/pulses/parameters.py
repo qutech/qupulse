@@ -97,7 +97,7 @@ class MappedParameter(Parameter):
 
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
         return dict(type=serializer.get_type_identifier(self),
-                    expression=serializer._serialize_subpulse(self.__expression))
+                    expression=serializer.dictify(self.__expression))
 
     @staticmethod
     def deserialize(serializer: Serializer, expression: str) -> 'MappedParameter':

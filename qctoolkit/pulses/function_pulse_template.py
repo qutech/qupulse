@@ -88,9 +88,9 @@ class FunctionPulseTemplate(PulseTemplate):
         root = dict()
         root['type'] = 'FunctionPulseTemplate'
         root['parameter_names'] = self.__parameter_names
-        root['duration_expression'] = serializer._serialize_subpulse(self.__duration_expression)
+        root['duration_expression'] = serializer.dictify(self.__duration_expression)
             #self.__duration_expression.string
-        root['expression'] = serializer._serialize_subpulse(self.__expression)
+        root['expression'] = serializer.dictify(self.__expression)
         root['measurement'] = self.__is_measurement_pulse
         return root
 
@@ -114,7 +114,7 @@ class FunctionWaveform(Waveform):
         return self.__expression.evaluate(**params)
     
     @property
-    def _compare_key(self) -> Any:
+    def compare_key(self) -> Any:
         return self.__expression
 
     @property

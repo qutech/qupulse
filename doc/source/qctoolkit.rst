@@ -21,22 +21,24 @@ qctoolkit.comparable module
     :members:
     :undoc-members:
     :show-inheritance:
+    :inherited-members:
 
 qctoolkit.expressions module
 ----------------------------
 
 .. automodule:: qctoolkit.expressions
     :members:
-    :undoc-members:
     :show-inheritance:
+    :special-members: __init__
+
 
 qctoolkit.serialization module
 ------------------------------
 
 .. automodule:: qctoolkit.serialization
     :members:
-    :undoc-members:
     :show-inheritance:
+    :special-members: __init__
 
 
 Module contents

@@ -77,7 +77,7 @@ class LoopPulseTemplate(PulseTemplate):
         data = dict(
             type=serializer.get_type_identifier(self),
             condition=self.__condition,
-            body=serializer._serialize_subpulse(self.__body)
+            body=serializer.dictify(self.__body)
         )
         return data
 

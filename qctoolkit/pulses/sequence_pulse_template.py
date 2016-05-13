@@ -118,8 +118,8 @@ class SequencePulseTemplate(PulseTemplate):
 
         subtemplates = []
         for (subtemplate, mapping_functions) in self.subtemplates:
-            mapping_functions_strings = {k: serializer._serialize_subpulse(m) for k, m in mapping_functions.items()}
-            subtemplate = serializer._serialize_subpulse(subtemplate)
+            mapping_functions_strings = {k: serializer.dictify(m) for k, m in mapping_functions.items()}
+            subtemplate = serializer.dictify(subtemplate)
             subtemplates.append(dict(template=subtemplate, mappings=mapping_functions_strings))
         data['subtemplates'] = subtemplates
 

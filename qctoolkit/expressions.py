@@ -1,47 +1,60 @@
-import py_expression_eval
+"""
+This module defines the class Expression to represent mathematical expression as well as
+corresponding exception classes.
+"""
 from typing import Any, Dict, Iterable, Optional
+import py_expression_eval
 
 from qctoolkit.comparable import Comparable
 from qctoolkit.serialization import Serializable, Serializer
 
-__all__ = ["Expression"]
+__all__ = ["Expression", "ExpressionVariableMissingException"]
 
 
 class Expression(Serializable, Comparable):
-    """A mathematical expression."""
+    """A mathematical expression instantiated from a string representation."""
 
     def __init__(self, ex: str) -> None:
-        """Creates an Expression object.
+        """Create an Expression object.
 
-        Receives the mathematical expression which shall be represented by the object as a string which will be parsed
-        using py_expression_eval. For available operators, functions and constants see
-        https://github.com/AxiaCore/py-expression-eval/#available-operators-constants-and-functions . In addition,
-        the ** operator may be used for exponentiation instead of the ^ operator.
+        Receives the mathematical expression which shall be represented by the object as a string
+        which will be parsed using py_expression_eval. For available operators, functions and
+        constants see
+        https://github.com/AxiaCore/py-expression-eval/#available-operators-constants-and-functions.
+        In addition, the ** operator may be used for exponentiation instead of the ^ operator.
 
         Args:
             ex (string): The mathematical expression represented as a string
         """
-        self.__string = str(ex) # type: str
-        self.__expression = py_expression_eval.Parser().parse(ex.replace('**', '^')) # type: py_expression_eval.Expression
+        super().__init__()
+        self.__string = str(ex)
+        self.__expression = py_expression_eval.Parser().parse(ex.replace('**', '^'))
 
     def __str__(self) -> str:
-        """Returns a string representation of this expression."""
         return self.__string
 
     @property
-    def _compare_key(self) -> Any:
-        """Returns the string representation of this expression as unique key used in comparison and hashing operations."""
+    def compare_key(self) -> Any:
         return str(self)
 
     def variables(self) -> Iterable[str]:
-        """Returns all variables occurring in the expression."""
+        """ Get all free variables in the expression.
+
+        Returns:
+            A collection of all free variables occurring in the expression.
+        """
         return self.__expression.variables()
 
     def evaluate(self, **kwargs) -> float:
-        """Evaluates the expression with the required variables passed in as kwargs.
+        """Evaluate the expression with the required variables passed in as kwargs.
 
-        Keyword Args:
-            <variable name> float: Values for the free variables of the expression.
+        Args:
+            float <variable_name>: Values for the free variables of the expression as keyword
+                arguments where <variable_name> stand for the name of the variable. For example,
+                evaluation of the expression "2*x" could be implemented as
+                Expresson("2*x").evaluate(x=2.5).
+        Returns:
+            The result of evaluating the expression with the given values for the free variables.
         Raises:
             ExpressionVariableMissingException if a value for a variable is not provided.
         """
@@ -63,19 +76,17 @@ class Expression(Serializable, Comparable):
 
 
 class ExpressionVariableMissingException(Exception):
+    """An exception indicating that a variable value was not provided during expression evaluation.
+
+    See also:
+         qctoolkit.expressions.Expression
+    """
 
     def __init__(self, variable: str, expression: Expression) -> None:
         super().__init__()
-        self.__variable = variable
-        self.__expression = expression
-
-    @property
-    def expression(self) -> Expression:
-        return self.__expression
-
-    @property
-    def variable(self) -> str:
-        return self.__variable
+        self.variable = variable
+        self.expression = expression
 
     def __str__(self) -> str:
-        return "Could not evaluate <{}>: A value for variable <{}> is missing!".format(str(self.expression), self.variable)
+        return "Could not evaluate <{}>: A value for variable <{}> is missing!".format(
+            str(self.expression), self.variable)

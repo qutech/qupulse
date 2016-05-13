@@ -36,7 +36,7 @@ class TableWaveform(Waveform):
         self.__table = waveform_table
 
     @property
-    def _compare_key(self) -> Any:
+    def compare_key(self) -> Any:
         return self.__table
 
     @property
@@ -327,8 +327,8 @@ class TablePulseTemplate(PulseTemplate):
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
         data = dict()
         data['is_measurement_pulse'] = self.__is_measurement_pulse
-        data['time_parameter_declarations'] = [serializer._serialize_subpulse(self.__time_parameter_declarations[key]) for key in sorted(self.__time_parameter_declarations.keys())]
-        data['voltage_parameter_declarations'] = [serializer._serialize_subpulse(self.__voltage_parameter_declarations[key]) for key in sorted(self.__voltage_parameter_declarations.keys())]
+        data['time_parameter_declarations'] = [serializer.dictify(self.__time_parameter_declarations[key]) for key in sorted(self.__time_parameter_declarations.keys())]
+        data['voltage_parameter_declarations'] = [serializer.dictify(self.__voltage_parameter_declarations[key]) for key in sorted(self.__voltage_parameter_declarations.keys())]
         entries = []
         for (time, voltage, interpolation) in self.__entries:
             if isinstance(time, ParameterDeclaration):
