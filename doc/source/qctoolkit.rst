@@ -19,9 +19,8 @@ qctoolkit.comparable module
 
 .. automodule:: qctoolkit.comparable
     :members:
-    :undoc-members:
     :show-inheritance:
-    :inherited-members:
+    :special-members: __init__
 
 qctoolkit.expressions module
 ----------------------------

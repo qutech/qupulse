@@ -49,7 +49,7 @@ class Expression(Serializable, Comparable):
         """Evaluate the expression with the required variables passed in as kwargs.
 
         Args:
-            float <variable_name>: Values for the free variables of the expression as keyword
+            <variable_name> (float): Values for the free variables of the expression as keyword
                 arguments where <variable_name> stand for the name of the variable. For example,
                 evaluation of the expression "2*x" could be implemented as
                 Expresson("2*x").evaluate(x=2.5).
@@ -60,8 +60,8 @@ class Expression(Serializable, Comparable):
         """
         try:
             return self.__expression.evaluate(kwargs)
-        except Exception as e:
-            raise ExpressionVariableMissingException(str(e).split(' ')[2], self) from e
+        except Exception as excp:
+            raise ExpressionVariableMissingException(str(excp).split(' ')[2], self) from excp
 
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
         return dict(type=serializer.get_type_identifier(self), expression=str(self))

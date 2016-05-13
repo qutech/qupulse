@@ -27,9 +27,9 @@ class StorageBackend(metaclass=ABCMeta):
         """Store the data string identified by identifier.
 
         Args:
-            str identifier: A unique identifier/name for the data to be stored.
-            str data: A serialized string of data to be stored.
-            bool overwrite: Set to True, if already existing data shall be overwritten.
+            identifier (str): A unique identifier/name for the data to be stored.
+            data (str): A serialized string of data to be stored.
+            overwrite (bool): Set to True, if already existing data shall be overwritten.
                 (default: False)
         Raises:
             DataExistsException if overwrite is False and there already exists data which
@@ -41,7 +41,7 @@ class StorageBackend(metaclass=ABCMeta):
         """Retrieve the data string with the given identifier.
 
         Args:
-            str identifier: The identifier of the data to be retrieved.
+            identifier (str): The identifier of the data to be retrieved.
         Returns:
             A serialized string of the data associated with the given identifier, if present.
         Raises:
@@ -53,7 +53,7 @@ class StorageBackend(metaclass=ABCMeta):
         """Check if data is stored for the given identifier.
 
         Args:
-            str identifier: The identifier for which presence of data shall be checked.
+            identifier (str): The identifier for which presence of data shall be checked.
         Returns:
             True, if stored data is associated with the given identifier.
         """
@@ -71,7 +71,7 @@ class FilesystemBackend(StorageBackend):
         """Create a new FilesystemBackend.
 
         Args:
-            str root: The path of the directory in which all data files are located. (default: ".",
+            root (str): The path of the directory in which all data files are located. (default: ".",
                 i.e. the current directory)
         Raises:
             NotADirectoryError if root is not a valid directory path.
@@ -114,7 +114,7 @@ class CachingBackend(StorageBackend):
         """Create a new CachingBackend.
 
         Args:
-            StorageBackend backend: A StorageBackend that provides data
+            backend (StorageBackend): A StorageBackend that provides data
                 IO functionality.
         """
         self.__backend = backend
@@ -156,7 +156,7 @@ class Serializable(metaclass=ABCMeta):
         """Initialize a Serializable.
 
         Args:
-            str identifier: An optional, non-empty identifier for this Serializable.
+            identifier (str): An optional, non-empty identifier for this Serializable.
                 If set, this Serializable will always be stored as a separate data item and never
                 be embedded. (default=None)
         Raises:
@@ -183,7 +183,7 @@ class Serializable(metaclass=ABCMeta):
         or only a reference to the Serializable subelement.
 
         Args:
-            Serializer serializer: A Serializer instance used to serialize complex subelements of
+            serializer (Serializer): A Serializer instance used to serialize complex subelements of
                 this Serializable.
         Returns:
             A dictionary of Python base types (strings, integers, lists/tuples containing these,
@@ -204,7 +204,7 @@ class Serializable(metaclass=ABCMeta):
         method.
 
          Args:
-             Serializer serializer: A serializer instance to be used when deserializing subelements.
+             serializer (Serializer): A serializer instance used when deserializing subelements.
              <property_name>: All relevant properties of the object as keyword arguments. For every
                 (key,value) pair returned by get_serialization_data, the same pair is given as
                 keyword argument as input to this method.
@@ -229,7 +229,7 @@ class Serializer(object):
         """Create a Serializer.
 
         Args:
-            StorageBackend storage_backend: The StorageBackend all objects will be stored in
+            storage_backend (StorageBackend): The StorageBackend all objects will be stored in.
         """
         self.__subpulses = dict() # type: Dict[str, Serializer.__FileEntry]
         self.__storage_backend = storage_backend
@@ -243,7 +243,7 @@ class Serializer(object):
         Serializables are either completely embedded or referenced by identifier.
 
         Args:
-            Serializable serializable: The Serializable object to convert.
+            serializable (Serializabe): The Serializable object to convert.
         Returns:
             A serialization dictionary, i.e., a dictionary of Python base types (strings, integers,
                 lists/tuples containing these, etc..) which fully represent the relevant properties
@@ -280,7 +280,7 @@ class Serializer(object):
         serialization dictionaries where the keys are the identifiers of the Serializables.
 
         Args:
-            Serializabe serializable: The Serializable object to convert.
+            serializable (Serializabe): The Serializable object to convert.
         Returns:
             A dictionary containing serialization dictionary for each separately stored Serializable
                 nested in the given Serializable.
@@ -319,7 +319,7 @@ class Serializer(object):
         If an identifier is already in use in the StorageBackend, associated data will be replaced.
 
         Args:
-            Serializable serializable: The Serializable to serialize and store
+            serializable (Serializable): The Serializable to serialize and store
         """
         repr_ = self.__collect_dictionaries(serializable)
         for identifier in repr_:

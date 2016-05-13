@@ -1,37 +1,31 @@
 import logging
-from typing import Union, Dict, List, Set, Optional, NamedTuple, Any, Iterable
+from typing import Union, Dict, List, Set, Optional, NamedTuple, Any, Iterable, Tuple
 import numbers
 import copy
 
 import numpy as np
 
-"""RELATED THIRD PARTY IMPORTS"""
-
-"""LOCAL IMPORTS"""
 from qctoolkit.serialization import Serializer
-
 from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter, ParameterNotProvidedException
 from qctoolkit.pulses.pulse_template import PulseTemplate, MeasurementWindow
 from qctoolkit.pulses.sequencing import InstructionBlock, Sequencer
 from qctoolkit.pulses.interpolation import InterpolationStrategy, LinearInterpolationStrategy, HoldInterpolationStrategy, JumpInterpolationStrategy
-from qctoolkit.pulses.instructions import Waveform, WaveformTable
+from qctoolkit.pulses.instructions import Waveform
 from qctoolkit.pulses.conditions import Condition
 
 logger = logging.getLogger(__name__)
 
 
-__all__ = ["TablePulseTemplate"]
+__all__ = ["TablePulseTemplate", "TableWaveform", "WaveformTableEntry"]
 
-
-TableValue = Union[float, ParameterDeclaration]
-TableEntry = NamedTuple("TableEntry", [('t', TableValue), ('v', TableValue), ('interp', InterpolationStrategy)])
+WaveformTableEntry = NamedTuple("WaveformTableEntry", [('t', float), ('v', float), ('interp', InterpolationStrategy)])
 
 
 class TableWaveform(Waveform):
 
-    def __init__(self, waveform_table: WaveformTable) -> None:
+    def __init__(self, waveform_table: Tuple[WaveformTableEntry]) -> None:
         if len(waveform_table) < 2:
-            raise ValueError("The given WaveformTable has less than two entries.")
+            raise ValueError("The given waveform table has less than two entries.")
         super().__init__()
         self.__table = waveform_table
 
@@ -50,6 +44,9 @@ class TableWaveform(Waveform):
             indices = np.logical_and(sample_times >= entry1.t, sample_times <= entry2.t)
             voltages[indices] = entry2.interp((entry1.t, entry1.v), (entry2.t, entry2.v), sample_times[indices]) # evaluate interpolation at each time
         return voltages
+
+TableValue = Union[float, ParameterDeclaration]
+TableEntry = NamedTuple("TableEntry", [('t', TableValue), ('v', TableValue), ('interp', InterpolationStrategy)])
 
 
 class TablePulseTemplate(PulseTemplate):

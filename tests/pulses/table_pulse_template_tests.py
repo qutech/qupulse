@@ -1,8 +1,8 @@
 import unittest
 import numpy
 
-from qctoolkit.pulses.instructions import EXECInstruction, WaveformTableEntry
-from qctoolkit.pulses.table_pulse_template import TablePulseTemplate, TableWaveform, TableEntry
+from qctoolkit.pulses.instructions import EXECInstruction
+from qctoolkit.pulses.table_pulse_template import TablePulseTemplate, TableWaveform, TableEntry, WaveformTableEntry
 from qctoolkit.pulses.parameters import ParameterDeclaration, ParameterNotProvidedException, ParameterValueIllegalException
 from qctoolkit.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy, JumpInterpolationStrategy
 
