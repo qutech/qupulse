@@ -16,7 +16,7 @@ MeasurementWindow = Tuple[float, float]
 
 
 class PulseTemplate(Serializable, SequencingElement, metaclass=ABCMeta):
-    """A PulseTemplate represents the parameterized general structure of a pulse.
+    """A PulseTemplate represents the parametrized general structure of a pulse.
 
     A PulseTemplate described a pulse in an abstract way: It defines the structure of a pulse
     but might leave some timings or voltage levels undefined, thus declaring parameters.

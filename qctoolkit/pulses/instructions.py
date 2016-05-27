@@ -22,7 +22,7 @@ import numpy
 
 from qctoolkit.comparable import Comparable
 
-# TODO lumip: add docstrings
+# TODO lumip: add docstrings to InstructionBlock after issue
 
 __all__ = ["Waveform", "Trigger", "InstructionPointer",
            "Instruction", "CJMPInstruction", "EXECInstruction", "GOTOInstruction",

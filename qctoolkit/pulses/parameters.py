@@ -10,23 +10,17 @@ Classes:
 """
 
 from abc import ABCMeta, abstractmethod, abstractproperty
-from typing import Optional, Union, Dict, Tuple, Any, Iterable
-import logging
+from typing import Optional, Union, Dict, Any, Iterable
 
-"""RELATED THIRD PARTY IMPORTS"""
-
-"""LOCAL IMPORTS"""
 from qctoolkit.serialization import Serializable, Serializer
 from qctoolkit.expressions import Expression
-
-logger = logging.getLogger(__name__)
-
+from qctoolkit.comparable import Comparable
 
 __all__ = ["Parameter", "ParameterDeclaration", "ConstantParameter",
            "ParameterNotProvidedException", "ParameterValueIllegalException"]
 
 
-class Parameter(Serializable, metaclass = ABCMeta):
+class Parameter(Serializable, metaclass=ABCMeta):
     """A parameter for pulses.
     
     Parameter specifies a concrete value which is inserted instead
@@ -44,9 +38,13 @@ class Parameter(Serializable, metaclass = ABCMeta):
 
     @abstractproperty
     def requires_stop(self) -> bool:
-        """Return True if the evaluation of this Parameter instance requires a stop in execution/
-        sequencing, e.g., because it depends on data that is only measured in during the next
-        execution."""
+        """Query whether the evaluation of this Parameter instance requires an interruption in
+        execution/sequencing, e.g., because it depends on data that is only measured in during the
+        next execution.
+
+        Returns:
+            True, if evaluating this Parameter instance requires an interruption.
+        """
     
     def __float__(self) -> float:
         return float(self.get_value())
@@ -56,6 +54,11 @@ class ConstantParameter(Parameter):
     """A pulse parameter with a constant value."""
     
     def __init__(self, value: float) -> None:
+        """Create a ConstantParameter instance.
+
+        Args:
+            value (float): The value of the parameter
+        """
         super().__init__()
         self.__value = value
         
@@ -80,21 +83,39 @@ class ConstantParameter(Parameter):
 class MappedParameter(Parameter):
     """A pulse parameter whose value is derived from other parameters via some mathematical
     expression.
+
+    The dependencies of a MappedParameter instance are defined by the free variables appearing
+    in the expression that defines how its value is derived.
+
+    MappedParameter holds a dictionary which assign Parameter objects to these dependencies.
+    Evaluation of the MappedParameter will raise a ParameterNotProvidedException if a Parameter
+    object is missing for some dependency.
     """
 
     def __init__(self,
                  expression: Expression,
-                 dependencies: Optional[Dict[str, Parameter]]=dict()) -> None:
+                 dependencies: Optional[Dict[str, Parameter]]=None) -> None:
+        """Create a MappedParameter instance.
+
+        Args:
+            expression (Expression): The expression defining how the the value of this
+                MappedParameter instance is derived from its dependencies.
+             dependencies (Dict(str, Parameter)): Parameter objects of the dependencies. May also
+                be defined via the dependencies public property. (Optional)
+        """
         super().__init__()
         self.__expression = expression
         self.dependencies = dependencies
+        if self.dependencies is None:
+            self.dependencies = dict()
 
     def __collect_dependencies(self) -> Iterable[Parameter]:
+        # filter only real dependencies from the dependencies dictionary
         try:
             return {dependency_name: self.dependencies[dependency_name]
                     for dependency_name in self.__expression.variables()}
-        except KeyError as e:
-            raise ParameterNotProvidedException(str(e)) from e
+        except KeyError as key_error:
+            raise ParameterNotProvidedException(str(key_error)) from key_error
 
     def get_value(self) -> float:
         if self.requires_stop:
@@ -111,10 +132,10 @@ class MappedParameter(Parameter):
         except:
             raise
 
-    def __repr__self(self) -> str:
+    def __repr__(self) -> str:
         return "<MappedParameter {0} depending on {1}>".format(
-                self.__expression, self.__dependencies
-            )
+            self.__expression, self.dependencies
+        )
 
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
         return dict(type=serializer.get_type_identifier(self),
@@ -124,14 +145,8 @@ class MappedParameter(Parameter):
     def deserialize(serializer: Serializer, expression: str) -> 'MappedParameter':
         return MappedParameter(serializer.deserialize(expression))
 
-#class ParameterValueProvider(metaclass = ABCMeta):
-#
-#    @abstractmethod
-#    def get_value(self, parameters: Dict[str, Parameter]) -> float:
-#        pass
 
-
-class ParameterDeclaration(Serializable):
+class ParameterDeclaration(Serializable, Comparable):
     """A declaration of a parameter required by a pulse template.
     
     PulseTemplates may declare parameters to allow for variations of values in an otherwise
@@ -142,19 +157,18 @@ class ParameterDeclaration(Serializable):
     
     BoundaryValue = Union[float, 'ParameterDeclaration']
     
-    def __init__(self,
-                 name: str,
-                 min: BoundaryValue = float('-inf'),
-                 max: BoundaryValue = float('+inf'),
-                 default: Optional[float] = None) -> None:
+    def __init__(self, name: str,
+                 min: BoundaryValue=float('-inf'),
+                 max: BoundaryValue=float('+inf'),
+                 default: Optional[float]=None) -> None:
         """Creates a ParameterDeclaration object.
         
         Args:
             name (str): A name for the declared parameter.
-            min (float, ParameterDeclaration): An optional real number or ParameterDeclaration
-                object specifying the minimum value allowed.
-            max (float, ParameterDeclaration): An optional real number or ParameterDeclaration
-                object specifying the maximum value allowed.
+            min (float, ParameterDeclaration): An optional real number or
+                ParameterDeclaration object specifying the minimum value allowed. (default: -inf)
+            max (float, ParameterDeclaration): An optional real number or
+                ParameterDeclaration object specifying the maximum value allowed. (default: +inf)
             default (float): An optional real number specifying a default value for the declared
                 pulse template parameter.
         """
@@ -395,8 +409,11 @@ class ParameterDeclaration(Serializable):
             self.name, min_value_str, max_value_str, self.default_value, type(self)
         )
 
-    def __compute_compare_key(self) -> \
-            Tuple[str, Union[float, str], Union[float, str], Optional[float]]:
+    def __repr__(self) -> str:
+        return "<"+self.__str__()+">"
+
+    @property
+    def compare_key(self) -> Any:
         min_value = self.min_value
         if isinstance(min_value, ParameterDeclaration):
             min_value = min_value.name
@@ -404,16 +421,6 @@ class ParameterDeclaration(Serializable):
         if isinstance(max_value, ParameterDeclaration):
             max_value = max_value.name
         return (self.name, min_value, max_value, self.default_value)
-
-    def __repr__(self) -> str:
-        return "<"+self.__str__()+">"
-
-    def __eq__(self, other) -> bool:
-        return (isinstance(other, ParameterDeclaration) and
-                self.__compute_compare_key() == other.__compute_compare_key())
-
-    def __hash__(self) -> int:
-        return hash(self.__compute_compare_key())
 
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
         data = dict()
