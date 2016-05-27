@@ -2,10 +2,9 @@
 waveform representation.
 
 Classes:
-    TablePulseTemplate: Defines a pulse via interpolation of a sequence of (time,voltage)-pairs.
-    TableWaveform: A waveform instantiated from a TablePulseTemplate by providing values for its
+    - TablePulseTemplate: Defines a pulse via interpolation of a sequence of (time,voltage)-pairs.
+    - TableWaveform: A waveform instantiated from a TablePulseTemplate by providing values for its
         declared parameters.
-    WaveformTableEntry: A single entry in a TableWaveform.
 """
 
 from typing import Union, Dict, List, Set, Optional, NamedTuple, Any, Iterable, Tuple
@@ -125,7 +124,7 @@ class TablePulseTemplate(PulseTemplate):
                   time: Union[float, str, ParameterDeclaration], 
                   voltage: Union[float, str, ParameterDeclaration], 
                   interpolation: str='hold') -> None:
-        """Add an entry to this TablePulseTemplate.
+        """Add an entry to the end of this TablePulseTemplate.
         
         The arguments time and voltage may either be real numbers or a string which
         references a parameter declaration by name or a ParameterDeclaration object.
@@ -151,6 +150,15 @@ class TablePulseTemplate(PulseTemplate):
             - if the time value is a parameter declaration and the previous time value is a
                 parameter declaration, the new minimum must not be smaller than the previous minimum
                 and the previous maximum must not be greater than the new maximum
+
+        Args:
+            time (float or str or ParameterDeclaration): The time value of the new entry. Either a
+                constant real number or some parameter name/declaration.
+            voltage (float or str or ParameterDeclaration): The voltage value of the new entry.
+                Either a constant real number or some parameter name/declaration.
+            interpolation (str): The interpolation strategy between the previously last and the new
+                entry. One of 'linear', 'hold' (hold previous value) or 'jump' (jump immediately
+                to new value).
         Raises:
             ValueError if the constraints listed above are violated.
         """
@@ -345,7 +353,7 @@ class TablePulseTemplate(PulseTemplate):
         """Compute an instantiated list of the table's entries.
 
         Args:
-            parameters (Dict(str, Parameter)): A mapping of parameter names to Parameter objects.
+            parameters (Dict(str -> Parameter)): A mapping of parameter names to Parameter objects.
         Returns:
              (float, float)-list of all table entries with concrete values provided by the given
                 parameters.

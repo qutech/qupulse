@@ -1,5 +1,8 @@
 """This module defines the abstract PulseTemplate class which is the basis of any
 pulse model in the qctoolkit.
+
+Classes:
+    - PulseTemplate: Represents the parametrized general structure of a pulse
 """
 from abc import ABCMeta, abstractmethod, abstractproperty
 from typing import Dict, List, Tuple, Set, Optional
@@ -43,6 +46,8 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=ABCMeta):
     def get_measurement_windows(self, parameters: Dict[str, Parameter]=None) \
             -> List[MeasurementWindow]:
         """
+        FLAWED / OBSOLETE: should be fixed already in a different branch and will be merged soon
+
         Returns:
              All measurement windows defined in this PulseTemplate.
          """

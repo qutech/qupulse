@@ -3,8 +3,8 @@ to translate PulseTemplates into a hardware understandable abstract instruction 
 instantiated pulses or waveforms.
 
 Classes:
-    SequencingElement: Interface for objects that can be translated into instruction sequences.
-    Sequencer: Controller of the sequencing/translation process.
+    - SequencingElement: Interface for objects that can be translated into instruction sequences.
+    - Sequencer: Controller of the sequencing/translation process.
 """
 
 from abc import ABCMeta, abstractmethod
@@ -42,8 +42,8 @@ class SequencingElement(metaclass=ABCMeta):
 
         Args:
             Sequencer sequencer: The Sequencer object coordinating the current sequencing process.
-            Dict[str, Parameter] parameters: A mapping of parameter names to Parameter objects.
-            Dict[str, Condition] conditions: A mapping of condition identifiers to Condition
+            Dict[str -> Parameter] parameters: A mapping of parameter names to Parameter objects.
+            Dict[str -> Condition] conditions: A mapping of condition identifiers to Condition
                 objects.
             InstructionBlock instruction_block: The instruction block into which instructions
                 resulting from the translation of this SequencingElement will be placed.
@@ -67,8 +67,8 @@ class SequencingElement(metaclass=ABCMeta):
         will be regarded during translation of that element.
 
         Args:
-            Dict[str, Parameter] parameters: A mapping of parameter names to Parameter objects.
-            Dict[str, Condition] conditions: A mapping of condition identifiers to Condition
+            parameters (Dict(str -> Parameter)): A mapping of parameter names to Parameter objects.
+            conditions (Dict(str -> Condition)): A mapping of condition identifiers to Condition
                 objects.
         Returns:
             True, if this SequencingElement cannot be translated yet. False, otherwise.
@@ -116,15 +116,15 @@ class Sequencer:
         subsequent calls to push with the same target_block occur.
 
         Args:
-            SequencingElement sequencing_element: The SequencingElement to push to the stack
-            Dict[str, Union[Parameter, float]] parameters: A mapping of parameters names defined
+            sequencing_element (SequencingElement): The SequencingElement to push to the stack.
+            parameters (Dict(str -> (Parameter or float)): A mapping of parameters names defined
                 in the SequencingElement to Parameter objects or constant float values. In the
                 latter case, the float values are encapsulated into ConstantParameter objects.
                 Optional, if no conditions are defined by the SequencingElement. (default: None)
-            Dict[str, Condition] conditions: A mapping of condition identifier defined by the
+            conditions (Dict(str -> Condition)): A mapping of condition identifier defined by the
                 SequencingElement to Condition objects. Optional, if no conditions are defined by
                 the SequencingElement. (default: None)
-            InstructionBlock target_block: The instruction block into which instructions resulting
+            target_block (InstructionBlock): The instruction block into which instructions resulting
                 from the translation of the SequencingElement will be placed. Optional. If not
                 provided, the main instruction block will be targeted. (default: None)
         """

@@ -1,12 +1,12 @@
 """This module defines parameters and parameter declaration for the usage in pulse modelling.
 
 Classes:
-    Parameter: A base class representing a single pulse parameter.
-    ConstantParameter: A single parameter with a constant value.
-    MappedParameter: A parameter whose value is mathematically computed from another parameter.
-    ParameterDeclaration: The declaration of a parameter within a pulse template.
-    ParameterNotProvidedException.
-    ParameterValueIllegalException.
+    - Parameter: A base class representing a single pulse parameter.
+    - ConstantParameter: A single parameter with a constant value.
+    - MappedParameter: A parameter whose value is mathematically computed from another parameter.
+    - ParameterDeclaration: The declaration of a parameter within a pulse template.
+    - ParameterNotProvidedException.
+    - ParameterValueIllegalException.
 """
 
 from abc import ABCMeta, abstractmethod, abstractproperty
@@ -100,7 +100,7 @@ class MappedParameter(Parameter):
         Args:
             expression (Expression): The expression defining how the the value of this
                 MappedParameter instance is derived from its dependencies.
-             dependencies (Dict(str, Parameter)): Parameter objects of the dependencies. May also
+             dependencies (Dict(str -> Parameter)): Parameter objects of the dependencies. May also
                 be defined via the dependencies public property. (Optional)
         """
         super().__init__()
@@ -165,9 +165,9 @@ class ParameterDeclaration(Serializable, Comparable):
         
         Args:
             name (str): A name for the declared parameter.
-            min (float, ParameterDeclaration): An optional real number or
+            min (float or ParameterDeclaration): An optional real number or
                 ParameterDeclaration object specifying the minimum value allowed. (default: -inf)
-            max (float, ParameterDeclaration): An optional real number or
+            max (float or ParameterDeclaration): An optional real number or
                 ParameterDeclaration object specifying the maximum value allowed. (default: +inf)
             default (float): An optional real number specifying a default value for the declared
                 pulse template parameter.
@@ -223,7 +223,7 @@ class ParameterDeclaration(Serializable, Comparable):
         
     @property
     def min_value(self) -> BoundaryValue:
-        """Return this ParameterDeclaration's minimum value or reference."""
+        """This ParameterDeclaration's minimum value or reference."""
         return self.__min_value
     
     @min_value.setter
@@ -252,7 +252,7 @@ class ParameterDeclaration(Serializable, Comparable):
     
     @property
     def max_value(self) ->  BoundaryValue:
-        """Return this ParameterDeclaration's maximum value or reference."""
+        """This ParameterDeclaration's maximum value or reference."""
         return self.__max_value
     
     @max_value.setter
@@ -281,7 +281,7 @@ class ParameterDeclaration(Serializable, Comparable):
         
     @property
     def default_value(self) -> Optional[float]:
-        """Return this ParameterDeclaration's default value."""
+        """This ParameterDeclaration's default value."""
         return self.__default_value
     
     @property
@@ -341,7 +341,7 @@ class ParameterDeclaration(Serializable, Comparable):
         from a set of parameter assignments.
 
         Args:
-            parameters (Dict(str, Parameter)): A mapping of parameter names to Parameter objects.
+            parameters (Dict(str -> Parameter)): A mapping of parameter names to Parameter objects.
         Returns:
             The value of the parameter corresponding to this ParameterDeclaration as a float.
         Raises:
@@ -364,7 +364,7 @@ class ParameterDeclaration(Serializable, Comparable):
         boundary checks.
 
         Args:
-            parameters (Dict(str, Parameter)): A mapping of parameter names to Parameter objects.
+            parameters (Dict(str -> Parameter)): A mapping of parameter names to Parameter objects.
         Returns:
             True, if the values provided for the parameters satisfy all boundary checks for this
                 ParameterDeclaration.

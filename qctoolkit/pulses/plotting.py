@@ -1,10 +1,10 @@
 """This module defines plotting functionality for instantiated PulseTemplates using matplotlib.
 
 Classes:
-    Plotter: Converts an InstructionSequence into plottable time and value sample arrays.
-    PlottingNotPossibleException.
+    - Plotter: Converts an InstructionSequence into plottable time and value sample arrays.
+    - PlottingNotPossibleException.
 Functions:
-    plot
+    - plot: Plot a pulse using matplotlib.
 """
 
 from typing import Dict, Tuple
@@ -78,7 +78,7 @@ def plot(pulse: PulseTemplate,
 
     Args:
         pulse (PulseTemplate): The pulse to be plotted.
-        parameters (Dict(str, Parameter)): An optional mapping of parameter names to Parameter
+        parameters (Dict(str -> Parameter)): An optional mapping of parameter names to Parameter
             objects.
         sample_rate (int): The rate with which the waveforms are sampled for the plot in
             samples per time unit. (default = 10)

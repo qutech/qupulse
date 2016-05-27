@@ -1,19 +1,19 @@
 """This module defines the abstract hardware instruction model of the qc-toolkit.
 
 Classes:
-    Waveform: An instantiated pulse which can be sampled to a raw voltage value array.
-    Trigger: Representation of a hardware trigger.
-    Instruction: Base class for hardware instructions.
-    CJMPInstruction: Conditional jump instruction.
-    EXECInstruction: Instruction to execute a waveform.
-    GOTOInstruction: Unconditional jump instruction.
-    STOPInstruction: Instruction which indicates the end of execution.
-    InstructionBlock: A block of instructions which are not yet embedded in a global sequence
-    InstructionSequence: A single final sequence of instructions.
-    InstructionPointer: References an instruction's location in a sequence.
-    InstructionBlockNotYetPlacedException
-    InstructionBlockAlreadyFinalizedException
-    MissingReturnAddressException
+    - Waveform: An instantiated pulse which can be sampled to a raw voltage value array.
+    - Trigger: Representation of a hardware trigger.
+    - Instruction: Base class for hardware instructions.
+    - CJMPInstruction: Conditional jump instruction.
+    - EXECInstruction: Instruction to execute a waveform.
+    - GOTOInstruction: Unconditional jump instruction.
+    - STOPInstruction: Instruction which indicates the end of execution.
+    - InstructionBlock: A block of instructions which are not yet embedded in a global sequence.
+    - InstructionSequence: A single final sequence of instructions.
+    - InstructionPointer: References an instruction's location in a sequence.
+    - InstructionBlockNotYetPlacedException
+    - InstructionBlockAlreadyFinalizedException
+    - MissingReturnAddressException
 """
 
 from abc import ABCMeta, abstractmethod, abstractproperty
@@ -22,7 +22,7 @@ import numpy
 
 from qctoolkit.comparable import Comparable
 
-# TODO lumip: add docstrings to InstructionBlock after issue
+# TODO lumip: add docstrings to InstructionBlock after issue #116 is resolved
 
 __all__ = ["Waveform", "Trigger", "InstructionPointer",
            "Instruction", "CJMPInstruction", "EXECInstruction", "GOTOInstruction",

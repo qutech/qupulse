@@ -1,10 +1,10 @@
 """This module defines strategies for interpolation between points in a pulse table or similar.
 
 Classes:
-    InterpolationStrategy: Interface for interpolation strategies.
-    LinearInterpolationStrategy: Interpolates linearly between two points.
-    HoldInterpolationStrategy: Interpolates by holding the first point's value.
-    JumpInterpolationStrategy: Interpolates by holding the second point's value.
+    - InterpolationStrategy: Interface for interpolation strategies.
+    - LinearInterpolationStrategy: Interpolates linearly between two points.
+    - HoldInterpolationStrategy: Interpolates by holding the first point's value.
+    - JumpInterpolationStrategy: Interpolates by holding the second point's value.
 """
 
 
@@ -29,8 +29,8 @@ class InterpolationStrategy(metaclass=ABCMeta):
         end point (given as (time, value) pairs) according to the interpolation strategy.
 
         Args:
-            start ((float, float): The start point of the interpolation as (time, value) pair.
-            end ((float, float): The end point of the interpolation as (time, value) pair.
+            start ((float, float)): The start point of the interpolation as (time, value) pair.
+            end ((float, float)): The end point of the interpolation as (time, value) pair.
             times (numpy.ndarray): An array of sample times for which values will be computed. All
                 values in this array must lie within the boundaries defined by start and end.
         Returns:

@@ -1,11 +1,11 @@
 """ This module provides serialization and storage functionality.
 
 Classes:
-    StorageBackend: Abstract representation of a data storage
-    FilesystemBackend: Implementation of a file system data storage
-    CachingBackend: A caching decorator for StorageBackends
-    Serializable: An interface for serializable objects
-    Serializer: Converts Serializables to a serial representation as a string and vice-versa
+    - StorageBackend: Abstract representation of a data storage.
+    - FilesystemBackend: Implementation of a file system data storage.
+    - CachingBackend: A caching decorator for StorageBackends.
+    - Serializable: An interface for serializable objects.
+    - Serializer: Converts Serializables to a serial representation as a string and vice-versa.
 """
 
 from abc import ABCMeta, abstractmethod, abstractstaticmethod

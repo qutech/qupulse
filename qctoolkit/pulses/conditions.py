@@ -1,11 +1,11 @@
 """This module defines conditions required for branching decisions in pulse execution.
 
 Classes:
-    Condition: Base-class for conditions.
-    SoftwareCondition: A software-evaluated condition.
-    HardwareCondition: A hardware-evaluated condition.
-    ConditionEvaluationException.
-    ConditionMissingException.
+    - Condition: Base-class for conditions.
+    - SoftwareCondition: A software-evaluated condition.
+    - HardwareCondition: A hardware-evaluated condition.
+    - ConditionEvaluationException.
+    - ConditionMissingException.
 """
 
 from abc import ABCMeta, abstractmethod
@@ -55,9 +55,9 @@ class Condition(metaclass=ABCMeta):
                 of its build_sequence method to this Condition object.
             body (SequencingElement): The SequencingElement representing the loops body.
             sequencer (Sequencer): The Sequencer object coordinating the current sequencing process.
-            parameters (Dict(str, Parameter): A mapping of parameter names to Parameter objects
+            parameters (Dict(str -> Parameter): A mapping of parameter names to Parameter objects
                 which will be passed to the loop body.
-            conditions (Dict(str, Conditions): A mapping of condition identifier to Condition
+            conditions (Dict(str -> Conditions): A mapping of condition identifier to Condition
                 objects which will be passed to the loop body.
             instruction_block (InstructionBlock): The instruction block into which instructions
                 resulting from the translation of this Condition object will be placed.
@@ -77,7 +77,21 @@ class Condition(metaclass=ABCMeta):
         """Translate a branching SequencingElement using this Condition into an instruction sequence
          for the given instruction block using sequencer and the given parameter sets.
 
-        See also SequencingElement.build_sequence().
+         Args:
+            delegator (SequencingElement): The SequencingElement which has delegated the invocation
+                of its build_sequence method to this Condition object.
+            if_branch (SequencingElement): The SequencingElement representing the branch executed
+                if the condition holds.
+            else_branch (SequencingElement): The SequencingElement representing the branch executed
+                if the condition does not hold.
+            parameters (Dict(str -> Parameter): A mapping of parameter names to Parameter objects
+                which will be passed to the loop body.
+            conditions (Dict(str -> Conditions): A mapping of condition identifier to Condition
+                objects which will be passed to the loop body.
+            instruction_block (InstructionBlock): The instruction block into which instructions
+                resulting from the translation of this Condition object will be placed.
+        See Also:
+            SequencingElement.build_sequence()
         """
 
 
