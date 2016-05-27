@@ -1,3 +1,6 @@
+"""This module defines RepetitionPulseTemplate, a higher-order hierarchical pulse template that
+represents the n-times repetition of another PulseTemplate."""
+
 from typing import Dict, List, Set, Optional, Union, Any
 
 from qctoolkit.serialization import Serializer
@@ -13,22 +16,41 @@ __all__ = ["RepetitionPulseTemplate", "ParameterNotIntegerException"]
 
 
 class RepetitionPulseTemplate(PulseTemplate):
+    """Repeat a PulseTemplate a constant number of times.
 
-    def __init__(self, body: PulseTemplate, repetition_count: Union[int, ParameterDeclaration], identifier: Optional[str]=None) -> None:
+    The equivalent to a simple for-loop in common programming languages in qctoolkit's pulse
+    modelling.
+    """
+
+    def __init__(self,
+                 body: PulseTemplate,
+                 repetition_count: Union[int, ParameterDeclaration],
+                 identifier: Optional[str]=None) -> None:
+        """Create a new RepetitionPulseTemplate instance.
+
+        Args:
+            body (PulseTemplate): The PulseTemplate which will be repeated.
+            repetition_count (int or ParameterDeclaration): The number of repetitions either as a
+                constant integer value or as a parameter declaration.
+            identifier (str): A unique identifier for use in serialization. (optional)
+        """
         super().__init__(identifier=identifier)
         self.__body = body
         self.__repetition_count = repetition_count
 
     @property
     def body(self) -> PulseTemplate:
+        """The PulseTemplate which is repeated by this RepetitionPulseTemplate."""
         return self.__body
 
     @property
     def repetition_count(self) -> Union[int, ParameterDeclaration]:
+        """The amount of repetitions. Either a constant integer or a ParameterDeclaration object."""
         return self.__repetition_count
 
     def __str__(self) -> str:
-        return "RepetitionPulseTemplate: <{}> times <{}>".format(self.__repetition_count, self.__body)
+        return "RepetitionPulseTemplate: <{}> times <{}>"\
+            .format(self.__repetition_count, self.__body)
 
     @property
     def parameter_names(self) -> Set[str]:
@@ -38,7 +60,9 @@ class RepetitionPulseTemplate(PulseTemplate):
     def parameter_declarations(self) -> Set[str]:
         return self.__body.parameter_declarations
 
-    def get_measurement_windows(self, parameters: Dict[str, Parameter] = None) -> List[MeasurementWindow]:
+    def get_measurement_windows(self,
+                                parameters: Dict[str, Parameter]=None
+                                ) -> List[MeasurementWindow]:
         """Return all measurement windows defined in this PulseTemplate."""
         raise NotImplementedError()
 
@@ -57,10 +81,12 @@ class RepetitionPulseTemplate(PulseTemplate):
             if not repetition_count.is_integer():
                 raise ParameterNotIntegerException(self.__repetition_count.name, repetition_count)
 
-        for i in range(0, int(repetition_count), 1):
+        for _ in range(0, int(repetition_count), 1):
             sequencer.push(self.__body, parameters, conditions, instruction_block)
 
-    def requires_stop(self, parameters: Dict[str, Parameter], conditions: Dict[str, 'Condition']) -> bool:
+    def requires_stop(self,
+                      parameters: Dict[str, Parameter],
+                      conditions: Dict[str, Condition]) -> bool:
         if isinstance(self.__repetition_count, ParameterDeclaration):
             if parameters[self.__repetition_count.name].requires_stop:
                 return True
@@ -88,6 +114,7 @@ class RepetitionPulseTemplate(PulseTemplate):
 
 
 class ParameterNotIntegerException(Exception):
+    """Indicates that the value of the parameter given as repetition count was not an integer."""
 
     def __init__(self, parameter_name: str, parameter_value: float) -> None:
         super().__init__()
@@ -95,5 +122,8 @@ class ParameterNotIntegerException(Exception):
         self.parameter_value = parameter_value
 
     def __str__(self) -> str:
-        return "The parameter <{}> must have an integral value (was <{}>) for use as repetition count.".format(
-            self.parameter_name, self.parameter_value)
+        return "The parameter <{}> must have an integral value (was <{}>) " \
+            "for use as repetition count.".format(
+                self.parameter_name,
+                self.parameter_value
+            )
