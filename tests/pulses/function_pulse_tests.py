@@ -21,19 +21,20 @@ class FunctionPulseTest(unittest.TestCase):
     def test_get_pulse_length(self):
         self.assertEqual(self.fpt.get_pulse_length(self.pars), 3)
 
-    def test_get_measurement_windows(self):
-        self.assertEqual(self.fpt.get_measurement_windows(self.pars), None)
-
-        fpt2 = FunctionPulseTemplate(self.s, self.s2, measurement=True)
-        self.assertEqual(fpt2.get_measurement_windows(self.pars), [(0, 3)])
+#    def test_get_measurement_windows(self):
+#        self.assertEqual(self.fpt.get_measurement_windows(self.pars), None)
+#
+#        fpt2 = FunctionPulseTemplate(self.s, self.s2, measurement=True)
+#        self.assertEqual(fpt2.get_measurement_windows(self.pars), [(0, 3)])
 
     def test_serialization_data(self):
         expected_data = dict(type='FunctionPulseTemplate',
                              parameter_names=set(['a', 'b', 'c']),
-                             duration_expression=self.s2,
-                             expression=self.s,
+                             duration_expression=str(self.s2),
+                             expression=str(self.s),
                              measurement=False)
-        self.assertEqual(expected_data, self.fpt.get_serialization_data(DummySerializer()))
+        self.assertEqual(expected_data, self.fpt.get_serialization_data(DummySerializer(serialize_callback=lambda x: str(x))))
+
 
 class FunctionPulseSequencingTest(unittest.TestCase):
     def setUp(self):
@@ -48,8 +49,10 @@ class FunctionPulseSequencingTest(unittest.TestCase):
         seq = Sequencer()
         cond = None
         self.fpt.build_sequence(seq, self.args, cond, ib)
-        
+
+
 class FunctionWaveformTest(unittest.TestCase):
+
     def test_sample(self):
         f = Expression("(t+1)**b")
         length = Expression("c**b")

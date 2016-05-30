@@ -18,7 +18,7 @@ To make any new class serializable, it must derive from the :class:`.Serializabl
 
 If class objects should be stored in a separate file, the `identifier` must be a non-empty string. If, on the other hand, class objects should be embedded into their parent's serialization (as is the case for, e.g., :class:`.ParameterDeclaration`), `identifier` must be `None`.
 
-The method `serialize` should return a dictionary of native Python types containing all relevant data. If the class has members that are not native Python types but must be serialized, they must be serializable and the `serialize` method can obtain their serialization as the return value of :meth:`.Serializer._serialize_subpulse` and embed it in its result. The dictionary returned by `serialize` should not include the identifier in the returned dictionary.
+The method `serialize` should return a dictionary of native Python types containing all relevant data. If the class has members that are not native Python types but must be serialized, they must be serializable and the `serialize` method can obtain their serialization as the return value of :meth:`.Serializer.dictify` and embed it in its result. The dictionary returned by `serialize` should not include the identifier in the returned dictionary.
 
 The method `deserialize` is invoked with all key-value pairs created by a call to `serialize` as keyword arguments as well as an additional `identifier` keyword argument (which may be `None`) and must return a valid corresponding class instance.
 
@@ -39,7 +39,7 @@ The following may serve as a simple example:
             return self.__identifier
             
         def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
-            return dict(template=serializer._serialize_subpulse(self.__template))
+            return dict(template=serializer.dictify(self.__template))
             
         @staticmethod
         def deserialize(serializer: Serializer, template: Dict[str, Any], identifer: Optional[str]=None) -> Serializable:

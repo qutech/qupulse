@@ -95,7 +95,7 @@ class DummyInstruction(Instruction):
         self.elem = elem
 
     @property
-    def _compare_key(self) -> Any:
+    def compare_key(self) -> Any:
         return self.elem
 
 
@@ -120,7 +120,7 @@ class DummyWaveform(Waveform):
         self.sample_calls = []
 
     @property
-    def _compare_key(self) -> Any:
+    def compare_key(self) -> Any:
         if self.sample_output is not None:
             return tuple(self.sample_output.tolist())
         else:
