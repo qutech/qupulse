@@ -259,7 +259,7 @@ class SequencePulseTemplateConcatenationTest(SequencePulseTemplateTest):
         b.add_entry('t', 'a')
 
         subtemplates = [(b, {'t': 't_ext', 'a': 'a_ext'})]
-        seq = SequencePulseTemplate(subtemplates, {'t_ext, a_ext'})
+        seq = SequencePulseTemplate(subtemplates, ['t_ext', 'a_ext'])
 
         concat = seq @ a
         subtemplates2 = [(seq, {'t_ext':'t_ext', 'a_ext': 'a_ext'}),
