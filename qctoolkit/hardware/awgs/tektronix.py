@@ -86,7 +86,8 @@ class AWGSocket():
 
 
 class TektronixAWG(AWG):
-    def __init__(self, ip: str, port: int, samplerate: float, first_index=None):
+
+    def __init__(self, ip: str, port: int, sample_rate: float, first_index=None):
         self.__programs = {} # holds names and programs
         self.__program_indices = {} # holds programs and their first index (for jumping to it)
         self.__waveform_memory = set() #map sequence indices to waveforms and vice versa
@@ -97,7 +98,7 @@ class TektronixAWG(AWG):
         self.inst = self.__rm.open_resource('TCPIP::{0}::INSTR'.format(self.__ip, self.__port))
         self.__identifier = self.inst.query('*IDN?\n')
         self.inst.write('AWGCONTROL:RMODE SEQUENCE') # play sequence
-        self.__samplerate = samplerate
+        self.__sample_rate = sample_rate
         self.__scale = 2.
         self.__offset = 1.
         self.__channel_template = '{0:s}_{1:d}'
@@ -128,8 +129,8 @@ class TektronixAWG(AWG):
         return list(self.__programs.keys())
 
     @property
-    def samplerate(self):
-        return self.__samplerate
+    def sample_rate(self):
+        return self.__sample_rate
 
     def rescale(self, voltages: np.ndarray) -> np.ndarray:
         """Converts an array of voltages to an array of unsigned integers for upload."""
@@ -151,7 +152,7 @@ class TektronixAWG(AWG):
             pass
         else:
             # first sample the waveform to get an array of data
-            ts = np.arange(waveform.duration * self.__samplerate) * 1/self.samplerate
+            ts = np.arange(waveform.duration * self.__sample_rate) * 1/self.sample_rate
             data = waveform.sample(ts, offset)
             wf_name = self.waveform2name(waveform)
 
@@ -212,7 +213,6 @@ class TektronixAWG(AWG):
         self.inst.write('SEQUENCE:ELEMENT1:GOTO:STATE ON')
         self.inst.write('SEQUENCE:ELEMENT1:GOTO:INDEX', self.__program_indices[name])
         self.inst.write('AWGCONTROL:RUN')
-
 
     def remove(self, name):
         if name in self.programs:

@@ -11,7 +11,7 @@ if sys.version_info < (3, 5):
 else:
     requires_typing = []
 
-subpackages = ['pulses','utils','qcmatlab']
+subpackages = ['pulses', 'utils', 'qcmatlab', 'hardware']
 packages = ['qctoolkit'] + ['qctoolkit.' + subpackage for subpackage in subpackages]
 
 setup(name='qctoolkit',
