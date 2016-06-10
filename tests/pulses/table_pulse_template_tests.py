@@ -313,13 +313,13 @@ class TablePulseTemplateTest(unittest.TestCase):
         table = TablePulseTemplate()
         table.add_entry(0, 2)
         instantiated_entries = table.get_entries_instantiated({})
-        self.assertEqual([[(0, 2, HoldInterpolationStrategy())]], instantiated_entries)
+        self.assertEqual([[]], instantiated_entries)
 
     def test_get_entries_instantiated_one_entry_float_declaration(self) -> None:
         table = TablePulseTemplate()
         table.add_entry(0, 'foo')
         instantiated_entries = table.get_entries_instantiated({'foo': 2})
-        self.assertEqual([[(0, 2, HoldInterpolationStrategy())]], instantiated_entries)
+        self.assertEqual([[]], instantiated_entries)
 
     def test_get_entries_instantiated_two_entries_float_float_declaration_float(self) -> None:
         table = TablePulseTemplate()

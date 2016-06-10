@@ -396,21 +396,26 @@ class TablePulseTemplate(PulseTemplate):
                 parameters.
         """
         instantiated_entries = [] # type: List[List[TableEntry]]
+        max_time = 0
         for channel in range(self.__channels):
             entries = self.__entries[channel]
             instantiated = []
-            for entry in entries:
-                # resolve time parameter references
-                if isinstance(entry.t, ParameterDeclaration):
-                    time_value = entry.t.get_value(parameters)
-                else:
-                    time_value = entry.t
-                if isinstance(entry.v, ParameterDeclaration):
-                    voltage_value = entry.v.get_value(parameters)
-                else:
-                    voltage_value = entry.v
+            if not entries:
+                instantiated.append(TableEntry(0, 0, self.__interpolation_strategies['hold']))
+            else:
+                for entry in entries:
+                    # resolve time parameter references
+                    if isinstance(entry.t, ParameterDeclaration):
+                        time_value = entry.t.get_value(parameters)
+                    else:
+                        time_value = entry.t
+                    if isinstance(entry.v, ParameterDeclaration):
+                        voltage_value = entry.v.get_value(parameters)
+                    else:
+                        voltage_value = entry.v
 
-                instantiated.append(TableEntry(time_value, voltage_value, entry.interp))
+                    instantiated.append(TableEntry(time_value, voltage_value, entry.interp))
+            max_time = max(max_time, instantiated[-1].t)
 
             # ensure that no time value occurs twice
             previous_time = -1
@@ -421,6 +426,18 @@ class TablePulseTemplate(PulseTemplate):
                 previous_time = time
 
             instantiated_entries.append(instantiated)
+
+        if max_time == 0:
+            return [[] * self.__channels]
+
+        # ensure that all channels have equal duration
+        for instantiated in instantiated_entries:
+            final_entry = instantiated[-1]
+            if final_entry.t != max_time:
+                instantiated.append(TableEntry(final_entry.t,
+                                               final_entry.v,
+                                               self.__interpolation_strategies['hold'])
+                                    )
         return list(map(TablePulseTemplate.__clean_entries, instantiated_entries))
 
     @staticmethod
