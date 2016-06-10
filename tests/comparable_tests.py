@@ -10,7 +10,7 @@ class DummyComparable(Comparable):
         self.compare_key_ = compare_key
 
     @property
-    def _compare_key(self) -> Any:
+    def compare_key(self) -> Any:
         return self.compare_key_
 
 

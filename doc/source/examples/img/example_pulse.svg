@@ -1,0 +1,666 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Generator: Adobe Illustrator 15.1.0, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->
+
+<svg
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   version="1.1"
+   id="Layer_1"
+   x="0px"
+   y="0px"
+   width="500"
+   height="500"
+   viewBox="0 0 500.00002 500.00002"
+   enable-background="new 0 0 283.46 283.46"
+   xml:space="preserve"
+   inkscape:version="0.48.5 r10040"
+   sodipodi:docname="example_pulse.svg"><metadata
+   id="metadata209"><rdf:RDF><cc:Work
+       rdf:about=""><dc:format>image/svg+xml</dc:format><dc:type
+         rdf:resource="http://purl.org/dc/dcmitype/StillImage" /></cc:Work></rdf:RDF></metadata><defs
+   id="defs207" /><sodipodi:namedview
+   pagecolor="#ffffff"
+   bordercolor="#666666"
+   borderopacity="1"
+   objecttolerance="10"
+   gridtolerance="10"
+   guidetolerance="10"
+   inkscape:pageopacity="0"
+   inkscape:pageshadow="2"
+   inkscape:window-width="1920"
+   inkscape:window-height="1028"
+   id="namedview205"
+   showgrid="false"
+   inkscape:zoom="0.83256899"
+   inkscape:cx="141.73"
+   inkscape:cy="141.73"
+   inkscape:window-x="-8"
+   inkscape:window-y="-8"
+   inkscape:window-maximized="1"
+   inkscape:current-layer="Layer_1" />
+<g
+   id="Grid"
+   transform="matrix(1.8212787,0,0,1.8212787,-12.619139,-5.2725481)">
+	<line
+   stroke-miterlimit="10"
+   x1="70.865997"
+   y1="7.086"
+   x2="70.865997"
+   y2="248.03101"
+   id="line4"
+   style="fill:none;stroke:#939598;stroke-width:0.5;stroke-miterlimit:10" />
+	
+		<line
+   stroke-miterlimit="10"
+   x1="106.299"
+   y1="7.086"
+   x2="106.299"
+   y2="248.03101"
+   id="line6"
+   style="fill:none;stroke:#939598;stroke-width:0.5;stroke-miterlimit:10" />
+	
+		<line
+   stroke-miterlimit="10"
+   x1="141.73199"
+   y1="7.086"
+   x2="141.73199"
+   y2="248.03101"
+   id="line8"
+   style="fill:none;stroke:#939598;stroke-width:0.5;stroke-miterlimit:10" />
+	
+		<line
+   stroke-miterlimit="10"
+   x1="212.59801"
+   y1="7.086"
+   x2="212.59801"
+   y2="248.03101"
+   id="line10"
+   style="fill:none;stroke:#939598;stroke-width:0.5;stroke-miterlimit:10" />
+	
+		<line
+   stroke-miterlimit="10"
+   x1="248.03101"
+   y1="7.086"
+   x2="248.03101"
+   y2="248.03101"
+   id="line12"
+   style="fill:none;stroke:#939598;stroke-width:0.5;stroke-miterlimit:10" />
+	
+		<line
+   stroke-miterlimit="10"
+   x1="35.433998"
+   y1="212.59801"
+   x2="269.29099"
+   y2="212.59801"
+   id="line14"
+   style="fill:none;stroke:#939598;stroke-width:0.5;stroke-miterlimit:10" />
+	
+		<line
+   stroke-miterlimit="10"
+   x1="35.432999"
+   y1="177.16499"
+   x2="269.29099"
+   y2="177.16499"
+   id="line16"
+   style="fill:none;stroke:#939598;stroke-width:0.5;stroke-miterlimit:10" />
+	
+		<line
+   stroke-miterlimit="10"
+   x1="35.433998"
+   y1="141.731"
+   x2="269.29099"
+   y2="141.731"
+   id="line18"
+   style="fill:none;stroke:#939598;stroke-width:0.5;stroke-miterlimit:10" />
+	
+		<line
+   stroke-miterlimit="10"
+   x1="35.433998"
+   y1="106.299"
+   x2="269.29099"
+   y2="106.299"
+   id="line20"
+   style="fill:none;stroke:#939598;stroke-width:0.5;stroke-miterlimit:10" />
+	<line
+   stroke-miterlimit="10"
+   x1="35.432999"
+   y1="70.865997"
+   x2="269.29099"
+   y2="70.865997"
+   id="line22"
+   style="fill:none;stroke:#939598;stroke-width:0.5;stroke-miterlimit:10" />
+	<line
+   stroke-miterlimit="10"
+   x1="35.433998"
+   y1="35.432999"
+   x2="269.29099"
+   y2="35.432999"
+   id="line24"
+   style="fill:none;stroke:#939598;stroke-width:0.5;stroke-miterlimit:10" />
+	
+		<line
+   stroke-miterlimit="10"
+   x1="177.16499"
+   y1="7.086"
+   x2="177.16499"
+   y2="248.03101"
+   id="line26"
+   style="fill:none;stroke:#939598;stroke-width:0.5;stroke-miterlimit:10" />
+</g>
+<g
+   id="Axes"
+   transform="matrix(1.8212787,0,0,1.8212787,-12.619139,-5.2725481)">
+	<g
+   id="g29">
+		<g
+   id="g31">
+			<line
+   stroke-miterlimit="10"
+   x1="35.432999"
+   y1="13.056"
+   x2="35.432999"
+   y2="248.03101"
+   id="line33"
+   style="fill:none;stroke:#000000;stroke-miterlimit:10" />
+			<g
+   id="g35">
+				<polygon
+   points="35.433,7.086 31.73,15.864 35.433,14.291 39.136,15.864 "
+   id="polygon37" />
+			</g>
+		</g>
+	</g>
+	<g
+   id="g39">
+		<g
+   id="g41">
+			<line
+   stroke-miterlimit="10"
+   x1="35.432999"
+   y1="248.03101"
+   x2="270.40799"
+   y2="248.03101"
+   id="line43"
+   style="fill:none;stroke:#000000;stroke-miterlimit:10" />
+			<g
+   id="g45">
+				<polygon
+   points="276.379,248.031 267.6,251.734 269.174,248.031 267.6,244.328 "
+   id="polygon47" />
+			</g>
+		</g>
+	</g>
+</g>
+<g
+   id="Path"
+   transform="matrix(1.8212787,0,0,1.8212787,-12.619139,-5.2725481)">
+	<line
+   stroke-miterlimit="10"
+   x1="35.433998"
+   y1="212.59801"
+   x2="106.299"
+   y2="212.59801"
+   id="line50"
+   style="fill:none;stroke:#009444;stroke-width:2;stroke-miterlimit:10" />
+	
+		<line
+   stroke-miterlimit="10"
+   x1="106.299"
+   y1="212.59801"
+   x2="106.299"
+   y2="141.731"
+   id="line52"
+   style="fill:none;stroke:#009444;stroke-width:2;stroke-miterlimit:10" />
+	
+		<line
+   stroke-miterlimit="10"
+   x1="106.299"
+   y1="141.731"
+   x2="177.166"
+   y2="106.298"
+   id="line54"
+   style="fill:none;stroke:#009444;stroke-width:2;stroke-miterlimit:10" />
+	
+		<line
+   stroke-miterlimit="10"
+   x1="177.166"
+   y1="106.298"
+   x2="177.166"
+   y2="212.59801"
+   id="line56"
+   style="fill:none;stroke:#009444;stroke-width:2;stroke-miterlimit:10" />
+	
+		<line
+   stroke-miterlimit="10"
+   x1="177.166"
+   y1="212.59801"
+   x2="248.03101"
+   y2="212.59801"
+   id="line58"
+   style="fill:none;stroke:#009444;stroke-width:2;stroke-miterlimit:10" />
+</g>
+<line
+   stroke-miterlimit="10"
+   x1="180.98097"
+   y1="459.36658"
+   x2="180.98097"
+   y2="446.461"
+   id="line60"
+   style="fill:none;stroke:#000000;stroke-width:1.82127869;stroke-miterlimit:10" />
+<g
+   id="g62"
+   transform="matrix(1.8212787,0,0,1.8212787,-12.619139,-5.2725481)">
+	<line
+   stroke-miterlimit="10"
+   x1="28.347"
+   y1="212.59801"
+   x2="35.433998"
+   y2="212.59801"
+   id="line64"
+   style="fill:none;stroke:#000000;stroke-miterlimit:10" />
+	<line
+   stroke-miterlimit="10"
+   x1="28.347"
+   y1="141.731"
+   x2="35.432999"
+   y2="141.731"
+   id="line66"
+   style="fill:none;stroke:#000000;stroke-miterlimit:10" />
+	<line
+   stroke-miterlimit="10"
+   x1="28.347"
+   y1="106.299"
+   x2="35.432999"
+   y2="106.299"
+   id="line68"
+   style="fill:none;stroke:#000000;stroke-miterlimit:10" />
+	<line
+   stroke-miterlimit="10"
+   x1="177.166"
+   y1="255.117"
+   x2="177.166"
+   y2="248.03101"
+   id="line70"
+   style="fill:none;stroke:#000000;stroke-miterlimit:10" />
+	<line
+   stroke-miterlimit="10"
+   x1="35.433998"
+   y1="255.117"
+   x2="35.432999"
+   y2="248.03101"
+   id="line72"
+   style="fill:none;stroke:#000000;stroke-miterlimit:10" />
+	<line
+   stroke-miterlimit="10"
+   x1="248.03101"
+   y1="255.117"
+   x2="248.03101"
+   y2="248.03101"
+   id="line74"
+   style="fill:none;stroke:#000000;stroke-miterlimit:10" />
+	<text
+   transform="translate(15.3125,110.3857)"
+   font-size="12"
+   id="text76"
+   style="font-size:12px;font-family:Helvetica">V</text>
+
+	<text
+   transform="matrix(0.583,0,0,0.583,23.3164,114.3818)"
+   font-size="12"
+   id="text78"
+   style="font-size:12px;font-family:Helvetica">b</text>
+
+	<text
+   transform="translate(15.3125,145.0527)"
+   font-size="12"
+   id="text80"
+   style="font-size:12px;font-family:Helvetica">V</text>
+
+	<text
+   transform="matrix(0.583,0,0,0.583,23.3164,149.0488)"
+   font-size="12"
+   id="text82"
+   style="font-size:12px;font-family:Helvetica">a</text>
+
+	<text
+   transform="translate(17.9229,216.6699)"
+   font-size="12"
+   id="text84"
+   style="font-size:12px;font-family:Helvetica">0</text>
+
+	<text
+   transform="translate(32.0962,266.0039)"
+   font-size="12"
+   id="text86"
+   style="font-size:12px;font-family:Helvetica">0</text>
+
+	<text
+   transform="translate(175.3145,266.0039)"
+   font-size="12"
+   id="text88"
+   style="font-size:12px;font-family:Helvetica">t</text>
+
+	<text
+   transform="matrix(0.583,0,0,0.583,178.6484,270)"
+   font-size="12"
+   id="text90"
+   style="font-size:12px;font-family:Helvetica">b</text>
+
+	<text
+   transform="translate(104.9814,266.0039)"
+   font-size="12"
+   id="text92"
+   style="font-size:12px;font-family:Helvetica">t</text>
+
+	<text
+   transform="matrix(0.583,0,0,0.583,108.3154,270)"
+   font-size="12"
+   id="text94"
+   style="font-size:12px;font-family:Helvetica">a</text>
+
+	<text
+   transform="translate(246.1934,266.0039)"
+   font-size="12"
+   id="text96"
+   style="font-size:12px;font-family:Helvetica">t</text>
+
+	<text
+   transform="matrix(0.583,0,0,0.583,249.5273,270)"
+   font-size="12"
+   id="text98"
+   style="font-size:12px;font-family:Helvetica">end</text>
+
+</g>
+<g
+   id="Marker"
+   transform="matrix(1.8212787,0,0,1.8212787,-12.619139,-5.2725481)">
+	<g
+   id="g101">
+		
+			<line
+   stroke-miterlimit="10"
+   x1="102.755"
+   y1="145.27499"
+   x2="109.842"
+   y2="138.188"
+   id="line103"
+   style="fill:none;stroke:#000000;stroke-width:2;stroke-miterlimit:10" />
+		
+			<line
+   stroke-miterlimit="10"
+   x1="102.755"
+   y1="138.188"
+   x2="109.842"
+   y2="145.27499"
+   id="line105"
+   style="fill:none;stroke:#000000;stroke-width:2;stroke-miterlimit:10" />
+	</g>
+	<g
+   id="g107">
+		
+			<line
+   stroke-miterlimit="10"
+   x1="173.623"
+   y1="109.842"
+   x2="180.709"
+   y2="102.755"
+   id="line109"
+   style="fill:none;stroke:#000000;stroke-width:2;stroke-miterlimit:10" />
+		
+			<line
+   stroke-miterlimit="10"
+   x1="173.623"
+   y1="102.755"
+   x2="180.709"
+   y2="109.842"
+   id="line111"
+   style="fill:none;stroke:#000000;stroke-width:2;stroke-miterlimit:10" />
+	</g>
+	<g
+   id="g113">
+		
+			<line
+   stroke-miterlimit="10"
+   x1="244.48801"
+   y1="216.142"
+   x2="251.57401"
+   y2="209.05499"
+   id="line115"
+   style="fill:none;stroke:#000000;stroke-width:2;stroke-miterlimit:10" />
+		
+			<line
+   stroke-miterlimit="10"
+   x1="244.48801"
+   y1="209.05499"
+   x2="251.57401"
+   y2="216.142"
+   id="line117"
+   style="fill:none;stroke:#000000;stroke-width:2;stroke-miterlimit:10" />
+	</g>
+	<g
+   id="g119">
+		<line
+   stroke-miterlimit="10"
+   x1="31.889999"
+   y1="216.142"
+   x2="38.977001"
+   y2="209.05499"
+   id="line121"
+   style="fill:none;stroke:#000000;stroke-width:2;stroke-miterlimit:10" />
+		<line
+   stroke-miterlimit="10"
+   x1="31.889999"
+   y1="209.05499"
+   x2="38.977001"
+   y2="216.142"
+   id="line123"
+   style="fill:none;stroke:#000000;stroke-width:2;stroke-miterlimit:10" />
+	</g>
+</g>
+<g
+   id="Labels"
+   transform="matrix(1.8212787,0,0,1.8212787,-12.619139,-5.2725481)">
+	<g
+   id="g126">
+		<g
+   id="g128">
+			
+				<line
+   stroke-miterlimit="10"
+   x1="113.386"
+   y1="85.039001"
+   x2="139.868"
+   y2="118.142"
+   id="line130"
+   style="fill:none;stroke:#000000;stroke-width:0.5;stroke-miterlimit:10" />
+			<g
+   id="g132">
+				<polygon
+   points="141.732,120.472 137.545,118.202 139.482,117.659 140.437,115.888 "
+   id="polygon134" />
+			</g>
+		</g>
+	</g>
+	<text
+   transform="matrix(0.583,0,0,0.583,78.6733,82.6147)"
+   font-size="14"
+   id="text136"
+   style="font-size:14px;font-family:Helvetica">Linear interpolation</text>
+
+	<g
+   id="g138">
+		<g
+   id="g140">
+			
+				<line
+   stroke-miterlimit="10"
+   x1="63.779999"
+   y1="191.339"
+   x2="63.779999"
+   y2="202.52699"
+   id="line142"
+   style="fill:none;stroke:#000000;stroke-width:0.5;stroke-miterlimit:10" />
+			<g
+   id="g144">
+				<polygon
+   points="63.78,205.512 61.928,201.123 63.78,201.909 65.631,201.123 "
+   id="polygon146" />
+			</g>
+		</g>
+	</g>
+	<text
+   transform="matrix(0.583,0,0,0.583,39.105,188.9141)"
+   font-size="14"
+   id="text148"
+   style="font-size:14px;font-family:Helvetica">Hold interpolation</text>
+
+	<g
+   id="g150">
+		<g
+   id="g152">
+			
+				<line
+   stroke-miterlimit="10"
+   x1="205.51199"
+   y1="191.34"
+   x2="205.51199"
+   y2="202.52699"
+   id="line154"
+   style="fill:none;stroke:#000000;stroke-width:0.5;stroke-miterlimit:10" />
+			<g
+   id="g156">
+				<polygon
+   points="205.512,205.512 203.66,201.123 205.512,201.91 207.363,201.123 "
+   id="polygon158" />
+			</g>
+		</g>
+	</g>
+	<text
+   transform="matrix(0.583,0,0,0.583,178.4531,188.9141)"
+   font-size="14"
+   id="text160"
+   style="font-size:14px;font-family:Helvetica">“Inverse hold” interpolation</text>
+
+</g>
+<g
+   id="Legend"
+   transform="matrix(1.8212787,0,0,1.8212787,-12.619139,-5.2725481)">
+	
+		<rect
+   x="173.623"
+   y="24"
+   stroke-miterlimit="10"
+   width="76.709999"
+   height="29.667"
+   id="rect163"
+   style="fill:#ffffff;stroke:#000000;stroke-width:0.5;stroke-miterlimit:10" />
+	<text
+   transform="matrix(0.583,0,0,0.583,187.7441,35.3779)"
+   font-size="14"
+   id="text165"
+   style="font-size:14px;font-family:Helvetica">Supporting point</text>
+
+	<text
+   transform="matrix(0.583,0,0,0.583,187.7441,48.4482)"
+   font-size="14"
+   id="text167"
+   style="font-size:14px;font-family:Helvetica">Pulse voltage</text>
+
+	<g
+   id="g169">
+		<line
+   stroke-miterlimit="10"
+   x1="176.946"
+   y1="36.199001"
+   x2="184.032"
+   y2="29.112"
+   id="line171"
+   style="fill:none;stroke:#000000;stroke-width:2;stroke-miterlimit:10" />
+		<line
+   stroke-miterlimit="10"
+   x1="176.946"
+   y1="29.112"
+   x2="184.032"
+   y2="36.199001"
+   id="line173"
+   style="fill:none;stroke:#000000;stroke-width:2;stroke-miterlimit:10" />
+	</g>
+	<line
+   stroke-miterlimit="10"
+   x1="176.94501"
+   y1="45.5"
+   x2="184.032"
+   y2="45.5"
+   id="line175"
+   style="fill:none;stroke:#39b54a;stroke-width:2;stroke-miterlimit:10" />
+</g>
+<g
+   id="g177"
+   transform="matrix(1.8212787,0,0,1.8212787,-12.619139,-5.2725481)">
+	<g
+   id="g179">
+		
+			<line
+   stroke-miterlimit="10"
+   x1="109.284"
+   y1="233.858"
+   x2="174.17999"
+   y2="233.858"
+   id="line181"
+   style="fill:none;stroke:#000000;stroke-width:0.5;stroke-miterlimit:10" />
+		<g
+   id="g183">
+			<polygon
+   points="106.299,233.858 110.688,235.71 109.902,233.858 110.688,232.007 "
+   id="polygon185" />
+		</g>
+		<g
+   id="g187">
+			<polygon
+   points="177.165,233.858 172.775,235.71 173.563,233.858 172.775,232.007 "
+   id="polygon189" />
+		</g>
+	</g>
+</g>
+<text
+   font-size="14"
+   id="text191"
+   style="font-size:14.86527538px;font-family:Helvetica-Oblique"
+   x="220.81943"
+   y="416.76779">length</text>
+
+<g
+   id="g193"
+   transform="matrix(1.8212787,0,0,1.8212787,-12.619139,-5.2725481)">
+	<g
+   id="g195">
+		
+			<line
+   stroke-miterlimit="10"
+   x1="101.992"
+   y1="217.797"
+   x2="83.216003"
+   y2="230.313"
+   id="line197"
+   style="fill:none;stroke:#000000;stroke-width:0.5;stroke-miterlimit:10" />
+		<g
+   id="g199">
+			<polygon
+   points="104.476,216.142 99.796,217.035 101.478,218.14 101.851,220.117 "
+   id="polygon201" />
+		</g>
+	</g>
+</g>
+<text
+   font-size="14"
+   id="text203"
+   style="font-size:14.86527538px;font-family:Helvetica-Oblique"
+   x="118.80634"
+   y="428.18463">start</text>
+
+</svg>

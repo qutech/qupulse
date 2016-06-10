@@ -41,7 +41,7 @@ class DummySerializer(Serializer):
         super().__init__(self.backend)
         self.subelements = dict()
 
-    def _serialize_subpulse(self, serializable: Serializable) -> None:
+    def dictify(self, serializable: Serializable) -> None:
         identifier = self.identifier_callback(serializable)
         self.subelements[identifier] = serializable
         return self.serialize_callback(serializable)

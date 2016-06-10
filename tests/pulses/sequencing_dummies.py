@@ -28,12 +28,30 @@ class DummyParameter(Parameter):
         return self.requires_stop_
 
     def get_serialization_data(self, serializer: Serializer) -> None:
-            raise NotImplemented()
+            raise NotImplementedError()
 
     @staticmethod
     def deserialize(serializer: Serializer) -> 'DummyParameter':
-        raise NotImplemented()
+        raise NotImplementedError()
 
+class DummyNoValueParameter(Parameter):
+
+    def __init__(self) -> None:
+        super().__init__()
+
+    def get_value(self) -> float:
+        raise Exception("May not call get_value on DummyNoValueParameter.")
+
+    @property
+    def requires_stop(self) -> bool:
+        return True
+
+    def get_serialization_data(self, serializer: Serializer) -> None:
+            raise NotImplementedError()
+
+    @staticmethod
+    def deserialize(serializer: Serializer) -> 'DummyParameter':
+        raise NotImplementedError()
 
 class DummySequencingElement(SequencingElement):
 
@@ -77,7 +95,7 @@ class DummyInstruction(Instruction):
         self.elem = elem
 
     @property
-    def _compare_key(self) -> Any:
+    def compare_key(self) -> Any:
         return self.elem
 
 
@@ -102,7 +120,7 @@ class DummyWaveform(Waveform):
         self.sample_calls = []
 
     @property
-    def _compare_key(self) -> Any:
+    def compare_key(self) -> Any:
         if self.sample_output is not None:
             return tuple(self.sample_output.tolist())
         else:
@@ -132,12 +150,12 @@ class DummySequencer(Sequencer):
     def push(self,
              sequencing_element: SequencingElement,
              parameters: Dict[str, Parameter],
-             conditions: Dict[str, 'Conditon'],
+             conditions: Dict[str, 'Condition'],
              target_block: InstructionBlock = None) -> None:
         if target_block is None:
             target_block = self.__main_block
 
-        if not target_block in self.sequencing_stacks:
+        if target_block not in self.sequencing_stacks:
             self.sequencing_stacks[target_block] = []
 
         self.sequencing_stacks[target_block].append((sequencing_element, parameters, conditions))
@@ -219,7 +237,7 @@ class DummyPulseTemplate(PulseTemplate):
 
     @property
     def parameter_names(self) -> Set[str]:
-        return self.parameter_names_
+        return set(self.parameter_names_)
 
     @property
     def parameter_declarations(self) -> Set[str]:

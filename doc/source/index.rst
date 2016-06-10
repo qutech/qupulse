@@ -9,13 +9,12 @@ Welcome to qc-toolkit's documentation!
 Contents:
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 3
    :numbered:
 
-   TablePulseTemplate_example
-
-.. automodule::pulses
-.. automodule::utils
+   concepts/concepts
+   examples/examples
+   qctoolkit API Documentation <qctoolkit>
 
 Indices and tables
 ==================

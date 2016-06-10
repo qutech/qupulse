@@ -1,0 +1,34 @@
+{
+    "entries": [
+        [
+            0,
+            0,
+            "hold"
+        ],
+        [
+            4,
+            20,
+            "linear"
+        ]
+    ],
+    "is_measurement_pulse": false,
+    "time_parameter_declarations": [
+        {
+            "default_value": null,
+            "max_value": Infinity,
+            "min_value": 0,
+            "name": "4",
+            "type": "qctoolkit.pulses.parameters.ParameterDeclaration"
+        }
+    ],
+    "type": "qctoolkit.pulses.table_pulse_template.TablePulseTemplate",
+    "voltage_parameter_declarations": [
+        {
+            "default_value": null,
+            "max_value": Infinity,
+            "min_value": -Infinity,
+            "name": "20",
+            "type": "qctoolkit.pulses.parameters.ParameterDeclaration"
+        }
+    ]
+}

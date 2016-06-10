@@ -1,20 +1,25 @@
+"""This module defines conditions required for branching decisions in pulse execution.
 
-import logging
+Classes:
+    - Condition: Base-class for conditions.
+    - SoftwareCondition: A software-evaluated condition.
+    - HardwareCondition: A hardware-evaluated condition.
+    - ConditionEvaluationException.
+    - ConditionMissingException.
+"""
+
 from abc import ABCMeta, abstractmethod
 from typing import Dict, Optional, Callable
 
-"""RELATED THIRD PARTY IMPORTS"""
+from qctoolkit.pulses.parameters import Parameter
+from qctoolkit.pulses.sequencing import Sequencer, SequencingElement
+from qctoolkit.pulses.instructions import InstructionBlock, InstructionPointer, Trigger
 
-"""LOCAL IMPORTS"""
-from .parameters import Parameter
-from .sequencing import SequencingElement, Sequencer
-from .instructions import InstructionBlock, InstructionPointer, Trigger
+__all__ = ["Condition", "ConditionEvaluationException", "ConditionMissingException",
+           "SoftwareCondition", "HardwareCondition"]
 
-logger = logging.getLogger(__name__)
 
-__all__ = ["Condition", "ConditionEvaluationException", "SoftwareCondition", "HardwareCondition"]
-
-class Condition(metaclass = ABCMeta):
+class Condition(metaclass=ABCMeta):
     """A condition on which the execution of a pulse may depend.
     
     Conditions are used for branching and looping of pulses and
@@ -22,12 +27,17 @@ class Condition(metaclass = ABCMeta):
     Implementations of Condition may rely on software variables,
     measured data or be mere placeholders for hardware triggers.
     """
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(self) -> None:
         super().__init__()
         
     @abstractmethod
     def requires_stop(self) -> bool:
-        """Return True if evaluating this Condition is not possible in the current translation process."""
+        """Query whether evaluating this Condition object requires an interruption in execution/
+        sequencing,  e.g. because it depends on a value obtained during executin.
+
+        Returns:
+            True, if evaluation of this Condition object requires sequencing to be interrupted.
+        """
         
     @abstractmethod
     def build_sequence_loop(self, 
@@ -37,10 +47,22 @@ class Condition(metaclass = ABCMeta):
                             parameters: Dict[str, Parameter],
                             conditions: Dict[str, 'Condition'],
                             instruction_block: InstructionBlock) -> None:
-        """Translate a looping SequencingElement using this Condition into an instruction sequence for the given instruction block using sequencer and the given parameter sets.
-        
-        delegator refers to the SequencingElement which has delegated the invocation of build_sequence to this Condition object. body is the loop body element.
-        See also SequencingElement.build_sequence().
+        """Translate a looping SequencingElement using this Condition into an instruction sequence
+        for the given instruction block using sequencer and the given parameter sets.
+
+        Args:
+            delegator (SequencingElement): The SequencingElement which has delegated the invocation
+                of its build_sequence method to this Condition object.
+            body (SequencingElement): The SequencingElement representing the loops body.
+            sequencer (Sequencer): The Sequencer object coordinating the current sequencing process.
+            parameters (Dict(str -> Parameter): A mapping of parameter names to Parameter objects
+                which will be passed to the loop body.
+            conditions (Dict(str -> Conditions): A mapping of condition identifier to Condition
+                objects which will be passed to the loop body.
+            instruction_block (InstructionBlock): The instruction block into which instructions
+                resulting from the translation of this Condition object will be placed.
+        See Also:
+            SequencingElement.build_sequence()
         """
     
     @abstractmethod
@@ -52,22 +74,42 @@ class Condition(metaclass = ABCMeta):
                               parameters: Dict[str, Parameter],
                               conditions: Dict[str, 'Condition'],
                               instruction_block: InstructionBlock) -> None:
-        """Translate a branching SequencingElement using this Condition into an instruction sequence for the given instruction block using sequencer and the given parameter sets.
-        
-        delegator refers to the SequencingElement which has delegated the invocation of build_sequence to this Condition object. if_branch and else_branch are the elements to
-        be translated into if and else branch instructions.
-        See also SequencingElement.build_sequence().
+        """Translate a branching SequencingElement using this Condition into an instruction sequence
+         for the given instruction block using sequencer and the given parameter sets.
+
+         Args:
+            delegator (SequencingElement): The SequencingElement which has delegated the invocation
+                of its build_sequence method to this Condition object.
+            if_branch (SequencingElement): The SequencingElement representing the branch executed
+                if the condition holds.
+            else_branch (SequencingElement): The SequencingElement representing the branch executed
+                if the condition does not hold.
+            parameters (Dict(str -> Parameter): A mapping of parameter names to Parameter objects
+                which will be passed to the loop body.
+            conditions (Dict(str -> Conditions): A mapping of condition identifier to Condition
+                objects which will be passed to the loop body.
+            instruction_block (InstructionBlock): The instruction block into which instructions
+                resulting from the translation of this Condition object will be placed.
+        See Also:
+            SequencingElement.build_sequence()
         """
 
 
 class HardwareCondition(Condition):
     """A condition that will be evaluated using hardware triggers.
-    
-    During the translation process, HardwareCondition instanced will produce in code blocks for branches/loop bodies and the corresponding conditional jump instructions.
+
+    The condition will be evaluate as true iff the trigger has fired before the hardware device
+    makes the branching decision.
+
+    During the translation process, a HardwareCondition instance will produce code blocks for
+    branches/loop bodies and the corresponding conditional jump instructions.
     """
     
     def __init__(self, trigger: Trigger) -> None:
-        """Create a new HardwareCondition instance. Argument trigger is the trigger handle of the corresponding hardware device."""
+        """Create a new HardwareCondition instance.
+
+        Args:
+             trigger (Trigger): The trigger handle of the corresponding hardware device."""
         super().__init__()
         self.__trigger = trigger # type: Trigger
         
@@ -79,7 +121,7 @@ class HardwareCondition(Condition):
                             body: SequencingElement,
                             sequencer: Sequencer,
                             parameters: Dict[str, Parameter],
-                            conditions: Dict[str, 'Condition'],
+                            conditions: Dict[str, Condition],
                             instruction_block: InstructionBlock) -> None:
         body_block = instruction_block.create_embedded_block()
         body_block.return_ip = InstructionPointer(instruction_block, len(body_block))
@@ -87,13 +129,13 @@ class HardwareCondition(Condition):
         instruction_block.add_instruction_cjmp(self.__trigger, body_block)
         sequencer.push(body, parameters, conditions, body_block)
         
-    def build_sequence_branch(self, 
+    def build_sequence_branch(self,
                               delegator: SequencingElement,
                               if_branch: SequencingElement,
                               else_branch: SequencingElement,
                               sequencer: Sequencer,
                               parameters: Dict[str, Parameter],
-                              conditions: Dict[str, 'Condition'],
+                              conditions: Dict[str, Condition],
                               instruction_block: InstructionBlock) -> None:
         if_block = instruction_block.create_embedded_block()
         else_block = instruction_block.create_embedded_block()
@@ -111,24 +153,28 @@ class HardwareCondition(Condition):
 class SoftwareCondition(Condition):
     """A condition that will be evaluated in the software.
     
-    SoftwareConditions are evaluated in software, allowing them to rely on sophisticated measurement evaluation or
-    to be used when the hardware device does not support trigger based jumping instructions.
+    SoftwareConditions are evaluated in software, allowing them to rely on sophisticated measurement
+    evaluation or to be used when the hardware device does not support trigger based jumping
+    instructions.
     
-    On the downside, this means that a translation processes may be interrupted because a SoftwareCondition
-    relying on measurement data cannot be evaluated before that data is acquired. In this case, the already translated
-    part has to be executed, the measurement is made and in a subsequent translation, the SoftwareCondition is evaluated
-    and the corresponding instructions of one branch/the loop body are generated without jumping instructions.
+    On the downside, this means that a translation processes may be interrupted because a
+    SoftwareCondition relying on measurement data cannot be evaluated before that data is acquired.
+    In this case, the already translated part has to be executed, the measurement is made and in a
+    subsequent translation, the SoftwareCondition is evaluated and the corresponding instructions
+    of one branch/the loop body are generated without jumping instructions.
     
     This interruption of pulse execution might not be feasible in some environments.
     """
         
     def __init__(self, evaluation_callback: Callable[[int], Optional[bool]]) -> None:
         """Create a new SoftwareCondition instance.
-        
-        Argument evaluationCallback is a callable function which accepts an integer argument and returns a bool or None.
-        The integer argument is the current iteration of a loop (starting at zero before the first loop execution). For
-        branch sequencing, this argument will always be zero. The callbacks return value must be None, if evaluation
-        is currently not possible and boolean otherwise.
+
+        Args:
+            evaluation_callback: A function handle which accepts an integer arguments and returns
+                a boolean value or None. The integer argument is the current iteration of loop
+                (starting at zero before the first loop execution). For branch sequencing, this
+                argument will always be zero. The callback's return value must be None iff
+                evaluation is currently not possible.
         """
         super().__init__()
         self.__callback = evaluation_callback # type: Callable[[int], Optional[bool]]
@@ -143,70 +189,16 @@ class SoftwareCondition(Condition):
                             body: SequencingElement,
                             sequencer: Sequencer,
                             parameters: Dict[str, Parameter],
-                            conditions: Dict[str, 'Condition'],
+                            conditions: Dict[str, Condition],
                             instruction_block: InstructionBlock) -> None:
         
         evaluation_result = self.__callback(self.__loop_iteration)
         if evaluation_result is None:
             raise ConditionEvaluationException()
-        #if evaluationResult is None:
-        #    instruction_block.add_instruction_stop()
-        #    sequencer.push(delegator, time_parameters, voltage_parameters, instruction_block)
-        #else:
-        # the above should be done by Sequencer via evaluating requires_stop()
-        if evaluation_result == True:
+        if evaluation_result is True:
             sequencer.push(delegator, parameters, conditions, instruction_block)
             sequencer.push(body, parameters, conditions, instruction_block)
             self.__loop_iteration += 1 # next time, evaluate for next iteration
-
-    def build_sequence_branch(self, 
-                              delegator: SequencingElement,
-                              if_branch: SequencingElement,
-                              else_branch: SequencingElement,
-                              sequencer: Sequencer,
-                              parameters: Dict[str, Parameter],
-                              conditions: Dict[str, 'Condition'],
-                              instruction_block: InstructionBlock) -> None:
-        
-        evaluation_result = self.__callback(self.__loop_iteration)
-        if evaluation_result is None:
-            raise ConditionEvaluationException()
-        #if evaluationResult is None:
-        #    instruction_block.add_instruction_stop()
-        #    sequencer.push(delegator, time_parameters, voltage_parameters, instruction_block)
-        #else:
-        # the above should be done by Sequencer via evaluating requires_stop()
-        if evaluation_result == True:
-            sequencer.push(if_branch, parameters, conditions, instruction_block)
-        else:
-            sequencer.push(else_branch, parameters, conditions, instruction_block)
-
-
-class ProxyCondition(Condition):
-
-    def __init__(self, condition_name: str) -> None:
-        super().__init__()
-        self.__condition_name = condition_name
-        self.__condition = None # type: Condition
-
-    def acquire_proxied(self, conditions: Dict[str, Condition]) -> None:
-        self.__condition = conditions[self.__condition_name]
-
-    def requires_stop(self) -> bool:
-        if self.__condition is None:
-            raise Exception("The Condition reference '{}' has not been resolved.".format(self.__condition_name))
-        return self.__condition.requires_stop()
-
-    def build_sequence_loop(self,
-                            delegator: SequencingElement,
-                            body: SequencingElement,
-                            sequencer: Sequencer,
-                            parameters: Dict[str, Parameter],
-                            conditions: Dict[str, 'Condition'],
-                            instruction_block: InstructionBlock) -> None:
-        if self.__condition is None:
-            raise Exception("The Condition reference '{}' has not been resolved.".format(self.__condition_name))
-        self.__condition.build_sequence_loop(delegator, body, sequencer, parameters, conditions, instruction_block)
 
     def build_sequence_branch(self,
                               delegator: SequencingElement,
@@ -214,11 +206,16 @@ class ProxyCondition(Condition):
                               else_branch: SequencingElement,
                               sequencer: Sequencer,
                               parameters: Dict[str, Parameter],
-                              conditions: Dict[str, 'Condition'],
+                              conditions: Dict[str, Condition],
                               instruction_block: InstructionBlock) -> None:
-        if self.__condition is None:
-            raise Exception("The Condition reference '{}' has not been resolved.".format(self.__condition_name))
-        self.__condition.build_sequence_branch(delegator, if_branch, else_branch, sequencer, parameters, conditions, instruction_block)
+        
+        evaluation_result = self.__callback(self.__loop_iteration)
+        if evaluation_result is None:
+            raise ConditionEvaluationException()
+        if evaluation_result is True:
+            sequencer.push(if_branch, parameters, conditions, instruction_block)
+        else:
+            sequencer.push(else_branch, parameters, conditions, instruction_block)
 
 
 class ConditionEvaluationException(Exception):
@@ -226,3 +223,15 @@ class ConditionEvaluationException(Exception):
     
     def __str__(self) -> str:
         return "The Condition can currently not be evaluated."
+
+
+class ConditionMissingException(Exception):
+    """Indicates that a Condition object was not provided for a condition identifier."""
+
+    def __init__(self, condition_name: str) -> None:
+        super().__init__()
+        self.condition_name = condition_name
+
+    def __str__(self) -> str:
+        return "Condition <{}> was referred to but not provided in the conditions dictionary."\
+            .format(self.condition_name)
