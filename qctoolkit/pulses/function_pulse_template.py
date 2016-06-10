@@ -101,6 +101,10 @@ class FunctionPulseTemplate(PulseTemplate):
     @property
     def is_interruptable(self) -> bool:
         return False
+
+    @property
+    def num_channels(self) -> int:
+        return 1
         
     def build_sequence(self,
                        sequencer: Sequencer,

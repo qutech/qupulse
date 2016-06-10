@@ -67,8 +67,13 @@ class SequencePulseTemplate(PulseTemplate):
         for i, (template, mappings) in enumerate(subtemplates):
             subtemplates[i] = (template, {k: Expression(v) for k, v in mappings.items()})
 
+        num_channels = 0
+        if subtemplates:
+            num_channels = subtemplates[0][0].num_channels
         for template, mapping_functions in subtemplates:
             # Consistency checks
+            if template.num_channels != num_channels:
+                raise ValueError("Subtemplates have different number of channels!")
             open_parameters = template.parameter_names
             mapped_parameters = set(mapping_functions.keys())
             missing_parameters = open_parameters - mapped_parameters
@@ -110,6 +115,10 @@ class SequencePulseTemplate(PulseTemplate):
     @is_interruptable.setter
     def is_interruptable(self, new_value: bool) -> None:
         self.__is_interruptable = new_value
+
+    @property
+    def num_channels(self) -> int:
+        return self.subtemplates[0][0].num_channels
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],

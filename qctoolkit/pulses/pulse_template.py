@@ -58,6 +58,6 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=ABCMeta):
         i.e., a Sequencer can translate this PulseTemplate partially.
         """
 
-    # @abstractproperty
-    # def num_channels(self) -> int:
-    #     """Returns the number of hardware output channels this PulseTemplate uses."""
+    @abstractproperty
+    def num_channels(self) -> int:
+        """Returns the number of hardware output channels this PulseTemplate defines."""

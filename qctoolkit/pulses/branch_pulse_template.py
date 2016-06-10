@@ -41,6 +41,8 @@ class BranchPulseTemplate(PulseTemplate):
             identifier (str): A unique identifier for use in serialization. (optional)
         """
         super().__init__(identifier=identifier)
+        if if_branch.num_channels != else_branch.num_channels:
+            raise ValueError("The number of channels in the provided pulses differ!")
         self.__condition = condition
         self.__if_branch = if_branch
         self.__else_branch = else_branch
@@ -64,6 +66,10 @@ class BranchPulseTemplate(PulseTemplate):
     @property
     def is_interruptable(self) -> bool:
         raise NotImplementedError()
+
+    @property
+    def num_channels(self) -> int:
+        return self.__if_branch.num_channels
 
     def __obtain_condition_object(self, conditions: Dict[str, Condition]) -> Condition:
         try:

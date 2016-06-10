@@ -52,7 +52,7 @@ class TableWaveform(Waveform):
         return tuple(map(tuple, self.__tables))
 
     @property
-    def channels(self) -> int:
+    def num_channels(self) -> int:
         return len(self.__tables)
 
     @property
@@ -380,6 +380,10 @@ class TablePulseTemplate(PulseTemplate):
     @property
     def is_interruptable(self) -> bool:
         return False
+
+    @property
+    def num_channels(self) -> int:
+        return self.__channels
         
     def get_entries_instantiated(self, parameters: Dict[str, Parameter]) \
             -> List[List[Tuple[float, float]]]:

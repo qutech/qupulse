@@ -228,12 +228,17 @@ class DummyCondition(Condition):
 
 class DummyPulseTemplate(PulseTemplate):
 
-    def __init__(self, requires_stop: bool=False, is_interruptable: bool=False, parameter_names: Set[str]={}) -> None:
+    def __init__(self,
+                 requires_stop: bool=False,
+                 is_interruptable: bool=False,
+                 parameter_names: Set[str]={},
+                 num_channels: int=0) -> None:
         super().__init__()
         self.requires_stop_ = requires_stop
         self.is_interruptable_ = is_interruptable
         self.parameter_names_ = parameter_names
         self.build_sequence_calls = 0
+        self.num_channels_ = num_channels
 
     @property
     def parameter_names(self) -> Set[str]:
@@ -250,6 +255,10 @@ class DummyPulseTemplate(PulseTemplate):
     @property
     def is_interruptable(self) -> bool:
         return self.is_interruptable_
+
+    @property
+    def num_channels(self) -> int:
+        return self.num_channels_
 
     def build_sequence(self,
                        sequencer: Sequencer,
