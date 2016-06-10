@@ -1,0 +1,17 @@
+{
+    "external_parameters": [],
+    "is_interruptable": true,
+    "subtemplates": [
+        {
+            "mappings": {
+                "ta": "1",
+                "tb": "2",
+                "tend": "5",
+                "va": "5",
+                "vb": "0"
+            },
+            "template": "table_template"
+        }
+    ],
+    "type": "qctoolkit.pulses.sequence_pulse_template.SequencePulseTemplate"
+}

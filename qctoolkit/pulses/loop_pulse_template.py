@@ -1,14 +1,16 @@
+"""This module defines LoopPulseTemplate, a higher-order hierarchical pulse template that loops
+another PulseTemplate based on a condition."""
+
+
 from typing import Dict, Set, Optional, Any
 
-"""RELATED THIRD PARTY IMPORTS"""
-
-"""LOCAL IMPORTS"""
-from .parameters import Parameter
-from .pulse_template import PulseTemplate, MeasurementWindow
-from .conditions import Condition
-from .instructions import InstructionBlock
-from .sequencing import Sequencer
 from qctoolkit.serialization import Serializer
+
+from qctoolkit.pulses.parameters import Parameter
+from qctoolkit.pulses.pulse_template import PulseTemplate, MeasurementWindow
+from qctoolkit.pulses.conditions import Condition, ConditionMissingException
+from qctoolkit.pulses.instructions import InstructionBlock
+from qctoolkit.pulses.sequencing import Sequencer
 
 __all__ = ['LoopPulseTemplate', 'ConditionMissingException']
 
@@ -16,11 +18,20 @@ __all__ = ['LoopPulseTemplate', 'ConditionMissingException']
 class LoopPulseTemplate(PulseTemplate):
     """Conditional looping in a pulse.
     
-    A LoopPulseTemplate is a PulseTemplate which is repeated
+    A LoopPulseTemplate is a PulseTemplate which body (subtemplate) is repeated
     during execution as long as a certain condition holds.
     """
     
     def __init__(self, condition: str, body: PulseTemplate, identifier: Optional[str]=None) -> None:
+        """Create a new LoopPulseTemplate instance.
+
+        Args:
+            condition (str): A unique identifier for the looping condition. Will be used to obtain
+                the Condition object from the mapping passed in during the sequencing process.
+            body (PulseTemplate): The PulseTemplate which will be repeated as long as the condition
+                holds.
+            identifier (str): A unique identifier for use in serialization. (optional)
+        """
         super().__init__(identifier=identifier)
         self.__condition = condition
         self.__body = body
@@ -30,18 +41,20 @@ class LoopPulseTemplate(PulseTemplate):
 
     @property
     def body(self) -> PulseTemplate:
+        """This LoopPulseTemplate's body/subtemplate."""
         return self.__body
 
     @property
     def condition(self) -> str:
+        """This LoopPulseTemplate's condition."""
         return self.__condition
 
     @property
     def parameter_names(self) -> Set[str]:
         return self.__body.parameter_names
 
-    def get_measurement_windows(self, parameters: Dict[str, Parameter] = None) -> MeasurementWindow:
-        raise NotImplemented()
+    def get_measurement_windows(self, parameters: Dict[str, Parameter]=None) -> MeasurementWindow:
+        raise NotImplementedError()
 
     @property
     def parameter_declarations(self) -> Set[str]:
@@ -69,14 +82,16 @@ class LoopPulseTemplate(PulseTemplate):
                                                                        conditions,
                                                                        instruction_block)
 
-    def requires_stop(self, parameters: Dict[str, Parameter], conditions: Dict[str, Condition]) -> bool:
+    def requires_stop(self,
+                      parameters: Dict[str, Parameter],
+                      conditions: Dict[str, Condition]) -> bool:
         return self.__obtain_condition_object(conditions).requires_stop()
 
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
         data = dict(
             type=serializer.get_type_identifier(self),
             condition=self.__condition,
-            body=serializer._serialize_subpulse(self.__body)
+            body=serializer.dictify(self.__body)
         )
         return data
 
@@ -87,13 +102,3 @@ class LoopPulseTemplate(PulseTemplate):
                     identifier: Optional[str]=None) -> 'LoopPulseTemplate':
         body = serializer.deserialize(body)
         return LoopPulseTemplate(condition, body, identifier=identifier)
-
-
-class ConditionMissingException(Exception):
-
-    def __init__(self, condition_name: str) -> None:
-        super().__init__()
-        self.condition_name = condition_name
-
-    def __str__(self) -> str:
-        return "Condition <{}> was referred to but not provided in the conditions dictionary.".format(self.condition_name)

@@ -1,7 +1,8 @@
 import unittest
 from typing import Union
 
-from qctoolkit.pulses.parameters import ConstantParameter, ParameterDeclaration, ParameterNotProvidedException, ParameterValueIllegalException
+from qctoolkit.expressions import Expression
+from qctoolkit.pulses.parameters import ConstantParameter, MappedParameter, ParameterDeclaration, ParameterNotProvidedException, ParameterValueIllegalException
 
 from tests.serialization_dummies import DummySerializer
 from tests.pulses.sequencing_dummies import DummyParameter
@@ -45,7 +46,51 @@ class ConstantParameterTest(unittest.TestCase):
         self.assertEqual(3.1, constant_parameter.get_value())
         self.assertIsNone(constant_parameter.identifier)
 
-    
+
+class MappedParameterTest(unittest.TestCase):
+
+    def test_requires_stop_and_get_value(self) -> None:
+        p = MappedParameter(Expression("foo + bar * hugo"))
+        self.assertRaises(ParameterNotProvidedException, lambda: p.requires_stop)
+        self.assertRaises(ParameterNotProvidedException, p.get_value)
+
+        foo = DummyParameter(-1.1)
+        bar = DummyParameter(0.5)
+        hugo = DummyParameter(5.2, requires_stop=True)
+        ilse = DummyParameter(2356.4, requires_stop=True)
+
+        p.dependencies = {'foo': foo, 'hugo': hugo, 'ilse': ilse}
+        self.assertRaises(ParameterNotProvidedException, lambda: p.requires_stop)
+        self.assertRaises(ParameterNotProvidedException, p.get_value)
+
+        p.dependencies = {'foo': foo, 'bar': bar, 'hugo': hugo}
+        self.assertTrue(p.requires_stop)
+        self.assertRaises(Exception, p.get_value)
+
+        hugo = DummyParameter(5.2, requires_stop=False)
+        p.dependencies = {'foo': foo, 'bar': bar, 'hugo': hugo, 'ilse': ilse}
+        self.assertFalse(p.requires_stop)
+        self.assertEqual(1.5, p.get_value())
+
+    def test_repr(self) -> None:
+        p = MappedParameter(Expression("foo + bar * hugo"))
+        self.assertIsInstance(repr(p), str)
+
+    def test_get_serialization_data(self) -> None:
+        exp = Expression("foo + bar * hugo")
+        p = MappedParameter(exp)
+        serializer = DummySerializer()
+        data = p.get_serialization_data(serializer)
+        self.assertEqual(dict(type=serializer.get_type_identifier(p), expression=str(id(exp))), data)
+
+    def test_deserialize(self) -> None:
+        serializer = DummySerializer()
+        exp = Expression("foo + bar * hugo")
+        serializer.subelements[id(exp)] = exp
+        p = MappedParameter.deserialize(serializer, expression=id(exp))
+        self.assertIsNone(p.identifier)
+
+
 class ParameterDeclarationTest(unittest.TestCase):
     
     def __test_valid_values(self, **kwargs):

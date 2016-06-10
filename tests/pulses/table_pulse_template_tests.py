@@ -1,8 +1,8 @@
 import unittest
 import numpy
 
-from qctoolkit.pulses.instructions import EXECInstruction, WaveformTableEntry
-from qctoolkit.pulses.table_pulse_template import TablePulseTemplate, TableWaveform, TableEntry
+from qctoolkit.pulses.instructions import EXECInstruction
+from qctoolkit.pulses.table_pulse_template import TablePulseTemplate, TableWaveform, TableEntry, WaveformTableEntry
 from qctoolkit.pulses.parameters import ParameterDeclaration, ParameterNotProvidedException, ParameterValueIllegalException
 from qctoolkit.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy, JumpInterpolationStrategy
 
@@ -433,18 +433,18 @@ class TablePulseTemplateTest(unittest.TestCase):
         pulse = TablePulseTemplate.from_array(times, voltages)
         entries = [[]]
         for (time, voltage) in zip(times, voltages):
-            entries[0].append((time, voltage, HoldInterpolationStrategy()))
+            entries[0].append(TableEntry(time, voltage, HoldInterpolationStrategy()))
         self.assertEqual(entries, pulse.entries)
 
     def test_from_array_multi(self) -> None:
         times = numpy.array([0, 1, 3])
         voltages = numpy.array([[1,2,3],
-                                [2,3,4]]).T
+                                [2,3,4]]).T # todo: why transposed??
         pulse = TablePulseTemplate.from_array(times, voltages)
         entries = [[],[]]
         for i, channel in enumerate(voltages.T):
             for (time, voltage) in zip(times, channel):
-                entries[i].append((time, voltage, HoldInterpolationStrategy()))
+                entries[i].append(TableEntry(time, voltage, HoldInterpolationStrategy()))
         self.assertEqual(entries, pulse.entries)
 
     def test_add_entry_multi_invalid_channel(self):
@@ -549,6 +549,12 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
         instruction_block = DummyInstructionBlock()
         table.build_sequence(sequencer, {}, {}, instruction_block)
         self.assertFalse(instruction_block.instructions)
+
+    def test_requires_stop_missing_param(self) -> None:
+        table = TablePulseTemplate()
+        foo_decl = ParameterDeclaration('foo')
+        table.add_entry(foo_decl, 'v', 'linear')
+        self.assertRaises(ParameterNotProvidedException, table.requires_stop, {'foo': DummyParameter(0, False)}, {})
 
     def test_requires_stop(self) -> None:
         table = TablePulseTemplate()

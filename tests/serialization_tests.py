@@ -37,7 +37,7 @@ class NestedDummySerializable(Serializable):
         raise NotImplemented()
 
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
-        return dict(data=serializer._serialize_subpulse(self.data))
+        return dict(data=serializer.dictify(self.data))
 
 
 class SerializableTests(unittest.TestCase):
@@ -192,59 +192,73 @@ class SerializerTests(unittest.TestCase):
 
     def test_serialize_subpulse_no_identifier(self) -> None:
         serializable = DummySerializable(data='bar')
-        serialized = self.serializer._serialize_subpulse(serializable)
-        self.assertEqual(serializable.get_serialization_data(self.serializer), serialized)
+        serialized = self.serializer.dictify(serializable)
+        expected = serializable.get_serialization_data(self.serializer)
+        expected['type'] = self.serializer.get_type_identifier(serializable)
+        self.assertEqual(expected, serialized)
 
     def test_serialize_subpulse_identifier(self) -> None:
         serializable = DummySerializable(identifier='bar')
-        serialized = self.serializer._serialize_subpulse(serializable)
+        serialized = self.serializer.dictify(serializable)
         self.assertEqual(serializable.identifier, serialized)
 
     def test_serialize_subpulse_duplicate_identifier(self) -> None:
         serializable = DummySerializable(identifier='bar')
-        self.serializer._serialize_subpulse(serializable)
-        self.serializer._serialize_subpulse(serializable)
+        self.serializer.dictify(serializable)
+        self.serializer.dictify(serializable)
         serializable = DummySerializable(data='this is other data than before', identifier='bar')
         with self.assertRaises(Exception):
-            self.serializer._serialize_subpulse(serializable)
+            self.serializer.dictify(serializable)
 
-    def test_dictify_no_identifier(self) -> None:
+    def test_collection_dictionaries_no_identifier(self) -> None:
         serializable = DummySerializable(data='bar')
-        dictified = self.serializer.dictify(serializable)
-        self.assertEqual({'': serializable.get_serialization_data(self.serializer)}, dictified)
+        dictified = self.serializer._Serializer__collect_dictionaries(serializable)
+        expected = {'': serializable.get_serialization_data(self.serializer)}
+        expected['']['type'] = self.serializer.get_type_identifier(serializable)
+        self.assertEqual(expected, dictified)
 
-    def test_dictify_identifier(self) -> None:
+    def test_collection_dictionaries_identifier(self) -> None:
         serializable = DummySerializable(data='bar', identifier='foo')
-        dicified = self.serializer.dictify(serializable)
-        self.assertEqual({serializable.identifier: serializable.get_serialization_data(self.serializer)}, dicified)
+        dicified = self.serializer._Serializer__collect_dictionaries(serializable)
+        expected = {serializable.identifier: serializable.get_serialization_data(self.serializer)}
+        expected[serializable.identifier]['type'] = self.serializer.get_type_identifier(serializable)
+        self.assertEqual(expected, dicified)
 
     def test_dicitify_no_identifier_one_nesting_no_identifier(self) -> None:
         inner_serializable = DummySerializable(data='bar')
         serializable = NestedDummySerializable(data=inner_serializable)
-        dicitified = self.serializer.dictify(serializable)
-        self.assertEqual({'': serializable.get_serialization_data(self.serializer)}, dicitified)
+        dicitified = self.serializer._Serializer__collect_dictionaries(serializable)
+        expected = {'': serializable.get_serialization_data(self.serializer)}
+        expected['']['type'] = self.serializer.get_type_identifier(serializable)
+        self.assertEqual(expected, dicitified)
 
-    def test_dictify_no_identifier_one_nesting_identifier(self) -> None:
+    def test_collection_dictionaries_no_identifier_one_nesting_identifier(self) -> None:
         inner_serializable = DummySerializable(data='bar', identifier='foo')
         serializable = NestedDummySerializable(data=inner_serializable)
-        dicitified = self.serializer.dictify(serializable)
-        self.assertEqual({'': serializable.get_serialization_data(self.serializer),
-                          inner_serializable.identifier: inner_serializable.get_serialization_data(self.serializer)},
-                         dicitified)
+        dicitified = self.serializer._Serializer__collect_dictionaries(serializable)
+        expected = {'': serializable.get_serialization_data(self.serializer),
+                    inner_serializable.identifier: inner_serializable.get_serialization_data(self.serializer)}
+        expected['']['type'] = self.serializer.get_type_identifier(serializable)
+        expected[inner_serializable.identifier]['type'] = self.serializer.get_type_identifier(inner_serializable)
+        self.assertEqual(expected, dicitified)
 
-    def test_dictify_identifier_one_nesting_no_identifier(self) -> None:
+    def test_collection_dictionaries_identifier_one_nesting_no_identifier(self) -> None:
         inner_serializable = DummySerializable(data='bar')
         serializable = NestedDummySerializable(data=inner_serializable, identifier='outer_foo')
-        dicitified = self.serializer.dictify(serializable)
-        self.assertEqual({serializable.identifier: serializable.get_serialization_data(self.serializer)}, dicitified)
+        dicitified = self.serializer._Serializer__collect_dictionaries(serializable)
+        expected = {serializable.identifier: serializable.get_serialization_data(self.serializer)}
+        expected[serializable.identifier]['type'] = self.serializer.get_type_identifier(serializable)
+        self.assertEqual(expected, dicitified)
 
-    def test_dictify_identifier_one_nesting_identifier(self) -> None:
+    def test_collection_dictionaries_identifier_one_nesting_identifier(self) -> None:
         inner_serializable = DummySerializable(data='bar', identifier='foo')
         serializable = NestedDummySerializable(data=inner_serializable, identifier='outer_foo')
-        dicitified = self.serializer.dictify(serializable)
-        self.assertEqual({inner_serializable.identifier: inner_serializable.get_serialization_data(self.serializer),
-                          serializable.identifier: serializable.get_serialization_data(self.serializer)},
-                         dicitified)
+        dicitified = self.serializer._Serializer__collect_dictionaries(serializable)
+        expected = {inner_serializable.identifier: inner_serializable.get_serialization_data(self.serializer),
+                    serializable.identifier: serializable.get_serialization_data(self.serializer)}
+        expected[serializable.identifier]['type'] = self.serializer.get_type_identifier(serializable)
+        expected[inner_serializable.identifier]['type'] = self.serializer.get_type_identifier(inner_serializable)
+        self.assertEqual(expected, dicitified)
 
     def __serialization_test_helper(self, serializable: Serializable, expected: Dict[str, str]) -> None:
         self.serializer.serialize(serializable)
@@ -254,17 +268,20 @@ class SerializerTests(unittest.TestCase):
     def test_serialize_no_identifier(self) -> None:
         serializable = DummySerializable(data='bar')
         expected = {'main': serializable.get_serialization_data(self.serializer)}
+        expected['main']['type'] = self.serializer.get_type_identifier(serializable)
         self.__serialization_test_helper(serializable, expected)
 
     def test_serialize_identifier(self) -> None:
         serializable = DummySerializable(data='bar', identifier='foo')
         expected = {serializable.identifier: serializable.get_serialization_data(self.serializer)}
+        expected[serializable.identifier]['type'] = self.serializer.get_type_identifier(serializable)
         self.__serialization_test_helper(serializable, expected)
 
     def test_serialize_no_identifier_one_nesting_no_identifier(self) -> None:
         inner_serializable = DummySerializable(data='bar')
         serializable = NestedDummySerializable(data=inner_serializable)
         expected = {'main': serializable.get_serialization_data(self.serializer)}
+        expected['main']['type'] = self.serializer.get_type_identifier(serializable)
         self.__serialization_test_helper(serializable, expected)
 
     def test_serialize_no_identifier_one_nesting_identifier(self) -> None:
@@ -272,12 +289,15 @@ class SerializerTests(unittest.TestCase):
         serializable = NestedDummySerializable(data=inner_serializable)
         expected = {'main': serializable.get_serialization_data(self.serializer),
                     inner_serializable.identifier: inner_serializable.get_serialization_data(self.serializer)}
+        expected['main']['type'] = self.serializer.get_type_identifier(serializable)
+        expected[inner_serializable.identifier]['type'] = self.serializer.get_type_identifier(inner_serializable)
         self.__serialization_test_helper(serializable, expected)
 
     def test_serialize_identifier_one_nesting_no_identifier(self) -> None:
         inner_serializable = DummySerializable(data='bar')
         serializable = NestedDummySerializable(data=inner_serializable, identifier='outer_foo')
         expected = {serializable.identifier: serializable.get_serialization_data(self.serializer)}
+        expected[serializable.identifier]['type'] = self.serializer.get_type_identifier(serializable)
         self.__serialization_test_helper(serializable, expected)
 
     def test_serialize_identifier_one_nesting_identifier(self) -> None:
@@ -285,6 +305,8 @@ class SerializerTests(unittest.TestCase):
         serializable = NestedDummySerializable(data=inner_serializable, identifier='outer_foo')
         expected = {serializable.identifier: serializable.get_serialization_data(self.serializer),
                     inner_serializable.identifier: inner_serializable.get_serialization_data(self.serializer)}
+        expected[serializable.identifier]['type'] = self.serializer.get_type_identifier(serializable)
+        expected[inner_serializable.identifier]['type'] = self.serializer.get_type_identifier(inner_serializable)
         self.__serialization_test_helper(serializable, expected)
 
     def test_deserialize_dict(self) -> None:

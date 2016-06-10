@@ -1,19 +1,26 @@
+"""This module defines parameters and parameter declaration for the usage in pulse modelling.
+
+Classes:
+    - Parameter: A base class representing a single pulse parameter.
+    - ConstantParameter: A single parameter with a constant value.
+    - MappedParameter: A parameter whose value is mathematically computed from another parameter.
+    - ParameterDeclaration: The declaration of a parameter within a pulse template.
+    - ParameterNotProvidedException.
+    - ParameterValueIllegalException.
+"""
+
 from abc import ABCMeta, abstractmethod, abstractproperty
-from typing import Optional, Union, Dict, Tuple, Any
-import logging
+from typing import Optional, Union, Dict, Any, Iterable
 
-"""RELATED THIRD PARTY IMPORTS"""
-
-"""LOCAL IMPORTS"""
 from qctoolkit.serialization import Serializable, Serializer
+from qctoolkit.expressions import Expression
+from qctoolkit.comparable import Comparable
 
-logger = logging.getLogger(__name__)
+__all__ = ["Parameter", "ParameterDeclaration", "ConstantParameter",
+           "ParameterNotProvidedException", "ParameterValueIllegalException"]
 
 
-__all__ = ["Parameter", "ParameterDeclaration", "ConstantParameter", "ParameterNotProvidedException", "ParameterValueIllegalException"]
-
-
-class Parameter(Serializable, metaclass = ABCMeta):
+class Parameter(Serializable, metaclass=ABCMeta):
     """A parameter for pulses.
     
     Parameter specifies a concrete value which is inserted instead
@@ -31,8 +38,13 @@ class Parameter(Serializable, metaclass = ABCMeta):
 
     @abstractproperty
     def requires_stop(self) -> bool:
-        """Return True if the evaluation of this Parameter instance requires a stop in execution/sequencing, e.g., because it
-        depends on data that is only measured in during the next execution."""
+        """Query whether the evaluation of this Parameter instance requires an interruption in
+        execution/sequencing, e.g., because it depends on data that is only measured in during the
+        next execution.
+
+        Returns:
+            True, if evaluating this Parameter instance requires an interruption.
+        """
     
     def __float__(self) -> float:
         return float(self.get_value())
@@ -42,6 +54,11 @@ class ConstantParameter(Parameter):
     """A pulse parameter with a constant value."""
     
     def __init__(self, value: float) -> None:
+        """Create a ConstantParameter instance.
+
+        Args:
+            value (float): The value of the parameter
+        """
         super().__init__()
         self.__value = value
         
@@ -55,37 +72,105 @@ class ConstantParameter(Parameter):
     def __repr__(self) -> str:
         return "<ConstantParameter {0}>".format(self.__value)
 
-    def get_serialization_data(self, serializer: Serializer) -> None:
+    def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
         return dict(type=serializer.get_type_identifier(self), constant=self.__value)
 
     @staticmethod
     def deserialize(serializer: Serializer, constant: float) -> 'ConstantParameter':
         return ConstantParameter(constant)
 
-#class ParameterValueProvider(metaclass = ABCMeta):
-#
-#    @abstractmethod
-#    def get_value(self, parameters: Dict[str, Parameter]) -> float:
-#        pass
+
+class MappedParameter(Parameter):
+    """A pulse parameter whose value is derived from other parameters via some mathematical
+    expression.
+
+    The dependencies of a MappedParameter instance are defined by the free variables appearing
+    in the expression that defines how its value is derived.
+
+    MappedParameter holds a dictionary which assign Parameter objects to these dependencies.
+    Evaluation of the MappedParameter will raise a ParameterNotProvidedException if a Parameter
+    object is missing for some dependency.
+    """
+
+    def __init__(self,
+                 expression: Expression,
+                 dependencies: Optional[Dict[str, Parameter]]=None) -> None:
+        """Create a MappedParameter instance.
+
+        Args:
+            expression (Expression): The expression defining how the the value of this
+                MappedParameter instance is derived from its dependencies.
+             dependencies (Dict(str -> Parameter)): Parameter objects of the dependencies. May also
+                be defined via the dependencies public property. (Optional)
+        """
+        super().__init__()
+        self.__expression = expression
+        self.dependencies = dependencies
+        if self.dependencies is None:
+            self.dependencies = dict()
+
+    def __collect_dependencies(self) -> Iterable[Parameter]:
+        # filter only real dependencies from the dependencies dictionary
+        try:
+            return {dependency_name: self.dependencies[dependency_name]
+                    for dependency_name in self.__expression.variables()}
+        except KeyError as key_error:
+            raise ParameterNotProvidedException(str(key_error)) from key_error
+
+    def get_value(self) -> float:
+        if self.requires_stop:
+            raise Exception("Cannot evaluate MappedParameter because at least one dependency "
+                            "cannot be evaluated.")
+        dependencies = self.__collect_dependencies()
+        variables = {k: float(dependencies[k]) for k in dependencies}
+        return self.__expression.evaluate(**variables)
+
+    @property
+    def requires_stop(self) -> bool:
+        try:
+            return any([p.requires_stop for p in self.__collect_dependencies().values()])
+        except:
+            raise
+
+    def __repr__(self) -> str:
+        return "<MappedParameter {0} depending on {1}>".format(
+            self.__expression, self.dependencies
+        )
+
+    def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
+        return dict(type=serializer.get_type_identifier(self),
+                    expression=serializer.dictify(self.__expression))
+
+    @staticmethod
+    def deserialize(serializer: Serializer, expression: str) -> 'MappedParameter':
+        return MappedParameter(serializer.deserialize(expression))
 
 
-class ParameterDeclaration(Serializable):
+class ParameterDeclaration(Serializable, Comparable):
     """A declaration of a parameter required by a pulse template.
     
     PulseTemplates may declare parameters to allow for variations of values in an otherwise
     static pulse structure. ParameterDeclaration represents a declaration of such a parameter
-    and allows for the definition of boundaries and a default value for a parameter.
+    and allows for the definition of boundaries and a default value for a parameter. Boundaries
+    may be either defined as constant value or as references to another ParameterDeclaration object.
     """
     
     BoundaryValue = Union[float, 'ParameterDeclaration']
     
-    def __init__(self, name: str, min: BoundaryValue = float('-inf'), max: BoundaryValue = float('+inf'), default: Optional[float] = None) -> None:
+    def __init__(self, name: str,
+                 min: BoundaryValue=float('-inf'),
+                 max: BoundaryValue=float('+inf'),
+                 default: Optional[float]=None) -> None:
         """Creates a ParameterDeclaration object.
         
         Args:
-            min (float, ParameterDeclaration): An optional real number or ParameterDeclaration object specifying the minimum value allowed.
-            max (float, ParameterDeclaration): An optional real number or ParameterDeclaration object specifying the maximum value allowed.
-            default (float): An optional real number specifying a default value for the declared pulse template parameter.
+            name (str): A name for the declared parameter.
+            min (float or ParameterDeclaration): An optional real number or
+                ParameterDeclaration object specifying the minimum value allowed. (default: -inf)
+            max (float or ParameterDeclaration): An optional real number or
+                ParameterDeclaration object specifying the maximum value allowed. (default: +inf)
+            default (float): An optional real number specifying a default value for the declared
+                pulse template parameter.
         """
         super().__init__(None)
         self.__name = name
@@ -98,30 +183,47 @@ class ParameterDeclaration(Serializable):
         self.__assert_values_valid()
 
     def __assert_values_valid(self) -> None:
+        # ensures that min <= default <= max or raises a ValueError
         if self.absolute_min_value > self.absolute_max_value:
-            raise ValueError("Max value ({0}) is less than min value ({1}).".format(self.max_value, self.min_value))
+            raise ValueError("Max value ({0}) is less than min value ({1}).".format(
+                    self.max_value, self.min_value
+                )
+            )
         
         if isinstance(self.min_value, ParameterDeclaration):
             if self.min_value.absolute_max_value > self.absolute_max_value:
-                raise ValueError("Max value ({0}) is less than min value ({1}).".format(self.max_value, self.min_value))
+                raise ValueError("Max value ({0}) is less than min value ({1}).".format(
+                        self.max_value, self.min_value
+                    )
+                )
             
         if isinstance(self.max_value, ParameterDeclaration):
             if self.max_value.absolute_min_value < self.absolute_min_value:
-                raise ValueError("Max value ({0}) is less than min value ({1}).".format(self.max_value, self.min_value))
+                raise ValueError("Max value ({0}) is less than min value ({1}).".format(
+                        self.max_value, self.min_value
+                    )
+                )
             
         if self.default_value is not None and self.absolute_min_value > self.default_value:
-            raise ValueError("Default value ({0}) is less than min value ({1}).".format(self.default_value, self.min_value))
+            raise ValueError("Default value ({0}) is less than min value ({1}).".format(
+                    self.default_value, self.min_value
+                )
+            )
         
         if self.default_value is not None and self.absolute_max_value < self.default_value:
-            raise ValueError("Default value ({0}) is greater than max value ({1}).".format(self.__default_value, self.__max_value))
+            raise ValueError("Default value ({0}) is greater than max value ({1}).".format(
+                    self.__default_value, self.__max_value
+                )
+            )
         
     @property
     def name(self) -> str:
+        """The name of the declared parameter."""
         return self.__name
         
     @property
     def min_value(self) -> BoundaryValue:
-        """Return this ParameterDeclaration's minimum value or reference."""
+        """This ParameterDeclaration's minimum value or reference."""
         return self.__min_value
     
     @min_value.setter
@@ -150,7 +252,7 @@ class ParameterDeclaration(Serializable):
     
     @property
     def max_value(self) ->  BoundaryValue:
-        """Return this ParameterDeclaration's maximum value or reference."""
+        """This ParameterDeclaration's maximum value or reference."""
         return self.__max_value
     
     @max_value.setter
@@ -179,7 +281,7 @@ class ParameterDeclaration(Serializable):
         
     @property
     def default_value(self) -> Optional[float]:
-        """Return this ParameterDeclaration's default value."""
+        """This ParameterDeclaration's default value."""
         return self.__default_value
     
     @property
@@ -193,6 +295,7 @@ class ParameterDeclaration(Serializable):
             return self.min_value.absolute_min_value
         else:
             return self.min_value
+
     @property
     def absolute_max_value(self) -> float:
         """Return this ParameterDeclaration's maximum value.
@@ -206,11 +309,26 @@ class ParameterDeclaration(Serializable):
             return self.max_value
 
     def is_parameter_valid(self, p: Parameter) -> bool:
-        """Checks whether a given parameter satisfies this ParameterDeclaration.
+        """Check whether a given parameter satisfies this ParameterDeclaration statically.
         
         A parameter is valid if all of the following statements hold:
-        - If the declaration specifies a minimum value, the parameter's value must be greater or equal
+        - If the declaration specifies a minimum value, the parameter's value must be greater or
+            equal
         - If the declaration specifies a maximum value, the parameter's value must be less or equal
+
+        Checks only against the static boundaries. For example, if the min value for this
+        ParameterDeclaration would be another ParameterDeclaration named 'foo' with a min value of
+        3.5, this method only checks whether the given parameter value is greater than or equal to
+        3.5. However, the implicit meaning of the reference minimum declaration is, that the value
+        provided for this ParameterDeclaration must indeed by greater than or equal than the value
+        provided for the referenced minimum declaration.
+
+        Args:
+            p (Parameter): The Parameter object checked for validity.
+        Returns:
+            True, if p is a valid parameter for this ParameterDeclaration.
+        See also:
+            check_parameter_set_valid()
         """
         parameter_value = float(p)
         is_valid = True
@@ -219,12 +337,44 @@ class ParameterDeclaration(Serializable):
         return is_valid
     
     def get_value(self, parameters: Dict[str, Parameter]) -> float:
+        """Retrieve the value of the parameter corresponding to this ParameterDeclaration object
+        from a set of parameter assignments.
+
+        Args:
+            parameters (Dict(str -> Parameter)): A mapping of parameter names to Parameter objects.
+        Returns:
+            The value of the parameter corresponding to this ParameterDeclaration as a float.
+        Raises:
+            ParameterNotProvidedException if no parameter is assigned to the name of this
+                ParameterDeclaration or any other ParameterDeclaration required to evaluate the
+                boundary conditions of this ParameterDeclaration.
+            ParameterValueIllegalException if a parameter exists but its value exceeds the bounds
+                specified by the corresponding ParameterDeclaration.
+        """
         value = self.__get_value_internal(parameters)
-        if not self.__check_parameter_set_valid(parameters):
+        if not self.check_parameter_set_valid(parameters):
             raise ParameterValueIllegalException(self, value)
         return value
 
-    def __check_parameter_set_valid(self, parameters: Dict[str, Parameter]) -> bool:
+    def check_parameter_set_valid(self, parameters: Dict[str, Parameter]) -> bool:
+        """Check whether an entire set of parameters is consistent with this ParameterDeclaration.
+
+        Recursively evaluates referenced min and max ParameterDeclarations (if existent) and checks
+        whether the values provided for these compare correctly, i.e., does not only perform static
+        boundary checks.
+
+        Args:
+            parameters (Dict(str -> Parameter)): A mapping of parameter names to Parameter objects.
+        Returns:
+            True, if the values provided for the parameters satisfy all boundary checks for this
+                ParameterDeclaration.
+        Raises:
+            ParameterNotProvidedException if no parameter is assigned to the name of this
+                ParameterDeclaration or any other ParameterDeclaration required to evaluate the
+                boundary conditions of this ParameterDeclaration.
+            ParameterValueIllegalException if a parameter exists but its value exceeds the bounds
+                specified by the corresponding ParameterDeclaration.
+        """
         parameter_value = self.__get_value_internal(parameters)
 
         # get actual instantiated values for boundaries.
@@ -240,7 +390,8 @@ class ParameterDeclaration(Serializable):
 
     def __get_value_internal(self, parameters: Dict[str, Parameter]) -> float:
         try:
-            return float(parameters[self.name]) # float() wraps get_value for Parameters and works for normal floats also
+            return float(parameters[self.name]) # float() wraps get_value for Parameters and works
+                                                # for normal floats also
         except KeyError:
             if self.default_value is not None:
                 return self.default_value
@@ -254,9 +405,15 @@ class ParameterDeclaration(Serializable):
         max_value_str = self.absolute_max_value
         if isinstance(self.max_value, ParameterDeclaration):
             max_value_str = "Parameter '{0}' (max {1})".format(self.max_value.name, max_value_str)
-        return "{4} '{0}', range ({1}, {2}), default {3}".format(self.name, min_value_str, max_value_str, self.default_value, type(self))
+        return "{4} '{0}', range ({1}, {2}), default {3}".format(
+            self.name, min_value_str, max_value_str, self.default_value, type(self)
+        )
 
-    def __compute_compare_key(self) -> Tuple[str, Union[float, str], Union[float, str], Optional[float]]:
+    def __repr__(self) -> str:
+        return "<"+self.__str__()+">"
+
+    @property
+    def compare_key(self) -> Any:
         min_value = self.min_value
         if isinstance(min_value, ParameterDeclaration):
             min_value = min_value.name
@@ -264,16 +421,6 @@ class ParameterDeclaration(Serializable):
         if isinstance(max_value, ParameterDeclaration):
             max_value = max_value.name
         return (self.name, min_value, max_value, self.default_value)
-
-    def __repr__(self) -> str:
-        return "<"+self.__str__()+">"
-
-    def __eq__(self, other) -> bool:
-        return (isinstance(other, ParameterDeclaration) and
-                self.__compute_compare_key() == other.__compute_compare_key())
-
-    def __hash__(self) -> int:
-        return hash(self.__compute_compare_key())
 
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
         data = dict()
@@ -315,11 +462,13 @@ class ParameterNotProvidedException(Exception):
         self.parameter_name = parameter_name
         
     def __str__(self) -> str:
-        return "No value was provided for parameter '{0}' and no default value was specified.".format(self.parameter_name)
+        return "No value was provided for parameter '{0}' " \
+               "and no default value was specified.".format(self.parameter_name)
 
 
 class ParameterValueIllegalException(Exception):
-    """Indicates that the value provided for a parameter is illegal, i.e., is outside the parameter's bounds or of wrong type."""
+    """Indicates that the value provided for a parameter is illegal, i.e., is outside the
+    parameter's bounds or of wrong type."""
 
     def __init__(self, parameter_declaration: ParameterDeclaration, parameter_value: float) -> None:
         super().__init__()
@@ -328,5 +477,5 @@ class ParameterValueIllegalException(Exception):
 
     def __str__(self) -> str:
         return "The value {0} provided for parameter {1} is illegal (min = {2}, max = {3})".format(
-            self.parameter_value, self.parameter_declaration.name, self.parameter_declaration.min_value,
-            self.parameter_declaration.max_value)
+            self.parameter_value, self.parameter_declaration.name,
+            self.parameter_declaration.min_value, self.parameter_declaration.max_value)

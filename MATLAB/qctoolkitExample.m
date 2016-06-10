@@ -35,8 +35,7 @@ parameters.foo = 80;
 sequencer.push(table_pulse_1, parameters);
 sequencer.push(table_pulse_1, parameters);
 
-block = sequencer.build();
-sequence = block.compile_sequence();
+sequence = sequencer.build();
 
 % Convert the instruction sequence to pulse_control pulses and a
 % pulse_group

@@ -1,18 +1,17 @@
-from bidict import bidict
-import visa
-import datetime
-import numpy as np
 from functools import reduce
 import socket
 import select
 from itertools import chain, repeat
-import ipdb 
 
-from .awg import AWG, DummyAWG, ProgramOverwriteException, OutOfWaveformMemoryException
+import visa
+import numpy as np
+
+from .awg import AWG, ProgramOverwriteException
 from qctoolkit.pulses.instructions import EXECInstruction
 
 
 __all__ = ['TektronixAWG', 'AWGSocket', 'EchoTestServer']
+
 
 class EchoTestServer():
     def __init__(self, port):
@@ -28,6 +27,7 @@ class EchoTestServer():
             if data:
                 client.send(data)
             client.close()
+
 
 def grouper(n, iterable, padvalue=None):
     return zip(*[chain(iterable, repeat(padvalue, n-1))]*n)

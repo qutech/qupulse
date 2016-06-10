@@ -71,6 +71,7 @@ if errorlevel 9009 (
 
 :sphinx_ok
 
+sphinx-apidoc --no-toc -o source ../qctoolkit
 
 if "%1" == "html" (
 	%SPHINXBUILD% -b html %ALLSPHINXOPTS% %BUILDDIR%/html
