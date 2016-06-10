@@ -427,6 +427,26 @@ class TablePulseTemplateTest(unittest.TestCase):
         expected = [[float(x)] for x in numbers]
         self.assertEqual(expected, result_sampled.tolist())
 
+    def test_get_entries_instantiated_two_channels(self) -> None:
+        table = TablePulseTemplate(channels=2)
+        table.add_entry('foo', 4)
+        parameters = {'foo': 10}
+
+        entries = table.get_entries_instantiated(parameters)
+
+        expected = [
+            [
+                TableEntry(0, 0, HoldInterpolationStrategy()),
+                TableEntry(10, 4, HoldInterpolationStrategy()),
+            ],
+            [
+                TableEntry(0, 0, HoldInterpolationStrategy()),
+                TableEntry(10, 0, HoldInterpolationStrategy())
+            ]
+        ]
+
+        self.assertEqual(expected, entries)
+
     def test_from_array_1D(self) -> None:
         times = numpy.array([0, 1, 3])
         voltages = numpy.array([5, 0, 5])
@@ -447,12 +467,12 @@ class TablePulseTemplateTest(unittest.TestCase):
                 entries[i].append(TableEntry(time, voltage, HoldInterpolationStrategy()))
         self.assertEqual(entries, pulse.entries)
 
-    def test_add_entry_multi_invalid_channel(self):
+    def test_add_entry_multi_invalid_channel(self) -> None:
         pulse = TablePulseTemplate()
         with self.assertRaises(ValueError):
             pulse.add_entry(2,2, channel=1)
 
-    def test_add_entry_multi(self):
+    def test_add_entry_multi(self) -> None:
         pulse = TablePulseTemplate(channels=2)
         pulse.add_entry(1,1, channel=0)
         pulse.add_entry(1,1, channel=1)
@@ -460,6 +480,24 @@ class TablePulseTemplateTest(unittest.TestCase):
                     (1,1,HoldInterpolationStrategy())],
                    [(0,0,HoldInterpolationStrategy()),
                     (1,1,HoldInterpolationStrategy())]]
+        self.assertEqual(entries, pulse.entries)
+
+    def test_add_entry_multi_same_time_param(self) -> None:
+        pulse = TablePulseTemplate(channels=2)
+        pulse.add_entry(1, 3)
+        pulse.add_entry('foo', 'bar')
+        pulse.add_entry(7, 3)
+
+        pulse.add_entry(0, -5, channel=1)
+        pulse.add_entry('foo', 0, channel=1)
+        pulse.add_entry(5, 'bar', channel=1)
+        entries[[(0, 0, HoldInterpolationStrategy()),
+                 (1, 3, HoldInterpolationStrategy()),
+                 (ParameterDeclaration('foo', min=1, max=5), ParameterDeclaration('bar'), HoldInterpolationStrategy()),
+                 (7, 3, HoldInterpolationStrategy())],
+                [(0, -5, HoldInterpolationStrategy()),
+                 (ParameterDeclaration('foo', min=1, max=5), 0, HoldInterpolationStrategy()),
+                 (5, ParameterDeclaration('bar'), HoldInterpolationStrategy)]]
         self.assertEqual(entries, pulse.entries)
 
     def test_measurement_windows_multi(self) -> None:
@@ -473,6 +511,7 @@ class TablePulseTemplateTest(unittest.TestCase):
         pulse.add_entry(10, 0, channel=1)
         windows = pulse.get_measurement_windows()
         self.assertEqual([(0,10)], windows)
+
 
 class TablePulseTemplateSerializationTests(unittest.TestCase):
 
@@ -573,10 +612,49 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
         for expected_result, parameter_set, condition_set in test_sets:
             self.assertEqual(expected_result, table.requires_stop(parameter_set, condition_set))
 
-    def test_identifier(self):
+    def test_identifier(self) -> None:
         identifier = 'some name'
         pulse = TablePulseTemplate(identifier=identifier)
         self.assertEqual(pulse.identifier, identifier)
+
+    def test_build_sequence_multi(self) -> None:
+        table = TablePulseTemplate(channels=2)
+        table.add_entry(1, 3)
+        table.add_entry('foo', 'bar')
+        table.add_entry(7, 3)
+
+        table.add_entry(0, -5, channel=1)
+        table.add_entry('foo', 0, channel=1)
+        table.add_entry(5, 'bar', channel=1)
+
+        parameters = {'foo': 3, 'bar': 17}
+
+        instantiated_entries = table.get_entries_instantiated(parameters)
+
+        sequencer = DummySequencer()
+        instruction_block = DummyInstructionBlock()
+        table.build_sequence(sequencer, parameters, {}, instruction_block)
+        waveform = TableWaveform(instantiated_entries)
+        self.assertEqual(1, len(instruction_block.instructions))
+        instruction = instruction_block.instructions[0]
+        self.assertIsInstance(instruction, EXECInstruction)
+        self.assertEqual(waveform, instruction.waveform)
+
+    def test_build_sequence_multi_one_channel_empty(self) -> None:
+        table = TablePulseTemplate(channels=2)
+        table.add_entry('foo', 4)
+        parameters = {'foo': 3}
+
+        instantiated_entries = table.get_entries_instantiated(parameters)
+
+        sequencer = DummySequencer()
+        instruction_block = DummyInstructionBlock()
+        table.build_sequence(sequencer, parameters, {}, instruction_block)
+        waveform = TableWaveform(instantiated_entries)
+        self.assertEqual(1, len(instruction_block.instructions))
+        instruction = instruction_block.instructions[0]
+        self.assertIsInstance(instruction, EXECInstruction)
+        self.assertEqual(waveform, instruction.waveform)
 
 
 class TableWaveformDataTests(unittest.TestCase):
