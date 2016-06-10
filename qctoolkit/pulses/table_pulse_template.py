@@ -500,10 +500,12 @@ class TablePulseTemplate(PulseTemplate):
             {declaration['name']: serializer.deserialize(declaration)
              for declaration in voltage_parameter_declarations}
 
-        template = TablePulseTemplate(is_measurement_pulse, identifier=identifier)
+        template = TablePulseTemplate(channels=len(entries),
+                                      measurement=is_measurement_pulse,
+                                      identifier=identifier)
 
-        for channel, channelentries in enumerate(entries):
-            for (time, voltage, interpolation) in channelentries:
+        for channel, channel_entries in enumerate(entries):
+            for (time, voltage, interpolation) in channel_entries:
                 if isinstance(time, str):
                     time = time_parameter_declarations[time]
                 if isinstance(voltage, str):
