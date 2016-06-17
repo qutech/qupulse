@@ -12,12 +12,65 @@ from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter, \
     ParameterNotProvidedException, MappedParameter
 from qctoolkit.pulses.sequencing import InstructionBlock, Sequencer
 from qctoolkit.pulses.conditions import Condition
+from qctoolkit.serialization import Serializable
 
 __all__ = ["SequencePulseTemplate",
            "MissingMappingException",
            "MissingParameterDeclarationException",
            "UnnecessaryMappingException"]
 
+
+class PulseTemplateParameterMapping:
+
+    def __init__(self,
+                 external_parameters: Optional[Set[str]]=None) -> None:
+        super().__init__()
+        self.__map = dict()
+        self.__external_parameters = {}
+        self.set_external_parameters(external_parameters)
+
+    def set_external_parameters(self, external_parameters: Optional[Set[str]]) -> None:
+        if external_parameters:
+            self.__external_parameters = set(external_parameters.copy())
+
+    @property
+    def external_parameters(self) -> Set[str]:
+        return self.__external_parameters.copy()
+
+    def __get_template_map(self, template: PulseTemplate) -> Dict[str, Expression]:
+        # internal helper function
+        if template not in self.__map:
+            return dict()
+        return self.__map[template]
+
+    def add(self,
+            template: PulseTemplate,
+            parameter: str,
+            mapping_expression: Union[str, Expression]):
+        if parameter not in template.parameter_names:
+            raise UnnecessaryMappingException(template, parameter)
+
+        if isinstance(mapping_expression, str):
+            mapping_expression = Expression(mapping_expression)
+        required_externals = set(mapping_expression.variables())
+        non_declared_externals = required_externals - self.__external_parameters
+        if non_declared_externals:
+            raise MissingParameterDeclarationException(template,
+                                                       non_declared_externals.pop())
+
+        template_map = self.__get_template_map(template)
+        template_map[parameter] = mapping_expression
+        self.__map[template] = template_map
+
+    def get_template_map(self, template: PulseTemplate) -> Dict[str, Expression]:
+        return self.__get_template_map(template).copy()
+
+    def is_template_mapped(self, template: PulseTemplate) -> bool:
+        return self.remaining_mappings(template)
+
+    def remaining_mappings(self, template: PulseTemplate) -> Set[str]:
+        template_map = self.__get_template_map(template)
+        return template.parameter_names - template_map.keys()
 
 # a subtemplate consists of a pulse template and mapping functions for its "internal" parameters
 Subtemplate = Tuple[PulseTemplate, Dict[str, str]] # pylint: disable=invalid-name
@@ -62,36 +115,28 @@ class SequencePulseTemplate(PulseTemplate):
             identifier (str): A unique identifier for use in serialization. (optional)
         """
         super().__init__(identifier)
-        self.__parameter_names = frozenset(external_parameters)
-        # convert all mapping strings to expressions
-        for i, (template, mappings) in enumerate(subtemplates):
-            subtemplates[i] = (template, {k: Expression(v) for k, v in mappings.items()})
 
         num_channels = 0
         if subtemplates:
             num_channels = subtemplates[0][0].num_channels
+
+        self.__parameter_mapping = PulseTemplateParameterMapping(external_parameters)
+
         for template, mapping_functions in subtemplates:
             # Consistency checks
             if template.num_channels != num_channels:
                 raise ValueError("Subtemplates have different number of channels!")
-            open_parameters = template.parameter_names
-            mapped_parameters = set(mapping_functions.keys())
-            missing_parameters = open_parameters - mapped_parameters
-            for missing in missing_parameters:
-                raise MissingMappingException(template, missing)
-            unnecessary_parameters = mapped_parameters - open_parameters
-            for unnecessary in unnecessary_parameters:
-                raise UnnecessaryMappingException(template, unnecessary)
 
-            for key, mapping_function in mapping_functions.items():
-                mapping_function = mapping_functions[key]
-                required_externals = set(mapping_function.variables())
-                non_declared_externals = required_externals - self.__parameter_names
-                if non_declared_externals:
-                    raise MissingParameterDeclarationException(template,
-                                                               non_declared_externals.pop())
+            for parameter, mapping_function in mapping_functions.items():
+                self.__parameter_mapping.add(template, parameter, mapping_function)
 
-        self.subtemplates = subtemplates  # type: List[Subtemplate]
+            remaining = self.__parameter_mapping.remaining_mappings(template)
+            if remaining:
+                raise MissingMappingException(template,
+                                              remaining.pop())
+
+        self.subtemplates = [(template, self.__parameter_mapping.get_template_map(template)) for (template, _) in subtemplates]
+        self.__parameter_names = self.__parameter_mapping.external_parameters
         self.__is_interruptable = True
 
     @property
