@@ -16,7 +16,7 @@ import numpy as np
 from qctoolkit.serialization import Serializer
 from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter, \
     ParameterNotProvidedException
-from qctoolkit.pulses.pulse_template import PulseTemplate, MeasurementWindow
+from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementWindow
 from qctoolkit.pulses.sequencing import InstructionBlock, Sequencer
 from qctoolkit.pulses.interpolation import InterpolationStrategy, LinearInterpolationStrategy, \
     HoldInterpolationStrategy, JumpInterpolationStrategy
@@ -83,7 +83,7 @@ TableEntry = NamedTuple( # pylint: disable=invalid-name
 )
 
 
-class TablePulseTemplate(PulseTemplate):
+class TablePulseTemplate(AtomicPulseTemplate):
     """Defines a pulse via interpolation of a sequence of (time,voltage)-pairs.
 
     TablePulseTemplate stores a list of (time,voltage)-pairs (the table) which is sorted
@@ -465,14 +465,19 @@ class TablePulseTemplate(PulseTemplate):
                 entries.pop(index)
         return entries
 
+    def build_waveform(self, parameters: Dict[str, Parameter]) -> Optional[Waveform]:
+        instantiated = self.get_entries_instantiated(parameters)
+        if instantiated[0][-1].t > 0:
+            return TableWaveform(instantiated)
+        return None
+
     def build_sequence(self,
                        sequencer: Sequencer,
                        parameters: Dict[str, Parameter],
                        conditions: Dict[str, Condition],
                        instruction_block: InstructionBlock) -> None:
-        instantiated = self.get_entries_instantiated(parameters)
-        if instantiated[0][-1].t > 0:
-            waveform = TableWaveform(instantiated)
+        waveform = self.build_waveform(parameters)
+        if waveform is not None:
             instruction_block.add_instruction_exec(waveform)
 
     def requires_stop(self,

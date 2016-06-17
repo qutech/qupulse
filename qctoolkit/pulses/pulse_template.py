@@ -72,5 +72,5 @@ class AtomicPulseTemplate(PulseTemplate):
         return False
 
     @abstractmethod
-    def build_waveform(self, parameters: Dict[str, Parameter]) -> 'Waveform':
+    def build_waveform(self, parameters: Dict[str, Parameter]) -> Optional['Waveform']:
         pass
