@@ -100,7 +100,6 @@ def plot(pulse: PulseTemplate,
     if not sequencer.has_finished():
         raise PlottingNotPossibleException(pulse)
     times, voltages = plotter.render(sequence)
-    import ipdb; ipdb.set_trace()
 
     # plot!
     figure = plt.figure()
@@ -111,8 +110,14 @@ def plot(pulse: PulseTemplate,
     plt.plot()
     plt.xlim(-0.5, times[-1] + 0.5)
     plt.ylim(min(voltages) - 0.5, max(voltages) + 0.5)
+    plt.xlabel('Time in ns')
+    plt.ylabel('Voltage')
+
+    if pulse.identifier:
+        plt.title(pulse.identifier)
 
     figure.show()
+    return figure
 
 
 class PlottingNotPossibleException(Exception):
