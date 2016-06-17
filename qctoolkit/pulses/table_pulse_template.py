@@ -471,15 +471,6 @@ class TablePulseTemplate(AtomicPulseTemplate):
             return TableWaveform(instantiated)
         return None
 
-    def build_sequence(self,
-                       sequencer: Sequencer,
-                       parameters: Dict[str, Parameter],
-                       conditions: Dict[str, Condition],
-                       instruction_block: InstructionBlock) -> None:
-        waveform = self.build_waveform(parameters)
-        if waveform is not None:
-            instruction_block.add_instruction_exec(waveform)
-
     def requires_stop(self,
                       parameters: Dict[str, Parameter],
                       conditions: Dict[str, 'Condition']) -> bool:

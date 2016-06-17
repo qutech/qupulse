@@ -10,7 +10,7 @@ from typing import Dict, List, Tuple, Set, Optional
 from qctoolkit.serialization import Serializable
 
 from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter
-from qctoolkit.pulses.sequencing import SequencingElement
+from qctoolkit.pulses.sequencing import SequencingElement, InstructionBlock
 
 __all__ = ["MeasurementWindow", "PulseTemplate", "AtomicPulseTemplate"]
 
@@ -74,3 +74,12 @@ class AtomicPulseTemplate(PulseTemplate):
     @abstractmethod
     def build_waveform(self, parameters: Dict[str, Parameter]) -> Optional['Waveform']:
         pass
+
+    def build_sequence(self,
+                       sequencer: 'Sequencer',
+                       parameters: Dict[str, Parameter],
+                       conditions: Dict[str, 'Condition'],
+                       instruction_block: InstructionBlock):
+        waveform = self.build_waveform(parameters)
+        if waveform:
+            instruction_block.add_instruction_exec(waveform)

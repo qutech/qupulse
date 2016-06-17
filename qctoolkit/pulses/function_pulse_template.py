@@ -113,13 +113,6 @@ class FunctionPulseTemplate(AtomicPulseTemplate):
             self.__expression,
             self.__duration_expression
         )
-        
-    def build_sequence(self,
-                       sequencer: Sequencer,
-                       parameters: Dict[str, Parameter],
-                       conditions: Dict[str, 'Condition'],
-                       instruction_block: InstructionBlock) -> None:
-        instruction_block.add_instruction_exec(self.build_waveform(parameters))
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],
