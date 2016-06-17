@@ -60,6 +60,10 @@ class Waveform(Comparable, metaclass=ABCMeta):
             numpy.ndarray of the sampled values of this Waveform at the provided sample times.
         """
 
+    @abstractproperty
+    def num_channels(self) -> int:
+        """The number of channels this waveform is defined for."""
+
 
 class Trigger(Comparable):
     """Abstract representation of a hardware trigger for hardware based branching decisions."""

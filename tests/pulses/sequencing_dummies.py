@@ -131,7 +131,7 @@ class DummyWaveform(Waveform):
         return self.duration_
 
     @property
-    def channels(self) -> int:
+    def num_channels(self) -> int:
         return 1
 
     def sample(self, sample_times: numpy.ndarray, first_offset: float=0) -> numpy.ndarray:

@@ -56,7 +56,7 @@ class Plotter:
         sample_count = total_time * self.__sample_rate + 1
         times = np.linspace(0, total_time, num=sample_count)
 
-        channels = max([waveform.channels for waveform in waveforms])
+        channels = max([waveform.num_channels for waveform in waveforms])
         voltages = np.empty((len(times), channels))
         time = 0
         for waveform in waveforms:

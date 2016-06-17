@@ -169,7 +169,7 @@ class FunctionWaveform(Waveform):
         self.__duration = duration_expression.evaluate(**self.__parameters)
 
     @property
-    def channels(self):
+    def num_channels(self):
         return 1
     
     def __evaluate_partially(self, t):
