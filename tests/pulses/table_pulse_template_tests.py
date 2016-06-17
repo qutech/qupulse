@@ -60,7 +60,8 @@ class TablePulseTemplateTest(unittest.TestCase):
     def test_add_entry_empty_time_is_negative(self) -> None:
         table = TablePulseTemplate()
         self.assertRaises(ValueError, table.add_entry, -2, 0)
-        self.assertFalse(table.entries[0])
+        self.assertEqual([[TableEntry(0, 0, HoldInterpolationStrategy())]], table.entries)
+        #self.assertFalse(table.entries[0])
         self.assertFalse(table.parameter_declarations)
         self.assertFalse(table.parameter_names)
 
@@ -106,12 +107,12 @@ class TablePulseTemplateTest(unittest.TestCase):
     def test_add_entry_time_float_after_float(self) -> None:
         table = TablePulseTemplate()
         table.add_entry(1.2, -3.8)
-        # expect ValueError if next float is smaller or equal than previous
+        # expect ValueError if next float is smaller than previous
         self.assertRaises(ValueError, table.add_entry, 0.423, 0)
-        self.assertRaises(ValueError, table.add_entry, 1.2, 0)
-        # adding a higher value as next entry should work
+        # adding a higher value or equal value as last entry should work
+        table.add_entry(1.2, 2.5252)
         table.add_entry(3.7, 1.34875)
-        self.assertEqual([[(0, 0, HoldInterpolationStrategy()), (1.2, -3.8, HoldInterpolationStrategy()), (3.7, 1.34875, HoldInterpolationStrategy())]], table.entries)
+        self.assertEqual([[(0, 0, HoldInterpolationStrategy()), (1.2, 2.5252, HoldInterpolationStrategy()), (3.7, 1.34875, HoldInterpolationStrategy())]], table.entries)
         self.assertFalse(table.parameter_names)
         self.assertFalse(table.parameter_declarations)
 
@@ -171,7 +172,7 @@ class TablePulseTemplateTest(unittest.TestCase):
         foo_decl.min_value = bar_decl
         self.assertRaises(ValueError, table.add_entry, foo_decl, 23857.23)
         self.assertRaises(ValueError, table.add_entry, bar_decl, -4967.1)
-        self.assertFalse(table.entries[0])
+        self.assertEquals([[TableEntry(0, 0, HoldInterpolationStrategy())]], table.entries)
         self.assertFalse(table.parameter_names)
         self.assertFalse(table.parameter_declarations)
 
@@ -302,7 +303,7 @@ class TablePulseTemplateTest(unittest.TestCase):
     def test_add_entry_time_and_voltage_same_declaration(self) -> None:
         table = TablePulseTemplate()
         self.assertRaises(ValueError, table.add_entry, 'foo', 'foo')
-        self.assertFalse(table.entries[0])
+        self.assertEquals([[TableEntry(0, 0, HoldInterpolationStrategy())]], table.entries)
         self.assertFalse(table.parameter_names)
         self.assertFalse(table.parameter_declarations)
 
@@ -313,13 +314,13 @@ class TablePulseTemplateTest(unittest.TestCase):
         table = TablePulseTemplate()
         table.add_entry(0, 2)
         instantiated_entries = table.get_entries_instantiated({})
-        self.assertEqual([[]], instantiated_entries)
+        self.assertEqual([[(0, 2, HoldInterpolationStrategy())]], instantiated_entries)
 
     def test_get_entries_instantiated_one_entry_float_declaration(self) -> None:
         table = TablePulseTemplate()
         table.add_entry(0, 'foo')
         instantiated_entries = table.get_entries_instantiated({'foo': 2})
-        self.assertEqual([[]], instantiated_entries)
+        self.assertEqual([[(0, 2, HoldInterpolationStrategy())]], instantiated_entries)
 
     def test_get_entries_instantiated_two_entries_float_float_declaration_float(self) -> None:
         table = TablePulseTemplate()
@@ -373,7 +374,7 @@ class TablePulseTemplateTest(unittest.TestCase):
 
     def test_get_entries_instantiated_empty(self) -> None:
         table = TablePulseTemplate()
-        self.assertFalse(table.get_entries_instantiated({})[0])
+        self.assertEquals([[(0, 0, HoldInterpolationStrategy())]], table.get_entries_instantiated({}))
 
     def test_get_entries_instantiated_two_equal_entries(self) -> None:
         table = TablePulseTemplate()

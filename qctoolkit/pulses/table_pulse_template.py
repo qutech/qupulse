@@ -105,16 +105,16 @@ class TablePulseTemplate(PulseTemplate):
         """
         super().__init__(identifier)
         self.__identifier = identifier
+        self.__interpolation_strategies = {'linear': LinearInterpolationStrategy(),
+                                           'hold': HoldInterpolationStrategy(),
+                                           'jump': JumpInterpolationStrategy()
+                                           }
         self.__entries = []
         for _ in range(channels):
-            self.__entries.append([]) # type: List[List[TableEntry]]
+            self.__entries.append([TableEntry(0, 0, self.__interpolation_strategies['hold'])])
         self.__time_parameter_declarations = {} # type: Dict[str, ParameterDeclaration]
         self.__voltage_parameter_declarations = {} # type: Dict[str, ParameterDeclaration]
         self.__is_measurement_pulse = measurement# type: bool
-        self.__interpolation_strategies = {'linear': LinearInterpolationStrategy(),
-                                           'hold': HoldInterpolationStrategy(), 
-                                           'jump': JumpInterpolationStrategy()
-                                          }
         self.__channels = channels # type: int
 
     @staticmethod
@@ -201,21 +201,22 @@ class TablePulseTemplate(PulseTemplate):
 
         entries = self.__entries[channel]
         # If this is the first entry, there are a number of cases we have to check
-        if not entries:
-            # if the first entry has a time that is either > 0 or a parameter declaration,
-            # insert a start point (0, 0)
-            if not isinstance(time, numbers.Real) or time > 0:
-                last_entry = TableEntry(0, 0, self.__interpolation_strategies['hold'])
-            # ensure that the first entry is not negative
-            elif isinstance(time, numbers.Real) and time < 0:
-                raise ValueError("Time value must not be negative, was {}.".format(time))
-            elif time == 0.0:
-                last_entry = TableEntry(-1, 0, self.__interpolation_strategies['hold'])
-        else:
-            last_entry = entries[-1]
+        # if not entries:
+        #     # if the first entry has a time that is either > 0 or a parameter declaration,
+        #     # insert a start point (0, 0)
+        #     if not isinstance(time, numbers.Real) or time > 0:
+        #         last_entry = TableEntry(0, 0, self.__interpolation_strategies['hold'])
+        #     # ensure that the first entry is not negative
+        #     elif isinstance(time, numbers.Real) and time < 0:
+        #         raise ValueError("Time value must not be negative, was {}.".format(time))
+        #     elif time == 0.0:
+        #         last_entry = TableEntry(-1, 0, self.__interpolation_strategies['hold'])
+        # else:
+        #     last_entry = entries[-1]
 
+        last_entry = entries[-1]
         # Handle time parameter/value
-        time = self.__add_entry_check_and_modify_time(time, last_entry)
+        time = self.__add_entry_check_and_modify_time(time, entries)
 
         # Handle voltage parameter/value
         # construct a ParameterDeclaration if voltage is a parameter name string
@@ -245,13 +246,18 @@ class TablePulseTemplate(PulseTemplate):
         # in case we need a time 0 entry previous to the new entry
         if not entries and (not isinstance(time, numbers.Real) or time > 0):
             entries.append(last_entry)
-        # finally, add the new entry to the table 
-        entries.append(TableEntry(time, voltage, interpolation))
+        # finally, add the new entry to the table
+        new_entry = TableEntry(time, voltage, interpolation)
+        if last_entry.t == time:
+            entries[-1] = new_entry
+        else:
+            entries.append(new_entry)
         self.__entries[channel] = entries
 
     def __add_entry_check_and_modify_time(self,
                                           time: Union[float, str, Parameter],
-                                          last_entry: TableValue) -> TableValue:
+                                          entries: List[TableEntry]) -> TableValue:
+        last_entry = entries[-1]
         # Handle time parameter/value
 
         # first case: time is a real number
@@ -271,9 +277,9 @@ class TablePulseTemplate(PulseTemplate):
                     )
 
             # if time is a real number, ensure that is it not less than the previous entry
-            elif time <= last_entry.t:
+            elif time < last_entry.t:
                 raise ValueError(
-                    "Argument time must be greater than previous time value {0}, was: {1}!".format(
+                    "Argument time must not be less than previous time value {0}, was: {1}!".format(
                         last_entry.t, time
                     )
                 )
@@ -427,14 +433,11 @@ class TablePulseTemplate(PulseTemplate):
 
             instantiated_entries.append(instantiated)
 
-        if max_time == 0:
-            return [[] * self.__channels]
-
         # ensure that all channels have equal duration
         for instantiated in instantiated_entries:
             final_entry = instantiated[-1]
             if final_entry.t != max_time:
-                instantiated.append(TableEntry(final_entry.t,
+                instantiated.append(TableEntry(max_time,
                                                final_entry.v,
                                                self.__interpolation_strategies['hold'])
                                     )
@@ -468,7 +471,7 @@ class TablePulseTemplate(PulseTemplate):
                        conditions: Dict[str, Condition],
                        instruction_block: InstructionBlock) -> None:
         instantiated = self.get_entries_instantiated(parameters)
-        if instantiated[0]:
+        if instantiated[0][-1].t > 0:
             waveform = TableWaveform(instantiated)
             instruction_block.add_instruction_exec(waveform)
 
