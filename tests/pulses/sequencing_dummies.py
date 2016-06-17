@@ -8,7 +8,7 @@ from qctoolkit.serialization import Serializer
 from qctoolkit.pulses.instructions import Waveform, Instruction
 from qctoolkit.pulses.sequencing import Sequencer, InstructionBlock, SequencingElement
 from qctoolkit.pulses.parameters import Parameter, ParameterDeclaration
-from qctoolkit.pulses.pulse_template import PulseTemplate, MeasurementWindow
+from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementWindow
 from qctoolkit.pulses.interpolation import InterpolationStrategy
 from qctoolkit.pulses.conditions import Condition
 
@@ -226,19 +226,21 @@ class DummyCondition(Condition):
         )
 
 
-class DummyPulseTemplate(PulseTemplate):
+class DummyPulseTemplate(AtomicPulseTemplate):
 
     def __init__(self,
                  requires_stop: bool=False,
                  is_interruptable: bool=False,
                  parameter_names: Set[str]={},
-                 num_channels: int=0) -> None:
+                 num_channels: int=0,
+                 duration: float=0) -> None:
         super().__init__()
         self.requires_stop_ = requires_stop
         self.is_interruptable_ = is_interruptable
         self.parameter_names_ = parameter_names
         self.build_sequence_calls = 0
         self.num_channels_ = num_channels
+        self.duration = duration
 
     @property
     def parameter_names(self) -> Set[str]:
@@ -266,6 +268,9 @@ class DummyPulseTemplate(PulseTemplate):
                        conditions: Dict[str, Condition],
                        instruction_block: InstructionBlock):
         self.build_sequence_calls += 1
+
+    def build_waveform(self, parameters: Dict[str, Parameter]) -> Optional[Waveform]:
+        return DummyWaveform(duration)
 
     def requires_stop(self, parameters: Dict[str, Parameter], conditions: Dict[str, Condition]) -> bool:
         return self.requires_stop_
