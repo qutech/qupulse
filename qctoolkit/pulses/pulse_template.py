@@ -12,7 +12,7 @@ from qctoolkit.serialization import Serializable
 from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter
 from qctoolkit.pulses.sequencing import SequencingElement
 
-__all__ = ["MeasurementWindow", "PulseTemplate"]
+__all__ = ["MeasurementWindow", "PulseTemplate", "AtomicPulseTemplate"]
 
 
 MeasurementWindow = Tuple[float, float]
@@ -61,3 +61,16 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=ABCMeta):
     @abstractproperty
     def num_channels(self) -> int:
         """Returns the number of hardware output channels this PulseTemplate defines."""
+
+
+class AtomicPulseTemplate(PulseTemplate):
+
+    def __init__(self, identifier: Optional[str]=None):
+        super().__init__(identifier=identifier)
+
+    def is_interruptable(self) -> bool:
+        return False
+
+    @abstractmethod
+    def build_waveform(self, parameters: Dict[str, Parameter]) -> 'Waveform':
+        pass
