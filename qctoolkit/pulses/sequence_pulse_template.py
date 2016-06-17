@@ -17,7 +17,9 @@ from qctoolkit.serialization import Serializable
 __all__ = ["SequencePulseTemplate",
            "MissingMappingException",
            "MissingParameterDeclarationException",
-           "UnnecessaryMappingException"]
+           "UnnecessaryMappingException",
+           "PulseTemplateParameterMapping",
+           "Subtemplate"]
 
 
 class PulseTemplateParameterMapping:
@@ -68,9 +70,27 @@ class PulseTemplateParameterMapping:
     def is_template_mapped(self, template: PulseTemplate) -> bool:
         return self.remaining_mappings(template)
 
-    def remaining_mappings(self, template: PulseTemplate) -> Set[str]:
+    def get_remaining_mappings(self, template: PulseTemplate) -> Set[str]:
         template_map = self.__get_template_map(template)
         return template.parameter_names - template_map.keys()
+
+    def map_parameters(self,
+                       template: PulseTemplate,
+                       parameters: Dict[str, Parameter]) -> Dict[str, Parameter]:
+        missing = self.__external_parameters - set(parameters.keys())
+        if missing:
+            raise ParameterNotProvidedException(missing.pop())
+
+        template_map = self.__get_template_map(template)
+        inner_parameters = {
+            parameter: MappedParameter(
+                mapping_function,
+                {name: parameters[name] for name in mapping_function.variables()}
+            )
+            for (parameter, mapping_function) in template_map.items()
+        }
+        return inner_parameters
+
 
 # a subtemplate consists of a pulse template and mapping functions for its "internal" parameters
 Subtemplate = Tuple[PulseTemplate, Dict[str, str]] # pylint: disable=invalid-name
@@ -130,23 +150,27 @@ class SequencePulseTemplate(PulseTemplate):
             for parameter, mapping_function in mapping_functions.items():
                 self.__parameter_mapping.add(template, parameter, mapping_function)
 
-            remaining = self.__parameter_mapping.remaining_mappings(template)
+            remaining = self.__parameter_mapping.get_remaining_mappings(template)
             if remaining:
                 raise MissingMappingException(template,
                                               remaining.pop())
 
-        self.subtemplates = [(template, self.__parameter_mapping.get_template_map(template)) for (template, _) in subtemplates]
-        self.__parameter_names = self.__parameter_mapping.external_parameters
+        self.__subtemplates = [template for (template, _) in subtemplates]
         self.__is_interruptable = True
 
     @property
     def parameter_names(self) -> Set[str]:
-        return self.__parameter_names
+        return self.__parameter_mapping.external_parameters
 
     @property
     def parameter_declarations(self) -> Set[ParameterDeclaration]:
         # TODO: min, max, default values not mapped (required?)
-        return set([ParameterDeclaration(name) for name in self.__parameter_names])
+        return {ParameterDeclaration(name) for name in self.parameter_names}
+
+    @property
+    def subtemplates(self) -> List[Subtemplate]:
+        return [(template, self.__parameter_mapping.get_template_map(template))
+                for template in self.__subtemplates]
 
     def get_measurement_windows(self,
                                 parameters: Dict[str, Parameter]=None
@@ -163,7 +187,7 @@ class SequencePulseTemplate(PulseTemplate):
 
     @property
     def num_channels(self) -> int:
-        return self.subtemplates[0][0].num_channels
+        return self.__subtemplates[0].num_channels
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],
@@ -178,19 +202,13 @@ class SequencePulseTemplate(PulseTemplate):
         # todo: currently ignores is_interruptable
 
         # detect missing or unnecessary parameters
-        missing = list(self.parameter_names - set(parameters))
+        missing = self.parameter_names - parameters.keys()
         if missing:
             raise ParameterNotProvidedException(missing[0])
 
         # push subtemplates to sequencing stack with mapped parameters
-        for template, mappings in reversed(self.subtemplates):
-            inner_parameters = {
-                name: MappedParameter(
-                    mapping_function,
-                    {name: parameters[name] for name in mapping_function.variables()}
-                )
-                for (name, mapping_function) in mappings.items()
-            }
+        for template in reversed(self.__subtemplates):
+            inner_parameters = self.__parameter_mapping.map_parameters(template, parameters)
             sequencer.push(template, inner_parameters, conditions, instruction_block)
 
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
@@ -199,7 +217,8 @@ class SequencePulseTemplate(PulseTemplate):
         data['is_interruptable'] = self.is_interruptable
 
         subtemplates = []
-        for (subtemplate, mapping_functions) in self.subtemplates:
+        for subtemplate in self.__subtemplates:
+            mapping_functions = self.__parameter_mapping.get_template_map(subtemplate)
             mapping_functions_strings = \
                 {k: serializer.dictify(m) for k, m in mapping_functions.items()}
             subtemplate = serializer.dictify(subtemplate)
