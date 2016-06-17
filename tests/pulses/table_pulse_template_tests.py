@@ -623,14 +623,16 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
         table.add_entry(bar_decl, 0, 'jump')
         parameters = {'v': 2.3, 'foo': 1, 'bar': 4}
         instantiated_entries = tuple(table.get_entries_instantiated(parameters))
+        waveform = table.build_waveform(parameters)
         sequencer = DummySequencer()
         instruction_block = DummyInstructionBlock()
         table.build_sequence(sequencer, parameters, {}, instruction_block)
-        waveform = TableWaveform(instantiated_entries)
+        expected_waveform = TableWaveform(instantiated_entries)
         self.assertEqual(1, len(instruction_block.instructions))
         instruction = instruction_block.instructions[0]
         self.assertIsInstance(instruction, EXECInstruction)
-        self.assertEqual(waveform, instruction.waveform)
+        self.assertEqual(expected_waveform, instruction.waveform)
+        self.assertEqual(expected_waveform, waveform)
 
     def test_build_sequence_empty(self) -> None:
         table = TablePulseTemplate()
@@ -638,6 +640,7 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
         instruction_block = DummyInstructionBlock()
         table.build_sequence(sequencer, {}, {}, instruction_block)
         self.assertFalse(instruction_block.instructions)
+        self.assertIsNone(table.build_waveform({}))
 
     def test_requires_stop_missing_param(self) -> None:
         table = TablePulseTemplate()
@@ -684,11 +687,13 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
         sequencer = DummySequencer()
         instruction_block = DummyInstructionBlock()
         table.build_sequence(sequencer, parameters, {}, instruction_block)
-        waveform = TableWaveform(instantiated_entries)
+        expected_waveform = TableWaveform(instantiated_entries)
         self.assertEqual(1, len(instruction_block.instructions))
         instruction = instruction_block.instructions[0]
         self.assertIsInstance(instruction, EXECInstruction)
-        self.assertEqual(waveform, instruction.waveform)
+        self.assertEqual(expected_waveform, instruction.waveform)
+        waveform = table.build_waveform(parameters)
+        self.assertEqual(expected_waveform, waveform)
 
     def test_build_sequence_multi_one_channel_empty(self) -> None:
         table = TablePulseTemplate(channels=2)
@@ -700,11 +705,13 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
         sequencer = DummySequencer()
         instruction_block = DummyInstructionBlock()
         table.build_sequence(sequencer, parameters, {}, instruction_block)
-        waveform = TableWaveform(instantiated_entries)
+        expected_waveform = TableWaveform(instantiated_entries)
         self.assertEqual(1, len(instruction_block.instructions))
         instruction = instruction_block.instructions[0]
         self.assertIsInstance(instruction, EXECInstruction)
-        self.assertEqual(waveform, instruction.waveform)
+        self.assertEqual(expected_waveform, instruction.waveform)
+        waveform = table.build_waveform(parameters)
+        self.assertEqual(expected_waveform, waveform)
 
 
 class TableWaveformDataTests(unittest.TestCase):
