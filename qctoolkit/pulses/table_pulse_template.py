@@ -93,6 +93,8 @@ class TablePulseTemplate(PulseTemplate):
     using concrete values for both, time and voltage.
     A TablePulseTemplate may be flagged as representing a measurement pulse, meaning that it defines
     a measurement window.
+
+    Each TablePulseTemplate contains at least an entry at time 0.
     """
 
     def __init__(self, channels=1, measurement=False, identifier: Optional[str]=None) -> None:
@@ -158,16 +160,22 @@ class TablePulseTemplate(PulseTemplate):
         The following constraints hold:
         - If a non-existing parameter declaration is referenced (via string), it is created without
             min, max and default values.
-        - Parameter declarations for the time domain may not be used multiple times.
-        - ParameterDeclaration objects for the time domain may not refer to other
-            ParameterDeclaration objects as min or max values.
+        - Parameter declarations for the time domain may not be used multiple times in the same
+            channel.
         - If a ParameterDeclaration is provided, its min and max values will be set to its
             neighboring values if they were not set previously or would exceed neighboring bounds.
+        - Parameter declarations for the time domain used in different channels will have their
+            bounds set such that range conforms with any channel automatically.
+        - ParameterDeclaration objects for the time domain may not refer to other
+            ParameterDeclaration objects as min or max values.
         - Each entries time value must be greater than its predecessor's, i.e.,
             - if the time value is a float and the previous time value is a float, the new value
-                must be greater
+                must be greater or equal
+            - if the time value is a float and the previous time value is a parameter declaration
+                and the new value is smaller then the maximum of the parameter declaration, the
+                maximum is adjusted to the new value
             - if the time value is a float and the previous time value is a parameter declaration,
-                the new value must not be smaller than the maximum of the parameter declaration
+                the new value must not be smaller than the minimum of the parameter declaration
             - if the time value is a parameter declaration and the previous time value is a float,
                 the new values minimum must be no smaller
             - if the time value is a parameter declaration and the previous time value is a
@@ -200,19 +208,6 @@ class TablePulseTemplate(PulseTemplate):
             interpolation = self.__interpolation_strategies[interpolation]
 
         entries = self.__entries[channel]
-        # If this is the first entry, there are a number of cases we have to check
-        # if not entries:
-        #     # if the first entry has a time that is either > 0 or a parameter declaration,
-        #     # insert a start point (0, 0)
-        #     if not isinstance(time, numbers.Real) or time > 0:
-        #         last_entry = TableEntry(0, 0, self.__interpolation_strategies['hold'])
-        #     # ensure that the first entry is not negative
-        #     elif isinstance(time, numbers.Real) and time < 0:
-        #         raise ValueError("Time value must not be negative, was {}.".format(time))
-        #     elif time == 0.0:
-        #         last_entry = TableEntry(-1, 0, self.__interpolation_strategies['hold'])
-        # else:
-        #     last_entry = entries[-1]
 
         last_entry = entries[-1]
         # Handle time parameter/value
@@ -268,13 +263,16 @@ class TablePulseTemplate(PulseTemplate):
                     last_entry.t.max_value = time
 
                 if time < last_entry.t.absolute_max_value:
-                    raise ValueError(
-                        "Argument time must be no smaller than previous time parameter "
-                        " declaration's maximum value. Parameter '{0}', Maximum {1}, Provided: {2}."
-                        .format(
-                            last_entry.t.name, last_entry.t.absolute_max_value, time
+                    try:
+                        last_entry.t.max_value = time
+                    except ValueError:
+                        raise ValueError(
+                            "Argument time must not be smaller than the minimum of the previous"
+                            "parameter declaration ({}, was {}).".format(
+                                last_entry.t.absolute_min_value,
+                                time
+                            )
                         )
-                    )
 
             # if time is a real number, ensure that is it not less than the previous entry
             elif time < last_entry.t:
@@ -298,6 +296,10 @@ class TablePulseTemplate(PulseTemplate):
                         time.name
                     )
                 )
+            if time.name in [e.t.name for e in entries if isinstance(e.t, ParameterDeclaration)]:
+                raise ValueError(
+                    "A time parameter with the name {} already exists.".format(time.name)
+                )
             if time.name not in self.__time_parameter_declarations:
                 if isinstance(time.min_value, ParameterDeclaration):
                     raise ValueError(
@@ -320,39 +322,37 @@ class TablePulseTemplate(PulseTemplate):
                 # relationship between both declarations
                 if time.min_value == float('-inf'):
                     time.min_value = last_entry.t
-
-                # Check dependencies between successive time parameters
-                if isinstance(last_entry.t, ParameterDeclaration):
-
-                    if last_entry.t.max_value == float('inf'):
-                        last_entry.t.max_value = time
-
-                    if time.absolute_min_value < last_entry.t.absolute_min_value:
-                        raise ValueError(
-                            "Argument time's minimum value must be no smaller than the previous "
-                            "time parameter declaration's minimum value. Parameter '{0}', Minimum "
-                            "{1}, Provided {2}.".format(
-                                last_entry.t.name, last_entry.t.absolute_min_value, time.min_value
-                            )
-                        )
-                    if time.absolute_max_value < last_entry.t.absolute_max_value:
-                        raise ValueError(
-                            "Argument time's maximum value must be no smaller than the previous "
-                            "time parameter declaration's maximum value. Parameter '{0}', Maximum "
-                            "{1}, Provided {2}.".format(
-                                last_entry.t.name, last_entry.t.absolute_max_value, time.max_value
-                            )
-                        )
-                else:
-                    if time.min_value < last_entry.t:
-                        raise ValueError(
-                            "Argument time's minimum value {0} must be no smaller than the previous"
-                            " time value {1}.".format(time.min_value, last_entry.t)
-                        )
             else:
-                raise ValueError(
-                    "A time parameter with the name {} already exists.".format(time.name)
-                )
+                time = self.__time_parameter_declarations[time.name]
+
+            # Check dependencies between successive time parameters
+            if isinstance(last_entry.t, ParameterDeclaration):
+
+                if last_entry.t.max_value == float('inf'):
+                    last_entry.t.max_value = time
+
+                if time.absolute_min_value < last_entry.t.absolute_min_value:
+                    raise ValueError(
+                        "Argument time's minimum value must be no smaller than the previous "
+                        "time parameter declaration's minimum value. Parameter '{0}', Minimum "
+                        "{1}, Provided {2}.".format(
+                            last_entry.t.name, last_entry.t.absolute_min_value, time.min_value
+                        )
+                    )
+                if time.absolute_max_value < last_entry.t.absolute_max_value:
+                    raise ValueError(
+                        "Argument time's maximum value must be no smaller than the previous "
+                        "time parameter declaration's maximum value. Parameter '{0}', Maximum "
+                        "{1}, Provided {2}.".format(
+                            last_entry.t.name, last_entry.t.absolute_max_value, time.max_value
+                        )
+                    )
+            else:
+                if time.min_value < last_entry.t:
+                    raise ValueError(
+                        "Argument time's minimum value {0} must be no smaller than the previous"
+                        " time value {1}.".format(time.min_value, last_entry.t)
+                    )
         return time
         
     @property
