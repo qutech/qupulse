@@ -5,6 +5,7 @@ __all__ = [
     'instructions_tests',
     'interpolation_tests',
     'loop_pulse_template_tests',
+    'multi_channel_pulse_template_tests',
     'parameters_tests',
     'plotting_tests',
     'repetition_pulse_template_tests',

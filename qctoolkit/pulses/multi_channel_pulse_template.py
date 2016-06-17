@@ -2,13 +2,20 @@
 
 from typing import Dict, List, Tuple, Set, Optional, Any, Iterable, Union
 
+import numpy
+
 from qctoolkit.serialization import Serializer
 from qctoolkit.expressions import Expression
 
 from qctoolkit.pulses.instructions import Waveform
-from qctoolkit.pulses.pulse_template import PulseTemplate, AtomicPulseTemplate
+from qctoolkit.pulses.pulse_template import AtomicPulseTemplate
 from qctoolkit.pulses.sequence_pulse_template import PulseTemplateParameterMapping, \
     MissingMappingException
+from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter, \
+    ParameterNotProvidedException
+from qctoolkit.pulses.conditions import Condition
+from qctoolkit.pulses.sequencing import Sequencer
+from qctoolkit.pulses.instructions import InstructionBlock
 
 __all__ = ["MultiChannelPulseTemplate"]
 
@@ -58,7 +65,7 @@ class MultiChannelWaveform(Waveform):
 Subtemplate = Tuple[AtomicPulseTemplate, Dict[str, str], List[int]]
 
 
-class MultiChannelPulseTemplate(PulseTemplate):
+class MultiChannelPulseTemplate(AtomicPulseTemplate):
 
     def __init__(self,
                  subtemplates: Iterable[Subtemplate],
@@ -69,7 +76,7 @@ class MultiChannelPulseTemplate(PulseTemplate):
 
         #todo: check duration consistency
 
-        for template, mapping_functions in subtemplates:
+        for template, mapping_functions, _ in subtemplates:
             # Consistency checks
             for parameter, mapping_function in mapping_functions.items():
                 self.__parameter_mapping.add(template, parameter, mapping_function)
@@ -92,7 +99,7 @@ class MultiChannelPulseTemplate(PulseTemplate):
         return {ParameterDeclaration(parameter_name) for parameter_name in self.parameter_names}
 
     def get_measurement_windows(self, parameters: Dict[str, Parameter] = None) \
-            -> List[MeasurementWindow]:
+            -> List['MeasurementWindow']:
         raise NotImplementedError()
 
     @property
@@ -108,14 +115,10 @@ class MultiChannelPulseTemplate(PulseTemplate):
                       conditions: Dict[str, Condition]) -> bool:
         return any(self.__subtemplates.requires_stop(parameters, conditions))
 
-    def build_sequence(self,
-                       sequencer: Sequencer,
-                       parameters: Dict[str, Parameter],
-                       conditions: Dict[str, Condition],
-                       instruction_block: InstructionBlock) -> None:
+    def build_waveform(self, parameters: Dict[str, Parameter]) -> Optional[Waveform]:
         missing = self.parameter_names - parameters.keys()
         if missing:
-            raise ParameterNotProvidedException(missing[0])
+            raise ParameterNotProvidedException(missing.pop())
 
         channel_waveforms = []
         for template, channel_mapping in self.__subtemplates:
@@ -123,7 +126,7 @@ class MultiChannelPulseTemplate(PulseTemplate):
             waveform = template.build_waveform(inner_parameters)
             channel_waveforms.append((waveform, channel_mapping))
         waveform = MultiChannelWaveform(channel_waveforms)
-        instruction_block.add_instruction_exec(waveform)
+        return waveform
 
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
         raise NotImplementedError()
