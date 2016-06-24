@@ -5,6 +5,7 @@ Classes:
     - Trigger: Representation of a hardware trigger.
     - Instruction: Base class for hardware instructions.
     - CJMPInstruction: Conditional jump instruction.
+    - REPJInstruction: Repetition jump instruciton.
     - EXECInstruction: Instruction to execute a waveform.
     - GOTOInstruction: Unconditional jump instruction.
     - STOPInstruction: Instruction which indicates the end of execution.
@@ -25,8 +26,8 @@ from qctoolkit.comparable import Comparable
 # TODO lumip: add docstrings to InstructionBlock after issue #116 is resolved
 
 __all__ = ["Waveform", "Trigger", "InstructionPointer",
-           "Instruction", "CJMPInstruction", "EXECInstruction", "GOTOInstruction",
-           "STOPInstruction", "InstructionBlock", "InstructionSequence",
+           "Instruction", "CJMPInstruction", "REPJInstruction", "EXECInstruction",
+           "GOTOInstruction", "STOPInstruction", "InstructionBlock", "InstructionSequence",
            "InstructionBlockNotYetPlacedException", "InstructionBlockAlreadyFinalizedException",
            "MissingReturnAddressException"
           ]
@@ -134,6 +135,26 @@ class CJMPInstruction(Instruction):
         return "cjmp to {} on {}".format(self.target, self.trigger)
 
 
+class REPJInstruction(Instruction):
+    """A repetition jump instruction.
+
+    Will cause the execution to jump to the instruction indicated by the InstructionPointer held by
+    this REPJInstruction for the first n times this REPJInstruction is encountered, where n is
+    a parameter."""
+
+    def __init__(self, count: int, block: 'InstructionBlock', offset: int=0) -> None:
+        super().__init__()
+        self.count = count
+        self.target = InstructionPointer(block, offset)
+
+    @property
+    def compare_key(self) -> Any:
+        return self.count, self.target
+
+    def __str__(self) -> str:
+        return "repj {} times to {}".format(self.count, self.target)
+
+
 class GOTOInstruction(Instruction):
     """An unconditional jump hardware instruction.
 
@@ -237,6 +258,12 @@ class InstructionBlock(Comparable):
                              target_block: 'InstructionBlock',
                              offset: int=0) -> None:
         self.add_instruction(CJMPInstruction(trigger, target_block, offset))
+
+    def add_instruction_repj(self,
+                             count: int,
+                             target_block: 'InstructionBlock',
+                             offset: int=0) -> None:
+        self.add_instruction(REPJInstruction(count, target_block, offset))
         
     def add_instruction_stop(self) -> None:
         self.add_instruction(STOPInstruction())

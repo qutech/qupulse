@@ -2,6 +2,7 @@ import unittest
 
 from qctoolkit.pulses.repetition_pulse_template import RepetitionPulseTemplate,ParameterNotIntegerException
 from qctoolkit.pulses.parameters import ParameterDeclaration, ParameterNotProvidedException, ParameterValueIllegalException
+from qctoolkit.pulses.instructions import REPJInstruction
 
 from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummySequencer, DummyInstructionBlock, DummyParameter, DummyCondition
 from tests.serialization_dummies import DummySerializer
@@ -86,15 +87,25 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
         parameters = {}
         conditions = dict(foo=DummyCondition(requires_stop=True))
         t.build_sequence(self.sequencer, parameters, conditions, self.block)
-        self.assertEqual([(self.body, parameters, conditions), (self.body, parameters, conditions), (self.body, parameters, conditions)],
-                         self.sequencer.sequencing_stacks[self.block])
+
+        self.assertTrue(self.block.embedded_blocks)
+        body_block = self.block.embedded_blocks[0]
+        self.assertEqual({body_block}, set(self.sequencer.sequencing_stacks.keys()))
+        self.assertEqual([(self.body, parameters, conditions)], self.sequencer.sequencing_stacks[body_block])
+        self.assertEqual([REPJInstruction(repetitions, body_block)], self.block.instructions)
 
     def test_build_sequence_declaration_success(self) -> None:
         parameters = dict(foo=3)
         conditions = dict(foo=DummyCondition(requires_stop=True))
         self.template.build_sequence(self.sequencer, parameters, conditions, self.block)
-        self.assertEqual([(self.body, parameters, conditions), (self.body, parameters, conditions), (self.body, parameters, conditions)],
-                         self.sequencer.sequencing_stacks[self.block])
+
+        self.assertTrue(self.block.embedded_blocks)
+        body_block = self.block.embedded_blocks[0]
+        self.assertEqual({body_block}, set(self.sequencer.sequencing_stacks.keys()))
+        self.assertEqual([(self.body, parameters, conditions)],
+                         self.sequencer.sequencing_stacks[body_block])
+        self.assertEqual([REPJInstruction(parameters['foo'], body_block)], self.block.instructions)
+
 
     def test_build_sequence_declaration_exceeds_bounds(self) -> None:
         parameters = dict(foo=9)
