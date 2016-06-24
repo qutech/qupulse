@@ -101,12 +101,12 @@ class DummyInstruction(Instruction):
 
 class DummyInstructionBlock(InstructionBlock):
 
-    def __init__(self, outer_block: InstructionBlock = None) -> None:
-        super().__init__(outer_block)
+    def __init__(self) -> None:
+        super().__init__()
         self.embedded_blocks = [] # type: Collection[InstructionBlock]
 
     def create_embedded_block(self) -> InstructionBlock:
-        block = InstructionBlock(self)
+        block = InstructionBlock()
         self.embedded_blocks.append(block)
         return block
 

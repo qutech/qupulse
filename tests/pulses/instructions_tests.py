@@ -20,16 +20,14 @@ class InstructionPointerTest(unittest.TestCase):
             ip = InstructionPointer(block, offset)
             self.assertIs(block, ip.block)
             self.assertEqual(offset, ip.offset)
-            self.assertEqual(offset, ip.get_absolute_address())
-            
+
     def test_initialization_relative_block(self) -> None:
         block = InstructionBlock().create_embedded_block()
         for offset in [0, 1, 924]:
             ip = InstructionPointer(block, offset)
             self.assertIs(block, ip.block)
             self.assertEqual(offset, ip.offset)
-            self.assertRaises(InstructionBlockNotYetPlacedException, ip.get_absolute_address)
-            
+
     def test_equality(self) -> None:
         blocks = [InstructionBlock(), InstructionBlock()]
         blocks.append(blocks[0].create_embedded_block())
@@ -170,31 +168,34 @@ class STOPInstructionTest(unittest.TestCase):
 
 class InstructionBlockTest(unittest.TestCase):
 
+    def __init__(self, methodName: str) -> None:
+        super().__init__(methodName)
+        self.maxDiff = None
+
     def __verify_block(self, block: InstructionBlock, expected_instructions: InstructionSequence, expected_compiled_instructions: InstructionSequence) -> None:
-        self.assertEqual(len(expected_instructions), len(block))
+        self.assertEqual(len(expected_instructions), len(block.instructions))
         self.assertEqual(expected_instructions, block.instructions)
-        self.assertEqual(expected_compiled_instructions, block.compile_sequence())
+        self.assertEqual(expected_compiled_instructions, [x for x in block])
 
     def test_empty_unreturning_main_block(self) -> None:
         block = InstructionBlock()
         self.__verify_block(block, [], [STOPInstruction()])
-        self.assertEqual(0, block.get_start_address())
+#        self.assertEqual(0, block.get_start_address())
         self.assertIsNone(block.return_ip)
         self.__verify_block(block, [], [STOPInstruction()])
         
     def test_empty_returning_main_block(self) -> None:
         block = InstructionBlock()
-        self.assertEqual(0, block.get_start_address())
+#        self.assertEqual(0, block.get_start_address())
         self.assertIsNone(block.return_ip)
         ip = InstructionPointer(InstructionBlock(), 7)
-        block.return_ip = ip # must have no effect
         self.__verify_block(block, [], [STOPInstruction()])
         
     def test_empty_relative_block(self) -> None:
         return_block = InstructionBlock()
-        block = InstructionBlock(return_block)
-        self.assertRaises(InstructionBlockNotYetPlacedException, block.get_start_address)
-        self.assertRaises(MissingReturnAddressException, block.compile_sequence)
+        block = InstructionBlock()
+#        self.assertRaises(InstructionBlockNotYetPlacedException, block.get_start_address)
+#        self.assertRaises(MissingReturnAddressException, block.compile_sequence)
         ip = InstructionPointer(return_block, 7)
         block.return_ip = ip
         self.__verify_block(block, [], [GOTOInstruction(ip)])
@@ -202,12 +203,12 @@ class InstructionBlockTest(unittest.TestCase):
     def test_create_embedded_block(self) -> None:
         parent_block = InstructionBlock()
         block = parent_block.create_embedded_block()
-        self.assertRaises(InstructionBlockNotYetPlacedException, block.get_start_address)
-        self.assertRaises(MissingReturnAddressException, block.compile_sequence)
+#        self.assertRaises(InstructionBlockNotYetPlacedException, block.get_start_address)
+#        self.assertRaises(MissingReturnAddressException, block.compile_sequence)
         block.return_ip = InstructionPointer(parent_block, 0)
         self.__verify_block(block, [], [GOTOInstruction(InstructionPointer(parent_block, 0))])
-        self.__verify_block(parent_block, [], [STOPInstruction(), GOTOInstruction(InstructionPointer(parent_block, 0))])
-        self.assertEqual(1, block.get_start_address())
+        self.__verify_block(parent_block, [], [STOPInstruction()])
+#        self.assertEqual(1, block.get_start_address())
         
     def test_add_instruction_exec(self) -> None:
         block = InstructionBlock()
@@ -229,13 +230,13 @@ class InstructionBlockTest(unittest.TestCase):
         block = InstructionBlock()
         expected_instructions = []
         
-        targets = [(InstructionBlock(), 0), (InstructionBlock(), 1), (InstructionBlock(), 50)]
+        targets = [InstructionBlock(), InstructionBlock(), InstructionBlock()]
         LOOKUP = [0, 1, 1, 0, 2, 1, 0, 0, 0, 1, 2, 2]
         for id in LOOKUP:
             target = targets[id]
-            instruction = GOTOInstruction(InstructionPointer(target[0], target[1]))
+            instruction = GOTOInstruction(InstructionPointer(target))
             expected_instructions.append(instruction)
-            block.add_instruction_goto(target[0], target[1])
+            block.add_instruction_goto(target)
             
         expected_compiled_instructions = expected_instructions.copy()
         expected_compiled_instructions.append(STOPInstruction())
@@ -324,45 +325,18 @@ class InstructionBlockTest(unittest.TestCase):
         
         positions = [0, None, None, None]                
         positions[3] = len(expected_compiled_instructions[1])
-        
-        expected_compiled_instructions[1].extend(expected_compiled_instructions[3])
-        for i in [1, 2]:
-            positions[i] = len(expected_compiled_instructions[0])
-            expected_compiled_instructions[0].extend(expected_compiled_instructions[i])
-            
-        positions[3] += positions[1]
-        
+
         self.__verify_block(blocks[2], expected_instructions[3], expected_compiled_instructions[3])
         self.__verify_block(blocks[1], expected_instructions[2], expected_compiled_instructions[2])
         self.__verify_block(blocks[0], expected_instructions[1], expected_compiled_instructions[1])
         self.__verify_block(main_block, expected_instructions[0], expected_compiled_instructions[0])
-        
-        self.assertEqual(positions[3], blocks[2].get_start_address())
-        self.assertEqual(positions[2], blocks[1].get_start_address())
-        self.assertEqual(positions[1], blocks[0].get_start_address())
-        self.assertEqual(positions[0], main_block.get_start_address())
-        
-        for instruction in main_block.instructions:
-            if isinstance(instruction, GOTOInstruction) or isinstance(instruction, CJMPInstruction):
-                self.assertIsInstance(instruction.target.get_absolute_address(), int)
-       
+
     def test_equality(self) -> None:
         block1 = InstructionBlock()
         block2 = InstructionBlock()
         self.assertEqual(block1, block1)
         self.assertNotEqual(block1, block2)
         self.assertNotEqual(hash(block1), hash(block2))
-
-    def test_add_instruction_already_compiled(self) -> None:
-        block = InstructionBlock()
-        wf1 = DummyWaveform()
-        wf2 = DummyWaveform()
-        block.add_instruction_exec(wf1)
-        block.compile_sequence()
-        block.add_instruction_exec(wf2)
-        sequence = block.compile_sequence()
-        expected_sequence = [EXECInstruction(wf1), EXECInstruction(wf2), STOPInstruction()]
-        self.assertEqual(expected_sequence, sequence)
 
 
 class InstructionStringRepresentation(unittest.TestCase):

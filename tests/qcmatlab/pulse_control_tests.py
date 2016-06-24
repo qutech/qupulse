@@ -32,7 +32,7 @@ class PulseControlInterfaceTests(unittest.TestCase):
         block = DummyInstructionBlock()
 
         pci = PulseControlInterface(sample_rate)
-        (result, _) = pci.create_pulse_group(block.compile_sequence(), name=name)
+        (result, _) = pci.create_pulse_group(block, name=name)
         expected_result = dict(
             name=name,
             nrep=[],
@@ -58,7 +58,7 @@ class PulseControlInterfaceTests(unittest.TestCase):
 
         registering_function = lambda x: x['data']
         pci = PulseControlInterface(sample_rate, time_scaling=1)
-        (result, _) = pci.create_pulse_group(block.compile_sequence(), name=name)
+        (result, _) = pci.create_pulse_group(block, name=name)
         expected_result = dict(
             name=name,
             nrep=[2, 1, 1],
