@@ -3,6 +3,9 @@
 Classes:
     - Waveform: An instantiated pulse which can be sampled to a raw voltage value array.
     - Trigger: Representation of a hardware trigger.
+    - WaveformSequence: A sequence of waveforms.
+    - MutableWaveformSequence: A mutable WaveformSequence where new waveforms can be appended.
+    - ImmutableWaveformSequence: An immutable WaveformSequence.
     - Instruction: Base class for hardware instructions.
     - CJMPInstruction: Conditional jump instruction.
     - EXECInstruction: Instruction to execute a waveform.
@@ -17,16 +20,17 @@ Classes:
 """
 
 from abc import ABCMeta, abstractmethod, abstractproperty
-from typing import List, Any
+from typing import List, Any, Optional
 import numpy
 
 from qctoolkit.comparable import Comparable
 
 # TODO lumip: add docstrings to InstructionBlock after issue #116 is resolved
 
-__all__ = ["Waveform", "Trigger", "InstructionPointer",
-           "Instruction", "CJMPInstruction", "EXECInstruction", "GOTOInstruction",
-           "STOPInstruction", "InstructionBlock", "InstructionSequence",
+__all__ = ["Waveform", "Trigger",
+           "WaveformSequence", "MutableWaveformSequence", "ImmutableWaveformSequence",
+           "InstructionPointer", "Instruction", "CJMPInstruction", "EXECInstruction",
+           "GOTOInstruction", "STOPInstruction", "InstructionBlock", "InstructionSequence",
            "InstructionBlockNotYetPlacedException", "InstructionBlockAlreadyFinalizedException",
            "MissingReturnAddressException"
           ]
@@ -294,3 +298,104 @@ class InstructionBlock(Comparable):
         
     def __str__(self) -> str:
         return str(hash(self))
+
+
+class SequenceContinuationStrategy(Comparable, metaclass=ABCMeta):
+
+    def __init__(self) -> None:
+        super().__init__()
+
+
+class WaveformSequence(metaclass=ABCMeta):
+
+    @abstractproperty
+    def waveforms(self) -> List[Waveform]:
+        pass
+
+    @abstractproperty
+    def repetitions(self) -> int:
+        pass
+
+    @abstractproperty
+    def goto_target(self) -> Optional['WaveformSequence']:
+        pass
+
+    @abstractproperty
+    def cjmp_trigger(self) -> Optional[Trigger]:
+        pass
+
+    @abstractproperty
+    def cjmp_target(self) -> Optional['WaveformSequence']:
+        pass
+
+
+class MutableWaveformSequence(WaveformSequence):
+
+    def __init__(self,
+                 repetitions: int=1,
+                 goto_target: Optional[WaveformSequence]=None,
+                 cjmp_trigger: Optional[Trigger]=None,
+                 cjmp_target: Optional[WaveformSequence]=None) -> None:
+        super().__init__()
+        self.__waveforms = []  # type: List[Waveform]
+        self.__repetitions = repetitions  # type: int
+        self.__goto_target = goto_target  # type: Optional[WaveformSequence]
+        self.__cjmp_trigger = cjmp_trigger  # type: Optional[Trigger]
+        self.__cjmp_target = cjmp_target  # type: Optional[WaveformSequence]
+
+    def add(self, waveform: Waveform) -> None:
+        self.__waveforms.append(waveform)
+
+    @property
+    def waveforms(self) -> List[Waveform]:
+        return self.__waveforms.copy()
+
+    @property
+    def repetitions(self) -> int:
+        return self.__repetitions
+
+    @property
+    def goto_target(self) -> Optional[WaveformSequence]:
+        return self.__goto_target
+
+    @property
+    def cjmp_trigger(self) -> Optional[Trigger]:
+        return self.__cjmp_trigger
+
+    @property
+    def cjmp_target(self) -> Optional[WaveformSequence]:
+        return self.__cjmp_target
+
+
+class ImmutableWaveformSequence(WaveformSequence):
+
+    def __init__(self, sequence: WaveformSequence):
+        super().__init__()
+        self.__sequence = sequence
+        self.__waveforms = self.__sequence.waveforms.copy()
+
+    @property
+    def waveforms(self) -> List[Waveform]:
+        return self.__waveforms.copy()
+
+    @property
+    def repetitions(self) -> int:
+        return self.__sequence.repetitions
+
+    @property
+    def goto_target(self) -> Optional['ImmutableWaveformSequence']:
+        goto_target = self.__sequence.goto_target
+        if goto_target is None:
+            return None
+        return ImmutableWaveformSequence(goto_target)
+
+    @property
+    def cjmp_trigger(self) -> Optional[Trigger]:
+        return self.__sequence.cjmp_trigger
+
+    @property
+    def cjmp_target(self) -> Optional['ImmutableWaveformSequence']:
+        cjmp_target = self.__sequence.cjmp_target
+        if cjmp_target is None:
+            return None
+        return ImmutableWaveformSequence(cjmp_target)
