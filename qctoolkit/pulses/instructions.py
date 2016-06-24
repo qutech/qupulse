@@ -79,7 +79,7 @@ class InstructionPointer(Comparable):
     """Reference to the location of an InstructionBlock.
     """
     
-    def __init__(self, block: 'InstructionBlock', offset: int) -> None:
+    def __init__(self, block: 'InstructionBlock', offset: int=0) -> None:
         super().__init__()
         if offset < 0:
             raise ValueError("offset must be a non-negative integer (was {})".format(offset))
@@ -121,10 +121,10 @@ class CJMPInstruction(Instruction):
     effect, the execution will continue with the following.
     """
 
-    def __init__(self, trigger: Trigger, block: 'InstructionBlock', offset: int=0) -> None:
+    def __init__(self, trigger: Trigger, target: InstructionPointer) -> None:
         super().__init__()
         self.trigger = trigger
-        self.target = InstructionPointer(block, offset)
+        self.target = target
 
     @property
     def compare_key(self) -> Any:
@@ -141,9 +141,9 @@ class GOTOInstruction(Instruction):
     held by this GOTOInstruction.
     """
     
-    def __init__(self, block: 'InstructionBlock', offset: int=0) -> None:
+    def __init__(self, target: InstructionPointer) -> None:
         super().__init__()
-        self.target = InstructionPointer(block, offset)
+        self.target = target
 
     @property
     def compare_key(self) -> Any:
@@ -230,13 +230,13 @@ class InstructionBlock(Comparable):
         self.add_instruction(EXECInstruction(waveform))
         
     def add_instruction_goto(self, target_block: 'InstructionBlock', offset: int=0) -> None:
-        self.add_instruction(GOTOInstruction(target_block, offset))
+        self.add_instruction(GOTOInstruction(InstructionPointer(target_block, offset)))
         
     def add_instruction_cjmp(self,
                              trigger: Trigger,
                              target_block: 'InstructionBlock',
                              offset: int=0) -> None:
-        self.add_instruction(CJMPInstruction(trigger, target_block, offset))
+        self.add_instruction(CJMPInstruction(trigger, InstructionPointer(target_block, offset)))
         
     def add_instruction_stop(self) -> None:
         self.add_instruction(STOPInstruction())
@@ -265,7 +265,7 @@ class InstructionBlock(Comparable):
             self.__compiled_sequence.append(STOPInstruction())
         elif self.return_ip is not None:
             self.__compiled_sequence.append(
-                GOTOInstruction(self.return_ip.block, self.return_ip.offset))
+                GOTOInstruction(self.return_ip))
         else:
             self.__compiled_sequence = None
             raise MissingReturnAddressException()
