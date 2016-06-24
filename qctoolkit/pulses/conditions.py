@@ -124,7 +124,7 @@ class HardwareCondition(Condition):
                             conditions: Dict[str, Condition],
                             instruction_block: InstructionBlock) -> None:
         body_block = instruction_block.create_embedded_block()
-        body_block.return_ip = InstructionPointer(instruction_block, len(body_block))
+        body_block.return_ip = InstructionPointer(instruction_block, len(instruction_block))
         
         instruction_block.add_instruction_cjmp(self.__trigger, body_block)
         sequencer.push(body, parameters, conditions, body_block)
