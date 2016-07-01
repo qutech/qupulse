@@ -75,7 +75,7 @@ class PulseControlInterfaceTests(unittest.TestCase):
         name = 'foo_group'
         sample_rate = 10
         block = DummyInstructionBlock()
-        block.add_instruction_goto(block.create_embedded_block())
+        block.add_instruction_goto(DummyInstructionBlock())
 
         pci = PulseControlInterface(sample_rate)
         with self.assertRaises(Exception):

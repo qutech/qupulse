@@ -5,7 +5,7 @@ import numpy
 
 """LOCAL IMPORTS"""
 from qctoolkit.serialization import Serializer
-from qctoolkit.pulses.instructions import Waveform, Instruction
+from qctoolkit.pulses.instructions import Waveform, Instruction, CJMPInstruction, GOTOInstruction
 from qctoolkit.pulses.sequencing import Sequencer, InstructionBlock, SequencingElement
 from qctoolkit.pulses.parameters import Parameter, ParameterDeclaration
 from qctoolkit.pulses.pulse_template import PulseTemplate, MeasurementWindow
@@ -105,10 +105,10 @@ class DummyInstructionBlock(InstructionBlock):
         super().__init__()
         self.embedded_blocks = [] # type: Collection[InstructionBlock]
 
-    def create_embedded_block(self) -> InstructionBlock:
-        block = InstructionBlock()
-        self.embedded_blocks.append(block)
-        return block
+    def add_instruction(self, instruction: Instruction) -> None:
+        super().add_instruction(instruction)
+        if isinstance(instruction, (CJMPInstruction, GOTOInstruction)):
+            self.embedded_blocks.append(instruction.target.block)
 
 
 class DummyWaveform(Waveform):

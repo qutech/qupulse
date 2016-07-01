@@ -24,7 +24,7 @@ class InstructionPointerTest(unittest.TestCase):
             self.assertEqual(offset, ip.offset)
 
     def test_initialization_relative_block(self) -> None:
-        block = InstructionBlock().create_embedded_block()
+        block = InstructionBlock()
         for offset in [0, 1, 924]:
             ip = InstructionPointer(block, offset)
             self.assertIs(block, ip.block)
@@ -32,7 +32,7 @@ class InstructionPointerTest(unittest.TestCase):
 
     def test_equality(self) -> None:
         blocks = [InstructionBlock(), InstructionBlock()]
-        blocks.append(blocks[0].create_embedded_block())
+        blocks.append(InstructionBlock())
         ips = []
         for block in blocks:
             for offset in [0, 1, 2352]:
@@ -196,7 +196,7 @@ class InstructionBlockTest(unittest.TestCase):
         
     def test_create_embedded_block(self) -> None:
         parent_block = InstructionBlock()
-        block = parent_block.create_embedded_block()
+        block = InstructionBlock()
         block.return_ip = InstructionPointer(parent_block, 18)
         self.__verify_block(block, [], [GOTOInstruction(InstructionPointer(parent_block, 18))], InstructionPointer(parent_block, 18))
         self.__verify_block(parent_block, [], [STOPInstruction()], None)
@@ -271,7 +271,7 @@ class InstructionBlockTest(unittest.TestCase):
         main_block.add_instruction_exec(waveforms[0])
         expected_instructions[0].append(EXECInstruction(waveforms[0]))
         
-        block = main_block.create_embedded_block() 
+        block = InstructionBlock()
         trigger = Trigger()
         ip = InstructionPointer(block)
         main_block.add_instruction_cjmp(trigger, block)
@@ -280,7 +280,7 @@ class InstructionBlockTest(unittest.TestCase):
         expected_return_ips.append(InstructionPointer(main_block, len(main_block)))
         blocks.append(block)
         
-        block = main_block.create_embedded_block()
+        block = InstructionBlock()
         trigger = Trigger()
         ip = InstructionPointer(block)
         main_block.add_instruction_cjmp(trigger, block)
@@ -298,7 +298,7 @@ class InstructionBlockTest(unittest.TestCase):
                 expected_instructions[i + 1].append(EXECInstruction(waveform))
                 block.add_instruction_exec(waveform)
             
-        block = blocks[0].create_embedded_block()
+        block = InstructionBlock()
         ip = InstructionPointer(block)
         blocks[0].add_instruction_cjmp(trigger, block)
         expected_instructions[1].append(CJMPInstruction(trigger, ip))
@@ -385,14 +385,14 @@ class ImmutableInstructionBlockTests(unittest.TestCase):
 
         main_block.add_instruction_exec(waveforms[0])
 
-        block = main_block.create_embedded_block()
+        block = InstructionBlock()
         trigger = Trigger()
         ip = InstructionPointer(block)
         main_block.add_instruction_cjmp(trigger, block)
         block.return_ip = InstructionPointer(main_block, len(main_block))
         blocks.append(block)
 
-        block = main_block.create_embedded_block()
+        block = InstructionBlock()
         trigger = Trigger()
         ip = InstructionPointer(block)
         main_block.add_instruction_cjmp(trigger, block)
@@ -407,7 +407,7 @@ class ImmutableInstructionBlockTests(unittest.TestCase):
                 waveform = waveforms[id]
                 block.add_instruction_exec(waveform)
 
-        block = blocks[0].create_embedded_block()
+        block = InstructionBlock()
         ip = InstructionPointer(block)
         blocks[0].add_instruction_cjmp(trigger, block)
         block.return_ip = InstructionPointer(blocks[0], len(blocks[0]))

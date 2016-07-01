@@ -123,7 +123,7 @@ class HardwareCondition(Condition):
                             parameters: Dict[str, Parameter],
                             conditions: Dict[str, Condition],
                             instruction_block: InstructionBlock) -> None:
-        body_block = instruction_block.create_embedded_block()
+        body_block = InstructionBlock()
         body_block.return_ip = InstructionPointer(instruction_block,
                                                   len(instruction_block.instructions))
         
@@ -138,8 +138,8 @@ class HardwareCondition(Condition):
                               parameters: Dict[str, Parameter],
                               conditions: Dict[str, Condition],
                               instruction_block: InstructionBlock) -> None:
-        if_block = instruction_block.create_embedded_block()
-        else_block = instruction_block.create_embedded_block()
+        if_block = InstructionBlock()
+        else_block = InstructionBlock()
         
         instruction_block.add_instruction_cjmp(self.__trigger, if_block)
         sequencer.push(if_branch, parameters, conditions, if_block)
