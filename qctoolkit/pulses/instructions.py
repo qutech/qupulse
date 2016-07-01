@@ -265,6 +265,10 @@ class AbstractInstructionBlock(Comparable, metaclass=ABCMeta):
             yield GOTOInstruction(self.return_ip)
 
     def __getitem__(self, index: int) -> Instruction:
+        if index > len(self.instructions) or index < -(len(self.instructions) + 1):
+            raise IndexError()
+        if index < 0:
+            return self[len(self) + index]
         if index < len(self.instructions):
             return self.instructions[index]
         elif index == len(self.instructions):
@@ -272,8 +276,6 @@ class AbstractInstructionBlock(Comparable, metaclass=ABCMeta):
                 return STOPInstruction()
             else:
                 return GOTOInstruction(self.return_ip)
-        else:
-            raise IndexError()
 
     def __len__(self) -> int:
         return len(self.instructions) + 1

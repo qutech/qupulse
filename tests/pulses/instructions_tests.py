@@ -1,10 +1,10 @@
 import unittest
 
-from typing import Dict
+from typing import Dict, Any, List
 
 from qctoolkit.pulses.instructions import InstructionBlock, InstructionPointer,\
     Trigger, CJMPInstruction, GOTOInstruction,EXECInstruction, STOPInstruction,\
-    InstructionSequence, AbstractInstructionBlock, ImmutableInstructionBlock
+    InstructionSequence, AbstractInstructionBlock, ImmutableInstructionBlock, Instruction
 
 from tests.pulses.sequencing_dummies import DummyWaveform, DummyInstructionBlock
 
@@ -166,6 +166,112 @@ class STOPInstructionTest(unittest.TestCase):
         self.assertEqual(instr1, instr2)
         self.assertEqual(instr2, instr1)
         self.assertEqual(hash(instr1), hash(instr2))
+
+
+class AbstractInstructionBlockStub(AbstractInstructionBlock):
+
+    def __init__(self, instructions: List[Instruction], return_ip: InstructionPointer) -> None:
+        super().__init__()
+        self.__instructions = instructions
+        self.__return_ip = return_ip
+
+    @property
+    def instructions(self) -> List[Instruction]:
+        return self.__instructions
+
+    @property
+    def return_ip(self) -> InstructionPointer:
+        return self.__return_ip
+
+    @property
+    def compare_key(self) -> Any:
+        return id(self)
+
+
+class AbstractInstructionBlockTest(unittest.TestCase):
+
+    def test_len_empty(self) -> None:
+        block = AbstractInstructionBlockStub([], None)
+        self.assertEqual(1, len(block))
+        self.assertEqual(0, len(block.instructions))
+
+    def test_len(self) -> None:
+        block = AbstractInstructionBlockStub([EXECInstruction(DummyWaveform())], None)
+        self.assertEqual(2, len(block))
+        self.assertEqual(1, len(block.instructions))
+
+    def test_iterable_empty_no_return(self) -> None:
+        block = AbstractInstructionBlockStub([], None)
+        count = 0
+        for instruction in block:
+            self.assertEqual(0, count)
+            self.assertIsInstance(instruction, STOPInstruction)
+            count += 1
+
+    def test_iterable_empty_return(self) -> None:
+        parent_block = InstructionBlock()
+        block = AbstractInstructionBlockStub([], InstructionPointer(parent_block, 13))
+        count = 0
+        for instruction in block:
+            self.assertEqual(0, count)
+            self.assertIsInstance(instruction, GOTOInstruction)
+            self.assertEqual(InstructionPointer(parent_block, 13), instruction.target)
+            count += 1
+
+    def test_iterable_no_return(self) -> None:
+        wf = DummyWaveform()
+        block = AbstractInstructionBlockStub([EXECInstruction(wf)], None)
+        count = 0
+        for expected_instruction, instruction in zip([EXECInstruction(wf), STOPInstruction()], block):
+            self.assertEqual(expected_instruction, instruction)
+            count += 1
+        self.assertEqual(2, count)
+
+    def test_iterable_return(self) -> None:
+        parent_block = InstructionBlock()
+        wf = DummyWaveform()
+        block = AbstractInstructionBlockStub([EXECInstruction(wf)], InstructionPointer(parent_block, 11))
+        count = 0
+        for expected_instruction, instruction in zip([EXECInstruction(wf), GOTOInstruction(InstructionPointer(parent_block, 11))], block):
+            self.assertEqual(expected_instruction, instruction)
+            count += 1
+        self.assertEqual(2, count);
+
+    def test_item_access_empty_no_return(self) -> None:
+        block = AbstractInstructionBlockStub([], None)
+        self.assertEqual(STOPInstruction(), block[0])
+        self.assertRaises(IndexError, block.__getitem__, 1)
+        self.assertEqual(STOPInstruction(), block[-1])
+        self.assertRaises(IndexError, block.__getitem__, -2)
+
+    def test_item_access_empty_return(self) -> None:
+        parent_block = InstructionBlock()
+        block = AbstractInstructionBlockStub([], InstructionPointer(parent_block, 84))
+        self.assertEqual(GOTOInstruction(InstructionPointer(parent_block, 84)), block[0])
+        self.assertRaises(IndexError, block.__getitem__, 1)
+        self.assertEqual(GOTOInstruction(InstructionPointer(parent_block, 84)), block[-1])
+        self.assertRaises(IndexError, block.__getitem__, -2)
+
+    def test_item_access_no_return(self) -> None:
+        wf = DummyWaveform()
+        block = AbstractInstructionBlockStub([EXECInstruction(wf)], None)
+        self.assertEqual(EXECInstruction(wf), block[0])
+        self.assertEqual(STOPInstruction(), block[1])
+        self.assertRaises(IndexError, block.__getitem__, 2)
+        self.assertEqual(STOPInstruction(), block[-1])
+        self.assertEqual(EXECInstruction(wf), block[-2])
+        self.assertRaises(IndexError, block.__getitem__, -3)
+
+    def test_item_access_return(self) -> None:
+        wf = DummyWaveform()
+        parent_block = InstructionBlock()
+        block = AbstractInstructionBlockStub([EXECInstruction(wf)], InstructionPointer(parent_block, 29))
+        self.assertEqual(EXECInstruction(wf), block[0])
+        self.assertEqual(GOTOInstruction(InstructionPointer(parent_block, 29)), block[1])
+        self.assertRaises(IndexError, block.__getitem__, 2)
+        self.assertEqual(GOTOInstruction(InstructionPointer(parent_block, 29)), block[-1])
+        self.assertEqual(EXECInstruction(wf), block[-2])
+        self.assertRaises(IndexError, block.__getitem__, -3)
 
 
 class InstructionBlockTest(unittest.TestCase):
@@ -372,13 +478,42 @@ class ImmutableInstructionBlockTests(unittest.TestCase):
     def test_empty_returning_block(self) -> None:
         return_block = InstructionBlock()
         block = InstructionBlock()
-        ip = InstructionPointer(return_block, 7)
-        block.return_ip = ip
+        block.return_ip = InstructionPointer(return_block, 7)
         context = {return_block: ImmutableInstructionBlock(return_block, dict())}
         immutable_block = ImmutableInstructionBlock(block, context)
         self.__verify_block(block, immutable_block, context)
 
-    def test_nested_block_construction(self) -> None:
+    def test_nested_no_context_argument(self) -> None:
+        parent_block = InstructionBlock()
+        block = InstructionBlock()
+        block.return_ip = InstructionPointer(parent_block, 1)
+        parent_block.add_instruction_goto(block)
+        immutable_block = ImmutableInstructionBlock(parent_block)
+        context = {
+            parent_block: immutable_block,
+            block: immutable_block.instructions[0].target.block
+        }
+        self.__verify_block(parent_block, immutable_block, context)
+
+    def test_nested_cjmp(self) -> None:
+        parent_block = InstructionBlock()
+        block = InstructionBlock()
+        block.return_ip = InstructionPointer(parent_block, 1)
+        parent_block.add_instruction_cjmp(Trigger(), block)
+        context = dict()
+        immutable_block = ImmutableInstructionBlock(parent_block, context)
+        self.__verify_block(parent_block, immutable_block, context)
+
+    def test_nested_goto(self) -> None:
+        parent_block = InstructionBlock()
+        block = InstructionBlock()
+        block.return_ip = InstructionPointer(parent_block, 1)
+        parent_block.add_instruction_goto(block)
+        context = dict()
+        immutable_block = ImmutableInstructionBlock(parent_block, context)
+        self.__verify_block(parent_block, immutable_block, context)
+
+    def test_multiple_nested_block_construction(self) -> None:
         main_block = InstructionBlock()
         blocks = []
         waveforms = [DummyWaveform(), DummyWaveform(), DummyWaveform()]
