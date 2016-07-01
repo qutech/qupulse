@@ -119,10 +119,6 @@ class Instruction(Comparable, metaclass=ABCMeta):
     def __init__(self) -> None:
         super().__init__()
 
-    @abstractmethod
-    def compare_key(self) -> Any:
-        pass
-
 
 class CJMPInstruction(Instruction):
     """A conditional jump hardware instruction.
@@ -133,6 +129,14 @@ class CJMPInstruction(Instruction):
     """
 
     def __init__(self, trigger: Trigger, target: InstructionPointer) -> None:
+        """Create a new CJMPInstruction object.
+
+        Args:
+            trigger (Trigger): Representation of the hardware trigger which controls whether the
+                conditional jump occurs or not.
+            target (InstructionPointer): Instruction pointer referencing the instruction targeted
+                by the conditional jump.
+        """
         super().__init__()
         self.trigger = trigger
         self.target = target
@@ -184,6 +188,12 @@ class GOTOInstruction(Instruction):
     """
     
     def __init__(self, target: InstructionPointer) -> None:
+        """Create a new GOTOInstruction object.
+
+        Args:
+            target (InstructionPointer): Instruction pointer referencing the instruction targeted
+                by the unconditional jump.
+        """
         super().__init__()
         self.target = target
 
@@ -199,6 +209,11 @@ class EXECInstruction(Instruction):
     """An instruction to execute/play back a waveform."""
 
     def __init__(self, waveform: Waveform) -> None:
+        """Create a new EXECInstruction object.
+
+        Args:
+            waveform (Waveform): The waveform that will be executed by this instruction.
+        """
         super().__init__()
         self.waveform = waveform
 
@@ -214,6 +229,7 @@ class STOPInstruction(Instruction):
     """An instruction which indicates the end of the program."""
 
     def __init__(self) -> None:
+        """Create a new STOPInstruction object."""
         super().__init__()
 
     @property
@@ -259,13 +275,11 @@ class AbstractInstructionBlock(Comparable, metaclass=ABCMeta):
     @abstractproperty
     def instructions(self) -> List[Instruction]:
         """The instructions contained in this block (excluding a final stop or return goto)."""
-        pass
 
     @abstractproperty
     def return_ip(self) -> Optional[InstructionPointer]:
         """The return instruction pointer indicating the instruction to which the control flow
         shall return after exection of this instruction block has finished."""
-        pass
 
     @property
     def compare_key(self) -> Any:
@@ -283,6 +297,10 @@ class AbstractInstructionBlock(Comparable, metaclass=ABCMeta):
             yield GOTOInstruction(self.return_ip)
 
     def __getitem__(self, index: int) -> Instruction:
+        if index > len(self.instructions) or index < -(len(self.instructions) + 1):
+            raise IndexError()
+        if index < 0:
+            return self[len(self) + index]
         if index < len(self.instructions):
             return self.instructions[index]
         elif index == len(self.instructions):
@@ -290,8 +308,6 @@ class AbstractInstructionBlock(Comparable, metaclass=ABCMeta):
                 return STOPInstruction()
             else:
                 return GOTOInstruction(self.return_ip)
-        else:
-            raise IndexError()
 
     def __len__(self) -> int:
         return len(self.instructions) + 1
