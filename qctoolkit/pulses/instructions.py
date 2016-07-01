@@ -153,6 +153,15 @@ class REPJInstruction(Instruction):
     a parameter."""
 
     def __init__(self, count: int, target: InstructionPointer) -> None:
+        """Create a new REPJInstruction object.
+
+        Args:
+            count (int): A positive integer indicating how often the repetition jump is triggered.
+            target (InstructionPointer): Instruction pointer referencing the instruction targeted
+                by the repetition jump.
+        Raises:
+            ValueError, if count is a negative number.
+        """
         super().__init__()
         if count < 0:
             raise ValueError("Repetition count must not be negative.")
