@@ -154,6 +154,8 @@ class REPJInstruction(Instruction):
 
     def __init__(self, count: int, target: InstructionPointer) -> None:
         super().__init__()
+        if count < 0:
+            raise ValueError("Repetition count must not be negative.")
         self.count = count
         self.target = target
 

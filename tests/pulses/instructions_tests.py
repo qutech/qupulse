@@ -93,6 +93,46 @@ class CJMPInstructionTest(unittest.TestCase):
         self.assertEqual("cjmp to {} on {}".format(InstructionPointer(block, 3), trigger), str(instr))
 
 
+class REPJInstructionTest(unittest.TestCase):
+
+    def test_initialization(self) -> None:
+        block = InstructionBlock()
+        for count in [0, 1, 47]:
+            for offset in [0, 1, 23]:
+                instr = REPJInstruction(count, InstructionPointer(block, offset))
+                self.assertEqual(count, instr.count)
+                self.assertEqual(block, instr.target.block)
+                self.assertEqual(offset, instr.target.offset)
+
+    def test_negative_count(self) -> None:
+        self.assertRaises(ValueError, REPJInstruction, -3, InstructionPointer(InstructionBlock))
+
+    def test_equality(self) -> None:
+        blocks = [InstructionBlock(), InstructionBlock()]
+        for count in [0, 1, 47]:
+            for offset in [0, 1, 23]:
+                instrA = REPJInstruction(count, InstructionPointer(blocks[0], offset))
+                instrB = REPJInstruction(count, InstructionPointer(blocks[0], offset))
+                self.assertEqual(instrA, instrB)
+                self.assertEqual(instrB, instrA)
+        instrs = []
+        for count in [0, 1, 43]:
+            for block in blocks:
+                for offset in [0, 17]:
+                    instruction = REPJInstruction(count, InstructionPointer(block, offset))
+                    self.assertEqual(instruction, instruction)
+                    for other in instrs:
+                        self.assertNotEqual(instruction, other)
+                        self.assertNotEqual(other, instruction)
+                        self.assertNotEqual(hash(instruction), hash(other))
+                    instrs.append(instruction)
+
+    def test_str(self) -> None:
+        block = DummyInstructionBlock()
+        instr = REPJInstruction(7, InstructionPointer(block, 3))
+        self.assertEqual("repj {} times to {}".format(7, InstructionPointer(block, 3)), str(instr))
+
+
 class GOTOInstructionTest(unittest.TestCase):
     
     def test_initialization(self) -> None:
