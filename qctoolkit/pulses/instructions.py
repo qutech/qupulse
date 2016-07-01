@@ -5,6 +5,7 @@ Classes:
     - Trigger: Representation of a hardware trigger.
     - Instruction: Base class for hardware instructions.
     - CJMPInstruction: Conditional jump instruction.
+    - REPJInstruction: Repetition jump instruciton.
     - EXECInstruction: Instruction to execute a waveform.
     - GOTOInstruction: Unconditional jump instruction.
     - STOPInstruction: Instruction which indicates the end of execution.
@@ -146,6 +147,37 @@ class CJMPInstruction(Instruction):
         
     def __str__(self) -> str:
         return "cjmp to {} on {}".format(self.target, self.trigger)
+
+
+class REPJInstruction(Instruction):
+    """A repetition jump instruction.
+
+    Will cause the execution to jump to the instruction indicated by the InstructionPointer held by
+    this REPJInstruction for the first n times this REPJInstruction is encountered, where n is
+    a parameter."""
+
+    def __init__(self, count: int, target: InstructionPointer) -> None:
+        """Create a new REPJInstruction object.
+
+        Args:
+            count (int): A positive integer indicating how often the repetition jump is triggered.
+            target (InstructionPointer): Instruction pointer referencing the instruction targeted
+                by the repetition jump.
+        Raises:
+            ValueError, if count is a negative number.
+        """
+        super().__init__()
+        if count < 0:
+            raise ValueError("Repetition count must not be negative.")
+        self.count = count
+        self.target = target
+
+    @property
+    def compare_key(self) -> Any:
+        return self.count, self.target
+
+    def __str__(self) -> str:
+        return "repj {} times to {}".format(self.count, self.target)
 
 
 class GOTOInstruction(Instruction):
@@ -331,7 +363,7 @@ class InstructionBlock(AbstractInstructionBlock):
 
         Args:
             target_block (InstructionBlock): The instruction block the new GOTOInstruction will
-                jump to. Execution will begin at the start of this block, i.e., the offset of the
+                jump to. Execution will begin at the start of that block, i.e., the offset of the
                 instruction pointer of the GOTOInstruction will be zero.
         """
         self.add_instruction(GOTOInstruction(InstructionPointer(target_block)))
@@ -344,11 +376,24 @@ class InstructionBlock(AbstractInstructionBlock):
         Args:
             trigger (Trigger): The hardware trigger that will control the new CJMPInstruction.
             target_block (InstructionBlock): The instruction block the new CJMPInstruction will
-                jump to. Execution will begin at the start of this block, i.e., the offset of the
+                jump to. Execution will begin at the start of that block, i.e., the offset of the
                 instruction pointer of the CJMPInstruction will be zero.
         """
         self.add_instruction(CJMPInstruction(trigger, InstructionPointer(target_block)))
 
+    def add_instruction_repj(self,
+                             count: int,
+                             target_block: 'InstructionBlock') -> None:
+        """Create and append a new REPJInstruction object at the end of this instruction block.
+
+        Args:
+            count (int): The amount of repetitions of the new REPJInstruction.
+            target_block (InstructionBlock): The instruction block the new REPJInstruction will
+                jump to. Execution will begin at the start of that block, i.e., the offset of the
+                instruction pointer of the REPJInstruction will be zero.
+        """
+        self.add_instruction(REPJInstruction(count, InstructionPointer(target_block)))
+        
     def add_instruction_stop(self) -> None:
         """Create and append a new STOPInstruction object at the end of this instruction block."""
         self.add_instruction(STOPInstruction())
@@ -399,11 +444,16 @@ class ImmutableInstructionBlock(AbstractInstructionBlock):
         context[block] = self
         for instruction in block.instructions:
             immutable_instruction = instruction
-            if isinstance(instruction, (GOTOInstruction, CJMPInstruction)):
+            if isinstance(instruction, (GOTOInstruction, CJMPInstruction, REPJInstruction)):
                 target_block = instruction.target.block
                 immutable_target_block = ImmutableInstructionBlock(target_block, context)
                 if isinstance(instruction, GOTOInstruction):
                     immutable_instruction = GOTOInstruction(
+                        InstructionPointer(immutable_target_block, instruction.target.offset)
+                    )
+                elif isinstance(instruction, REPJInstruction):
+                    immutable_instruction = REPJInstruction(
+                        instruction.count,
                         InstructionPointer(immutable_target_block, instruction.target.offset)
                     )
                 else:

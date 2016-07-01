@@ -3,7 +3,7 @@ import unittest
 from typing import Dict, Any, List
 
 from qctoolkit.pulses.instructions import InstructionBlock, InstructionPointer,\
-    Trigger, CJMPInstruction, GOTOInstruction,EXECInstruction, STOPInstruction,\
+    Trigger, CJMPInstruction, REPJInstruction, GOTOInstruction, EXECInstruction, STOPInstruction,\
     InstructionSequence, AbstractInstructionBlock, ImmutableInstructionBlock, Instruction
 
 from tests.pulses.sequencing_dummies import DummyWaveform, DummyInstructionBlock
@@ -91,6 +91,46 @@ class CJMPInstructionTest(unittest.TestCase):
         trigger = Trigger()
         instr = CJMPInstruction(trigger, InstructionPointer(block, 3))
         self.assertEqual("cjmp to {} on {}".format(InstructionPointer(block, 3), trigger), str(instr))
+
+
+class REPJInstructionTest(unittest.TestCase):
+
+    def test_initialization(self) -> None:
+        block = InstructionBlock()
+        for count in [0, 1, 47]:
+            for offset in [0, 1, 23]:
+                instr = REPJInstruction(count, InstructionPointer(block, offset))
+                self.assertEqual(count, instr.count)
+                self.assertEqual(block, instr.target.block)
+                self.assertEqual(offset, instr.target.offset)
+
+    def test_negative_count(self) -> None:
+        self.assertRaises(ValueError, REPJInstruction, -3, InstructionPointer(InstructionBlock))
+
+    def test_equality(self) -> None:
+        blocks = [InstructionBlock(), InstructionBlock()]
+        for count in [0, 1, 47]:
+            for offset in [0, 1, 23]:
+                instrA = REPJInstruction(count, InstructionPointer(blocks[0], offset))
+                instrB = REPJInstruction(count, InstructionPointer(blocks[0], offset))
+                self.assertEqual(instrA, instrB)
+                self.assertEqual(instrB, instrA)
+        instrs = []
+        for count in [0, 1, 43]:
+            for block in blocks:
+                for offset in [0, 17]:
+                    instruction = REPJInstruction(count, InstructionPointer(block, offset))
+                    self.assertEqual(instruction, instruction)
+                    for other in instrs:
+                        self.assertNotEqual(instruction, other)
+                        self.assertNotEqual(other, instruction)
+                        self.assertNotEqual(hash(instruction), hash(other))
+                    instrs.append(instruction)
+
+    def test_str(self) -> None:
+        block = DummyInstructionBlock()
+        instr = REPJInstruction(7, InstructionPointer(block, 3))
+        self.assertEqual("repj {} times to {}".format(7, InstructionPointer(block, 3)), str(instr))
 
 
 class GOTOInstructionTest(unittest.TestCase):
@@ -342,14 +382,27 @@ class InstructionBlockTest(unittest.TestCase):
     def test_add_instruction_cjmp(self) -> None:
         block = InstructionBlock()
         expected_instructions = []
-        expected_compiled_instructions = []
         
-        targets = [(InstructionBlock(), 0), (InstructionBlock(), 1), (InstructionBlock(), 50)]
+        targets = [InstructionBlock(), InstructionBlock(), InstructionBlock()]
         triggers = [Trigger(), Trigger()]
         LOOKUP = [(0, 0), (1, 0), (1, 1), (0, 1), (2, 0), (1, 0), (0, 1), (0, 1), (0, 0), (1, 0), (2, 1), (2, 1)]
         for i in LOOKUP:
-            block.add_instruction_cjmp(triggers[i[1]], targets[i[0]][0])
-            expected_instructions.append(CJMPInstruction(triggers[i[1]], InstructionPointer(targets[i[0]][0], 0)))
+            block.add_instruction_cjmp(triggers[i[1]], targets[i[0]])
+            expected_instructions.append(CJMPInstruction(triggers[i[1]], InstructionPointer(targets[i[0]], 0)))
+
+        expected_compiled_instructions = expected_instructions.copy()
+        expected_compiled_instructions.append(STOPInstruction())
+        self.__verify_block(block, expected_instructions, expected_compiled_instructions, None)
+
+    def test_add_instruction_repj(self) -> None:
+        block = InstructionBlock()
+        expected_instructions = []
+        targets = [InstructionBlock(), InstructionBlock(), InstructionBlock()]
+        counts = [3, 8, 857]
+        LOOKUP = [(0, 0), (0, 1), (1, 1), (0, 2), (2, 0), (1, 0), (2, 2), (2, 1), (1, 0), (1,2)]
+        for i in LOOKUP:
+            block.add_instruction_repj(counts[i[0]], targets[i[1]])
+            expected_instructions.append(REPJInstruction(counts[i[0]], InstructionPointer(targets[i[1]], 0)))
 
         expected_compiled_instructions = expected_instructions.copy()
         expected_compiled_instructions.append(STOPInstruction())
@@ -460,7 +513,7 @@ class ImmutableInstructionBlockTests(unittest.TestCase):
 
         for instruction, immutable_instruction in zip(block.instructions, immutable_block.instructions):
             self.assertEqual(type(instruction), type(immutable_instruction))
-            if isinstance(instruction, (GOTOInstruction, CJMPInstruction)):
+            if isinstance(instruction, (GOTOInstruction, CJMPInstruction, REPJInstruction)):
                 target_block = instruction.target.block
                 immutable_target_block = immutable_instruction.target.block
                 self.assertEqual(instruction.target.offset, immutable_instruction.target.offset)
@@ -500,6 +553,15 @@ class ImmutableInstructionBlockTests(unittest.TestCase):
         block = InstructionBlock()
         block.return_ip = InstructionPointer(parent_block, 1)
         parent_block.add_instruction_cjmp(Trigger(), block)
+        context = dict()
+        immutable_block = ImmutableInstructionBlock(parent_block, context)
+        self.__verify_block(parent_block, immutable_block, context)
+
+    def test_nested_repj(self) -> None:
+        parent_block = InstructionBlock()
+        block = InstructionBlock()
+        block.return_ip = InstructionPointer(parent_block, 1)
+        parent_block.add_instruction_repj(3, block)
         context = dict()
         immutable_block = ImmutableInstructionBlock(parent_block, context)
         self.__verify_block(parent_block, immutable_block, context)
