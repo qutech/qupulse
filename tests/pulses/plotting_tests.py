@@ -17,10 +17,10 @@ class PlotterTests(unittest.TestCase):
         block.add_instruction(DummyInstruction())
         plotter = Plotter()
         with self.assertRaises(NotImplementedError):
-            plotter.render(block.compile_sequence())
+            plotter.render(block)
 
     def test_render_no_waveforms(self) -> None:
-        self.assertEqual(([], []), Plotter().render(InstructionBlock().compile_sequence()))
+        self.assertEqual(([], []), Plotter().render(InstructionBlock()))
 
     def test_render(self) -> None:
         wf1 = DummyWaveform(duration=19)
@@ -31,7 +31,7 @@ class PlotterTests(unittest.TestCase):
         block.add_instruction_exec(wf2)
 
         plotter = Plotter(sample_rate=0.5)
-        times, voltages = plotter.render(block.compile_sequence())
+        times, voltages = plotter.render(block)
 
         wf1_expected = [([0, 2, 4, 6, 8, 10, 12, 14, 16, 18], 0)]
         wf2_expected = [([20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40], 1)]

@@ -81,7 +81,7 @@ class RepetitionPulseTemplate(PulseTemplate):
             if not repetition_count.is_integer():
                 raise ParameterNotIntegerException(self.__repetition_count.name, repetition_count)
 
-        body_block = instruction_block.create_embedded_block()
+        body_block = InstructionBlock()
         body_block.return_ip = InstructionPointer(instruction_block, len(instruction_block))
 
         instruction_block.add_instruction_repj(int(repetition_count), body_block)
