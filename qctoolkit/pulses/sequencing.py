@@ -11,7 +11,7 @@ from abc import ABCMeta, abstractmethod
 from typing import Tuple, Dict, Union, Optional
 import numbers
 
-from qctoolkit.pulses.instructions import InstructionBlock, InstructionSequence
+from qctoolkit.pulses.instructions import InstructionBlock, ImmutableInstructionBlock
 from qctoolkit.pulses.parameters import Parameter, ConstantParameter
 
 
@@ -171,7 +171,7 @@ class Sequencer:
                             element.build_sequence(self, parameters, conditions, target_block)
                         else: break
 
-        return self.__main_block
+        return ImmutableInstructionBlock(self.__main_block, dict())
 
     def has_finished(self) -> bool:
         """Check whether all translation stacks are empty. Indicates that the translation is

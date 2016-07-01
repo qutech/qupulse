@@ -11,16 +11,15 @@ Classes:
     - EXECInstruction: Instruction to execute a waveform.
     - GOTOInstruction: Unconditional jump instruction.
     - STOPInstruction: Instruction which indicates the end of execution.
-    - InstructionBlock: A block of instructions which are not yet embedded in a global sequence.
+    - AbstractInstructionBlock: A block of instructions (abstract base class)
+    - InstructionBlock: A mutable block of instructions to which instructions can be added
+    - ImmutableInstructionBlock: An immutable InstructionBlock
     - InstructionSequence: A single final sequence of instructions.
     - InstructionPointer: References an instruction's location in a sequence.
-    - InstructionBlockNotYetPlacedException
-    - InstructionBlockAlreadyFinalizedException
-    - MissingReturnAddressException
 """
 
 from abc import ABCMeta, abstractmethod, abstractproperty
-from typing import List, Any, Optional, Iterable
+from typing import List, Any, Optional, Iterable, Dict, Set
 import numpy
 
 from qctoolkit.comparable import Comparable
@@ -30,9 +29,8 @@ from qctoolkit.comparable import Comparable
 __all__ = ["Waveform", "Trigger",
            "WaveformSequence", "MutableWaveformSequence", "ImmutableWaveformSequence",
            "InstructionPointer", "Instruction", "CJMPInstruction", "EXECInstruction",
-           "GOTOInstruction", "STOPInstruction", "InstructionBlock", "InstructionSequence",
-           "InstructionBlockNotYetPlacedException", "InstructionBlockAlreadyFinalizedException",
-           "MissingReturnAddressException"
+           "GOTOInstruction", "STOPInstruction", "AbstractInstructionBlock", "InstructionBlock",
+           "ImmutableInstructionBlock", "InstructionSequence"
           ]
 
 
@@ -104,10 +102,6 @@ class InstructionPointer(Comparable):
         
     def __str__(self) -> str:
         return "IP:{0}#{1}".format(self.__block, self.__offset)
-        # try:
-        #     return "{}".format(self.get_absolute_address())
-        # except InstructionBlockNotYetPlacedException:
-        #     return "IP:{0}#{1}".format(self.__block, self.__offset)
 
 
 class Instruction(Comparable, metaclass=ABCMeta):
@@ -190,51 +184,90 @@ class STOPInstruction(Instruction):
         return "stop"
         
         
-class InstructionBlockAlreadyFinalizedException(Exception):
-    """Indicates that an attempt was made to change an already finalized InstructionBlock."""
-    def __str__(self) -> str:
-        return "An attempt was made to change an already finalized InstructionBlock."
-        
-        
-class InstructionBlockNotYetPlacedException(Exception):
-    """Indicates that an attempt was made to obtain the start address of an InstructionBlock that
-    was not yet placed inside the corresponding outer block."""
-    def __str__(self) -> str:
-        return "An attempt was made to obtain the start address of an InstructionBlock that was " \
-               "not yet finally placed inside the corresponding outer block."
-
-
-class MissingReturnAddressException(Exception):
-    """Indicates that an inner InstructionBlock has no return address."""
-    def __str__(self) -> str:
-        return "No return address is set!"
-        
-        
 InstructionSequence = List[Instruction] # pylint: disable=invalid-name,invalid-sequence-index
 
 
-# class InstructionBlock(Comparable, metaclass=ABCMeta):
-#
-#     def __init__(self) -> None:
-#         super().__init__()
-#
-#     @abstractproperty
-#     def instructions(self) -> List[Instruction]:
-#         pass
-#
-#     @abstractproperty
-#     def return_ip(self) -> InstructionPointer:
-#         pass
-#
-#     @property
-#     def compare_key(self) -> Any:
-#         return id(self)
-#
-#     def str(self) -> str:
-#         return str(hash(self))
+class AbstractInstructionBlock(Comparable, metaclass=ABCMeta):
+
+    def __init__(self) -> None:
+        super().__init__()
+
+    @abstractproperty
+    def instructions(self) -> List[Instruction]:
+        pass
+
+    @abstractproperty
+    def return_ip(self) -> InstructionPointer:
+        pass
+
+    @property
+    def compare_key(self) -> Any:
+        return id(self)
+
+    def str(self) -> str:
+        return str(hash(self))
+
+    def __iter__(self) -> Iterable[Instruction]:
+        for instruction in self.instructions:
+            yield instruction
+        if self.return_ip is None:
+            yield STOPInstruction()
+        else:
+            yield GOTOInstruction(self.return_ip)
+
+    def __getitem__(self, index: int) -> Instruction:
+        if index < len(self.instructions):
+            return self.instructions[index]
+        elif index == len(self.instructions):
+            if self.return_ip is None:
+                return STOPInstruction()
+            else:
+                return GOTOInstruction(self.return_ip)
+        else:
+            raise IndexError()
+
+    def __len__(self) -> int:
+        return len(self.instructions) + 1
 
 
-class InstructionBlock(Comparable):
+class ImmutableInstructionBlock(AbstractInstructionBlock):
+
+    def __init__(self,
+                 block: AbstractInstructionBlock,
+                 context: Dict[AbstractInstructionBlock, 'ImmutableInstructionBlock']) -> None:
+        super().__init__()
+        self.__instruction_list = []
+        self.__return_ip = None
+        return_ip = block.return_ip
+        if return_ip is not None:
+            self.__return_ip = InstructionPointer(context[return_ip.block], return_ip.offset)
+        context[block] = self
+        for instruction in block.instructions:
+            immutable_instruction = instruction
+            if isinstance(instruction, (GOTOInstruction, CJMPInstruction)):
+                target_block = instruction.target.block
+                immutable_target_block = ImmutableInstructionBlock(target_block, context)
+                if isinstance(instruction, GOTOInstruction):
+                    immutable_instruction = GOTOInstruction(
+                        InstructionPointer(immutable_target_block, instruction.target.offset)
+                    )
+                else:
+                    immutable_instruction = CJMPInstruction(
+                        instruction.trigger,
+                        InstructionPointer(immutable_target_block, instruction.target.offset)
+                    )
+            self.__instruction_list.append(immutable_instruction)
+
+    @property
+    def instructions(self) -> List[Instruction]:
+        return self.__instruction_list.copy()
+
+    @property
+    def return_ip(self) -> InstructionPointer:
+        return self.__return_ip
+
+
+class InstructionBlock(AbstractInstructionBlock):
     
     def __init__(self) -> None:
         super().__init__()
@@ -276,35 +309,6 @@ class InstructionBlock(Comparable):
         block = InstructionBlock()
         self.__embedded_blocks.append(block)
         return block
-
-    def __iter__(self) -> Iterable[Instruction]:
-        for instruction in self.__instruction_list.copy():
-            yield instruction
-        if self.__return_ip is None:
-            yield STOPInstruction()
-        else:
-            yield GOTOInstruction(self.__return_ip)
-
-    def __getitem__(self, index: int) -> Instruction:
-        if index < len(self.__instruction_list):
-            return self.__instruction_list[index]
-        elif index == len(self.__instruction_list):
-            if self.__return_ip is None:
-                return STOPInstruction()
-            else:
-                return GOTOInstruction(self.__return_ip)
-        else:
-            raise IndexError()
-
-    def __len__(self) -> int:
-        return len(self.__instruction_list) + 1
-
-    @property
-    def compare_key(self) -> Any:
-        return id(self)
-        
-    def __str__(self) -> str:
-        return str(hash(self))
 
 
 class SequenceContinuationStrategy(Comparable, metaclass=ABCMeta):
