@@ -161,8 +161,30 @@ class MultiChannelPulseTemplate(AtomicPulseTemplate):
         return waveform
 
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
-        raise NotImplementedError()
+        subtemplates = []
+        for subtemplate, channel_mapping in self.__subtemplates:
+            mapping_functions = self.__parameter_mapping.get_template_map(subtemplate)
+            mapping_function_strings = \
+                {k: serializer.dictify(m) for k, m in mapping_functions.items()}
+            subtemplate = serializer.dictify(subtemplate)
+            subtemplates.append(dict(template=subtemplate,
+                                     parameter_mappings=mapping_function_strings,
+                                     channel_mappings=channel_mapping))
+        return dict(subtemplates=subtemplates,
+                    external_parameters=sorted(list(self.parameter_names)))
 
     @staticmethod
-    def deserialize(serializer: Serializer, **kwargs) -> 'MultiChannelPulseTemplate':
-        raise NotImplementedError()
+    def deserialize(serializer: Serializer,
+                    subtemplates: Iterable[Dict[str, Any]],
+                    external_parameters: Iterable[str],
+                    identifier: Optional[str]=None) -> 'MultiChannelPulseTemplate':
+        subtemplates = \
+            [(serializer.deserialize(subt['template']),
+              {k: str(serializer.deserialize(m)) for k, m in subt['parameter_mappings'].items()},
+              subt['channel_mappings'])
+             for subt in subtemplates]
+
+        template = MultiChannelPulseTemplate(subtemplates,
+                                             external_parameters,
+                                             identifier=identifier)
+        return template

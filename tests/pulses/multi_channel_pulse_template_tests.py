@@ -2,12 +2,13 @@ import unittest
 
 import numpy
 
-from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate, MissingMappingException, UnnecessaryMappingException, MissingParameterDeclarationException
+from qctoolkit.pulses.sequence_pulse_template import MissingMappingException, MissingParameterDeclarationException
 from qctoolkit.pulses.parameters import ParameterDeclaration, ParameterNotProvidedException, MappedParameter, ConstantParameter
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelPulseTemplate, MultiChannelWaveform
 from qctoolkit.expressions import Expression
 
 from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyPulseTemplate, DummyWaveform
+from tests.serialization_dummies import DummySerializer
 
 
 class MultiChannelWaveformTest(unittest.TestCase):
@@ -263,3 +264,67 @@ class MultiChannelPulseTemplateSequencingTests(unittest.TestCase):
         self.assertEqual(expected, result)
         self.assertEqual([{'foo': MappedParameter(Expression("2*bar"), {'bar': ConstantParameter(3)})}], dummy1.build_waveform_calls)
         self.assertEqual([{}], dummy2.build_waveform_calls)
+
+
+class MutliChannelPulseTemplateSerializationTests(unittest.TestCase):
+
+    def __init__(self, methodName) -> None:
+        super().__init__(methodName=methodName)
+        self.maxDiff = None
+
+    def test_get_serialization_data(self) -> None:
+        serializer = DummySerializer(
+            serialize_callback=lambda x: str(x) if isinstance(x, Expression) else str(id(x)))
+        dummy1 = DummyPulseTemplate(parameter_names={'foo'}, num_channels=2)
+        dummy2 = DummyPulseTemplate(parameter_names={}, num_channels=1)
+        template = MultiChannelPulseTemplate(
+            [
+                (dummy1, {'foo': "bar+3"}, [0, 2]),
+                (dummy2, {}, [1])
+             ],
+            {'bar'},
+            identifier='herbert'
+        )
+        expected_data = dict(
+            external_parameters=['bar'],
+            subtemplates = [
+                dict(template=str(id(dummy1)),
+                     parameter_mappings=dict(foo=str(Expression("bar+3"))),
+                     channel_mappings=[0, 2]),
+                dict(template=str(id(dummy2)),
+                     parameter_mappings=dict(),
+                     channel_mappings=[1])
+            ]
+        )
+        data = template.get_serialization_data(serializer)
+        self.assertEqual(expected_data, data)
+
+    def test_deserialize(self) -> None:
+        dummy1 = DummyPulseTemplate(parameter_names={'foo'}, num_channels=2)
+        dummy2 = DummyPulseTemplate(parameter_names={}, num_channels=1)
+        exp = Expression("bar - 35")
+
+        data = dict(
+            external_parameters=['bar'],
+            subtemplates=[
+                dict(template=str(id(dummy1)),
+                     parameter_mappings=dict(foo=str(exp)),
+                     channel_mappings=[0, 2]),
+                dict(template=str(id(dummy2)),
+                     parameter_mappings=dict(),
+                     channel_mappings=[1])
+            ]
+        )
+
+        serializer = DummySerializer(serialize_callback=lambda x: str(x) if isinstance(x, Expression) else str(id(x)))
+        serializer.subelements[str(id(dummy1))] = dummy1
+        serializer.subelements[str(id(dummy2))] = dummy2
+        serializer.subelements[str(exp)] = exp
+
+        template = MultiChannelPulseTemplate.deserialize(serializer, **data)
+        self.assertEqual(set(data['external_parameters']), template.parameter_names)
+        self.assertEqual({ParameterDeclaration('bar')}, template.parameter_declarations)
+
+        recovered_data = template.get_serialization_data(serializer)
+        self.assertEqual(data, recovered_data)
+
