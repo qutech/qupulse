@@ -756,9 +756,8 @@ class TableWaveformDataTests(unittest.TestCase):
     def test_sample(self) -> None:
         interp = DummyInterpolationStrategy()
         entries = [[WaveformTableEntry(0, 0, interp),
-                         WaveformTableEntry(2.1, -33.2, interp),
-                         WaveformTableEntry(5.7, 123.4, interp)
-                         ]]
+                    WaveformTableEntry(2.1, -33.2, interp),
+                    WaveformTableEntry(5.7, 123.4, interp)]]
         waveform = TableWaveform(entries)
         sample_times = numpy.linspace(98.5, 103.5, num=11)
 

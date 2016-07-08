@@ -38,11 +38,12 @@ class MultiChannelWaveform(Waveform):
                     "MultiChannelWaveform cannot be constructed from channel waveforms of different"
                     "lengths."
                 )
-            too_high_channel = [channel for channel in channel_mapping if channel >= num_channels]
+            too_high_channel = [channel for channel in channel_mapping if channel >= num_channels or channel < 0]
             if too_high_channel:
                 raise ValueError(
-                    "The channel {}, assigned to a channel waveform, does exceed the number of"
-                    "channels {}.".format(too_high_channel.pop(), num_channels)
+                    "The channel mapping {}, assigned to a channel waveform, is not valid (must be "
+                    "greater than 0 and less than {}).".format(too_high_channel.pop(),
+                                                               num_channels)
                 )
 
     @property
@@ -50,12 +51,12 @@ class MultiChannelWaveform(Waveform):
         return self.__channel_waveforms[0][0].duration
 
     def sample(self, sample_times: numpy.ndarray, first_offset: float=0) -> numpy.ndarray:
-        voltages = numpy.empty((len(sample_times), self.num_channels))
+        voltages_transposed = numpy.empty((self.num_channels, len(sample_times)))
         for waveform, channel_mapping in self.__channel_waveforms:
-            waveform_voltages = waveform.sample(sample_times, first_offset)
+            waveform_voltages_transposed = waveform.sample(sample_times, first_offset).T
             for old_c, new_c in enumerate(channel_mapping):
-                voltages[new_c] = waveform_voltages[old_c]
-        return voltages
+                voltages_transposed[new_c] = waveform_voltages_transposed[old_c]
+        return voltages_transposed.T
 
     @property
     def num_channels(self) -> int:
