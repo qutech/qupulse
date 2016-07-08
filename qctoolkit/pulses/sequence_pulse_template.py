@@ -18,8 +18,7 @@ __all__ = ["SequencePulseTemplate",
            "MissingMappingException",
            "MissingParameterDeclarationException",
            "UnnecessaryMappingException",
-           "PulseTemplateParameterMapping",
-           "Subtemplate"]
+           "PulseTemplateParameterMapping"]
 
 
 class PulseTemplateParameterMapping:
@@ -92,10 +91,6 @@ class PulseTemplateParameterMapping:
         return inner_parameters
 
 
-# a subtemplate consists of a pulse template and mapping functions for its "internal" parameters
-Subtemplate = Tuple[PulseTemplate, Dict[str, str]] # pylint: disable=invalid-name
-
-
 class SequencePulseTemplate(PulseTemplate):
     """A sequence of different PulseTemplates.
     
@@ -108,6 +103,9 @@ class SequencePulseTemplate(PulseTemplate):
     parameter declarations from its subtemplates to its own, enabling
     renaming and mathematical transformation of parameters.
     """
+
+    # a subtemplate consists of a pulse template and mapping functions for its "internal" parameters
+    Subtemplate = Tuple[PulseTemplate, Dict[str, str]]  # pylint: disable=invalid-name
 
     def __init__(self,
                  subtemplates: List[Subtemplate],
@@ -133,6 +131,11 @@ class SequencePulseTemplate(PulseTemplate):
             external_parameters (List(str)): A set of names for external parameters of this
                 SequencePulseTemplate.
             identifier (str): A unique identifier for use in serialization. (optional)
+        Raises:
+            MissingMappingException, if a parameter of a subtemplate is not mapped to the external
+                parameters of this SequencePulseTemplate.
+            MissingParameterDeclarationException, if a parameter mapping requires a parameter
+                that was not declared in the external parameters of this SequencePulseTemplate.
         """
         super().__init__(identifier)
 

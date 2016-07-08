@@ -1,4 +1,11 @@
-"""This module defines MultiChannelPulseTemplate"""
+"""This module defines MultiChannelPulseTemplate, which allows the combination of several
+AtomicPulseTemplates into a single template spanning several channels.
+
+Classes:
+    - MultiChannelPulseTemplate: A pulse template defined for several channels by combining pulse
+        templates
+    - MultiChannelWaveform: A waveform defined for several channels by combining waveforms
+"""
 
 from typing import Dict, List, Tuple, Set, Optional, Any, Iterable, Union
 
@@ -21,17 +28,50 @@ __all__ = ["MultiChannelWaveform", "MultiChannelPulseTemplate"]
 
 
 class MultiChannelWaveform(Waveform):
+    """A MultiChannelWaveform is a Waveform object that allows combining arbitrary Waveform objects
+    to into a single waveform defined for several channels.
 
-    def __init__(self, channel_waveforms: List[Tuple[Waveform, List[int]]]) -> None:
+    The number of channels used by the MultiChannelWaveform object is the sum of the channels used
+    by the Waveform objects it consists of.
+
+    MultiChannelWaveform allows an arbitrary mapping of channels defined by the Waveforms it
+    consists of and the channels it defines. For example, if the MultiChannelWaveform consists
+    of a two Waveform objects A and B which define two channels each, then the channels of the
+    MultiChannelWaveform may be 0: A.1, 1: B.0, 2: B.1, 3: A.0 where A.0 means channel 0 of Waveform
+    object A.
+
+    The following constraints must hold:
+     - The durations of all Waveform objects must be equal.
+     - The channel mapping must be sane, i.e., no channel of the MultiChannelWaveform must be
+        assigned more than one channel of any Waveform object it consists of
+    """
+
+    def __init__(self, subwaveforms: List[Tuple[Waveform, List[int]]]) -> None:
+        """Create a new MultiChannelWaveform instance.
+
+        Requires a list of subwaveforms in the form (Waveform, List(int)) where the list defines
+        the channel mapping, i.e., a value y at index x in the list means that channel x of the
+        subwaveform will be mapped to channel y of this MultiChannelWaveform object.
+
+        Args:
+            subwaveforms (List( (Waveform, List(int)) )): The list of subwaveforms of this
+                MultiChannelWaveform as tuples of the form (Waveform, List(int))
+        Raises:
+            ValueError, if a channel mapping is out of bounds of the channels defined by this
+                MultiChannelWaveform
+            ValueError, if several subwaveform channels are assigned to a single channel of this
+                MultiChannelWaveform
+            ValueError, if subwaveforms have inconsistent durations
+        """
         super().__init__()
-        if not channel_waveforms:
+        if not subwaveforms:
             raise ValueError(
                 "MultiChannelWaveform cannot be constructed without channel waveforms."
             )
 
-        self.__channel_waveforms = channel_waveforms
+        self.__channel_waveforms = subwaveforms
         num_channels = self.num_channels
-        duration = channel_waveforms[0][0].duration
+        duration = subwaveforms[0][0].duration
         assigned_channels = set()
         for waveform, channel_mapping in self.__channel_waveforms:
             if waveform.duration != duration:
@@ -79,6 +119,33 @@ class MultiChannelWaveform(Waveform):
 
 
 class MultiChannelPulseTemplate(AtomicPulseTemplate):
+    """A multi-channel group of several AtomicPulseTemplate objects.
+
+    While SequencePulseTemplate combines several subtemplates (with an identical number of channels)
+    for subsequent execution, MultiChannelPulseTemplate combines several subtemplates into a new
+    template defined for the sum of the channels of the subtemplates.
+    A constraint is that the subtemplates must only be AtomicPulseTemplate objects, i.e., not define
+    any changes in the control flow and be directly translatable into waveforms. Additionally,
+    for each possible set of parameter value assignments, the waveforms resulting from the templates
+    must be of the same duration. However, this cannot be enforced during the construction of the
+    MultiChannelPulseTemplate object. Instead, if subtemplate misbehave, an exception will be raised
+    during translation in the build_waveform and build_sequence methods.
+
+    MultiChannelPulseTemplate allows an arbitrary mapping of channels defined by the subtemplates
+    and the channels it defines. For example, if the MultiChannelPulseTemplate consists
+    of a two subtemplates A and B which define two channels each, then the channels of the
+    MultiChannelPulseTemplate may be 0: A.1, 1: B.0, 2: B.1, 3: A.0 where A.0 means channel 0 of A.
+    The channel mapping must be sane, i.e., to no channel of the MultiChannelPulseTemplate must be
+    assigned more than one channel of any subtemplate.
+
+    Finally, MultiChannelPulseTemplate allows a mapping of parameter in the same way and with
+    the same constraints as SequencePulseTemplate.
+
+    See Also:
+        - SequencePulseTemplate
+        - AtomicPulseTemplate
+        - MultiChannelWaveform
+    """
 
     Subtemplate = Tuple[AtomicPulseTemplate, Dict[str, str], List[int]]
 
@@ -86,6 +153,34 @@ class MultiChannelPulseTemplate(AtomicPulseTemplate):
                  subtemplates: Iterable[Subtemplate],
                  external_parameters: Set[str],
                  identifier: str=None) -> None:
+        """Creates a new MultiChannelPulseTemplate instance.
+
+        Requires a list of subtemplates in the form
+        (PulseTemplate, Dict(str -> str), List(int)) where the dictionary is a mapping between the
+        external parameters exposed by this SequencePulseTemplate to the parameters declared by the
+        subtemplates, specifying how the latter are derived from the former, i.e., the mapping is
+        subtemplate_parameter_name -> mapping_expression (as str) where the free variables in the
+        mapping_expression are parameters declared by this MultiChannelPulseTemplate.
+        The list defines the channel mapping, i.e., a value y at index x in the list means that
+        channel x of the subtemplate will be mapped to channel y of this MultiChannelPulseTemplate.
+
+        Args:
+            subtemplates (List(Subtemplate)): The list of subtemplates of this
+                MultiChannelPulseTemplate as tuples of the form
+                (PulseTemplate, Dict(str -> str), List(int)).
+            external_parameters (List(str)): A set of names for external parameters of this
+                MultiChannelPulseTemplate.
+            identifier (str): A unique identifier for use in serialization. (optional)
+        Raises:
+            ValueError, if a channel mapping is out of bounds of the channels defined by this
+                MultiChannelPulseTemplate.
+            ValueError, if several subtemplate channels are assigned to a single channel of this
+                MultiChannelPulseTemplate.
+            MissingMappingException, if a parameter of a subtemplate is not mapped to the external
+                parameters of this MultiChannelPulseTemplate.
+            MissingParameterDeclarationException, if a parameter mapping requires a parameter
+                that was not declared in the external parameters of this MultiChannelPulseTemplate.
+        """
         super().__init__(identifier=identifier)
         self.__parameter_mapping = PulseTemplateParameterMapping(external_parameters)
         self.__subtemplates = [(template, channel_mapping) for (template, _, channel_mapping)
