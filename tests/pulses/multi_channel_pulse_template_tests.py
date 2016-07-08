@@ -22,8 +22,10 @@ class MultiChannelWaveformTest(unittest.TestCase):
 
     def test_init_single_channel(self) -> None:
         dwf = DummyWaveform(duration=1.3)
-        self.assertRaises(ValueError, MultiChannelWaveform, [(dwf, [1])])
-        self.assertRaises(ValueError, MultiChannelWaveform, [(dwf, [-1])])
+        with self.assertRaises(ValueError):
+            MultiChannelWaveform([(dwf, [1])])
+        with self.assertRaises(ValueError):
+            MultiChannelWaveform([(dwf, [-1])])
         waveform = MultiChannelWaveform([(dwf, [0])])
         self.assertEqual(1, waveform.num_channels)
         self.assertEqual(1.3, waveform.duration)
@@ -32,8 +34,16 @@ class MultiChannelWaveformTest(unittest.TestCase):
         dwfa = DummyWaveform(duration=4.2, num_channels=2)
         dwfb = DummyWaveform(duration=4.2, num_channels=3)
         dwfc = DummyWaveform(duration=2.3)
-        self.assertRaises(ValueError, MultiChannelWaveform, [(dwfa, [2, 4]), (dwfb, [3, 5, 1])])
-        self.assertRaises(ValueError, MultiChannelWaveform, [(dwfa, [0, 1]), (dwfc, [2])])
+        with self.assertRaises(ValueError):
+            MultiChannelWaveform([(dwfa, [2, 4]), (dwfb, [3, 5, 1])])
+        with self.assertRaises(ValueError):
+            MultiChannelWaveform([(dwfa, [2, 4]), (dwfb, [3, -1, 1])])
+        with self.assertRaises(ValueError):
+            MultiChannelWaveform([(dwfa, [0, 1]), (dwfc, [2])])
+        with self.assertRaises(ValueError):
+            MultiChannelWaveform([(dwfa, [0, 0]), (dwfb, [3, 4, 1])])
+        with self.assertRaises(ValueError):
+            MultiChannelWaveform([(dwfa, [2, 4]), (dwfb, [3, 4, 1])])
         waveform = MultiChannelWaveform([(dwfa, [2, 4]), (dwfb, [3, 0, 1])])
         self.assertEqual(5, waveform.num_channels)
         self.assertEqual(4.2, waveform.duration)
@@ -83,6 +93,149 @@ class MultiChannelWaveformTest(unittest.TestCase):
 
 
 class MultiChannelPulseTemplateTest(unittest.TestCase):
+
+    def test_init_empty(self) -> None:
+        template = MultiChannelPulseTemplate([], {}, identifier='foo')
+        self.assertEqual('foo', template.identifier)
+        self.assertFalse(template.parameter_names)
+        self.assertFalse(template.parameter_declarations)
+        self.assertEqual(True, template.is_interruptable)
+        self.assertEqual(False, template.requires_stop({}, {}))
+        self.assertEqual(0, template.num_channels)
+
+    def test_init_single_subtemplate_no_external_params(self) -> None:
+        subtemplate = DummyPulseTemplate(parameter_names={'foo'}, num_channels=2, duration=1.3)
+        template = MultiChannelPulseTemplate([(subtemplate, {'foo': "2.3"}, [1, 0])], {})
+        self.assertFalse(template.parameter_names)
+        self.assertFalse(template.parameter_declarations)
+        self.assertEqual(False, template.is_interruptable)
+        self.assertEqual(False, template.requires_stop({}, {}))
+        self.assertEqual(2, template.num_channels)
+
+    def test_init_single_subtemplate_requires_stop_external_params(self) -> None:
+        subtemplate = DummyPulseTemplate(parameter_names={'foo'}, requires_stop=True, num_channels=2, duration=1.3)
+        template = MultiChannelPulseTemplate([(subtemplate, {'foo': "2.3 ** bar"}, [1, 0])], {'bar'})
+        self.assertEqual({'bar'}, template.parameter_names)
+        self.assertEqual({ParameterDeclaration('bar')}, template.parameter_declarations)
+        self.assertEqual(False, template.is_interruptable)
+        self.assertEqual(True, template.requires_stop({}, {}))
+        self.assertEqual(2, template.num_channels)
+
+    def test_init_single_subtemplate_invalid_channel_mapping(self) -> None:
+        subtemplate = DummyPulseTemplate(parameter_names={'foo'}, num_channels=2, duration=1.3)
+        with self.assertRaises(ValueError):
+            MultiChannelPulseTemplate([(subtemplate, {'foo': "2.3"}, [3, 0])], {})
+        with self.assertRaises(ValueError):
+            MultiChannelPulseTemplate([(subtemplate, {'foo': "2.3"}, [-1, 0])], {})
+
+    def test_init_multi_subtemplates_not_interruptable_requires_stop(self) -> None:
+        st1 = DummyPulseTemplate(parameter_names={'foo'}, requires_stop=True, num_channels=2,
+                                 duration=1.3)
+        st2 = DummyPulseTemplate(parameter_names={'bar'}, is_interruptable=True, num_channels=1,
+                                 duration=6.34)
+        template = MultiChannelPulseTemplate(
+            [
+                (st1, {'foo': "2.3 ** bar"}, [0, 2]),
+                (st2, {'bar': "bar"}, [1])
+            ],
+            {'bar'}
+        )
+        self.assertEqual({'bar'}, template.parameter_names)
+        self.assertEqual({ParameterDeclaration('bar')}, template.parameter_declarations)
+        self.assertEqual(False, template.is_interruptable)
+        self.assertEqual(True, template.requires_stop({}, {}))
+        self.assertEqual(3, template.num_channels)
+
+    def test_init_multi_subtemplates_interruptable_no_requires_stop(self) -> None:
+        st1 = DummyPulseTemplate(parameter_names={'foo'}, is_interruptable=True, num_channels=2,
+                                 duration=1.3)
+        st2 = DummyPulseTemplate(parameter_names={'bar'}, is_interruptable=True, num_channels=1,
+                                 duration=6.34)
+        template = MultiChannelPulseTemplate(
+            [
+                (st1, {'foo': "2.3 ** bar"}, [0, 2]),
+                (st2, {'bar': "bar"}, [1])
+            ],
+            {'bar'}
+        )
+        self.assertEqual({'bar'}, template.parameter_names)
+        self.assertEqual({ParameterDeclaration('bar')}, template.parameter_declarations)
+        self.assertEqual(True, template.is_interruptable)
+        self.assertEqual(False, template.requires_stop({}, {}))
+        self.assertEqual(3, template.num_channels)
+
+    def test_init_multi_subtemplates_wrong_channel_mapping(self) -> None:
+        st1 = DummyPulseTemplate(parameter_names={'foo'}, is_interruptable=True, num_channels=2,
+                                 duration=1.3)
+        st2 = DummyPulseTemplate(parameter_names={'bar'}, is_interruptable=True, num_channels=1,
+                                 duration=6.34)
+        with self.assertRaises(ValueError):
+            MultiChannelPulseTemplate(
+                [
+                    (st1, {'foo': "2.3 ** bar"}, [0, 3]),
+                    (st2, {'bar': "bar"}, [1])
+                ],
+                {'bar'}
+            )
+        with self.assertRaises(ValueError):
+            MultiChannelPulseTemplate(
+                [
+                    (st1, {'foo': "2.3 ** bar"}, [0, -1]),
+                    (st2, {'bar': "bar"}, [1])
+                ],
+                {'bar'}
+            )
+        with self.assertRaises(ValueError):
+            MultiChannelPulseTemplate(
+                [
+                    (st1, {'foo': "2.3 ** bar"}, [0, 2]),
+                    (st2, {'bar': "bar"}, [-1])
+                ],
+                {'bar'}
+            )
+        with self.assertRaises(ValueError):
+            MultiChannelPulseTemplate(
+                [
+                    (st1, {'foo': "2.3 ** bar"}, [0, 2]),
+                    (st2, {'bar': "bar"}, [3])
+                ],
+                {'bar'}
+            )
+        with self.assertRaises(ValueError):
+            MultiChannelPulseTemplate(
+                [
+                    (st1, {'foo': "2.3 ** bar"}, [0, 0]),
+                    (st2, {'bar': "bar"}, [1])
+                ],
+                {'bar'}
+            )
+        with self.assertRaises(ValueError):
+            MultiChannelPulseTemplate(
+                [
+                    (st1, {'foo': "2.3 ** bar"}, [0, 2]),
+                    (st2, {'bar': "bar"}, [2])
+                ],
+                {'bar'}
+            )
+
+    def test_init_broken_mappings(self) -> None:
+        st1 = DummyPulseTemplate(parameter_names={'foo'}, is_interruptable=True, num_channels=2,
+                                 duration=1.3)
+        st2 = DummyPulseTemplate(parameter_names={'bar'}, is_interruptable=True, num_channels=1,
+                                 duration=6.34)
+        with self.assertRaises(MissingMappingException):
+            MultiChannelPulseTemplate([(st1, {'foo': "bar"}, [0, 2]), (st2, {}, [1])], {'bar'})
+        with self.assertRaises(MissingMappingException):
+            MultiChannelPulseTemplate([(st1, {}, [0, 2]), (st2, {'bar': "bar"}, [1])], {'bar'})
+        with self.assertRaises(MissingParameterDeclarationException):
+            MultiChannelPulseTemplate(
+                [
+                    (st1, {'foo': "2.3 ** bar"}, [0, 2]),
+                    (st2, {'bar': "bar"}, [1])
+                ],
+                {}
+            )
+
 
     def test_build_sequence_no_params(self) -> None:
         dummy1 = DummyPulseTemplate(parameter_names={'foo'})

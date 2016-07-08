@@ -233,7 +233,7 @@ class DummyPulseTemplate(AtomicPulseTemplate):
                  requires_stop: bool=False,
                  is_interruptable: bool=False,
                  parameter_names: Set[str]={},
-                 num_channels: int=0,
+                 num_channels: int=1,
                  duration: float=0) -> None:
         super().__init__()
         self.requires_stop_ = requires_stop
@@ -271,7 +271,7 @@ class DummyPulseTemplate(AtomicPulseTemplate):
         self.build_sequence_calls += 1
 
     def build_waveform(self, parameters: Dict[str, Parameter]) -> Optional[Waveform]:
-        return DummyWaveform(self.duration)
+        return DummyWaveform(duration=self.duration, num_channels=self.num_channels)
 
     def requires_stop(self, parameters: Dict[str, Parameter], conditions: Dict[str, Condition]) -> bool:
         return self.requires_stop_

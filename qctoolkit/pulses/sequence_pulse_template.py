@@ -28,7 +28,7 @@ class PulseTemplateParameterMapping:
                  external_parameters: Optional[Set[str]]=None) -> None:
         super().__init__()
         self.__map = dict()
-        self.__external_parameters = {}
+        self.__external_parameters = set()
         self.set_external_parameters(external_parameters)
 
     def set_external_parameters(self, external_parameters: Optional[Set[str]]) -> None:

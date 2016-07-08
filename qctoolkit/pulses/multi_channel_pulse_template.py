@@ -32,19 +32,30 @@ class MultiChannelWaveform(Waveform):
         self.__channel_waveforms = channel_waveforms
         num_channels = self.num_channels
         duration = channel_waveforms[0][0].duration
+        assigned_channels = set()
         for waveform, channel_mapping in self.__channel_waveforms:
             if waveform.duration != duration:
                 raise ValueError(
                     "MultiChannelWaveform cannot be constructed from channel waveforms of different"
                     "lengths."
                 )
-            too_high_channel = [channel for channel in channel_mapping if channel >= num_channels or channel < 0]
-            if too_high_channel:
+            # ensure that channel mappings stay within bounds
+            out_of_bounds_channel = [channel for channel in channel_mapping
+                                     if channel >= num_channels or channel < 0]
+            if out_of_bounds_channel:
                 raise ValueError(
                     "The channel mapping {}, assigned to a channel waveform, is not valid (must be "
-                    "greater than 0 and less than {}).".format(too_high_channel.pop(),
+                    "greater than 0 and less than {}).".format(out_of_bounds_channel.pop(),
                                                                num_channels)
                 )
+            # ensure that only a single waveform is mapped to each channel
+            for channel in channel_mapping:
+                if channel in assigned_channels:
+                    raise ValueError("The channel {} has multiple channel waveform assignments"
+                                     .format(channel))
+                else:
+                    assigned_channels.add(channel)
+
 
     @property
     def duration(self) -> float:
@@ -77,8 +88,12 @@ class MultiChannelPulseTemplate(AtomicPulseTemplate):
                  identifier: str=None) -> None:
         super().__init__(identifier=identifier)
         self.__parameter_mapping = PulseTemplateParameterMapping(external_parameters)
+        self.__subtemplates = [(template, channel_mapping) for (template, _, channel_mapping)
+                               in subtemplates]
 
-        for template, mapping_functions, _ in subtemplates:
+        assigned_channels = set()
+        num_channels = self.num_channels
+        for template, mapping_functions, channel_mapping in subtemplates:
             # Consistency checks
             for parameter, mapping_function in mapping_functions.items():
                 self.__parameter_mapping.add(template, parameter, mapping_function)
@@ -88,8 +103,23 @@ class MultiChannelPulseTemplate(AtomicPulseTemplate):
                 raise MissingMappingException(template,
                                               remaining.pop())
 
-        self.__subtemplates = [(template, channel_mapping) for (template, _, channel_mapping)
-                               in subtemplates]
+
+            # ensure that channel mappings stay within bounds
+            out_of_bounds_channel = [channel for channel in channel_mapping
+                                     if channel >= num_channels or channel < 0]
+            if out_of_bounds_channel:
+                raise ValueError(
+                    "The channel mapping {}, assigned to a channel waveform, is not valid (must be "
+                    "greater than 0 and less than {}).".format(out_of_bounds_channel.pop(),
+                                                               num_channels)
+                )
+            # ensure that only a single waveform is mapped to each channel
+            for channel in channel_mapping:
+                if channel in assigned_channels:
+                    raise ValueError("The channel {} has multiple channel waveform assignments"
+                                     .format(channel))
+                else:
+                    assigned_channels.add(channel)
 
     @property
     def parameter_names(self) -> Set[str]:
@@ -106,16 +136,16 @@ class MultiChannelPulseTemplate(AtomicPulseTemplate):
 
     @property
     def is_interruptable(self) -> bool:
-        return all(self.__subtemplates.is_interruptable)
+        return all(t.is_interruptable for t, _ in self.__subtemplates)
 
     @property
     def num_channels(self) -> int:
-        return sum(self.__subtemplates.num_channels)
+        return sum(t.num_channels for t, _ in self.__subtemplates)
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],
                       conditions: Dict[str, Condition]) -> bool:
-        return any(self.__subtemplates.requires_stop(parameters, conditions))
+        return any(t.requires_stop(parameters, conditions) for t, _ in self.__subtemplates)
 
     def build_waveform(self, parameters: Dict[str, Parameter]) -> Optional[Waveform]:
         missing = self.parameter_names - parameters.keys()
@@ -123,7 +153,7 @@ class MultiChannelPulseTemplate(AtomicPulseTemplate):
             raise ParameterNotProvidedException(missing.pop())
 
         channel_waveforms = []
-        for template, _, channel_mapping in self.__subtemplates:
+        for template, channel_mapping in self.__subtemplates:
             inner_parameters = self.__parameter_mapping.map_parameters(template, parameters)
             waveform = template.build_waveform(inner_parameters)
             channel_waveforms.append((waveform, channel_mapping))
