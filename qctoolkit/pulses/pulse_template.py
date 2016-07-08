@@ -2,7 +2,9 @@
 pulse model in the qctoolkit.
 
 Classes:
-    - PulseTemplate: Represents the parametrized general structure of a pulse
+    - PulseTemplate: Represents the parametrized general structure of a pulse.
+    - AtomicPulseTemplate: PulseTemplate that does imply any control flow disruptions and can be
+        directly translated into a waveform.
 """
 from abc import ABCMeta, abstractmethod, abstractproperty
 from typing import Dict, List, Tuple, Set, Optional
@@ -64,6 +66,11 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=ABCMeta):
 
 
 class AtomicPulseTemplate(PulseTemplate):
+    """A PulseTemplate that does not imply any control flow disruptions and can be directly
+    translated into a waveform.
+
+    Implies that no AtomicPulseTemplate object is interruptable.
+    """
 
     def __init__(self, identifier: Optional[str]=None):
         super().__init__(identifier=identifier)
@@ -73,7 +80,14 @@ class AtomicPulseTemplate(PulseTemplate):
 
     @abstractmethod
     def build_waveform(self, parameters: Dict[str, Parameter]) -> Optional['Waveform']:
-        pass
+        """Translate this AtomicPulseTemplate into a waveform according to the given parameteres.
+
+        Args:
+            parameters (Dict[str -> Parameter]): A mapping of parameter names to Parameter objects.
+        Returns:
+            Waveform object represented by this AtomicPulseTemplate object or None, if this object
+                does not represent a valid waveform.
+        """
 
     def build_sequence(self,
                        sequencer: 'Sequencer',
