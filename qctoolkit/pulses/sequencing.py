@@ -11,7 +11,7 @@ from abc import ABCMeta, abstractmethod
 from typing import Tuple, Dict, Union, Optional
 import numbers
 
-from qctoolkit.pulses.instructions import InstructionBlock, InstructionSequence
+from qctoolkit.pulses.instructions import InstructionBlock, ImmutableInstructionBlock
 from qctoolkit.pulses.parameters import Parameter, ConstantParameter
 
 
@@ -144,17 +144,17 @@ class Sequencer:
 
         self.__sequencing_stacks[target_block].append((sequencing_element, parameters, conditions))
 
-    def build(self) -> InstructionSequence:
+    def build(self) -> InstructionBlock:
         """Start the translation process. Translate all elements currently on the translation stacks
-        into an InstructionSequence.
+        into an InstructionBlock hierarchy.
 
         Processes all sequencing stacks (for each InstructionBlock) until each stack is either
         empty or its topmost element requires a stop. If build is called after a previous
         translation process where some elements required a stop (i.e., has_finished returned False),
-        it will append new instructions to the previously generated and returned main sequence.
+        it will append new instructions to the previously generated and returned blocks.
 
         Returns:
-            The instruction sequence resulting from the translation of the (remaining)
+            The instruction block (hierarchy) resulting from the translation of the (remaining)
                 SequencingElements on the sequencing stacks.
         """
         if not self.has_finished():            
@@ -171,7 +171,7 @@ class Sequencer:
                             element.build_sequence(self, parameters, conditions, target_block)
                         else: break
 
-        return self.__main_block.compile_sequence()
+        return ImmutableInstructionBlock(self.__main_block, dict())
 
     def has_finished(self) -> bool:
         """Check whether all translation stacks are empty. Indicates that the translation is
