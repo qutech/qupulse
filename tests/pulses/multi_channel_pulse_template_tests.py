@@ -1,16 +1,13 @@
 import unittest
-import copy
 
 import numpy
 
-from qctoolkit.expressions import Expression
-from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
 from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate, MissingMappingException, UnnecessaryMappingException, MissingParameterDeclarationException
-from qctoolkit.pulses.parameters import ParameterDeclaration, ParameterNotProvidedException, ConstantParameter
+from qctoolkit.pulses.parameters import ParameterDeclaration, ParameterNotProvidedException, MappedParameter, ConstantParameter
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelPulseTemplate, MultiChannelWaveform
+from qctoolkit.expressions import Expression
 
-from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyPulseTemplate, DummyParameter, DummyNoValueParameter, DummyWaveform
-from tests.serialization_dummies import DummySerializer
+from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyPulseTemplate, DummyWaveform
 
 
 class MultiChannelWaveformTest(unittest.TestCase):
@@ -237,6 +234,8 @@ class MultiChannelPulseTemplateTest(unittest.TestCase):
             )
 
 
+class MultiChannelPulseTemplateSequencingTests(unittest.TestCase):
+
     def test_build_sequence_no_params(self) -> None:
         dummy1 = DummyPulseTemplate(parameter_names={'foo'})
         pulse = MultiChannelPulseTemplate([(dummy1, {'foo': '2*bar'}, [1]),
@@ -247,4 +246,20 @@ class MultiChannelPulseTemplateTest(unittest.TestCase):
 
         self.assertRaises(ParameterNotProvidedException, pulse.build_waveform, {})
 
-        self.assertRaises(ParameterNotProvidedException, pulse.build_sequence, DummySequencer(), {}, {}, DummyInstructionBlock())
+        self.assertRaises(ParameterNotProvidedException, pulse.build_sequence, DummySequencer(), {},
+                          {}, DummyInstructionBlock())
+
+    def test_build_sequence(self) -> None:
+        dummy_wf1 = DummyWaveform(duration=2.3, num_channels=2)
+        dummy_wf2 = DummyWaveform(duration=2.3, num_channels=1)
+        dummy1 = DummyPulseTemplate(parameter_names={'foo'}, num_channels=2, waveform=dummy_wf1)
+        dummy2 = DummyPulseTemplate(parameter_names={}, num_channels=1, waveform=dummy_wf2)
+
+        pulse = MultiChannelPulseTemplate([(dummy1, {'foo': '2*bar'}, [2, 1]),
+                                           (dummy2, {}, [0])], {'bar'})
+
+        result = pulse.build_waveform({'bar': ConstantParameter(3)})
+        expected = MultiChannelWaveform([(dummy_wf1, [2, 1]), (dummy_wf2, [0])])
+        self.assertEqual(expected, result)
+        self.assertEqual([{'foo': MappedParameter(Expression("2*bar"), {'bar': ConstantParameter(3)})}], dummy1.build_waveform_calls)
+        self.assertEqual([{}], dummy2.build_waveform_calls)
