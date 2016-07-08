@@ -5,90 +5,16 @@ combines several other PulseTemplate objects for sequential execution."""
 from typing import Dict, List, Tuple, Set, Optional, Any, Iterable, Union
 
 from qctoolkit.serialization import Serializer
-from qctoolkit.expressions import Expression
 
 from qctoolkit.pulses.pulse_template import PulseTemplate, MeasurementWindow
 from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter, \
-    ParameterNotProvidedException, MappedParameter
+    ParameterNotProvidedException
 from qctoolkit.pulses.sequencing import InstructionBlock, Sequencer
 from qctoolkit.pulses.conditions import Condition
-from qctoolkit.serialization import Serializable
+from qctoolkit.pulses.pulse_template_parameter_mapping import PulseTemplateParameterMapping, \
+    MissingMappingException
 
-__all__ = ["SequencePulseTemplate",
-           "MissingMappingException",
-           "MissingParameterDeclarationException",
-           "UnnecessaryMappingException",
-           "PulseTemplateParameterMapping"]
-
-
-class PulseTemplateParameterMapping:
-
-    def __init__(self,
-                 external_parameters: Optional[Set[str]]=None) -> None:
-        super().__init__()
-        self.__map = dict()
-        self.__external_parameters = set()
-        self.set_external_parameters(external_parameters)
-
-    def set_external_parameters(self, external_parameters: Optional[Set[str]]) -> None:
-        if external_parameters:
-            self.__external_parameters = set(external_parameters.copy())
-
-    @property
-    def external_parameters(self) -> Set[str]:
-        return self.__external_parameters.copy()
-
-    def __get_template_map(self, template: PulseTemplate) -> Dict[str, Expression]:
-        # internal helper function
-        if template not in self.__map:
-            return dict()
-        return self.__map[template]
-
-    def add(self,
-            template: PulseTemplate,
-            parameter: str,
-            mapping_expression: Union[str, Expression]):
-        if parameter not in template.parameter_names:
-            raise UnnecessaryMappingException(template, parameter)
-
-        if isinstance(mapping_expression, str):
-            mapping_expression = Expression(mapping_expression)
-        required_externals = set(mapping_expression.variables())
-        non_declared_externals = required_externals - self.__external_parameters
-        if non_declared_externals:
-            raise MissingParameterDeclarationException(template,
-                                                       non_declared_externals.pop())
-
-        template_map = self.__get_template_map(template)
-        template_map[parameter] = mapping_expression
-        self.__map[template] = template_map
-
-    def get_template_map(self, template: PulseTemplate) -> Dict[str, Expression]:
-        return self.__get_template_map(template).copy()
-
-    def is_template_mapped(self, template: PulseTemplate) -> bool:
-        return self.remaining_mappings(template)
-
-    def get_remaining_mappings(self, template: PulseTemplate) -> Set[str]:
-        template_map = self.__get_template_map(template)
-        return template.parameter_names - template_map.keys()
-
-    def map_parameters(self,
-                       template: PulseTemplate,
-                       parameters: Dict[str, Parameter]) -> Dict[str, Parameter]:
-        missing = self.__external_parameters - set(parameters.keys())
-        if missing:
-            raise ParameterNotProvidedException(missing.pop())
-
-        template_map = self.__get_template_map(template)
-        inner_parameters = {
-            parameter: MappedParameter(
-                mapping_function,
-                {name: parameters[name] for name in mapping_function.variables()}
-            )
-            for (parameter, mapping_function) in template_map.items()
-        }
-        return inner_parameters
+__all__ = ["SequencePulseTemplate"]
 
 
 class SequencePulseTemplate(PulseTemplate):
@@ -246,48 +172,3 @@ class SequencePulseTemplate(PulseTemplate):
         template = SequencePulseTemplate(subtemplates, external_parameters, identifier=identifier)
         template.is_interruptable = is_interruptable
         return template
-
-
-class MissingParameterDeclarationException(Exception):
-    """Indicates that a parameter declaration mapping in a SequencePulseTemplate maps to an external
-    parameter declaration that was not declared."""
-
-    def __init__(self, template: PulseTemplate, missing_declaration: str) -> None:
-        super().__init__()
-        self.template = template
-        self.missing_declaration = missing_declaration
-
-    def __str__(self) -> str:
-        return \
-            "A mapping for template {} requires a parameter '{}' which has not been declared as" \
-            " an external parameter of the SequencePulseTemplate.".format(
-                self.template, self.missing_declaration
-            )
-
-
-class MissingMappingException(Exception):
-    """Indicates that no mapping was specified for some parameter declaration of a
-    SequencePulseTemplate's subtemplate."""
-
-    def __init__(self, template, key) -> None:
-        super().__init__()
-        self.key = key
-        self.template = template
-
-    def __str__(self) -> str:
-        return "The template {} needs a mapping function for parameter {}".\
-            format(self.template, self.key)
-
-
-class UnnecessaryMappingException(Exception):
-    """Indicates that a mapping was provided that does not correspond to any of a
-    SequencePulseTemplate's subtemplate's parameter declarations and is thus obsolete."""
-
-    def __init__(self, template: PulseTemplate, key: str) -> None:
-        super().__init__()
-        self.template = template
-        self.key = key
-
-    def __str__(self) -> str:
-        return "Mapping function for parameter '{}', which template {} does not need"\
-            .format(self.key, self.template)

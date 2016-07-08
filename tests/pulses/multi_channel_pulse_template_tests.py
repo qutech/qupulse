@@ -2,7 +2,7 @@ import unittest
 
 import numpy
 
-from qctoolkit.pulses.sequence_pulse_template import MissingMappingException, MissingParameterDeclarationException
+from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingException, MissingParameterDeclarationException
 from qctoolkit.pulses.parameters import ParameterDeclaration, ParameterNotProvidedException, MappedParameter, ConstantParameter
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelPulseTemplate, MultiChannelWaveform
 from qctoolkit.expressions import Expression

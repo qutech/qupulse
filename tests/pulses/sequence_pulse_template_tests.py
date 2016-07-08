@@ -3,10 +3,11 @@ import copy
 
 from qctoolkit.expressions import Expression
 from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
-from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate, MissingMappingException, UnnecessaryMappingException, MissingParameterDeclarationException
+from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
+from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingException, UnnecessaryMappingException, MissingParameterDeclarationException
 from qctoolkit.pulses.parameters import ParameterDeclaration, ParameterNotProvidedException, ConstantParameter
 
-from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyPulseTemplate, DummyParameter, DummyNoValueParameter
+from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyPulseTemplate, DummyNoValueParameter
 from tests.serialization_dummies import DummySerializer
 
 class SequencePulseTemplateTest(unittest.TestCase):
@@ -224,18 +225,6 @@ class SequencePulseTemplateSequencingTests(SequencePulseTemplateTest):
         subtemplates = [(self.square, mapping)]
         with self.assertRaises(MissingParameterDeclarationException):
             SequencePulseTemplate(subtemplates, self.outer_parameters)
-
-
-class SequencePulseTemplateStringTest(unittest.TestCase):
-    def test_str(self):
-        T = TablePulseTemplate()
-        a = [UnnecessaryMappingException(T,"b"),
-             MissingMappingException(T,"b"),
-             MissingParameterDeclarationException(T, "c")]
-        
-        b = [x.__str__() for x in a]
-        for s in b:
-            self.assertIsInstance(s, str)
 
 
 class SequencePulseTemplateTestProperties(SequencePulseTemplateTest):

@@ -83,7 +83,7 @@ class AtomicPulseTemplate(PulseTemplate):
         """Translate this AtomicPulseTemplate into a waveform according to the given parameteres.
 
         Args:
-            parameters (Dict[str -> Parameter]): A mapping of parameter names to Parameter objects.
+            parameters (Dict(str -> Parameter)): A mapping of parameter names to Parameter objects.
         Returns:
             Waveform object represented by this AtomicPulseTemplate object or None, if this object
                 does not represent a valid waveform.
