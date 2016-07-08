@@ -20,7 +20,7 @@ __all__ = ["Parameter", "ParameterDeclaration", "ConstantParameter",
            "ParameterNotProvidedException", "ParameterValueIllegalException"]
 
 
-class Parameter(Serializable, metaclass=ABCMeta):
+class Parameter(Serializable, Comparable, metaclass=ABCMeta):
     """A parameter for pulses.
     
     Parameter specifies a concrete value which is inserted instead
@@ -47,6 +47,10 @@ class Parameter(Serializable, metaclass=ABCMeta):
         """
     
     def __float__(self) -> float:
+        return float(self.get_value())
+
+    @property
+    def compare_key(self) -> Any:
         return float(self.get_value())
         
         
