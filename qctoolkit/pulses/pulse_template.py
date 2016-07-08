@@ -79,7 +79,7 @@ class AtomicPulseTemplate(PulseTemplate):
                        sequencer: 'Sequencer',
                        parameters: Dict[str, Parameter],
                        conditions: Dict[str, 'Condition'],
-                       instruction_block: InstructionBlock):
+                       instruction_block: InstructionBlock) -> None:
         waveform = self.build_waveform(parameters)
         if waveform:
             instruction_block.add_instruction_exec(waveform)

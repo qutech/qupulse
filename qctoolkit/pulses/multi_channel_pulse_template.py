@@ -17,7 +17,7 @@ from qctoolkit.pulses.conditions import Condition
 from qctoolkit.pulses.sequencing import Sequencer
 from qctoolkit.pulses.instructions import InstructionBlock
 
-__all__ = ["MultiChannelPulseTemplate"]
+__all__ = ["MultiChannelWaveform", "MultiChannelPulseTemplate"]
 
 
 class MultiChannelWaveform(Waveform):
@@ -47,10 +47,10 @@ class MultiChannelWaveform(Waveform):
 
     @property
     def duration(self) -> float:
-        return channel_waveforms[0][0].duration
+        return self.__channel_waveforms[0][0].duration
 
     def sample(self, sample_times: numpy.ndarray, first_offset: float=0) -> numpy.ndarray:
-        voltages = np.empty((len(sample_times), self.num_channels))
+        voltages = numpy.empty((len(sample_times), self.num_channels))
         for waveform, channel_mapping in self.__channel_waveforms:
             waveform_voltages = waveform.sample(sample_times, first_offset)
             for old_c, new_c in enumerate(channel_mapping):
@@ -61,11 +61,14 @@ class MultiChannelWaveform(Waveform):
     def num_channels(self) -> int:
         return sum([waveform.num_channels for waveform, _ in self.__channel_waveforms])
 
-
-Subtemplate = Tuple[AtomicPulseTemplate, Dict[str, str], List[int]]
+    @property
+    def compare_key(self) -> Any:
+        return self.__channel_waveforms
 
 
 class MultiChannelPulseTemplate(AtomicPulseTemplate):
+
+    Subtemplate = Tuple[AtomicPulseTemplate, Dict[str, str], List[int]]
 
     def __init__(self,
                  subtemplates: Iterable[Subtemplate],
@@ -73,8 +76,6 @@ class MultiChannelPulseTemplate(AtomicPulseTemplate):
                  identifier: str=None) -> None:
         super().__init__(identifier=identifier)
         self.__parameter_mapping = PulseTemplateParameterMapping(external_parameters)
-
-        #todo: check duration consistency
 
         for template, mapping_functions, _ in subtemplates:
             # Consistency checks
@@ -121,7 +122,7 @@ class MultiChannelPulseTemplate(AtomicPulseTemplate):
             raise ParameterNotProvidedException(missing.pop())
 
         channel_waveforms = []
-        for template, channel_mapping in self.__subtemplates:
+        for template, _, channel_mapping in self.__subtemplates:
             inner_parameters = self.__parameter_mapping.map_parameters(template, parameters)
             waveform = template.build_waveform(inner_parameters)
             channel_waveforms.append((waveform, channel_mapping))
