@@ -271,7 +271,7 @@ class DummyPulseTemplate(AtomicPulseTemplate):
         self.build_sequence_calls += 1
 
     def build_waveform(self, parameters: Dict[str, Parameter]) -> Optional[Waveform]:
-        return DummyWaveform(duration)
+        return DummyWaveform(self.duration)
 
     def requires_stop(self, parameters: Dict[str, Parameter], conditions: Dict[str, Condition]) -> bool:
         return self.requires_stop_
