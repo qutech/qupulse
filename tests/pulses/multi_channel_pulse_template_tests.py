@@ -72,6 +72,15 @@ class MultiChannelWaveformTest(unittest.TestCase):
         ])
         self.assertTrue(numpy.all(expected == result))
 
+    def test_equality(self) -> None:
+        dwf_a = DummyWaveform(duration=246.2, num_channels=2)
+        waveform_a1 = MultiChannelWaveform([(dwf_a, [0, 1])])
+        waveform_a2 = MultiChannelWaveform([(dwf_a, [0, 1])])
+        waveform_a3 = MultiChannelWaveform([(dwf_a, [1, 0])])
+        self.assertEqual(waveform_a1, waveform_a1)
+        self.assertEqual(waveform_a1, waveform_a2)
+        self.assertNotEqual(waveform_a1, waveform_a3)
+
 
 class MultiChannelPulseTemplateTest(unittest.TestCase):
 
