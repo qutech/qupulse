@@ -43,7 +43,7 @@ class TableWaveform(Waveform):
         """
         for table in waveform_tables:
             if len(table) < 2:
-                raise ValueError("The given WaveformTable has less than two entries.")
+                raise ValueError("A given waveform table has less than two entries.")
         super().__init__()
         self.__tables = waveform_tables
 

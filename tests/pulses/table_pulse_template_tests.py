@@ -550,6 +550,29 @@ class TablePulseTemplateTest(unittest.TestCase):
 
         self.assertEqual(expected, entries)
 
+    def test_get_instaniated_entries_multi_one_empty_channel(self) -> None:
+        table = TablePulseTemplate(channels=2)
+        table.add_entry(1, 3, channel=1)
+        table.add_entry('foo', 'bar', 'linear', channel=1)
+
+        parameters = {'foo': 5.2, 'bar': -83.8}
+
+        entries = table.get_entries_instantiated(parameters)
+
+        expected = [
+            [
+                TableEntry(0, 0, HoldInterpolationStrategy()),
+                TableEntry(5.2, 0, HoldInterpolationStrategy())
+            ],
+            [
+                TableEntry(0, 0, HoldInterpolationStrategy()),
+                TableEntry(1, 3, HoldInterpolationStrategy()),
+                TableEntry(5.2, -83.8, LinearInterpolationStrategy())
+            ]
+        ]
+
+        self.assertEqual(expected, entries)
+
     def test_measurement_windows_multi(self) -> None:
         pulse = TablePulseTemplate(measurement=True, channels=2)
         pulse.add_entry(1, 1)
@@ -721,6 +744,10 @@ class TableWaveformDataTests(unittest.TestCase):
         waveform = TableWaveform(entries)
         self.assertEqual(5, waveform.duration)
 
+    def test_duration_no_entries(self) -> None:
+        waveform = TableWaveform([])
+        self.assertEqual(0, waveform.duration)
+
     def test_few_entries(self) -> None:
         with self.assertRaises(ValueError):
             TableWaveform([[]])
@@ -752,9 +779,8 @@ class TableWaveformDataTests(unittest.TestCase):
     def test_sample_multi(self) -> None:
         interp = DummyInterpolationStrategy()
         entries = [[WaveformTableEntry(0, 0, interp),
-                         WaveformTableEntry(2.1, -33.2, interp),
-                         WaveformTableEntry(5.7, 123.4, interp)
-                         ],
+                    WaveformTableEntry(2.1, -33.2, interp),
+                    WaveformTableEntry(5.7, 123.4, interp)],
                    [WaveformTableEntry(0,0,interp),
                     WaveformTableEntry(2.1,-33.2,interp),
                     WaveformTableEntry(5.7, 123.4, interp)]]
@@ -768,6 +794,26 @@ class TableWaveformDataTests(unittest.TestCase):
                          ((2.1, -33.2), (5.7, 123.4), [2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5])]
         self.assertEqual(expected_data, interp.call_arguments)
         self.assertTrue(numpy.all(expected_result == result))
+
+    def test_num_channels(self) -> None:
+        waveform = TableWaveform([])
+        self.assertEqual(0, waveform.num_channels)
+
+        interp = DummyInterpolationStrategy()
+        entries = [[WaveformTableEntry(0, 0, interp),
+                    WaveformTableEntry(5, 1, interp)]]
+        waveform = TableWaveform(entries)
+        self.assertEqual(1, waveform.num_channels)
+
+        entries = [[WaveformTableEntry(0, 0, interp),
+                    WaveformTableEntry(2.1, -33.2, interp),
+                    WaveformTableEntry(5.7, 123.4, interp)],
+                   [WaveformTableEntry(0, 0, interp),
+                    WaveformTableEntry(2.1, -33.2, interp),
+                    WaveformTableEntry(5.7, 123.4, interp)]]
+        waveform = TableWaveform(entries)
+        self.assertEqual(2, waveform.num_channels)
+
 
 class ParameterValueIllegalExceptionTest(unittest.TestCase):
 
