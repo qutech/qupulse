@@ -8,6 +8,7 @@ __all__ = [
     'multi_channel_pulse_template_tests',
     'parameters_tests',
     'plotting_tests',
+    'pulse_template_parameter_mapping_tests',
     'pulse_template_tests',
     'repetition_pulse_template_tests',
     'sample_pulse_generator',

@@ -49,7 +49,7 @@ class PulseTemplateParameterMapping:
             external_parameters (Set(str)): A set of names of external parameters. Might be None,
                 which results in no changes.
         """
-        if external_parameters:
+        if external_parameters is not None:
             self.__external_parameters = set(external_parameters.copy())
 
     @property
@@ -107,15 +107,15 @@ class PulseTemplateParameterMapping:
         return self.__get_template_map(template).copy()
 
     def is_template_mapped(self, template: PulseTemplate) -> bool:
-        """Query whether any parameter mapping is defined for a given pusle template.
+        """Query whether a complete parameter mapping is defined for a given pulse template.
 
         Args:
             template (PulseTemplate): The pulse template for which to query the existence of
                 mappings.
         Returns:
-            True, if at least one mapping exists for template.
+            True, if all parameters of template are mapped to external parameters.
         """
-        return self.remaining_mappings(template)
+        return len(self.get_remaining_mappings(template)) == 0
 
     def get_remaining_mappings(self, template: PulseTemplate) -> Set[str]:
         """Query all currently unmapped parameters of a given pulse template.
@@ -177,7 +177,7 @@ class MissingMappingException(Exception):
     """Indicates that no mapping was specified for some parameter declaration of a
     SequencePulseTemplate's subtemplate."""
 
-    def __init__(self, template, key) -> None:
+    def __init__(self, template: PulseTemplate, key: str) -> None:
         super().__init__()
         self.key = key
         self.template = template
