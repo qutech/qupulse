@@ -16,7 +16,7 @@ from qctoolkit.expressions import Expression
 from qctoolkit.serialization import Serializer
 
 from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter
-from qctoolkit.pulses.pulse_template import PulseTemplate, MeasurementWindow
+from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementWindow
 from qctoolkit.pulses.sequencing import InstructionBlock, Sequencer
 from qctoolkit.pulses.sequence_pulse_template import ParameterNotProvidedException
 from qctoolkit.pulses.instructions import Waveform
@@ -24,7 +24,7 @@ from qctoolkit.pulses.instructions import Waveform
 __all__ = ["FunctionPulseTemplate", "FunctionWaveform"]
 
 
-class FunctionPulseTemplate(PulseTemplate):
+class FunctionPulseTemplate(AtomicPulseTemplate):
     """Defines a pulse via a time-domain expression.
 
     FunctionPulseTemplate stores the expression and its external parameters. The user must provide
@@ -105,19 +105,14 @@ class FunctionPulseTemplate(PulseTemplate):
     @property
     def num_channels(self) -> int:
         return 1
-        
-    def build_sequence(self,
-                       sequencer: Sequencer,
-                       parameters: Dict[str, Parameter],
-                       conditions: Dict[str, 'Condition'],
-                       instruction_block: InstructionBlock) -> None:
-        waveform = FunctionWaveform(
+
+    def build_waveform(self, parameters: Dict[str, Parameter]) -> Optional[Waveform]:
+        return FunctionWaveform(
             {parameter_name: parameter.get_value()
              for (parameter_name, parameter) in parameters.items()},
             self.__expression,
             self.__duration_expression
         )
-        instruction_block.add_instruction_exec(waveform)
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],
