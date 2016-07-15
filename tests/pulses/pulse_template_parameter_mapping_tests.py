@@ -107,5 +107,5 @@ class PulseTemplateParameterMappingExceptionsTests(unittest.TestCase):
 
     def test_unnecessary_mapping_exception_str(self) -> None:
         dummy = DummyPulseTemplate()
-        exception = MissingMappingException(dummy, 'foo')
+        exception = UnnecessaryMappingException(dummy, 'foo')
         self.assertIsInstance(str(exception), str)
