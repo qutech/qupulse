@@ -75,8 +75,10 @@ class SoftwareConditionTest(unittest.TestCase):
         condition = SoftwareCondition(lambda loop_iteration: None)
         
         self.assertTrue(condition.requires_stop())
-        self.assertRaises(ConditionEvaluationException, condition.build_sequence_loop, delegator, body, sequencer, {}, {}, block)
-        self.assertRaises(ConditionEvaluationException, condition.build_sequence_branch, delegator, body, body, sequencer, {}, {}, block)
+        with self.assertRaises(ConditionEvaluationException):
+            condition.build_sequence_loop(delegator, body, sequencer, {}, {}, block)
+        with self.assertRaises(ConditionEvaluationException):
+            condition.build_sequence_branch(delegator, body, body, sequencer, {}, {}, block)
         self.assertEqual(str(ConditionEvaluationException()), "The Condition can currently not be evaluated.")
         
     def test_build_sequence_loop_true(self) -> None:

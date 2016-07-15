@@ -13,8 +13,10 @@ class InstructionPointerTest(unittest.TestCase):
 
     def test_invalid_offset(self) -> None:
         block = InstructionBlock()
-        self.assertRaises(ValueError, InstructionPointer, block, -1)
-        self.assertRaises(ValueError, InstructionPointer, block, -12)
+        with self.assertRaises(ValueError):
+            InstructionPointer(block, -1)
+        with self.assertRaises(ValueError):
+            InstructionPointer(block, -12)
         
     def test_initialization_main_block(self) -> None:
         block = InstructionBlock()
@@ -105,7 +107,8 @@ class REPJInstructionTest(unittest.TestCase):
                 self.assertEqual(offset, instr.target.offset)
 
     def test_negative_count(self) -> None:
-        self.assertRaises(ValueError, REPJInstruction, -3, InstructionPointer(InstructionBlock))
+        with self.assertRaises(ValueError):
+            REPJInstruction(-3, InstructionPointer(InstructionBlock))
 
     def test_equality(self) -> None:
         blocks = [InstructionBlock(), InstructionBlock()]
@@ -280,27 +283,33 @@ class AbstractInstructionBlockTest(unittest.TestCase):
     def test_item_access_empty_no_return(self) -> None:
         block = AbstractInstructionBlockStub([], None)
         self.assertEqual(STOPInstruction(), block[0])
-        self.assertRaises(IndexError, block.__getitem__, 1)
+        with self.assertRaises(IndexError):
+            block[1]
         self.assertEqual(STOPInstruction(), block[-1])
-        self.assertRaises(IndexError, block.__getitem__, -2)
+        with self.assertRaises(IndexError):
+            block[-2]
 
     def test_item_access_empty_return(self) -> None:
         parent_block = InstructionBlock()
         block = AbstractInstructionBlockStub([], InstructionPointer(parent_block, 84))
         self.assertEqual(GOTOInstruction(InstructionPointer(parent_block, 84)), block[0])
-        self.assertRaises(IndexError, block.__getitem__, 1)
+        with self.assertRaises(IndexError):
+            block[1]
         self.assertEqual(GOTOInstruction(InstructionPointer(parent_block, 84)), block[-1])
-        self.assertRaises(IndexError, block.__getitem__, -2)
+        with self.assertRaises(IndexError):
+            block[-2]
 
     def test_item_access_no_return(self) -> None:
         wf = DummyWaveform()
         block = AbstractInstructionBlockStub([EXECInstruction(wf)], None)
         self.assertEqual(EXECInstruction(wf), block[0])
         self.assertEqual(STOPInstruction(), block[1])
-        self.assertRaises(IndexError, block.__getitem__, 2)
+        with self.assertRaises(IndexError):
+            block[2]
         self.assertEqual(STOPInstruction(), block[-1])
         self.assertEqual(EXECInstruction(wf), block[-2])
-        self.assertRaises(IndexError, block.__getitem__, -3)
+        with self.assertRaises(IndexError):
+            block[-3]
 
     def test_item_access_return(self) -> None:
         wf = DummyWaveform()
@@ -308,10 +317,12 @@ class AbstractInstructionBlockTest(unittest.TestCase):
         block = AbstractInstructionBlockStub([EXECInstruction(wf)], InstructionPointer(parent_block, 29))
         self.assertEqual(EXECInstruction(wf), block[0])
         self.assertEqual(GOTOInstruction(InstructionPointer(parent_block, 29)), block[1])
-        self.assertRaises(IndexError, block.__getitem__, 2)
+        with self.assertRaises(IndexError):
+            block[2]
         self.assertEqual(GOTOInstruction(InstructionPointer(parent_block, 29)), block[-1])
         self.assertEqual(EXECInstruction(wf), block[-2])
-        self.assertRaises(IndexError, block.__getitem__, -3)
+        with self.assertRaises(IndexError):
+            block[-3]
 
 
 class InstructionBlockTest(unittest.TestCase):

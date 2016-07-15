@@ -23,8 +23,10 @@ class TablePulseTemplateTest(unittest.TestCase):
 
     def test_add_entry_unknown_interpolation_strategy(self) -> None:
         table = TablePulseTemplate()
-        self.assertRaises(ValueError, table.add_entry, 0, 0, 'foo')
-        self.assertRaises(ValueError, table.add_entry, 3.2, 0, 'foo')
+        with self.assertRaises(ValueError):
+            table.add_entry(0, 0, 'foo')
+        with self.assertRaises(ValueError):
+            table.add_entry(3.2, 0, 'foo')
 
     def test_add_entry_for_interpolation(self) -> None:
         table = TablePulseTemplate()
@@ -32,7 +34,8 @@ class TablePulseTemplateTest(unittest.TestCase):
         for i,strategy in enumerate(strategies):
             table.add_entry(2*(i+1), i+1, strategy)
 
-        self.assertRaises(ValueError, table.add_entry, 1,2, "bar")
+        with self.assertRaises(ValueError):
+            table.add_entry(1,2, "bar")
 
     def test_measurement_windows(self) -> None:
         pulse = TablePulseTemplate(measurement=True)
@@ -59,7 +62,8 @@ class TablePulseTemplateTest(unittest.TestCase):
 
     def test_add_entry_empty_time_is_negative(self) -> None:
         table = TablePulseTemplate()
-        self.assertRaises(ValueError, table.add_entry, -2, 0)
+        with self.assertRaises(ValueError):
+            table.add_entry(-2, 0)
         self.assertEqual([[TableEntry(0, 0, HoldInterpolationStrategy())]], table.entries)
         #self.assertFalse(table.entries[0])
         self.assertFalse(table.parameter_declarations)
@@ -108,7 +112,8 @@ class TablePulseTemplateTest(unittest.TestCase):
         table = TablePulseTemplate()
         table.add_entry(1.2, -3.8)
         # expect ValueError if next float is smaller than previous
-        self.assertRaises(ValueError, table.add_entry, 0.423, 0)
+        with self.assertRaises(ValueError):
+            table.add_entry(0.423, 0)
         # adding a higher value or equal value as last entry should work
         table.add_entry(1.2, 2.5252)
         table.add_entry(3.7, 1.34875)
@@ -148,7 +153,8 @@ class TablePulseTemplateTest(unittest.TestCase):
         table = TablePulseTemplate()
         decl = ParameterDeclaration('t', min=1.2, max=83456.2)
         table.add_entry(decl, 2.2)
-        self.assertRaises(ValueError, table.add_entry, 1.1, -6.3)
+        with self.assertRaises(ValueError):
+            table.add_entry(1.1, -6.3)
         self.assertEqual([[(0, 0, HoldInterpolationStrategy()), (decl, 2.2, HoldInterpolationStrategy())]], table.entries)
         self.assertEqual({'t'}, table.parameter_names)
         self.assertEqual({decl}, table.parameter_declarations)
@@ -159,7 +165,8 @@ class TablePulseTemplateTest(unittest.TestCase):
         foo_decl = ParameterDeclaration('foo')
         self.assertEqual({'foo'}, table.parameter_names)
         self.assertEqual({foo_decl}, table.parameter_declarations)
-        self.assertRaises(ValueError, table.add_entry, 'foo', 4.3)
+        with self.assertRaises(ValueError):
+            table.add_entry('foo', 4.3)
         self.assertEqual({'foo'}, table.parameter_names)
         self.assertEqual({foo_decl}, table.parameter_declarations)
         self.assertEqual([[(0, foo_decl, HoldInterpolationStrategy())]], table.entries)
@@ -169,7 +176,8 @@ class TablePulseTemplateTest(unittest.TestCase):
         table.add_entry('foo', 'bar')
         foo_decl = ParameterDeclaration('foo', min=0)
         bar_decl = ParameterDeclaration('bar')
-        self.assertRaises(ValueError, table.add_entry, ParameterDeclaration('foo'), 3.4)
+        with self.assertRaises(ValueError):
+            table.add_entry(ParameterDeclaration('foo'), 3.4)
         self.assertEqual([[(0, 0, HoldInterpolationStrategy()), (foo_decl, bar_decl, HoldInterpolationStrategy())]], table.entries)
         self.assertEqual({'foo', 'bar'}, table.parameter_names)
         self.assertEqual({foo_decl, bar_decl}, table.parameter_declarations)
@@ -179,8 +187,10 @@ class TablePulseTemplateTest(unittest.TestCase):
         bar_decl = ParameterDeclaration('bar')
         foo_decl = ParameterDeclaration('foo')
         foo_decl.min_value = bar_decl
-        self.assertRaises(ValueError, table.add_entry, foo_decl, 23857.23)
-        self.assertRaises(ValueError, table.add_entry, bar_decl, -4967.1)
+        with self.assertRaises(ValueError):
+            table.add_entry(foo_decl, 23857.23)
+        with self.assertRaises(ValueError):
+            table.add_entry(bar_decl, -4967.1)
         self.assertEquals([[TableEntry(0, 0, HoldInterpolationStrategy())]], table.entries)
         self.assertFalse(table.parameter_names)
         self.assertFalse(table.parameter_declarations)
@@ -207,7 +217,8 @@ class TablePulseTemplateTest(unittest.TestCase):
         table = TablePulseTemplate()
         table.add_entry(3.2, 92.1)
         decl = ParameterDeclaration('t', min=0.1)
-        self.assertRaises(ValueError, table.add_entry, decl, 1.2)
+        with self.assertRaises(ValueError):
+            table.add_entry(decl, 1.2)
         self.assertEqual([[(0, 0, HoldInterpolationStrategy()), (3.2, 92.1, HoldInterpolationStrategy())]], table.entries)
         self.assertFalse(table.parameter_names)
         self.assertFalse(table.parameter_declarations)
@@ -261,7 +272,8 @@ class TablePulseTemplateTest(unittest.TestCase):
         bar_decl = ParameterDeclaration('bar', min=1, max=5)
         foo_decl = ParameterDeclaration('foo', min=0)
         table.add_entry(bar_decl, -3)
-        self.assertRaises(ValueError, table.add_entry, foo_decl, 0.1)
+        with self.assertRaises(ValueError):
+            table.add_entry(foo_decl, 0.1)
         self.assertEqual([[(0, 0, HoldInterpolationStrategy()), (bar_decl, -3, HoldInterpolationStrategy())]], table.entries)
         self.assertEqual({'bar'}, table.parameter_names)
         self.assertEqual({bar_decl}, table.parameter_declarations)
@@ -271,7 +283,8 @@ class TablePulseTemplateTest(unittest.TestCase):
         bar_decl = ParameterDeclaration('bar', min=1, max=2)
         foo_decl = ParameterDeclaration('foo', max=1)
         table.add_entry(bar_decl, -3)
-        self.assertRaises(ValueError, table.add_entry, foo_decl, 0.1)
+        with self.assertRaises(ValueError):
+            table.add_entry(foo_decl, 0.1)
         self.assertEqual([[(0, 0, HoldInterpolationStrategy()), (bar_decl, -3, HoldInterpolationStrategy())]], table.entries)
         self.assertEqual({'bar'}, table.parameter_names)
         self.assertEqual({bar_decl}, table.parameter_declarations)
@@ -281,7 +294,8 @@ class TablePulseTemplateTest(unittest.TestCase):
         bar_decl = ParameterDeclaration('bar', min=1, max=2)
         foo_decl = ParameterDeclaration('foo', min=1, max=1.5)
         table.add_entry(bar_decl, -3)
-        self.assertRaises(ValueError, table.add_entry, foo_decl, 0.1)
+        with self.assertRaises(ValueError):
+            table.add_entry(foo_decl, 0.1)
         self.assertEqual([[(0, 0, HoldInterpolationStrategy()), (bar_decl, -3, HoldInterpolationStrategy())]], table.entries)
         self.assertEqual({'bar'}, table.parameter_names)
         self.assertEqual({bar_decl}, table.parameter_declarations)
@@ -304,14 +318,16 @@ class TablePulseTemplateTest(unittest.TestCase):
         table = TablePulseTemplate()
         foo_decl = ParameterDeclaration('foo', min=0, max=2)
         table.add_entry(foo_decl, 0)
-        self.assertRaises(ValueError, table.add_entry, 4, foo_decl)
+        with self.assertRaises(ValueError):
+            table.add_entry(4, foo_decl)
         self.assertEqual([[(0, 0, HoldInterpolationStrategy()), (foo_decl, 0, HoldInterpolationStrategy())]], table.entries)
         self.assertEqual({'foo'}, table.parameter_names)
         self.assertEqual({foo_decl}, table.parameter_declarations)
 
     def test_add_entry_time_and_voltage_same_declaration(self) -> None:
         table = TablePulseTemplate()
-        self.assertRaises(ValueError, table.add_entry, 'foo', 'foo')
+        with self.assertRaises(ValueError):
+            table.add_entry('foo', 'foo')
         self.assertEquals([[TableEntry(0, 0, HoldInterpolationStrategy())]], table.entries)
         self.assertFalse(table.parameter_names)
         self.assertFalse(table.parameter_declarations)
@@ -350,15 +366,18 @@ class TablePulseTemplateTest(unittest.TestCase):
         t_decl = ParameterDeclaration('t', min=1, max=2)
         v2_decl = ParameterDeclaration('v2', min=10, max=30)
         table.add_entry(t_decl, v2_decl)
-        self.assertRaises(ParameterValueIllegalException, table.get_entries_instantiated, {'v1': -5, 't': 0, 'v2': 20})
-        self.assertRaises(ParameterValueIllegalException, table.get_entries_instantiated, {'v1': -5, 't': 1, 'v2': -20})
+        with self.assertRaises(ParameterValueIllegalException):
+            table.get_entries_instantiated({'v1': -5, 't': 0, 'v2': 20})
+        with self.assertRaises(ParameterValueIllegalException):
+            table.get_entries_instantiated({'v1': -5, 't': 1, 'v2': -20})
 
     def test_get_entries_instantiated_two_entries_parameter_missing(self) -> None:
         table = TablePulseTemplate()
         t_decl = ParameterDeclaration('t', min=1, max=2)
         v2_decl = ParameterDeclaration('v2', min=10, max=30)
         table.add_entry(t_decl, v2_decl)
-        self.assertRaises(ParameterNotProvidedException, table.get_entries_instantiated, {})
+        with self.assertRaises(ParameterNotProvidedException):
+            table.get_entries_instantiated(dict())
 
     def test_get_entries_instantiated_linked_time_declarations(self) -> None:
         table = TablePulseTemplate()
@@ -368,8 +387,10 @@ class TablePulseTemplateTest(unittest.TestCase):
         table.add_entry(bar_decl, 0, 'jump')
         instantiated_entries = table.get_entries_instantiated({'v': 2.3, 'foo': 1, 'bar': 4})
         self.assertEqual([[(0, 0, HoldInterpolationStrategy()), (1, 2.3, LinearInterpolationStrategy()), (4, 0, JumpInterpolationStrategy())]], instantiated_entries)
-        self.assertRaises(Exception, table.get_entries_instantiated, {'v': 2.3, 'foo': 1, 'bar': 1})
-        self.assertRaises(Exception, table.get_entries_instantiated, {'v': 2.3, 'foo': 1, 'bar': 0.2})
+        with self.assertRaises(Exception):
+            table.get_entries_instantiated({'v': 2.3, 'foo': 1, 'bar': 1})
+        with self.assertRaises(Exception):
+            table.get_entries_instantiated({'v': 2.3, 'foo': 1, 'bar': 0.2})
 
     def test_get_entries_instantiated_unlinked_time_declarations(self) -> None:
         table = TablePulseTemplate()
@@ -379,7 +400,8 @@ class TablePulseTemplateTest(unittest.TestCase):
         table.add_entry(bar_decl, 0, 'jump')
         instantiated_entries = table.get_entries_instantiated({'v': 2.3, 'foo': 1, 'bar': 4})
         self.assertEqual([[(0, 0, HoldInterpolationStrategy()), (1, 2.3, LinearInterpolationStrategy()), (4, 0, JumpInterpolationStrategy())]], instantiated_entries)
-        self.assertRaises(Exception, table.get_entries_instantiated, {'v': 2.3, 'foo': 2, 'bar': 1.5})
+        with self.assertRaises(Exception):
+            table.get_entries_instantiated({'v': 2.3, 'foo': 2, 'bar': 1.5})
 
     def test_get_entries_instantiated_empty(self) -> None:
         table = TablePulseTemplate()
@@ -669,7 +691,8 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
         table = TablePulseTemplate()
         foo_decl = ParameterDeclaration('foo')
         table.add_entry(foo_decl, 'v', 'linear')
-        self.assertRaises(ParameterNotProvidedException, table.requires_stop, {'foo': DummyParameter(0, False)}, {})
+        with self.assertRaises(ParameterNotProvidedException):
+            table.requires_stop({'foo': DummyParameter(0, False)}, {})
 
     def test_requires_stop(self) -> None:
         table = TablePulseTemplate()
@@ -751,6 +774,7 @@ class TableWaveformDataTests(unittest.TestCase):
     def test_few_entries(self) -> None:
         with self.assertRaises(ValueError):
             TableWaveform([[]])
+        with self.assertRaises(ValueError):
             TableWaveform([[WaveformTableEntry(0, 0, HoldInterpolationStrategy())]])
 
     def test_sample(self) -> None:

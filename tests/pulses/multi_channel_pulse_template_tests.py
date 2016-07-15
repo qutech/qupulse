@@ -16,6 +16,7 @@ class MultiChannelWaveformTest(unittest.TestCase):
     def test_init_no_args(self) -> None:
         with self.assertRaises(ValueError):
             MultiChannelWaveform([])
+        with self.assertRaises(ValueError):
             MultiChannelWaveform(None)
 
     def test_init_single_channel(self) -> None:
@@ -245,10 +246,11 @@ class MultiChannelPulseTemplateSequencingTests(unittest.TestCase):
         self.assertEqual({'bar'}, pulse.parameter_names)
         self.assertEqual({ParameterDeclaration('bar')}, pulse.parameter_declarations)
 
-        self.assertRaises(ParameterNotProvidedException, pulse.build_waveform, {})
+        with self.assertRaises(ParameterNotProvidedException):
+            pulse.build_waveform({})
 
-        self.assertRaises(ParameterNotProvidedException, pulse.build_sequence, DummySequencer(), {},
-                          {}, DummyInstructionBlock())
+        with self.assertRaises(ParameterNotProvidedException):
+            pulse.build_sequence(DummySequencer(), dict(), dict(), DummyInstructionBlock())
 
     def test_build_sequence(self) -> None:
         dummy_wf1 = DummyWaveform(duration=2.3, num_channels=2)

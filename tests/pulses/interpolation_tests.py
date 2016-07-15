@@ -22,7 +22,8 @@ class InterpolationTest(unittest.TestCase):
         strat = HoldInterpolationStrategy()
         result = strat(start, end, t)
         self.assertTrue(all(result == -1))
-        self.assertRaises(ValueError, strat, end, start, t)
+        with self.assertRaises(ValueError):
+            strat(end, start, t)
 
     def test_jump_interpolation(self):
         start = (-1, -1)
@@ -31,7 +32,8 @@ class InterpolationTest(unittest.TestCase):
         strat = JumpInterpolationStrategy()
         result = strat(start, end, t)
         self.assertTrue(all(result == 3))
-        self.assertRaises(ValueError, strat, end, start, t)
+        with self.assertRaises(ValueError):
+            strat(end, start, t)
     
     def test_repr_str(self):
         #Test hash

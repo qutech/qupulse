@@ -23,4 +23,5 @@ class ExpressionTests(unittest.TestCase):
         params = {
             'b': 1.5
         }
-        self.assertRaises(ExpressionVariableMissingException, e.evaluate, **params)
+        with self.assertRaises(ExpressionVariableMissingException):
+            e.evaluate(**params)
