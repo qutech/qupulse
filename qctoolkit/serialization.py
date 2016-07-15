@@ -83,7 +83,7 @@ class FilesystemBackend(StorageBackend):
             raise NotADirectoryError()
         self.__root = os.path.abspath(root)
 
-    def _path(self, identifier):
+    def _path(self, identifier) -> str:
         return os.path.join(self.__root, identifier + '.json')
 
     def put(self, identifier: str, data: str, overwrite: bool=False) -> None:
@@ -134,7 +134,7 @@ class ZipFileBackend(StorageBackend):
             z.close()
         self.__root = root
 
-    def _path(self, identifier):
+    def _path(self, identifier) -> str:
         return os.path.join(identifier + '.json')
 
     def put(self, identifier: str, data: str, overwrite: bool=False) -> None:
@@ -162,7 +162,7 @@ class ZipFileBackend(StorageBackend):
         with zipfile.ZipFile(self.__root, 'r') as myzip:
             return path in myzip.namelist()
 
-    def _update(self, filename, data):
+    def _update(self, filename, data) -> None:
         # generate a temp file
         tmpfd, tmpname = tempfile.mkstemp(dir=os.path.dirname(self.__root))
         os.close(tmpfd)
