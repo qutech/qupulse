@@ -8,7 +8,7 @@ from qctoolkit.serialization import Serializer
 from qctoolkit.pulses.instructions import Waveform, Instruction, CJMPInstruction, GOTOInstruction, REPJInstruction
 from qctoolkit.pulses.sequencing import Sequencer, InstructionBlock, SequencingElement
 from qctoolkit.pulses.parameters import Parameter, ParameterDeclaration
-from qctoolkit.pulses.pulse_template import PulseTemplate, MeasurementWindow
+from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementWindow
 from qctoolkit.pulses.interpolation import InterpolationStrategy
 from qctoolkit.pulses.conditions import Condition
 
@@ -113,10 +113,11 @@ class DummyInstructionBlock(InstructionBlock):
 
 class DummyWaveform(Waveform):
 
-    def __init__(self, duration: float=0, sample_output: numpy.ndarray=None) -> None:
+    def __init__(self, duration: float=0, sample_output: numpy.ndarray=None, num_channels: int=1) -> None:
         super().__init__()
         self.duration_ = duration
         self.sample_output = sample_output
+        self.num_channels_ = num_channels
         self.sample_calls = []
 
     @property
@@ -129,6 +130,10 @@ class DummyWaveform(Waveform):
     @property
     def duration(self) -> float:
         return self.duration_
+
+    @property
+    def num_channels(self) -> int:
+        return self.num_channels_
 
     def sample(self, sample_times: numpy.ndarray, first_offset: float=0) -> numpy.ndarray:
         self.sample_calls.append((list(sample_times), first_offset))
@@ -222,14 +227,24 @@ class DummyCondition(Condition):
         )
 
 
-class DummyPulseTemplate(PulseTemplate):
+class DummyPulseTemplate(AtomicPulseTemplate):
 
-    def __init__(self, requires_stop: bool=False, is_interruptable: bool=False, parameter_names: Set[str]={}) -> None:
+    def __init__(self,
+                 requires_stop: bool=False,
+                 is_interruptable: bool=False,
+                 parameter_names: Set[str]={},
+                 num_channels: int=1,
+                 duration: float=0,
+                 waveform: Waveform=None) -> None:
         super().__init__()
         self.requires_stop_ = requires_stop
         self.is_interruptable_ = is_interruptable
         self.parameter_names_ = parameter_names
         self.build_sequence_calls = 0
+        self.num_channels_ = num_channels
+        self.duration = duration
+        self.waveform = waveform
+        self.build_waveform_calls = []
 
     @property
     def parameter_names(self) -> Set[str]:
@@ -247,12 +262,22 @@ class DummyPulseTemplate(PulseTemplate):
     def is_interruptable(self) -> bool:
         return self.is_interruptable_
 
+    @property
+    def num_channels(self) -> int:
+        return self.num_channels_
+
     def build_sequence(self,
                        sequencer: Sequencer,
                        parameters: Dict[str, Parameter],
                        conditions: Dict[str, Condition],
                        instruction_block: InstructionBlock):
         self.build_sequence_calls += 1
+
+    def build_waveform(self, parameters: Dict[str, Parameter]) -> Optional[Waveform]:
+        self.build_waveform_calls.append(parameters)
+        if self.waveform is not None:
+            return self.waveform
+        return DummyWaveform(duration=self.duration, num_channels=self.num_channels)
 
     def requires_stop(self, parameters: Dict[str, Parameter], conditions: Dict[str, Condition]) -> bool:
         return self.requires_stop_

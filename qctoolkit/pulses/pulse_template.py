@@ -2,7 +2,9 @@
 pulse model in the qctoolkit.
 
 Classes:
-    - PulseTemplate: Represents the parametrized general structure of a pulse
+    - PulseTemplate: Represents the parametrized general structure of a pulse.
+    - AtomicPulseTemplate: PulseTemplate that does imply any control flow disruptions and can be
+        directly translated into a waveform.
 """
 from abc import ABCMeta, abstractmethod, abstractproperty
 from typing import Dict, List, Tuple, Set, Optional
@@ -10,9 +12,9 @@ from typing import Dict, List, Tuple, Set, Optional
 from qctoolkit.serialization import Serializable
 
 from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter
-from qctoolkit.pulses.sequencing import SequencingElement
+from qctoolkit.pulses.sequencing import SequencingElement, InstructionBlock
 
-__all__ = ["MeasurementWindow", "PulseTemplate"]
+__all__ = ["MeasurementWindow", "PulseTemplate", "AtomicPulseTemplate"]
 
 
 MeasurementWindow = Tuple[float, float]
@@ -57,3 +59,41 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=ABCMeta):
         """True, if this execution of this PulseTemplate can be interrupted at certain points,
         i.e., a Sequencer can translate this PulseTemplate partially.
         """
+
+    @abstractproperty
+    def num_channels(self) -> int:
+        """Returns the number of hardware output channels this PulseTemplate defines."""
+
+
+class AtomicPulseTemplate(PulseTemplate):
+    """A PulseTemplate that does not imply any control flow disruptions and can be directly
+    translated into a waveform.
+
+    Implies that no AtomicPulseTemplate object is interruptable.
+    """
+
+    def __init__(self, identifier: Optional[str]=None):
+        super().__init__(identifier=identifier)
+
+    def is_interruptable(self) -> bool:
+        return False
+
+    @abstractmethod
+    def build_waveform(self, parameters: Dict[str, Parameter]) -> Optional['Waveform']:
+        """Translate this AtomicPulseTemplate into a waveform according to the given parameteres.
+
+        Args:
+            parameters (Dict(str -> Parameter)): A mapping of parameter names to Parameter objects.
+        Returns:
+            Waveform object represented by this AtomicPulseTemplate object or None, if this object
+                does not represent a valid waveform.
+        """
+
+    def build_sequence(self,
+                       sequencer: 'Sequencer',
+                       parameters: Dict[str, Parameter],
+                       conditions: Dict[str, 'Condition'],
+                       instruction_block: InstructionBlock) -> None:
+        waveform = self.build_waveform(parameters)
+        if waveform:
+            instruction_block.add_instruction_exec(waveform)

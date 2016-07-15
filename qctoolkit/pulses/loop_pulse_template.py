@@ -64,6 +64,10 @@ class LoopPulseTemplate(PulseTemplate):
     def is_interruptable(self) -> bool:
         return self.__body.is_interruptable
 
+    @property
+    def num_channels(self) -> int:
+        return self.__body.num_channels
+
     def __obtain_condition_object(self, conditions: Dict[str, Condition]) -> Condition:
         try:
             return conditions[self.__condition]

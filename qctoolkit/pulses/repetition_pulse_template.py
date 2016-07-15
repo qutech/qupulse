@@ -70,6 +70,10 @@ class RepetitionPulseTemplate(PulseTemplate):
     def is_interruptable(self) -> bool:
         return self.__body.is_interruptable
 
+    @property
+    def num_channels(self) -> int:
+        return self.__body.num_channels
+
     def build_sequence(self,
                        sequencer: Sequencer,
                        parameters: Dict[str, Parameter],
