@@ -17,7 +17,6 @@ from qctoolkit.serialization import Serializer
 
 from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter
 from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementWindow
-from qctoolkit.pulses.sequencing import InstructionBlock, Sequencer
 from qctoolkit.pulses.sequence_pulse_template import ParameterNotProvidedException
 from qctoolkit.pulses.instructions import Waveform
 

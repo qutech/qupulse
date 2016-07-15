@@ -17,7 +17,6 @@ from qctoolkit.serialization import Serializer
 from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter, \
     ParameterNotProvidedException
 from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementWindow
-from qctoolkit.pulses.sequencing import InstructionBlock, Sequencer
 from qctoolkit.pulses.interpolation import InterpolationStrategy, LinearInterpolationStrategy, \
     HoldInterpolationStrategy, JumpInterpolationStrategy
 from qctoolkit.pulses.instructions import Waveform
@@ -97,10 +96,11 @@ class TablePulseTemplate(AtomicPulseTemplate):
     Each TablePulseTemplate contains at least an entry at time 0.
     """
 
-    def __init__(self, channels=1, measurement=False, identifier: Optional[str]=None) -> None:
+    def __init__(self, channels: int=1, measurement=False, identifier: Optional[str]=None) -> None:
         """Create a new TablePulseTemplate.
 
         Args:
+            channels (int): The number of channels defined in this TablePulseTemplate (default = 1).
             measurement (bool): True, if this TablePulseTemplate shall define a measurement window.
                 (optional, default = False).
             identifier (str): A unique identifier for use in serialization. (optional)
