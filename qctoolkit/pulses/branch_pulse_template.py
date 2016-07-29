@@ -108,7 +108,7 @@ class BranchPulseTemplate(PulseTemplate):
                     condition: str,
                     if_branch_template: Dict[str, Any],
                     else_branch_template: Dict[str, Any],
-                    identifier: Optional[str]) -> 'BranchPulseTemplate':
+                    identifier: Optional[str]=None) -> 'BranchPulseTemplate':
         return BranchPulseTemplate(condition,
                                    serializer.deserialize(if_branch_template),
                                    serializer.deserialize(else_branch_template),
