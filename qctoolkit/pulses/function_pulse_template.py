@@ -70,7 +70,7 @@ class FunctionPulseTemplate(AtomicPulseTemplate):
 
     @property
     def parameter_declarations(self) -> Set[ParameterDeclaration]:
-        return [ParameterDeclaration(param_name) for param_name in self.parameter_names]
+        return {ParameterDeclaration(param_name) for param_name in self.parameter_names}
 
     def get_pulse_length(self, parameters: Dict[str, Parameter]) -> float:
         """Return the length of this pulse for the given parameters.
@@ -118,8 +118,7 @@ class FunctionPulseTemplate(AtomicPulseTemplate):
                       conditions: Dict[str, 'Condition']) -> bool:
         return any(
             parameters[name].requires_stop
-            for name in parameters.keys()
-            if (name in self.parameter_names) and not isinstance(parameters[name], numbers.Number)
+            for name in parameters.keys() if (name in self.parameter_names)
         )
 
     def get_serialization_data(self, serializer: Serializer) -> None:
@@ -136,7 +135,7 @@ class FunctionPulseTemplate(AtomicPulseTemplate):
         return FunctionPulseTemplate(
             kwargs['expression'],
             kwargs['duration_expression'],
-            kwargs['Measurement']
+            kwargs['measurement']
         )
 
 
@@ -173,7 +172,7 @@ class FunctionWaveform(Waveform):
     
     @property
     def compare_key(self) -> Any:
-        return self.__expression
+        return self.__expression, self.__duration, self.__parameters
 
     @property
     def duration(self) -> float:
