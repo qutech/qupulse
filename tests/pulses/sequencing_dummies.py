@@ -5,10 +5,10 @@ import numpy
 
 """LOCAL IMPORTS"""
 from qctoolkit.serialization import Serializer
-from qctoolkit.pulses.instructions import Waveform, Instruction
+from qctoolkit.pulses.instructions import Waveform, Instruction, CJMPInstruction, GOTOInstruction, REPJInstruction
 from qctoolkit.pulses.sequencing import Sequencer, InstructionBlock, SequencingElement
 from qctoolkit.pulses.parameters import Parameter, ParameterDeclaration
-from qctoolkit.pulses.pulse_template import PulseTemplate, MeasurementWindow
+from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementWindow
 from qctoolkit.pulses.interpolation import InterpolationStrategy
 from qctoolkit.pulses.conditions import Condition
 
@@ -101,22 +101,23 @@ class DummyInstruction(Instruction):
 
 class DummyInstructionBlock(InstructionBlock):
 
-    def __init__(self, outer_block: InstructionBlock = None) -> None:
-        super().__init__(outer_block)
+    def __init__(self) -> None:
+        super().__init__()
         self.embedded_blocks = [] # type: Collection[InstructionBlock]
 
-    def create_embedded_block(self) -> InstructionBlock:
-        block = InstructionBlock(self)
-        self.embedded_blocks.append(block)
-        return block
+    def add_instruction(self, instruction: Instruction) -> None:
+        super().add_instruction(instruction)
+        if isinstance(instruction, (CJMPInstruction, GOTOInstruction, REPJInstruction)):
+            self.embedded_blocks.append(instruction.target.block)
 
 
 class DummyWaveform(Waveform):
 
-    def __init__(self, duration: float=0, sample_output: numpy.ndarray=None) -> None:
+    def __init__(self, duration: float=0, sample_output: numpy.ndarray=None, num_channels: int=1) -> None:
         super().__init__()
         self.duration_ = duration
         self.sample_output = sample_output
+        self.num_channels_ = num_channels
         self.sample_calls = []
 
     @property
@@ -131,8 +132,8 @@ class DummyWaveform(Waveform):
         return self.duration_
 
     @property
-    def channels(self) -> int:
-        return 1
+    def num_channels(self) -> int:
+        return self.num_channels_
 
     @property
     def measurement_windows(self):
@@ -230,14 +231,24 @@ class DummyCondition(Condition):
         )
 
 
-class DummyPulseTemplate(PulseTemplate):
+class DummyPulseTemplate(AtomicPulseTemplate):
 
-    def __init__(self, requires_stop: bool=False, is_interruptable: bool=False, parameter_names: Set[str]={}) -> None:
+    def __init__(self,
+                 requires_stop: bool=False,
+                 is_interruptable: bool=False,
+                 parameter_names: Set[str]={},
+                 num_channels: int=1,
+                 duration: float=0,
+                 waveform: Waveform=None) -> None:
         super().__init__()
         self.requires_stop_ = requires_stop
         self.is_interruptable_ = is_interruptable
         self.parameter_names_ = parameter_names
         self.build_sequence_calls = 0
+        self.num_channels_ = num_channels
+        self.duration = duration
+        self.waveform = waveform
+        self.build_waveform_calls = []
 
     @property
     def parameter_names(self) -> Set[str]:
@@ -245,7 +256,7 @@ class DummyPulseTemplate(PulseTemplate):
 
     @property
     def parameter_declarations(self) -> Set[str]:
-        return [ParameterDeclaration(name) for name in self.parameter_names]
+        return {ParameterDeclaration(name) for name in self.parameter_names}
 
     def get_measurement_windows(self, parameters: Dict[str, Parameter] = None) -> List[MeasurementWindow]:
         """Return all measurement windows defined in this PulseTemplate."""
@@ -255,12 +266,22 @@ class DummyPulseTemplate(PulseTemplate):
     def is_interruptable(self) -> bool:
         return self.is_interruptable_
 
+    @property
+    def num_channels(self) -> int:
+        return self.num_channels_
+
     def build_sequence(self,
                        sequencer: Sequencer,
                        parameters: Dict[str, Parameter],
                        conditions: Dict[str, Condition],
                        instruction_block: InstructionBlock):
         self.build_sequence_calls += 1
+
+    def build_waveform(self, parameters: Dict[str, Parameter]) -> Optional[Waveform]:
+        self.build_waveform_calls.append(parameters)
+        if self.waveform is not None:
+            return self.waveform
+        return DummyWaveform(duration=self.duration, num_channels=self.num_channels)
 
     def requires_stop(self, parameters: Dict[str, Parameter], conditions: Dict[str, Condition]) -> bool:
         return self.requires_stop_

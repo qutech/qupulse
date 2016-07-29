@@ -56,7 +56,7 @@ class Plotter:
         sample_count = total_time * self.__sample_rate + 1
         times = np.linspace(0, total_time, num=sample_count)
 
-        channels = max([waveform.channels for waveform in waveforms])
+        channels = max([waveform.num_channels for waveform in waveforms])
         voltages = np.empty((len(times), channels))
         time = 0
         for waveform in waveforms:
@@ -107,6 +107,15 @@ def plot(pulse: PulseTemplate,
     figure = plt.figure()
     ax = figure.add_subplot(111)
     ax.step(times, voltages, where='post')
+    return figure
+
+    plt.xlabel('Time in ns')
+    plt.ylabel('Voltage')
+
+    if pulse.identifier:
+        plt.title(pulse.identifier)
+
+    figure.show()
     return figure
 
 

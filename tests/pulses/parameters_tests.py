@@ -51,8 +51,10 @@ class MappedParameterTest(unittest.TestCase):
 
     def test_requires_stop_and_get_value(self) -> None:
         p = MappedParameter(Expression("foo + bar * hugo"))
-        self.assertRaises(ParameterNotProvidedException, lambda: p.requires_stop)
-        self.assertRaises(ParameterNotProvidedException, p.get_value)
+        with self.assertRaises(ParameterNotProvidedException):
+            p.requires_stop
+        with self.assertRaises(ParameterNotProvidedException):
+            p.get_value()
 
         foo = DummyParameter(-1.1)
         bar = DummyParameter(0.5)
@@ -60,12 +62,15 @@ class MappedParameterTest(unittest.TestCase):
         ilse = DummyParameter(2356.4, requires_stop=True)
 
         p.dependencies = {'foo': foo, 'hugo': hugo, 'ilse': ilse}
-        self.assertRaises(ParameterNotProvidedException, lambda: p.requires_stop)
-        self.assertRaises(ParameterNotProvidedException, p.get_value)
+        with self.assertRaises(ParameterNotProvidedException):
+            p.requires_stop
+        with self.assertRaises(ParameterNotProvidedException):
+            p.get_value()
 
         p.dependencies = {'foo': foo, 'bar': bar, 'hugo': hugo}
         self.assertTrue(p.requires_stop)
-        self.assertRaises(Exception, p.get_value)
+        with self.assertRaises(Exception):
+            p.get_value()
 
         hugo = DummyParameter(5.2, requires_stop=False)
         p.dependencies = {'foo': foo, 'bar': bar, 'hugo': hugo, 'ilse': ilse}
@@ -149,26 +154,40 @@ class ParameterDeclarationTest(unittest.TestCase):
         self.__test_valid_values(min=-0.1, default=-0.1, max=3.5)
         self.__test_valid_values(min=-0.1, default=3.5, max=3.5)
         self.__test_valid_values(min=1.7, default=1.7, max=1.7)
-        self.assertRaises(ValueError, ParameterDeclaration, 'test', min=-0.1, max=-0.2)
-        self.assertRaises(ValueError, ParameterDeclaration, 'test', min=-0.1, default=-0.2)
-        self.assertRaises(ValueError, ParameterDeclaration, 'test', max=-0.2, default=-0.1)
-        self.assertRaises(ValueError, ParameterDeclaration, 'test', min=-0.2, default=-0.3, max=0.1)
-        self.assertRaises(ValueError, ParameterDeclaration, 'test', min=-0.2, default=-0.3, max=-0.4)
-        self.assertRaises(ValueError, ParameterDeclaration, 'test', min=-0.2, default=-0.1, max=-0.4)
-        self.assertRaises(ValueError, ParameterDeclaration, 'test', min=-0.2, default=0.5, max=0.1)
-        self.assertRaises(ValueError, ParameterDeclaration, 'test', min=1.7, default=0.5, max=0.1)
+        with self.assertRaises(ValueError):
+            ParameterDeclaration('test', min=-0.1, max=-0.2)
+        with self.assertRaises(ValueError):
+            ParameterDeclaration('test', min=-0.1, default=-0.2)
+        with self.assertRaises(ValueError):
+            ParameterDeclaration('test', max=-0.2, default=-0.1)
+        with self.assertRaises(ValueError):
+            ParameterDeclaration('test', min=-0.2, default=-0.3, max=0.1)
+        with self.assertRaises(ValueError):
+            ParameterDeclaration('test', min=-0.2, default=-0.3, max=-0.4)
+        with self.assertRaises(ValueError):
+            ParameterDeclaration('test', min=-0.2, default=-0.1, max=-0.4)
+        with self.assertRaises(ValueError):
+            ParameterDeclaration('test', min=-0.2, default=0.5, max=0.1)
+        with self.assertRaises(ValueError):
+            ParameterDeclaration('test', min=1.7, default=0.5, max=0.1)
         decl = ParameterDeclaration('test', min=-0.1)
-        self.assertRaises(ValueError, self.__max_assignment, decl, -0.2)
+        with self.assertRaises(ValueError):
+            self.__max_assignment(decl, -0.2)
         decl = ParameterDeclaration('test', min=-0.2, default=-0.1)
-        self.assertRaises(ValueError, self.__max_assignment, decl, -0.4)
+        with self.assertRaises(ValueError):
+            self.__max_assignment(decl, -0.4)
         decl = ParameterDeclaration('test', min=-0.2, default=0.5)
-        self.assertRaises(ValueError, self.__max_assignment, decl, 0.1)
+        with self.assertRaises(ValueError):
+            self.__max_assignment(decl, 0.1)
         decl = ParameterDeclaration('test', max=-0.1)
-        self.assertRaises(ValueError, self.__min_assignment, decl, 0.2)
+        with self.assertRaises(ValueError):
+            self.__min_assignment(decl, 0.2)
         decl = ParameterDeclaration('test', max=0.2, default=-0.1)
-        self.assertRaises(ValueError, self.__min_assignment, decl, 0.4)
+        with self.assertRaises(ValueError):
+            self.__min_assignment(decl, 0.4)
         decl = ParameterDeclaration('test', max=1.1, default=0.5)
-        self.assertRaises(ValueError, self.__min_assignment, decl, 0.7)
+        with self.assertRaises(ValueError):
+                self.__min_assignment(decl, 0.7)
     
     def test_init_min_reference(self) -> None:
         self.__test_valid_values(min=ParameterDeclaration('foo', min=-17.3, max=-0.1))
@@ -188,12 +207,18 @@ class ParameterDeclarationTest(unittest.TestCase):
         self.__test_valid_values(min=ParameterDeclaration('foo', min=-17.3, max=-0.1), default=-17.3, max=3.5)
         self.__test_valid_values(min=ParameterDeclaration('foo', min=-17.3, max=-0.1), default=-17.3, max=-0.1)
         
-        self.assertRaises(ValueError, ParameterDeclaration, 'test', min=ParameterDeclaration('foo', min=-17.3, max=-0.1), max=-0.2)
-        self.assertRaises(ValueError, ParameterDeclaration, 'test', min=ParameterDeclaration('foo', min=-17.3, max=-0.1), default=-20.3)
-        self.assertRaises(ValueError, ParameterDeclaration, 'test', min=ParameterDeclaration('foo', min=-17.3, max=-0.1), default=-20.3, max=0.1)
-        self.assertRaises(ValueError, ParameterDeclaration, 'test', min=ParameterDeclaration('foo', min=-17.3, max=-0.1), default=-4.2, max=-0.4)
-        self.assertRaises(ValueError, ParameterDeclaration, 'test', min=ParameterDeclaration('foo', min=-17.3, max=-0.1), default=-20.3, max=-0.4)
-        self.assertRaises(ValueError, ParameterDeclaration, 'test', min=ParameterDeclaration('foo', min=-17.3, max=-0.1), default=0.3, max=0.2)
+        with self.assertRaises(ValueError):
+            ParameterDeclaration('test', min=ParameterDeclaration('foo', min=-17.3, max=-0.1), max=-0.2)
+        with self.assertRaises(ValueError):
+            ParameterDeclaration('test', min=ParameterDeclaration('foo', min=-17.3, max=-0.1), default=-20.3)
+        with self.assertRaises(ValueError):
+            ParameterDeclaration('test', min=ParameterDeclaration('foo', min=-17.3, max=-0.1), default=-20.3, max=0.1)
+        with self.assertRaises(ValueError):
+            ParameterDeclaration('test', min=ParameterDeclaration('foo', min=-17.3, max=-0.1), default=-4.2, max=-0.4)
+        with self.assertRaises(ValueError):
+            ParameterDeclaration('test', min=ParameterDeclaration('foo', min=-17.3, max=-0.1), default=-20.3, max=-0.4)
+        with self.assertRaises(ValueError):
+            ParameterDeclaration('test', min=ParameterDeclaration('foo', min=-17.3, max=-0.1), default=0.3, max=0.2)
         
     def test_init_max_reference(self) -> None:
         self.__test_valid_values(max=ParameterDeclaration('foo', min=-17.3, max=-0.1))
@@ -213,12 +238,18 @@ class ParameterDeclarationTest(unittest.TestCase):
         self.__test_valid_values(max=ParameterDeclaration('foo', min=-17.3, max=-0.1), default=-0.1, min=-22.2)
         self.__test_valid_values(max=ParameterDeclaration('foo', min=-17.3, max=-0.1), default=-0.1, min=-17.3)
 
-        self.assertRaises(ValueError, ParameterDeclaration, 'test', max=ParameterDeclaration('foo', min=-17.3, max=-0.1), min=-0.2)
-        self.assertRaises(ValueError, ParameterDeclaration, 'test', max=ParameterDeclaration('foo', min=-17.3, max=-0.1), default=0.01)
-        self.assertRaises(ValueError, ParameterDeclaration, 'test', max=ParameterDeclaration('foo', min=-17.3, max=-0.1), default=-0.01, min=-20.9)
-        self.assertRaises(ValueError, ParameterDeclaration, 'test', max=ParameterDeclaration('foo', min=-17.3, max=-0.1), default=-4.2, min=-5.2)
-        self.assertRaises(ValueError, ParameterDeclaration, 'test', max=ParameterDeclaration('foo', min=-17.3, max=-0.1), default=1.2, min=-0.4)
-        self.assertRaises(ValueError, ParameterDeclaration, 'test', max=ParameterDeclaration('foo', min=-17.3, max=-0.1), default=1.2, min=3.9)
+        with self.assertRaises(ValueError):
+            ParameterDeclaration('test', max=ParameterDeclaration('foo', min=-17.3, max=-0.1), min=-0.2)
+        with self.assertRaises(ValueError):
+            ParameterDeclaration('test', max=ParameterDeclaration('foo', min=-17.3, max=-0.1), default=0.01)
+        with self.assertRaises(ValueError):
+            ParameterDeclaration('test', max=ParameterDeclaration('foo', min=-17.3, max=-0.1), default=-0.01, min=-20.9)
+        with self.assertRaises(ValueError):
+            ParameterDeclaration('test', max=ParameterDeclaration('foo', min=-17.3, max=-0.1), default=-4.2, min=-5.2)
+        with self.assertRaises(ValueError):
+            ParameterDeclaration('test', max=ParameterDeclaration('foo', min=-17.3, max=-0.1), default=1.2, min=-0.4)
+        with self.assertRaises(ValueError):
+            ParameterDeclaration('test', max=ParameterDeclaration('foo', min=-17.3, max=-0.1), default=1.2, min=3.9)
         
     def test_init_min_max_reference(self) -> None:
         self.__test_valid_values(min=ParameterDeclaration('fooi', max=3.5), max=ParameterDeclaration('fooa', min=4.2, max=13.2))
@@ -247,21 +278,26 @@ class ParameterDeclarationTest(unittest.TestCase):
         self.__test_valid_values(min=ParameterDeclaration('fooi', min=0.3, max=3.5), default=4.2, max=ParameterDeclaration('fooa', min=4.2, max=13.2))
         self.__test_valid_values(min=ParameterDeclaration('fooi', min=0.3, max=3.5), default=5.7, max=ParameterDeclaration('fooa', min=4.2, max=13.2))
         self.__test_valid_values(min=ParameterDeclaration('fooi', min=0.3, max=3.5), default=13.2, max=ParameterDeclaration('fooa', min=4.2, max=13.2))
-        
-        self.assertRaises(ValueError, ParameterDeclaration, 'test', min=ParameterDeclaration('fooi', min=0.3, max=3.5), max=ParameterDeclaration('fooa', min=0.2, max=13.2))
-        self.assertRaises(ValueError, ParameterDeclaration, 'test', min=ParameterDeclaration('fooi', min=0.3, max=13.5), max=ParameterDeclaration('fooa', min=4.2, max=13.2))
+
+        with self.assertRaises(ValueError):
+            ParameterDeclaration('test', min=ParameterDeclaration('fooi', min=0.3, max=3.5), max=ParameterDeclaration('fooa', min=0.2, max=13.2))
+        with self.assertRaises(ValueError):
+            ParameterDeclaration('test', min=ParameterDeclaration('fooi', min=0.3, max=13.5), max=ParameterDeclaration('fooa', min=4.2, max=13.2))
         self.__test_valid_values(min=ParameterDeclaration('fooi', min=0.3), max=ParameterDeclaration('fooa', min=4.2, max=13.2))
         self.__test_valid_values(min=ParameterDeclaration('fooi', min=0.3, max=3.5), max=ParameterDeclaration('fooa', max=13.2))
         self.__test_valid_values(min=ParameterDeclaration('fooi', min=0.3), max=ParameterDeclaration('fooa', max=13.2))
-        
-        self.assertRaises(ValueError, ParameterDeclaration, 'test', min=ParameterDeclaration('fooi', min=0.3, max=3.5), default=-0.2, max=ParameterDeclaration('fooa', min=4.2, max=13.2))
-        self.assertRaises(ValueError, ParameterDeclaration, 'test', min=ParameterDeclaration('fooi', min=0.3, max=3.5), default=22.1, max=ParameterDeclaration('fooa', min=4.2, max=13.2))
+
+        with self.assertRaises(ValueError):
+            ParameterDeclaration('test', min=ParameterDeclaration('fooi', min=0.3, max=3.5), default=-0.2, max=ParameterDeclaration('fooa', min=4.2, max=13.2))
+        with self.assertRaises(ValueError):
+            ParameterDeclaration('test', min=ParameterDeclaration('fooi', min=0.3, max=3.5), default=22.1, max=ParameterDeclaration('fooa', min=4.2, max=13.2))
         
     def test_get_value(self) -> None:
         decl = ParameterDeclaration('foo')
         foo_param = ConstantParameter(2.1)
         self.assertEqual(foo_param.get_value(), decl.get_value({'foo': foo_param}))
-        self.assertRaises(ParameterNotProvidedException, decl.get_value, {})
+        with self.assertRaises(ParameterNotProvidedException):
+            decl.get_value(dict())
         
         decl = ParameterDeclaration('foo', default=2.7)
         self.assertEqual(decl.default_value, decl.get_value({}))
@@ -269,19 +305,23 @@ class ParameterDeclarationTest(unittest.TestCase):
         decl = ParameterDeclaration('foo', min=1.3)
         self.assertEqual(1.4, decl.get_value({'foo': ConstantParameter(1.4)}))
         self.assertEqual(1.3, decl.get_value({'foo': ConstantParameter(1.3)}))
-        self.assertRaises(ParameterValueIllegalException, decl.get_value, {'foo': ConstantParameter(1.1)})
+        with self.assertRaises(ParameterValueIllegalException):
+            decl.get_value({'foo': ConstantParameter(1.1)})
 
         decl = ParameterDeclaration('foo', max=2.3)
         self.assertTrue(1.4, decl.get_value({'foo': ConstantParameter(1.4)}))
         self.assertTrue(2.3, decl.get_value({'foo': ConstantParameter(2.3)}))
-        self.assertRaises(ParameterValueIllegalException, decl.get_value, {'foo': ConstantParameter(3.1)})
+        with self.assertRaises(ParameterValueIllegalException):
+            decl.get_value({'foo': ConstantParameter(3.1)})
 
         decl = ParameterDeclaration('foo', min=1.3, max=2.3)
-        self.assertRaises(ParameterValueIllegalException, decl.get_value, {'foo': ConstantParameter(0.9)})
+        with self.assertRaises(ParameterValueIllegalException):
+            decl.get_value({'foo': ConstantParameter(0.9)})
         self.assertEqual(1.3, decl.get_value({'foo': ConstantParameter(1.3)}))
         self.assertEqual(1.4, decl.get_value({'foo': ConstantParameter(1.4)}))
         self.assertEqual(2.3, decl.get_value({'foo': ConstantParameter(2.3)}))
-        self.assertRaises(ParameterValueIllegalException, decl.get_value, {'foo': ConstantParameter(3.1)})
+        with self.assertRaises(ParameterValueIllegalException):
+            decl.get_value({'foo': ConstantParameter(3.1)})
 
         min_decl = ParameterDeclaration('min', min=1.2, max=2.3)
         max_decl = ParameterDeclaration('max', min=1.2, max=5.1)
@@ -290,15 +330,21 @@ class ParameterDeclarationTest(unittest.TestCase):
         max_param = ConstantParameter(2.3)
 
         decl = ParameterDeclaration('foo', min=min_decl, max=max_decl)
-        self.assertRaises(ParameterValueIllegalException, decl.get_value, {'min': min_param, 'max': max_param, 'foo': ConstantParameter(0.9)})
-        self.assertRaises(ParameterValueIllegalException, decl.get_value, {'min': min_param, 'max': max_param, 'foo': ConstantParameter(1.2)})
-        self.assertRaises(ParameterValueIllegalException, decl.get_value, {'min': min_param, 'max': max_param, 'foo': ConstantParameter(1.25)})
+        with self.assertRaises(ParameterValueIllegalException):
+            decl.get_value({'min': min_param, 'max': max_param, 'foo': ConstantParameter(0.9)})
+        with self.assertRaises(ParameterValueIllegalException):
+            decl.get_value({'min': min_param, 'max': max_param, 'foo': ConstantParameter(1.2)})
+        with self.assertRaises(ParameterValueIllegalException):
+            decl.get_value({'min': min_param, 'max': max_param, 'foo': ConstantParameter(1.25)})
         self.assertEqual(1.3, decl.get_value({'min': min_param, 'max': max_param, 'foo': ConstantParameter(1.3)}))
         self.assertEqual(1.7, decl.get_value({'min': min_param, 'max': max_param, 'foo': ConstantParameter(1.7)}))
         self.assertEqual(2.3, decl.get_value({'min': min_param, 'max': max_param, 'foo': ConstantParameter(2.3)}))
-        self.assertRaises(ParameterValueIllegalException, decl.get_value, {'min': min_param, 'max': max_param, 'foo': ConstantParameter(3.5)})
-        self.assertRaises(ParameterValueIllegalException, decl.get_value, {'min': min_param, 'max': max_param, 'foo': ConstantParameter(5.1)})
-        self.assertRaises(ParameterValueIllegalException, decl.get_value, {'min': min_param, 'max': max_param, 'foo': ConstantParameter(17.2)})
+        with self.assertRaises(ParameterValueIllegalException):
+            decl.get_value({'min': min_param, 'max': max_param, 'foo': ConstantParameter(3.5)})
+        with self.assertRaises(ParameterValueIllegalException):
+            decl.get_value({'min': min_param, 'max': max_param, 'foo': ConstantParameter(5.1)})
+        with self.assertRaises(ParameterValueIllegalException):
+            decl.get_value({'min': min_param, 'max': max_param, 'foo': ConstantParameter(17.2)})
 
     def __assign_min_value(self, left_value: ParameterDeclaration, right_value: ParameterDeclaration) -> None:
         left_value.min_value = right_value
@@ -306,11 +352,13 @@ class ParameterDeclarationTest(unittest.TestCase):
     def test_internal_set_value_exception_branches(self) -> None:
         foo = ParameterDeclaration('foo', min=2.1, max=2.6)
         bar = ParameterDeclaration('bar', min=foo, max=foo)
-        self.assertRaises(ValueError, ParameterDeclaration, 'foobar', min=3.1, max=bar)
+        with self.assertRaises(ValueError):
+            ParameterDeclaration('foobar', min=3.1, max=bar)
 
         bar = ParameterDeclaration('bar', min=foo, max=foo)
         foobar = ParameterDeclaration('foobar', max=1.1)
-        self.assertRaises(ValueError, self.__assign_min_value, foobar, bar)
+        with self.assertRaises(ValueError):
+            self.__assign_min_value(foobar, bar)
 
     def test_is_parameter_valid_no_bounds(self) -> None:
         decl = ParameterDeclaration('foo')

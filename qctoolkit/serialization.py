@@ -3,6 +3,7 @@
 Classes:
     - StorageBackend: Abstract representation of a data storage.
     - FilesystemBackend: Implementation of a file system data storage.
+    - ZipFileBackend: Like FilesystemBackend but inside a single zip file instead of a directory
     - CachingBackend: A caching decorator for StorageBackends.
     - Serializable: An interface for serializable objects.
     - Serializer: Converts Serializables to a serial representation as a string and vice-versa.
@@ -11,9 +12,11 @@ Classes:
 from abc import ABCMeta, abstractmethod, abstractstaticmethod
 from typing import Dict, Any, Optional, NamedTuple, Union
 import os.path
+import zipfile
+import tempfile
 import json
 
-__all__ = ["StorageBackend", "FilesystemBackend", "CachingBackend", "Serializable", "Serializer"]
+__all__ = ["StorageBackend", "FilesystemBackend", "ZipFileBackend" "CachingBackend", "Serializable", "Serializer"]
 
 
 class StorageBackend(metaclass=ABCMeta):
@@ -80,15 +83,18 @@ class FilesystemBackend(StorageBackend):
             raise NotADirectoryError()
         self.__root = os.path.abspath(root)
 
+    def _path(self, identifier) -> str:
+        return os.path.join(self.__root, identifier + '.json')
+
     def put(self, identifier: str, data: str, overwrite: bool=False) -> None:
-        path = os.path.join(self.__root, identifier)
         if self.exists(identifier) and not overwrite:
             raise FileExistsError(identifier)
+        path = self._path(identifier)
         with open(path, 'w') as file:
             file.write(data)
 
     def get(self, identifier: str) -> str:
-        path = os.path.join(self.__root, identifier)
+        path = self._path(identifier)
         try:
             with open(path) as file:
                 return file.read()
@@ -96,8 +102,86 @@ class FilesystemBackend(StorageBackend):
             raise FileNotFoundError(identifier) from fnf
 
     def exists(self, identifier: str) -> bool:
-        path = os.path.join(self.__root, identifier)
+        path = self._path(identifier)
         return os.path.isfile(path)
+
+
+class ZipFileBackend(StorageBackend):
+    """A StorageBackend implementation based on a single zip file.
+
+    Data will be stored in plain text files in a zip file. The zip file is given
+    in the constructor of this FilesystemBackend. For each data item, a separate
+    file is created and named after the corresponding identifier.
+
+    ZipFileBackend uses significantly less storage space and is faster on
+    network devices, but takes longer to update because every write causes a
+    complete recompression (it's not too bad)."""
+
+    def __init__(self, root: str='.') -> None:
+        """Create a new FilesystemBackend.
+
+        Args:
+            root (str): The path of the zip file in which all data files are stored. (default: ".",
+                i.e. the current directory)
+        Raises:
+            NotADirectoryError if root is not a valid directory path.
+        """
+        parent, fname = os.path.split(root)
+        if not os.path.isdir(parent):
+            raise NotADirectoryError()
+        if not os.path.isfile(root):
+            z = zipfile.ZipFile(root, "w")
+            z.close()
+        self.__root = root
+
+    def _path(self, identifier) -> str:
+        return os.path.join(identifier + '.json')
+
+    def put(self, identifier: str, data: str, overwrite: bool=False) -> None:
+        if not self.exists(identifier):
+            with zipfile.ZipFile(self.__root, mode='a', compression=zipfile.ZIP_DEFLATED) as myzip:
+                path = self._path(identifier)
+                myzip.writestr(path,data)
+        else:
+            if overwrite:
+                self._update(self._path(identifier), data)
+            else:
+                raise FileExistsError(identifier)
+
+    def get(self, identifier: str) -> str:
+        path = self._path(identifier)
+        try:
+            with zipfile.ZipFile(self.__root) as myzip:
+                with myzip.open(path) as file:
+                    return file.read().decode()
+        except FileNotFoundError as fnf:
+            raise FileNotFoundError(identifier) from fnf
+
+    def exists(self, identifier: str) -> bool:
+        path = self._path(identifier)
+        with zipfile.ZipFile(self.__root, 'r') as myzip:
+            return path in myzip.namelist()
+
+    def _update(self, filename, data) -> None:
+        # generate a temp file
+        tmpfd, tmpname = tempfile.mkstemp(dir=os.path.dirname(self.__root))
+        os.close(tmpfd)
+
+        # create a temp copy of the archive without filename            
+        with zipfile.ZipFile(self.__root, 'r') as zin:
+            with zipfile.ZipFile(tmpname, 'w') as zout:
+                zout.comment = zin.comment # preserve the comment
+                for item in zin.infolist():
+                    if item.filename != filename:
+                        zout.writestr(item, zin.read(item.filename))
+
+        # replace with the temp archive
+        os.remove(self.__root)
+        os.rename(tmpname, self.__root)
+
+        # now add filename with its new data
+        with zipfile.ZipFile(self.__root, mode='a', compression=zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr(filename, data)
 
 
 class CachingBackend(StorageBackend):
@@ -307,7 +391,7 @@ class Serializer(object):
         """
         return "{}.{}".format(obj.__module__, obj.__class__.__name__)
 
-    def serialize(self, serializable: Serializable) -> None:
+    def serialize(self, serializable: Serializable, overwrite=False) -> None:
         """Serialize and store a Serializable.
 
         The given Serializable and all nested Serializables that are to be stored separately will be
@@ -327,7 +411,7 @@ class Serializer(object):
             if identifier == '':
                 storage_identifier = 'main'
             json_str = json.dumps(repr_[identifier], indent=4, sort_keys=True)
-            self.__storage_backend.put(storage_identifier, json_str, True)
+            self.__storage_backend.put(storage_identifier, json_str, overwrite)
 
     def deserialize(self, representation: Union[str, Dict[str, Any]]) -> Serializable:
         """Load a stored Serializable object or convert dictionary representation back to the

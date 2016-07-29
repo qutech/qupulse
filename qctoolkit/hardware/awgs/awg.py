@@ -103,7 +103,7 @@ class DummyAWG(AWG):
         self.__waveform_indices[hash(waveform)] = index
         return index
 
-    def upload(self, name, program, force=False):
+    def upload(self, name, program, force=False) -> None:
         if name in self.programs:
             if not force:
                 raise ProgramOverwriteException(name)
@@ -116,13 +116,13 @@ class DummyAWG(AWG):
             indices = frozenset(self.add_waveform(block.waveform) for block in exec_blocks)
             self.__program_wfs[name] = indices
 
-    def remove(self,name):
+    def remove(self,name) -> None:
         if name in self.programs:
             self.__programs.pop(name)
             self.program_wfs.pop(name)
             self.clean()
 
-    def clean(self):
+    def clean(self) -> None:
         necessary_wfs = reduce(lambda acc, s: acc.union(s), self.__program_wfs.values(), set())
         all_wfs = set(self.__waveform_indices.values())
         delete = all_wfs - necessary_wfs
@@ -135,7 +135,7 @@ class DummyAWG(AWG):
         raise NotImplementedError()
 
     @property
-    def programs(self):
+    def programs(self) -> Set[str]:
         return frozenset(self.__programs.keys())
 
     @property
@@ -153,7 +153,7 @@ class DummyAWG(AWG):
 
 class ProgramOverwriteException(Exception):
 
-    def __init__(self, name):
+    def __init__(self, name) -> None:
         super().__init__()
         self.name = name
 
@@ -163,5 +163,6 @@ class ProgramOverwriteException(Exception):
 
 
 class OutOfWaveformMemoryException(Exception):
-    def __str__(self):
+
+    def __str__(self) -> str:
         return "Out of memory error adding waveform to waveform memory."

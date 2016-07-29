@@ -2,22 +2,24 @@ from functools import reduce
 import socket
 import select
 from itertools import chain, repeat
+from typing import Iterable, Any, Set, Tuple
 
 import visa
 import numpy as np
 
-from .awg import AWG, ProgramOverwriteException
-from qctoolkit.pulses.instructions import EXECInstruction
+from qctoolkit.hardware.awgs.awg import AWG, ProgramOverwriteException, Program
+from qctoolkit.pulses.instructions import EXECInstruction, Waveform
 
 
 __all__ = ['TektronixAWG', 'AWGSocket', 'EchoTestServer']
 
 
 class EchoTestServer():
-    def __init__(self, port):
+
+    def __init__(self, port: int) -> None:
         self.port = port
 
-    def run(self):
+    def run(self) -> None:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.bind(('', self.port))
         s.listen(5)
@@ -29,18 +31,19 @@ class EchoTestServer():
             client.close()
 
 
-def grouper(n, iterable, padvalue=None):
+def grouper(n, iterable, padvalue=None) -> Iterable[Any]:
     return zip(*[chain(iterable, repeat(padvalue, n-1))]*n)
 
 
 class AWGSocket():
-    def __init__(self, ip, port, buffersize=1024, timeout=5):
+
+    def __init__(self, ip: str, port: int, buffersize: int=1024, timeout: float=5) -> None:
         self.__ip = ip
         self.__port = port
         self.__buffersize = buffersize
         self.__timeout = timeout
 
-    def _cleanstring(self, bytestring):
+    def _cleanstring(self, bytestring: bytes) -> bytes:
         # accept strings as well, but encode them to bytes
         if not isinstance(bytestring, bytes):
                 bytestring = bytestring.encode()
@@ -49,7 +52,7 @@ class AWGSocket():
             bytestring = bytestring + b'\n'
         return bytestring
 
-    def send(self, bytestring):
+    def send(self, bytestring: bytes) -> None:
         """Sends a command to the AWG with no answer."""
         bytestring = self._cleanstring(bytestring)
         s = socket.create_connection((self.__ip, self.__port))
@@ -57,7 +60,7 @@ class AWGSocket():
             s.send(bytestring)
         s.close()
 
-    def query(self, bytestring):
+    def query(self, bytestring: bytes) -> None:
         """Queries the AWG and returns its answer."""
         bytestring = self._cleanstring(bytestring)
         if not bytestring.endswith(b'?\n'):
@@ -87,7 +90,7 @@ class AWGSocket():
 
 class TektronixAWG(AWG):
 
-    def __init__(self, ip: str, port: int, sample_rate: float, first_index=None):
+    def __init__(self, ip: str, port: int, sample_rate: float, first_index=None) -> None:
         self.__programs = {} # holds names and programs
         self.__program_indices = {} # holds programs and their first index (for jumping to it)
         self.__waveform_memory = set() #map sequence indices to waveforms and vice versa
@@ -117,19 +120,19 @@ class TektronixAWG(AWG):
 
 
     @property
-    def outputRange(self):
+    def outputRange(self) -> Tuple[float, float]:
         return (-1, 1)
 
     @property
-    def identifier(self):
+    def identifier(self) -> str:
         return self.__identifier
 
     @property
-    def programs(self):
+    def programs(self) -> Set[str]:
         return list(self.__programs.keys())
 
     @property
-    def sample_rate(self):
+    def sample_rate(self) -> float:
         return self.__sample_rate
 
     def rescale(self, voltages: np.ndarray) -> np.ndarray:
@@ -142,10 +145,10 @@ class TektronixAWG(AWG):
         # data = data + marker.astype(np.uint16) * 2**14
         return data
 
-    def waveform2name(self, waveform):
+    def waveform2name(self, waveform: Waveform) -> str:
         return str(hash(waveform))
 
-    def add_waveform(self, waveform, offset):
+    def add_waveform(self, waveform: Waveform, offset: float) -> None:
         """Samples a Waveform object to actual data and sends it to the AWG."""
         # check if waveform is on the AWG already
         if waveform in self.__waveform_memory:
@@ -170,7 +173,7 @@ class TektronixAWG(AWG):
 
             self.__waveform_memory.add(waveform)
 
-    def build_sequence(self, name):
+    def build_sequence(self, name: str) -> None:
         '''Puts a new sequence in the AWG sequence memory'''
         length = len(self.__programs[name]) - 1 # - 1 for the stop instruction in the end
         program = self.__programs[name]
@@ -186,7 +189,7 @@ class TektronixAWG(AWG):
         self.inst.write('SEQUENCE:ELEMENT{0:d}:GOTO:STATE ON'.format(length))
 
 
-    def upload(self, name, program, force=False):
+    def upload(self, name: str, program: Program, force: bool=False) -> None:
         '''Uploads all necessary waveforms for the program to the AWG and create a corresponding sequence.'''
         if name in self.programs:
             if not force:
@@ -208,19 +211,19 @@ class TektronixAWG(AWG):
 
             self.build_sequence(name)
 
-    def run(self, name, autorun=False):
+    def run(self, name: str, autorun: bool=False) -> None:
         # there is only one sequence per devicee, so program the sequence first
         self.inst.write('SEQUENCE:ELEMENT1:GOTO:STATE ON')
         self.inst.write('SEQUENCE:ELEMENT1:GOTO:INDEX', self.__program_indices[name])
         self.inst.write('AWGCONTROL:RUN')
 
-    def remove(self, name):
+    def remove(self, name: str) -> None:
         if name in self.programs:
             self.__programs.pop(name)
             self.__program_waveforms.pop(name)
             self.clean()
 
-    def clean(self):
+    def clean(self) -> int:
         necessary_wfs = reduce(lambda acc, s: acc.union(s), self.__program_waveforms.values(), set())
         all_wfs = self.__waveform_memory
         delete = all_wfs - necessary_wfs

@@ -16,8 +16,7 @@ import numpy as np
 from qctoolkit.serialization import Serializer
 from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter, \
     ParameterNotProvidedException
-from qctoolkit.pulses.pulse_template import PulseTemplate, MeasurementWindow
-from qctoolkit.pulses.sequencing import InstructionBlock, Sequencer
+from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementWindow
 from qctoolkit.pulses.interpolation import InterpolationStrategy, LinearInterpolationStrategy, \
     HoldInterpolationStrategy, JumpInterpolationStrategy
 from qctoolkit.pulses.instructions import Waveform
@@ -43,7 +42,7 @@ class TableWaveform(Waveform):
         """
         for table in waveform_tables:
             if len(table) < 2:
-                raise ValueError("The given WaveformTable has less than two entries.")
+                raise ValueError("A given waveform table has less than two entries.")
         super().__init__()
         self.__tables = waveform_tables
 
@@ -52,7 +51,7 @@ class TableWaveform(Waveform):
         return tuple(map(tuple, self.__tables))
 
     @property
-    def channels(self) -> int:
+    def num_channels(self) -> int:
         return len(self.__tables)
 
     @property
@@ -83,7 +82,7 @@ TableEntry = NamedTuple( # pylint: disable=invalid-name
 )
 
 
-class TablePulseTemplate(PulseTemplate):
+class TablePulseTemplate(AtomicPulseTemplate):
     """Defines a pulse via interpolation of a sequence of (time,voltage)-pairs.
 
     TablePulseTemplate stores a list of (time,voltage)-pairs (the table) which is sorted
@@ -93,28 +92,31 @@ class TablePulseTemplate(PulseTemplate):
     using concrete values for both, time and voltage.
     A TablePulseTemplate may be flagged as representing a measurement pulse, meaning that it defines
     a measurement window.
+
+    Each TablePulseTemplate contains at least an entry at time 0.
     """
 
-    def __init__(self, channels=1, measurement=False, identifier: Optional[str]=None) -> None:
+    def __init__(self, channels: int=1, measurement=False, identifier: Optional[str]=None) -> None:
         """Create a new TablePulseTemplate.
 
         Args:
+            channels (int): The number of channels defined in this TablePulseTemplate (default = 1).
             measurement (bool): True, if this TablePulseTemplate shall define a measurement window.
                 (optional, default = False).
             identifier (str): A unique identifier for use in serialization. (optional)
         """
         super().__init__(identifier)
         self.__identifier = identifier
+        self.__interpolation_strategies = {'linear': LinearInterpolationStrategy(),
+                                           'hold': HoldInterpolationStrategy(),
+                                           'jump': JumpInterpolationStrategy()
+                                           }
         self.__entries = []
         for _ in range(channels):
-            self.__entries.append([]) # type: List[List[TableEntry]]
+            self.__entries.append([TableEntry(0, 0, self.__interpolation_strategies['hold'])])
         self.__time_parameter_declarations = {} # type: Dict[str, ParameterDeclaration]
         self.__voltage_parameter_declarations = {} # type: Dict[str, ParameterDeclaration]
         self.__is_measurement_pulse = measurement# type: bool
-        self.__interpolation_strategies = {'linear': LinearInterpolationStrategy(),
-                                           'hold': HoldInterpolationStrategy(), 
-                                           'jump': JumpInterpolationStrategy()
-                                          }
         self.__channels = channels # type: int
 
     @staticmethod
@@ -158,16 +160,22 @@ class TablePulseTemplate(PulseTemplate):
         The following constraints hold:
         - If a non-existing parameter declaration is referenced (via string), it is created without
             min, max and default values.
-        - Parameter declarations for the time domain may not be used multiple times.
-        - ParameterDeclaration objects for the time domain may not refer to other
-            ParameterDeclaration objects as min or max values.
+        - Parameter declarations for the time domain may not be used multiple times in the same
+            channel.
         - If a ParameterDeclaration is provided, its min and max values will be set to its
             neighboring values if they were not set previously or would exceed neighboring bounds.
+        - Parameter declarations for the time domain used in different channels will have their
+            bounds set such that range conforms with any channel automatically.
+        - ParameterDeclaration objects for the time domain may not refer to other
+            ParameterDeclaration objects as min or max values.
         - Each entries time value must be greater than its predecessor's, i.e.,
             - if the time value is a float and the previous time value is a float, the new value
-                must be greater
+                must be greater or equal
+            - if the time value is a float and the previous time value is a parameter declaration
+                and the new value is smaller then the maximum of the parameter declaration, the
+                maximum is adjusted to the new value
             - if the time value is a float and the previous time value is a parameter declaration,
-                the new value must not be smaller than the maximum of the parameter declaration
+                the new value must not be smaller than the minimum of the parameter declaration
             - if the time value is a parameter declaration and the previous time value is a float,
                 the new values minimum must be no smaller
             - if the time value is a parameter declaration and the previous time value is a
@@ -200,22 +208,10 @@ class TablePulseTemplate(PulseTemplate):
             interpolation = self.__interpolation_strategies[interpolation]
 
         entries = self.__entries[channel]
-        # If this is the first entry, there are a number of cases we have to check
-        if not entries:
-            # if the first entry has a time that is either > 0 or a parameter declaration,
-            # insert a start point (0, 0)
-            if not isinstance(time, numbers.Real) or time > 0:
-                last_entry = TableEntry(0, 0, self.__interpolation_strategies['hold'])
-            # ensure that the first entry is not negative
-            elif isinstance(time, numbers.Real) and time < 0:
-                raise ValueError("Time value must not be negative, was {}.".format(time))
-            elif time == 0.0:
-                last_entry = TableEntry(-1, 0, self.__interpolation_strategies['hold'])
-        else:
-            last_entry = entries[-1]
 
+        last_entry = entries[-1]
         # Handle time parameter/value
-        time = self.__add_entry_check_and_modify_time(time, last_entry)
+        time = self.__add_entry_check_and_modify_time(time, entries)
 
         # Handle voltage parameter/value
         # construct a ParameterDeclaration if voltage is a parameter name string
@@ -245,13 +241,18 @@ class TablePulseTemplate(PulseTemplate):
         # in case we need a time 0 entry previous to the new entry
         if not entries and (not isinstance(time, numbers.Real) or time > 0):
             entries.append(last_entry)
-        # finally, add the new entry to the table 
-        entries.append(TableEntry(time, voltage, interpolation))
+        # finally, add the new entry to the table
+        new_entry = TableEntry(time, voltage, interpolation)
+        if last_entry.t == time:
+            entries[-1] = new_entry
+        else:
+            entries.append(new_entry)
         self.__entries[channel] = entries
 
     def __add_entry_check_and_modify_time(self,
                                           time: Union[float, str, Parameter],
-                                          last_entry: TableValue) -> TableValue:
+                                          entries: List[TableEntry]) -> TableValue:
+        last_entry = entries[-1]
         # Handle time parameter/value
 
         # first case: time is a real number
@@ -262,18 +263,21 @@ class TablePulseTemplate(PulseTemplate):
                     last_entry.t.max_value = time
 
                 if time < last_entry.t.absolute_max_value:
-                    raise ValueError(
-                        "Argument time must be no smaller than previous time parameter "
-                        " declaration's maximum value. Parameter '{0}', Maximum {1}, Provided: {2}."
-                        .format(
-                            last_entry.t.name, last_entry.t.absolute_max_value, time
+                    try:
+                        last_entry.t.max_value = time
+                    except ValueError:
+                        raise ValueError(
+                            "Argument time must not be smaller than the minimum of the previous"
+                            "parameter declaration ({}, was {}).".format(
+                                last_entry.t.absolute_min_value,
+                                time
+                            )
                         )
-                    )
 
             # if time is a real number, ensure that is it not less than the previous entry
-            elif time <= last_entry.t:
+            elif time < last_entry.t:
                 raise ValueError(
-                    "Argument time must be greater than previous time value {0}, was: {1}!".format(
+                    "Argument time must not be less than previous time value {0}, was: {1}!".format(
                         last_entry.t, time
                     )
                 )
@@ -291,6 +295,10 @@ class TablePulseTemplate(PulseTemplate):
                     "Cannot use already declared voltage parameter '{}' in time domain.".format(
                         time.name
                     )
+                )
+            if time.name in [e.t.name for e in entries if isinstance(e.t, ParameterDeclaration)]:
+                raise ValueError(
+                    "A time parameter with the name {} already exists.".format(time.name)
                 )
             if time.name not in self.__time_parameter_declarations:
                 if isinstance(time.min_value, ParameterDeclaration):
@@ -314,39 +322,37 @@ class TablePulseTemplate(PulseTemplate):
                 # relationship between both declarations
                 if time.min_value == float('-inf'):
                     time.min_value = last_entry.t
-
-                # Check dependencies between successive time parameters
-                if isinstance(last_entry.t, ParameterDeclaration):
-
-                    if last_entry.t.max_value == float('inf'):
-                        last_entry.t.max_value = time
-
-                    if time.absolute_min_value < last_entry.t.absolute_min_value:
-                        raise ValueError(
-                            "Argument time's minimum value must be no smaller than the previous "
-                            "time parameter declaration's minimum value. Parameter '{0}', Minimum "
-                            "{1}, Provided {2}.".format(
-                                last_entry.t.name, last_entry.t.absolute_min_value, time.min_value
-                            )
-                        )
-                    if time.absolute_max_value < last_entry.t.absolute_max_value:
-                        raise ValueError(
-                            "Argument time's maximum value must be no smaller than the previous "
-                            "time parameter declaration's maximum value. Parameter '{0}', Maximum "
-                            "{1}, Provided {2}.".format(
-                                last_entry.t.name, last_entry.t.absolute_max_value, time.max_value
-                            )
-                        )
-                else:
-                    if time.min_value < last_entry.t:
-                        raise ValueError(
-                            "Argument time's minimum value {0} must be no smaller than the previous"
-                            " time value {1}.".format(time.min_value, last_entry.t)
-                        )
             else:
-                raise ValueError(
-                    "A time parameter with the name {} already exists.".format(time.name)
-                )
+                time = self.__time_parameter_declarations[time.name]
+
+            # Check dependencies between successive time parameters
+            if isinstance(last_entry.t, ParameterDeclaration):
+
+                if last_entry.t.max_value == float('inf'):
+                    last_entry.t.max_value = time
+
+                if time.absolute_min_value < last_entry.t.absolute_min_value:
+                    raise ValueError(
+                        "Argument time's minimum value must be no smaller than the previous "
+                        "time parameter declaration's minimum value. Parameter '{0}', Minimum "
+                        "{1}, Provided {2}.".format(
+                            last_entry.t.name, last_entry.t.absolute_min_value, time.min_value
+                        )
+                    )
+                if time.absolute_max_value < last_entry.t.absolute_max_value:
+                    raise ValueError(
+                        "Argument time's maximum value must be no smaller than the previous "
+                        "time parameter declaration's maximum value. Parameter '{0}', Maximum "
+                        "{1}, Provided {2}.".format(
+                            last_entry.t.name, last_entry.t.absolute_max_value, time.max_value
+                        )
+                    )
+            else:
+                if time.min_value < last_entry.t:
+                    raise ValueError(
+                        "Argument time's minimum value {0} must be no smaller than the previous"
+                        " time value {1}.".format(time.min_value, last_entry.t)
+                    )
         return time
         
     @property
@@ -380,6 +386,10 @@ class TablePulseTemplate(PulseTemplate):
     @property
     def is_interruptable(self) -> bool:
         return False
+
+    @property
+    def num_channels(self) -> int:
+        return self.__channels
         
     def get_entries_instantiated(self, parameters: Dict[str, Parameter]) \
             -> List[List[Tuple[float, float]]]:
@@ -392,21 +402,26 @@ class TablePulseTemplate(PulseTemplate):
                 parameters.
         """
         instantiated_entries = [] # type: List[List[TableEntry]]
+        max_time = 0
         for channel in range(self.__channels):
             entries = self.__entries[channel]
             instantiated = []
-            for entry in entries:
-                # resolve time parameter references
-                if isinstance(entry.t, ParameterDeclaration):
-                    time_value = entry.t.get_value(parameters)
-                else:
-                    time_value = entry.t
-                if isinstance(entry.v, ParameterDeclaration):
-                    voltage_value = entry.v.get_value(parameters)
-                else:
-                    voltage_value = entry.v
+            if not entries:
+                instantiated.append(TableEntry(0, 0, self.__interpolation_strategies['hold']))
+            else:
+                for entry in entries:
+                    # resolve time parameter references
+                    if isinstance(entry.t, ParameterDeclaration):
+                        time_value = entry.t.get_value(parameters)
+                    else:
+                        time_value = entry.t
+                    if isinstance(entry.v, ParameterDeclaration):
+                        voltage_value = entry.v.get_value(parameters)
+                    else:
+                        voltage_value = entry.v
 
-                instantiated.append(TableEntry(time_value, voltage_value, entry.interp))
+                    instantiated.append(TableEntry(time_value, voltage_value, entry.interp))
+            max_time = max(max_time, instantiated[-1].t)
 
             # ensure that no time value occurs twice
             previous_time = -1
@@ -417,6 +432,15 @@ class TablePulseTemplate(PulseTemplate):
                 previous_time = time
 
             instantiated_entries.append(instantiated)
+
+        # ensure that all channels have equal duration
+        for instantiated in instantiated_entries:
+            final_entry = instantiated[-1]
+            if final_entry.t != max_time:
+                instantiated.append(TableEntry(max_time,
+                                               final_entry.v,
+                                               self.__interpolation_strategies['hold'])
+                                    )
         return list(map(TablePulseTemplate.__clean_entries, instantiated_entries))
 
     @staticmethod
@@ -441,15 +465,11 @@ class TablePulseTemplate(PulseTemplate):
                 entries.pop(index)
         return entries
 
-    def build_sequence(self,
-                       sequencer: Sequencer,
-                       parameters: Dict[str, Parameter],
-                       conditions: Dict[str, Condition],
-                       instruction_block: InstructionBlock) -> None:
+    def build_waveform(self, parameters: Dict[str, Parameter]) -> Optional[Waveform]:
         instantiated = self.get_entries_instantiated(parameters)
-        if instantiated[0]:
-            waveform = TableWaveform(instantiated)
-            instruction_block.add_instruction_exec(waveform)
+        if instantiated[0][-1].t > 0:
+            return TableWaveform(instantiated)
+        return None
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],

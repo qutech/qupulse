@@ -16,15 +16,14 @@ from qctoolkit.expressions import Expression
 from qctoolkit.serialization import Serializer
 
 from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter
-from qctoolkit.pulses.pulse_template import PulseTemplate, MeasurementWindow
-from qctoolkit.pulses.sequencing import InstructionBlock, Sequencer
+from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementWindow
 from qctoolkit.pulses.sequence_pulse_template import ParameterNotProvidedException
 from qctoolkit.pulses.instructions import Waveform
 
 __all__ = ["FunctionPulseTemplate", "FunctionWaveform"]
 
 
-class FunctionPulseTemplate(PulseTemplate):
+class FunctionPulseTemplate(AtomicPulseTemplate):
     """Defines a pulse via a time-domain expression.
 
     FunctionPulseTemplate stores the expression and its external parameters. The user must provide
@@ -71,7 +70,7 @@ class FunctionPulseTemplate(PulseTemplate):
 
     @property
     def parameter_declarations(self) -> Set[ParameterDeclaration]:
-        return [ParameterDeclaration(param_name) for param_name in self.parameter_names]
+        return {ParameterDeclaration(param_name) for param_name in self.parameter_names}
 
     def get_pulse_length(self, parameters: Dict[str, Parameter]) -> float:
         """Return the length of this pulse for the given parameters.
@@ -101,44 +100,45 @@ class FunctionPulseTemplate(PulseTemplate):
     @property
     def is_interruptable(self) -> bool:
         return False
-        
-    def build_sequence(self,
-                       sequencer: Sequencer,
-                       parameters: Dict[str, Parameter],
-                       conditions: Dict[str, 'Condition'],
-                       instruction_block: InstructionBlock) -> None:
-        waveform = FunctionWaveform(
+
+    @property
+    def num_channels(self) -> int:
+        return 1
+
+    def build_waveform(self, parameters: Dict[str, Parameter]) -> Optional[Waveform]:
+        return FunctionWaveform(
             {parameter_name: parameter.get_value()
              for (parameter_name, parameter) in parameters.items()},
             self.__expression,
             self.__duration_expression
         )
-        instruction_block.add_instruction_exec(waveform)
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],
                       conditions: Dict[str, 'Condition']) -> bool:
         return any(
             parameters[name].requires_stop
-            for name in parameters.keys()
-            if (name in self.parameter_names) and not isinstance(parameters[name], numbers.Number)
+            for name in parameters.keys() if (name in self.parameter_names)
         )
 
     def get_serialization_data(self, serializer: Serializer) -> None:
-        root = dict()
-        root['type'] = 'FunctionPulseTemplate'
-        root['parameter_names'] = self.__parameter_names
-        root['duration_expression'] = serializer.dictify(self.__duration_expression)
-        root['expression'] = serializer.dictify(self.__expression)
-        root['measurement'] = self.__is_measurement_pulse
-        return root
+        return dict(
+            duration_expression=serializer.dictify(self.__duration_expression),
+            expression=serializer.dictify(self.__expression),
+            measurement=self.__is_measurement_pulse
+        )
 
     @staticmethod
-    def deserialize(serializer: 'Serializer', **kwargs) -> 'Serializable':
+    def deserialize(serializer: 'Serializer',
+                    expression: str,
+                    duration_expression: str,
+                    measurement: bool,
+                    identifier: Optional[bool]=None) -> 'FunctionPulseTemplate':
         return FunctionPulseTemplate(
-            kwargs['expression'],
-            kwargs['duration_expression'],
-            kwargs['Measurement']
+            serializer.deserialize(expression),
+            serializer.deserialize(duration_expression),
+            measurement,
+            identifier=identifier
         )
 
 
@@ -165,7 +165,7 @@ class FunctionWaveform(Waveform):
         self.__duration = duration_expression.evaluate(**self.__parameters)
 
     @property
-    def channels(self):
+    def num_channels(self):
         return 1
     
     def __evaluate_partially(self, t):
@@ -175,7 +175,7 @@ class FunctionWaveform(Waveform):
     
     @property
     def compare_key(self) -> Any:
-        return self.__expression
+        return self.__expression, self.__duration, self.__parameters
 
     @property
     def duration(self) -> float:
