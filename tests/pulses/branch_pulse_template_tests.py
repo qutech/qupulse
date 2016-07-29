@@ -35,6 +35,23 @@ class BranchPulseTemplateTest(unittest.TestCase):
         template = BranchPulseTemplate('foo_condition', if_dummy, else_dummy)
         self.assertEqual(3, template.num_channels)
 
+    def test_is_interruptable(self) -> None:
+        if_dummy = DummyPulseTemplate(num_channels=3, is_interruptable=True)
+        else_dummy = DummyPulseTemplate(num_channels=3)
+        template = BranchPulseTemplate('foo_condition', if_dummy, else_dummy)
+        self.assertFalse(template.is_interruptable)
+
+        if_dummy = DummyPulseTemplate(num_channels=3, is_interruptable=True)
+        else_dummy = DummyPulseTemplate(num_channels=3, is_interruptable=True)
+        template = BranchPulseTemplate('foo_condition', if_dummy, else_dummy)
+        self.assertTrue(template.is_interruptable)
+
+    def test_str(self) -> None:
+        if_dummy = DummyPulseTemplate(num_channels=3, is_interruptable=True)
+        else_dummy = DummyPulseTemplate(num_channels=3)
+        template = BranchPulseTemplate('foo_condition', if_dummy, else_dummy)
+        self.assertIsInstance(str(template), str)
+        
 
 class BranchPulseTemplateSequencingTests(unittest.TestCase):
 
