@@ -7,6 +7,7 @@ from qctoolkit.pulses.parameters import Parameter
 from qctoolkit.pulses.pulse_template import PulseTemplate, MeasurementWindow
 from qctoolkit.pulses.conditions import Condition, ConditionMissingException
 from qctoolkit.pulses.sequencing import Sequencer, InstructionBlock
+from qctoolkit.serialization import Serializer
 
 __all__ = ["BranchPulseTemplate"]
 
@@ -53,11 +54,11 @@ class BranchPulseTemplate(PulseTemplate):
     
     @property
     def parameter_names(self) -> Set[str]:
-        raise NotImplementedError()
+        return self.__if_branch.parameter_names | self.__else_branch.parameter_names
 
     @property
     def parameter_declarations(self) -> Set[str]:
-        raise NotImplementedError()
+        return self.__if_branch.parameter_declarations | self.__else_branch.parameter_declarations
 
     def get_measurement_windows(self, parameters: Dict[str, Parameter]=None) \
             -> List[MeasurementWindow]:
@@ -65,7 +66,7 @@ class BranchPulseTemplate(PulseTemplate):
 
     @property
     def is_interruptable(self) -> bool:
-        raise NotImplementedError()
+        return self.__if_branch.is_interruptable and self.__else_branch.is_interruptable
 
     @property
     def num_channels(self) -> int:
@@ -95,9 +96,20 @@ class BranchPulseTemplate(PulseTemplate):
                       conditions: Dict[str, Condition]) -> bool:
         return self.__obtain_condition_object(conditions).requires_stop()
 
-    def get_serialization_data(self, serializer: 'Serializer') -> Dict[str, Any]:
-        raise NotImplementedError()
+    def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
+        return dict(
+            if_branch_template=serializer.dictify(self.__if_branch),
+            else_branch_template=serializer.dictify(self.__else_branch),
+            condition=self.__condition
+        )
 
     @staticmethod
-    def deserialize(serializer: 'Serializer', **kwargs) -> 'BranchPulseTemplate':
-        raise NotImplementedError()
+    def deserialize(serializer: Serializer,
+                    condition: str,
+                    if_branch_template: Dict[str, Any],
+                    else_branch_template: Dict[str, Any],
+                    identifier: Optional[str]=None) -> 'BranchPulseTemplate':
+        return BranchPulseTemplate(condition,
+                                   serializer.deserialize(if_branch_template),
+                                   serializer.deserialize(else_branch_template),
+                                   identifier)

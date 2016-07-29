@@ -252,7 +252,7 @@ class DummyPulseTemplate(AtomicPulseTemplate):
 
     @property
     def parameter_declarations(self) -> Set[str]:
-        return [ParameterDeclaration(name) for name in self.parameter_names]
+        return {ParameterDeclaration(name) for name in self.parameter_names}
 
     def get_measurement_windows(self, parameters: Dict[str, Parameter] = None) -> List[MeasurementWindow]:
         """Return all measurement windows defined in this PulseTemplate."""
