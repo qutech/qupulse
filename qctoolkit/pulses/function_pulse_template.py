@@ -122,11 +122,11 @@ class FunctionPulseTemplate(AtomicPulseTemplate):
         )
 
     def get_serialization_data(self, serializer: Serializer) -> None:
-        root = dict()
-        root['duration_expression'] = serializer.dictify(self.__duration_expression)
-        root['expression'] = serializer.dictify(self.__expression)
-        root['measurement'] = self.__is_measurement_pulse
-        return root
+        return dict(
+            duration_expression=serializer.dictify(self.__duration_expression),
+            expression=serializer.dictify(self.__expression),
+            measurement=self.__is_measurement_pulse
+        )
 
     @staticmethod
     def deserialize(serializer: 'Serializer',

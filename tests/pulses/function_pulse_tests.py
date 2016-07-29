@@ -55,15 +55,18 @@ class FunctionPulseTest(unittest.TestCase):
     def test_deserialize(self) -> None:
         basic_data = dict(duration_expression=str(self.s2),
                           expression=str(self.s),
-                          measurement=False)
+                          measurement=False,
+                          identifier='hugo')
         serializer = DummySerializer(serialize_callback=lambda x: str(x))
         serializer.subelements[str(self.s2)] = Expression(self.s2)
         serializer.subelements[str(self.s)] = Expression(self.s)
         template = FunctionPulseTemplate.deserialize(serializer, **basic_data)
+        self.assertEqual('hugo', template.identifier)
         self.assertEqual({'a', 'b', 'c'}, template.parameter_names)
         self.assertEqual({ParameterDeclaration(name) for name in {'a', 'b', 'c'}},
                          template.parameter_declarations)
         serialized_data = template.get_serialization_data(serializer)
+        del basic_data['identifier']
         self.assertEqual(basic_data, serialized_data)
 
 
