@@ -4,11 +4,26 @@
     "subtemplates": [
         {
             "mappings": {
-                "ta": "1",
-                "tb": "2",
-                "tend": "5",
-                "va": "5",
-                "vb": "0"
+                "ta": {
+                    "expression": "1",
+                    "type": "qctoolkit.expressions.Expression"
+                },
+                "tb": {
+                    "expression": "2",
+                    "type": "qctoolkit.expressions.Expression"
+                },
+                "tend": {
+                    "expression": "5",
+                    "type": "qctoolkit.expressions.Expression"
+                },
+                "va": {
+                    "expression": "5",
+                    "type": "qctoolkit.expressions.Expression"
+                },
+                "vb": {
+                    "expression": "0",
+                    "type": "qctoolkit.expressions.Expression"
+                }
             },
             "template": "table_template"
         }

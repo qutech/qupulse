@@ -7,7 +7,7 @@ from qctoolkit.serialization import Serializer
 
 from qctoolkit.pulses.pulse_template import PulseTemplate, MeasurementWindow
 from qctoolkit.pulses.sequencing import Sequencer
-from qctoolkit.pulses.instructions import InstructionBlock
+from qctoolkit.pulses.instructions import InstructionBlock, InstructionPointer
 from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter
 from qctoolkit.pulses.conditions import Condition
 
@@ -70,6 +70,10 @@ class RepetitionPulseTemplate(PulseTemplate):
     def is_interruptable(self) -> bool:
         return self.__body.is_interruptable
 
+    @property
+    def num_channels(self) -> int:
+        return self.__body.num_channels
+
     def build_sequence(self,
                        sequencer: Sequencer,
                        parameters: Dict[str, Parameter],
@@ -81,8 +85,11 @@ class RepetitionPulseTemplate(PulseTemplate):
             if not repetition_count.is_integer():
                 raise ParameterNotIntegerException(self.__repetition_count.name, repetition_count)
 
-        for _ in range(0, int(repetition_count), 1):
-            sequencer.push(self.__body, parameters, conditions, instruction_block)
+        body_block = InstructionBlock()
+        body_block.return_ip = InstructionPointer(instruction_block, len(instruction_block))
+
+        instruction_block.add_instruction_repj(int(repetition_count), body_block)
+        sequencer.push(self.body, parameters, conditions, body_block)
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],

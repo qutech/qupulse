@@ -22,8 +22,10 @@ class TableSequenceSequencerIntegrationTests(unittest.TestCase):
 
         seqt = SequencePulseTemplate([(t1, {'foo': 'foo'}), (t2, {'bar': '2 * hugo'})], {'foo', 'hugo'})
 
-        self.assertRaises(ParameterNotProvidedException, t1.requires_stop, {}, {})
-        self.assertRaises(ParameterNotProvidedException, t2.requires_stop, {}, {})
+        with self.assertRaises(ParameterNotProvidedException):
+            t1.requires_stop(dict(), dict())
+        with self.assertRaises(ParameterNotProvidedException):
+            t2.requires_stop(dict(), dict())
         self.assertFalse(seqt.requires_stop({}, {}))
 
         foo = DummyNoValueParameter()

@@ -5,30 +5,27 @@ Classes:
     - Trigger: Representation of a hardware trigger.
     - Instruction: Base class for hardware instructions.
     - CJMPInstruction: Conditional jump instruction.
+    - REPJInstruction: Repetition jump instruciton.
     - EXECInstruction: Instruction to execute a waveform.
     - GOTOInstruction: Unconditional jump instruction.
     - STOPInstruction: Instruction which indicates the end of execution.
-    - InstructionBlock: A block of instructions which are not yet embedded in a global sequence.
+    - AbstractInstructionBlock: A block of instructions (abstract base class)
+    - InstructionBlock: A mutable block of instructions to which instructions can be added
+    - ImmutableInstructionBlock: An immutable InstructionBlock
     - InstructionSequence: A single final sequence of instructions.
     - InstructionPointer: References an instruction's location in a sequence.
-    - InstructionBlockNotYetPlacedException
-    - InstructionBlockAlreadyFinalizedException
-    - MissingReturnAddressException
 """
 
 from abc import ABCMeta, abstractmethod, abstractproperty
-from typing import List, Any
+from typing import List, Any, Dict, Iterable, Optional
 import numpy
 
 from qctoolkit.comparable import Comparable
 
-# TODO lumip: add docstrings to InstructionBlock after issue #116 is resolved
-
-__all__ = ["Waveform", "Trigger", "InstructionPointer",
-           "Instruction", "CJMPInstruction", "EXECInstruction", "GOTOInstruction",
-           "STOPInstruction", "InstructionBlock", "InstructionSequence",
-           "InstructionBlockNotYetPlacedException", "InstructionBlockAlreadyFinalizedException",
-           "MissingReturnAddressException"
+__all__ = ["Waveform", "Trigger",
+           "InstructionPointer", "Instruction", "CJMPInstruction", "EXECInstruction",
+           "GOTOInstruction", "STOPInstruction", "AbstractInstructionBlock", "InstructionBlock",
+           "ImmutableInstructionBlock", "InstructionSequence"
           ]
 
 
@@ -60,6 +57,10 @@ class Waveform(Comparable, metaclass=ABCMeta):
             numpy.ndarray of the sampled values of this Waveform at the provided sample times.
         """
 
+    @abstractproperty
+    def num_channels(self) -> int:
+        """The number of channels this waveform is defined for."""
+
 
 class Trigger(Comparable):
     """Abstract representation of a hardware trigger for hardware based branching decisions."""
@@ -76,30 +77,44 @@ class Trigger(Comparable):
 
 
 class InstructionPointer(Comparable):
-    """Reference to the location of an InstructionBlock.
+    """Reference to the location of an instruction used in expressing targets of jumps.
+
+    The target instruction is referenced by the instruction block it resides in and its offset
+    within this block.
     """
     
-    def __init__(self, block: 'InstructionBlock', offset: int) -> None:
+    def __init__(self, block: 'AbstractInstructionBlock', offset: int=0) -> None:
+        """Create a new InstructionPointer instance.
+
+        Args:
+            block (AbstractInstructionBlock): The instruction block the referenced instruction
+                resides in.
+            offset (int): The position/offset of the referenced instruction in its block.
+        Raises:
+            ValueError, if offset is negative
+        """
         super().__init__()
         if offset < 0:
             raise ValueError("offset must be a non-negative integer (was {})".format(offset))
-        self.block = block
-        self.offset = offset
-        
-    def get_absolute_address(self) -> int:
-        """Return the absolute offset of the targeted instruction in the final instruction sequence.
-        """
-        return self.block.get_start_address() + self.offset
+        self.__block = block
+        self.__offset = offset
+
+    @property
+    def block(self) -> 'AbstractInstructionBlock':
+        """The instruction block containing the referenced instruction."""
+        return self.__block
+
+    @property
+    def offset(self) -> int:
+        """The offset of the referenced instruction in its containing block."""
+        return self.__offset
 
     @property
     def compare_key(self) -> Any:
-        return id(self.block), self.offset
+        return id(self.__block), self.__offset
         
     def __str__(self) -> str:
-        try:
-            return "{}".format(self.get_absolute_address())
-        except InstructionBlockNotYetPlacedException:
-            return "IP:{0}#{1}".format(self.block, self.offset)
+        return "IP:{0}#{1}".format(self.__block, self.__offset)
 
 
 class Instruction(Comparable, metaclass=ABCMeta):
@@ -107,10 +122,6 @@ class Instruction(Comparable, metaclass=ABCMeta):
 
     def __init__(self) -> None:
         super().__init__()
-
-    @abstractmethod
-    def compare_key(self) -> Any:
-        pass
 
 
 class CJMPInstruction(Instruction):
@@ -121,10 +132,18 @@ class CJMPInstruction(Instruction):
     effect, the execution will continue with the following.
     """
 
-    def __init__(self, trigger: Trigger, block: 'InstructionBlock', offset: int=0) -> None:
+    def __init__(self, trigger: Trigger, target: InstructionPointer) -> None:
+        """Create a new CJMPInstruction object.
+
+        Args:
+            trigger (Trigger): Representation of the hardware trigger which controls whether the
+                conditional jump occurs or not.
+            target (InstructionPointer): Instruction pointer referencing the instruction targeted
+                by the conditional jump.
+        """
         super().__init__()
         self.trigger = trigger
-        self.target = InstructionPointer(block, offset)
+        self.target = target
 
     @property
     def compare_key(self) -> Any:
@@ -134,6 +153,37 @@ class CJMPInstruction(Instruction):
         return "cjmp to {} on {}".format(self.target, self.trigger)
 
 
+class REPJInstruction(Instruction):
+    """A repetition jump instruction.
+
+    Will cause the execution to jump to the instruction indicated by the InstructionPointer held by
+    this REPJInstruction for the first n times this REPJInstruction is encountered, where n is
+    a parameter."""
+
+    def __init__(self, count: int, target: InstructionPointer) -> None:
+        """Create a new REPJInstruction object.
+
+        Args:
+            count (int): A positive integer indicating how often the repetition jump is triggered.
+            target (InstructionPointer): Instruction pointer referencing the instruction targeted
+                by the repetition jump.
+        Raises:
+            ValueError, if count is a negative number.
+        """
+        super().__init__()
+        if count < 0:
+            raise ValueError("Repetition count must not be negative.")
+        self.count = count
+        self.target = target
+
+    @property
+    def compare_key(self) -> Any:
+        return self.count, self.target
+
+    def __str__(self) -> str:
+        return "repj {} times to {}".format(self.count, self.target)
+
+
 class GOTOInstruction(Instruction):
     """An unconditional jump hardware instruction.
 
@@ -141,9 +191,15 @@ class GOTOInstruction(Instruction):
     held by this GOTOInstruction.
     """
     
-    def __init__(self, block: 'InstructionBlock', offset: int=0) -> None:
+    def __init__(self, target: InstructionPointer) -> None:
+        """Create a new GOTOInstruction object.
+
+        Args:
+            target (InstructionPointer): Instruction pointer referencing the instruction targeted
+                by the unconditional jump.
+        """
         super().__init__()
-        self.target = InstructionPointer(block, offset)
+        self.target = target
 
     @property
     def compare_key(self) -> Any:
@@ -157,6 +213,11 @@ class EXECInstruction(Instruction):
     """An instruction to execute/play back a waveform."""
 
     def __init__(self, waveform: Waveform) -> None:
+        """Create a new EXECInstruction object.
+
+        Args:
+            waveform (Waveform): The waveform that will be executed by this instruction.
+        """
         super().__init__()
         self.waveform = waveform
 
@@ -172,6 +233,7 @@ class STOPInstruction(Instruction):
     """An instruction which indicates the end of the program."""
 
     def __init__(self) -> None:
+        """Create a new STOPInstruction object."""
         super().__init__()
 
     @property
@@ -182,115 +244,235 @@ class STOPInstruction(Instruction):
         return "stop"
         
         
-class InstructionBlockAlreadyFinalizedException(Exception):
-    """Indicates that an attempt was made to change an already finalized InstructionBlock."""
-    def __str__(self) -> str:
-        return "An attempt was made to change an already finalized InstructionBlock."
-        
-        
-class InstructionBlockNotYetPlacedException(Exception):
-    """Indicates that an attempt was made to obtain the start address of an InstructionBlock that
-    was not yet placed inside the corresponding outer block."""
-    def __str__(self) -> str:
-        return "An attempt was made to obtain the start address of an InstructionBlock that was " \
-               "not yet finally placed inside the corresponding outer block."
-
-
-class MissingReturnAddressException(Exception):
-    """Indicates that an inner InstructionBlock has no return address."""
-    def __str__(self) -> str:
-        return "No return address is set!"
-        
-        
 InstructionSequence = List[Instruction] # pylint: disable=invalid-name,invalid-sequence-index
 
 
-class InstructionBlock(Comparable):
-    
-    def __init__(self, outer_block: 'InstructionBlock'=None) -> None:
+class AbstractInstructionBlock(Comparable, metaclass=ABCMeta):
+    """"Abstract base class of a block of instructions representing a (sub)sequence in the control
+    flow of a pulse template instantiation.
+
+    Because of included jump instructions, instruction blocks typically form a "calling" hierarchy.
+    Due to how the sequencing process works, this hierarchy will typically resemble the pulse
+    template from which it was translated closely.
+
+    An instruction block might define a return instruction pointer specifying to which instruction
+    the control flow should return after execution of the block has finished.
+
+    Instruction blocks define the item access and the iterable interface to allow access to the
+    contained instructions. When using these interfaces, a final stop or goto instruction  is
+    automatically added after the regular instructions according to whether a return instruction
+    pointer was set or not (to return control flow to a calling block or stop the execution).
+    Consequently, the len() operation includes this additional instruction in the returned length.
+
+    The property "instructions" allows access to the contained instructions without the
+    additional stop/goto instruction mentioned above.
+
+    See Also:
+        InstructionBlock
+        ImmutableInstructionBlock
+    """
+
+    def __init__(self) -> None:
+        """Create a new AbstractInstructionBlock instance."""
         super().__init__()
-        self.__instruction_list = [] # type: InstructionSequence
-        self.__embedded_blocks = [] # type: List[InstructionBlock]
-        self.__outer_block = outer_block
-        self.__offset = None
-        if self.__outer_block is None:
-            self.__offset = 0
-        self.return_ip = None
-        self.__compiled_sequence = None # type: InstructionSequence
-        
-    def add_instruction(self, instruction: Instruction) -> None:
-        # change to instructions -> invalidate cached compiled sequence
-        if self.__compiled_sequence is not None:
-            self.__compiled_sequence = None
-            for block in self.__embedded_blocks:
-                block.__offset = None
-        self.__instruction_list.append(instruction)
-            
-    def add_instruction_exec(self, waveform: Waveform) -> None:
-        self.add_instruction(EXECInstruction(waveform))
-        
-    def add_instruction_goto(self, target_block: 'InstructionBlock', offset: int=0) -> None:
-        self.add_instruction(GOTOInstruction(target_block, offset))
-        
-    def add_instruction_cjmp(self,
-                             trigger: Trigger,
-                             target_block: 'InstructionBlock',
-                             offset: int=0) -> None:
-        self.add_instruction(CJMPInstruction(trigger, target_block, offset))
-        
-    def add_instruction_stop(self) -> None:
-        self.add_instruction(STOPInstruction())
-      
-    @property
-    def instructions(self) -> InstructionSequence:
-        return self.__instruction_list.copy()
-        
-    def create_embedded_block(self) -> 'InstructionBlock':
-        block = InstructionBlock(self)
-        self.__embedded_blocks.append(block)
-        return block
-        
-    def compile_sequence(self) -> InstructionSequence:
-        # do not recompile if no changes happened
-        if self.__compiled_sequence is not None:
-            return self.__compiled_sequence
-            
-        # clear old offsets
-        for block in self.__embedded_blocks:
-            block.__offset = None
-            
-        self.__compiled_sequence = self.__instruction_list.copy()
-        
-        if self.__outer_block is None:
-            self.__compiled_sequence.append(STOPInstruction())
-        elif self.return_ip is not None:
-            self.__compiled_sequence.append(
-                GOTOInstruction(self.return_ip.block, self.return_ip.offset))
-        else:
-            self.__compiled_sequence = None
-            raise MissingReturnAddressException()
-            
-        for block in self.__embedded_blocks:
-            block.__offset = len(self.__compiled_sequence)
-            block_sequence = block.compile_sequence()
-            self.__compiled_sequence.extend(block_sequence)
-            
-        return self.__compiled_sequence
-    
-    def get_start_address(self) -> int:
-        if self.__offset is None:
-            raise InstructionBlockNotYetPlacedException()
-        pos = self.__offset
-        if self.__outer_block is not None:
-            pos += self.__outer_block.get_start_address()
-        return pos
-    
-    def __len__(self) -> int:
-        return len(self.__instruction_list)
+
+    @abstractproperty
+    def instructions(self) -> List[Instruction]:
+        """The instructions contained in this block (excluding a final stop or return goto)."""
+
+    @abstractproperty
+    def return_ip(self) -> Optional[InstructionPointer]:
+        """The return instruction pointer indicating the instruction to which the control flow
+        shall return after exection of this instruction block has finished."""
 
     @property
     def compare_key(self) -> Any:
         return id(self)
-        
+
     def __str__(self) -> str:
         return str(hash(self))
+
+    def __iter__(self) -> Iterable[Instruction]:
+        for instruction in self.instructions:
+            yield instruction
+        if self.return_ip is None:
+            yield STOPInstruction()
+        else:
+            yield GOTOInstruction(self.return_ip)
+
+    def __getitem__(self, index: int) -> Instruction:
+        if index > len(self.instructions) or index < -(len(self.instructions) + 1):
+            raise IndexError()
+        if index < 0:
+            return self[len(self) + index]
+        if index < len(self.instructions):
+            return self.instructions[index]
+        elif index == len(self.instructions):
+            if self.return_ip is None:
+                return STOPInstruction()
+            else:
+                return GOTOInstruction(self.return_ip)
+
+    def __len__(self) -> int:
+        return len(self.instructions) + 1
+
+
+class InstructionBlock(AbstractInstructionBlock):
+    """A block of instructions representing a (sub)sequence in the control
+    flow of a pulse template instantiation.
+
+    Because of included jump instructions, instruction blocks typically form a "calling" hierarchy.
+    Due to how the sequencing process works, this hierarchy will typically resemble the pulse
+    template from which it was translated closely.
+
+    An instruction block might define a return instruction pointer specifying to which instruction
+    the control flow should return after execution of the block has finished.
+
+    Instruction blocks define the item access and the iterable interface to allow access to the
+    contained instructions. When using these interfaces, a final stop or goto instruction  is
+    automatically added after the regular instructions according to whether a return instruction
+    pointer was set or not (to return control flow to a calling block or stop the execution).
+    Consequently, the len() operation includes this additional instruction in the returned length.
+
+    The property "instructions" allows access to the contained instructions without the
+    additional stop/goto instruction mentioned above."""
+
+    def __init__(self) -> None:
+        """Create a new InstructionBlock instance."""
+        super().__init__()
+        self.__instruction_list = [] # type: InstructionSequence
+
+        self.__return_ip = None
+
+    def add_instruction(self, instruction: Instruction) -> None:
+        """Append an instruction at the end of this instruction block.
+
+        Args:
+            instruction (Instruction): The instruction to append.
+        """
+        self.__instruction_list.append(instruction)
+
+    def add_instruction_exec(self, waveform: Waveform) -> None:
+        """Create and append a new EXECInstruction object for the given waveform at the end of this
+        instruction block.
+
+        Args:
+            waveform (Waveform): The Waveform object referenced by the new EXECInstruction.
+        """
+        self.add_instruction(EXECInstruction(waveform))
+
+    def add_instruction_goto(self, target_block: 'InstructionBlock') -> None:
+        """Create and append a new GOTOInstruction object with a given target block at the end of
+        this instruction block.
+
+        Args:
+            target_block (InstructionBlock): The instruction block the new GOTOInstruction will
+                jump to. Execution will begin at the start of that block, i.e., the offset of the
+                instruction pointer of the GOTOInstruction will be zero.
+        """
+        self.add_instruction(GOTOInstruction(InstructionPointer(target_block)))
+
+    def add_instruction_cjmp(self,
+                             trigger: Trigger,
+                             target_block: 'InstructionBlock') -> None:
+        """Create and append a new CJMPInstruction object at the end of this instruction block.
+
+        Args:
+            trigger (Trigger): The hardware trigger that will control the new CJMPInstruction.
+            target_block (InstructionBlock): The instruction block the new CJMPInstruction will
+                jump to. Execution will begin at the start of that block, i.e., the offset of the
+                instruction pointer of the CJMPInstruction will be zero.
+        """
+        self.add_instruction(CJMPInstruction(trigger, InstructionPointer(target_block)))
+
+    def add_instruction_repj(self,
+                             count: int,
+                             target_block: 'InstructionBlock') -> None:
+        """Create and append a new REPJInstruction object at the end of this instruction block.
+
+        Args:
+            count (int): The amount of repetitions of the new REPJInstruction.
+            target_block (InstructionBlock): The instruction block the new REPJInstruction will
+                jump to. Execution will begin at the start of that block, i.e., the offset of the
+                instruction pointer of the REPJInstruction will be zero.
+        """
+        self.add_instruction(REPJInstruction(count, InstructionPointer(target_block)))
+        
+    def add_instruction_stop(self) -> None:
+        """Create and append a new STOPInstruction object at the end of this instruction block."""
+        self.add_instruction(STOPInstruction())
+
+    @property
+    def instructions(self) -> InstructionSequence:
+        return self.__instruction_list.copy()
+
+    @property
+    def return_ip(self) -> InstructionPointer:
+        return self.__return_ip
+
+    @return_ip.setter
+    def return_ip(self, value: InstructionPointer) -> None:
+        self.__return_ip = value
+
+
+class ImmutableInstructionBlock(AbstractInstructionBlock):
+    """An immutable instruction block which cannot be altered.
+
+    See Also:
+        InstructionBlock
+    """
+
+    def __init__(self,
+                 block: AbstractInstructionBlock,
+                 context: Dict[AbstractInstructionBlock, 'ImmutableInstructionBlock']=None) -> None:
+        """Create a new ImmutableInstructionBlock hierarchy from a (mutable) InstructionBlock
+        hierarchy.
+
+        Will create a deep copy (including all embedded blocks) of the given instruction block.
+
+        Args:
+            block (AbstractInstructionBlock): The instruction block that will be copied into an
+                immutable one.
+            context (Dict(AbstractInstructionBlock -> ImmutableInstructionBlock)): A dictionary
+                to look up already existing conversions of instruction blocks. Required to resolve
+                return instruction pointers. Will be altered by the process.
+        """
+        super().__init__()
+        if context is None:
+            context = dict()
+        self.__instruction_list = []
+        self.__return_ip = None
+        return_ip = block.return_ip
+        if return_ip is not None:
+            self.__return_ip = InstructionPointer(context[return_ip.block], return_ip.offset)
+        context[block] = self
+        for instruction in block.instructions:
+            immutable_instruction = instruction
+            if isinstance(instruction, (GOTOInstruction, CJMPInstruction, REPJInstruction)):
+                target_block = instruction.target.block
+                immutable_target_block = ImmutableInstructionBlock(target_block, context)
+                if isinstance(instruction, GOTOInstruction):
+                    immutable_instruction = GOTOInstruction(
+                        InstructionPointer(immutable_target_block, instruction.target.offset)
+                    )
+                elif isinstance(instruction, REPJInstruction):
+                    immutable_instruction = REPJInstruction(
+                        instruction.count,
+                        InstructionPointer(immutable_target_block, instruction.target.offset)
+                    )
+                else:
+                    immutable_instruction = CJMPInstruction(
+                        instruction.trigger,
+                        InstructionPointer(immutable_target_block, instruction.target.offset)
+                    )
+            self.__instruction_list.append(immutable_instruction)
+
+    @property
+    def instructions(self) -> List[Instruction]:
+        return self.__instruction_list.copy()
+
+    @property
+    def return_ip(self) -> InstructionPointer:
+        return self.__return_ip
+
+

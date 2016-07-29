@@ -4,14 +4,16 @@ import copy
 from qctoolkit.pulses.pulse_template import DoubleParameterNameException
 from qctoolkit.expressions import Expression
 from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
-from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate, MissingMappingException, UnnecessaryMappingException, MissingParameterDeclarationException
+from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
+from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingException, UnnecessaryMappingException, MissingParameterDeclarationException
 from qctoolkit.pulses.parameters import ParameterDeclaration, ParameterNotProvidedException, ConstantParameter
 
-from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyPulseTemplate, DummyParameter, DummyNoValueParameter
+from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyPulseTemplate, DummyNoValueParameter
 from tests.serialization_dummies import DummySerializer
 
 class SequencePulseTemplateTest(unittest.TestCase):
-    def __init__(self, *args, **kwargs):
+
+    def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
         # Setup test data
@@ -37,7 +39,7 @@ class SequencePulseTemplateTest(unittest.TestCase):
 
         self.sequence = SequencePulseTemplate([(self.square, self.mapping1)], self.outer_parameters)
 
-    def test_missing_mapping(self):
+    def test_missing_mapping(self) -> None:
         mapping = self.mapping1
         mapping.pop('v')
 
@@ -45,7 +47,7 @@ class SequencePulseTemplateTest(unittest.TestCase):
         with self.assertRaises(MissingMappingException):
             SequencePulseTemplate(subtemplates, self.outer_parameters)
 
-    def test_unnecessary_mapping(self):
+    def test_unnecessary_mapping(self) -> None:
         mapping = self.mapping1
         mapping['unnecessary'] = 'voltage'
 
@@ -53,10 +55,23 @@ class SequencePulseTemplateTest(unittest.TestCase):
         with self.assertRaises(UnnecessaryMappingException):
             SequencePulseTemplate(subtemplates, self.outer_parameters)
 
-    def test_identifier(self):
+    def test_identifier(self) -> None:
         identifier = 'some name'
         pulse = SequencePulseTemplate([], [], identifier=identifier)
         self.assertEqual(identifier, pulse.identifier)
+
+    def test_multiple_channels(self) -> None:
+        dummy = DummyPulseTemplate(parameter_names={'hugo'}, num_channels=2)
+        subtemplates = [(dummy, {'hugo': 'foo'}), (dummy, {'hugo': '3'})]
+        sequence = SequencePulseTemplate(subtemplates, {'foo'})
+        self.assertEqual(2, sequence.num_channels)
+
+    def test_multiple_channels_mismatch(self) -> None:
+        dummy1 = DummyPulseTemplate(num_channels=6)
+        dummy2 = DummyPulseTemplate(num_channels=5)
+        subtemplates = [(dummy1, dict()), (dummy2, dict())]
+        with self.assertRaises(ValueError):
+            SequencePulseTemplate(subtemplates, set())
 
 
 class SequencePulseTemplateSerializationTests(unittest.TestCase):
@@ -225,18 +240,6 @@ class SequencePulseTemplateSequencingTests(SequencePulseTemplateTest):
         subtemplates = [(self.square, mapping)]
         with self.assertRaises(MissingParameterDeclarationException):
             SequencePulseTemplate(subtemplates, self.outer_parameters)
-
-
-class SequencePulseTemplateStringTest(unittest.TestCase):
-    def test_str(self):
-        T = TablePulseTemplate()
-        a = [UnnecessaryMappingException(T,"b"),
-             MissingMappingException(T,"b"),
-             MissingParameterDeclarationException(T, "c")]
-        
-        b = [x.__str__() for x in a]
-        for s in b:
-            self.assertIsInstance(s, str)
 
 
 class SequencePulseTemplateTestProperties(SequencePulseTemplateTest):
