@@ -22,7 +22,7 @@ class FunctionPulseTest(unittest.TestCase):
     def test_get_pulse_length(self) -> None:
         self.assertEqual(136.78, self.fpt.get_pulse_length(self.pars))
 
-    def test_get_pulse_length(self) -> None:
+    def test_get_pulse_length_missing_parameter(self) -> None:
         with self.assertRaises(ParameterNotProvidedException):
             self.fpt.get_pulse_length(dict(b=DummyParameter(26.3267)))
 
