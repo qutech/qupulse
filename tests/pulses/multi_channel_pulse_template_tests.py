@@ -290,7 +290,7 @@ class MultiChannelPulseTemplateSequencingTests(unittest.TestCase):
         self.assertEqual([{}], dummy2.build_waveform_calls)
 
     def test_integration_table_and_function_template(self) -> None:
-        from qctoolkit.pulses import TablePulseTemplate, FunctionPulseTemplate, Sequencer
+        from qctoolkit.pulses import TablePulseTemplate, FunctionPulseTemplate, Sequencer, EXECInstruction, STOPInstruction
 
         table_template = TablePulseTemplate(channels=2)
         table_template.add_entry(1, 4, channel=0)
@@ -307,10 +307,22 @@ class MultiChannelPulseTemplateSequencingTests(unittest.TestCase):
             {'hugo'}
         )
 
-        result = template.build_waveform(dict(hugo=ConstantParameter(-1.3)))
+        sample_times = numpy.linspace(98.5, 103.5, num=11)
+        function_template_samples = function_template.build_waveform(dict()).sample(sample_times).T
+        table_template_samples = table_template.build_waveform(dict(foo=ConstantParameter(5), bar=ConstantParameter(2*(-1.3)))).sample(sample_times).T
+
+        template_waveform = template.build_waveform(dict(hugo=ConstantParameter(-1.3)))
+        template_samples = template_waveform.sample(sample_times).T
+        self.assertEqual(list(table_template_samples[0]), list(template_samples[2]))
+        self.assertEqual(list(table_template_samples[1]), list(template_samples[0]))
+        self.assertEqual(list(function_template_samples), list(template_samples[1]))
+
         sequencer = Sequencer()
         sequencer.push(template, parameters=dict(hugo=-1.3), conditions=dict())
         instructions = sequencer.build()
+        self.assertEqual(2, len(instructions))
+        self.assertIsInstance(instructions[0], EXECInstruction)
+        self.assertIsInstance(instructions[1], STOPInstruction)
 
 
 class MutliChannelPulseTemplateSerializationTests(unittest.TestCase):
