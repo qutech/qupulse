@@ -14,8 +14,9 @@ from matplotlib import pyplot as plt
 
 from qctoolkit.pulses.pulse_template import PulseTemplate
 from qctoolkit.pulses.parameters import Parameter
-from qctoolkit.pulses.sequencing import Sequencer, SequencingElement
-from qctoolkit.pulses.instructions import EXECInstruction, STOPInstruction, InstructionSequence
+from qctoolkit.pulses.sequencing import Sequencer
+from qctoolkit.pulses.instructions import EXECInstruction, STOPInstruction, InstructionSequence, \
+    REPJInstruction
 
 
 __all__ = ["Plotter", "plot", "PlottingNotPossibleException"]
@@ -44,7 +45,9 @@ class Plotter:
             a tuple (times, values) of numpy.ndarrays of similar size. times contains the time value
             of all sample times and values the corresponding sampled value.
         """
-        if [x for x in sequence if not isinstance(x, (EXECInstruction, STOPInstruction))]:
+        if [x for x in sequence if not isinstance(x, (EXECInstruction,
+                                                      STOPInstruction,
+                                                      REPJInstruction))]:
             raise NotImplementedError('Can only plot waveforms without branching so far.')
 
         waveforms = [instruction.waveform
@@ -100,16 +103,21 @@ def plot(pulse: PulseTemplate,
     if not sequencer.has_finished():
         raise PlottingNotPossibleException(pulse)
     times, voltages = plotter.render(sequence)
+    if len(voltages.shape) > 1:
+        voltages = voltages.transpose()
+    else:
+        voltages = [voltages]
 
     # plot!
     figure = plt.figure()
     ax = figure.add_subplot(111)
-    ax.step(times, voltages, where='post')
+    for channel in voltages:
+        ax.step(times, channel, where='post')
 
     # add some margins in the presentation
     plt.plot()
     plt.xlim(-0.5, times[-1] + 0.5)
-    plt.ylim(min(voltages) - 0.5, max(voltages) + 0.5)
+    plt.ylim(min(voltages[0]) - 0.5, max(voltages[0]) + 0.5)
     plt.xlabel('Time in ns')
     plt.ylabel('Voltage')
 
