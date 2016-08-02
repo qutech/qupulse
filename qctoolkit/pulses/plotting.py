@@ -111,13 +111,18 @@ def plot(pulse: PulseTemplate,
     # plot!
     figure = plt.figure()
     ax = figure.add_subplot(111)
-    for channel in voltages:
-        ax.step(times, channel, where='post')
+    for index, channel in enumerate(voltages):
+        ax.step(times, channel, where='post', label='channel {}'.format(index))
+
+    ax.legend()
+
+    max_voltage = max(max(channel) for channel in voltages)
+    min_voltage = min(min(channel) for channel in voltages)
 
     # add some margins in the presentation
     plt.plot()
     plt.xlim(-0.5, times[-1] + 0.5)
-    plt.ylim(min(voltages[0]) - 0.5, max(voltages[0]) + 0.5)
+    plt.ylim(min_voltage - 0.5, max_voltage + 0.5)
     plt.xlabel('Time in ns')
     plt.ylabel('Voltage')
 
