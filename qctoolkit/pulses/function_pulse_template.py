@@ -184,5 +184,6 @@ class FunctionWaveform(Waveform):
     def sample(self, sample_times: np.ndarray, first_offset: float=0) -> np.ndarray:
         sample_times -= (sample_times[0] - first_offset)
         func = np.vectorize(self.__evaluate_partially)
-        voltages = func(sample_times)
+        voltages = np.empty((1, len(sample_times)))
+        voltages[0] = func(sample_times)
         return voltages

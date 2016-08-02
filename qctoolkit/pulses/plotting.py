@@ -60,16 +60,14 @@ class Plotter:
         times = np.linspace(0, total_time, num=sample_count)
 
         channels = max([waveform.num_channels for waveform in waveforms])
-        voltages = np.empty((len(times), channels))
+        voltages = np.empty((channels, len(times)))
         time = 0
         for waveform in waveforms:
             indices = np.logical_and(times >= time, times <= time + waveform.duration)
             sample_times = times[indices]
             offset = times[indices][0] - time
             w_voltages = waveform.sample(sample_times, offset)
-            if w_voltages.ndim == 1:
-                w_voltages = w_voltages.reshape(-1,1)
-            voltages[indices,:] = w_voltages
+            voltages[:,indices] = w_voltages
             time += waveform.duration
         return times, voltages
 
@@ -103,10 +101,6 @@ def plot(pulse: PulseTemplate,
     if not sequencer.has_finished():
         raise PlottingNotPossibleException(pulse)
     times, voltages = plotter.render(sequence)
-    if len(voltages.shape) > 1:
-        voltages = voltages.transpose()
-    else:
-        voltages = [voltages]
 
     # plot!
     figure = plt.figure()

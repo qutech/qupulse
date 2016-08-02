@@ -50,12 +50,15 @@ class MultiChannelWaveformTest(unittest.TestCase):
     def test_sample(self) -> None:
         sample_times = numpy.linspace(98.5, 103.5, num=11)
         samples_a = numpy.array([
-            [0, 0.5], [1, 0.6], [2, 0.7], [3, 0.8], [4, 0.9], [5, 1.0],
-            [6, 1.1], [7, 1.2], [8, 1.3], [9, 1.4], [10, 1.5]
+            [  0,   1,   2,   3,   4,   5,   6,   7,   8,   9,   10],
+            [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5]
+#            [0, 0.5], [1, 0.6], [2, 0.7], [3, 0.8], [4, 0.9], [5, 1.0],
+#            [6, 1.1], [7, 1.2], [8, 1.3], [9, 1.4], [10, 1.5]
         ])
-        samples_b = numpy.array(
-            [[-10], [-11], [-12], [-13], [-14], [-15], [-16], [-17], [-18], [-19], [-20]]
-        )
+        samples_b = numpy.array([
+            [-10, -11, -12, -13, -14, -15, -16, -17, -18, -19, -20]
+#           [-10], [-11], [-12], [-13], [-14], [-15], [-16], [-17], [-18], [-19], [-20]
+        ])
         dwf_a = DummyWaveform(duration=3.2, sample_output=samples_a, num_channels=2)
         dwf_b = DummyWaveform(duration=3.2, sample_output=samples_b, num_channels=1)
         waveform = MultiChannelWaveform([(dwf_a, [2, 0]), (dwf_b, [1])])
@@ -66,18 +69,23 @@ class MultiChannelWaveformTest(unittest.TestCase):
         self.assertEqual([(list(sample_times), 0.7)], dwf_a.sample_calls)
         self.assertEqual([(list(sample_times), 0.7)], dwf_b.sample_calls)
 
+        # expected = numpy.array([
+        #     [0.5, -10, 0],
+        #     [0.6, -11, 1],
+        #     [0.7, -12, 2],
+        #     [0.8, -13, 3],
+        #     [0.9, -14, 4],
+        #     [1.0, -15, 5],
+        #     [1.1, -16, 6],
+        #     [1.2, -17, 7],
+        #     [1.3, -18, 8],
+        #     [1.4, -19, 9],
+        #     [1.5, -20, 10],
+        # ])
         expected = numpy.array([
-            [0.5, -10, 0],
-            [0.6, -11, 1],
-            [0.7, -12, 2],
-            [0.8, -13, 3],
-            [0.9, -14, 4],
-            [1.0, -15, 5],
-            [1.1, -16, 6],
-            [1.2, -17, 7],
-            [1.3, -18, 8],
-            [1.4, -19, 9],
-            [1.5, -20, 10],
+            [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5],
+            [-10, -11, -12, -13, -14, -15, -16, -17, -18, -19, -20],
+            [  0,   1,   2,   3,   4,   5,   6,   7,   8,   9,  10]
         ])
         self.assertTrue(numpy.all(expected == result))
 
@@ -308,14 +316,15 @@ class MultiChannelPulseTemplateSequencingTests(unittest.TestCase):
         )
 
         sample_times = numpy.linspace(98.5, 103.5, num=11)
-        function_template_samples = function_template.build_waveform(dict()).sample(sample_times).T
-        table_template_samples = table_template.build_waveform(dict(foo=ConstantParameter(5), bar=ConstantParameter(2*(-1.3)))).sample(sample_times).T
+        function_template_samples = function_template.build_waveform(dict()).sample(sample_times)
+        table_template_samples = table_template.build_waveform(dict(foo=ConstantParameter(5), bar=ConstantParameter(2*(-1.3)))).sample(sample_times)
 
         template_waveform = template.build_waveform(dict(hugo=ConstantParameter(-1.3)))
-        template_samples = template_waveform.sample(sample_times).T
-        self.assertEqual(list(table_template_samples[0]), list(template_samples[2]))
-        self.assertEqual(list(table_template_samples[1]), list(template_samples[0]))
-        self.assertEqual(list(function_template_samples), list(template_samples[1]))
+        template_samples = template_waveform.sample(sample_times)
+
+        self.assertTrue(numpy.all(table_template_samples[0] == template_samples[2]))
+        self.assertTrue(numpy.all(table_template_samples[1] == template_samples[0]))
+        self.assertTrue(numpy.all(function_template_samples[0] == template_samples[1]))
 
         sequencer = Sequencer()
         sequencer.push(template, parameters=dict(hugo=-1.3), conditions=dict())

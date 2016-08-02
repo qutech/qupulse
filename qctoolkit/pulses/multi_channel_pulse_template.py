@@ -101,10 +101,10 @@ class MultiChannelWaveform(Waveform):
     def sample(self, sample_times: numpy.ndarray, first_offset: float=0) -> numpy.ndarray:
         voltages_transposed = numpy.empty((self.num_channels, len(sample_times)))
         for waveform, channel_mapping in self.__channel_waveforms:
-            waveform_voltages_transposed = waveform.sample(sample_times, first_offset).T
+            waveform_voltages_transposed = waveform.sample(sample_times, first_offset)
             for old_c, new_c in enumerate(channel_mapping):
                 voltages_transposed[new_c] = waveform_voltages_transposed[old_c]
-        return voltages_transposed.T
+        return voltages_transposed
 
     @property
     def num_channels(self) -> int:

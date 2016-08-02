@@ -65,11 +65,13 @@ class TableWaveform(Waveform):
         channels = len(self.__tables)
         sample_times = sample_times.copy()
         sample_times -= (sample_times[0] - first_offset)
-        voltages = np.empty((len(sample_times), channels))
+        #voltages = np.empty((len(sample_times), channels))
+        voltages = np.empty((channels, len(sample_times)))
         for channel, table in enumerate(self.__tables):
             for entry1, entry2 in zip(table[:-1], table[1:]):
                 indices = np.logical_and(sample_times >= entry1.t, sample_times <= entry2.t)
-                voltages[indices, channel] = \
+                #voltages[indices, channel] = \
+                voltages[channel, indices] = \
                     entry2.interp((entry1.t, entry1.v), (entry2.t, entry2.v), sample_times[indices])
 
         return voltages
