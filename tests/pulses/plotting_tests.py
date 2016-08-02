@@ -35,11 +35,12 @@ class PlotterTests(unittest.TestCase):
 
         wf1_expected = [([0, 2, 4, 6, 8, 10, 12, 14, 16, 18], 0)]
         wf2_expected = [([20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40], 1)]
-        expected_result = list(range(0, 41, 2))
+        expected_result = numpy.array([range(0, 41, 2)])
         self.assertEqual(wf1_expected, wf1.sample_calls)
         self.assertEqual(wf2_expected, wf2.sample_calls)
-        self.assertEqual(expected_result, list(times))
-        self.assertEqual(expected_result, list(voltages))
+        self.assertTrue(numpy.all(expected_result == times))
+        self.assertTrue(numpy.all(expected_result == voltages))
+        self.assertEqual(expected_result.shape, voltages.shape)
 
     def integrated_test_with_sequencer_and_pulse_templates(self) -> None:
         # Setup test data

@@ -121,5 +121,7 @@ class FunctionWaveformTest(unittest.TestCase):
         par = {"b":2,"c":10}
         fw = FunctionWaveform(par,f,length)
         a = np.arange(4)
-        self.assertEqual(list(fw.sample(a)), [1,4,9,16])
+        expected_result = [[1, 4, 9, 16]]
+        result = fw.sample(a)
+        self.assertTrue(np.all(result == expected_result))
         

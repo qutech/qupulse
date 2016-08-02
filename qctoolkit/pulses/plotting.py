@@ -14,8 +14,9 @@ from matplotlib import pyplot as plt
 
 from qctoolkit.pulses.pulse_template import PulseTemplate
 from qctoolkit.pulses.parameters import Parameter
-from qctoolkit.pulses.sequencing import Sequencer, SequencingElement
-from qctoolkit.pulses.instructions import EXECInstruction, STOPInstruction, InstructionSequence
+from qctoolkit.pulses.sequencing import Sequencer
+from qctoolkit.pulses.instructions import EXECInstruction, STOPInstruction, InstructionSequence, \
+    REPJInstruction
 
 
 __all__ = ["Plotter", "plot", "PlottingNotPossibleException"]
@@ -44,7 +45,9 @@ class Plotter:
             a tuple (times, values) of numpy.ndarrays of similar size. times contains the time value
             of all sample times and values the corresponding sampled value.
         """
-        if [x for x in sequence if not isinstance(x, (EXECInstruction, STOPInstruction))]:
+        if [x for x in sequence if not isinstance(x, (EXECInstruction,
+                                                      STOPInstruction,
+                                                      REPJInstruction))]:
             raise NotImplementedError('Can only plot waveforms without branching so far.')
 
         waveforms = [instruction.waveform
@@ -57,16 +60,14 @@ class Plotter:
         times = np.linspace(0, total_time, num=sample_count)
 
         channels = max([waveform.num_channels for waveform in waveforms])
-        voltages = np.empty((len(times), channels))
+        voltages = np.empty((channels, len(times)))
         time = 0
         for waveform in waveforms:
             indices = np.logical_and(times >= time, times <= time + waveform.duration)
             sample_times = times[indices]
             offset = times[indices][0] - time
             w_voltages = waveform.sample(sample_times, offset)
-            if w_voltages.ndim == 1:
-                w_voltages = w_voltages.reshape(-1,1)
-            voltages[indices,:] = w_voltages
+            voltages[:,indices] = w_voltages
             time += waveform.duration
         return times, voltages
 
@@ -104,12 +105,18 @@ def plot(pulse: PulseTemplate,
     # plot!
     figure = plt.figure()
     ax = figure.add_subplot(111)
-    ax.step(times, voltages, where='post')
+    for index, channel in enumerate(voltages):
+        ax.step(times, channel, where='post', label='channel {}'.format(index))
+
+    ax.legend()
+
+    max_voltage = max(max(channel) for channel in voltages)
+    min_voltage = min(min(channel) for channel in voltages)
 
     # add some margins in the presentation
     plt.plot()
     plt.xlim(-0.5, times[-1] + 0.5)
-    plt.ylim(min(voltages) - 0.5, max(voltages) + 0.5)
+    plt.ylim(min_voltage - 0.5, max_voltage + 0.5)
     plt.xlabel('Time in ns')
     plt.ylabel('Voltage')
 
@@ -117,7 +124,6 @@ def plot(pulse: PulseTemplate,
         plt.title(pulse.identifier)
 
     figure.show()
-    return figure
 
 
 class PlottingNotPossibleException(Exception):

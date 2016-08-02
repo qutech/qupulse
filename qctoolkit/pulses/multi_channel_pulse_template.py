@@ -101,10 +101,10 @@ class MultiChannelWaveform(Waveform):
     def sample(self, sample_times: numpy.ndarray, first_offset: float=0) -> numpy.ndarray:
         voltages_transposed = numpy.empty((self.num_channels, len(sample_times)))
         for waveform, channel_mapping in self.__channel_waveforms:
-            waveform_voltages_transposed = waveform.sample(sample_times, first_offset).T
+            waveform_voltages_transposed = waveform.sample(sample_times, first_offset)
             for old_c, new_c in enumerate(channel_mapping):
                 voltages_transposed[new_c] = waveform_voltages_transposed[old_c]
-        return voltages_transposed.T
+        return voltages_transposed
 
     @property
     def num_channels(self) -> int:
@@ -237,7 +237,9 @@ class MultiChannelPulseTemplate(AtomicPulseTemplate):
     def requires_stop(self,
                       parameters: Dict[str, Parameter],
                       conditions: Dict[str, Condition]) -> bool:
-        return any(t.requires_stop(parameters, conditions) for t, _ in self.__subtemplates)
+        return any(t.requires_stop(self.__parameter_mapping.map_parameters(t, parameters),
+                                   conditions)
+                   for t, _ in self.__subtemplates)
 
     def build_waveform(self, parameters: Dict[str, Parameter]) -> Optional[Waveform]:
         missing = self.parameter_names - parameters.keys()

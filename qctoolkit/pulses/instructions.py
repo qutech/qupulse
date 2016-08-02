@@ -54,7 +54,9 @@ class Waveform(Comparable, metaclass=ABCMeta):
             float first_offset: Offset of the discrete first sample from the actual beginning of
                 the waveform in a continuous time domain.
         Result:
-            numpy.ndarray of the sampled values of this Waveform at the provided sample times.
+            numpy.ndarray of the sampled values of this Waveform at the provided sample times. If
+                this Waveform defines multiple channels, the array will be structured as
+                [ [channel 0 values] [channel 1 values] .... [channel n values] ].
         """
 
     @abstractproperty
