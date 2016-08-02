@@ -237,7 +237,9 @@ class MultiChannelPulseTemplate(AtomicPulseTemplate):
     def requires_stop(self,
                       parameters: Dict[str, Parameter],
                       conditions: Dict[str, Condition]) -> bool:
-        return any(t.requires_stop(parameters, conditions) for t, _ in self.__subtemplates)
+        return any(t.requires_stop(self.__parameter_mapping.map_parameters(t, parameters),
+                                   conditions)
+                   for t, _ in self.__subtemplates)
 
     def build_waveform(self, parameters: Dict[str, Parameter]) -> Optional[Waveform]:
         missing = self.parameter_names - parameters.keys()
