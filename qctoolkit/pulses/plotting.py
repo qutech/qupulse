@@ -117,7 +117,6 @@ def plot(pulse: PulseTemplate,
         plt.title(pulse.identifier)
 
     figure.show()
-    return figure
 
 
 class PlottingNotPossibleException(Exception):
