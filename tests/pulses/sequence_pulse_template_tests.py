@@ -1,6 +1,7 @@
 import unittest
 import copy
 
+from qctoolkit.pulses.pulse_template import DoubleParameterNameException
 from qctoolkit.expressions import Expression
 from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
 from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
@@ -250,6 +251,36 @@ class SequencePulseTemplateTestProperties(SequencePulseTemplateTest):
     def test_parameter_declarations(self):
         decl = self.sequence.parameter_declarations
         self.assertEqual(decl, set([ParameterDeclaration(i) for i in self.outer_parameters]))
+
+
+class SequencePulseTemplateConcatenationTest(SequencePulseTemplateTest):
+
+    def test_concatenation_sequence_table_pulse(self):
+        a = TablePulseTemplate()
+        a.add_entry('t', 'a')
+        b = TablePulseTemplate()
+        b.add_entry('t', 'a')
+
+        subtemplates = [(b, {'t': 't_ext', 'a': 'a_ext'})]
+        seq = SequencePulseTemplate(subtemplates, ['t_ext', 'a_ext'])
+
+        concat = seq @ a
+        subtemplates2 = [(seq, {'t_ext':'t_ext', 'a_ext': 'a_ext'}),
+                         (a, {'t':'t', 'a':'a'})]
+        seq2 = SequencePulseTemplate(subtemplates2, ['a', 'a_ext', 't', 't_ext'])
+        self.assertEqual(concat, seq2)
+
+    def test_concatenation_sequence_table_pulse_double_parameter(self):
+        a = TablePulseTemplate()
+        a.add_entry('t', 'a')
+        b = TablePulseTemplate()
+        b.add_entry('t', 'a')
+
+        subtemplates = [(b, {'t': 't', 'a': 'a'})]
+        seq = SequencePulseTemplate(subtemplates, ['t', 'a'])
+
+        with self.assertRaises(DoubleParameterNameException) as e:
+            concat = seq @ a
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
