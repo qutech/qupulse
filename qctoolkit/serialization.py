@@ -109,7 +109,7 @@ class FilesystemBackend(StorageBackend):
 class ZipFileBackend(StorageBackend):
     """A StorageBackend implementation based on a single zip file.
 
-    Data will be stored in plain text files in a zip file. The zip file is given
+    Data will be stored in plain text files inside a zip file. The zip file is given
     in the constructor of this FilesystemBackend. For each data item, a separate
     file is created and named after the corresponding identifier.
 
@@ -117,14 +117,14 @@ class ZipFileBackend(StorageBackend):
     network devices, but takes longer to update because every write causes a
     complete recompression (it's not too bad)."""
 
-    def __init__(self, root: str='.') -> None:
+    def __init__(self, root: str='./storage.zip') -> None:
         """Create a new FilesystemBackend.
 
         Args:
-            root (str): The path of the zip file in which all data files are stored. (default: ".",
+            root (str): The path of the zip file in which all data files are stored. (default: "./storage.zip",
                 i.e. the current directory)
         Raises:
-            NotADirectoryError if root is not a valid directory path.
+            NotADirectoryError if root is not a valid path.
         """
         parent, fname = os.path.split(root)
         if not os.path.isdir(parent):
