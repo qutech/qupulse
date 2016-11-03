@@ -20,9 +20,13 @@ python3 setup.py install
 
 The optional script *tests/utils/syntax_check.py* invokes pyflakes to perform a static code analysis, so pyflakes should be installed if its usage is intended.
 
+## Documentation
+You can find documentation on how to use this library on [readthedocs](https://readthedocs.org/projects/qc-toolkit/badge/?version=latest) and IPython notebooks with examples in `doc/source/examples`.
+
 ## Folder Structure
-The repository primarily consists of the folders *qctoolkit* and *tests*.
+The repository primarily consists of the folders `qctoolkit` and `tests`.
 
-*qctoolkit* contains the entire source code of the project and is further partitioned into packages of related modules (i.e. a package folder *pulses* which contains all modules related to pulse representation and translation).
+`qctoolkit` contains the entire source code of the project and is further partitioned into packages of related modules (i.e. a package folder `pulses` which contains all modules related to pulse representation and translation).
 
-Contents of *tests* mirror the structure of *qctoolkit*. For every *<module>* somewhere in *qctoolkit* there should exist a *<module>Tests.py* in the corresponding subdirectory of *tests*.
+Contents of `tests` mirror the structure of `qctoolkit`. For every `<module>` somewhere in `qctoolkit` there should exist a `<module>Tests.py` in the corresponding subdirectory of `tests`.
+
