@@ -4,8 +4,15 @@ import select
 from itertools import chain, repeat
 from typing import Iterable, Any, Set, Tuple
 
-import visa
 import numpy as np
+import warnings
+
+try:
+    import visa
+    hasVisa = True
+except ImportError:
+    warnings.warn("pyVISA not available, Tektronix AWGs only available in simulation mode!")
+    hasVisa = False
 
 from qctoolkit.hardware.awgs.awg import AWG, ProgramOverwriteException, Program
 from qctoolkit.pulses.instructions import EXECInstruction, Waveform
@@ -87,18 +94,39 @@ class AWGSocket():
         answer = b''.join(chunks)
         return answer
 
+class TektronixAWGSimulator():
+    def query(self, *args) -> str:
+        string = ' '.join(map(str, args))
+        if string.startswith('*IDN='):
+            return "Tektronix Simulator"
+        elif string.startswith('SEQUENCE:LENGTH?'):
+            return 0
+        else:
+            return "QUERY: %s" % string
+
+    def write(self, string, *args, **kwargs) -> None:
+        pass
+
+    def write_binary_values(self, string, *args, **kwargs) -> None:
+        pass
+
 
 class TektronixAWG(AWG):
 
-    def __init__(self, ip: str, port: int, sample_rate: float, first_index=None) -> None:
+    def __init__(self, ip: str, port: int, sample_rate: float, first_index=None, simulation=False) -> None:
         self.__programs = {} # holds names and programs
         self.__program_indices = {} # holds programs and their first index (for jumping to it)
         self.__waveform_memory = set() #map sequence indices to waveforms and vice versa
         self.__program_waveforms = {} # maps program names to set of waveforms used by the program
         self.__ip = ip
         self.__port = port
-        self.__rm = visa.ResourceManager()
-        self.inst = self.__rm.open_resource('TCPIP::{0}::INSTR'.format(self.__ip, self.__port))
+        self.__simulation = simulation
+        if simulation:
+            warnings.warn("Using Tektronix AWG driver in simulation mode!")
+            self.inst = TektronixAWGSimulator()
+        else:
+            self.__rm = visa.ResourceManager()
+            self.inst = self.__rm.open_resource('TCPIP::{0}::INSTR'.format(self.__ip, self.__port))
         self.__identifier = self.inst.query('*IDN?\n')
         self.inst.write('AWGCONTROL:RMODE SEQUENCE') # play sequence
         self.__sample_rate = sample_rate
@@ -108,7 +136,7 @@ class TektronixAWG(AWG):
         self.__channels = [1] # use 2 channels. TODO: fix this
         if not first_index:
             # query how long the sequence already is
-            sequence_length_before = self.inst.query('SEQUENCE:LENGTH?')
+            sequence_length_before = int(self.inst.query('SEQUENCE:LENGTH?'))
             # add 400 (?, arbitrary) more slots
             self.inst.query('SEQUENCE:LENGTH', sequence_length_before + 400) # magic number
             self.__first_index = sequence_length_before
@@ -120,7 +148,7 @@ class TektronixAWG(AWG):
 
 
     @property
-    def outputRange(self) -> Tuple[float, float]:
+    def output_range(self) -> Tuple[float, float]:
         return (-1, 1)
 
     @property
