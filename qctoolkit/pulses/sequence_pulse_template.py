@@ -105,7 +105,7 @@ class SequencePulseTemplate(PulseTemplate):
     def get_measurement_windows(self,
                                 parameters: Dict[str, Parameter]=None
                                 ) -> List[MeasurementWindow]:
-        raise NotImplementedError() # will be computed by Sequencer
+        raise NotImplementedError() # will be computed by Sequencer #TODO: IMPORTANT
 
     @property
     def is_interruptable(self) -> bool:

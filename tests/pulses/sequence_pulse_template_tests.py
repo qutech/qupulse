@@ -268,7 +268,9 @@ class SequencePulseTemplateConcatenationTest(SequencePulseTemplateTest):
         subtemplates2 = [(seq, {'t_ext':'t_ext', 'a_ext': 'a_ext'}),
                          (a, {'t':'t', 'a':'a'})]
         seq2 = SequencePulseTemplate(subtemplates2, ['a', 'a_ext', 't', 't_ext'])
-        self.assertEqual(concat, seq2)
+        self.assertEqual(concat.parameter_names, seq2.parameter_names)
+        self.assertEqual(concat.subtemplates, seq2.subtemplates)
+        #self.assertEqual(concat, seq2)
 
     def test_concatenation_sequence_table_pulse_double_parameter(self):
         a = TablePulseTemplate()

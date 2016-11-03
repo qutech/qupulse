@@ -64,7 +64,7 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=ABCMeta):
         """Returns the number of hardware output channels this PulseTemplate defines."""
 
 
-    def __matmult__(self, other) -> 'SequencePulseTemplate':
+    def __matmul__(self, other) -> 'SequencePulseTemplate':
         """This method enables us to use the @-operator (intended for matrix multiplication) for
          concatenating pulses"""
         from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
