@@ -21,7 +21,7 @@ python3 setup.py install
 The optional script *tests/utils/syntax_check.py* invokes pyflakes to perform a static code analysis, so pyflakes should be installed if its usage is intended.
 
 ## Documentation
-You can find documentation on how to use this library on [readthedocs](https://readthedocs.org/projects/qc-toolkit/badge/?version=latest) and IPython notebooks with examples in `doc/source/examples`.
+You can find documentation on how to use this library on [readthedocs](https://readthedocs.org/projects/qc-toolkit/badge/?version=latest) and [IPython notebooks with examples in this repo](doc/source/examples)
 
 ## Folder Structure
 The repository primarily consists of the folders `qctoolkit` and `tests`.
