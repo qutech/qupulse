@@ -60,12 +60,6 @@ class RepetitionPulseTemplate(PulseTemplate):
     def parameter_declarations(self) -> Set[str]:
         return self.__body.parameter_declarations
 
-    def get_measurement_windows(self,
-                                parameters: Dict[str, Parameter]=None
-                                ) -> List[MeasurementWindow]:
-        """Return all measurement windows defined in this PulseTemplate."""
-        raise NotImplementedError()
-
     @property
     def is_interruptable(self) -> bool:
         return self.__body.is_interruptable
@@ -74,10 +68,15 @@ class RepetitionPulseTemplate(PulseTemplate):
     def num_channels(self) -> int:
         return self.__body.num_channels
 
+    @property
+    def measurement_names(self) -> Set[str]:
+        return self.__body.measurement_names
+
     def build_sequence(self,
                        sequencer: Sequencer,
                        parameters: Dict[str, Parameter],
                        conditions: Dict[str, Condition],
+                       measurement_mapping: Dict[str, str],
                        instruction_block: InstructionBlock) -> None:
         repetition_count = self.__repetition_count
         if isinstance(repetition_count, ParameterDeclaration):
@@ -89,7 +88,7 @@ class RepetitionPulseTemplate(PulseTemplate):
         body_block.return_ip = InstructionPointer(instruction_block, len(instruction_block))
 
         instruction_block.add_instruction_repj(int(repetition_count), body_block)
-        sequencer.push(self.body, parameters, conditions, body_block)
+        sequencer.push(self.body, parameters, conditions, measurement_mapping, body_block)
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],

@@ -88,14 +88,12 @@ class FunctionPulseTemplate(AtomicPulseTemplate):
                for (parameter_name, parameter) in parameters.items()}
         )
 
-    def get_measurement_windows(self,
-                                parameters: Optional[Dict[str, Parameter]]=None) \
-            -> List[MeasurementWindow]:
-        raise NotImplementedError()
-        if not self.__is_measurement_pulse:
-            return
-        else:
-            return [(0, self.get_pulse_length(parameters))]
+    def get_measurement_windows(self, parameters: Dict[str, Parameter]) -> List[MeasurementWindow]:
+        return []
+
+    @property
+    def measurement_names(self) -> Set[str]:
+        return set()
 
     @property
     def is_interruptable(self) -> bool:

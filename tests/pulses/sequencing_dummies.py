@@ -62,6 +62,7 @@ class DummySequencingElement(SequencingElement):
         self.target_block = None
         self.parameters = None
         self.conditions = None
+        self.window_mapping = None
         self.requires_stop_ = requires_stop
         self.push_elements = push_elements
         self.parameter_names = set()
@@ -71,15 +72,17 @@ class DummySequencingElement(SequencingElement):
                        sequencer: Sequencer,
                        parameters: Dict[str, Parameter],
                        conditions: Dict[str, 'Condition'],
+                       measurement_mapping: Optional[Dict[str, str]],
                        instruction_block: InstructionBlock) -> None:
         self.build_call_counter += 1
         self.target_block = instruction_block
         instruction_block.add_instruction(DummyInstruction(self))
         self.parameters = parameters
         self.conditions = conditions
+        self.window_mapping = measurement_mapping
         if self.push_elements is not None:
             for element in self.push_elements[1]:
-                sequencer.push(element, parameters, conditions, self.push_elements[0])
+                sequencer.push(element, parameters, conditions, measurement_mapping, self.push_elements[0])
 
     def requires_stop(self, parameters: Dict[str, Parameter], conditions: Dict[str, 'Conditions']) -> bool:
         self.requires_stop_call_counter += 1
@@ -152,6 +155,7 @@ class DummySequencer(Sequencer):
              sequencing_element: SequencingElement,
              parameters: Dict[str, Parameter],
              conditions: Dict[str, 'Condition'],
+             window_mapping: Optional[Dict[str, str]] = None,
              target_block: InstructionBlock = None) -> None:
         if target_block is None:
             target_block = self.__main_block
@@ -159,7 +163,7 @@ class DummySequencer(Sequencer):
         if target_block not in self.sequencing_stacks:
             self.sequencing_stacks[target_block] = []
 
-        self.sequencing_stacks[target_block].append((sequencing_element, parameters, conditions))
+        self.sequencing_stacks[target_block].append((sequencing_element, parameters, conditions, window_mapping))
 
     def build(self) -> InstructionBlock:
         raise NotImplementedError()
@@ -198,6 +202,7 @@ class DummyCondition(Condition):
                             sequencer: Sequencer,
                             parameters: Dict[str, Parameter],
                             conditions: Dict[str, Condition],
+                            measurement_mapping: Dict[str, str],
                             instruction_block: InstructionBlock) -> None:
         self.loop_call_data = dict(
             delegator=delegator,
@@ -205,6 +210,7 @@ class DummyCondition(Condition):
             sequencer=sequencer,
             parameters=parameters,
             conditions=conditions,
+            measurement_mapping=measurement_mapping,
             instruction_block=instruction_block
         )
 
@@ -215,6 +221,7 @@ class DummyCondition(Condition):
                               sequencer: Sequencer,
                               parameters: Dict[str, Parameter],
                               conditions: Dict[str, Condition],
+                              measurement_mapping: Dict[str, str],
                               instruction_block: InstructionBlock) -> None:
         self.branch_call_data = dict(
             delegator=delegator,
@@ -223,6 +230,7 @@ class DummyCondition(Condition):
             sequencer=sequencer,
             parameters=parameters,
             conditions=conditions,
+            measurement_mapping=measurement_mapping,
             instruction_block=instruction_block
         )
 
@@ -235,7 +243,8 @@ class DummyPulseTemplate(AtomicPulseTemplate):
                  parameter_names: Set[str]={},
                  num_channels: int=1,
                  duration: float=0,
-                 waveform: Waveform=None) -> None:
+                 waveform: Waveform=None,
+                 measurement_names: Set[str] = set()) -> None:
         super().__init__()
         self.requires_stop_ = requires_stop
         self.is_interruptable_ = is_interruptable
@@ -245,6 +254,7 @@ class DummyPulseTemplate(AtomicPulseTemplate):
         self.duration = duration
         self.waveform = waveform
         self.build_waveform_calls = []
+        self.measurement_names_ = measurement_names
 
     @property
     def parameter_names(self) -> Set[str]:
@@ -266,10 +276,15 @@ class DummyPulseTemplate(AtomicPulseTemplate):
     def num_channels(self) -> int:
         return self.num_channels_
 
+    @property
+    def measurement_names(self) -> Set[str]:
+        return self.measurement_names_
+
     def build_sequence(self,
                        sequencer: Sequencer,
                        parameters: Dict[str, Parameter],
                        conditions: Dict[str, Condition],
+                       measurement_mapping: Dict[str, str],
                        instruction_block: InstructionBlock):
         self.build_sequence_calls += 1
 

@@ -33,6 +33,7 @@ class SequencingElement(metaclass=ABCMeta):
                        sequencer: "Sequencer",
                        parameters: Dict[str, Parameter],
                        conditions: Dict[str, 'Condition'],
+                       measurement_mapping: Dict[str, str],
                        instruction_block: InstructionBlock) -> None:
         """Translate this SequencingElement into an instruction sequence for the given
         instruction_block using sequencer and the given parameter and condition sets.
@@ -45,6 +46,7 @@ class SequencingElement(metaclass=ABCMeta):
             Dict[str -> Parameter] parameters: A mapping of parameter names to Parameter objects.
             Dict[str -> Condition] conditions: A mapping of condition identifiers to Condition
                 objects.
+            Dict[str -> str] measurement_mapping: A mapping of measurement window names
             InstructionBlock instruction_block: The instruction block into which instructions
                 resulting from the translation of this SequencingElement will be placed.
         """
@@ -94,7 +96,7 @@ class Sequencer:
         SequencingElement
     """
 
-    StackElement = Tuple[SequencingElement, Dict[str, Parameter], Dict[str, 'Condition']]
+    StackElement = Tuple[SequencingElement, Dict[str, Parameter], Dict[str, 'Condition'], Dict[str,str]]
 
     def __init__(self) -> None:
         """Create a Sequencer."""
@@ -108,6 +110,7 @@ class Sequencer:
              sequencing_element: SequencingElement,
              parameters: Optional[Dict[str, Union[Parameter, float]]]=None,
              conditions: Optional[Dict[str, 'Condition']]=None,
+             window_mapping: Optional[Dict[str,str]] = None,
              target_block: Optional[InstructionBlock]=None) -> None:
         """Add an element to the translation stack of the target_block with the given set of
          parameters.
@@ -134,6 +137,8 @@ class Sequencer:
             conditions = dict()
         if target_block is None:
             target_block = self.__main_block
+        if window_mapping is None:
+            window_mapping = dict()
 
         for (key, value) in parameters.items():
             if isinstance(value, numbers.Real):
@@ -142,7 +147,7 @@ class Sequencer:
         if target_block not in self.__sequencing_stacks:
             self.__sequencing_stacks[target_block] = []
 
-        self.__sequencing_stacks[target_block].append((sequencing_element, parameters, conditions))
+        self.__sequencing_stacks[target_block].append((sequencing_element, parameters, conditions, window_mapping))
 
     def build(self) -> InstructionBlock:
         """Start the translation process. Translate all elements currently on the translation stacks
@@ -164,11 +169,11 @@ class Sequencer:
                 shall_continue = False
                 for target_block, sequencing_stack in self.__sequencing_stacks.copy().items():
                     while sequencing_stack:
-                        (element, parameters, conditions) = sequencing_stack[-1]
+                        (element, parameters, conditions, window_mapping) = sequencing_stack[-1]
                         if not element.requires_stop(parameters, conditions):
                             shall_continue |= True
                             sequencing_stack.pop()
-                            element.build_sequence(self, parameters, conditions, target_block)
+                            element.build_sequence(self, parameters, conditions, window_mapping, target_block)
                         else: break
 
         return ImmutableInstructionBlock(self.__main_block, dict())

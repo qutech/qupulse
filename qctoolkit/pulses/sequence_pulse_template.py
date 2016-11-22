@@ -7,13 +7,13 @@ from typing import Dict, List, Tuple, Set, Optional, Any, Iterable, Union
 from qctoolkit.serialization import Serializer
 
 from qctoolkit.pulses.pulse_template import PulseTemplate, MeasurementWindow, \
-    DoubleParameterNameException
+    DoubleParameterNameException, SubTemplate
 from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter, \
     ParameterNotProvidedException
 from qctoolkit.pulses.sequencing import InstructionBlock, Sequencer
 from qctoolkit.pulses.conditions import Condition
 from qctoolkit.pulses.pulse_template_parameter_mapping import PulseTemplateParameterMapping, \
-    MissingMappingException
+    MissingMappingException, get_measurement_name_mappings
 
 __all__ = ["SequencePulseTemplate"]
 
@@ -32,10 +32,10 @@ class SequencePulseTemplate(PulseTemplate):
     """
 
     # a subtemplate consists of a pulse template and mapping functions for its "internal" parameters
-    Subtemplate = Tuple[PulseTemplate, Dict[str, str]]  # pylint: disable=invalid-name
+    SimpleSubTemplate = Tuple[PulseTemplate, Dict[str, str]]  # pylint: disable=invalid-name
 
     def __init__(self,
-                 subtemplates: List[Subtemplate],
+                 subtemplates: Iterable[Union[SimpleSubTemplate,SubTemplate]],
                  external_parameters: List[str], # pylint: disable=invalid-sequence-index
                  identifier: Optional[str]=None) -> None:
         """Create a new SequencePulseTemplate instance.
@@ -70,22 +70,28 @@ class SequencePulseTemplate(PulseTemplate):
         if subtemplates:
             num_channels = subtemplates[0][0].num_channels
 
+        subtemplates = [ st if isinstance(st,SubTemplate) else SubTemplate(*st) for st in subtemplates  ]
+
         self.__parameter_mapping = PulseTemplateParameterMapping(external_parameters)
 
-        for template, mapping_functions in subtemplates:
+        for template, parameter_mapping, _, channel_mapping in subtemplates:
+            if channel_mapping:
+                raise ValueError('Channel mapping not allowed (yet) in SequencePulseTemplate')
+
             # Consistency checks
             if template.num_channels != num_channels:
                 raise ValueError("Subtemplates have different number of channels!")
 
-            for parameter, mapping_function in mapping_functions.items():
-                self.__parameter_mapping.add(template, parameter, mapping_function)
+            for parameter, parameter_mapping_function in parameter_mapping.items():
+                self.__parameter_mapping.add(template, parameter, parameter_mapping_function)
 
             remaining = self.__parameter_mapping.get_remaining_mappings(template)
             if remaining:
                 raise MissingMappingException(template,
                                               remaining.pop())
 
-        self.__subtemplates = [template for (template, _) in subtemplates]
+        self.__measurement_window_mappings = get_measurement_name_mappings(subtemplates)
+        self.__subtemplates = [st.template for st in subtemplates]
         self.__is_interruptable = True
 
     @property
@@ -98,14 +104,11 @@ class SequencePulseTemplate(PulseTemplate):
         return {ParameterDeclaration(name) for name in self.parameter_names}
 
     @property
-    def subtemplates(self) -> List[Subtemplate]:
-        return [(template, self.__parameter_mapping.get_template_map(template))
-                for template in self.__subtemplates]
-
-    def get_measurement_windows(self,
-                                parameters: Dict[str, Parameter]=None
-                                ) -> List[MeasurementWindow]:
-        raise NotImplementedError() # will be computed by Sequencer #TODO: IMPORTANT
+    def subtemplates(self) -> List[SubTemplate]:
+        return [SubTemplate(template,
+                            self.__parameter_mapping.get_template_map(template),
+                            measurement_mapping=name_mapping)
+                for template, name_mapping in zip(self.__subtemplates, self.__measurement_window_mappings)]
 
     @property
     def is_interruptable(self) -> bool:
@@ -119,6 +122,11 @@ class SequencePulseTemplate(PulseTemplate):
     def num_channels(self) -> int:
         return self.__subtemplates[0].num_channels
 
+    @property
+    def measurement_names(self) -> Set[str]:
+        return set.union(*(set(measurement_mapping.values())
+                           for measurement_mapping in self.__measurement_window_mappings))
+
     def requires_stop(self,
                       parameters: Dict[str, Parameter],
                       conditions: Dict[str, 'Condition']) -> bool:
@@ -128,6 +136,7 @@ class SequencePulseTemplate(PulseTemplate):
                        sequencer: Sequencer,
                        parameters: Dict[str, Parameter],
                        conditions: Dict[str, Condition],
+                       measurement_mapping : Dict[str, str],
                        instruction_block: InstructionBlock) -> None:
         # todo: currently ignores is_interruptable
 
@@ -136,10 +145,15 @@ class SequencePulseTemplate(PulseTemplate):
         if missing:
             raise ParameterNotProvidedException(missing.pop())
 
+        def concatenate_dicts(d1, d2):
+            return dict(((key, d1[value]) for key, value in d2.items()))
+
         # push subtemplates to sequencing stack with mapped parameters
-        for template in reversed(self.__subtemplates):
+        for template, local_window_mapping in zip(reversed(self.__subtemplates),reversed(self.__measurement_window_mappings)):
             inner_parameters = self.__parameter_mapping.map_parameters(template, parameters)
-            sequencer.push(template, inner_parameters, conditions, instruction_block)
+            inner_names = concatenate_dicts(measurement_mapping, local_window_mapping)
+            sequencer.push(template, inner_parameters, conditions,
+                           inner_names, instruction_block)
 
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
         data = dict()
@@ -147,12 +161,13 @@ class SequencePulseTemplate(PulseTemplate):
         data['is_interruptable'] = self.is_interruptable
 
         subtemplates = []
-        for subtemplate in self.__subtemplates:
+        for subtemplate,window_name_mappings in zip(self.__subtemplates,self.__measurement_window_mappings):
             mapping_functions = self.__parameter_mapping.get_template_map(subtemplate)
             mapping_functions_strings = \
                 {k: serializer.dictify(m) for k, m in mapping_functions.items()}
             subtemplate = serializer.dictify(subtemplate)
-            subtemplates.append(dict(template=subtemplate, mappings=mapping_functions_strings))
+            subtemplates.append(dict(template=subtemplate, parameter_mappings=mapping_functions_strings,
+                                     measurement_mappings=window_name_mappings))
         data['subtemplates'] = subtemplates
 
         data['type'] = serializer.get_type_identifier(self)
@@ -165,10 +180,11 @@ class SequencePulseTemplate(PulseTemplate):
                     external_parameters: Iterable[str],
                     identifier: Optional[str]=None) -> 'SequencePulseTemplate':
         subtemplates = \
-            [(serializer.deserialize(d['template']),
-             {k: str(serializer.deserialize(m))
-              for k, m in d['mappings'].items()})
-             for d in subtemplates]
+            [SubTemplate(
+                serializer.deserialize(d['template']),
+                {k: str(serializer.deserialize(m)) for k, m in d['parameter_mappings'].items()},
+                measurement_mapping=d['measurement_mappings']
+            ) for d in subtemplates]
 
         template = SequencePulseTemplate(subtemplates, external_parameters, identifier=identifier)
         template.is_interruptable = is_interruptable

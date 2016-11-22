@@ -1,17 +1,18 @@
 """This module defines PulseTemplateParameterMapping, a helper class for pulse templates that
 offer mapping of parameters of subtemplates."""
 
-from typing import Optional, Set, Dict, Union
+from typing import Optional, Set, Dict, Union, Iterable, List
 
 from qctoolkit.expressions import Expression
-from qctoolkit.pulses.pulse_template import PulseTemplate
+from qctoolkit.pulses.pulse_template import PulseTemplate, SubTemplate
 from qctoolkit.pulses.parameters import Parameter, MappedParameter, ParameterNotProvidedException
 
 __all__ = [
     "MissingMappingException",
     "MissingParameterDeclarationException",
     "UnnecessaryMappingException",
-    "PulseTemplateParameterMapping"
+    "PulseTemplateParameterMapping",
+    "get_measurement_name_mappings"
 ]
 
 
@@ -156,6 +157,19 @@ class PulseTemplateParameterMapping:
         return inner_parameters
 
 
+def get_measurement_name_mappings(subtemplates: Iterable[SubTemplate]) -> List[Dict[str,str]]:
+    mappings = [template.measurement_mapping.copy() for template in subtemplates]
+    for subtemplate, measurement_mapping in zip(subtemplates,mappings):
+        internal_names = subtemplate.template.measurement_names
+        mapped_names = set(measurement_mapping.keys())
+        if mapped_names - internal_names:
+            raise UnnecessaryMappingException(subtemplate.template,mapped_names - internal_names)
+        # add the missing identity mappings
+        for unmapped_name in internal_names - mapped_names:
+            measurement_mapping[unmapped_name] = unmapped_name
+    return mappings
+
+
 class MissingParameterDeclarationException(Exception):
     """Indicates that a parameter declaration mapping in a SequencePulseTemplate maps to an external
     parameter declaration that was not declared."""
@@ -177,13 +191,13 @@ class MissingMappingException(Exception):
     """Indicates that no mapping was specified for some parameter declaration of a
     SequencePulseTemplate's subtemplate."""
 
-    def __init__(self, template: PulseTemplate, key: str) -> None:
+    def __init__(self, template: PulseTemplate, key: Union[str,Set[str]]) -> None:
         super().__init__()
         self.key = key
         self.template = template
 
     def __str__(self) -> str:
-        return "The template {} needs a mapping function for parameter {}".\
+        return "The template {} needs a mapping function for parameter(s) {}".\
             format(self.template, self.key)
 
 
@@ -191,11 +205,11 @@ class UnnecessaryMappingException(Exception):
     """Indicates that a mapping was provided that does not correspond to any of a
     SequencePulseTemplate's subtemplate's parameter declarations and is thus obsolete."""
 
-    def __init__(self, template: PulseTemplate, key: str) -> None:
+    def __init__(self, template: PulseTemplate, key: Union[str,Set[str]]) -> None:
         super().__init__()
         self.template = template
         self.key = key
 
     def __str__(self) -> str:
-        return "Mapping function for parameter '{}', which template {} does not need"\
+        return "Mapping function for parameter(s) '{}', which template {} does not need"\
             .format(self.key, self.template)

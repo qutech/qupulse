@@ -46,6 +46,7 @@ class Condition(metaclass=ABCMeta):
                             sequencer: Sequencer,
                             parameters: Dict[str, Parameter],
                             conditions: Dict[str, 'Condition'],
+                            measurement_mapping: Dict[str, str],
                             instruction_block: InstructionBlock) -> None:
         """Translate a looping SequencingElement using this Condition into an instruction sequence
         for the given instruction block using sequencer and the given parameter sets.
@@ -73,6 +74,7 @@ class Condition(metaclass=ABCMeta):
                               sequencer: Sequencer,
                               parameters: Dict[str, Parameter],
                               conditions: Dict[str, 'Condition'],
+                              measurement_mapping: Dict[str, str],
                               instruction_block: InstructionBlock) -> None:
         """Translate a branching SequencingElement using this Condition into an instruction sequence
          for the given instruction block using sequencer and the given parameter sets.
@@ -122,13 +124,14 @@ class HardwareCondition(Condition):
                             sequencer: Sequencer,
                             parameters: Dict[str, Parameter],
                             conditions: Dict[str, Condition],
+                            measurement_mapping: Dict[str, str],
                             instruction_block: InstructionBlock) -> None:
         body_block = InstructionBlock()
         body_block.return_ip = InstructionPointer(instruction_block,
                                                   len(instruction_block.instructions))
         
         instruction_block.add_instruction_cjmp(self.__trigger, body_block)
-        sequencer.push(body, parameters, conditions, body_block)
+        sequencer.push(body, parameters, conditions, measurement_mapping, body_block)
         
     def build_sequence_branch(self,
                               delegator: SequencingElement,
@@ -137,15 +140,16 @@ class HardwareCondition(Condition):
                               sequencer: Sequencer,
                               parameters: Dict[str, Parameter],
                               conditions: Dict[str, Condition],
+                              measurement_mapping: Dict[str, str],
                               instruction_block: InstructionBlock) -> None:
         if_block = InstructionBlock()
         else_block = InstructionBlock()
         
         instruction_block.add_instruction_cjmp(self.__trigger, if_block)
-        sequencer.push(if_branch, parameters, conditions, if_block)
+        sequencer.push(if_branch, parameters, conditions, measurement_mapping, if_block)
         
         instruction_block.add_instruction_goto(else_block)
-        sequencer.push(else_branch, parameters, conditions, else_block)
+        sequencer.push(else_branch, parameters, conditions, measurement_mapping, else_block)
         
         if_block.return_ip = InstructionPointer(instruction_block,
                                                 len(instruction_block.instructions))
@@ -192,14 +196,15 @@ class SoftwareCondition(Condition):
                             sequencer: Sequencer,
                             parameters: Dict[str, Parameter],
                             conditions: Dict[str, Condition],
+                            measurement_mapping: Dict[str, str],
                             instruction_block: InstructionBlock) -> None:
         
         evaluation_result = self.__callback(self.__loop_iteration)
         if evaluation_result is None:
             raise ConditionEvaluationException()
         if evaluation_result is True:
-            sequencer.push(delegator, parameters, conditions, instruction_block)
-            sequencer.push(body, parameters, conditions, instruction_block)
+            sequencer.push(delegator, parameters, conditions, measurement_mapping, instruction_block)
+            sequencer.push(body, parameters, conditions, measurement_mapping, instruction_block)
             self.__loop_iteration += 1 # next time, evaluate for next iteration
 
     def build_sequence_branch(self,
@@ -209,15 +214,16 @@ class SoftwareCondition(Condition):
                               sequencer: Sequencer,
                               parameters: Dict[str, Parameter],
                               conditions: Dict[str, Condition],
+                              measurement_mapping: Dict[str, str],
                               instruction_block: InstructionBlock) -> None:
         
         evaluation_result = self.__callback(self.__loop_iteration)
         if evaluation_result is None:
             raise ConditionEvaluationException()
         if evaluation_result is True:
-            sequencer.push(if_branch, parameters, conditions, instruction_block)
+            sequencer.push(if_branch, parameters, conditions, measurement_mapping, instruction_block)
         else:
-            sequencer.push(else_branch, parameters, conditions, instruction_block)
+            sequencer.push(else_branch, parameters, conditions, measurement_mapping, instruction_block)
 
 
 class ConditionEvaluationException(Exception):

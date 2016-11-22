@@ -35,6 +35,12 @@ class BranchPulseTemplateTest(unittest.TestCase):
         template = BranchPulseTemplate('foo_condition', if_dummy, else_dummy)
         self.assertEqual(3, template.num_channels)
 
+    def test_measurement_names(self) -> None:
+        if_dummy = DummyPulseTemplate(measurement_names={'if_meas'})
+        else_dummy = DummyPulseTemplate(measurement_names={'else_meas'})
+        template = BranchPulseTemplate('foo_condition', if_dummy, else_dummy)
+        self.assertEqual({'if_meas','else_meas'}, template.measurement_names)
+
     def test_is_interruptable(self) -> None:
         if_dummy = DummyPulseTemplate(num_channels=3, is_interruptable=True)
         else_dummy = DummyPulseTemplate(num_channels=3)
@@ -57,8 +63,10 @@ class BranchPulseTemplateSequencingTests(unittest.TestCase):
 
     def setUp(self) -> None:
         self.maxDiff = None
-        self.if_dummy   = DummyPulseTemplate(num_channels=3, parameter_names={'foo', 'bar'})
-        self.else_dummy = DummyPulseTemplate(num_channels=3, parameter_names={'foo', 'hugo'})
+        self.if_dummy   = DummyPulseTemplate(num_channels=3, parameter_names={'foo', 'bar'},
+                                             measurement_names={'if_meas'})
+        self.else_dummy = DummyPulseTemplate(num_channels=3, parameter_names={'foo', 'hugo'},
+                                             measurement_names={'else_meas'})
         self.template   = BranchPulseTemplate('foo_condition', self.if_dummy, self.else_dummy)
         self.sequencer  = DummySequencer()
         self.block      = DummyInstructionBlock()
@@ -111,7 +119,9 @@ class BranchPulseTemplateSequencingTests(unittest.TestCase):
         parameters = dict(foo=DummyParameter(326.272),
                           bar=DummyParameter(-2624.23),
                           hugo=DummyParameter(3.532))
-        self.template.build_sequence(self.sequencer, parameters, conditions, self.block)
+        window_mapping = dict(else_meas='my_meas',if_meas='thy_meas')
+
+        self.template.build_sequence(self.sequencer, parameters, conditions, window_mapping, self.block)
         self.assertFalse(foo_condition.loop_call_data)
         self.assertEqual(
             dict(
@@ -121,6 +131,7 @@ class BranchPulseTemplateSequencingTests(unittest.TestCase):
                 sequencer=self.sequencer,
                 parameters=parameters,
                 conditions=conditions,
+                measurement_mapping=window_mapping,
                 instruction_block=self.block
             ),
             foo_condition.branch_call_data
@@ -133,15 +144,17 @@ class BranchPulseTemplateSequencingTests(unittest.TestCase):
         parameters = dict(foo=DummyParameter(326.272),
                           bar=DummyParameter(-2624.23),
                           hugo=DummyParameter(3.532))
+        window_mapping = {}
         with self.assertRaises(ConditionMissingException):
-            self.template.build_sequence(self.sequencer, parameters, conditions, self.block)
+            self.template.build_sequence(self.sequencer, parameters, conditions, window_mapping, self.block)
 
     def test_build_sequence_parameter_missing(self) -> None:
         foo_condition = DummyCondition()
         conditions = dict(foo_condition=foo_condition)
         parameters = dict(foo=DummyParameter(326.272),
                           bar=DummyParameter(-2624.23))
-        self.template.build_sequence(self.sequencer, parameters, conditions, self.block)
+        window_mapping = dict(else_meas='my_meas',if_meas='thy_meas')
+        self.template.build_sequence(self.sequencer, parameters, conditions, window_mapping, self.block)
         self.assertFalse(foo_condition.loop_call_data)
         self.assertEqual(
             dict(
@@ -151,6 +164,7 @@ class BranchPulseTemplateSequencingTests(unittest.TestCase):
                 sequencer=self.sequencer,
                 parameters=parameters,
                 conditions=conditions,
+                measurement_mapping=window_mapping,
                 instruction_block=self.block
             ),
             foo_condition.branch_call_data
@@ -163,8 +177,8 @@ class BranchPulseTemplateSerializationTests(unittest.TestCase):
 
     def setUp(self) -> None:
         self.maxDiff = None
-        self.if_dummy = DummyPulseTemplate(num_channels=3, parameter_names={'foo', 'bar'})
-        self.else_dummy = DummyPulseTemplate(num_channels=3, parameter_names={'foo', 'hugo'})
+        self.if_dummy = DummyPulseTemplate(num_channels=3, parameter_names={'foo', 'bar'}, measurement_names={'if_mease'})
+        self.else_dummy = DummyPulseTemplate(num_channels=3, parameter_names={'foo', 'hugo'}, measurement_names={'else_meas'})
         self.template = BranchPulseTemplate('foo_condition', self.if_dummy, self.else_dummy)
 
     def test_get_serialization_data(self) -> None:

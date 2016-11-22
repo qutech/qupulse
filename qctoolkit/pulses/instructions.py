@@ -17,7 +17,7 @@ Classes:
 """
 
 from abc import ABCMeta, abstractmethod, abstractproperty
-from typing import List, Any, Dict, Iterable, Optional
+from typing import List, Any, Dict, Iterable, Optional, Tuple
 import numpy
 
 from qctoolkit.comparable import Comparable
@@ -214,7 +214,7 @@ class GOTOInstruction(Instruction):
 class EXECInstruction(Instruction):
     """An instruction to execute/play back a waveform."""
 
-    def __init__(self, waveform: Waveform) -> None:
+    def __init__(self, waveform: Waveform, measurement_windows: List[Tuple[str,List['MeasurementWindow']]] = []) -> None:
         """Create a new EXECInstruction object.
 
         Args:
@@ -222,6 +222,7 @@ class EXECInstruction(Instruction):
         """
         super().__init__()
         self.waveform = waveform
+        self.measurement_windows = measurement_windows
 
     @property
     def compare_key(self) -> Any:
@@ -354,14 +355,14 @@ class InstructionBlock(AbstractInstructionBlock):
         """
         self.__instruction_list.append(instruction)
 
-    def add_instruction_exec(self, waveform: Waveform) -> None:
+    def add_instruction_exec(self, waveform: Waveform, measurement_windows: List[Tuple[str,List['MeasurementWindows']]] =  None) -> None:
         """Create and append a new EXECInstruction object for the given waveform at the end of this
         instruction block.
 
         Args:
             waveform (Waveform): The Waveform object referenced by the new EXECInstruction.
         """
-        self.add_instruction(EXECInstruction(waveform))
+        self.add_instruction(EXECInstruction(waveform,measurement_windows))
 
     def add_instruction_goto(self, target_block: 'InstructionBlock') -> None:
         """Create and append a new GOTOInstruction object with a given target block at the end of

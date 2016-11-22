@@ -21,6 +21,7 @@ from qctoolkit.pulses.interpolation import InterpolationStrategy, LinearInterpol
     HoldInterpolationStrategy, JumpInterpolationStrategy
 from qctoolkit.pulses.instructions import Waveform
 from qctoolkit.pulses.conditions import Condition
+from qctoolkit.expressions import Expression
 
 __all__ = ["TablePulseTemplate", "TableWaveform", "WaveformTableEntry"]
 
@@ -82,6 +83,7 @@ TableEntry = NamedTuple( # pylint: disable=invalid-name
     "TableEntry",
     [('t', TableValue), ('v', TableValue), ('interp', InterpolationStrategy)]
 )
+MeasurementDeclaration = Tuple[Union[float,Expression], Union[float,Expression]]
 
 
 class TablePulseTemplate(AtomicPulseTemplate):
@@ -98,7 +100,7 @@ class TablePulseTemplate(AtomicPulseTemplate):
     Each TablePulseTemplate contains at least an entry at time 0.
     """
 
-    def __init__(self, channels: int=1, measurement=False, identifier: Optional[str]=None) -> None:
+    def __init__(self, channels: int=1, identifier: Optional[str]=None) -> None:
         """Create a new TablePulseTemplate.
 
         Args:
@@ -118,11 +120,11 @@ class TablePulseTemplate(AtomicPulseTemplate):
             self.__entries.append([TableEntry(0, 0, self.__interpolation_strategies['hold'])])
         self.__time_parameter_declarations = {} # type: Dict[str, ParameterDeclaration]
         self.__voltage_parameter_declarations = {} # type: Dict[str, ParameterDeclaration]
-        self.__is_measurement_pulse = measurement# type: bool
+        self.__measurement_windows = {} # type: Dict[str,List[MeasurementDeclaration]]
         self.__channels = channels # type: int
 
     @staticmethod
-    def from_array(times: np.ndarray, voltages: np.ndarray, measurement=False) \
+    def from_array(times: np.ndarray, voltages: np.ndarray) \
             -> 'TablePulseTemplate':
         """Static constructor to build a TablePulse from numpy arrays.
 
@@ -135,12 +137,12 @@ class TablePulseTemplate(AtomicPulseTemplate):
             parameters.
         """
         if voltages.ndim == 1:
-            res = TablePulseTemplate(channels=1, measurement=measurement)
+            res = TablePulseTemplate(channels=1)
             for time, voltage in zip(times, voltages):
                 res.add_entry(time, voltage, interpolation='hold')
         elif voltages.ndim == 2:
             channels = voltages.shape[1]
-            res = TablePulseTemplate(channels=channels, measurement=measurement)
+            res = TablePulseTemplate(channels=channels)
             for channel in range(channels):
                 for time, voltage in zip(times, voltages[:, channel]):
                     res.add_entry(time, voltage, interpolation='hold', channel=channel)
@@ -374,16 +376,62 @@ class TablePulseTemplate(AtomicPulseTemplate):
         return set(self.__time_parameter_declarations.values()) | \
                set(self.__voltage_parameter_declarations.values())
 
-    def get_measurement_windows(self,
-                                parameters: Optional[Dict[str, Parameter]]=None) \
-            -> List[MeasurementWindow]: # TODO: remove
-        if not self.__is_measurement_pulse:
-            return []
+    def get_measurement_windows(self, parameters: Dict[str, Parameter]) -> List[MeasurementWindow]:
+        def get_val(v):
+            return v if not isinstance(v, Expression) else v.evaluate(
+              **{name_: parameters[name_].get_value() if isinstance(parameters[name_], Parameter) else parameters[name_]
+              for name_ in v.variables()})
+
+        t_max = [entry[-1][0] for entry in self.__entries]
+        t_max = max([t if isinstance(t,numbers.Number) else t.get_value(parameters) for t in t_max])
+
+        resulting_windows = []
+        for name, windows in self.__measurement_windows.items():
+            for begin, end in windows:
+                resulting_windows.append( (name, get_val(begin), get_val(end)) )
+                if resulting_windows[-1][2] > t_max:
+                    raise ValueError('Measurement window out of pulse')
+        return resulting_windows
+
+
+    @property
+    def measurement_declarations(self):
+        """
+        :return: Measurement declarations as added by the add_measurement_declaration method
+        """
+        as_builtin = lambda x: str(x) if isinstance(x, Expression) else x
+        return { name: [(as_builtin(begin), as_builtin(end)) for begin, end in windows] for name, windows in self.__measurement_windows.items() }
+
+
+    @property
+    def measurement_names(self) -> Set[str]:
+        """
+        :return:
+        """
+        return set(self.__measurement_windows.keys())
+
+    def add_measurement_declaration(self, name: str, begin: Union[float,str], end: Union[float,str]) -> None:
+        if isinstance(begin,str):
+            begin = Expression(begin)
+            for v in begin.variables():
+                if not v in self.__time_parameter_declarations:
+                    if v in self.__voltage_parameter_declarations:
+                        raise ValueError("Argument begin=<{}> must not refer to a voltage parameter declaration."
+                                .format(str(begin)))
+                    self.__time_parameter_declarations[v] = ParameterDeclaration(v)
+        if isinstance(end,str):
+            end = Expression(end)
+            for v in end.variables():
+                if not v in self.__time_parameter_declarations:
+                    if v in self.__voltage_parameter_declarations:
+                        raise ValueError("Argument begin=<{}> must not refer to a voltage parameter declaration."
+                                .format(str(end)))
+                    self.__time_parameter_declarations[v] = ParameterDeclaration(v)
+        if name in self.__measurement_windows:
+            self.__measurement_windows[name].append((begin,end))
         else:
-            # instantiated_entries = self.get_entries_instantiated(parameters)
-            last_entries = [channel[-1].t for channel in self.get_entries_instantiated(parameters)]
-            maxtime = max(last_entries)
-            return [(0, maxtime)]
+            self.__measurement_windows[name] = [(begin,end)]
+
 
     @property
     def is_interruptable(self) -> bool:
@@ -487,7 +535,6 @@ class TablePulseTemplate(AtomicPulseTemplate):
 
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
         data = dict()
-        data['is_measurement_pulse'] = self.__is_measurement_pulse
         data['time_parameter_declarations'] = \
             [serializer.dictify(self.__time_parameter_declarations[key])
              for key in sorted(self.__time_parameter_declarations.keys())]
@@ -505,6 +552,7 @@ class TablePulseTemplate(AtomicPulseTemplate):
                 entries.append((time, voltage, str(interpolation)))
             serialized_entries.append(entries)
         data['entries'] = serialized_entries
+        data['measurement_declarations'] = self.measurement_declarations
         data['type'] = serializer.get_type_identifier(self)
         return data
 
@@ -513,7 +561,7 @@ class TablePulseTemplate(AtomicPulseTemplate):
                     time_parameter_declarations: Iterable[Any],
                     voltage_parameter_declarations: Iterable[Any],
                     entries: Iterable[Any],
-                    is_measurement_pulse: bool,
+                    measurement_declarations: Dict[str,Iterable[Any]],
                     identifier: Optional[str]=None) -> 'TablePulseTemplate':
         time_parameter_declarations = \
             {declaration['name']: serializer.deserialize(declaration)
@@ -523,7 +571,6 @@ class TablePulseTemplate(AtomicPulseTemplate):
              for declaration in voltage_parameter_declarations}
 
         template = TablePulseTemplate(channels=len(entries),
-                                      measurement=is_measurement_pulse,
                                       identifier=identifier)
 
         for channel, channel_entries in enumerate(entries):
@@ -533,5 +580,9 @@ class TablePulseTemplate(AtomicPulseTemplate):
                 if isinstance(voltage, str):
                     voltage = voltage_parameter_declarations[voltage]
                 template.add_entry(time, voltage, interpolation=interpolation, channel=channel)
+
+        for name, windows in measurement_declarations.items():
+            for window in windows:
+                template.add_measurement_declaration(name,*window)
 
         return template

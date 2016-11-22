@@ -60,10 +60,6 @@ class BranchPulseTemplate(PulseTemplate):
     def parameter_declarations(self) -> Set[str]:
         return self.__if_branch.parameter_declarations | self.__else_branch.parameter_declarations
 
-    def get_measurement_windows(self, parameters: Dict[str, Parameter]=None) \
-            -> List[MeasurementWindow]:
-        raise NotImplementedError()
-
     @property
     def is_interruptable(self) -> bool:
         return self.__if_branch.is_interruptable and self.__else_branch.is_interruptable
@@ -71,6 +67,10 @@ class BranchPulseTemplate(PulseTemplate):
     @property
     def num_channels(self) -> int:
         return self.__if_branch.num_channels
+
+    @property
+    def measurement_names(self) -> Set[str]:
+        return self.__if_branch.measurement_names | self.__else_branch.measurement_names
 
     def __obtain_condition_object(self, conditions: Dict[str, Condition]) -> Condition:
         try:
@@ -82,6 +82,7 @@ class BranchPulseTemplate(PulseTemplate):
                        sequencer: Sequencer,
                        parameters: Dict[str, Parameter],
                        conditions: Dict[str, Condition],
+                       measurement_mapping: Dict[str, str],
                        instruction_block: InstructionBlock) -> None:
         self.__obtain_condition_object(conditions).build_sequence_branch(self,
                                                                          self.__if_branch,
@@ -89,6 +90,7 @@ class BranchPulseTemplate(PulseTemplate):
                                                                          sequencer,
                                                                          parameters,
                                                                          conditions,
+                                                                         measurement_mapping,
                                                                          instruction_block)
 
     def requires_stop(self,

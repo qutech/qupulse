@@ -7,16 +7,16 @@ Classes:
     - MultiChannelWaveform: A waveform defined for several channels by combining waveforms
 """
 
-from typing import Dict, List, Tuple, Set, Optional, Any, Iterable
+from typing import Dict, List, Tuple, Set, Optional, Any, Iterable, Union
 
 import numpy
 
 from qctoolkit.serialization import Serializer
 
 from qctoolkit.pulses.instructions import Waveform
-from qctoolkit.pulses.pulse_template import AtomicPulseTemplate
+from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, SubTemplate
 from qctoolkit.pulses.pulse_template_parameter_mapping import PulseTemplateParameterMapping, \
-    MissingMappingException
+    MissingMappingException, get_measurement_name_mappings
 from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter, \
     ParameterNotProvidedException
 from qctoolkit.pulses.conditions import Condition
@@ -144,17 +144,17 @@ class MultiChannelPulseTemplate(AtomicPulseTemplate):
         - MultiChannelWaveform
     """
 
-    Subtemplate = Tuple[AtomicPulseTemplate, Dict[str, str], List[int]]
+    SimpleSubTemplate = Tuple[AtomicPulseTemplate, Dict[str, str], Dict[str,str], List[int]]
 
     def __init__(self,
-                 subtemplates: Iterable[Subtemplate],
+                 subtemplates: Iterable[Union[SubTemplate,SimpleSubTemplate]],
                  external_parameters: Set[str],
                  identifier: str=None) -> None:
         """Creates a new MultiChannelPulseTemplate instance.
 
         Requires a list of subtemplates in the form
         (PulseTemplate, Dict(str -> str), List(int)) where the dictionary is a mapping between the
-        external parameters exposed by this SequencePulseTemplate to the parameters declared by the
+        external parameters exposed by this PulseTemplate to the parameters declared by the
         subtemplates, specifying how the latter are derived from the former, i.e., the mapping is
         subtemplate_parameter_name -> mapping_expression (as str) where the free variables in the
         mapping_expression are parameters declared by this MultiChannelPulseTemplate.
@@ -179,13 +179,16 @@ class MultiChannelPulseTemplate(AtomicPulseTemplate):
                 that was not declared in the external parameters of this MultiChannelPulseTemplate.
         """
         super().__init__(identifier=identifier)
+
+        subtemplates = [st if isinstance(st,SubTemplate) else SubTemplate(st[0],st[1],channel_mapping=st[2]) for st in subtemplates ]
+
         self.__parameter_mapping = PulseTemplateParameterMapping(external_parameters)
-        self.__subtemplates = [(template, channel_mapping) for (template, _, channel_mapping)
-                               in subtemplates]
+        self.__subtemplates = [(st.template, st.channel_mapping) for st in subtemplates]
+        self.__measurement_window_mappings = get_measurement_name_mappings(subtemplates)
 
         assigned_channels = set()
         num_channels = self.num_channels
-        for template, mapping_functions, channel_mapping in subtemplates:
+        for template, mapping_functions, _, channel_mapping in subtemplates:
             # Consistency checks
             for parameter, mapping_function in mapping_functions.items():
                 self.__parameter_mapping.add(template, parameter, mapping_function)
@@ -222,9 +225,10 @@ class MultiChannelPulseTemplate(AtomicPulseTemplate):
         # TODO: min, max, default values not mapped (required?)
         return {ParameterDeclaration(parameter_name) for parameter_name in self.parameter_names}
 
-    def get_measurement_windows(self, parameters: Dict[str, Parameter] = None) \
-            -> List['MeasurementWindow']:
-        raise NotImplementedError()
+    def get_measurement_windows(self, parameters: Dict[str, Parameter]) -> List['MeasurementWindow']:
+        mapped_window = lambda window : (self.__measurement_window_mappings[window[0]],window[1],window[2]) if \
+            window[0] in self.__measurement_window_mappings else window
+        return [ mapped_window(window) for st, _ in self.__subtemplates for window in st.get_measurement_windows(parameters) ]
 
     @property
     def is_interruptable(self) -> bool:
@@ -233,6 +237,12 @@ class MultiChannelPulseTemplate(AtomicPulseTemplate):
     @property
     def num_channels(self) -> int:
         return sum(t.num_channels for t, _ in self.__subtemplates)
+
+    @property
+    def measurement_names(self) -> Set[str]:
+        return {measurement_mapping[name] if name in measurement_mapping else name
+                for template, measurement_mapping in zip(self.__subtemplates, self.__measurement_window_mappings)
+                for name in template[0].measurement_names}
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],
@@ -256,13 +266,14 @@ class MultiChannelPulseTemplate(AtomicPulseTemplate):
 
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
         subtemplates = []
-        for subtemplate, channel_mapping in self.__subtemplates:
+        for subtemplate, channel_mapping, measurement_mapping in zip(*zip(*self.__subtemplates) ,self.__measurement_window_mappings):
             mapping_functions = self.__parameter_mapping.get_template_map(subtemplate)
             mapping_function_strings = \
                 {k: serializer.dictify(m) for k, m in mapping_functions.items()}
             subtemplate = serializer.dictify(subtemplate)
             subtemplates.append(dict(template=subtemplate,
                                      parameter_mappings=mapping_function_strings,
+                                     measurement_mapping=measurement_mapping,
                                      channel_mappings=channel_mapping))
         return dict(subtemplates=subtemplates,
                     external_parameters=sorted(list(self.parameter_names)))
@@ -273,10 +284,12 @@ class MultiChannelPulseTemplate(AtomicPulseTemplate):
                     external_parameters: Iterable[str],
                     identifier: Optional[str]=None) -> 'MultiChannelPulseTemplate':
         subtemplates = \
-            [(serializer.deserialize(subt['template']),
-              {k: str(serializer.deserialize(m)) for k, m in subt['parameter_mappings'].items()},
-              subt['channel_mappings'])
-             for subt in subtemplates]
+            [SubTemplate(
+                serializer.deserialize(subt['template']),
+                {k: str(serializer.deserialize(m)) for k, m in subt['parameter_mappings'].items()},
+                measurement_mapping=subt['measurement_mapping'],
+                channel_mapping=subt['channel_mappings'])
+            for subt in subtemplates]
 
         template = MultiChannelPulseTemplate(subtemplates,
                                              external_parameters,

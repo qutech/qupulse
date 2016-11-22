@@ -85,24 +85,26 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
         repetitions = 3
         t = RepetitionPulseTemplate(self.body, repetitions)
         parameters = {}
+        measurement_mapping = {'my' : 'thy'}
         conditions = dict(foo=DummyCondition(requires_stop=True))
-        t.build_sequence(self.sequencer, parameters, conditions, self.block)
+        t.build_sequence(self.sequencer, parameters, conditions, measurement_mapping, self.block)
 
         self.assertTrue(self.block.embedded_blocks)
         body_block = self.block.embedded_blocks[0]
         self.assertEqual({body_block}, set(self.sequencer.sequencing_stacks.keys()))
-        self.assertEqual([(self.body, parameters, conditions)], self.sequencer.sequencing_stacks[body_block])
+        self.assertEqual([(self.body, parameters, conditions, measurement_mapping)], self.sequencer.sequencing_stacks[body_block])
         self.assertEqual([REPJInstruction(repetitions, InstructionPointer(body_block, 0))], self.block.instructions)
 
     def test_build_sequence_declaration_success(self) -> None:
         parameters = dict(foo=3)
         conditions = dict(foo=DummyCondition(requires_stop=True))
-        self.template.build_sequence(self.sequencer, parameters, conditions, self.block)
+        measurement_mapping = dict(moth='fire')
+        self.template.build_sequence(self.sequencer, parameters, conditions, measurement_mapping, self.block)
 
         self.assertTrue(self.block.embedded_blocks)
         body_block = self.block.embedded_blocks[0]
         self.assertEqual({body_block}, set(self.sequencer.sequencing_stacks.keys()))
-        self.assertEqual([(self.body, parameters, conditions)],
+        self.assertEqual([(self.body, parameters, conditions, measurement_mapping)],
                          self.sequencer.sequencing_stacks[body_block])
         self.assertEqual([REPJInstruction(parameters['foo'], InstructionPointer(body_block, 0))], self.block.instructions)
 
@@ -111,21 +113,21 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
         parameters = dict(foo=9)
         conditions = dict(foo=DummyCondition(requires_stop=True))
         with self.assertRaises(ParameterValueIllegalException):
-            self.template.build_sequence(self.sequencer, parameters, conditions, self.block)
+            self.template.build_sequence(self.sequencer, parameters, conditions, {}, self.block)
         self.assertFalse(self.sequencer.sequencing_stacks)
 
     def test_build_sequence_declaration_parameter_missing(self) -> None:
         parameters = {}
         conditions = dict(foo=DummyCondition(requires_stop=True))
         with self.assertRaises(ParameterNotProvidedException):
-            self.template.build_sequence(self.sequencer, parameters, conditions, self.block)
+            self.template.build_sequence(self.sequencer, parameters, conditions, {}, self.block)
         self.assertFalse(self.sequencer.sequencing_stacks)
 
     def test_build_sequence_declaration_parameter_value_not_whole(self) -> None:
         parameters = dict(foo=3.3)
         conditions = dict(foo=DummyCondition(requires_stop=True))
         with self.assertRaises(ParameterNotIntegerException):
-            self.template.build_sequence(self.sequencer, parameters, conditions, self.block)
+            self.template.build_sequence(self.sequencer, parameters, conditions, {}, self.block)
         self.assertFalse(self.sequencer.sequencing_stacks)
 
 

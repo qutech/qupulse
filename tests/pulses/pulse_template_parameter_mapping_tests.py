@@ -1,6 +1,8 @@
 import unittest
 
-from qctoolkit.pulses.pulse_template_parameter_mapping import PulseTemplateParameterMapping, MissingMappingException, UnnecessaryMappingException, MissingParameterDeclarationException
+from qctoolkit.pulses.pulse_template import SubTemplate
+from qctoolkit.pulses.pulse_template_parameter_mapping import PulseTemplateParameterMapping, MissingMappingException,\
+    UnnecessaryMappingException, MissingParameterDeclarationException, get_measurement_name_mappings
 from qctoolkit.expressions import Expression
 from qctoolkit.pulses.parameters import MappedParameter, ParameterNotProvidedException, ConstantParameter
 
@@ -92,6 +94,61 @@ class PulseTemplateParameterMappingTests(unittest.TestCase):
             foo=MappedParameter(Expression('barbar'), dict(barbar=ConstantParameter(5)))
         ), mapped)
 
+
+class GetMeasurementNameMappingsTest(unittest.TestCase):
+    def setUp(self):
+        self.template = DummyPulseTemplate()
+
+    def test_no_mapping(self):
+        template = DummyPulseTemplate()
+
+        mappings = get_measurement_name_mappings([SubTemplate(template, dict())])
+        self.assertEqual(mappings,[dict()])
+
+    def test_mapping(self):
+        template = DummyPulseTemplate()
+        template.measurement_names_ = set(['foo', 'bar'])
+
+        mapping_arg={'foo': 'hendrix', 'bar': 'shoe'}
+        mappings = get_measurement_name_mappings([SubTemplate(template,dict(),measurement_mapping=mapping_arg)])
+
+        self.assertEqual(mappings,[mapping_arg])
+
+    def test_missing_mapping(self):
+        template = DummyPulseTemplate()
+        template.measurement_names_ = set(['foo', 'bar'])
+
+        mapping_arg = {'foo': 'hendrix'}
+        mappings = get_measurement_name_mappings([SubTemplate(template, dict(), measurement_mapping=mapping_arg)])
+
+        self.assertEqual(mappings, [dict(**mapping_arg,bar='bar')])
+
+    def test_unnecessary_mapping(self):
+        template = DummyPulseTemplate()
+        template.measurement_names_ = set(['foo', 'bar'])
+
+        mapping_arg = {'foo': 'hendrix', 'my': 'oh_my'}
+        with self.assertRaises(UnnecessaryMappingException):
+            get_measurement_name_mappings([SubTemplate(template, dict(), measurement_mapping=mapping_arg)])
+
+    def test_multiple_arguments(self):
+        template1 = DummyPulseTemplate()
+        template1.measurement_names_ = set(['foo', 'bar'])
+
+        template2 = DummyPulseTemplate()
+        template2.measurement_names_ = set(['hurr', 'durr'])
+
+        mappings = get_measurement_name_mappings([SubTemplate(template1,dict(),measurement_mapping=dict()),
+                                                 SubTemplate(template1,dict(),measurement_mapping={'foo': 'bar'}),
+                                                 SubTemplate(template2, dict(), measurement_mapping={'hurr': 'bar','durr': 'bar'})])
+        self.assertEqual(mappings,[dict(foo='foo',bar='bar'),dict(foo='bar',bar='bar'),{'hurr': 'bar','durr': 'bar'}])
+
+        with self.assertRaises(UnnecessaryMappingException):
+            get_measurement_name_mappings([SubTemplate(template1, dict(), measurement_mapping=dict()),
+                                          SubTemplate(template1, dict(),
+                                                      measurement_mapping={'foo': 'bar'}),
+                                          SubTemplate(template2, dict(),
+                                                      measurement_mapping={'hurr': 'bar', 'durr': 'bar', 'hopfen': 'malz'})])
 
 class PulseTemplateParameterMappingExceptionsTests(unittest.TestCase):
 

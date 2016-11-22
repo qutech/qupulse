@@ -18,9 +18,10 @@ class SequencerTest(unittest.TestCase):
         
         ps = {'foo': ConstantParameter(1), 'bar': ConstantParameter(7.3)}
         cs = {'foo': DummyCondition()}
+        wm = {'foo' : 'bar'}
         elem = DummySequencingElement()
         
-        sequencer.push(elem, ps, cs)
+        sequencer.push(elem, ps, cs, wm)
         self.assertFalse(sequencer.has_finished())
         sequencer.build()
         self.assertEqual(ps, elem.parameters)
@@ -77,8 +78,9 @@ class SequencerTest(unittest.TestCase):
         elem = DummySequencingElement(True)
         ps = {'foo': ConstantParameter(1), 'bar': ConstantParameter(7.3)}
         cs = {'foo': DummyCondition()}
+        wm = {}
         target_block = InstructionBlock()
-        sequencer.push(elem, ps, cs, target_block)
+        sequencer.push(elem, ps, cs, wm, target_block)
         sequencer.build()
         
         self.assertFalse(sequencer.has_finished())
@@ -92,13 +94,13 @@ class SequencerTest(unittest.TestCase):
     
         ps = {'foo': ConstantParameter(1), 'bar': ConstantParameter(7.3)}
         cs = {'foo': DummyCondition()}
-    
+        wm = {}
         elem_main = DummySequencingElement(True)
         sequencer.push(elem_main, ps, cs)
         
         elem_cstm = DummySequencingElement(True)
         target_block = InstructionBlock()
-        sequencer.push(elem_cstm, ps, cs, target_block)
+        sequencer.push(elem_cstm, ps, cs, wm, target_block)
         
         sequencer.build()
         
@@ -248,10 +250,11 @@ class SequencerTest(unittest.TestCase):
                 
         ps = {'foo': ConstantParameter(1), 'bar': ConstantParameter(7.3)}
         cs = {'foo': DummyCondition()}
-        
+        wm = {'foo' : 'bar'}
+
         target_block = InstructionBlock()
         elem = DummySequencingElement(False)
-        sequencer.push(elem, ps, cs, target_block)
+        sequencer.push(elem, ps, cs, wm, target_block)
         
         sequencer.build()
         
@@ -268,13 +271,14 @@ class SequencerTest(unittest.TestCase):
                 
         ps = {'foo': ConstantParameter(1), 'bar': ConstantParameter(7.3)}
         cs = {'foo': DummyCondition()}
+        wm = {'foo': 'bar'}
         
         elem_main = DummySequencingElement(True)
         sequencer.push(elem_main, ps, cs)
         
         target_block = InstructionBlock()
         elem_cstm = DummySequencingElement(False)
-        sequencer.push(elem_cstm, ps, cs, target_block)
+        sequencer.push(elem_cstm, ps, cs, wm, target_block)
         
         sequencer.build()
         
@@ -294,13 +298,14 @@ class SequencerTest(unittest.TestCase):
                 
         ps = {'foo': ConstantParameter(1), 'bar': ConstantParameter(7.3)}
         cs = {'foo': DummyCondition()}
+        wm = {'foo': 'bar'}
         
         elem_main = DummySequencingElement(False)
         sequencer.push(elem_main, ps, cs)
         
         target_block = InstructionBlock()
         elem_cstm = DummySequencingElement(False)
-        sequencer.push(elem_cstm, ps, cs, target_block)
+        sequencer.push(elem_cstm, ps, cs, wm, target_block)
         
         sequence = sequencer.build()
         
@@ -323,13 +328,14 @@ class SequencerTest(unittest.TestCase):
                 
         ps = {'foo': ConstantParameter(1), 'bar': ConstantParameter(7.3)}
         cs = {'foo': DummyCondition()}
+        wm = {'foo': 'bar'}
         
         target_block = InstructionBlock()
         elem2 = DummySequencingElement(True)
-        sequencer.push(elem2, ps, cs, target_block)
+        sequencer.push(elem2, ps, cs, wm, target_block)
         
         elem1 = DummySequencingElement(False)
-        sequencer.push(elem1, ps, cs, target_block)
+        sequencer.push(elem1, ps, cs, wm, target_block)
         
         sequencer.build()
         
@@ -349,13 +355,14 @@ class SequencerTest(unittest.TestCase):
                 
         ps = {'foo': ConstantParameter(1), 'bar': ConstantParameter(7.3)}
         cs = {'foo': DummyCondition()}
+        wm = {'foo': 'bar'}
         
         target_block = InstructionBlock()
         elem2 = DummySequencingElement(False)
-        sequencer.push(elem2, ps, cs, target_block)
+        sequencer.push(elem2, ps, cs, wm, target_block)
         
         elem1 = DummySequencingElement(False)
-        sequencer.push(elem1, ps, cs, target_block)
+        sequencer.push(elem1, ps, cs, wm, target_block)
         
         sequencer.build()
         
@@ -376,13 +383,14 @@ class SequencerTest(unittest.TestCase):
                 
         ps = {'foo': ConstantParameter(1), 'bar': ConstantParameter(7.3)}
         cs = {'foo': DummyCondition()}
+        wm = {'foo': 'bar'}
         
         target_block = InstructionBlock()
         elem2 = DummySequencingElement(True)
-        sequencer.push(elem2, ps, cs, target_block)
+        sequencer.push(elem2, ps, cs, wm, target_block)
         
         elem1 = DummySequencingElement(False)
-        sequencer.push(elem1, ps, cs, target_block)
+        sequencer.push(elem1, ps, cs, wm, target_block)
         
         elem_main = DummySequencingElement(True)
         sequencer.push(elem_main, ps, cs)
@@ -409,13 +417,14 @@ class SequencerTest(unittest.TestCase):
                 
         ps = {'foo': ConstantParameter(1), 'bar': ConstantParameter(7.3)}
         cs = {'foo': DummyCondition()}
+        wm = {'foo': 'bar'}
         
         target_block = InstructionBlock()
         elem2 = DummySequencingElement(True)
-        sequencer.push(elem2, ps, cs, target_block)
+        sequencer.push(elem2, ps, cs, wm, target_block)
         
         elem1 = DummySequencingElement(False)
-        sequencer.push(elem1, ps, cs, target_block)
+        sequencer.push(elem1, ps, cs, wm, target_block)
         
         elem_main = DummySequencingElement(False)
         sequencer.push(elem_main, ps, cs)
@@ -445,13 +454,14 @@ class SequencerTest(unittest.TestCase):
                 
         ps = {'foo': ConstantParameter(1), 'bar': ConstantParameter(7.3)}
         cs = {'foo': DummyCondition()}
-        
+        wm = {'foo': 'bar'}
+
         target_block = InstructionBlock()
         elem2 = DummySequencingElement(False)
-        sequencer.push(elem2, ps, cs, target_block)
+        sequencer.push(elem2, ps, cs, wm, target_block)
         
         elem1 = DummySequencingElement(False)
-        sequencer.push(elem1, ps, cs, target_block)
+        sequencer.push(elem1, ps, cs, wm, target_block)
         
         elem_main = DummySequencingElement(False)
         sequencer.push(elem_main, ps, cs)
@@ -482,13 +492,14 @@ class SequencerTest(unittest.TestCase):
                 
         ps = {'foo': ConstantParameter(1), 'bar': ConstantParameter(7.3)}
         cs = {'foo': DummyCondition()}
+        wm = {'foo': 'bar'}
         
         target_block = InstructionBlock()
         elem2 = DummySequencingElement(True)
-        sequencer.push(elem2, ps, cs, target_block)
+        sequencer.push(elem2, ps, cs, wm, target_block)
         
         elem1 = DummySequencingElement(False)
-        sequencer.push(elem1, ps, cs, target_block)
+        sequencer.push(elem1, ps, cs, wm, target_block)
         
         elem_main2 = DummySequencingElement(True)
         sequencer.push(elem_main2, ps, cs)
@@ -526,13 +537,14 @@ class SequencerTest(unittest.TestCase):
                 
         ps = {'foo': ConstantParameter(1), 'bar': ConstantParameter(7.3)}
         cs = {'foo': DummyCondition()}
+        wm = {'foo': 'bar'}
         
         target_block = InstructionBlock()
         elem2 = DummySequencingElement(True)
-        sequencer.push(elem2, ps, cs, target_block)
+        sequencer.push(elem2, ps, cs, wm, target_block)
         
         elem1 = DummySequencingElement(False)
-        sequencer.push(elem1, ps, cs, target_block)
+        sequencer.push(elem1, ps, cs, wm, target_block)
         
         elem_main2 = DummySequencingElement(False)
         sequencer.push(elem_main2, ps, cs)
@@ -570,14 +582,14 @@ class SequencerTest(unittest.TestCase):
                 
         ps = {'foo': ConstantParameter(1), 'bar': ConstantParameter(7.3)}
         cs = {'foo': DummyCondition()}
-
+        wm = {'foo': 'bar'}
         
         target_block = InstructionBlock()
         elem2 = DummySequencingElement(False)
-        sequencer.push(elem2, ps, cs, target_block)
+        sequencer.push(elem2, ps, cs, wm, target_block)
         
         elem1 = DummySequencingElement(False)
-        sequencer.push(elem1, ps, cs, target_block)
+        sequencer.push(elem1, ps, cs, wm, target_block)
         
         elem_main2 = DummySequencingElement(False)
         sequencer.push(elem_main2, ps, cs)

@@ -7,7 +7,7 @@ Classes:
         directly translated into a waveform.
 """
 from abc import ABCMeta, abstractmethod, abstractproperty
-from typing import Dict, List, Tuple, Set, Optional
+from typing import Dict, List, Tuple, Set, Optional, NamedTuple
 
 from qctoolkit.serialization import Serializable
 
@@ -16,8 +16,7 @@ from qctoolkit.pulses.sequencing import SequencingElement, InstructionBlock
 
 __all__ = ["MeasurementWindow", "PulseTemplate", "AtomicPulseTemplate", "DoubleParameterNameException"]
 
-
-MeasurementWindow = Tuple[float, float]
+MeasurementWindow = Tuple[str, float, float]
 
 
 class PulseTemplate(Serializable, SequencingElement, metaclass=ABCMeta):
@@ -44,15 +43,9 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=ABCMeta):
         this PulseTemplate.
         """
 
-    @abstractmethod
-    def get_measurement_windows(self, parameters: Dict[str, Parameter]=None) \
-            -> List[MeasurementWindow]:
-        """
-        FLAWED / OBSOLETE: should be fixed already in a different branch and will be merged soon
-
-        Returns:
-             All measurement windows defined in this PulseTemplate.
-         """
+    @abstractproperty
+    def measurement_names(self) -> Set[str]:
+        """The set of measurement identifiers in this pulse template"""
 
     @abstractproperty
     def is_interruptable(self) -> bool:
@@ -74,11 +67,16 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=ABCMeta):
             # if there are parameter name conflicts, throw an exception
             raise DoubleParameterNameException(self, other, double_parameters)
         else:
-            subtemplates = [(self, {p:p for p in self.parameter_names}),
-                            (other, {p:p for p in other.parameter_names})]
+            subtemplates = [(self, {p:p for p in self.parameter_names}, {}),
+                            (other, {p:p for p in other.parameter_names}, {})]
             external_parameters = self.parameter_names | other.parameter_names # union
             return SequencePulseTemplate(subtemplates, external_parameters)
 
+SubTemplate = NamedTuple('SubTemplate',[('template',PulseTemplate),
+                                        ('parameter_mapping',Dict[str,str]),
+                                        ('measurement_mapping',Optional[Dict[str,str]]),
+                                        ('channel_mapping',Optional[List[int]])] )
+SubTemplate.__new__.__defaults__ = (dict(),None)
 
 class AtomicPulseTemplate(PulseTemplate):
     """A PulseTemplate that does not imply any control flow disruptions and can be directly
@@ -104,14 +102,29 @@ class AtomicPulseTemplate(PulseTemplate):
                 does not represent a valid waveform.
         """
 
+    @abstractmethod
+    def get_measurement_windows(self, parameters: Dict[str, Parameter]=None) -> List[MeasurementWindow]:
+        """
+        :param parameters:
+        :return:
+        """
+
     def build_sequence(self,
                        sequencer: 'Sequencer',
                        parameters: Dict[str, Parameter],
                        conditions: Dict[str, 'Condition'],
+                       measurement_mapping: Dict[str, str],
                        instruction_block: InstructionBlock) -> None:
         waveform = self.build_waveform(parameters)
         if waveform:
-            instruction_block.add_instruction_exec(waveform)
+            meas_windows = self.get_measurement_windows(parameters)
+
+            meas_windows = [(measurement_mapping[name],begin,end) for name, begin, end in meas_windows]
+
+            instruction_block.add_instruction_exec(waveform,meas_windows)
+
+
+
 
 class DoubleParameterNameException(Exception):
 
