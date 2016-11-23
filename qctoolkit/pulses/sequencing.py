@@ -105,7 +105,7 @@ class Sequencer:
         self.__main_block = InstructionBlock()
         self.__sequencing_stacks = \
             {self.__main_block: []} #type: Dict[InstructionBlock, List[StackElement]]
-        
+
     def push(self,
              sequencing_element: SequencingElement,
              parameters: Optional[Dict[str, Union[Parameter, float]]]=None,
@@ -162,7 +162,7 @@ class Sequencer:
             The instruction block (hierarchy) resulting from the translation of the (remaining)
                 SequencingElements on the sequencing stacks.
         """
-        if not self.has_finished():            
+        if not self.has_finished():
             shall_continue = True # shall_continue will only be False, if the first element on all
                                   # stacks requires a stop or all stacks are empty
             while shall_continue:
@@ -181,7 +181,7 @@ class Sequencer:
     def has_finished(self) -> bool:
         """Check whether all translation stacks are empty. Indicates that the translation is
         complete.
-        
+
         Note that has_finished will return False, if there are stack elements that require a stop.
         In this case, calling build will only have an effect if these elements no longer require a
         stop, e.g. when required measurement results have been acquired since the last translation.

@@ -11,7 +11,7 @@ if sys.version_info < (3, 5):
 else:
     requires_typing = []
 
-subpackages = ['pulses','utils','qcmatlab']
+subpackages = ['pulses', 'utils', 'qcmatlab', 'hardware']
 packages = ['qctoolkit'] + ['qctoolkit.' + subpackage for subpackage in subpackages]
 
 setup(name='qctoolkit',
@@ -21,7 +21,7 @@ setup(name='qctoolkit',
     package_dir = {'qctoolkit': 'qctoolkit'},
     packages=packages,
     tests_require=['pytest'],
-    install_requires= ['py_expression_eval', 'numpy'] + requires_typing,
+    install_requires= ['py_expression_eval', 'numpy', 'pyvisa'] + requires_typing,
     extras_require={
         'testing' : ['pytest'],
         'plotting' : ['matplotlib'],
