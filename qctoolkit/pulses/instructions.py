@@ -24,7 +24,7 @@ from qctoolkit.comparable import Comparable
 
 __all__ = ["Waveform", "Trigger",
            "InstructionPointer", "Instruction", "CJMPInstruction", "EXECInstruction",
-           "GOTOInstruction", "STOPInstruction", "AbstractInstructionBlock", "InstructionBlock",
+           "GOTOInstruction", "STOPInstruction", "REPJInstruction", "AbstractInstructionBlock", "InstructionBlock",
            "ImmutableInstructionBlock", "InstructionSequence"
           ]
 
