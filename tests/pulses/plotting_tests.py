@@ -7,7 +7,7 @@ from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
 from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
 from qctoolkit.pulses.sequencing import Sequencer
 
-from tests.pulses.sequencing_dummies import DummyWaveform, DummyInstruction
+from tests.pulses.sequencing_dummies import DummySingleChannelWaveform, DummyInstruction
 
 
 class PlotterTests(unittest.TestCase):
@@ -23,8 +23,8 @@ class PlotterTests(unittest.TestCase):
         self.assertEqual(([], []), Plotter().render(InstructionBlock()))
 
     def test_render(self) -> None:
-        wf1 = DummyWaveform(duration=19)
-        wf2 = DummyWaveform(duration=21)
+        wf1 = DummySingleChannelWaveform(duration=19)
+        wf2 = DummySingleChannelWaveform(duration=21)
 
         block = InstructionBlock()
         block.add_instruction_exec(wf1)

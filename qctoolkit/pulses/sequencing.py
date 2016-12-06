@@ -34,6 +34,7 @@ class SequencingElement(metaclass=ABCMeta):
                        parameters: Dict[str, Parameter],
                        conditions: Dict[str, 'Condition'],
                        measurement_mapping: Dict[str, str],
+                       channel_mapping: Dict['ChannelID', 'ChannelID'],
                        instruction_block: InstructionBlock) -> None:
         """Translate this SequencingElement into an instruction sequence for the given
         instruction_block using sequencer and the given parameter and condition sets.
@@ -110,7 +111,8 @@ class Sequencer:
              sequencing_element: SequencingElement,
              parameters: Optional[Dict[str, Union[Parameter, float]]]=None,
              conditions: Optional[Dict[str, 'Condition']]=None,
-             window_mapping: Optional[Dict[str,str]] = None,
+             window_mapping: Optional[Dict[str,str]]=None,
+             channel_mapping: Optional[Dict['ChannelID','ChannelID']]=None,
              target_block: Optional[InstructionBlock]=None) -> None:
         """Add an element to the translation stack of the target_block with the given set of
          parameters.
@@ -139,6 +141,8 @@ class Sequencer:
             target_block = self.__main_block
         if window_mapping is None:
             window_mapping = dict()
+        if channel_mapping is None:
+            channel_mapping = dict()
 
         for (key, value) in parameters.items():
             if isinstance(value, numbers.Real):
@@ -147,7 +151,7 @@ class Sequencer:
         if target_block not in self.__sequencing_stacks:
             self.__sequencing_stacks[target_block] = []
 
-        self.__sequencing_stacks[target_block].append((sequencing_element, parameters, conditions, window_mapping))
+        self.__sequencing_stacks[target_block].append((sequencing_element, parameters, conditions, window_mapping, channel_mapping))
 
     def build(self) -> InstructionBlock:
         """Start the translation process. Translate all elements currently on the translation stacks
@@ -169,11 +173,12 @@ class Sequencer:
                 shall_continue = False
                 for target_block, sequencing_stack in self.__sequencing_stacks.copy().items():
                     while sequencing_stack:
-                        (element, parameters, conditions, window_mapping) = sequencing_stack[-1]
+                        (element, parameters, conditions, window_mapping, channel_mapping) = sequencing_stack[-1]
                         if not element.requires_stop(parameters, conditions):
                             shall_continue |= True
                             sequencing_stack.pop()
-                            element.build_sequence(self, parameters, conditions, window_mapping, target_block)
+                            element.build_sequence(self, parameters, conditions, window_mapping,
+                                                   channel_mapping, target_block)
                         else: break
 
         return ImmutableInstructionBlock(self.__main_block, dict())

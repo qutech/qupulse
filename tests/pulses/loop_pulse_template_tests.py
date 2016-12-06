@@ -58,8 +58,9 @@ class LoopPulseTemplateSequencingTests(unittest.TestCase):
         block = DummyInstructionBlock()
         parameters = {}
         conditions = {'foo_cond': condition}
-        measurement_mapping = {'swag':'aufdrehen'}
-        t.build_sequence(sequencer, parameters, conditions, measurement_mapping, block)
+        measurement_mapping = {'swag': 'aufdrehen'}
+        channel_mapping = {}
+        t.build_sequence(sequencer, parameters, conditions, measurement_mapping, channel_mapping, block)
         expected_data = dict(
             delegator=t,
             body=body,
@@ -67,6 +68,7 @@ class LoopPulseTemplateSequencingTests(unittest.TestCase):
             parameters=parameters,
             conditions=conditions,
             measurement_mapping=measurement_mapping,
+            channel_mapping=channel_mapping,
             instruction_block=block
         )
         self.assertEqual(expected_data, condition.loop_call_data)

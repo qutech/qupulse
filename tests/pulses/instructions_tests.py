@@ -6,7 +6,7 @@ from qctoolkit.pulses.instructions import InstructionBlock, InstructionPointer,\
     Trigger, CJMPInstruction, REPJInstruction, GOTOInstruction, EXECInstruction, STOPInstruction,\
     InstructionSequence, AbstractInstructionBlock, ImmutableInstructionBlock, Instruction
 
-from tests.pulses.sequencing_dummies import DummyWaveform, DummyInstructionBlock
+from tests.pulses.sequencing_dummies import DummySingleChannelWaveform, DummyInstructionBlock
 
  
 class InstructionPointerTest(unittest.TestCase):
@@ -172,13 +172,13 @@ class GOTOInstructionTest(unittest.TestCase):
 class EXECInstructionTest(unittest.TestCase):
     
     def test_initialization(self):
-        waveform = DummyWaveform()
+        waveform = DummySingleChannelWaveform()
         instr = EXECInstruction(waveform)
         self.assertIs(waveform, instr.waveform)
         
     def test_equality(self):
-        wf1 = DummyWaveform()
-        wf2 = DummyWaveform()
+        wf1 = DummySingleChannelWaveform()
+        wf2 = DummySingleChannelWaveform()
         instr11 = EXECInstruction(wf1)
         instr12 = EXECInstruction(wf1)
         instr20 = EXECInstruction(wf2)
@@ -191,7 +191,7 @@ class EXECInstructionTest(unittest.TestCase):
         self.assertNotEqual(hash(instr11), hash(instr20))
 
     def test_str(self) -> None:
-        wf = DummyWaveform()
+        wf = DummySingleChannelWaveform()
         instr = EXECInstruction(wf)
         self.assertEqual("exec {}".format(str(wf)), str(instr))
 
@@ -239,7 +239,7 @@ class AbstractInstructionBlockTest(unittest.TestCase):
         self.assertEqual(0, len(block.instructions))
 
     def test_len(self) -> None:
-        block = AbstractInstructionBlockStub([EXECInstruction(DummyWaveform())], None)
+        block = AbstractInstructionBlockStub([EXECInstruction(DummySingleChannelWaveform())], None)
         self.assertEqual(2, len(block))
         self.assertEqual(1, len(block.instructions))
 
@@ -262,7 +262,7 @@ class AbstractInstructionBlockTest(unittest.TestCase):
             count += 1
 
     def test_iterable_no_return(self) -> None:
-        wf = DummyWaveform()
+        wf = DummySingleChannelWaveform()
         block = AbstractInstructionBlockStub([EXECInstruction(wf)], None)
         count = 0
         for expected_instruction, instruction in zip([EXECInstruction(wf), STOPInstruction()], block):
@@ -272,7 +272,7 @@ class AbstractInstructionBlockTest(unittest.TestCase):
 
     def test_iterable_return(self) -> None:
         parent_block = InstructionBlock()
-        wf = DummyWaveform()
+        wf = DummySingleChannelWaveform()
         block = AbstractInstructionBlockStub([EXECInstruction(wf)], InstructionPointer(parent_block, 11))
         count = 0
         for expected_instruction, instruction in zip([EXECInstruction(wf), GOTOInstruction(InstructionPointer(parent_block, 11))], block):
@@ -300,7 +300,7 @@ class AbstractInstructionBlockTest(unittest.TestCase):
             block[-2]
 
     def test_item_access_no_return(self) -> None:
-        wf = DummyWaveform()
+        wf = DummySingleChannelWaveform()
         block = AbstractInstructionBlockStub([EXECInstruction(wf)], None)
         self.assertEqual(EXECInstruction(wf), block[0])
         self.assertEqual(STOPInstruction(), block[1])
@@ -312,7 +312,7 @@ class AbstractInstructionBlockTest(unittest.TestCase):
             block[-3]
 
     def test_item_access_return(self) -> None:
-        wf = DummyWaveform()
+        wf = DummySingleChannelWaveform()
         parent_block = InstructionBlock()
         block = AbstractInstructionBlockStub([EXECInstruction(wf)], InstructionPointer(parent_block, 29))
         self.assertEqual(EXECInstruction(wf), block[0])
@@ -323,6 +323,24 @@ class AbstractInstructionBlockTest(unittest.TestCase):
         self.assertEqual(EXECInstruction(wf), block[-2])
         with self.assertRaises(IndexError):
             block[-3]
+
+    def test_sliced_item_access(self) -> None:
+        wf = DummySingleChannelWaveform()
+        parent_block = InstructionBlock()
+        block = AbstractInstructionBlockStub([EXECInstruction(wf), EXECInstruction(wf)], InstructionPointer(parent_block, 29))
+        for instruction in block[:-1]:
+            self.assertEqual(EXECInstruction(wf), instruction)
+
+        expections = [EXECInstruction(wf), EXECInstruction(wf), GOTOInstruction(InstructionPointer(parent_block, 29))]
+
+        for expected, instruction in zip(expections,block[:4]):
+            self.assertEqual(expected, instruction)
+
+        for instruction, expected in zip(block[::-1], reversed(expections)):
+            self.assertEqual(expected, instruction)
+
+        with self.assertRaises(StopIteration):
+            next(iter(block[3:]))
 
 
 class InstructionBlockTest(unittest.TestCase):
@@ -362,7 +380,7 @@ class InstructionBlockTest(unittest.TestCase):
         block = InstructionBlock()
         expected_instructions = []
         
-        waveforms = [DummyWaveform(), DummyWaveform(), DummyWaveform()]
+        waveforms = [DummySingleChannelWaveform(), DummySingleChannelWaveform(), DummySingleChannelWaveform()]
         LOOKUP = [0, 1, 1, 0, 2, 1, 0, 0, 0, 1, 2, 2]
         for id in LOOKUP:
             waveform = waveforms[id]
@@ -436,7 +454,7 @@ class InstructionBlockTest(unittest.TestCase):
         
         blocks = []
             
-        waveforms = [DummyWaveform(), DummyWaveform(), DummyWaveform()]
+        waveforms = [DummySingleChannelWaveform(), DummySingleChannelWaveform(), DummySingleChannelWaveform()]
         
         main_block.add_instruction_exec(waveforms[0])
         expected_instructions[0].append(EXECInstruction(waveforms[0]))
@@ -589,7 +607,7 @@ class ImmutableInstructionBlockTests(unittest.TestCase):
     def test_multiple_nested_block_construction(self) -> None:
         main_block = InstructionBlock()
         blocks = []
-        waveforms = [DummyWaveform(), DummyWaveform(), DummyWaveform()]
+        waveforms = [DummySingleChannelWaveform(), DummySingleChannelWaveform(), DummySingleChannelWaveform()]
 
         main_block.add_instruction_exec(waveforms[0])
 
@@ -634,7 +652,7 @@ class InstructionStringRepresentation(unittest.TestCase):
     def test_str(self) -> None:
         IB = InstructionBlock()
         T = Trigger()
-        W = DummyWaveform()
+        W = DummySingleChannelWaveform()
 
         a = [W,
              T,

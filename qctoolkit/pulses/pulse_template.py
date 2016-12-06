@@ -7,16 +7,19 @@ Classes:
         directly translated into a waveform.
 """
 from abc import ABCMeta, abstractmethod, abstractproperty
-from typing import Dict, List, Tuple, Set, Optional, NamedTuple
+from typing import Dict, List, Tuple, Set, Optional, Union
+import itertools
+
+MeasurementWindow = Tuple[str, float, float]
+ChannelID = Union[str,int]
 
 from qctoolkit.serialization import Serializable
 
 from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter
 from qctoolkit.pulses.sequencing import SequencingElement, InstructionBlock
 
-__all__ = ["MeasurementWindow", "PulseTemplate", "AtomicPulseTemplate", "DoubleParameterNameException"]
+__all__ = ["MeasurementWindow", "PulseTemplate", "AtomicPulseTemplate", "DoubleParameterNameException", "ChannelID"]
 
-MeasurementWindow = Tuple[str, float, float]
 
 
 class PulseTemplate(Serializable, SequencingElement, metaclass=ABCMeta):
@@ -53,30 +56,27 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=ABCMeta):
         """
 
     @abstractproperty
-    def num_channels(self) -> int:
+    def defined_channels(self) -> Set['ChannelID']:
         """Returns the number of hardware output channels this PulseTemplate defines."""
 
-
-    def __matmul__(self, other) -> 'SequencePulseTemplate':
+    def __matmul__(self, other: 'PulseTemplate') -> 'SequencePulseTemplate':
         """This method enables us to use the @-operator (intended for matrix multiplication) for
-         concatenating pulses"""
-        from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
-        # check if parameter names of the subpulses clash, otherwise construct a default mapping
-        double_parameters = self.parameter_names & other.parameter_names # intersection
-        if double_parameters:
-            # if there are parameter name conflicts, throw an exception
-            raise DoubleParameterNameException(self, other, double_parameters)
-        else:
-            subtemplates = [(self, {p:p for p in self.parameter_names}, {}),
-                            (other, {p:p for p in other.parameter_names}, {})]
-            external_parameters = self.parameter_names | other.parameter_names # union
-            return SequencePulseTemplate(subtemplates, external_parameters)
+         concatenating pulses. If one of the pulses is a SequencePulseTemplate the other pulse gets merged into it"""
 
-SubTemplate = NamedTuple('SubTemplate',[('template',PulseTemplate),
-                                        ('parameter_mapping',Dict[str,str]),
-                                        ('measurement_mapping',Optional[Dict[str,str]]),
-                                        ('channel_mapping',Optional[List[int]])] )
-SubTemplate.__new__.__defaults__ = (dict(),None)
+        from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
+
+        if self != other:
+            # check if parameter names of the subpulses intersect and raise an exception if so
+            double_parameters = self.parameter_names & other.parameter_names
+            if double_parameters:
+                raise DoubleParameterNameException(self, other, double_parameters)
+
+        external_parameters = self.parameter_names | other.parameter_names
+        subtemplates = itertools.chain(self.subtemplates if isinstance(self, SequencePulseTemplate) else [self],
+                                       other.subtemplates if isinstance(other, SequencePulseTemplate) else [other])
+        return SequencePulseTemplate(subtemplates, external_parameters)
+
+
 
 class AtomicPulseTemplate(PulseTemplate):
     """A PulseTemplate that does not imply any control flow disruptions and can be directly
@@ -92,7 +92,7 @@ class AtomicPulseTemplate(PulseTemplate):
         return False
 
     @abstractmethod
-    def build_waveform(self, parameters: Dict[str, Parameter]) -> Optional['Waveform']:
+    def build_waveform(self, parameters: Dict[str, Parameter]) -> Optional['MultiChannelWaveform']:
         """Translate this AtomicPulseTemplate into a waveform according to the given parameteres.
 
         Args:
@@ -114,6 +114,7 @@ class AtomicPulseTemplate(PulseTemplate):
                        parameters: Dict[str, Parameter],
                        conditions: Dict[str, 'Condition'],
                        measurement_mapping: Dict[str, str],
+                       channel_mapping: Dict['ChannelID', 'ChannelID'],
                        instruction_block: InstructionBlock) -> None:
         waveform = self.build_waveform(parameters)
         if waveform:
@@ -121,7 +122,7 @@ class AtomicPulseTemplate(PulseTemplate):
 
             meas_windows = [(measurement_mapping[name],begin,end) for name, begin, end in meas_windows]
 
-            instruction_block.add_instruction_exec(waveform,meas_windows)
+            instruction_block.add_instruction_exec(waveform.get_remapped(channel_mapping), meas_windows)
 
 
 

@@ -7,7 +7,7 @@ from typing import Dict, Set, Optional, Any
 from qctoolkit.serialization import Serializer
 
 from qctoolkit.pulses.parameters import Parameter
-from qctoolkit.pulses.pulse_template import PulseTemplate, MeasurementWindow
+from qctoolkit.pulses.pulse_template import PulseTemplate
 from qctoolkit.pulses.conditions import Condition, ConditionMissingException
 from qctoolkit.pulses.instructions import InstructionBlock
 from qctoolkit.pulses.sequencing import Sequencer
@@ -62,8 +62,8 @@ class LoopPulseTemplate(PulseTemplate):
         return self.__body.is_interruptable
 
     @property
-    def num_channels(self) -> int:
-        return self.__body.num_channels
+    def defined_channels(self) -> Set['ChannelID']:
+        return self.__body.defined_channels
 
     @property
     def measurement_names(self) -> Set[str]:
@@ -80,6 +80,7 @@ class LoopPulseTemplate(PulseTemplate):
                        parameters: Dict[str, Parameter],
                        conditions: Dict[str, Condition],
                        measurement_mapping: Dict[str, str],
+                       channel_mapping: Dict['ChannelID', 'ChannelID'],
                        instruction_block: InstructionBlock) -> None:
         self.__obtain_condition_object(conditions).build_sequence_loop(self,
                                                                        self.__body,
@@ -87,6 +88,7 @@ class LoopPulseTemplate(PulseTemplate):
                                                                        parameters,
                                                                        conditions,
                                                                        measurement_mapping,
+                                                                       channel_mapping,
                                                                        instruction_block)
 
     def requires_stop(self,

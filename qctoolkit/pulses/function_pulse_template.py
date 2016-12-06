@@ -17,10 +17,11 @@ from qctoolkit.serialization import Serializer
 
 from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter
 from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementWindow
-from qctoolkit.pulses.sequence_pulse_template import ParameterNotProvidedException
-from qctoolkit.pulses.instructions import Waveform
+from qctoolkit.pulses.instructions import SingleChannelWaveform
+from qctoolkit.pulses.pulse_template_parameter_mapping import ParameterNotProvidedException
+from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 
-__all__ = ["FunctionPulseTemplate", "FunctionWaveform"]
+__all__ = ["FunctionPulseTemplate", "FunctionSingleChannelWaveform"]
 
 
 class FunctionPulseTemplate(AtomicPulseTemplate):
@@ -38,8 +39,8 @@ class FunctionPulseTemplate(AtomicPulseTemplate):
     def __init__(self,
                  expression: Union[str, Expression],
                  duration_expression: Union[str, Expression],
-                 measurement: bool=False,
-                 identifier: str=None) -> None:
+                 identifier: str=None,
+                 channel: 'ChannelID' = 'default') -> None:
         """Create a new FunctionPulseTemplate instance.
 
         Args:
@@ -60,9 +61,9 @@ class FunctionPulseTemplate(AtomicPulseTemplate):
         self.__duration_expression = duration_expression
         if not isinstance(self.__duration_expression, Expression):
             self.__duration_expression = Expression(self.__duration_expression)
-        self.__is_measurement_pulse = measurement # type: bool
         self.__parameter_names = set(self.__duration_expression.variables()
                                      + self.__expression.variables()) - set(['t'])
+        self.__channel = channel
 
     @property
     def parameter_names(self) -> Set[str]:
@@ -100,15 +101,17 @@ class FunctionPulseTemplate(AtomicPulseTemplate):
         return False
 
     @property
-    def num_channels(self) -> int:
-        return 1
+    def defined_channels(self) -> Set['ChannelID']:
+        return set(self.__channel)
 
-    def build_waveform(self, parameters: Dict[str, Parameter]) -> Optional[Waveform]:
-        return FunctionWaveform(
-            {parameter_name: parameter.get_value()
-             for (parameter_name, parameter) in parameters.items()},
-            self.__expression,
-            self.__duration_expression
+    def build_waveform(self, parameters: Dict[str, Parameter]) -> Optional[MultiChannelWaveform]:
+        return MultiChannelWaveform(
+            {self.__channel: FunctionSingleChannelWaveform(
+                {parameter_name: parameter.get_value()
+                 for (parameter_name, parameter) in parameters.items()},
+                self.__expression,
+                self.__duration_expression
+            )}
         )
 
     def requires_stop(self,
@@ -123,24 +126,24 @@ class FunctionPulseTemplate(AtomicPulseTemplate):
         return dict(
             duration_expression=serializer.dictify(self.__duration_expression),
             expression=serializer.dictify(self.__expression),
-            measurement=self.__is_measurement_pulse
+            channel=self.__channel
         )
 
     @staticmethod
     def deserialize(serializer: 'Serializer',
                     expression: str,
                     duration_expression: str,
-                    measurement: bool,
+                    channel: 'ChannelID',
                     identifier: Optional[bool]=None) -> 'FunctionPulseTemplate':
         return FunctionPulseTemplate(
             serializer.deserialize(expression),
             serializer.deserialize(duration_expression),
-            measurement,
+            channel=channel,
             identifier=identifier
         )
 
 
-class FunctionWaveform(Waveform):
+class FunctionSingleChannelWaveform(SingleChannelWaveform):
     """Waveform obtained from instantiating a FunctionPulseTemplate."""
 
     def __init__(self,

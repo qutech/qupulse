@@ -65,8 +65,8 @@ class RepetitionPulseTemplate(PulseTemplate):
         return self.__body.is_interruptable
 
     @property
-    def num_channels(self) -> int:
-        return self.__body.num_channels
+    def defined_channels(self) -> Set['ChannelID']:
+        return self.__body.defined_channels
 
     @property
     def measurement_names(self) -> Set[str]:
@@ -77,6 +77,7 @@ class RepetitionPulseTemplate(PulseTemplate):
                        parameters: Dict[str, Parameter],
                        conditions: Dict[str, Condition],
                        measurement_mapping: Dict[str, str],
+                       channel_mapping: Dict['ChannelID', 'ChannelID'],
                        instruction_block: InstructionBlock) -> None:
         repetition_count = self.__repetition_count
         if isinstance(repetition_count, ParameterDeclaration):
@@ -88,7 +89,7 @@ class RepetitionPulseTemplate(PulseTemplate):
         body_block.return_ip = InstructionPointer(instruction_block, len(instruction_block))
 
         instruction_block.add_instruction_repj(int(repetition_count), body_block)
-        sequencer.push(self.body, parameters, conditions, measurement_mapping, body_block)
+        sequencer.push(self.body, parameters, conditions, measurement_mapping, channel_mapping, body_block)
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],

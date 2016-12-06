@@ -4,7 +4,7 @@ conditionally executes one out of two possible PulseTemplates."""
 from typing import Dict, Set, List, Optional, Any
 
 from qctoolkit.pulses.parameters import Parameter
-from qctoolkit.pulses.pulse_template import PulseTemplate, MeasurementWindow
+from qctoolkit.pulses.pulse_template import PulseTemplate
 from qctoolkit.pulses.conditions import Condition, ConditionMissingException
 from qctoolkit.pulses.sequencing import Sequencer, InstructionBlock
 from qctoolkit.serialization import Serializer
@@ -42,8 +42,8 @@ class BranchPulseTemplate(PulseTemplate):
             identifier (str): A unique identifier for use in serialization. (optional)
         """
         super().__init__(identifier=identifier)
-        if if_branch.num_channels != else_branch.num_channels:
-            raise ValueError("The number of channels in the provided pulses differ!")
+        if if_branch.defined_channels != else_branch.defined_channels:
+            raise ValueError("The channels defined by the provided pulses differ!")
         self.__condition = condition
         self.__if_branch = if_branch
         self.__else_branch = else_branch
@@ -65,8 +65,8 @@ class BranchPulseTemplate(PulseTemplate):
         return self.__if_branch.is_interruptable and self.__else_branch.is_interruptable
 
     @property
-    def num_channels(self) -> int:
-        return self.__if_branch.num_channels
+    def defined_channels(self) -> Set['ChannelID']:
+        return self.__if_branch.defined_channels
 
     @property
     def measurement_names(self) -> Set[str]:
@@ -83,6 +83,7 @@ class BranchPulseTemplate(PulseTemplate):
                        parameters: Dict[str, Parameter],
                        conditions: Dict[str, Condition],
                        measurement_mapping: Dict[str, str],
+                       channel_mapping: Dict['ChannelID', 'ChannelID'],
                        instruction_block: InstructionBlock) -> None:
         self.__obtain_condition_object(conditions).build_sequence_branch(self,
                                                                          self.__if_branch,
@@ -91,6 +92,7 @@ class BranchPulseTemplate(PulseTemplate):
                                                                          parameters,
                                                                          conditions,
                                                                          measurement_mapping,
+                                                                         channel_mapping,
                                                                          instruction_block)
 
     def requires_stop(self,

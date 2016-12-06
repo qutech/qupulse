@@ -16,20 +16,23 @@ Classes:
     - InstructionPointer: References an instruction's location in a sequence.
 """
 
+import itertools
 from abc import ABCMeta, abstractmethod, abstractproperty
-from typing import List, Any, Dict, Iterable, Optional, Tuple
+from typing import List, Any, Dict, Iterable, Optional, Tuple, Union
 import numpy
 
 from qctoolkit.comparable import Comparable
 
-__all__ = ["Waveform", "Trigger",
+__all__ = ["SingleChannelWaveform", "Trigger",
            "InstructionPointer", "Instruction", "CJMPInstruction", "EXECInstruction",
            "GOTOInstruction", "STOPInstruction", "REPJInstruction", "AbstractInstructionBlock", "InstructionBlock",
-           "ImmutableInstructionBlock", "InstructionSequence"
-          ]
+           "ImmutableInstructionBlock", "InstructionSequence", "ChannelID"
+           ]
+
+ChannelID = Union[str,int]
 
 
-class Waveform(Comparable, metaclass=ABCMeta):
+class SingleChannelWaveform(Comparable, metaclass=ABCMeta):
     """Represents an instantiated PulseTemplate which can be sampled to retrieve arrays of voltage
     values for the hardware."""
 
@@ -58,10 +61,6 @@ class Waveform(Comparable, metaclass=ABCMeta):
                 this Waveform defines multiple channels, the array will be structured as
                 [ [channel 0 values] [channel 1 values] .... [channel n values] ].
         """
-
-    @abstractproperty
-    def num_channels(self) -> int:
-        """The number of channels this waveform is defined for."""
 
 
 class Trigger(Comparable):
@@ -214,11 +213,11 @@ class GOTOInstruction(Instruction):
 class EXECInstruction(Instruction):
     """An instruction to execute/play back a waveform."""
 
-    def __init__(self, waveform: Waveform, measurement_windows: List[Tuple[str,List['MeasurementWindow']]] = []) -> None:
+    def __init__(self, waveform: SingleChannelWaveform, measurement_windows: List[Tuple[str, List['MeasurementWindow']]] = []) -> None:
         """Create a new EXECInstruction object.
 
         Args:
-            waveform (Waveform): The waveform that will be executed by this instruction.
+            waveform (SingleChannelWaveform): The waveform that will be executed by this instruction.
         """
         super().__init__()
         self.waveform = waveform
@@ -245,7 +244,29 @@ class STOPInstruction(Instruction):
 
     def __str__(self) -> str:
         return "stop"
-        
+
+
+class CHANInstruction(Instruction):
+    """Split the control flow for different channels.
+
+    There is no guarantee at this point that the instruction blocks have the same length. This is basically a
+    switch statement.
+    """
+
+    def __init__(self, channel_to_instruction_block: Dict[ChannelID,InstructionPointer]):
+        self.channel_to_instruction_block = channel_to_instruction_block
+
+    @property
+    def compare_key(self):
+        return self.channel_to_instruction_block
+
+    def __str__(self):
+        return "chan " + ",".join("{target} for {channel}"
+                                  .format(target=v,channel=k) for k,v in self.channel_to_instruction_block.items())
+
+    def __getitem__(self, item) -> InstructionPointer:
+        return self.channel_to_instruction_block[item]
+
         
 InstructionSequence = List[Instruction] # pylint: disable=invalid-name,invalid-sequence-index
 
@@ -303,7 +324,10 @@ class AbstractInstructionBlock(Comparable, metaclass=ABCMeta):
         else:
             yield GOTOInstruction(self.return_ip)
 
-    def __getitem__(self, index: int) -> Instruction:
+    def __getitem__(self, index: Union[int,slice]) -> Union[Instruction,Iterable[Instruction]]:
+        if isinstance(index, slice):
+            return (self[i] for i in range(*index.indices(len(self))))
+
         if index > len(self.instructions) or index < -(len(self.instructions) + 1):
             raise IndexError()
         if index < 0:
@@ -355,14 +379,14 @@ class InstructionBlock(AbstractInstructionBlock):
         """
         self.__instruction_list.append(instruction)
 
-    def add_instruction_exec(self, waveform: Waveform, measurement_windows: List[Tuple[str,List['MeasurementWindows']]] =  None) -> None:
+    def add_instruction_exec(self, waveform: 'MultiChannelWaveform', measurement_windows: List[Tuple[str, List['MeasurementWindows']]] =  None) -> None:
         """Create and append a new EXECInstruction object for the given waveform at the end of this
         instruction block.
 
         Args:
-            waveform (Waveform): The Waveform object referenced by the new EXECInstruction.
+            waveform (SingleChannelWaveform): The Waveform object referenced by the new EXECInstruction.
         """
-        self.add_instruction(EXECInstruction(waveform,measurement_windows))
+        self.add_instruction(EXECInstruction(waveform, measurement_windows))
 
     def add_instruction_goto(self, target_block: 'InstructionBlock') -> None:
         """Create and append a new GOTOInstruction object with a given target block at the end of
@@ -404,6 +428,10 @@ class InstructionBlock(AbstractInstructionBlock):
     def add_instruction_stop(self) -> None:
         """Create and append a new STOPInstruction object at the end of this instruction block."""
         self.add_instruction(STOPInstruction())
+
+    def add_instruction_chan(self, channel_to_instruction: Dict[ChannelID,'InstructionBlock'] ):
+        """Create and append a new CHANInstruction at the end of this instruction block."""
+        self.add_instruction(CHANInstruction({ch: InstructionPointer(block) for ch, block in channel_to_instruction.items()}))
 
     @property
     def instructions(self) -> InstructionSequence:
