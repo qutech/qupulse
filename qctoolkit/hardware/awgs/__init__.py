@@ -1,4 +1,6 @@
+from qctoolkit.hardware.awgs.base import AWG, DummyAWG
+
 __all__ = [
-    'awg',
-    'tektronix'
+    'AWG',
+    'DummyAWG'
 ]

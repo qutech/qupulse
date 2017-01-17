@@ -81,10 +81,10 @@ class MultiChannelWaveform(Comparable):
 
     def __getitem__(self, key: Union[Set[ChannelID], ChannelID]) -> Union[SingleChannelWaveform, 'MultiChannelWaveform']:
         try:
-            if not isinstance(key, set):
+            if not isinstance(key, (set, frozenset)):
                 return self.__channel_waveforms[key]
             else:
-                return MultiChannelWaveform( dict( (chID, self.__channel_waveforms[chID]) for chID in key  ) )
+                return MultiChannelWaveform(dict((chID, self.__channel_waveforms[chID]) for chID in key))
         except KeyError as err:
             raise KeyError('Unknown channel ID: {}'.format(err.args[0]),*err.args)
 

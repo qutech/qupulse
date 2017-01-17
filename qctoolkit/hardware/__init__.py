@@ -1,4 +1,5 @@
 __all__ = [
     'awgs',
-    'dacs'
+    'dacs',
+    'program'
 ]

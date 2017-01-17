@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Tuple
 
 import numpy
 
-from qctoolkit.pulses.instructions import Waveform, EXECInstruction, \
+from qctoolkit.pulses.instructions import SingleChannelWaveform, EXECInstruction, \
     STOPInstruction, InstructionSequence
 
 __all__ = ["PulseControlInterface"]
@@ -34,17 +34,17 @@ class PulseControlInterface:
         self.__time_scaling = time_scaling
 
     @staticmethod
-    def __get_waveform_name(waveform: Waveform) -> str:
+    def __get_waveform_name(waveform: SingleChannelWaveform) -> str:
         # returns a unique identifier for a waveform object
         return 'wf_{}'.format(hash(waveform))
 
     def create_waveform_struct(self,
-                               waveform: Waveform,
+                               waveform: SingleChannelWaveform,
                                name: str) -> 'PulseControlInterface.Pulse':
         """Construct a dictionary adhering to the waveform struct definition in pulse control.
 
         Arguments:
-            waveform (Waveform): The Waveform object to convert.
+            waveform (SingleChannelWaveform): The Waveform object to convert.
             name (str): Value for the name field in the resulting waveform dictionary.
         Returns:
             a dictionary representing waveform as a waveform struct for pulse control

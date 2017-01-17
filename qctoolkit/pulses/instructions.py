@@ -19,6 +19,7 @@ Classes:
 import itertools
 from abc import ABCMeta, abstractmethod, abstractproperty
 from typing import List, Any, Dict, Iterable, Optional, Tuple, Union
+from weakref import WeakValueDictionary
 import numpy
 
 from qctoolkit.comparable import Comparable
@@ -35,6 +36,8 @@ ChannelID = Union[str,int]
 class SingleChannelWaveform(Comparable, metaclass=ABCMeta):
     """Represents an instantiated PulseTemplate which can be sampled to retrieve arrays of voltage
     values for the hardware."""
+
+    __sampled_cache = WeakValueDictionary()
 
     @abstractproperty
     def duration(self) -> float:
@@ -57,10 +60,24 @@ class SingleChannelWaveform(Comparable, metaclass=ABCMeta):
             float first_offset: Offset of the discrete first sample from the actual beginning of
                 the waveform in a continuous time domain.
         Result:
-            numpy.ndarray of the sampled values of this Waveform at the provided sample times. If
-                this Waveform defines multiple channels, the array will be structured as
-                [ [channel 0 values] [channel 1 values] .... [channel n values] ].
+            numpy.ndarray of the sampled values of this Waveform at the provided sample times.
         """
+
+    def get_sampled(self, *args, **kwargs) -> numpy.ndarray:
+        """A wrapper to the sample method which caches the result.
+
+        Args:
+            args, kwargs: Same signature as the sample method. See documentation there.
+
+        Result:
+            A read only numpy.ndarray of the sampled values of this Waveform at the provided sample times.
+        """
+        result = self.sample(*args, **kwargs)
+        result.flags.writable = False
+        key = hash(result.data)
+        if key not in self.__sampled_cache:
+            self.__sampled_cache[key] = result
+        return self.__sampled_cache[key]
 
 
 class Trigger(Comparable):
@@ -213,11 +230,11 @@ class GOTOInstruction(Instruction):
 class EXECInstruction(Instruction):
     """An instruction to execute/play back a waveform."""
 
-    def __init__(self, waveform: SingleChannelWaveform, measurement_windows: List[Tuple[str, List['MeasurementWindow']]] = []) -> None:
+    def __init__(self, waveform: 'MultiChannelWaveform', measurement_windows: List['MeasurementWindow'] = []) -> None:
         """Create a new EXECInstruction object.
 
         Args:
-            waveform (SingleChannelWaveform): The waveform that will be executed by this instruction.
+            waveform (MultiChannelWaveform): The waveform that will be executed by this instruction.
         """
         super().__init__()
         self.waveform = waveform

@@ -11,7 +11,7 @@ from typing import Dict, List, Tuple, Set, Optional, Union
 import itertools
 
 MeasurementWindow = Tuple[str, float, float]
-ChannelID = Union[str,int]
+ChannelID = Union[str, int]
 
 from qctoolkit.serialization import Serializable
 

@@ -18,14 +18,16 @@ setup(name='qctoolkit',
     version='0.1',
     description='Quantum Computing Toolkit',
     author='qutech',
-    package_dir = {'qctoolkit': 'qctoolkit'},
+    package_dir ={'qctoolkit': 'qctoolkit'},
     packages=packages,
     tests_require=['pytest'],
-    install_requires= ['py_expression_eval', 'numpy', 'pyvisa'] + requires_typing,
+    install_requires=['py_expression_eval', 'numpy'] + requires_typing,
     extras_require={
-        'testing' : ['pytest'],
-        'plotting' : ['matplotlib'],
-        'faster expressions' : ['numexpr']
+        'testing': ['pytest'],
+        'plotting': ['matplotlib'],
+        'faster expressions': ['numexpr'],
+        'VISA': ['pyvisa'],
+        'tabor instruments': ['pytabor', 'teawg']
     },
     test_suite="tests",
 )

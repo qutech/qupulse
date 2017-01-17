@@ -13,7 +13,7 @@ from typing import Set, Tuple, List
 from qctoolkit.pulses.instructions import InstructionSequence, EXECInstruction
 
 __all__ = ["AWG", "Program", "DummyAWG", "ProgramOverwriteException",
-           "OutOfWaveformMemoryExecption"]
+           "OutOfWaveformMemoryException"]
 
 Program = InstructionSequence
 
