@@ -1,12 +1,14 @@
 from qctoolkit.pulses.instructions import AbstractInstructionBlock, InstructionBlock, EXECInstruction, REPJInstruction, GOTOInstruction, STOPInstruction, InstructionPointer, CHANInstruction
 from typing import Union, Dict, Set, Iterable, FrozenSet, List, NamedTuple, Any, Callable
-from qctoolkit.hardware.awgs import AWG
+from collections import deque
+
 from qctoolkit.comparable import Comparable
 
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 import itertools
 from collections import namedtuple
 from copy import deepcopy, copy as shallowcopy
+from ctypes import c_int64 as MutableInt
 
 
 ChannelID = int
@@ -64,17 +66,6 @@ class Loop(Comparable):
                 self.assert_tree_integrity()
                 return
         raise Exception('Could not split of one child', self)
-
-    def is_leaf(self) -> bool:
-        return len(self.__children) == 0
-
-    def depth(self) -> int:
-        return 0 if self.is_leaf() else (1 + max((e.depth() for e in self)))
-
-    def is_balanced(self) -> bool:
-        if self.is_leaf():
-            return True
-        return all((e.depth() == self.__children[0].depth() and e.is_balanced()) for e in self)
 
     def merge(self):
         """Merge successive loops that are repeated once and are no leafs into one"""
@@ -201,8 +192,7 @@ class Loop(Comparable):
 
     def assert_tree_integrity(self):
         if self.__parent:
-            children_ids = [id(c) for c in self.__parent.children]
-            if id(self) not in children_ids:
+            if id(self) not in (id(c) for c in self.__parent.children):
                 raise Exception()
         for child in self.__children:
             child.assert_tree_integrity()
@@ -213,6 +203,33 @@ class Loop(Comparable):
                           repetition_count=self.repetition_count,
                           children=(child.copy_tree_structure() for child in self.__children))
 
+    def get_measurement_windows(self, offset: MutableInt = MutableInt(0), measurement_windows=dict()):
+        if self.is_leaf():
+            for _ in range(self.repetition_count):
+                for (mw_name, begin, length) in self.instruction.waveform.get_measurement_windows():
+                    measurement_windows.get(mw_name, default=deque()).append((begin + offset.value, length))
+                offset.value += self.instruction.waveform.duration
+        else:
+            for _ in range(self.repetition_count):
+                for child in self.__children:
+                    child.get_measurement_windows(offset, measurement_windows=measurement_windows)
+        return measurement_windows
+
+"""
+    def extract_measurement_windows(loop: 'Loop', offset: MutableInt):
+        if loop.is_leaf():
+            for _ in range(loop.repetition_count):
+                for (mw_name, begin, length) in loop.instruction.measurement_windows:
+                    measurement_windows.get(mw_name, default=[]).append(begin + offset.value, length)
+                offset.value += loop.instruction.waveform.duration
+        else:
+            for _ in range(loop.repetition_count):
+                for sub_loop in loop:
+                    extract_measurement_windows(sub_loop, offset)
+
+    for program in mcp.programs.values():
+        extract_measurement_windows(program, MutableInt(0))
+"""
 
 class ChannelSplit(Exception):
     def __init__(self, channels_and_blocks):
