@@ -72,6 +72,10 @@ class BranchPulseTemplate(PulseTemplate):
     def measurement_names(self) -> Set[str]:
         return self.__if_branch.measurement_names | self.__else_branch.measurement_names
 
+    @property
+    def atomicity(self) -> bool:
+        return False
+
     def __obtain_condition_object(self, conditions: Dict[str, Condition]) -> Condition:
         try:
             return conditions[self.__condition]

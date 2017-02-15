@@ -2,7 +2,7 @@ import unittest
 import numpy
 
 from qctoolkit.pulses.instructions import EXECInstruction
-from qctoolkit.pulses.table_pulse_template import TablePulseTemplate, TableSingleChannelWaveform, TableEntry, WaveformTableEntry
+from qctoolkit.pulses.table_pulse_template import TablePulseTemplate, TableWaveform, TableEntry, WaveformTableEntry
 from qctoolkit.pulses.parameters import ParameterDeclaration, ParameterNotProvidedException, ParameterValueIllegalException
 from qctoolkit.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy, JumpInterpolationStrategy
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
@@ -44,15 +44,15 @@ class TablePulseTemplateTest(unittest.TestCase):
         pulse.add_entry(3, 0)
         pulse.add_entry(5, 0)
         pulse.add_measurement_declaration('mw',0,5)
-        windows = pulse.get_measurement_windows({})
-        self.assertEqual([('mw',0,5)], windows)
+        windows = pulse.get_measurement_windows(parameters={}, measurement_mapping={'mw': 'asd'})
+        self.assertEqual([('asd', 0, 5)], windows)
 
     def test_no_measurement_windows(self) -> None:
         pulse = TablePulseTemplate()
         pulse.add_entry(1, 1)
         pulse.add_entry(3, 0)
         pulse.add_entry(5, 0)
-        windows = pulse.get_measurement_windows({})
+        windows = pulse.get_measurement_windows({}, {'mw': 'asd'})
         self.assertEqual([], windows)
 
     def test_measurement_windows_with_parameters(self) -> None:
@@ -61,8 +61,8 @@ class TablePulseTemplateTest(unittest.TestCase):
         pulse.add_entry('length', 0)
         pulse.add_measurement_declaration('mw',1,'(1+length)/2')
         parameters = dict(length=100)
-        windows = pulse.get_measurement_windows(parameters)
-        self.assertEqual(windows, [('mw', 1, 101/2)])
+        windows = pulse.get_measurement_windows(parameters, measurement_mapping={'mw': 'asd'})
+        self.assertEqual(windows, [('asd', 1, 101/2)])
 
     def test_add_entry_empty_time_is_negative(self) -> None:
         table = TablePulseTemplate()
@@ -457,7 +457,9 @@ class TablePulseTemplateTest(unittest.TestCase):
         ]
         self.assertEqual(expected, entries)
 
-        result_sampled = TableSingleChannelWaveform(entries).sample(numpy.linspace(0, 10, 11), 0)
+        result_sampled = TableWaveform(channel='A', waveform_table=entries, measurement_windows=[]).get_sampled(
+            channel='A',
+            sample_times=numpy.linspace(0, 10, 11))
 
         numbers = [5, 5, 5, 5, 5, 5, 4, 3, 2, 1, 0]
         expected = [float(x) for x in numbers]
@@ -611,8 +613,8 @@ class TablePulseTemplateTest(unittest.TestCase):
         pulse.add_entry(10, 0, channel=1)
 
         pulse.add_measurement_declaration('mw',1,7)
-        windows = pulse.get_measurement_windows({})
-        self.assertEqual([('mw',1,7)], windows)
+        windows = pulse.get_measurement_windows({}, measurement_mapping={'mw': 'asd'})
+        self.assertEqual([('asd',1,7)], windows)
 
     def test_measurement_windows_multi_out_of_pulse(self) -> None:
         pulse = TablePulseTemplate(channels=[0, 1])
@@ -626,7 +628,7 @@ class TablePulseTemplateTest(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             pulse.add_measurement_declaration('mw', 1, 't_meas')
-            pulse.get_measurement_windows({'t_meas':20})
+            pulse.get_measurement_windows({'t_meas': 20}, measurement_mapping={'mw': 'asd'})
 
 
 class TablePulseTemplateSerializationTests(unittest.TestCase):
@@ -696,13 +698,21 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
         table.add_entry(bar_decl, 0, 'jump')
         parameters = {'v': 2.3, 'foo': 1, 'bar': 4}
         instantiated_entries = table.get_entries_instantiated(parameters)
-        waveform = table.build_waveform(parameters)
+        channel_mapping = {'default': 'default'}
+        waveform = table.build_waveform(parameters,
+                                        measurement_mapping={},
+                                        channel_mapping=channel_mapping)
         sequencer = DummySequencer()
         instruction_block = DummyInstructionBlock()
-        channel_mapping = {'default': 'default'}
+
         table.build_sequence(sequencer, parameters, {}, {}, channel_mapping, instruction_block)
-        expected_waveform = MultiChannelWaveform({channel: TableSingleChannelWaveform(inst)
-                                                  for channel,inst in instantiated_entries.items()})
+        if len(instantiated_entries) == 1:
+            expected_waveform = TableWaveform(*instantiated_entries.popitem(), measurement_windows=[])
+        else:
+            expected_waveform = MultiChannelWaveform([TableWaveform(channel=channel,
+                                                                    waveform_table=inst,
+                                                                    measurement_windows=[])
+                                                      for channel, inst in instantiated_entries.items()])
         self.assertEqual(1, len(instruction_block.instructions))
         instruction = instruction_block.instructions[0]
         self.assertIsInstance(instruction, EXECInstruction)
@@ -762,8 +772,9 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
 
         instantiated_entries = table.get_entries_instantiated(parameters)
         expected_waveform = MultiChannelWaveform(
-            {('CH' + channel): TableSingleChannelWaveform(instantiated) for channel, instantiated in
-             instantiated_entries.items()})
+            [TableWaveform(channel=('CH'+channel), waveform_table=instantiated, measurement_windows=[])
+             for channel, instantiated in
+             instantiated_entries.items()])
 
         sequencer = DummySequencer()
         instruction_block = DummyInstructionBlock()
@@ -775,9 +786,9 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
         instruction = instruction_block.instructions[0]
         self.assertIsInstance(instruction, EXECInstruction)
         self.assertEqual(expected_waveform, instruction.waveform)
-        waveform = table.build_waveform(parameters)
+        waveform = table.build_waveform(parameters, measurement_mapping={}, channel_mapping=channel_mapping)
         for ch in waveform.defined_channels:
-            self.assertEqual(expected_waveform['CH' + ch], waveform[ch])
+            self.assertEqual(expected_waveform, waveform)
 
     def test_build_sequence_multi_one_channel_empty(self) -> None:
         table = TablePulseTemplate(channels={'A', 'B'})
@@ -794,54 +805,71 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
                              measurement_mapping={},
                              channel_mapping=channel_mapping,
                              instruction_block=instruction_block)
-        expected_waveform = MultiChannelWaveform({('CH'+channel):TableSingleChannelWaveform(instantiated) for channel, instantiated in instantiated_entries.items()})
+        expected_waveform = MultiChannelWaveform([TableWaveform('CH'+channel, instantiated, []) for channel, instantiated in instantiated_entries.items()])
         self.assertEqual(1, len(instruction_block.instructions))
         instruction = instruction_block.instructions[0]
         self.assertIsInstance(instruction, EXECInstruction)
         self.assertEqual(expected_waveform, instruction.waveform)
-        waveform = table.build_waveform(parameters)
-        for ch in waveform.defined_channels:
-            self.assertEqual(expected_waveform['CH' + ch], waveform[ch])
+        waveform = table.build_waveform(parameters, measurement_mapping={}, channel_mapping=channel_mapping)
+
+        self.assertEqual(expected_waveform, waveform)
 
 
 class TableWaveformDataTests(unittest.TestCase):
 
     def test_duration(self) -> None:
         entries = [WaveformTableEntry(0, 0, HoldInterpolationStrategy()), WaveformTableEntry(5, 1, HoldInterpolationStrategy())]
-        waveform = TableSingleChannelWaveform(entries)
+        waveform = TableWaveform('A', entries, [])
         self.assertEqual(5, waveform.duration)
 
     @unittest.skip("What is the point of empty waveforms?")
     def test_duration_no_entries(self) -> None:
-        waveform = TableSingleChannelWaveform([])
+        waveform = TableWaveform([])
         self.assertEqual(0, waveform.duration)
 
     def test_duration_no_entries_exception(self) -> None:
         with self.assertRaises(ValueError):
-            waveform = TableSingleChannelWaveform([])
+            waveform = TableWaveform('A', [], [])
             self.assertEqual(0, waveform.duration)
 
     def test_few_entries(self) -> None:
         with self.assertRaises(ValueError):
-            TableSingleChannelWaveform([[]])
+            TableWaveform('A', [[]], [])
         with self.assertRaises(ValueError):
-            TableSingleChannelWaveform([WaveformTableEntry(0, 0, HoldInterpolationStrategy())])
+            TableWaveform('A', [WaveformTableEntry(0, 0, HoldInterpolationStrategy())], [])
 
-    def test_sample(self) -> None:
+    def test_unsafe_sample(self) -> None:
         interp = DummyInterpolationStrategy()
         entries = [WaveformTableEntry(0, 0, interp),
                     WaveformTableEntry(2.1, -33.2, interp),
                     WaveformTableEntry(5.7, 123.4, interp)]
-        waveform = TableSingleChannelWaveform(entries)
-        sample_times = numpy.linspace(98.5, 103.5, num=11)
+        waveform = TableWaveform('A', entries, [])
+        sample_times = numpy.linspace(98.5, 103.5, num=11)-98
 
-        offset = 0.5
-        result = waveform.sample(sample_times, offset)
+        result = waveform.unsafe_sample('A', sample_times)
         expected_data = [((0, 0), (2.1, -33.2), [0.5, 1.0, 1.5, 2.0]),
                          ((2.1, -33.2), (5.7, 123.4), [2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5])]
         self.assertEqual(expected_data, interp.call_arguments)
-        expected_result = [sample_times - 98]
+        expected_result = sample_times
         self.assertTrue(numpy.all(expected_result == result))
+
+        output_expected = numpy.empty_like(expected_data)
+        output_received = waveform.unsafe_sample('A', sample_times, output_array=output_expected)
+        self.assertIs(output_expected, output_received)
+        self.assertTrue(numpy.all(expected_result == output_received))
+
+    def test_simple_properties(self):
+        interp = DummyInterpolationStrategy()
+        entries = [WaveformTableEntry(0, 0, interp),
+                   WaveformTableEntry(2.1, -33.2, interp),
+                   WaveformTableEntry(5.7, 123.4, interp)]
+        meas = [('M', 1, 2)]
+        chan = 'A'
+        waveform = TableWaveform(chan, entries, meas)
+
+        self.assertEqual(waveform.defined_channels, {chan})
+        self.assertEqual(waveform.get_measurement_windows(), meas)
+        self.assertIs(waveform.unsafe_get_subset_for_channels('A'), waveform)
 
 
 class ParameterValueIllegalExceptionTest(unittest.TestCase):

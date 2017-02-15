@@ -1,11 +1,12 @@
 """STANDARD LIBRARY IMPORTS"""
 from typing import Tuple, List, Dict, Optional, Set, Any
+import copy
 
 import numpy
 
 """LOCAL IMPORTS"""
 from qctoolkit.serialization import Serializer
-from qctoolkit.pulses.instructions import SingleChannelWaveform, Instruction, CJMPInstruction, GOTOInstruction, REPJInstruction
+from qctoolkit.pulses.instructions import Waveform, Instruction, CJMPInstruction, GOTOInstruction, REPJInstruction
 from qctoolkit.pulses.sequencing import Sequencer, InstructionBlock, SequencingElement
 from qctoolkit.pulses.parameters import Parameter, ParameterDeclaration
 from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementWindow
@@ -68,6 +69,7 @@ class DummySequencingElement(SequencingElement):
         self.push_elements = push_elements
         self.parameter_names = set()
         self.condition_names = set()
+        self.atomicity_ = False
 
     def build_sequence(self,
                        sequencer: Sequencer,
@@ -93,6 +95,10 @@ class DummySequencingElement(SequencingElement):
         self.conditions = conditions
         return self.requires_stop_
 
+    @property
+    def atomicity(self):
+        return self.atomicity_
+
 
 class DummyInstruction(Instruction):
 
@@ -117,19 +123,20 @@ class DummyInstructionBlock(InstructionBlock):
             self.embedded_blocks.append(instruction.target.block)
 
 
-class DummySingleChannelWaveform(SingleChannelWaveform):
+class DummyWaveform(Waveform):
 
-    def __init__(self, duration: float=0, sample_output: numpy.ndarray=None, num_channels: int=1) -> None:
+    def __init__(self, duration: float=0, sample_output: numpy.ndarray=None, defined_channels={'A'}, measurement_windows=[]) -> None:
         super().__init__()
         self.duration_ = duration
         self.sample_output = sample_output
-        self.num_channels_ = num_channels
+        self.defined_channels_ = defined_channels
         self.sample_calls = []
+        self.measurement_windows_ = measurement_windows
 
     @property
     def compare_key(self) -> Any:
         if self.sample_output is not None:
-            return tuple(self.sample_output.tolist())
+            return hash(bytes(self.sample_output))
         else:
             return id(self)
 
@@ -138,18 +145,35 @@ class DummySingleChannelWaveform(SingleChannelWaveform):
         return self.duration_
 
     @property
-    def num_channels(self) -> int:
-        return self.num_channels_
-
-    @property
     def measurement_windows(self):
         return []
 
-    def sample(self, sample_times: numpy.ndarray, first_offset: float=0) -> numpy.ndarray:
-        self.sample_calls.append((list(sample_times), first_offset))
+    def unsafe_sample(self,
+                      channel: ChannelID,
+                      sample_times: numpy.ndarray,
+                      output_array: numpy.ndarray = None) -> numpy.ndarray:
+        self.sample_calls.append((channel, list(sample_times), output_array))
+        if output_array is None:
+            output_array = numpy.empty_like(sample_times)
         if self.sample_output is not None:
-            return self.sample_output
-        return sample_times
+            output_array[:] = self.sample_output
+        else:
+            output_array[:] = sample_times
+        return output_array
+
+    def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> 'Waveform':
+        if not channels <= self.defined_channels_:
+            raise KeyError('channels not in defined_channels')
+        c = copy.copy(self)
+        c.defined_channels_ = channels
+        return c
+
+    @property
+    def defined_channels(self):
+        return self.defined_channels_
+
+    def get_measurement_windows(self):
+        return self.measurement_windows_
 
 
 class DummySequencer(Sequencer):
@@ -256,7 +280,7 @@ class DummyPulseTemplate(AtomicPulseTemplate):
                  parameter_names: Set[str]={},
                  defined_channels: Set[ChannelID]={'default'},
                  duration: float=0,
-                 waveform: SingleChannelWaveform=None,
+                 waveform: Waveform=None,
                  measurement_names: Set[str] = set()) -> None:
         super().__init__()
         self.requires_stop_ = requires_stop
@@ -308,11 +332,14 @@ class DummyPulseTemplate(AtomicPulseTemplate):
                        instruction_block: InstructionBlock):
         self.build_sequence_arguments.append((sequencer,parameters,conditions, measurement_mapping, channel_mapping, instruction_block))
 
-    def build_waveform(self, parameters: Dict[str, Parameter]) -> Optional[SingleChannelWaveform]:
-        self.build_waveform_calls.append(parameters)
+    def build_waveform(self,
+                       parameters: Dict[str, Parameter],
+                       measurement_mapping: Dict[str, str],
+                       channel_mapping: Dict[ChannelID, ChannelID]):
+        self.build_waveform_calls.append((parameters, measurement_mapping, channel_mapping))
         if self.waveform is not None:
             return self.waveform
-        return DummySingleChannelWaveform(duration=self.duration, num_channels=self.num_channels)
+        return DummyWaveform(duration=self.duration, defined_channels=self.defined_channels)
 
     def requires_stop(self, parameters: Dict[str, Parameter], conditions: Dict[str, Condition]) -> bool:
         self.requires_stop_arguments.append((parameters,conditions))

@@ -18,13 +18,14 @@ Classes:
 
 import itertools
 from abc import ABCMeta, abstractmethod, abstractproperty
-from typing import List, Any, Dict, Iterable, Optional, Tuple, Union
+from typing import List, Any, Dict, Iterable, Optional, Tuple, Union, Set
 from weakref import WeakValueDictionary
 import numpy
 
 from qctoolkit.comparable import Comparable
+from qctoolkit.pulses.pulse_template import MeasurementWindow
 
-__all__ = ["SingleChannelWaveform", "Trigger",
+__all__ = ["Waveform", "Trigger",
            "InstructionPointer", "Instruction", "CJMPInstruction", "EXECInstruction",
            "GOTOInstruction", "STOPInstruction", "REPJInstruction", "AbstractInstructionBlock", "InstructionBlock",
            "ImmutableInstructionBlock", "InstructionSequence", "ChannelID"
@@ -33,7 +34,7 @@ __all__ = ["SingleChannelWaveform", "Trigger",
 ChannelID = Union[str,int]
 
 
-class SingleChannelWaveform(Comparable, metaclass=ABCMeta):
+class Waveform(Comparable, metaclass=ABCMeta):
     """Represents an instantiated PulseTemplate which can be sampled to retrieve arrays of voltage
     values for the hardware."""
 
@@ -44,40 +45,86 @@ class SingleChannelWaveform(Comparable, metaclass=ABCMeta):
         """The duration of the waveform in time units."""
 
     @abstractmethod
-    def sample(self, sample_times: numpy.ndarray, first_offset: float=0) -> numpy.ndarray:
+    def unsafe_sample(self,
+                      channel: ChannelID,
+                      sample_times: numpy.ndarray,
+                      output_array: Union[numpy.ndarray, None]=None) -> numpy.ndarray:
         """Sample the waveform at given sample times.
 
-        The only requirement on the provided sample times is that they must be monotonously
-        increasing. The must not lie in the range of [0, waveform.duration] (but will be normalized
-        internally into that range for the sampling). For example, if this Waveform had a duration
-        of 5 and the given sample times would be [11, 15, 20], the result would be the samples of
-        this Waveform at [0, 2.5, 5] in the Waveforms domain. This allows easier sampling of
-        multiple subsequent Waveforms.
+        The unsafe means that there are no sanity checks performed. The provided sample times are assumed to be
+        monotonously increasing and lie in the range of [0, waveform.duration]
 
         Args:
-            numpy.ndarray sample_times: Times at which this Waveform will be sampled. Will be
-                normalized such that they lie in the range [0, waveform.duration] for interpolation.
-            float first_offset: Offset of the discrete first sample from the actual beginning of
-                the waveform in a continuous time domain.
+            numpy.ndarray sample_times: Times at which this Waveform will be sampled.
+            numpy.ndarray output_array: Has to be either None or an array of the same size and type as sample_times. If
+            not None, the sampled values will be written here and this array will be returned
         Result:
-            numpy.ndarray of the sampled values of this Waveform at the provided sample times.
+            numpy.ndarray of the sampled values of this Waveform at the provided sample times. Has the same number of
+            elements as sample_times.
         """
 
-    def get_sampled(self, *args, **kwargs) -> numpy.ndarray:
-        """A wrapper to the sample method which caches the result.
+    def get_sampled(self,
+                    channel: ChannelID,
+                    sample_times: numpy.ndarray,
+                    output_array: Union[numpy.ndarray, None]=None) -> numpy.ndarray:
+        """A wrapper to the unsafe_sample method which caches the result. This method enforces the constrains
+        unsafe_sample expects and caches the result to save memory.
 
-        Args:
-            args, kwargs: Same signature as the sample method. See documentation there.
-
+        Args/Result:
+            numpy.ndarray sample_times: Times at which this Waveform will be sampled.
+            numpy.ndarray output_array: Has to be either None or an array of the same size and type as sample_times.
+            If None, a new array will be created and cached to save memory.
+            If not None, the sampled values will be written here and this array will be returned.
         Result:
-            A read only numpy.ndarray of the sampled values of this Waveform at the provided sample times.
+            A numpy.ndarray of the sampled values of this Waveform at the provided sample times.
         """
-        result = self.sample(*args, **kwargs)
-        result.flags.writable = False
-        key = hash(result.data)
-        if key not in self.__sampled_cache:
-            self.__sampled_cache[key] = result
-        return self.__sampled_cache[key]
+        if numpy.any(sample_times[:-1] >= sample_times[1:]):
+            raise ValueError('The sample times are not in the range [0, duration]')
+        if sample_times[0] < 0 or sample_times[-1] > self.duration:
+            raise ValueError('The sample times are not monotonously increasing')
+        if channel not in self.defined_channels:
+            raise KeyError('Channel not defined in this waveform: {}'.format(channel))
+
+        if output_array is None:
+            # cache the result to save memory
+            result = self.unsafe_sample(channel, sample_times)
+            result.flags.writeable = False
+            key = hash(bytes(result))
+            if key not in self.__sampled_cache:
+                self.__sampled_cache[key] = result
+            return self.__sampled_cache[key]
+        else:
+            if len(output_array) != len(sample_times):
+                raise ValueError('Output array length and sample time length are different')
+            # use the user provided memory
+            return self.unsafe_sample(channel=channel,
+                                      sample_times=sample_times,
+                                      output_array=output_array)
+
+    @abstractproperty
+    def defined_channels(self) -> Set[ChannelID]:
+        """"""
+
+    @abstractmethod
+    def get_measurement_windows(self) -> Iterable[MeasurementWindow]:
+        """This function will in must cases return a generator to fill the measurement windows in a more efficient
+        data structure like a dict."""
+
+    @abstractmethod
+    def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> 'Waveform':
+        """"""
+
+    def get_subset_for_channels(self, channels: Set[ChannelID]) -> 'Waveform':
+        """
+
+        :param channels:
+        :return:
+        """
+        if not channels <= self.defined_channels:
+            raise KeyError('Channels not defined on waveform: {}'.format(channels))
+        if channels == self.defined_channels:
+            return self
+        return self.unsafe_get_subset_for_channels(channels=channels)
 
 
 class Trigger(Comparable):
@@ -230,7 +277,7 @@ class GOTOInstruction(Instruction):
 class EXECInstruction(Instruction):
     """An instruction to execute/play back a waveform."""
 
-    def __init__(self, waveform: 'MultiChannelWaveform', measurement_windows: List['MeasurementWindow'] = []) -> None:
+    def __init__(self, waveform: 'MultiChannelWaveform') -> None:
         """Create a new EXECInstruction object.
 
         Args:
@@ -238,7 +285,6 @@ class EXECInstruction(Instruction):
         """
         super().__init__()
         self.waveform = waveform
-        self.measurement_windows = measurement_windows
 
     @property
     def compare_key(self) -> Any:
@@ -396,14 +442,14 @@ class InstructionBlock(AbstractInstructionBlock):
         """
         self.__instruction_list.append(instruction)
 
-    def add_instruction_exec(self, waveform: 'MultiChannelWaveform', measurement_windows: List[Tuple[str, List['MeasurementWindows']]] =  None) -> None:
+    def add_instruction_exec(self, waveform: 'MultiChannelWaveform') -> None:
         """Create and append a new EXECInstruction object for the given waveform at the end of this
         instruction block.
 
         Args:
-            waveform (SingleChannelWaveform): The Waveform object referenced by the new EXECInstruction.
+            waveform (Waveform): The Waveform object referenced by the new EXECInstruction.
         """
-        self.add_instruction(EXECInstruction(waveform, measurement_windows))
+        self.add_instruction(EXECInstruction(waveform))
 
     def add_instruction_goto(self, target_block: 'InstructionBlock') -> None:
         """Create and append a new GOTOInstruction object with a given target block at the end of

@@ -21,7 +21,6 @@ from qctoolkit.pulses.sequencing import SequencingElement, InstructionBlock
 __all__ = ["MeasurementWindow", "PulseTemplate", "AtomicPulseTemplate", "DoubleParameterNameException", "ChannelID"]
 
 
-
 class PulseTemplate(Serializable, SequencingElement, metaclass=ABCMeta):
     """A PulseTemplate represents the parametrized general structure of a pulse.
 
@@ -77,23 +76,17 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=ABCMeta):
         return SequencePulseTemplate(subtemplates, external_parameters)
 
 
-
-class AtomicPulseTemplate(PulseTemplate):
-    """A PulseTemplate that does not imply any control flow disruptions and can be directly
-    translated into a waveform.
-
-    Implies that no AtomicPulseTemplate object is interruptable.
-    """
-
+class PossiblyAtomicPulseTemplate(PulseTemplate):
+    """This PulseTemplate may be atomic."""
     def __init__(self, identifier: Optional[str]=None):
         super().__init__(identifier=identifier)
 
-    def is_interruptable(self) -> bool:
-        return False
-
     @abstractmethod
-    def build_waveform(self, parameters: Dict[str, Parameter]) -> Optional['MultiChannelWaveform']:
-        """Translate this AtomicPulseTemplate into a waveform according to the given parameteres.
+    def build_waveform(self,
+                       parameters: Dict[str, Parameter],
+                       measurement_mapping: Dict[str, str],
+                       channel_mapping: Dict[ChannelID, ChannelID]) -> Optional['Waveform']:
+        """Translate this PulseTemplate into a waveform according to the given parameteres.
 
         Args:
             parameters (Dict(str -> Parameter)): A mapping of parameter names to Parameter objects.
@@ -102,12 +95,33 @@ class AtomicPulseTemplate(PulseTemplate):
                 does not represent a valid waveform.
         """
 
-    @abstractmethod
-    def get_measurement_windows(self, parameters: Dict[str, Parameter]=None) -> List[MeasurementWindow]:
-        """
-        :param parameters:
-        :return:
-        """
+    def atomic_build_sequence(self,
+                              parameters: Dict[str, Parameter],
+                              measurement_mapping: Dict[str, str],
+                              channel_mapping: Dict['ChannelID', 'ChannelID'],
+                              instruction_block: InstructionBlock):
+        waveform = self.build_waveform(parameters,
+                                       measurement_mapping=measurement_mapping,
+                                       channel_mapping=channel_mapping)
+        if waveform:
+            instruction_block.add_instruction_exec(waveform)
+
+
+class AtomicPulseTemplate(PossiblyAtomicPulseTemplate, metaclass=ABCMeta):
+    """A PulseTemplate that does not imply any control flow disruptions and can be directly
+    translated into a waveform.
+
+    Implies that no AtomicPulseTemplate object is interruptable.
+    """
+    def __init__(self, identifier: Optional[str]=None):
+        super().__init__(identifier=identifier)
+
+    def is_interruptable(self) -> bool:
+        return False
+
+    @property
+    def atomicity(self) -> bool:
+        return True
 
     def build_sequence(self,
                        sequencer: 'Sequencer',
@@ -116,15 +130,10 @@ class AtomicPulseTemplate(PulseTemplate):
                        measurement_mapping: Dict[str, str],
                        channel_mapping: Dict['ChannelID', 'ChannelID'],
                        instruction_block: InstructionBlock) -> None:
-        waveform = self.build_waveform(parameters)
-        if waveform:
-            meas_windows = self.get_measurement_windows(parameters)
-
-            meas_windows = [(measurement_mapping[name],begin,end) for name, begin, end in meas_windows]
-
-            instruction_block.add_instruction_exec(waveform.get_remapped(channel_mapping), meas_windows)
-
-
+        self.atomic_build_sequence(parameters=parameters,
+                                   measurement_mapping=measurement_mapping,
+                                   channel_mapping=channel_mapping,
+                                   instruction_block=instruction_block)
 
 
 class DoubleParameterNameException(Exception):

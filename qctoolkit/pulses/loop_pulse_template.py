@@ -69,6 +69,10 @@ class LoopPulseTemplate(PulseTemplate):
     def measurement_names(self) -> Set[str]:
         return self.__body.measurement_names
 
+    @property
+    def atomicity(self) -> bool:
+        False
+
     def __obtain_condition_object(self, conditions: Dict[str, Condition]) -> Condition:
         try:
             return conditions[self.__condition]

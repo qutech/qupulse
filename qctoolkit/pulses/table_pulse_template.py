@@ -19,12 +19,12 @@ from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter, \
 from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementWindow
 from qctoolkit.pulses.interpolation import InterpolationStrategy, LinearInterpolationStrategy, \
     HoldInterpolationStrategy, JumpInterpolationStrategy
-from qctoolkit.pulses.instructions import SingleChannelWaveform
+from qctoolkit.pulses.instructions import Waveform
 from qctoolkit.pulses.conditions import Condition
 from qctoolkit.expressions import Expression
 from qctoolkit.pulses.multi_channel_pulse_template import ChannelID, MultiChannelWaveform
 
-__all__ = ["TablePulseTemplate", "TableSingleChannelWaveform", "WaveformTableEntry"]
+__all__ = ["TablePulseTemplate", "TableWaveform", "WaveformTableEntry"]
 
 WaveformTableEntry = NamedTuple( # pylint: disable=invalid-name
     "WaveformTableEntry",
@@ -32,10 +32,13 @@ WaveformTableEntry = NamedTuple( # pylint: disable=invalid-name
 )
 
 
-class TableSingleChannelWaveform(SingleChannelWaveform):
+class TableWaveform(Waveform):
     """Waveform obtained from instantiating a TablePulseTemplate."""
 
-    def __init__(self, waveform_table: Tuple[WaveformTableEntry]) -> None:
+    def __init__(self,
+                 channel: ChannelID,
+                 waveform_table: Iterable[WaveformTableEntry],
+                 measurement_windows: Iterable[MeasurementWindow]) -> None:
         """Create a new TableWaveform instance.
 
         Args:
@@ -45,25 +48,41 @@ class TableSingleChannelWaveform(SingleChannelWaveform):
         if len(waveform_table) < 2:
             raise ValueError("A given waveform table has less than two entries.")
         super().__init__()
-        self.__table = waveform_table
+        self.__table = tuple(waveform_table)
+        self.__channel_id = channel
+        self.__measurement_windows = tuple(measurement_windows)
 
     @property
     def compare_key(self) -> Any:
-        return self.__table
+        return self.__channel_id, self.__table, self.__measurement_windows
 
     @property
     def duration(self) -> float:
         return self.__table[-1].t
 
-    def sample(self, sample_times: np.ndarray, first_offset: float=0) -> np.ndarray:
-        sample_times = sample_times.copy()
-        sample_times -= (sample_times[0] - first_offset)
-        voltages = np.empty(len(sample_times))
+    def unsafe_sample(self,
+                      channel: ChannelID,
+                      sample_times: np.ndarray,
+                      output_array: Union[np.ndarray, None]=None) -> np.ndarray:
+        if output_array is None:
+            output_array = np.empty(len(sample_times))
+
         for entry1, entry2 in zip(self.__table[:-1], self.__table[1:]):
-            indices = np.logical_and(sample_times >= entry1.t, sample_times <= entry2.t)
-            voltages[indices] = \
+            indices = slice(np.searchsorted(sample_times, entry1.t, 'left'),
+                            np.searchsorted(sample_times, entry2.t, 'right'))
+            output_array[indices] = \
                 entry2.interp((entry1.t, entry1.v), (entry2.t, entry2.v), sample_times[indices])
-        return voltages
+        return output_array
+
+    @property
+    def defined_channels(self) -> Set[ChannelID]:
+        return {self.__channel_id}
+
+    def get_measurement_windows(self) -> Iterable[MeasurementWindow]:
+        return self.__measurement_windows
+
+    def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> 'Waveform':
+        return self
 
 
 TableValue = Union[float, ParameterDeclaration] # pylint: disable=invalid-name
@@ -376,7 +395,9 @@ class TablePulseTemplate(AtomicPulseTemplate):
         return set(self.__time_parameter_declarations.values()) | \
                set(self.__voltage_parameter_declarations.values())
 
-    def get_measurement_windows(self, parameters: Dict[str, Parameter]) -> List[MeasurementWindow]:
+    def get_measurement_windows(self,
+                                parameters: Dict[str, Parameter],
+                                measurement_mapping: Dict[str, str]) -> List[MeasurementWindow]:
         def get_val(v):
             return v if not isinstance(v, Expression) else v.evaluate(
               **{name_: parameters[name_].get_value() if isinstance(parameters[name_], Parameter) else parameters[name_]
@@ -388,11 +409,10 @@ class TablePulseTemplate(AtomicPulseTemplate):
         resulting_windows = []
         for name, windows in self.__measurement_windows.items():
             for begin, end in windows:
-                resulting_windows.append( (name, get_val(begin), get_val(end)) )
+                resulting_windows.append((measurement_mapping[name], get_val(begin), get_val(end)))
                 if resulting_windows[-1][2] > t_max:
                     raise ValueError('Measurement window out of pulse')
         return resulting_windows
-
 
     @property
     def measurement_declarations(self):
@@ -403,7 +423,6 @@ class TablePulseTemplate(AtomicPulseTemplate):
         return {name: [(as_builtin(begin), as_builtin(end))
                        for begin, end in windows]
                 for name, windows in self.__measurement_windows.items() }
-
 
     @property
     def measurement_names(self) -> Set[str]:
@@ -434,7 +453,6 @@ class TablePulseTemplate(AtomicPulseTemplate):
         else:
             self.__measurement_windows[name] = [(begin,end)]
 
-
     @property
     def is_interruptable(self) -> bool:
         return False
@@ -448,7 +466,7 @@ class TablePulseTemplate(AtomicPulseTemplate):
         return len(self.__entries)
 
     def get_entries_instantiated(self, parameters: Dict[str, Parameter]) \
-            -> Dict[ChannelID,List[Tuple[float, float]]]:
+            -> Dict[ChannelID, List[Tuple[float, float]]]:
         """Compute an instantiated list of the table's entries.
 
         Args:
@@ -521,10 +539,22 @@ class TablePulseTemplate(AtomicPulseTemplate):
                 entries.pop(index)
         return entries
 
-    def build_waveform(self, parameters: Dict[str, Parameter]) -> Optional[MultiChannelWaveform]:
-        instantiated = self.get_entries_instantiated(parameters)
-        return MultiChannelWaveform({channel: TableSingleChannelWaveform(instantiated_channel)
-                                     for channel, instantiated_channel in instantiated.items()})
+    def build_waveform(self,
+                       parameters: Dict[str, Parameter],
+                       measurement_mapping: Dict[str, str],
+                       channel_mapping: Dict[ChannelID, ChannelID]) -> Optional['Waveform']:
+        instantiated = [(channel_mapping[channel], instantiated_channel)
+                        for channel, instantiated_channel in self.get_entries_instantiated(parameters).items()]
+        measurement_windows = self.get_measurement_windows(parameters=parameters,
+                                                           measurement_mapping=measurement_mapping)
+
+        if len(instantiated) == 1:
+            return TableWaveform(*instantiated.pop(), measurement_windows)
+        else:
+            return MultiChannelWaveform(
+                [TableWaveform(*instantiated.pop(), measurement_windows)]
+                +
+                [TableWaveform(channel, instantiated_channel, [])for channel, instantiated_channel in instantiated])
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],

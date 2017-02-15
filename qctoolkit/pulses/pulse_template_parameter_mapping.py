@@ -5,7 +5,7 @@ from typing import Optional, Set, Dict, Union, Iterable, List, Any
 import itertools
 
 from qctoolkit.expressions import Expression
-from qctoolkit.pulses.pulse_template import PulseTemplate
+from qctoolkit.pulses.pulse_template import PulseTemplate, PossiblyAtomicPulseTemplate
 from qctoolkit.pulses.parameters import Parameter, ParameterDeclaration, MappedParameter, ParameterNotProvidedException
 from qctoolkit.pulses.instructions import ChannelID
 
@@ -17,7 +17,7 @@ __all__ = [
 ]
 
 
-class MappingTemplate(PulseTemplate):
+class MappingTemplate(PossiblyAtomicPulseTemplate):
     def __init__(self, template: PulseTemplate,
                  parameter_mapping: Dict[str, str],
                  measurement_mapping: Dict[str, str] = dict(),
@@ -29,7 +29,7 @@ class MappingTemplate(PulseTemplate):
         if mapped_internal_parameters - internal_parameters:
             raise UnnecessaryMappingException(template, mapped_internal_parameters - internal_parameters)
         elif internal_parameters - mapped_internal_parameters:
-            raise MissingMappingException(template,internal_parameters - mapped_internal_parameters)
+            raise MissingMappingException(template, internal_parameters - mapped_internal_parameters)
         parameter_mapping = dict((k, Expression(v)) for k, v in parameter_mapping.items())
 
         internal_names = template.measurement_names
@@ -78,6 +78,14 @@ class MappingTemplate(PulseTemplate):
     @property
     def defined_channels(self) -> Set[ChannelID]:
         return {self.__channel_mapping[k] for k in self.template.defined_channels}
+
+    @property
+    def atomicity(self) -> bool:
+        return self.__template.atomicity
+
+    @atomicity.setter
+    def atomicity(self, val) -> None:
+        self.__template.atomicity = val
 
     def get_serialization_data(self, serializer: 'Serializer') -> Dict[str,Any]:
         return dict(template=serializer.dictify(self.template),
@@ -132,8 +140,18 @@ class MappingTemplate(PulseTemplate):
                                      parameters=self.map_parameters(parameters),
                                      conditions=conditions,
                                      measurement_mapping=self.get_updated_measurement_mapping(measurement_mapping),
-                                     channel_mapping=channel_mapping,
+                                     channel_mapping=self.get_updated_channel_mapping(channel_mapping),
                                      instruction_block=instruction_block)
+
+    def build_waveform(self,
+                       parameters: Dict[str, Parameter],
+                       measurement_mapping: Dict[str, str],
+                       channel_mapping: Dict[ChannelID, ChannelID]):
+        """This gets called if the parent is atomic"""
+        return self.template.build_waveform(
+            parameters=self.map_parameters(parameters),
+            measurement_mapping=self.get_updated_measurement_mapping(measurement_mapping),
+            channel_mapping=self.get_updated_channel_mapping(channel_mapping))
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],

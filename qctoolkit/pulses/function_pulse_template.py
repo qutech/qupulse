@@ -8,7 +8,6 @@ Classes:
 
 
 from typing import Any, Dict, List, Set, Optional, Union
-import numbers
 
 import numpy as np
 
@@ -16,12 +15,12 @@ from qctoolkit.expressions import Expression
 from qctoolkit.serialization import Serializer
 
 from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter
-from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementWindow
-from qctoolkit.pulses.instructions import SingleChannelWaveform
+from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementWindow, ChannelID
+from qctoolkit.pulses.instructions import Waveform
 from qctoolkit.pulses.pulse_template_parameter_mapping import ParameterNotProvidedException
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 
-__all__ = ["FunctionPulseTemplate", "FunctionSingleChannelWaveform"]
+__all__ = ["FunctionPulseTemplate", "FunctionWaveform"]
 
 
 class FunctionPulseTemplate(AtomicPulseTemplate):
@@ -89,9 +88,6 @@ class FunctionPulseTemplate(AtomicPulseTemplate):
                for (parameter_name, parameter) in parameters.items()}
         )
 
-    def get_measurement_windows(self, parameters: Dict[str, Parameter]) -> List[MeasurementWindow]:
-        return []
-
     @property
     def measurement_names(self) -> Set[str]:
         return set()
@@ -104,15 +100,19 @@ class FunctionPulseTemplate(AtomicPulseTemplate):
     def defined_channels(self) -> Set['ChannelID']:
         return set(self.__channel)
 
-    def build_waveform(self, parameters: Dict[str, Parameter]) -> Optional[MultiChannelWaveform]:
-        return MultiChannelWaveform(
-            {self.__channel: FunctionSingleChannelWaveform(
-                {parameter_name: parameter.get_value()
-                 for (parameter_name, parameter) in parameters.items()},
-                self.__expression,
-                self.__duration_expression
-            )}
+    def build_waveform(self,
+                       parameters: Dict[str, Parameter],
+                       measurement_mapping: Dict[str, str],
+                       channel_mapping: Dict[ChannelID, ChannelID]):
+        return FunctionWaveform(
+            channel=channel_mapping[self.__channel],
+            parameters={parameter_name: parameter.get_value()
+                        for (parameter_name, parameter) in parameters.items()},
+            expression=self.__expression,
+            duration_expression=self.__duration_expression,
+            measurement_windows=[]
         )
+
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],
@@ -143,13 +143,16 @@ class FunctionPulseTemplate(AtomicPulseTemplate):
         )
 
 
-class FunctionSingleChannelWaveform(SingleChannelWaveform):
+class FunctionWaveform(Waveform):
     """Waveform obtained from instantiating a FunctionPulseTemplate."""
 
     def __init__(self,
                  parameters: Dict[str, float],
                  expression: Expression,
-                 duration_expression: Expression) -> None:
+                 duration_expression: Expression,
+                 measurement_windows: List[MeasurementWindow],
+                 channel: ChannelID
+                 ) -> None:
         """Creates a new FunctionWaveform instance.
 
         Args:
@@ -164,10 +167,15 @@ class FunctionSingleChannelWaveform(SingleChannelWaveform):
         self.__expression = expression
         self.__parameters = parameters
         self.__duration = duration_expression.evaluate(**self.__parameters)
+        self.__channel_id = channel
+        self.__measurement_windows = measurement_windows
 
     @property
-    def num_channels(self):
-        return 1
+    def defined_channels(self):
+        return {self.__channel_id}
+
+    def get_measurement_windows(self):
+        return self.__measurement_windows
     
     def __evaluate_partially(self, t):
         params = self.__parameters.copy()
@@ -176,15 +184,21 @@ class FunctionSingleChannelWaveform(SingleChannelWaveform):
     
     @property
     def compare_key(self) -> Any:
-        return self.__expression, self.__duration, self.__parameters
+        return self.__channel_id, self.__expression, self.__duration, self.__parameters
 
     @property
     def duration(self) -> float:
         return self.__duration
 
-    def sample(self, sample_times: np.ndarray, first_offset: float=0) -> np.ndarray:
-        sample_times -= (sample_times[0] - first_offset)
-        func = np.vectorize(self.__evaluate_partially)
-        voltages = np.empty((1, len(sample_times)))
-        voltages[0] = func(sample_times)
-        return voltages
+    def unsafe_sample(self,
+                      channel: ChannelID,
+                      sample_times: np.ndarray,
+                      output_array: Union[np.ndarray, None] = None) -> np.ndarray:
+        if output_array is None:
+            output_array = np.empty(len(sample_times))
+        for i, t in enumerate(sample_times):
+            output_array[i] = self.__evaluate_partially(t)
+        return output_array
+
+    def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> 'Waveform':
+        return self

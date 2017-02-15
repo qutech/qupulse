@@ -1,15 +1,67 @@
 import unittest
 import copy
 
+import numpy as np
+
 from qctoolkit.pulses.pulse_template import DoubleParameterNameException
 from qctoolkit.expressions import Expression
 from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
-from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
+from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate, SequenceWaveform
 from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingException, UnnecessaryMappingException, MissingParameterDeclarationException, MappingTemplate
 from qctoolkit.pulses.parameters import ParameterDeclaration, ParameterNotProvidedException, ConstantParameter
 
-from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyPulseTemplate, DummyNoValueParameter
+from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyPulseTemplate,\
+    DummyNoValueParameter, DummyWaveform
 from tests.serialization_dummies import DummySerializer
+
+
+class SequenceWaveformTest(unittest.TestCase):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+
+    def test_init(self):
+        dwf_ab = DummyWaveform(duration=1.1, defined_channels={'A', 'B'})
+        dwf_abc = DummyWaveform(duration=2.2, defined_channels={'A', 'B', 'C'})
+
+        with self.assertRaises(ValueError):
+            SequenceWaveform((dwf_ab, dwf_abc))
+
+        swf1 = SequenceWaveform((dwf_ab, dwf_ab))
+        self.assertEqual(swf1.duration, 2*dwf_ab.duration)
+        self.assertEqual(len(swf1.compare_key), 2)
+
+        swf2 = SequenceWaveform((swf1, dwf_ab))
+        self.assertEqual(swf2.duration, 3 * dwf_ab.duration)
+
+        self.assertEqual(len(swf2.compare_key), 3)
+
+    def test_unsafe_sample(self):
+        dwfs = (DummyWaveform(duration=1., sample_output=np.linspace(5, 6, num=10)),
+                DummyWaveform(duration=3., sample_output=np.linspace(1, 2, num=30)),
+                DummyWaveform(duration=2., sample_output=np.linspace(8, 9, num=20)))
+
+        swf = SequenceWaveform(dwfs)
+
+        sample_times = np.arange(0, 60)*0.1
+        expected_output = np.concatenate(tuple(dwf.sample_output for dwf in dwfs))
+
+        output = swf.unsafe_sample('A', sample_times=sample_times)
+        np.testing.assert_equal(expected_output, output)
+
+        output_2 = swf.unsafe_sample('A', sample_times=sample_times, output_array=output)
+        self.assertIs(output_2, output)
+
+    def test_get_measurement_windows(self):
+        dwfs = (DummyWaveform(duration=1., measurement_windows=[('M', 0.2, 0.5)]),
+                DummyWaveform(duration=3., measurement_windows=[('N', 0.6, 0.7)]),
+                DummyWaveform(duration=2., measurement_windows=[('M', 0.1, 0.2), ('N', 0.5, 0.6)]))
+        swf = SequenceWaveform(dwfs)
+
+        expected_windows = (('M', 0.2, 0.5), ('N', 1.6, 1.7), ('M', 4.1, 4.2), ('N', 4.5, 4.6))
+        received_windows = tuple(swf.get_measurement_windows())
+        self.assertEqual(len(received_windows), len(expected_windows))
+        self.assertEqual(set(received_windows), set(expected_windows))
+
 
 class SequencePulseTemplateTest(unittest.TestCase):
 
@@ -126,15 +178,6 @@ class SequencePulseTemplateSerializationTests(unittest.TestCase):
 
 
 class SequencePulseTemplateSequencingTests(SequencePulseTemplateTest):
-    @unittest.skip("The test for missing parameters is performed on the lowest level.")
-    def test_missing_parameter(self):
-        sequencer = DummySequencer()
-        block = DummyInstructionBlock()
-        parameters = copy.deepcopy(self.parameters)
-        parameters.pop('uptime')
-        with self.assertRaises(ParameterNotProvidedException):
-            self.sequence.build_sequence(sequencer, parameters, {}, {}, {}, block)
-
     def test_build_sequence(self) -> None:
         sub1 = DummyPulseTemplate(requires_stop=False)
         sub2 = DummyPulseTemplate(requires_stop=True, parameter_names={'foo'})

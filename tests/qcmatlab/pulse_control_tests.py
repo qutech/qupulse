@@ -2,7 +2,7 @@ import unittest
 import numpy
 import numpy.random
 from qctoolkit.qcmatlab.pulse_control import PulseControlInterface
-from tests.pulses.sequencing_dummies import DummySingleChannelWaveform, DummyInstructionBlock
+from tests.pulses.sequencing_dummies import DummyWaveform, DummyInstructionBlock
 
 
 class PulseControlInterfaceTests(unittest.TestCase):
@@ -12,12 +12,12 @@ class PulseControlInterfaceTests(unittest.TestCase):
         sample_rate = 10
         expected_samples = numpy.random.rand(11)
 
-        waveform = DummySingleChannelWaveform(duration=1, sample_output=expected_samples)
+        waveform = DummyWaveform(duration=1, sample_output=expected_samples)
         pci = PulseControlInterface(sample_rate, time_scaling=1)
         result = pci.create_waveform_struct(waveform, name=name)
 
         expected_sample_times = numpy.linspace(0, 1, 11).tolist()
-        self.assertEqual((expected_sample_times, 0), waveform.sample_calls[0])
+        self.assertAlmostEqual(expected_sample_times, waveform.sample_calls[0][1])
         expected_result = dict(name=name,
                                data=dict(wf=expected_samples.tolist(),
                                          marker=numpy.zeros_like(expected_samples).tolist(),
@@ -48,9 +48,9 @@ class PulseControlInterfaceTests(unittest.TestCase):
         expected_samples_wf1 = numpy.random.rand(11)
         expected_samples_wf2 = numpy.random.rand(11)
         block = DummyInstructionBlock()
-        wf1a = DummySingleChannelWaveform(duration=1, sample_output=expected_samples_wf1)
-        wf1b = DummySingleChannelWaveform(duration=1, sample_output=expected_samples_wf1)
-        wf2 = DummySingleChannelWaveform(duration=1, sample_output=expected_samples_wf2)
+        wf1a = DummyWaveform(duration=1, sample_output=expected_samples_wf1)
+        wf1b = DummyWaveform(duration=1, sample_output=expected_samples_wf1)
+        wf2 = DummyWaveform(duration=1, sample_output=expected_samples_wf2)
         block.add_instruction_exec(wf1a)
         block.add_instruction_exec(wf1b)
         block.add_instruction_exec(wf2)

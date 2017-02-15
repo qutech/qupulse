@@ -76,4 +76,4 @@ class TableSequenceSequencerIntegrationTests(unittest.TestCase):
 
         for instruction in instructions:
             if isinstance(instruction,EXECInstruction):
-                self.assertIn(instruction.measurement_windows[0], [('my', 2, 5),('thy', 4, 5)])
+                self.assertIn(instruction.waveform.get_measurement_windows()[0], [('my', 2, 5), ('thy', 4, 5)])

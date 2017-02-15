@@ -7,7 +7,7 @@ Classes:
     - Sequencer: Controller of the sequencing/translation process.
 """
 
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta, abstractmethod, abstractproperty
 from typing import Tuple, Dict, Union, Optional
 import numbers
 
@@ -27,6 +27,10 @@ class SequencingElement(metaclass=ABCMeta):
 
     def __init__(self) -> None:
         super().__init__()
+
+    @abstractproperty
+    def atomicity(self) -> bool:
+        """Is the element translated to a single EXECInstruction with one waveform"""
 
     @abstractmethod
     def build_sequence(self,

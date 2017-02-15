@@ -12,7 +12,7 @@ from typing import Dict, Tuple
 import numpy as np
 from matplotlib import pyplot as plt
 
-from qctoolkit.pulses.pulse_template import PulseTemplate
+from qctoolkit.pulses.pulse_template import PulseTemplate, ChannelID
 from qctoolkit.pulses.parameters import Parameter
 from qctoolkit.pulses.sequencing import Sequencer
 from qctoolkit.pulses.instructions import EXECInstruction, STOPInstruction, InstructionSequence, \
@@ -38,37 +38,51 @@ class Plotter:
         super().__init__()
         self.__sample_rate = sample_rate
 
-    def render(self, sequence: InstructionSequence) -> Tuple[np.ndarray, np.ndarray]:
+    def render(self, sequence: InstructionSequence) -> Tuple[np.ndarray, Dict[ChannelID, np.ndarray]]:
         """'Render' an instruction sequence (sample all contained waveforms into an array).
 
         Returns:
             a tuple (times, values) of numpy.ndarrays of similar size. times contains the time value
             of all sample times and values the corresponding sampled value.
         """
-        if [x for x in sequence if not isinstance(x, (EXECInstruction,
-                                                      STOPInstruction,
-                                                      REPJInstruction))]:
+        if not all(isinstance(x, (EXECInstruction, STOPInstruction, REPJInstruction)) for x in sequence):
             raise NotImplementedError('Can only plot waveforms without branching so far.')
 
-        waveforms = [instruction.waveform
-                     for instruction in sequence if isinstance(instruction, EXECInstruction)]
+        def get_waveform_generator(instruction_block):
+            for instruction in instruction_block:
+                if isinstance(instruction, EXECInstruction):
+                    yield instruction.waveform
+                elif isinstance(instruction, REPJInstruction):
+                    for _ in range(instruction.count):
+                        yield from get_waveform_generator(instruction.target.block[instruction.target.offset:])
+                else:
+                    return
+
+        waveforms = [wf for wf in get_waveform_generator(sequence)]
         if not waveforms:
             return [], []
-        total_time = sum([waveform.duration for waveform in waveforms])
 
+        total_time = sum(waveform.duration for waveform in waveforms)
+
+        channels = waveforms[0].defined_channels
+
+        # add one sample to see the end of the waveform
         sample_count = total_time * self.__sample_rate + 1
         times = np.linspace(0, total_time, num=sample_count)
+        # move the last sample inside the waveform
+        times[-1] = np.nextafter(times[-1], times[-2])
 
-        channels = max([waveform.num_channels for waveform in waveforms])
-        voltages = np.empty((channels, len(times)))
-        time = 0
+        voltages = dict((ch, np.empty(len(times))) for ch in channels)
+        offset = 0
         for waveform in waveforms:
-            indices = np.logical_and(times >= time, times <= time + waveform.duration)
-            sample_times = times[indices]
-            offset = times[indices][0] - time
-            w_voltages = waveform.sample(sample_times, offset)
-            voltages[:,indices] = w_voltages
-            time += waveform.duration
+            for channel in channels:
+                indices = slice(*np.searchsorted(times, (offset, offset+waveform.duration)))
+                sample_times = times[indices] - offset
+                output_array = voltages[channel][indices]
+                waveform.get_sampled(channel=channel,
+                                     sample_times=sample_times,
+                                     output_array=output_array)
+                offset += waveform.duration
         return times, voltages
 
 
