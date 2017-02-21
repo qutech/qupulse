@@ -57,10 +57,9 @@ class SequenceWaveformTest(unittest.TestCase):
                 DummyWaveform(duration=2., measurement_windows=[('M', 0.1, 0.2), ('N', 0.5, 0.6)]))
         swf = SequenceWaveform(dwfs)
 
-        expected_windows = (('M', 0.2, 0.5), ('N', 1.6, 1.7), ('M', 4.1, 4.2), ('N', 4.5, 4.6))
-        received_windows = tuple(swf.get_measurement_windows())
-        self.assertEqual(len(received_windows), len(expected_windows))
-        self.assertEqual(set(received_windows), set(expected_windows))
+        expected_windows = sorted((('M', 0.2, 0.5), ('N', 1.6, 0.7), ('M', 4.1, 0.2), ('N', 4.5, 0.6)))
+        received_windows = sorted(tuple(swf.get_measurement_windows()))
+        self.assertEqual(received_windows, expected_windows)
 
 
 class SequencePulseTemplateTest(unittest.TestCase):

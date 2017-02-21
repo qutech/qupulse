@@ -3,7 +3,8 @@ import unittest
 import copy
 from typing import Optional, Dict, Set, Any, List
 
-from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementWindow
+from qctoolkit import MeasurementWindow, ChannelID
+from qctoolkit.pulses.pulse_template import AtomicPulseTemplate
 from qctoolkit.pulses.instructions import Waveform, EXECInstruction
 from qctoolkit.pulses.parameters import Parameter, ParameterDeclaration
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform

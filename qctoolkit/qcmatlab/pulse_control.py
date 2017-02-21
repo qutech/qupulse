@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Tuple
 
 import numpy
 
-from qctoolkit.pulses.instructions import SingleChannelWaveform, EXECInstruction, \
+from qctoolkit.pulses.instructions import Waveform, EXECInstruction, \
     STOPInstruction, InstructionSequence
 
 __all__ = ["PulseControlInterface"]
@@ -34,24 +34,28 @@ class PulseControlInterface:
         self.__time_scaling = time_scaling
 
     @staticmethod
-    def __get_waveform_name(waveform: SingleChannelWaveform) -> str:
+    def __get_waveform_name(waveform: Waveform) -> str:
         # returns a unique identifier for a waveform object
         return 'wf_{}'.format(hash(waveform))
 
     def create_waveform_struct(self,
-                               waveform: SingleChannelWaveform,
+                               waveform: Waveform,
                                name: str) -> 'PulseControlInterface.Pulse':
         """Construct a dictionary adhering to the waveform struct definition in pulse control.
 
         Arguments:
-            waveform (SingleChannelWaveform): The Waveform object to convert.
+            waveform (Waveform): The Waveform object to convert.
             name (str): Value for the name field in the resulting waveform dictionary.
         Returns:
             a dictionary representing waveform as a waveform struct for pulse control
         """
+        if len(waveform.defined_channels) > 1:
+            raise ValueError('More than one channel')
+        channel = next(iter(waveform.defined_channels))
+
         sample_count = floor(waveform.duration * self.__time_scaling * self.__sample_rate) + 1
         sample_times = numpy.linspace(0, waveform.duration, sample_count)
-        sampled_waveform = waveform.sample(sample_times)
+        sampled_waveform = waveform.get_sampled(channel, sample_times)
         struct = dict(name=name,
                       data=dict(wf=sampled_waveform.tolist(),
                                 marker=numpy.zeros_like(sampled_waveform).tolist(),

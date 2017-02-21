@@ -12,7 +12,8 @@ from typing import Dict, Tuple
 import numpy as np
 from matplotlib import pyplot as plt
 
-from qctoolkit.pulses.pulse_template import PulseTemplate, ChannelID
+from qctoolkit import ChannelID
+from qctoolkit.pulses.pulse_template import PulseTemplate
 from qctoolkit.pulses.parameters import Parameter
 from qctoolkit.pulses.sequencing import Sequencer
 from qctoolkit.pulses.instructions import EXECInstruction, STOPInstruction, InstructionSequence, \

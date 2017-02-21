@@ -14,11 +14,12 @@ import numpy as np
 from qctoolkit.expressions import Expression
 from qctoolkit.serialization import Serializer
 
+from qctoolkit import MeasurementWindow, ChannelID
 from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter
-from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementWindow, ChannelID
+from qctoolkit.pulses.pulse_template import AtomicPulseTemplate
 from qctoolkit.pulses.instructions import Waveform
 from qctoolkit.pulses.pulse_template_parameter_mapping import ParameterNotProvidedException
-from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
+
 
 __all__ = ["FunctionPulseTemplate", "FunctionWaveform"]
 
@@ -103,7 +104,7 @@ class FunctionPulseTemplate(AtomicPulseTemplate):
     def build_waveform(self,
                        parameters: Dict[str, Parameter],
                        measurement_mapping: Dict[str, str],
-                       channel_mapping: Dict[ChannelID, ChannelID]):
+                       channel_mapping: Dict[ChannelID, ChannelID]) -> 'FunctionWaveform':
         return FunctionWaveform(
             channel=channel_mapping[self.__channel],
             parameters={parameter_name: parameter.get_value()
@@ -112,7 +113,6 @@ class FunctionPulseTemplate(AtomicPulseTemplate):
             duration_expression=self.__duration_expression,
             measurement_windows=[]
         )
-
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],
@@ -171,13 +171,13 @@ class FunctionWaveform(Waveform):
         self.__measurement_windows = measurement_windows
 
     @property
-    def defined_channels(self):
+    def defined_channels(self) -> Set[ChannelID]:
         return {self.__channel_id}
 
-    def get_measurement_windows(self):
+    def get_measurement_windows(self) -> List[MeasurementWindow]:
         return self.__measurement_windows
     
-    def __evaluate_partially(self, t):
+    def __evaluate_partially(self, t) -> float:
         params = self.__parameters.copy()
         params.update({"t":t})
         return self.__expression.evaluate(**params)
@@ -200,5 +200,5 @@ class FunctionWaveform(Waveform):
             output_array[i] = self.__evaluate_partially(t)
         return output_array
 
-    def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> 'Waveform':
+    def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> Waveform:
         return self

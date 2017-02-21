@@ -1,13 +1,14 @@
 """This module defines RepetitionPulseTemplate, a higher-order hierarchical pulse template that
 represents the n-times repetition of another PulseTemplate."""
 
-from typing import Dict, List, Set, Optional, Union, Any
+from typing import Dict, List, Set, Optional, Union, Any, Iterable, Tuple
 
 import numpy as np
 
 from qctoolkit.serialization import Serializer
 
-from qctoolkit.pulses.pulse_template import PulseTemplate, ChannelID, PossiblyAtomicPulseTemplate
+from qctoolkit import MeasurementWindow, ChannelID
+from qctoolkit.pulses.pulse_template import PulseTemplate, PossiblyAtomicPulseTemplate
 from qctoolkit.pulses.sequencing import Sequencer
 from qctoolkit.pulses.instructions import InstructionBlock, InstructionPointer, Waveform
 from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter
@@ -36,7 +37,7 @@ class RepetitionWaveform(Waveform):
     def unsafe_sample(self,
                       channel: ChannelID,
                       sample_times: np.ndarray,
-                      output_array: Union[np.ndarray, None]=None):
+                      output_array: Union[np.ndarray, None]=None) -> np.ndarray:
         if output_array is None:
             output_array = np.empty(len(sample_times))
         body_duration = self.__body.duration
@@ -48,14 +49,14 @@ class RepetitionWaveform(Waveform):
         return output_array
 
     @property
-    def compare_key(self):
+    def compare_key(self) -> Tuple[Any, int]:
         return self.__body.compare_key, self.__repetition_count
 
     @property
-    def duration(self):
+    def duration(self) -> float:
         return self.__body.duration*self.__repetition_count
 
-    def get_measurement_windows(self):
+    def get_measurement_windows(self) -> Iterable[MeasurementWindow]:
         def get_measurement_window_generator(body: Waveform, repetition_count: int):
             body_windows = list(body.get_measurement_windows())
             for i in range(repetition_count):
@@ -63,7 +64,7 @@ class RepetitionWaveform(Waveform):
                     yield (name, begin+i*body.duration, length)
         return get_measurement_window_generator(self.__body, self.__repetition_count)
 
-    def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]):
+    def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> 'RepetitionWaveform':
         return RepetitionWaveform(body=self.__body.unsafe_get_subset_for_channels(channels),
                                   repetition_count=self.__repetition_count)
 

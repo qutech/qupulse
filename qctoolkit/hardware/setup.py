@@ -1,10 +1,12 @@
-from typing import NamedTuple, Any, Callable
+from typing import NamedTuple, Any, Set, Callable, Dict, Tuple
 
 from ctypes import c_int64 as MutableInt
 
 from qctoolkit.hardware.awgs import AWG
 from qctoolkit.hardware.dacs import DAC
 from qctoolkit.hardware.program import MultiChannelProgram, Loop
+
+from qctoolkit import ChannelID
 
 import numpy as np
 
@@ -18,11 +20,17 @@ PlaybackChannel = NamedTuple('PlaybackChannel', [('awg', AWG),
 PlaybackChannel.__new__.__defaults__ = (lambda v: v,)
 PlaybackChannel.__doc__ += ': Properties of an actual hardware channel'
 PlaybackChannel.awg.__doc__ = 'The AWG the channel is defined on'
-PlaybackChannel.channel_on_awg.__doc__ = 'The channel\'s ID on the AWG.'
+PlaybackChannel.channel_on_awg.__doc__ = 'The channel\'s index(starting with 0) on the AWG.'
 PlaybackChannel.voltage_transformation.__doc__ = \
     'A transformation that is applied to the pulses on the channel.\
     One use case is to scale up the voltage if an amplifier is inserted.'
+PlaybackChannel.__hash__ = lambda pbc: hash((id(pbc.awg), pbc.channel_on_awg))
 
+
+RegisteredProgram = NamedTuple('RegisteredProgram', [('program', MultiChannelProgram),
+                                                     ('measurement_windows', Dict[str, Tuple[float, float]]),
+                                                     ('run_callback', Callable),
+                                                     ('awgs_to_upload_to', Set[AWG])])
 
 
 class HardwareSetup:
@@ -35,51 +43,72 @@ class HardwareSetup:
     def __init__(self):
         self.__dacs = []
 
-        self.__channel_map = dict()  # type: Dict[ChannelID, PlaybackChannel]
-        self.__awgs = []  # type: List[AWG, List[ChannelID, Any]]
+        self.__channel_map = dict()  # type: Dict[ChannelID, Set[PlaybackChannel]]
 
-        self.__registered_programs = dict()
+        self.__registered_programs = dict()  # type: Dict[str, RegisteredProgram]
 
-    def register_program(self, name: str, instruction_block, run_callback=None):
+    def register_program(self, name: str, instruction_block, run_callback=lambda: None, update=False):
+        if not callable(run_callback):
+            raise TypeError('The provided run_callback is not callable')
+
         mcp = MultiChannelProgram(instruction_block)
 
         measurement_windows = dict()
 
-        def extract_measurement_windows(loop: Loop, offset: MutableInt):
-            if loop.is_leaf():
-                for (mw_name, begin, length) in loop.instruction.measurement_windows:
-                    measurement_windows.get(mw_name, default=[]).append(begin + offset.value, length)
-                offset.value += loop.instruction.waveform.duration
-            else:
-                for sub_loop in loop:
-                    extract_measurement_windows(sub_loop, offset)
         for program in mcp.programs.values():
-            extract_measurement_windows(program, MutableInt(0))
+            program.get_measurement_windows(measurement_windows=measurement_windows)
 
+        for mw_name, begin_length_list in measurement_windows.items():
+            measurement_windows[mw_name] = sorted(set(begin_length_list))
+
+        handled_awgs = set()
         for channels, program in mcp.programs:
-            pass
+            awgs_to_upload_to = dict()
+            for channel_id in channels:
+                if channel_id in channels:
+                    pbc = self.__channel_map[channel_id]
+                    awgs_to_upload_to.get(pbc.awg, [None]*pbc.awg.num_channels)[pbc.channel_on_awg] = channel_id
 
-        try:
-            for dac in self.__dacs:
-                dac.register_measurement_windows(name, measurement_windows)
-        except:
-            raise
+            for awg, channel_ids in awgs_to_upload_to.items():
+                if awg in handled_awgs:
+                    raise ValueError('AWG has two programs')
+                else:
+                    handled_awgs.add(awg)
+                awg.upload(name, program=program, channels=channel_ids, force=update)
 
-        self.__registered_programs[name] = (mcp, measurement_windows,
-                                            lambda: None if run_callback is None else run_callback)
+        for dac in self.__dacs:
+            dac.register_measurement_windows(name, measurement_windows)
 
-        raise NotImplementedError()
+        self.__registered_programs[name] = RegisteredProgram(program=mcp,
+                                                             measurement_windows=measurement_windows,
+                                                             run_callback=run_callback,
+                                                             awgs_to_upload_to=
+                                                             set(awg for awg, _ in awgs_to_upload_to.items()))
 
     def arm_program(self, name):
         """Assert program is in memory. Hardware will wait for trigger event"""
-        raise NotImplementedError()
+        for awg in self.__registered_programs[name].awgs_to_upload_to:
+            awg.arm(name)
+        for dac in self.__dacs:
+            dac.arm_program(name)
 
     def run_program(self, name):
         """Calls arm program and starts it using the run callback"""
-        raise NotImplementedError()
+        self.arm_program(name)
+        self.__registered_programs[name].run_callback()
 
-    def set_channel(self, identifier: ChannelID, channel: PlaybackChannel):
-        self.__channel_map[identifier] = channel
+    def set_channel(self, identifier: ChannelID, playback_channel: PlaybackChannel):
+        for ch_id, pbc_set in self.__channel_map.items():
+            if playback_channel in pbc_set:
+                raise ValueError('Channel already registered as playback channel for channel {}'.format(ch_id))
+        self.__channel_map[identifier] = playback_channel
+
+    def rm_channel(self, identifier: ChannelID):
+        self.__channel_map.pop(identifier)
+
+    def registered_playback_channels(self) -> Set[PlaybackChannel]:
+        return set(pbc for pbc_set in self.__channel_map.values() for pbc in pbc_set)
+
 
 
 

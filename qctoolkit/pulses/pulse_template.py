@@ -7,18 +7,18 @@ Classes:
         directly translated into a waveform.
 """
 from abc import ABCMeta, abstractmethod, abstractproperty
-from typing import Dict, List, Tuple, Set, Optional, Union
+from typing import Dict, List, Tuple, Set, Optional, Union, NamedTuple
 import itertools
 
-MeasurementWindow = Tuple[str, float, float]
-ChannelID = Union[str, int]
 
+from qctoolkit import ChannelID
 from qctoolkit.serialization import Serializable
 
 from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter
 from qctoolkit.pulses.sequencing import SequencingElement, InstructionBlock
 
-__all__ = ["MeasurementWindow", "PulseTemplate", "AtomicPulseTemplate", "DoubleParameterNameException", "ChannelID"]
+
+__all__ = ["PulseTemplate", "AtomicPulseTemplate", "DoubleParameterNameException"]
 
 
 class PulseTemplate(Serializable, SequencingElement, metaclass=ABCMeta):
@@ -99,7 +99,7 @@ class PossiblyAtomicPulseTemplate(PulseTemplate):
                               parameters: Dict[str, Parameter],
                               measurement_mapping: Dict[str, str],
                               channel_mapping: Dict['ChannelID', 'ChannelID'],
-                              instruction_block: InstructionBlock):
+                              instruction_block: InstructionBlock) -> None:
         waveform = self.build_waveform(parameters,
                                        measurement_mapping=measurement_mapping,
                                        channel_mapping=channel_mapping)

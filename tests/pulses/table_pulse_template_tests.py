@@ -841,22 +841,24 @@ class TableWaveformDataTests(unittest.TestCase):
     def test_unsafe_sample(self) -> None:
         interp = DummyInterpolationStrategy()
         entries = [WaveformTableEntry(0, 0, interp),
-                    WaveformTableEntry(2.1, -33.2, interp),
-                    WaveformTableEntry(5.7, 123.4, interp)]
+                   WaveformTableEntry(2.1, -33.2, interp),
+                   WaveformTableEntry(5.7, 123.4, interp)]
         waveform = TableWaveform('A', entries, [])
-        sample_times = numpy.linspace(98.5, 103.5, num=11)-98
+        sample_times = numpy.linspace(.5, 5.5, num=11)
+
+        expected_interp_arguments = [((0, 0), (2.1, -33.2), [0.5, 1.0, 1.5, 2.0]),
+                                     ((2.1, -33.2), (5.7, 123.4), [2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5])]
+        expected_result = numpy.copy(sample_times)
 
         result = waveform.unsafe_sample('A', sample_times)
-        expected_data = [((0, 0), (2.1, -33.2), [0.5, 1.0, 1.5, 2.0]),
-                         ((2.1, -33.2), (5.7, 123.4), [2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5])]
-        self.assertEqual(expected_data, interp.call_arguments)
-        expected_result = sample_times
-        self.assertTrue(numpy.all(expected_result == result))
 
-        output_expected = numpy.empty_like(expected_data)
+        self.assertEqual(expected_interp_arguments, interp.call_arguments)
+        numpy.testing.assert_equal(expected_result, result)
+
+        output_expected = numpy.empty_like(expected_result)
         output_received = waveform.unsafe_sample('A', sample_times, output_array=output_expected)
         self.assertIs(output_expected, output_received)
-        self.assertTrue(numpy.all(expected_result == output_received))
+        numpy.testing.assert_equal(expected_result, output_received)
 
     def test_simple_properties(self):
         interp = DummyInterpolationStrategy()
@@ -868,7 +870,7 @@ class TableWaveformDataTests(unittest.TestCase):
         waveform = TableWaveform(chan, entries, meas)
 
         self.assertEqual(waveform.defined_channels, {chan})
-        self.assertEqual(waveform.get_measurement_windows(), meas)
+        self.assertEqual(list(waveform.get_measurement_windows()), meas)
         self.assertIs(waveform.unsafe_get_subset_for_channels('A'), waveform)
 
 

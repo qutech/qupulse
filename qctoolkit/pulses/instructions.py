@@ -16,22 +16,21 @@ Classes:
     - InstructionPointer: References an instruction's location in a sequence.
 """
 
-import itertools
 from abc import ABCMeta, abstractmethod, abstractproperty
 from typing import List, Any, Dict, Iterable, Optional, Tuple, Union, Set
 from weakref import WeakValueDictionary
+
 import numpy
 
+from qctoolkit import ChannelID
 from qctoolkit.comparable import Comparable
-from qctoolkit.pulses.pulse_template import MeasurementWindow
+from qctoolkit import MeasurementWindow
 
 __all__ = ["Waveform", "Trigger",
            "InstructionPointer", "Instruction", "CJMPInstruction", "EXECInstruction",
            "GOTOInstruction", "STOPInstruction", "REPJInstruction", "AbstractInstructionBlock", "InstructionBlock",
            "ImmutableInstructionBlock", "InstructionSequence", "ChannelID"
            ]
-
-ChannelID = Union[str,int]
 
 
 class Waveform(Comparable, metaclass=ABCMeta):
@@ -316,14 +315,14 @@ class CHANInstruction(Instruction):
     switch statement.
     """
 
-    def __init__(self, channel_to_instruction_block: Dict[ChannelID,InstructionPointer]):
+    def __init__(self, channel_to_instruction_block: Dict[ChannelID, InstructionPointer]):
         self.channel_to_instruction_block = channel_to_instruction_block
 
     @property
-    def compare_key(self):
+    def compare_key(self) -> Dict[ChannelID, InstructionPointer]:
         return self.channel_to_instruction_block
 
-    def __str__(self):
+    def __str__(self) -> str:
         return "chan " + ",".join("{target} for {channel}"
                                   .format(target=v,channel=k) for k,v in self.channel_to_instruction_block.items())
 
@@ -492,7 +491,7 @@ class InstructionBlock(AbstractInstructionBlock):
         """Create and append a new STOPInstruction object at the end of this instruction block."""
         self.add_instruction(STOPInstruction())
 
-    def add_instruction_chan(self, channel_to_instruction: Dict[ChannelID,'InstructionBlock'] ):
+    def add_instruction_chan(self, channel_to_instruction: Dict[ChannelID, 'InstructionBlock']) -> None:
         """Create and append a new CHANInstruction at the end of this instruction block."""
         self.add_instruction(CHANInstruction({ch: InstructionPointer(block) for ch, block in channel_to_instruction.items()}))
 

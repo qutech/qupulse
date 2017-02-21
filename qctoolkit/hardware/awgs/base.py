@@ -10,6 +10,7 @@ Classes:
 from abc import ABCMeta, abstractmethod, abstractproperty
 from typing import Set, Tuple, List
 
+from qctoolkit import MeasurementWindow, ChannelID
 from qctoolkit.hardware.program import Loop
 from qctoolkit.comparable import Comparable
 from qctoolkit.pulses.instructions import InstructionSequence, EXECInstruction

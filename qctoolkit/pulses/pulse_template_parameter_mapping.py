@@ -4,10 +4,11 @@ offer mapping of parameters of subtemplates."""
 from typing import Optional, Set, Dict, Union, Iterable, List, Any
 import itertools
 
+from qctoolkit import ChannelID
 from qctoolkit.expressions import Expression
 from qctoolkit.pulses.pulse_template import PulseTemplate, PossiblyAtomicPulseTemplate
 from qctoolkit.pulses.parameters import Parameter, ParameterDeclaration, MappedParameter, ParameterNotProvidedException
-from qctoolkit.pulses.instructions import ChannelID
+
 
 __all__ = [
     "MappingTemplate",
@@ -51,11 +52,11 @@ class MappingTemplate(PossiblyAtomicPulseTemplate):
         self.__channel_mapping = dict(((name,name) for name in missing_channel_mappings), **channel_mapping)
 
     @property
-    def template(self):
+    def template(self) -> PulseTemplate:
         return self.__template
 
     @property
-    def measurement_mapping(self):
+    def measurement_mapping(self) -> Dict[str, str]:
         return self.__measurement_mapping
 
     @property
@@ -87,7 +88,7 @@ class MappingTemplate(PossiblyAtomicPulseTemplate):
     def atomicity(self, val) -> None:
         self.__template.atomicity = val
 
-    def get_serialization_data(self, serializer: 'Serializer') -> Dict[str,Any]:
+    def get_serialization_data(self, serializer: 'Serializer') -> Dict[str, Any]:
         return dict(template=serializer.dictify(self.template),
                     parameter_mapping=self.__parameter_mapping,
                     measurement_mapping=self.__measurement_mapping,
@@ -123,10 +124,10 @@ class MappingTemplate(PossiblyAtomicPulseTemplate):
         }
         return inner_parameters
 
-    def get_updated_measurement_mapping(self, measurement_mapping: Dict[str,str]):
+    def get_updated_measurement_mapping(self, measurement_mapping: Dict[str, str]) -> Dict[str, str]:
         return {k: measurement_mapping[v] for k, v in self.__measurement_mapping.items()}
 
-    def get_updated_channel_mapping(self, channel_mapping: Dict[ChannelID, ChannelID]):
+    def get_updated_channel_mapping(self, channel_mapping: Dict[ChannelID, ChannelID]) -> Dict[ChannelID, ChannelID]:
         return {inner_ch: channel_mapping[outer_ch] for inner_ch, outer_ch in self.__channel_mapping.items()}
 
     def build_sequence(self,
@@ -146,7 +147,7 @@ class MappingTemplate(PossiblyAtomicPulseTemplate):
     def build_waveform(self,
                        parameters: Dict[str, Parameter],
                        measurement_mapping: Dict[str, str],
-                       channel_mapping: Dict[ChannelID, ChannelID]):
+                       channel_mapping: Dict[ChannelID, ChannelID]) -> 'Waveform':
         """This gets called if the parent is atomic"""
         return self.template.build_waveform(
             parameters=self.map_parameters(parameters),
@@ -197,7 +198,7 @@ class UnnecessaryMappingException(Exception):
     """Indicates that a mapping was provided that does not correspond to any of a
     SequencePulseTemplate's subtemplate's parameter declarations and is thus obsolete."""
 
-    def __init__(self, template: PulseTemplate, key: Union[str,Set[str]]) -> None:
+    def __init__(self, template: PulseTemplate, key: Union[str, Set[str]]) -> None:
         super().__init__()
         self.template = template
         self.key = key

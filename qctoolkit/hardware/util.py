@@ -12,6 +12,8 @@ def voltage_to_uint16(voltage: np.ndarray, output_amplitude: float, output_offse
     :param resolution:
     :return:
     """
+    if resolution < 1 or not isinstance(resolution, int):
+        raise ValueError('The resolution must be an integer > 0')
     non_dc_voltage = voltage - output_offset
 
     if np.any(np.abs(non_dc_voltage) > output_amplitude):

@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 
-import qctoolkit.hardware.awgs.awg as awg
+import qctoolkit.hardware.awgs.base as awg
 import qctoolkit.hardware.awgs.tektronix as tek
 import qctoolkit.pulses as pls
 

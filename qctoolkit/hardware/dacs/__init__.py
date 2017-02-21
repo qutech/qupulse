@@ -9,16 +9,16 @@ class DAC(metaclass=ABCMeta):
     """Representation of a data acquisition card"""
 
     @abstractmethod
-    def register_measurement_windows(self, program_name: str, windows: Dict[str, deque]):
+    def register_measurement_windows(self, program_name: str, windows: Dict[str, deque]) -> None:
         """"""
 
     @abstractmethod
-    def register_operations(self, program_name: str, operations):
+    def register_operations(self, program_name: str, operations) -> None:
         """"""
 
     @abstractmethod
-    def arm_program(self, program_name: str):
+    def arm_program(self, program_name: str) -> None:
         """"""
 
-    def delete_program(self, program_name):
+    def delete_program(self, program_name) -> None:
         """"""

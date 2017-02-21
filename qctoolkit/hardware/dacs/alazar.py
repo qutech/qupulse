@@ -1,4 +1,4 @@
-from typing import Union, Dict, NamedTuple, List
+from typing import Union, Dict, NamedTuple, List, Any
 from collections import deque
 
 import numpy as np
@@ -33,10 +33,10 @@ class AlazarCard(DAC):
         self.__registered_programs = dict()  # type: Dict[str, AlazarProgram]
 
     @property
-    def card(self):
+    def card(self) -> Any:
         return self.__card
 
-    def __make_mask(self, mask_id: str, window_deque: deque):
+    def __make_mask(self, mask_id: str, window_deque: deque) -> Mask:
         if mask_id not in self.__mask_prototypes:
             raise KeyError('Measurement window {} can not be converted as it is not registered.'.format(mask_id))
 
@@ -61,7 +61,7 @@ class AlazarCard(DAC):
         mask.channel = hardware_channel
         return mask
 
-    def register_measurement_windows(self, program_name: str, windows: Dict[str, deque]):
+    def register_measurement_windows(self, program_name: str, windows: Dict[str, deque]) -> None:
         for mask_id, window_deque in windows.items():
             begins_lengths = np.asarray(window_deque)
             begins = begins_lengths[:, 0]
@@ -81,12 +81,12 @@ class AlazarCard(DAC):
             for mask_id, window_deque in windows.items()]
         self.__registered_programs[program_name].total_length = total_length
 
-    def register_operations(self, program_name: str, operations):
+    def register_operations(self, program_name: str, operations) -> None:
         self.__registered_programs.get(program_name,
                                        default=AlazarProgram()
                                        ).operations = self.__registered_programs.get(program_name, self)
 
-    def arm_program(self, program_name: str):
+    def arm_program(self, program_name: str) -> None:
         config = self.config
         config.masks, config.operations, total_record_size = self.__registered_programs[program_name]
 
@@ -99,6 +99,6 @@ class AlazarCard(DAC):
         config.apply(self.__card)
         self.__card.startAcquisition(1)
 
-    def delete_program(self, program_name: str):
+    def delete_program(self, program_name: str) -> None:
         self.__registered_operations.pop(program_name, None)
         self.__registered_masks.pop(program_name, None)

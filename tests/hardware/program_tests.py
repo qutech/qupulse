@@ -6,16 +6,24 @@ from string import Formatter
 
 from qctoolkit.hardware.program import Loop, MultiChannelProgram
 from qctoolkit.pulses.instructions import REPJInstruction, InstructionBlock, ImmutableInstructionBlock
-from tests.pulses.sequencing_dummies import DummySingleChannelWaveform
+from tests.pulses.sequencing_dummies import DummyWaveform
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 
 
 class LoopTests(unittest.TestCase):
-    def __init__(self, *args, waveform_data_generator=itertools.repeat(None), waveform_duration=None, **kwargs):
+    def __init__(self, *args, waveform_data_generator=itertools.repeat(None), waveform_duration=None, num_channels=2, **kwargs):
         super().__init__(*args, **kwargs)
 
-        def generate_waveform():
-            return DummySingleChannelWaveform(sample_output=next(waveform_data_generator), duration=waveform_duration)
+        names = 'ABCDEFGH'[:num_channels]
+
+        def generate_waveform(chan):
+            return DummyWaveform(sample_output=next(waveform_data_generator),
+                                 duration=waveform_duration,
+                                 defined_channels={chan})
+
+        def generate_multi_channel_waveform():
+            return MultiChannelWaveform([generate_waveform(names[ch_i]) for ch_i in range(num_channels)])
+
 
         self.old_description = \
 """\
@@ -64,49 +72,49 @@ LOOP 1 times:
       ->LOOP 9 times:
           ->EXEC {} 10 times
           ->EXEC {} 11 times"""
-
+        self.root_block = InstructionBlock()
         self.loop_block11 = InstructionBlock()
-        self.loop_block11.add_instruction_exec(MultiChannelWaveform(dict(A=generate_waveform(), B=generate_waveform())))
-
         self.loop_block1 = InstructionBlock()
-        self.loop_block1.add_instruction_repj(5,ImmutableInstructionBlock(self.loop_block11))
-
         self.loop_block21 = InstructionBlock()
-        self.loop_block21.add_instruction_exec(MultiChannelWaveform(dict(A=generate_waveform(), B=generate_waveform())))
-        self.loop_block21.add_instruction_exec(MultiChannelWaveform(dict(A=generate_waveform(), B=generate_waveform())))
-
         self.loop_block2 = InstructionBlock()
-        self.loop_block2.add_instruction_repj(2,ImmutableInstructionBlock(self.loop_block21))
-        self.loop_block2.add_instruction_exec(MultiChannelWaveform(dict(A=generate_waveform(), B=generate_waveform())))
-
         self.loop_block3 = InstructionBlock()
-        self.loop_block3.add_instruction_exec(MultiChannelWaveform(dict(A=generate_waveform(), B=generate_waveform())))
-        self.loop_block3.add_instruction_exec(MultiChannelWaveform(dict(A=generate_waveform(), B=generate_waveform())))
-
         self.loop_block411 = InstructionBlock()
-        self.loop_block411.add_instruction_exec(MultiChannelWaveform(dict(A=generate_waveform(), B=generate_waveform())))
         self.loop_block412 = InstructionBlock()
-        self.loop_block412.add_instruction_exec(MultiChannelWaveform(dict(A=generate_waveform(), B=generate_waveform())))
-
         self.loop_block41 = InstructionBlock()
+        self.loop_block4 = InstructionBlock()
+        self.loop_block421 = InstructionBlock()
+        self.loop_block422 = InstructionBlock()
+        self.loop_block42 = InstructionBlock()
+
+        self.root_block.add_instruction_exec(generate_multi_channel_waveform())
+
+        self.loop_block11.add_instruction_exec(generate_multi_channel_waveform())
+        self.loop_block1.add_instruction_repj(5, ImmutableInstructionBlock(self.loop_block11))
+
+        self.loop_block21.add_instruction_exec(generate_multi_channel_waveform())
+        self.loop_block21.add_instruction_exec(generate_multi_channel_waveform())
+
+        self.loop_block2.add_instruction_repj(2, ImmutableInstructionBlock(self.loop_block21))
+        self.loop_block2.add_instruction_exec(generate_multi_channel_waveform())
+
+        self.loop_block3.add_instruction_exec(generate_multi_channel_waveform())
+        self.loop_block3.add_instruction_exec(generate_multi_channel_waveform())
+
+        self.loop_block411.add_instruction_exec(generate_multi_channel_waveform())
+        self.loop_block412.add_instruction_exec(generate_multi_channel_waveform())
+
         self.loop_block41.add_instruction_repj(7, ImmutableInstructionBlock(self.loop_block411))
         self.loop_block41.add_instruction_repj(8, ImmutableInstructionBlock(self.loop_block412))
 
-        self.loop_block421 = InstructionBlock()
-        self.loop_block421.add_instruction_exec(MultiChannelWaveform(dict(A=generate_waveform(), B=generate_waveform())))
-        self.loop_block422 = InstructionBlock()
-        self.loop_block422.add_instruction_exec(MultiChannelWaveform(dict(A=generate_waveform(), B=generate_waveform())))
+        self.loop_block421.add_instruction_exec(generate_multi_channel_waveform())
+        self.loop_block422.add_instruction_exec(generate_multi_channel_waveform())
 
-        self.loop_block42 = InstructionBlock()
         self.loop_block42.add_instruction_repj(10, ImmutableInstructionBlock(self.loop_block421))
         self.loop_block42.add_instruction_repj(11, ImmutableInstructionBlock(self.loop_block422))
 
-        self.loop_block4 = InstructionBlock()
         self.loop_block4.add_instruction_repj(6, ImmutableInstructionBlock(self.loop_block41))
         self.loop_block4.add_instruction_repj(9, ImmutableInstructionBlock(self.loop_block42))
 
-        self.root_block = InstructionBlock()
-        self.root_block.add_instruction_exec(MultiChannelWaveform(dict(A=generate_waveform(), B=generate_waveform())))
         self.root_block.add_instruction_repj(10, ImmutableInstructionBlock(self.loop_block1))
         self.root_block.add_instruction_repj(17, ImmutableInstructionBlock(self.loop_block2))
         self.root_block.add_instruction_repj(3,  ImmutableInstructionBlock(self.loop_block3))
@@ -121,7 +129,7 @@ LOOP 1 times:
     def test_repr(self):
         root_loop = self.get_root_loop()
         repres = root_loop.__repr__()
-        expected = self.new_description.format(*(loop.instruction
+        expected = self.new_description.format(*(loop.waveform
                                                  for loop in root_loop.get_depth_first_iterator() if loop.is_leaf()))
         self.assertEqual(repres, expected)
 
@@ -129,10 +137,10 @@ LOOP 1 times:
         root_loop = self.get_root_loop()
 
         for loop in root_loop.get_depth_first_iterator():
-            self.assertTrue(bool(loop.is_leaf()) != bool(loop.instruction is None))
+            self.assertTrue(bool(loop.is_leaf()) != bool(loop.waveform is None))
 
         for loop in root_loop.get_breadth_first_iterator():
-            self.assertTrue(bool(loop.is_leaf()) != bool(loop.instruction is None))
+            self.assertTrue(bool(loop.is_leaf()) != bool(loop.waveform is None))
 
     def test_depth(self):
         root_loop = self.get_root_loop()
@@ -153,44 +161,11 @@ LOOP 1 times:
         self.assertTrue(root_loop[3].is_balanced())
         self.assertTrue(root_loop[4].is_balanced())
 
-    @unittest.skip("Further thinking needed.")
-    def test_merge(self):
-        # TODO: this test sucks
-        root_loop1 = self.get_root_loop()
-        root_loop2 = self.get_root_loop()
-
-        for l1, l2 in zip(root_loop1,root_loop2):
-            l1.merge()
-            self.assertEqual(l1.__repr__(),l2.__repr__())
-
-            if not l1.is_leaf():
-                for m1, m2 in zip(l1, l2):
-                    m1.merge()
-                    self.assertEqual(m1.__repr__(), m2.__repr__())
-
-        merge_loop = self.get_root_loop()
-        merge_loop[1].__repetition_count = 1
-        merge_loop[2].__repetition_count = 1
-        merge_loop.merge()
-        self.assertEqual(len(merge_loop) + 1, len(root_loop1))
-        self.assertEqual(merge_loop[1].repetition_count, 1)
-        self.assertEqual(merge_loop[2].repetition_count, 3)
-        self.assertEqual(merge_loop[1].depth(), 1)
-
-        merge_loop = Loop(self.root_block)
-        merge_loop[1].__repetition_count = 1
-        merge_loop[2].__repetition_count = 1
-        merge_loop[3].__repetition_count = 1
-        merge_loop.merge()
-        self.assertEqual(len(merge_loop) + 2,len(root_loop1))
-        self.assertEqual(merge_loop[1].repetition_count,1)
-        self.assertEqual(merge_loop[2].repetition_count,4)
-
 
 class MultiChannelTests(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        wf = DummySingleChannelWaveform()
+        wf = DummyWaveform()
         self.descriptionA = \
 """\
 LOOP 1 times:
@@ -224,40 +199,43 @@ LOOP 1 times:
       ->EXEC {} 10 times
       ->EXEC {} 11 times"""
 
-        def generate_waveform():
-            return DummySingleChannelWaveform(sample_output=None, duration=None)
+        def generate_waveform(channel):
+            return DummyWaveform(sample_output=None, duration=None, defined_channels={channel})
+
+        def generate_multi_channel_waveform():
+            return MultiChannelWaveform([generate_waveform('A'), generate_waveform('B')])
 
         self.loop_block11 = InstructionBlock()
-        self.loop_block11.add_instruction_exec(MultiChannelWaveform(dict(A=generate_waveform(), B=generate_waveform())))
+        self.loop_block11.add_instruction_exec(generate_multi_channel_waveform())
 
         self.loop_block1 = InstructionBlock()
         self.loop_block1.add_instruction_repj(5, ImmutableInstructionBlock(self.loop_block11))
 
         self.loop_block21 = InstructionBlock()
-        self.loop_block21.add_instruction_exec(MultiChannelWaveform(dict(A=generate_waveform(), B=generate_waveform())))
-        self.loop_block21.add_instruction_exec(MultiChannelWaveform(dict(A=generate_waveform(), B=generate_waveform())))
+        self.loop_block21.add_instruction_exec(generate_multi_channel_waveform())
+        self.loop_block21.add_instruction_exec(generate_multi_channel_waveform())
 
         self.loop_block2 = InstructionBlock()
         self.loop_block2.add_instruction_repj(2, ImmutableInstructionBlock(self.loop_block21))
-        self.loop_block2.add_instruction_exec(MultiChannelWaveform(dict(A=generate_waveform(), B=generate_waveform())))
+        self.loop_block2.add_instruction_exec(generate_multi_channel_waveform())
 
         self.loop_block3 = InstructionBlock()
-        self.loop_block3.add_instruction_exec(MultiChannelWaveform(dict(A=generate_waveform(), B=generate_waveform())))
-        self.loop_block3.add_instruction_exec(MultiChannelWaveform(dict(A=generate_waveform(), B=generate_waveform())))
+        self.loop_block3.add_instruction_exec(generate_multi_channel_waveform())
+        self.loop_block3.add_instruction_exec(generate_multi_channel_waveform())
 
         self.loop_block411 = InstructionBlock()
-        self.loop_block411.add_instruction_exec(MultiChannelWaveform(dict(A=generate_waveform())))
+        self.loop_block411.add_instruction_exec(MultiChannelWaveform([generate_waveform('A')]))
         self.loop_block412 = InstructionBlock()
-        self.loop_block412.add_instruction_exec(MultiChannelWaveform(dict(A=generate_waveform())))
+        self.loop_block412.add_instruction_exec(MultiChannelWaveform([generate_waveform('A')]))
 
         self.loop_block41 = InstructionBlock()
         self.loop_block41.add_instruction_repj(7, ImmutableInstructionBlock(self.loop_block411))
         self.loop_block41.add_instruction_repj(8, ImmutableInstructionBlock(self.loop_block412))
 
         self.loop_block421 = InstructionBlock()
-        self.loop_block421.add_instruction_exec(MultiChannelWaveform(dict(B=generate_waveform())))
+        self.loop_block421.add_instruction_exec(MultiChannelWaveform([generate_waveform('B')]))
         self.loop_block422 = InstructionBlock()
-        self.loop_block422.add_instruction_exec(MultiChannelWaveform(dict(B=generate_waveform())))
+        self.loop_block422.add_instruction_exec(MultiChannelWaveform([generate_waveform('B')]))
 
         self.loop_block42 = InstructionBlock()
         self.loop_block42.add_instruction_repj(10, ImmutableInstructionBlock(self.loop_block421))
@@ -274,7 +252,7 @@ LOOP 1 times:
                                               frozenset('B'): ImmutableInstructionBlock(self.chan_block4B)})
 
         self.root_block = InstructionBlock()
-        self.root_block.add_instruction_exec(MultiChannelWaveform(dict(A=generate_waveform(), B=generate_waveform())))
+        self.root_block.add_instruction_exec(generate_multi_channel_waveform())
         self.root_block.add_instruction_repj(10, ImmutableInstructionBlock(self.loop_block1))
         self.root_block.add_instruction_repj(17, ImmutableInstructionBlock(self.loop_block2))
         self.root_block.add_instruction_repj(3, ImmutableInstructionBlock(self.loop_block3))
@@ -289,9 +267,10 @@ LOOP 1 times:
     def test_via_repr(self):
         root_loopA = self.get_root_loop('A')
         root_loopB = self.get_root_loop('B')
-        reprA = self.descriptionA.format(*(loop.instruction
-                                           for loop in root_loopA.get_depth_first_iterator() if loop.is_leaf()))
-        reprB = self.descriptionB.format(*(loop.instruction
+        waveformsA = tuple(loop.waveform
+                                           for loop in root_loopA.get_depth_first_iterator() if loop.is_leaf())
+        reprA = self.descriptionA.format(*waveformsA)
+        reprB = self.descriptionB.format(*(loop.waveform
                                            for loop in root_loopB.get_depth_first_iterator() if loop.is_leaf()))
         self.assertEqual(root_loopA.__repr__(), reprA)
         self.assertEqual(root_loopB.__repr__(), reprB)

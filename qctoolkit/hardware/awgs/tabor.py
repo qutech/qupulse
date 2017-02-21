@@ -1,4 +1,4 @@
-from qctoolkit.pulses.pulse_template import ChannelID
+from qctoolkit import ChannelID
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 from qctoolkit.hardware.program import Loop, MultiChannelProgram
 from qctoolkit.hardware.util import voltage_to_uint16

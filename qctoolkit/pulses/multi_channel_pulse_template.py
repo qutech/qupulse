@@ -15,10 +15,11 @@ import numpy
 
 from qctoolkit.serialization import Serializer
 
+from qctoolkit import MeasurementWindow, ChannelID
 from qctoolkit.pulses.instructions import InstructionBlock, Waveform, InstructionPointer
 from qctoolkit.pulses.pulse_template import PulseTemplate, PossiblyAtomicPulseTemplate
 from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingException, MappingTemplate,\
-    MissingParameterDeclarationException, ChannelID
+    MissingParameterDeclarationException
 from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter, \
     ParameterNotProvidedException
 from qctoolkit.pulses.conditions import Condition
@@ -113,7 +114,7 @@ class MultiChannelWaveform(Waveform):
                       output_array: Union[numpy.ndarray, None]=None) -> numpy.ndarray:
         return self[channel].unsafe_sample(channel, sample_times, output_array)
 
-    def get_measurement_windows(self):
+    def get_measurement_windows(self) -> Iterable[MeasurementWindow]:
         return itertools.chain.from_iterable(sub_waveform.get_measurement_windows()
                                              for sub_waveform in self.__sub_waveforms)
 
@@ -309,5 +310,6 @@ class ChannelMappingException(Exception):
         self.intersect_set = intersect_set
         self.obj1 = obj1
         self.obj2 = obj2
-    def __str__(self):
+
+    def __str__(self) -> str:
         return 'Channels {chs} defined in {} and {}'.format(self.intersect_set, self.obj1, self.obj2)

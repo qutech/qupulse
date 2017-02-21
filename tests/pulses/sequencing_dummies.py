@@ -5,14 +5,14 @@ import copy
 import numpy
 
 """LOCAL IMPORTS"""
+from qctoolkit import MeasurementWindow, ChannelID
 from qctoolkit.serialization import Serializer
 from qctoolkit.pulses.instructions import Waveform, Instruction, CJMPInstruction, GOTOInstruction, REPJInstruction
 from qctoolkit.pulses.sequencing import Sequencer, InstructionBlock, SequencingElement
 from qctoolkit.pulses.parameters import Parameter, ParameterDeclaration
-from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementWindow
+from qctoolkit.pulses.pulse_template import AtomicPulseTemplate
 from qctoolkit.pulses.interpolation import InterpolationStrategy
 from qctoolkit.pulses.conditions import Condition
-from qctoolkit.pulses.multi_channel_pulse_template import ChannelID
 
 class DummyParameter(Parameter):
 

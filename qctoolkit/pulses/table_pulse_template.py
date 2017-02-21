@@ -13,16 +13,17 @@ import copy
 
 import numpy as np
 
+from qctoolkit import MeasurementWindow, ChannelID
 from qctoolkit.serialization import Serializer
 from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter, \
     ParameterNotProvidedException
-from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementWindow
+from qctoolkit.pulses.pulse_template import AtomicPulseTemplate
 from qctoolkit.pulses.interpolation import InterpolationStrategy, LinearInterpolationStrategy, \
     HoldInterpolationStrategy, JumpInterpolationStrategy
 from qctoolkit.pulses.instructions import Waveform
 from qctoolkit.pulses.conditions import Condition
 from qctoolkit.expressions import Expression
-from qctoolkit.pulses.multi_channel_pulse_template import ChannelID, MultiChannelWaveform
+from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 
 __all__ = ["TablePulseTemplate", "TableWaveform", "WaveformTableEntry"]
 

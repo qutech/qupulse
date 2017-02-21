@@ -7,12 +7,13 @@ import itertools
 
 from qctoolkit.serialization import Serializer
 
-from qctoolkit.pulses.pulse_template import PulseTemplate, MeasurementWindow, PossiblyAtomicPulseTemplate
+from qctoolkit import MeasurementWindow, ChannelID
+from qctoolkit.pulses.pulse_template import PulseTemplate, PossiblyAtomicPulseTemplate
 from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter
 from qctoolkit.pulses.sequencing import InstructionBlock, Sequencer
 from qctoolkit.pulses.conditions import Condition
 from qctoolkit.pulses.pulse_template_parameter_mapping import \
-    MissingMappingException, MappingTemplate, ChannelID, MissingParameterDeclarationException
+    MissingMappingException, MappingTemplate, MissingParameterDeclarationException
 from qctoolkit.pulses.instructions import Waveform
 
 __all__ = ["SequencePulseTemplate"]
@@ -67,11 +68,11 @@ class SequenceWaveform(Waveform):
         return output_array
 
     @property
-    def compare_key(self):
+    def compare_key(self) -> Tuple[Waveform]:
         return self.__sequenced_waveforms
 
     @property
-    def duration(self):
+    def duration(self) -> float:
         return self.__duration
 
     def get_measurement_windows(self) -> Iterable[MeasurementWindow]:
@@ -200,7 +201,7 @@ class SequencePulseTemplate(PossiblyAtomicPulseTemplate):
         SequencePulseTemplate can be partially sequenced."""
         return self.__subtemplates[0].requires_stop(parameters,conditions) if self.__subtemplates else False
 
-    def build_waveform(self, parameters: Dict[str, Parameter]):
+    def build_waveform(self, parameters: Dict[str, Parameter]) -> SequenceWaveform:
         return SequenceWaveform([subtemplate.build_waveform(parameters) for subtemplate in self.__subtemplates])
 
     def build_sequence(self,

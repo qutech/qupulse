@@ -15,7 +15,7 @@ except ImportError:
     hasVisa = False
 
 from qctoolkit.hardware.awgs.base import AWG, ProgramOverwriteException, Program
-from qctoolkit.pulses.instructions import EXECInstruction, SingleChannelWaveform
+from qctoolkit.pulses.instructions import EXECInstruction, Waveform
 
 
 __all__ = ['TektronixAWG', 'AWGSocket', 'EchoTestServer']
@@ -173,10 +173,10 @@ class TektronixAWG(AWG):
         # data = data + marker.astype(np.uint16) * 2**14
         return data
 
-    def waveform2name(self, waveform: SingleChannelWaveform) -> str:
+    def waveform2name(self, waveform: Waveform) -> str:
         return str(hash(waveform))
 
-    def add_waveform(self, waveform: SingleChannelWaveform, offset: float) -> None:
+    def add_waveform(self, waveform: Waveform, offset: float) -> None:
         """Samples a Waveform object to actual data and sends it to the AWG."""
         # check if waveform is on the AWG already
         if waveform in self.__waveform_memory:
