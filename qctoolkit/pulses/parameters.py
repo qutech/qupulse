@@ -127,7 +127,7 @@ class MappedParameter(Parameter):
                             "cannot be evaluated.")
         dependencies = self.__collect_dependencies()
         variables = {k: float(dependencies[k]) for k in dependencies}
-        return self.__expression.evaluate(**variables)
+        return self.__expression.evaluate_numeric(**variables)
 
     @property
     def requires_stop(self) -> bool:

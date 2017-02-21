@@ -21,7 +21,7 @@ setup(name='qctoolkit',
       package_dir={'qctoolkit': 'qctoolkit'},
       packages=packages,
       tests_require=['pytest'],
-      install_requires=['py_expression_eval', 'numpy'] + requires_typing,
+      install_requires=['sympy', 'numpy'] + requires_typing,
       extras_require={
           'testing': ['pytest'],
           'plotting': ['matplotlib'],
