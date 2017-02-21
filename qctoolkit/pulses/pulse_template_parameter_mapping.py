@@ -89,8 +89,9 @@ class MappingTemplate(PossiblyAtomicPulseTemplate):
         self.__template.atomicity = val
 
     def get_serialization_data(self, serializer: 'Serializer') -> Dict[str, Any]:
+        parameter_mapping_dict = dict((key, str(expression)) for key, expression in self.__parameter_mapping.items())
         return dict(template=serializer.dictify(self.template),
-                    parameter_mapping=self.__parameter_mapping,
+                    parameter_mapping=parameter_mapping_dict,
                     measurement_mapping=self.__measurement_mapping,
                     channel_mapping=self.__channel_mapping)
 
