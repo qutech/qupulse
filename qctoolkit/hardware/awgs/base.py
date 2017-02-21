@@ -102,7 +102,8 @@ class DummyAWG(AWG):
                  memory: int=100,
                  sample_rate: float=10,
                  output_range: Tuple[float, float]=(-5,5),
-                 num_channels: int=1) -> None:
+                 num_channels: int=1,
+                 num_markers: int=1) -> None:
         """Create a new DummyAWG instance.
 
         Args:
@@ -111,21 +112,22 @@ class DummyAWG(AWG):
             output_range (float, float): A (min,max)-tuple of possible output values.
                 (default = (-5,5)).
         """
-        self.__programs = {} # contains program names and programs
-        self.__waveform_memory = [None for i in range(memory)]
-        self.__waveform_indices = {} # dict that maps from waveform hash to memory index
-        self.__program_wfs = {} # contains program names and necessary waveforms indices
-        self.__sample_rate = sample_rate
-        self.__output_range = output_range
-        self.__num_channels = num_channels
+        self._programs = {} # contains program names and programs
+        self._waveform_memory = [None for i in range(memory)]
+        self._waveform_indices = {} # dict that maps from waveform hash to memory index
+        self._program_wfs = {} # contains program names and necessary waveforms indices
+        self._sample_rate = sample_rate
+        self._output_range = output_range
+        self._num_channels = num_channels
+        self._num_markers = num_markers
 
     def add_waveform(self, waveform) -> int:
         try:
-            index = self.__waveform_memory.index(None)
+            index = self._waveform_memory.index(None)
         except ValueError:
             raise OutOfWaveformMemoryException()
-        self.__waveform_memory[index] = waveform
-        self.__waveform_indices[hash(waveform)] = index
+        self._waveform_memory[index] = waveform
+        self._waveform_indices[hash(waveform)] = index
         return index
 
     def upload(self, name, program, force=False) -> None:
@@ -136,36 +138,36 @@ class DummyAWG(AWG):
                 self.remove(name)
                 self.upload(name, program)
         else:
-            self.__programs[name] = program
+            self._programs[name] = program
             exec_blocks = filter(lambda x: type(x) == EXECInstruction, program)
             indices = frozenset(self.add_waveform(block.waveform) for block in exec_blocks)
-            self.__program_wfs[name] = indices
+            self._program_wfs[name] = indices
 
     def remove(self,name) -> None:
         if name in self.programs:
-            self.__programs.pop(name)
+            self._programs.pop(name)
             self.program_wfs.pop(name)
             self.clean()
 
     def clean(self) -> None:
-        necessary_wfs = reduce(lambda acc, s: acc.union(s), self.__program_wfs.values(), set())
-        all_wfs = set(self.__waveform_indices.values())
+        necessary_wfs = reduce(lambda acc, s: acc.union(s), self._program_wfs.values(), set())
+        all_wfs = set(self._waveform_indices.values())
         delete = all_wfs - necessary_wfs
         for index in delete:
-            wf = self.__waveform_memory(index)
-            self.__waveform_indices.pop(wf)
-            self.__waveform_memory = None
+            wf = self._waveform_memory(index)
+            self._waveform_indices.pop(wf)
+            self._waveform_memory = None
 
     def arm(self, name: str) -> None:
         raise NotImplementedError()
 
     @property
     def programs(self) -> Set[str]:
-        return frozenset(self.__programs.keys())
+        return frozenset(self._programs.keys())
 
     @property
     def output_range(self) -> Tuple[float, float]:
-        return self.__output_range
+        return self._output_range
 
     @property
     def identifier(self) -> str:
@@ -173,11 +175,15 @@ class DummyAWG(AWG):
 
     @property
     def sample_rate(self) -> float:
-        return self.__sample_rate
+        return self._sample_rate
 
     @property
     def num_channels(self):
-        return self.__num_channels
+        return self._num_channels
+
+    @property
+    def num_markers(self):
+        return self._num_markers
 
 
 class ProgramOverwriteException(Exception):

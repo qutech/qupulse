@@ -145,7 +145,17 @@ class TektronixAWG(AWG):
         self.__current_index = self.__first_index + 1
         # TODO: load dummy pulse to first_index
 
+    @property
+    def num_channels(self):
+        raise NotImplementedError()
 
+    @property
+    def num_markers(self):
+        raise NotImplementedError()
+
+    @property
+    def arm(self, name: str):
+        raise NotImplementedError()
 
     @property
     def output_range(self) -> Tuple[float, float]:
