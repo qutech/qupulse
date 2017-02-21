@@ -10,6 +10,8 @@ Classes:
 from abc import ABCMeta, abstractmethod, abstractproperty
 from typing import Set, Tuple, List
 
+from qctoolkit.hardware.program import Loop
+from qctoolkit.comparable import Comparable
 from qctoolkit.pulses.instructions import InstructionSequence, EXECInstruction
 
 __all__ = ["AWG", "Program", "DummyAWG", "ProgramOverwriteException",
@@ -18,24 +20,44 @@ __all__ = ["AWG", "Program", "DummyAWG", "ProgramOverwriteException",
 Program = InstructionSequence
 
 
-class AWG(metaclass=ABCMeta):
+class AWG(Comparable):
     """An arbitrary waveform generator abstraction class.
 
+    It represents a set of channels that have to have(hardware enforced) the same:
+        -control flow
+        -sample rate
     It keeps track of the AWG state and manages waveforms and programs on the hardware.
     """
 
+    def __init__(self, identifier: str):
+        self.identifier = identifier
+
+    @abstractproperty
+    def num_channels(self):
+        """Number of channels"""
+
+    @abstractproperty
+    def num_markers(self):
+        """Number of marker channels"""
+
     @abstractmethod
-    def upload(self, name: str, program: Program, force: bool=False) -> None:
+    def upload(self, name: str,
+               program: Loop,
+               channels: List[ChannelID],
+               markers: List[ChannelID],
+               force: bool=False) -> None:
         """Upload a program to the AWG.
 
         Physically uploads all waveforms required by the program - excluding those already present -
         to the device and sets up playback sequences accordingly.
         This method should be cheap for program already on the device and can therefore be used
-        for syncing.
+        for syncing. Programs that are uploaded should be fast(~1 sec) to arm.
 
         Args:
             name (str): A name for the program on the AWG.
-            program (Program): The program (a sequence of instructions) to upload.
+            program (Loop): The program (a sequence of instructions) to upload.
+            channels (List): List of channels in the program to use. Index of channel ID corresponds to the AWG channel
+            markers (List): List of channels in the program to use. Index of channel ID corresponds to the AWG channel
             force (bool): If a different sequence is already present with the same name, it is
                 overwritten if force is set to True. (default = False)
         """
@@ -51,9 +73,8 @@ class AWG(metaclass=ABCMeta):
         """
 
     @abstractmethod
-    def run(self, name: str) -> None:
-        """Load the program 'name' and either arm the device for running it or run it."""
-        # todo: isn't this semantically unlcear and should be separated into two explicit methods
+    def arm(self, name: str) -> None:
+        """Load the program 'name' and arm the device for running it."""
 
     @abstractproperty
     def programs(self) -> Set[str]:
@@ -63,13 +84,14 @@ class AWG(metaclass=ABCMeta):
     def sample_rate(self) -> float:
         """The sample rate of the AWG."""
 
-    @abstractproperty
-    def identifier(self) -> str:
-        """Return a hardware identifier string."""
+    def compare_key(self) -> int:
+        return id(self)
 
-    @abstractproperty
-    def output_range(self) -> Tuple[float, float]:
-        """The minimal/maximal voltage the AWG can produce."""
+    def __copy__(self) -> None:
+        raise NotImplementedError()
+
+    def __deepcopy__(self, memodict={}) -> None:
+        raise NotImplementedError()
 
 
 class DummyAWG(AWG):
@@ -78,7 +100,8 @@ class DummyAWG(AWG):
     def __init__(self,
                  memory: int=100,
                  sample_rate: float=10,
-                 output_range: Tuple[float, float]=(-5,5)) -> None:
+                 output_range: Tuple[float, float]=(-5,5),
+                 num_channels: int=1) -> None:
         """Create a new DummyAWG instance.
 
         Args:
@@ -93,6 +116,7 @@ class DummyAWG(AWG):
         self.__program_wfs = {} # contains program names and necessary waveforms indices
         self.__sample_rate = sample_rate
         self.__output_range = output_range
+        self.__num_channels = num_channels
 
     def add_waveform(self, waveform) -> int:
         try:
@@ -131,7 +155,7 @@ class DummyAWG(AWG):
             self.__waveform_indices.pop(wf)
             self.__waveform_memory = None
 
-    def run(self, name: str) -> None:
+    def arm(self, name: str) -> None:
         raise NotImplementedError()
 
     @property
@@ -149,6 +173,10 @@ class DummyAWG(AWG):
     @property
     def sample_rate(self) -> float:
         return self.__sample_rate
+
+    @property
+    def num_channels(self):
+        return self.__num_channels
 
 
 class ProgramOverwriteException(Exception):

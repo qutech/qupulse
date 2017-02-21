@@ -1,239 +1,141 @@
-from qctoolkit.pulses.instructions import AbstractInstructionBlock, InstructionBlock, EXECInstruction, REPJInstruction, GOTOInstruction, STOPInstruction, InstructionPointer, CHANInstruction
-from typing import Union, Dict, Set, Iterable, FrozenSet, List, NamedTuple, Any, Callable
-from collections import deque
-
-from qctoolkit.comparable import Comparable
-
-from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 import itertools
-from collections import namedtuple
-from copy import deepcopy, copy as shallowcopy
+from typing import Union, Dict, Set, Iterable, FrozenSet, List, NamedTuple, Any, Callable, Tuple
+from collections import deque
+from copy import deepcopy
 from ctypes import c_int64 as MutableInt
 
+from qctoolkit import MeasurementWindow, ChannelID
+from qctoolkit.pulses.instructions import AbstractInstructionBlock, EXECInstruction, REPJInstruction, GOTOInstruction, STOPInstruction, InstructionPointer, CHANInstruction, Waveform
+from qctoolkit.comparable import Comparable
+from qctoolkit.utils.tree import Node, is_tree_circular
 
-ChannelID = int
 
-__all__ = ['ChannelID', 'Loop']
+__all__ = ['Loop', 'MultiChannelProgram', '']
 
 
-class Loop(Comparable):
+class Loop(Comparable, Node):
     """Build a loop tree. The leaves of the tree are loops with one element."""
-    def __init__(self, parent=None, instruction=None, children=list(), repetition_count=1):
-        super().__init__()
+    def __init__(self,
+                 parent: Union['Loop', None]=None,
+                 children: Iterable['Loop']=list(),
+                 waveform: Union[EXECInstruction, Waveform]=None,
+                 repetition_count=1):
+        super().__init__(parent=parent, children=children)
 
-        self.__parent = parent
-        self.__children = [self.__parse_child(child) for child in children]
-        self.__instruction = instruction
-        self.__repetition_count = repetition_count
+        self._waveform = waveform
+        self._repetition_count = repetition_count
 
-        if not (instruction is None or isinstance(instruction, (EXECInstruction, MultiChannelWaveform))):
+        if not isinstance(waveform, (type(None), Waveform)):
             raise Exception()
 
-    def unroll(self):
-        for i, e in enumerate(self.__parent):
-            if e is self:
-                self.__parent[i:i+1] = (child.copy_tree_structure(new_parent=self.__parent)
-                                        for _ in range(self.repetition_count)
-                                        for child in self.children)
-                self.__parent.assert_tree_integrity()
-                self.__parent = None
+    @property
+    def compare_key(self) -> Tuple:
+        return self._waveform, self._repetition_count, tuple(c.compare_key for c in self)
+
+    def append_child(self, **kwargs) -> None:
+        self[len(self):len(self)] = (kwargs, )
+
+    @property
+    def waveform(self) -> Waveform:
+        return self._waveform
+
+    @waveform.setter
+    def waveform(self, val) -> None:
+        self._waveform = val
+
+    @property
+    def repetition_count(self) -> int:
+        return self._repetition_count
+
+    @repetition_count.setter
+    def repetition_count(self, val) -> None:
+        self._repetition_count = val
+
+    def unroll(self) -> None:
+        for i, e in enumerate(self.parent):
+            if id(e) == id(self):
+                self.parent[i:i+1] = (child.copy_tree_structure(new_parent=self.parent)
+                                      for _ in range(self.repetition_count)
+                                      for child in self)
+                self.parent.assert_tree_integrity()
                 return
         raise Exception('self not found in parent')
 
-    def unroll_children(self):
-        self.__children = [Loop(parent=self, instruction=child.instruction, children=child.children)
-                           for _ in range(self.repetition_count)
-                           for child in self.children]
-        self.__repetition_count = 1
+    def unroll_children(self) -> None:
+        old_children = self.children
+        self[:] = (child.copy_tree_structure()
+                   for _ in range(self.repetition_count)
+                   for child in old_children)
+        self._repetition_count = 1
         self.assert_tree_integrity()
 
-    def encapsulate(self):
-        self.__children = [Loop(children=self.__children,
-                                parent=self,
-                                repetition_count=self.__repetition_count,
-                                instruction=self.__instruction)]
-        self.__repetition_count = 1
-        self.__instruction = None
+    def encapsulate(self) -> None:
+        self[:] = [Loop(children=self.children,
+                        repetition_count=self._repetition_count,
+                        waveform=self._waveform)]
+        self._repetition_count = 1
+        self._waveform = None
         self.assert_tree_integrity()
 
-    def split_one_child(self):
-        self.assert_tree_integrity()
-        for i in reversed(range(len(self))):
-            if self[i].repetition_count > 1:
-                self[i].repetition_count -= 1
-                self[i+1:i+1] = (self[i].copy_tree_structure(),)
-                self[i+1].repetition_count = 1
-                self.assert_tree_integrity()
-                return
-        raise Exception('Could not split of one child', self)
-
-    def merge(self):
-        """Merge successive loops that are repeated once and are no leafs into one"""
-        raise Exception("Not tested.")
-        if self.depth() < 2:
-            return
-        # TODO: make this pythonic
-        i = 0
-        while i < len(self.__children):
-            if self.__children[i].repetition_count == 1 and not self.__children[i].is_leaf():
-                j = i + 1
-                while j < len(self.__children) and self.__children[j].repetition_count == 1 and not self.__children[j].is_leaf():
-                    j += 1
-                if j > i + 1:
-                    self.__children[i:j] = Loop(parent=self,
-                                                children=[cc for child in self.__children[i:j] for cc in child],
-                                                repetition_count=1)
-            i += 1
-        self.assert_tree_integrity()
-
-    def compare_key(self):
-        return self.__instruction, self.__repetition_count, tuple(c.compare_key() for c in self.__children)
-
-    @property
-    def children(self) -> List['Loop']:
-        """
-        :return: shallow copy of children
-        """
-        return shallowcopy(self.__children)
-
-    def append_child(self, **kwargs):
-        self.__children.append(Loop(parent=self, **kwargs))
-        self.assert_tree_integrity()
-
-    def __check_circular(self, visited: List['Loop']):
-        for v in visited:
-            if self is v:
-                raise Exception(self, visited)
-        visited.append(self)
-        for c in self.__children:
-            c.__check_circular(shallowcopy(visited))
-
-    def check_circular(self):
-        self.__check_circular([])
-
-    @property
-    def instruction(self):
-        return self.__instruction
-
-    @instruction.setter
-    def instruction(self, val):
-        self.__instruction = val
-
-    @property
-    def repetition_count(self):
-        return self.__repetition_count
-
-    @repetition_count.setter
-    def repetition_count(self, val):
-        self.__repetition_count = val
-
-    def get_root(self):
-        if self.__parent:
-            return self.__parent.get_root()
-        else:
-            return self
-
-    def get_depth_first_iterator(self):
-        if not self.is_leaf():
-            for e in self.__children:
-                yield from e.get_depth_first_iterator()
-        yield self
-
-    def get_breadth_first_iterator(self, queue: List['Loop']=[]):
-        yield self
-        if not self.is_leaf():
-            queue += self.__children
-        if queue:
-            yield from queue.pop(0).get_breadth_first_iterator(queue)
-
-    def __iter__(self) -> Iterable['Loop']:
-        return iter(self.children)
-
-    def __setitem__(self, idx, value):
-        if isinstance(idx, slice):
-            if isinstance(value, Loop):
-                raise TypeError('can only assign an iterable (Loop does not count)')
-            value = (self.__parse_child(child) for child in value)
-        else:
-            value = self.__parse_child(value)
-        self.__children.__setitem__(idx, value)
-
-    def __getitem__(self, *args, **kwargs) ->Union['Loop', List['Loop']]:
-        return self.__children.__getitem__(*args, **kwargs)
-
-    def __len__(self):
-        return len(self.__children)
-
-    def __repr__(self):
-        try:
-            self.check_circular()
-        except Exception as e:
-            if len(e.args) == 2:
-                return '{}: Circ {}'.format(id(self), len(e.args[1]))
+    def __repr__(self) -> str:
+        is_circular = is_tree_circular(self)
+        if is_circular:
+            return '{}: Circ {}'.format(id(self), is_circular)
 
         if self.is_leaf():
-            return 'EXEC {} {} times'.format(self.__instruction, self.__repetition_count)
+            return 'EXEC {} {} times'.format(self._waveform, self._repetition_count)
         else:
-            repr = ['LOOP {} times:'.format(self.__repetition_count)]
-            for elem in self.__children:
+            repr = ['LOOP {} times:'.format(self._repetition_count)]
+            for elem in self:
                 sub_repr = elem.__repr__().splitlines()
                 sub_repr = ['  ->' + sub_repr[0]] + ['    ' + line for line in sub_repr[1:]]
                 repr += sub_repr
             return '\n'.join(repr)
 
-    def __parse_child(self, child):
-        if isinstance(child, dict):
-            return Loop(parent=self, **child)
-        elif isinstance(child, Loop):
-            child.__parent = self
-            return child
-        else:
-            raise TypeError('Invalid child type', type(child))
-
-    def assert_tree_integrity(self):
-        if self.__parent:
-            if id(self) not in (id(c) for c in self.__parent.children):
-                raise Exception()
-        for child in self.__children:
-            child.assert_tree_integrity()
-
-    def copy_tree_structure(self, new_parent: Union['Loop', bool]=False):
-        return type(self)(parent=self.__parent if new_parent is not False else new_parent,
-                          instruction=self.__instruction,
+    def copy_tree_structure(self, new_parent: Union['Loop', bool]=False) -> 'Loop':
+        return type(self)(parent=self.parent if new_parent is False else new_parent,
+                          waveform=self._waveform,
                           repetition_count=self.repetition_count,
-                          children=(child.copy_tree_structure() for child in self.__children))
+                          children=(child.copy_tree_structure() for child in self))
 
-    def get_measurement_windows(self, offset: MutableInt = MutableInt(0), measurement_windows=dict()):
+    def get_measurement_windows(self, offset: MutableInt = MutableInt(0), measurement_windows=dict()) -> Dict[str,
+                                                                                                              deque]:
         if self.is_leaf():
             for _ in range(self.repetition_count):
-                for (mw_name, begin, length) in self.instruction.waveform.get_measurement_windows():
+                for (mw_name, begin, length) in self.waveform.get_measurement_windows():
                     measurement_windows.get(mw_name, default=deque()).append((begin + offset.value, length))
-                offset.value += self.instruction.waveform.duration
+                offset.value += self.waveform.duration
         else:
             for _ in range(self.repetition_count):
-                for child in self.__children:
+                for child in self:
                     child.get_measurement_windows(offset, measurement_windows=measurement_windows)
         return measurement_windows
 
-"""
-    def extract_measurement_windows(loop: 'Loop', offset: MutableInt):
-        if loop.is_leaf():
-            for _ in range(loop.repetition_count):
-                for (mw_name, begin, length) in loop.instruction.measurement_windows:
-                    measurement_windows.get(mw_name, default=[]).append(begin + offset.value, length)
-                offset.value += loop.instruction.waveform.duration
+    def split_one_child(self, child_index=None) -> None:
+        """Take the last child that has a repetition count larger one, decrease it's repetition count and insert a copy
+        with repetition cout one after it"""
+        if child_index:
+            if self[child_index].repetition_count < 2:
+                raise ValueError('Cannot split child {} as the repetition count is not larger 1')
         else:
-            for _ in range(loop.repetition_count):
-                for sub_loop in loop:
-                    extract_measurement_windows(sub_loop, offset)
+            try:
+                child_index = next(i for i in reversed(range(len(self)))
+                                   if self[i].repetition_count > 1)
+            except StopIteration:
+                raise RuntimeError('There is no child with repetition count > 1')
 
-    for program in mcp.programs.values():
-        extract_measurement_windows(program, MutableInt(0))
-"""
+        new_child = self[child_index].copy_tree_structure()
+        new_child.repetition_count = 1
+
+        self[child_index].repetition_count -= 1
+
+        self[child_index+1:child_index+1] = (new_child,)
+        self.assert_tree_integrity()
+
 
 class ChannelSplit(Exception):
-    def __init__(self, channels_and_blocks):
-        self.channels_and_stacks = channels_and_blocks
+    def __init__(self, channel_sets):
+        self.channel_sets = channel_sets
 
 
 class MultiChannelProgram:
@@ -261,18 +163,20 @@ class MultiChannelProgram:
 
         channels = frozenset(channels)
 
-        stacks = {channels: [(Loop(), [*instruction_block[:-1]])]}
+        root = Loop()
+        stacks = {channels: (root, [([], [*instruction_block[:-1]])])}
         self.__programs = dict()
 
         while len(stacks) > 0:
-            chans, stack = stacks.popitem()
+            chans, (root_loop, stack) = stacks.popitem()
             try:
-                self.__programs[chans] = MultiChannelProgram.__split_channels(stack, chans)
-            except ChannelSplit as c:
-                for new_chans, new_stack in c.channels_and_stacks.items():
-                    assert (new_chans not in stacks)
-                    assert (chans.issuperset(new_chans))
-                    stacks[new_chans] = new_stack
+                self.__programs[chans] = MultiChannelProgram.__split_channels(chans, root_loop, stack)
+            except ChannelSplit as split:
+                for new_channel_set in split.channel_sets:
+                    assert (new_channel_set not in stacks)
+                    assert (chans.issuperset(new_channel_set))
+
+                    stacks[new_channel_set] = (root_loop.copy_tree_structure(), deepcopy(stack))
 
         for channels, program in self.__programs.items():
             iterable = program.get_breadth_first_iterator()
@@ -280,7 +184,7 @@ class MultiChannelProgram:
                 try:
                     loop = next(iterable)
                     if len(loop) == 1:
-                        loop.instruction = loop[0].instruction
+                        loop.waveform = loop[0].waveform
                         loop.repetition_count = loop.repetition_count * loop[0].repetition_count
                         loop[:] = loop[0][:]
 
@@ -288,32 +192,32 @@ class MultiChannelProgram:
                 except StopIteration:
                     break
 
-            for loop in program.get_breadth_first_iterator():
-                loop.assert_tree_integrity()
-
     @property
-    def programs(self):
+    def programs(self) -> Dict[FrozenSet[ChannelID], Loop]:
         return self.__programs
 
     @property
-    def channels(self):
+    def channels(self) -> Set[ChannelID]:
         return set(itertools.chain(*self.__programs.keys()))
 
     @staticmethod
-    def __split_channels(block_stack, channels):
+    def __split_channels(channels, root_loop, block_stack) -> Loop:
         while block_stack:
-            current_loop, current_instruction_block = block_stack.pop()
+            current_loop_location, current_instruction_block = block_stack.pop()
+            current_loop = root_loop.locate(current_loop_location)
+
             while current_instruction_block:
                 instruction = current_instruction_block.pop(0)
+
                 if isinstance(instruction, EXECInstruction):
                     if not instruction.waveform.defined_channels.issuperset(channels):
                         raise Exception(instruction.waveform.defined_channels, channels)
-                    current_loop.append_child(instruction=instruction)
+                    current_loop.append_child(waveform=instruction.waveform)
 
                 elif isinstance(instruction, REPJInstruction):
                     current_loop.append_child(repetition_count=instruction.count)
                     block_stack.append(
-                        (current_loop.children[-1],
+                        (current_loop[-1].get_location(),
                          [*instruction.target.block[instruction.target.offset:-1]])
                     )
 
@@ -325,18 +229,15 @@ class MultiChannelProgram:
                         current_instruction_block[0:0] = new_instruction_list
 
                     else:
-                        block_stack.append((current_loop, current_instruction_block))
+                        block_stack.append((current_loop_location, [instruction] + current_instruction_block))
 
-                        channel_to_stack = dict()
-                        for (chs, instruction_ptr) in instruction.channel_to_instruction_block.items():
-                            channel_to_stack[chs] = deepcopy(block_stack)
-                            channel_to_stack[chs][-1][1][0:0] = [*instruction_ptr.block[instruction_ptr.offset:-1]]
-                        raise ChannelSplit(channel_to_stack)
+                        raise ChannelSplit(instruction.channel_to_instruction_block.keys())
+
                 else:
                     raise Exception('Encountered unhandled instruction {} on channel(s) {}'.format(instruction, channels))
-        return current_loop.get_root()
+        return root_loop
 
-    def __getitem__(self, item: Union[ChannelID, Set[ChannelID], FrozenSet[ChannelID]]):
+    def __getitem__(self, item: Union[ChannelID, Set[ChannelID], FrozenSet[ChannelID]]) -> Loop:
         if not isinstance(item, (set, frozenset)):
             item = frozenset((item,))
         elif isinstance(item, set):
