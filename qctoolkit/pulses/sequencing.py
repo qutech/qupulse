@@ -133,6 +133,8 @@ class Sequencer:
             conditions (Dict(str -> Condition)): A mapping of condition identifier defined by the
                 SequencingElement to Condition objects. Optional, if no conditions are defined by
                 the SequencingElement. (default: None)
+            window_mapping (Dict(str -> str)): Mapping of the measurement window names of the sequence element
+            channel_mapping (Dict(ChannelID -> ChannelID)): Mapping of the defined channels
             target_block (InstructionBlock): The instruction block into which instructions resulting
                 from the translation of the SequencingElement will be placed. Optional. If not
                 provided, the main instruction block will be targeted. (default: None)
