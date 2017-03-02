@@ -191,7 +191,7 @@ class ParameterDeclaration(Serializable, Comparable):
         """Creates a ParameterDeclaration object.
         
         Args:
-            name (str): A name for the declared parameter.
+            name (str): A name for the declared parameter. The name must me a valid variable name.
             min (float or ParameterDeclaration): An optional real number or
                 ParameterDeclaration object specifying the minimum value allowed. (default: -inf)
             max (float or ParameterDeclaration): An optional real number or
@@ -200,6 +200,9 @@ class ParameterDeclaration(Serializable, Comparable):
                 pulse template parameter.
         """
         super().__init__(None)
+        if not name.isidentifier():
+            raise InvalidParameterNameException(name)
+
         self.__name = name
         self.__min_value = float('-inf')
         self.__max_value = float('+inf')
@@ -506,3 +509,11 @@ class ParameterValueIllegalException(Exception):
         return "The value {0} provided for parameter {1} is illegal (min = {2}, max = {3})".format(
             self.parameter_value, self.parameter_declaration.name,
             self.parameter_declaration.min_value, self.parameter_declaration.max_value)
+
+
+class InvalidParameterNameException(Exception):
+    def __init__(self, parameter_name: str):
+        self.parameter_name = parameter_name
+
+    def __str__(self):
+        return '{} is an invalid parameter name'.format(self.parameter_name)
