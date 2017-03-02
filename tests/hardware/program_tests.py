@@ -2,7 +2,9 @@ import unittest
 import itertools
 from copy import deepcopy
 
-from string import Formatter
+import numpy as np
+
+from string import Formatter, ascii_uppercase
 
 from qctoolkit.hardware.program import Loop, MultiChannelProgram
 from qctoolkit.pulses.instructions import REPJInstruction, InstructionBlock, ImmutableInstructionBlock
@@ -10,53 +12,40 @@ from tests.pulses.sequencing_dummies import DummyWaveform
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 
 
+class WaveformGenerator:
+    def __init__(self, num_channels,
+                 duration_generator=itertools.repeat(None),
+                 waveform_data_generator=itertools.repeat(None), channel_names=ascii_uppercase):
+        self.num_channels = num_channels
+        self.duration_generator = duration_generator
+        self.waveform_data_generator = waveform_data_generator
+        self.channel_names = channel_names[:num_channels]
+
+    def generate_single_channel_waveform(self, channel):
+        return DummyWaveform(sample_output=next(self.waveform_data_generator),
+                             duration=next(self.duration_generator),
+                             defined_channels={channel})
+
+    def generate_multi_channel_waveform(self):
+        return MultiChannelWaveform([self.generate_single_channel_waveform(self.channel_names[ch_i])
+                                     for ch_i in range(self.num_channels)])
+
+    def __call__(self):
+        return self.generate_multi_channel_waveform()
+
+
 class LoopTests(unittest.TestCase):
-    def __init__(self, *args, waveform_data_generator=itertools.repeat(None), waveform_duration=None, num_channels=2, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        names = 'ABCDEFGH'[:num_channels]
+        self.maxDiff = None
 
-        def generate_waveform(chan):
-            return DummyWaveform(sample_output=next(waveform_data_generator),
-                                 duration=waveform_duration,
-                                 defined_channels={chan})
-
-        def generate_multi_channel_waveform():
-            return MultiChannelWaveform([generate_waveform(names[ch_i]) for ch_i in range(num_channels)])
-
-
-        self.old_description = \
-"""\
-LOOP 1 times:
-  ->EXEC 1 times
-  ->LOOP 10 times:
-      ->LOOP 5 times:
-          ->EXEC 1 times
-  ->LOOP 17 times:
-      ->LOOP 2 times:
-          ->EXEC 1 times
-          ->EXEC 1 times
-      ->EXEC 1 times
-  ->LOOP 3 times:
-      ->EXEC 1 times
-      ->EXEC 1 times
-  ->LOOP 4 times:
-      ->LOOP 6 times:
-          ->LOOP 7 times:
-              ->EXEC 1 times
-          ->LOOP 8 times:
-              ->EXEC 1 times
-      ->LOOP 9 times:
-          ->LOOP 10 times:
-              ->EXEC 1 times
-          ->LOOP 11 times:
-              ->EXEC 1 times"""
-
-        self.new_description = \
+        self.test_loop_repr = \
 """\
 LOOP 1 times:
   ->EXEC {} 1 times
-  ->EXEC {} 50 times
+  ->LOOP 10 times:
+      ->EXEC {} 50 times
   ->LOOP 17 times:
       ->LOOP 2 times:
           ->EXEC {} 1 times
@@ -72,69 +61,71 @@ LOOP 1 times:
       ->LOOP 9 times:
           ->EXEC {} 10 times
           ->EXEC {} 11 times"""
-        self.root_block = InstructionBlock()
-        self.loop_block11 = InstructionBlock()
-        self.loop_block1 = InstructionBlock()
-        self.loop_block21 = InstructionBlock()
-        self.loop_block2 = InstructionBlock()
-        self.loop_block3 = InstructionBlock()
-        self.loop_block411 = InstructionBlock()
-        self.loop_block412 = InstructionBlock()
-        self.loop_block41 = InstructionBlock()
-        self.loop_block4 = InstructionBlock()
-        self.loop_block421 = InstructionBlock()
-        self.loop_block422 = InstructionBlock()
-        self.loop_block42 = InstructionBlock()
 
-        self.root_block.add_instruction_exec(generate_multi_channel_waveform())
+    @staticmethod
+    def get_test_loop(waveform_generator=None):
+        if waveform_generator is None:
+            waveform_generator = lambda: None
 
-        self.loop_block11.add_instruction_exec(generate_multi_channel_waveform())
-        self.loop_block1.add_instruction_repj(5, ImmutableInstructionBlock(self.loop_block11))
+        return Loop(repetition_count=1, children=[Loop(repetition_count=1, waveform=waveform_generator()),
+                                                  Loop(repetition_count=10, children=[Loop(repetition_count=50, waveform=waveform_generator())]),
+                                                  Loop(repetition_count=17, children=[Loop(repetition_count=2, children=[Loop(repetition_count=1, waveform=waveform_generator()),
+                                                                                                                         Loop(repetition_count=1, waveform=waveform_generator())]),
+                                                                                      Loop(repetition_count=1, waveform=waveform_generator())]),
+                                                  Loop(repetition_count=3, children=[Loop(repetition_count=1, waveform=waveform_generator()),
+                                                                                     Loop(repetition_count=1, waveform=waveform_generator())]),
+                                                  Loop(repetition_count=4, children=[Loop(repetition_count=6, children=[Loop(repetition_count=7, waveform=waveform_generator()),
+                                                                                                                        Loop(repetition_count=8, waveform=waveform_generator())]),
+                                                                                     Loop(repetition_count=9, children=[Loop(repetition_count=10, waveform=waveform_generator()),
+                                                                                                                        Loop(repetition_count=11, waveform=waveform_generator())])])])
 
-        self.loop_block21.add_instruction_exec(generate_multi_channel_waveform())
-        self.loop_block21.add_instruction_exec(generate_multi_channel_waveform())
+    def test_compare_key(self):
+        wf_gen = WaveformGenerator(num_channels=1)
 
-        self.loop_block2.add_instruction_repj(2, ImmutableInstructionBlock(self.loop_block21))
-        self.loop_block2.add_instruction_exec(generate_multi_channel_waveform())
+        wf_1 = wf_gen()
+        wf_2 = wf_gen()
 
-        self.loop_block3.add_instruction_exec(generate_multi_channel_waveform())
-        self.loop_block3.add_instruction_exec(generate_multi_channel_waveform())
+        tree1 = Loop(children=[Loop(waveform=wf_1, repetition_count=5)])
+        tree2 = Loop(children=[Loop(waveform=wf_1, repetition_count=4)])
+        tree3 = Loop(children=[Loop(waveform=wf_2, repetition_count=5)])
+        tree4 = Loop(children=[Loop(waveform=wf_1, repetition_count=5)])
 
-        self.loop_block411.add_instruction_exec(generate_multi_channel_waveform())
-        self.loop_block412.add_instruction_exec(generate_multi_channel_waveform())
+        self.assertNotEqual(tree1, tree2)
+        self.assertNotEqual(tree1, tree3)
+        self.assertNotEqual(tree2, tree3)
+        self.assertEqual(tree1, tree4)
 
-        self.loop_block41.add_instruction_repj(7, ImmutableInstructionBlock(self.loop_block411))
-        self.loop_block41.add_instruction_repj(8, ImmutableInstructionBlock(self.loop_block412))
-
-        self.loop_block421.add_instruction_exec(generate_multi_channel_waveform())
-        self.loop_block422.add_instruction_exec(generate_multi_channel_waveform())
-
-        self.loop_block42.add_instruction_repj(10, ImmutableInstructionBlock(self.loop_block421))
-        self.loop_block42.add_instruction_repj(11, ImmutableInstructionBlock(self.loop_block422))
-
-        self.loop_block4.add_instruction_repj(6, ImmutableInstructionBlock(self.loop_block41))
-        self.loop_block4.add_instruction_repj(9, ImmutableInstructionBlock(self.loop_block42))
-
-        self.root_block.add_instruction_repj(10, ImmutableInstructionBlock(self.loop_block1))
-        self.root_block.add_instruction_repj(17, ImmutableInstructionBlock(self.loop_block2))
-        self.root_block.add_instruction_repj(3,  ImmutableInstructionBlock(self.loop_block3))
-        self.root_block.add_instruction_repj(4, ImmutableInstructionBlock(self.loop_block4))
-
-        self.maxDiff = None
-
-    def get_root_loop(self):
-        program = MultiChannelProgram(self.root_block, {'A', 'B'})
-        return program[{'A', 'B'}]
+        tree1 = Loop(children=[Loop(waveform=wf_1, repetition_count=5),
+                               Loop(waveform=wf_2, repetition_count=7)], repetition_count=2)
+        tree2 = Loop(children=[Loop(waveform=wf_1, repetition_count=5),
+                               Loop(waveform=wf_2, repetition_count=5)], repetition_count=2)
+        tree3 = Loop(children=[Loop(waveform=wf_1, repetition_count=5),
+                               Loop(waveform=wf_1, repetition_count=7)], repetition_count=2)
+        tree4 = Loop(children=[Loop(waveform=wf_1, repetition_count=5),
+                               Loop(waveform=wf_2, repetition_count=7)], repetition_count=3)
+        tree5 = Loop(children=[Loop(waveform=wf_1, repetition_count=5),
+                               Loop(waveform=wf_2, repetition_count=7)], repetition_count=2)
+        self.assertNotEqual(tree1, tree2)
+        self.assertNotEqual(tree1, tree3)
+        self.assertNotEqual(tree1, tree4)
+        self.assertEqual(tree1, tree5)
 
     def test_repr(self):
-        root_loop = self.get_root_loop()
-        repres = root_loop.__repr__()
-        expected = self.new_description.format(*(loop.waveform
-                                                 for loop in root_loop.get_depth_first_iterator() if loop.is_leaf()))
-        self.assertEqual(repres, expected)
+        wf_gen = WaveformGenerator(num_channels=1)
+        wfs = [wf_gen() for _ in range(11)]
+
+        expected = self.test_loop_repr.format(*wfs)
+
+        tree = self.get_test_loop()
+        for loop in tree.get_depth_first_iterator():
+            if loop.is_leaf():
+                loop.waveform = wfs.pop(0)
+        self.assertEqual(len(wfs), 0)
+
+        self.assertEqual(repr(tree), expected)
 
     def test_is_leaf(self):
-        root_loop = self.get_root_loop()
+        root_loop = self.get_test_loop(waveform_generator=WaveformGenerator(1))
 
         for loop in root_loop.get_depth_first_iterator():
             self.assertTrue(bool(loop.is_leaf()) != bool(loop.waveform is None))
@@ -143,7 +134,7 @@ LOOP 1 times:
             self.assertTrue(bool(loop.is_leaf()) != bool(loop.waveform is None))
 
     def test_depth(self):
-        root_loop = self.get_root_loop()
+        root_loop = self.get_test_loop()
         self.assertEqual(root_loop.depth(), 3)
         self.assertEqual(root_loop[-1].depth(), 2)
         self.assertEqual(root_loop[-1][-1].depth(), 1)
@@ -152,7 +143,7 @@ LOOP 1 times:
             root_loop[-1][-1][-1][-1].depth()
 
     def test_is_balanced(self):
-        root_loop = self.get_root_loop()
+        root_loop = self.get_test_loop()
         self.assertFalse(root_loop.is_balanced())
 
         self.assertFalse(root_loop[2].is_balanced())
@@ -260,9 +251,19 @@ LOOP 1 times:
 
         self.maxDiff = None
 
-    def get_root_loop(self, channels):
+    def get_mcp(self, channels):
         program = MultiChannelProgram(self.root_block, ['A', 'B'])
         return program[channels]
+
+    def test_init(self):
+        with self.assertRaises(ValueError):
+            MultiChannelProgram(InstructionBlock())
+
+        mcp = MultiChannelProgram(self.root_block, ['A', 'B'])
+        self.assertEqual(mcp.channels, {'A', 'B'})
+
+        with self.assertRaises(KeyError):
+            mcp['C']
 
     def test_via_repr(self):
         root_loopA = self.get_root_loop('A')

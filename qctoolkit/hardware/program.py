@@ -18,7 +18,7 @@ class Loop(Comparable, Node):
     def __init__(self,
                  parent: Union['Loop', None]=None,
                  children: Iterable['Loop']=list(),
-                 waveform: Union[EXECInstruction, Waveform]=None,
+                 waveform: Union[Waveform]=None,
                  repetition_count=1):
         super().__init__(parent=parent, children=children)
 
