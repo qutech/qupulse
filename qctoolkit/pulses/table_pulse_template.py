@@ -400,7 +400,7 @@ class TablePulseTemplate(AtomicPulseTemplate):
                                 parameters: Dict[str, Parameter],
                                 measurement_mapping: Dict[str, str]) -> List[MeasurementWindow]:
         def get_val(v):
-            return v if not isinstance(v, Expression) else v.evaluate(
+            return v if not isinstance(v, Expression) else v.evaluate_numeric(
               **{name_: parameters[name_].get_value() if isinstance(parameters[name_], Parameter) else parameters[name_]
               for name_ in v.variables()})
 

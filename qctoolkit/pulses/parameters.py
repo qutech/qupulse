@@ -16,8 +16,31 @@ from qctoolkit.serialization import Serializable, Serializer
 from qctoolkit.expressions import Expression
 from qctoolkit.comparable import Comparable
 
-__all__ = ["Parameter", "ParameterDeclaration", "ConstantParameter",
+__all__ = ["make_parameter", "ParameterDict", "Parameter", "ParameterDeclaration", "ConstantParameter",
            "ParameterNotProvidedException", "ParameterValueIllegalException"]
+
+
+def make_parameter(value):
+    """Convenience function """
+    if isinstance(value, Parameter):
+        return value
+    if isinstance(value, Number):
+        return ConstantParameter(value)
+    if isinstance(value, str):
+        return MappedParameter(Expression(value))
+    raise TypeError('Can not convert object of type {} to a parameter'.format(type(value)))
+
+
+class ParameterDict(dict):
+    """Conve"""
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *((k, make_parameter(v)) for k, v in args),
+            **dict((k, make_parameter(v)) for k, v in kwargs.items())
+        )
+
+    def __setitem__(self, key, value) -> None:
+        super().__setitem__(key, make_parameter(value))
 
 
 class Parameter(Serializable, Comparable, metaclass=ABCMeta):
@@ -127,7 +150,7 @@ class MappedParameter(Parameter):
                             "cannot be evaluated.")
         dependencies = self.__collect_dependencies()
         variables = {k: float(dependencies[k]) for k in dependencies}
-        return self.__expression.evaluate(**variables)
+        return self.__expression.evaluate_numeric(**variables)
 
     @property
     def requires_stop(self) -> bool:
@@ -168,7 +191,7 @@ class ParameterDeclaration(Serializable, Comparable):
         """Creates a ParameterDeclaration object.
         
         Args:
-            name (str): A name for the declared parameter.
+            name (str): A name for the declared parameter. The name must me a valid variable name.
             min (float or ParameterDeclaration): An optional real number or
                 ParameterDeclaration object specifying the minimum value allowed. (default: -inf)
             max (float or ParameterDeclaration): An optional real number or
@@ -177,6 +200,9 @@ class ParameterDeclaration(Serializable, Comparable):
                 pulse template parameter.
         """
         super().__init__(None)
+        if not name.isidentifier():
+            raise InvalidParameterNameException(name)
+
         self.__name = name
         self.__min_value = float('-inf')
         self.__max_value = float('+inf')
@@ -483,3 +509,11 @@ class ParameterValueIllegalException(Exception):
         return "The value {0} provided for parameter {1} is illegal (min = {2}, max = {3})".format(
             self.parameter_value, self.parameter_declaration.name,
             self.parameter_declaration.min_value, self.parameter_declaration.max_value)
+
+
+class InvalidParameterNameException(Exception):
+    def __init__(self, parameter_name: str):
+        self.parameter_name = parameter_name
+
+    def __str__(self):
+        return '{} is an invalid parameter name'.format(self.parameter_name)

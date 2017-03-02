@@ -20,16 +20,8 @@ class FunctionPulseTest(unittest.TestCase):
         self.fpt = FunctionPulseTemplate(self.s, self.s2,channel='A')
         self.pars = dict(a=DummyParameter(1), b=DummyParameter(2), c=DummyParameter(136.78))
 
-    def test_get_pulse_length(self) -> None:
-        self.assertEqual(136.78, self.fpt.get_pulse_length(self.pars))
-
-    def test_get_pulse_length_missing_parameter(self) -> None:
-        with self.assertRaises(ParameterNotProvidedException):
-            self.fpt.get_pulse_length(dict(b=DummyParameter(26.3267)))
-
     def test_is_interruptable(self) -> None:
         self.assertFalse(self.fpt.is_interruptable)
-
 
     def test_defined_channels(self) -> None:
         self.assertEqual({'A'}, self.fpt.defined_channels)

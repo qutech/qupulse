@@ -73,22 +73,6 @@ class FunctionPulseTemplate(AtomicPulseTemplate):
     def parameter_declarations(self) -> Set[ParameterDeclaration]:
         return {ParameterDeclaration(param_name) for param_name in self.parameter_names}
 
-    def get_pulse_length(self, parameters: Dict[str, Parameter]) -> float:
-        """Return the length of this pulse for the given parameters.
-
-        OBSOLETE/FLAWED? Just used in by get_measurement_windows which days are counted.
-
-        Args:
-            parameters (Dict(str -> Parameter)): A mapping of parameter name to parameter objects.
-        """
-        missing_parameters = self.__parameter_names - set(parameters.keys())
-        for missing_parameter in missing_parameters:
-            raise ParameterNotProvidedException(missing_parameter)
-        return self.__duration_expression.evaluate(
-            **{parameter_name: parameter.get_value()
-               for (parameter_name, parameter) in parameters.items()}
-        )
-
     @property
     def measurement_names(self) -> Set[str]:
         return set()
@@ -166,7 +150,7 @@ class FunctionWaveform(Waveform):
         super().__init__()
         self.__expression = expression
         self.__parameters = parameters
-        self.__duration = duration_expression.evaluate(**self.__parameters)
+        self.__duration = duration_expression.evaluate_numeric(**self.__parameters)
         self.__channel_id = channel
         self.__measurement_windows = measurement_windows
 
@@ -177,10 +161,10 @@ class FunctionWaveform(Waveform):
     def get_measurement_windows(self) -> List[MeasurementWindow]:
         return self.__measurement_windows
     
-    def __evaluate_partially(self, t) -> float:
+    def __evaluate(self, t) -> float:
         params = self.__parameters.copy()
-        params.update({"t":t})
-        return self.__expression.evaluate(**params)
+        params.update({"t": t})
+        return self.__expression.evaluate_numeric(**params)
     
     @property
     def compare_key(self) -> Any:
@@ -196,8 +180,7 @@ class FunctionWaveform(Waveform):
                       output_array: Union[np.ndarray, None] = None) -> np.ndarray:
         if output_array is None:
             output_array = np.empty(len(sample_times))
-        for i, t in enumerate(sample_times):
-            output_array[i] = self.__evaluate_partially(t)
+        output_array[:] = self.__evaluate(sample_times)
         return output_array
 
     def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> Waveform:
