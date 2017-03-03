@@ -1,6 +1,7 @@
 import unittest
 from qctoolkit.hardware.awgs.tabor import TaborAWGRepresentation, TaborException, TaborProgram, TaborChannelPair
 from qctoolkit.hardware.program import MultiChannelProgram
+from qctoolkit.pulses.instructions import InstructionBlock
 import numbers
 import itertools
 import numpy as np
@@ -8,7 +9,7 @@ from copy import copy, deepcopy
 from teawg import model_properties_dict
 from qctoolkit.hardware.util import voltage_to_uint16
 
-from .program_tests import LoopTests
+from .program_tests import LoopTests, WaveformGenerator, MultiChannelTests
 
 
 try:
@@ -35,18 +36,16 @@ class TaborProgramTests(unittest.TestCase):
                                                         -0.5*np.cos(np.linspace(0, 2*np.pi, num=4048))])
 
     @property
-    def root_block(self):
-        return LoopTests(waveform_data_generator=self.waveform_data_generator, waveform_duration=4048e-9).root_block
-
-    @property
-    def working_root_block(self):
-        block = self.root_block
+    def root_loop(self):
+        return LoopTests.get_test_loop(WaveformGenerator(num_channels=2,
+                                                         waveform_data_generator=self.waveform_data_generator,
+                                                         duration_generator=itertools.repeat(4048e-9)))
 
     def test_init(self):
-        prog = MultiChannelProgram(self.root_block)
-        TaborProgram(prog, self.instr_props, ('A', 'B'), (None, None))
-        with self.assertRaises(Exception):
-            TaborProgram(prog, self.instr_props, ('A',), (None, None))
+        prog = MultiChannelProgram(MultiChannelTests().root_block)
+        TaborProgram(prog, self.instr_props, ('A', None), (None, None))
+        with self.assertRaises(TaborException):
+            TaborProgram(prog, self.instr_props, ('A', 'B'), (None, None))
 
     @unittest.skip
     def test_setup_single_waveform_mode(self):
@@ -65,17 +64,23 @@ class TaborProgramTests(unittest.TestCase):
 
         sample_rate = 8096
         with self.assertRaises(TaborException):
-            TaborProgram(MultiChannelProgram(
-                LoopTests(waveform_data_generator=my_gen(self.waveform_data_generator),
-                          waveform_duration=1e-9,
-                          num_channels=4).root_block
-            ), self.instr_props, ('A', 'B'), (None, None)).sampled_segments(8000, (1., 1.), (0, 0))
+            root_loop = LoopTests.get_test_loop(WaveformGenerator(
+                waveform_data_generator=my_gen(self.waveform_data_generator),
+                duration_generator=itertools.repeat(1e-9),
+                num_channels=4))
 
-        mcp = MultiChannelProgram(
-            LoopTests(waveform_data_generator=my_gen(self.waveform_data_generator),
-                      waveform_duration=0.5,
-                      num_channels=4).root_block
-        )
+            mcp = MultiChannelProgram(InstructionBlock(), tuple())
+            mcp.programs[frozenset(('A', 'B', 'C', 'D'))] = root_loop
+            TaborProgram(mcp, self.instr_props, ('A', 'B'), (None, None)).sampled_segments(8000, (1., 1.), (0, 0))
+
+        root_loop = LoopTests.get_test_loop(WaveformGenerator(
+            waveform_data_generator=my_gen(self.waveform_data_generator),
+            duration_generator=itertools.repeat(0.5),
+            num_channels=4))
+
+        mcp = MultiChannelProgram(InstructionBlock(), tuple())
+        mcp.programs[frozenset(('A', 'B', 'C', 'D'))] = root_loop
+
         prog = TaborProgram(mcp, self.instr_props, ('A', 'B'), (None, None))
 
         sampled, sampled_length = prog.sampled_segments(sample_rate, (1., 1.), (0, 0))

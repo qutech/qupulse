@@ -266,8 +266,8 @@ LOOP 1 times:
             mcp['C']
 
     def test_via_repr(self):
-        root_loopA = self.get_root_loop('A')
-        root_loopB = self.get_root_loop('B')
+        root_loopA = self.get_mcp('A')
+        root_loopB = self.get_mcp('B')
         waveformsA = tuple(loop.waveform
                                            for loop in root_loopA.get_depth_first_iterator() if loop.is_leaf())
         reprA = self.descriptionA.format(*waveformsA)

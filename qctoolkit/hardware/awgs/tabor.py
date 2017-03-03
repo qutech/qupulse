@@ -147,26 +147,59 @@ class TaborProgram:
                         if entry.depth() == depth_to_unroll:
                             entry.unroll()
 
+        min_seq_len = self.__device_properties['min_seq_len']
+        max_seq_len = self.__device_properties['max_seq_len']
+
+        def check_merge_with_next(program, n):
+            if (program[n].repetition_count == 1 and program[n+1].repetition_count == 1 and
+                    len(program[n]) + len(program[n+1]) < max_seq_len):
+                program[n][len(program[n]):] = program[n + 1][:]
+                program[n + 1:n + 2] = []
+                return True
+            return False
+
+        def check_partial_unroll(program, n):
+            st = program[n]
+            if sum(entry.repetition_count for entry in st) * st.repetition_count >= min_seq_len:
+                if sum(entry.repetition_count for entry in st) < min_seq_len:
+                    st.unroll_children()
+                while len(st) < min_seq_len:
+                    st.split_one_child()
+                return True
+            return False
+
         i = 0
         while i < len(self.program):
-            sequence_table = self.program[i]
-            if len(sequence_table) > self.__device_properties['max_seq_len']:
-                raise TaborException()
-            elif len(sequence_table) < self.__device_properties['min_seq_len']:
-                # try to merge with neighbours
-                if sequence_table.repetition_count == 1:
-                    if i > 0 and self.program[i-1].repetition_count == 1:
-                        self.program[i-1][len(self.program[i-1]):] = sequence_table[:]
-                        self.program[i:i+1] = []
-                    elif i+1 < len(self.program) and self.program[i+1].repetition_count == 1:
-                        self.program[i+1][:0] = sequence_table[:]
-                        self.program[i:i+1] = []
-                    else:
-                        self.increase_sequence_table_length(sequence_table, self.__device_properties)
+            self.program[i].assert_tree_integrity()
+            if len(self.program[i]) > max_seq_len:
+                raise TaborException('The algorithm is not smart enough to make sequence tables shorter')
+            elif len(self.program[i]) < min_seq_len:
+                if self.program[i].repetition_count == 0:
+                    raise TaborException('Invalid repetition count')
+                elif self.program[i].repetition_count == 1:
+                    # check if merging with neighbour is possible
+                    if i > 0 and check_merge_with_next(self.program, i-1):
+                        pass
+                    elif i+1 < len(self.program) and check_merge_with_next(self.program, i):
+                        pass
+
+                    # check if (partial) unrolling is possible
+                    elif check_partial_unroll(self.program, i):
                         i += 1
-                else:
-                    self.increase_sequence_table_length(sequence_table, self.__device_properties)
+
+                    elif i > 0 and len(self.program[i]) + len(self.program[i-1]) < max_seq_len:
+                        self.program[i][:0] = self.program[i-1].copy_tree_structure()[:]
+                        self.program[i - 1].repetition_count -= 1
+                    elif i+1 < len(self.program) and len(self.program[i]) + len(self.program[i+1]) < max_seq_len:
+                        self.program[i][len(self.program[i]):] = self.program[i+1].copy_tree_structure()[:]
+                        self.program[i+1].repetition_count -= 1
+
+                    else:
+                        raise TaborException('The algorithm is not smart enough to make this sequence table longer')
+                elif check_partial_unroll(self.program, i):
                     i += 1
+                else:
+                    raise TaborException('The algorithm is not smart enough to make this sequence table longer')
             else:
                 i += 1
 
@@ -177,7 +210,7 @@ class TaborProgram:
             raise TaborException()
         for sequence_table in self.program:
             if len(sequence_table) < self.__device_properties['min_seq_len']:
-                raise TaborException()
+                raise TaborException('Sequence table is too short')
             if len(sequence_table) > self.__device_properties['max_seq_len']:
                 raise TaborException()
 
@@ -214,19 +247,6 @@ class TaborProgram:
 
     def get_sequencer_tables(self) -> List[Tuple[int, int, int]]:
         return self.__sequencer_tables
-
-    @staticmethod
-    def increase_sequence_table_length(sequence_table: Loop, device_properties) -> None:
-        assert(sequence_table.depth() == 1)
-        if len(sequence_table) < device_properties['min_seq_len']:
-
-            if sum(entry.repetition_count for entry in sequence_table)*sequence_table.repetition_count >= device_properties['min_seq_len']:
-                if sum(entry.repetition_count for entry in sequence_table) < device_properties['min_seq_len']:
-                    sequence_table.unroll_children()
-                while len(sequence_table) < device_properties['min_seq_len']:
-                    sequence_table.split_one_child()
-            else:
-                TaborException('Sequence table too short: ', sequence_table)
 
     def get_advanced_sequencer_table(self) -> List[Tuple[int, int, int]]:
         """Advanced sequencer table that can be used  via the download_adv_seq_table pytabor command"""
