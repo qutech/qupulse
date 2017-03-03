@@ -2,7 +2,7 @@
 another PulseTemplate based on a condition."""
 
 
-from typing import Dict, Set, Optional, Any, Union, Tuple, NamedTuple
+from typing import Dict, Set, Optional, Any, Union, Tuple, Generator
 
 from qctoolkit.serialization import Serializer
 
@@ -76,13 +76,13 @@ class ParametrizedRange:
         self.stop = Expression(stop)
         self.step = Expression(step)
 
-    def to_tuple(self):
+    def to_tuple(self) -> Tuple[Any, Any, Any]:
         """Return a simple representation of the range which is useful for comparison and serialization"""
         return (self.start.get_most_simple_representation(),
                 self.stop.get_most_simple_representation(),
                 self.step.get_most_simple_representation())
 
-    def to_range(self, parameters: Dict[str, Any]):
+    def to_range(self, parameters: Dict[str, Any]) -> range:
         return range(self.start.evaluate_numeric(**parameters),
                      self.stop.evaluate_numeric(**parameters),
                      self.step.evaluate_numeric(**parameters))
@@ -140,10 +140,10 @@ class ForLoopPulseTemplate(LoopPulseTemplate):
         return parameter_names | self._loop_range.parameter_names
 
     @property
-    def parameter_declarations(self):
+    def parameter_declarations(self) -> Set['ParameterDeclaration']:
         raise NotImplementedError()
 
-    def _body_parameter_generator(self, parameters: Dict[str, Parameter], forward=True):
+    def _body_parameter_generator(self, parameters: Dict[str, Parameter], forward=True) -> Generator:
         loop_range_parameters = dict((parameter_name, parameters[parameter_name].get_value())
                                      for parameter_name in self._loop_range.parameter_names)
         loop_range = self._loop_range.to_range(loop_range_parameters)
@@ -185,7 +185,7 @@ class ForLoopPulseTemplate(LoopPulseTemplate):
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],
-                      conditions: Dict[str, 'Condition']):
+                      conditions: Dict[str, 'Condition']) -> bool:
         if any(parameters[parameter_name].requires_stop() for parameter_name in self._loop_range.parameter_names):
             return True
         if self.atomicity:
@@ -208,7 +208,7 @@ class ForLoopPulseTemplate(LoopPulseTemplate):
                     body: Dict[str, Any],
                     loop_range: Tuple,
                     loop_index: str,
-                    identifier: Optional[str]=None) -> 'WhileLoopPulseTemplate':
+                    identifier: Optional[str]=None) -> 'ForLoopPulseTemplate':
         body = serializer.deserialize(body)
         return ForLoopPulseTemplate(body=body,
                                     identifier=identifier,
@@ -261,7 +261,7 @@ class WhileLoopPulseTemplate(LoopPulseTemplate):
     def build_waveform(self,
                        parameters: Dict[str, Parameter],
                        measurement_mapping: Dict[str, str],
-                       channel_mapping: Dict[ChannelID, ChannelID]):
+                       channel_mapping: Dict[ChannelID, ChannelID]) -> None:
         raise NotImplementedError()
 
     def build_sequence(self,

@@ -35,7 +35,7 @@ class Expression(Serializable, Comparable):
     def __str__(self) -> str:
         return self.__string
 
-    def get_most_simple_representation(self):
+    def get_most_simple_representation(self) -> Union[str, int, float, complex]:
         if self.__expression.free_symbols:
             return str(self.__expression)
         elif self.__expression.is_integer:
@@ -48,7 +48,7 @@ class Expression(Serializable, Comparable):
             return str(self.__expression)
 
     @property
-    def compare_key(self) -> str:
+    def compare_key(self) -> sympy.Expr:
         return self.__expression
 
     def variables(self) -> Iterable[str]:
