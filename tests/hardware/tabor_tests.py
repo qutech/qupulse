@@ -39,7 +39,7 @@ from teawg import model_properties_dict
 from .program_tests import LoopTests, WaveformGenerator, MultiChannelTests
 
 
-class DummyTaborAWGRepresentation(dummy_modules.dummy_pytabor.TEWXAwg):
+class DummyTaborAWGRepresentation(dummy_modules.dummy_teawg.TEWXAwg):
     def __init__(self, *args, **kwargs):
         pass
     send_cmd = __init__
