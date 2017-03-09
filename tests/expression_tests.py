@@ -34,7 +34,7 @@ class ExpressionTests(unittest.TestCase):
             'c': -7
         }
         result = e.evaluate_symbolic(params)
-        expected = sympify('d*b-7')
+        expected = Expression('d*b-7')
         self.assertEqual(result, expected)
 
     def test_variables(self) -> None:

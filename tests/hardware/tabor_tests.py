@@ -1,38 +1,63 @@
 import unittest
-
-
-try:
-    from qctoolkit.hardware.awgs.tabor import TaborAWGRepresentation, TaborException, TaborProgram, TaborChannelPair
-    imports_failed = (False, '')
-except ImportError as err:
-    if err.name in ('pytabor', 'pyvisa'):
-        imports_failed = (True, 'Could not import {}').format(err.name)
-    else:
-        raise
-
-from qctoolkit.hardware.program import MultiChannelProgram
-from qctoolkit.pulses.instructions import InstructionBlock
+import sys
 import numbers
 import itertools
-import numpy as np
 from copy import copy, deepcopy
-from teawg import model_properties_dict
+
+import numpy as np
+
+failed_imports = {}
+try:
+    import pytabor
+except ImportError:
+    class dummy_pytabor:
+        pass
+    sys.modules['pytabor'] = dummy_pytabor
+    failed_imports.add('pytabor')
+
+try:
+    import pyvisa
+except ImportError:
+    class dummy_pyvisa:
+        pass
+    sys.modules['pyvisa'] = dummy_pyvisa
+    failed_imports.add('pyvisa')
+
+try:
+    import teawg
+except ImportError:
+    class dummy_teawg:
+        model_properties_dict = dict()
+    sys.modules['teawg'] = dummy_teawg
+    failed_imports.add('teawg')
+
+
+from qctoolkit.hardware.awgs.tabor import TaborAWGRepresentation, TaborException, TaborProgram, TaborChannelPair
+from qctoolkit.hardware.program import MultiChannelProgram
+from qctoolkit.pulses.instructions import InstructionBlock
 from qctoolkit.hardware.util import voltage_to_uint16
+
+
+from teawg import model_properties_dict
 
 from .program_tests import LoopTests, WaveformGenerator, MultiChannelTests
 
 
-try:
-    instrument_address = '127.0.0.1'
-    #instrument_address = '192.168.1.223'
-    #instrument_address = 'ASRL10::INSTR'
-    instrument = TaborAWGRepresentation(instrument_address)
-    instrument._visa_inst.timeout = 25000
-except:
+if 'pytabor' not in failed_imports:
+    # fix on your machine
+    possible_addresses = ('127.0.0.1', )
+
     instrument = None
+    try:
+        for instrument_address in possible_addresses:
+            instrument = TaborAWGRepresentation(instrument_address,
+                                                reset=True,
+                                                paranoia_level=2)
+            instrument._visa_inst.timeout = 25000
+    except:
+        pass
 
 
-@unittest.skipIf(*imports_failed)
 class TaborProgramTests(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -121,15 +146,7 @@ class TaborProgramTests(unittest.TestCase):
             self.assertTrue(np.all(sampled_seg[0] << 2 == data[0] << 2))
             self.assertTrue(np.all(sampled_seg[1] << 2 == data[1] << 2))
 
-    @unittest.skipIf(instrument is None, "Instrument not present")
-    def test_upload(self):
-        prog = MultiChannelProgram(self.root_block)
-        program = TaborProgram(prog, instrument.dev_properties, ('A', 'B'))
 
-        program.upload_to_device(instrument, (1, 2))
-
-
-@unittest.skipIf(*imports_failed)
 class TaborAWGRepresentationTests(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -149,7 +166,6 @@ class TaborAWGRepresentationTests(unittest.TestCase):
             self.assertIsInstance(instrument.amplitude(ch), float)
 
 
-@unittest.skipIf(*imports_failed)
 class TaborChannelPairTests(unittest.TestCase):
     @unittest.skipIf(instrument is None, "Instrument not present")
     def test_copy(self):

@@ -329,7 +329,10 @@ class SerializerTests(unittest.TestCase):
         table_foo.add_entry(ParameterDeclaration('albert', max=9.1), 'voltage')
         table = TablePulseTemplate()
         foo_mappings = dict(hugo='ilse', albert='albert', voltage='voltage')
-        sequence = SequencePulseTemplate([(table_foo, foo_mappings, {}), (table, {}, {})], ['ilse', 'albert', 'voltage'], identifier=None)
+        sequence = SequencePulseTemplate([(table_foo, foo_mappings, {}),
+                                          (table, {}, {})],
+                                         ['ilse', 'albert', 'voltage'],
+                                         identifier=None)
 
         storage = DummyStorageBackend()
         serializer = Serializer(storage)

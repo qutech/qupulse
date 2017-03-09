@@ -1,18 +1,17 @@
 """"""
 import fractions
 import sys
-from typing import List, Tuple, Iterable, Set, NamedTuple, Callable, Optional
+from typing import List, Tuple, Set, NamedTuple, Callable, Optional, Any
 
 # Provided by Tabor electronics for python 2.7
 # a python 3 version is in a private repository on https://git.rwth-aachen.de/qutech
 # Beware of the string encoding change!
-import pytabor
 import teawg
 import numpy as np
 
 from qctoolkit import ChannelID
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
-from qctoolkit.hardware.program import Loop, MultiChannelProgram
+from qctoolkit.hardware.program import Loop
 from qctoolkit.hardware.util import voltage_to_uint16, make_combined_wave
 from qctoolkit.hardware.awgs import AWG
 
@@ -36,14 +35,14 @@ class TaborSegment(tuple):
         return hash((bytes(self[0]) if self[0] is not None else 0,
                      bytes(self[1]) if self[1] is not None else 0))
 
-    def __eq__(self, other):
+    def __eq__(self, other) -> bool:
         return
 
     @property
-    def num_points(self):
+    def num_points(self) -> int:
         return len(self[0]) if self[1] is None else len(self[1])
 
-    def get_as_binary(self):
+    def get_as_binary(self) -> np.ndarray:
         assert not (self[0] is None or self[1] is None)
         return make_combined_wave([self])
 
@@ -54,8 +53,8 @@ class TaborProgram:
     def __init__(self,
                  program: Loop,
                  device_properties,
-                 channels: Tuple[ChannelID, ChannelID],
-                 markers: Tuple[ChannelID, ChannelID]):
+                 channels: Tuple[Optional[ChannelID], Optional[ChannelID]],
+                 markers: Tuple[Optional[ChannelID], Optional[ChannelID]]):
         if len(channels) != device_properties['chan_per_part']:
             raise TaborException('TaborProgram only supports {} channels'.format(device_properties['chan_per_part']))
         if len(markers) != device_properties['chan_per_part']:
@@ -66,8 +65,8 @@ class TaborProgram:
         self._program = program
 
         self.__waveform_mode = 'advanced'
-        self._channels = channels
-        self._markers = markers
+        self._channels = tuple(channels)
+        self._markers = tuple(markers)
         self.__used_channels = channel_set
         self.__device_properties = device_properties
 
@@ -83,11 +82,11 @@ class TaborProgram:
             self.setup_advanced_sequence_mode()
 
     @property
-    def markers(self):
+    def markers(self) -> Tuple[Optional[ChannelID], Optional[ChannelID]]:
         return self._markers
 
     @property
-    def channels(self):
+    def channels(self) -> Tuple[Optional[ChannelID], Optional[ChannelID]]:
         return self._channels
 
     def setup_single_waveform_mode(self) -> None:
@@ -297,76 +296,8 @@ class TaborProgram:
         """Advanced sequencer table that can be used  via the download_adv_seq_table pytabor command"""
         return self._advanced_sequencer_table
 
-    def get_waveform_data(self,
-                          device_properties,
-                          sample_rate: float,
-                          voltage_amplitude: Tuple[float, float],
-                          voltage_offset: Tuple[float, float]) -> Tuple[np.ndarray, np.ndarray]:
-        if any(not(waveform.duration*sample_rate).is_integer() for waveform in self._waveforms):
-            raise TaborException('At least one waveform has a length that is no multiple of the time per sample')
-        maximal_length = int(max(waveform.duration for waveform in self._waveforms) * sample_rate)
-        time_array = np.arange(0, maximal_length, 1)
-        maximal_size = int(2 * (sample_rate * sum(waveform.duration for waveform in self._waveforms) + 16 * len(self._waveforms)))
-        data = np.empty(maximal_size, dtype=np.uint16)
-        offset = 0
-        segment_lengths = np.zeros(len(self._waveforms), dtype=np.uint32)
-
-        def voltage_to_data(waveform, time, channel):
-            return voltage_to_uint16(waveform[self._channels[channel]].sample(time),
-                                     voltage_amplitude[channel],
-                                     voltage_offset[channel],
-                                     resolution=14) if self._channels[channel] else None
-
-        for i, waveform in enumerate(self._waveforms):
-            t = time_array[:int(waveform.duration*sample_rate)]
-            segment1 = voltage_to_data(waveform, t, 0)
-            segment2 = voltage_to_data(waveform, t, 1)
-            segment_lengths[i] = len(segment1) if segment1 is not None else len(segment2)
-            assert(segment2 is None or segment_lengths[i] == len(segment2))
-            offset = pytabor.make_combined_wave(
-                segment1,
-                segment2,
-                data, offset, add_idle_pts=True)
-
-        if np.any(segment_lengths < device_properties['min_seq_len']):
-            raise Exception()
-        if np.any(segment_lengths % device_properties['seg_quantum']>0):
-            raise Exception()
-
-        return data[:offset], segment_lengths
-
-    def upload_to_device(self, device: 'TaborAWG', channel_pair) -> None:
-        if channel_pair not in ((1, 2), (3, 4)):
-            raise Exception('Invalid channel pair', channel_pair)
-
-        if self.__waveform_mode == 'advanced':
-            sample_rate = device.sample_rate(channel_pair[0])
-            amplitude = (device.amplitude(channel_pair[0]), device.amplitude(channel_pair[1]))
-            offset = (device.offset(channel_pair[0]), device.offset(channel_pair[1]))
-
-            wf_data, segment_lengths = self.get_waveform_data(device_properties=device.dev_properties,
-                                                              sample_rate=sample_rate,
-                                                              voltage_amplitude=amplitude,
-                                                              voltage_offset=offset)
-            # download the waveform data as one big waveform
-            device.select_channel(channel_pair[0])
-            device.send_cmd(':FUNC:MODE ASEQ')
-            device.send_cmd(':TRAC:DEF 1,{}'.format(len(wf_data)))
-            device.send_cmd(':TRAC:SEL 1')
-            device.send_binary_data(pref=':TRAC:DATA', bin_dat=wf_data)
-            # partition the memory
-            device.download_segment_lengths(segment_lengths)
-
-            #download all sequence tables
-            for i, sequencer_table in enumerate(self.get_sequencer_tables()):
-                device.send_cmd('SEQ:SEL {}'.format(i+1))
-                device.download_sequencer_table(sequencer_table)
-
-            device.download_adv_seq_table(self.get_advanced_sequencer_table())
-            device.send_cmd('SEQ:SEL 1')
-
     @property
-    def waveform_mode(self):
+    def waveform_mode(self) -> str:
         return self.__waveform_mode
 
 
@@ -397,7 +328,7 @@ class TaborAWGRepresentation(teawg.TEWXAwg):
         self.select_channel(3)
         self.send_cmd(setup_command)
 
-    def send_cmd(self, cmd_str, paranoia_level=None):
+    def send_cmd(self, cmd_str, paranoia_level=None) -> Any:
         if paranoia_level is not None:
             super().send_cmd(cmd_str=cmd_str, paranoia_level=paranoia_level)
         else:
@@ -437,7 +368,7 @@ class TaborAWGRepresentation(teawg.TEWXAwg):
 
         self.send_cmd(':INST:SEL {channel}'.format(channel=channel))
 
-    def select_marker(self, marker):
+    def select_marker(self, marker) -> None:
         if marker not in (1, 2, 3, 4):
             raise TaborException('Invalid marker: {}'.format(marker))
         self.send_cmd(':SOUR:MARK:SEL {marker}'.format(marker=marker))
@@ -455,24 +386,29 @@ class TaborAWGRepresentation(teawg.TEWXAwg):
     def offset(self, channel) -> float:
         return float(self.send_query(':INST:SEL {channel}; :VOLT:OFFS?'.format(channel=channel)))
 
-    def enable(self):
+    def enable(self) -> None:
         self.send_cmd(':ENAB')
 
-    def abort(self):
+    def abort(self) -> None:
         self.send_cmd(':ABOR')
 
-    def reset(self):
+    def reset(self) -> None:
         self.send_cmd(':RES')
         self.send_cmd(':INST:SEL 1; :INIT:GATE OFF; :INIT:CONT ON; :INIT:CONT:ENAB ARM; :INIT:CONT:ENAB:SOUR BUS')
         self.send_cmd(':INST:SEL 3; :INIT:GATE OFF; :INIT:CONT ON; :INIT:CONT:ENAB ARM; :INIT:CONT:ENAB:SOUR BUS')
+
+    def trigger(self) -> None:
+        self.send_cmd(':TRIG')
 
 
 TaborProgramMemory = NamedTuple('TaborProgramMemory', [('segment_indices', np.ndarray),
                                                        ('program', TaborProgram)])
 
 
-def with_configuration_guard(function_object):
-    def guarding_method(channel_pair: 'TaborChannelPair', *args, **kwargs):
+def with_configuration_guard(function_object: Callable[['TaborChannelPair'], Any]) -> Callable[['TaborChannelPair'],
+                                                                                               Any]:
+    """This decorator assures that the AWG is in configuration mode while the decorated method runs."""
+    def guarding_method(channel_pair: 'TaborChannelPair', *args, **kwargs) -> Any:
         if channel_pair._configuration_guard_count == 0:
             channel_pair._enter_config_mode()
         channel_pair._configuration_guard_count += 1
@@ -788,7 +724,7 @@ class TaborChannelPair(AWG):
         self._device.enable()
         self._current_program = name
 
-    def run_current_program(self):
+    def run_current_program(self) -> None:
         if self._current_program:
             self._device.send_cmd(':TRIG')
         else:
@@ -811,10 +747,9 @@ class TaborChannelPair(AWG):
     def num_markers(self) -> int:
         return 2
 
-    def configuration_guard(self):
-        return self.ConfigurationGuard(self)
-
-    def _enter_config_mode(self):
+    def _enter_config_mode(self) -> None:
+        """Enter the configuration mode if not already in. All outputs are turned of and the sequencing is disabled
+        as the manual states this speeds up sequence validation when uploading multiple sequences"""
         if self._is_in_config_mode is False:
             self.set_marker_state(0, False)
             self.set_marker_state(1, False)
@@ -825,7 +760,8 @@ class TaborChannelPair(AWG):
             self._device.send_cmd(':SOUR:FUNC:MODE FIX')
             self._is_in_config_mode = True
 
-    def _exit_config_mode(self):
+    def _exit_config_mode(self) -> None:
+        """Leave the configuration mode. Enter advanced sequence mode and turn on all outputs"""
         if self._current_program:
             _, program = self._known_programs[self._current_program]
 
