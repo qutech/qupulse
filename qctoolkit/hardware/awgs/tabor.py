@@ -1,41 +1,58 @@
-from qctoolkit import ChannelID
-from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
-from qctoolkit.hardware.program import Loop, MultiChannelProgram
-from qctoolkit.hardware.util import voltage_to_uint16
-from qctoolkit.hardware.awgs import AWG
-
+""""""
+import fractions
 import sys
-import numpy as np
-from typing import List, Tuple, Iterable, Set, NamedTuple
+from typing import List, Tuple, Iterable, Set, NamedTuple, Callable, Optional
 
 # Provided by Tabor electronics for python 2.7
 # a python 3 version is in a private repository on https://git.rwth-aachen.de/qutech
 # Beware of the string encoding change!
 import pytabor
 import teawg
+import numpy as np
+
+from qctoolkit import ChannelID
+from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
+from qctoolkit.hardware.program import Loop, MultiChannelProgram
+from qctoolkit.hardware.util import voltage_to_uint16, make_combined_wave
+from qctoolkit.hardware.awgs import AWG
+
 
 assert(sys.byteorder == 'little')
 
 
+__all__ = ['TaborAWGRepresentation', 'TaborChannelPair']
+
+
 class TaborSegment(tuple):
-    def __new__(cls, ch_a, ch_b):
+    """Represents one segment of two channels on the device. Convenience class."""
+    def __new__(cls, ch_a: Optional[np.ndarray], ch_b: Optional[np.ndarray]):
         return tuple.__new__(cls, (ch_a, ch_b))
 
     def __init__(self, ch_a, ch_b):
-        pass
-
-    def num_points(self) -> int:
-        return max(len(self[0]), len(self[1]))
+        if ch_a is None and ch_b is None:
+            raise TaborException('Empty TaborSegments are not allowed')
 
     def __hash__(self) -> int:
-        return hash((bytes(self[0]), bytes(self[1])))
+        return hash((bytes(self[0]) if self[0] is not None else 0,
+                     bytes(self[1]) if self[1] is not None else 0))
+
+    def __eq__(self, other):
+        return
+
+    @property
+    def num_points(self):
+        return len(self[0]) if self[1] is None else len(self[1])
+
+    def get_as_binary(self):
+        assert not (self[0] is None or self[1] is None)
+        return make_combined_wave([self])
 
 
 class TaborProgram:
     WAVEFORM_MODES = ('single', 'advanced', 'sequence')
 
     def __init__(self,
-                 program: MultiChannelProgram,
+                 program: Loop,
                  device_properties,
                  channels: Tuple[ChannelID, ChannelID],
                  markers: Tuple[ChannelID, ChannelID]):
@@ -46,30 +63,32 @@ class TaborProgram:
         channel_set = frozenset(channel for channel in channels if channel is not None) | frozenset(marker
                                                                                                     for marker in
                                                                                                     markers if marker is not None)
-        self.__root_loop = None
-        for known_channels in program.programs.keys():
-            if known_channels.issuperset(channel_set):
-                self.__root_loop = program.programs[known_channels]
-                break
-        if self.__root_loop is None:
-            raise TaborException("{} not found in program.".format(channel_set))
+        self._program = program
 
         self.__waveform_mode = 'advanced'
-        self.__channels = channels
-        self.__markers = markers
+        self._channels = channels
+        self._markers = markers
         self.__used_channels = channel_set
         self.__device_properties = device_properties
 
-        self.__waveforms = []  # type: List[MultiChannelWaveform]
-        self.__sequencer_tables = []
-        self.__advanced_sequencer_table = []
+        self._waveforms = []  # type: List[MultiChannelWaveform]
+        self._sequencer_tables = []
+        self._advanced_sequencer_table = []
 
         if self.program.depth() == 0:
             self.setup_single_waveform_mode()
         elif self.program.depth() == 1:
-            self.setup_single_sequence_table_mode()
+            self.setup_single_sequence_mode()
         else:
             self.setup_advanced_sequence_mode()
+
+    @property
+    def markers(self):
+        return self._markers
+
+    @property
+    def channels(self):
+        return self._channels
 
     def setup_single_waveform_mode(self) -> None:
         raise NotImplementedError()
@@ -77,20 +96,27 @@ class TaborProgram:
     def sampled_segments(self,
                          sample_rate: float,
                          voltage_amplitude: Tuple[float, float],
-                         voltage_offset: Tuple[float, float]) -> List[TaborSegment]:
+                         voltage_offset: Tuple[float, float],
+                         voltage_transformation: Tuple[Callable, Callable]) -> List[TaborSegment]:
+        sample_rate = fractions.Fraction(sample_rate, 10**9)
 
-        segment_lengths = np.fromiter((waveform.duration for waveform in self.__waveforms),
-                                      dtype=float, count=len(self.__waveforms)) * sample_rate
-        if not all(segment_length.is_integer() for segment_length in segment_lengths):
-            raise TaborException('At least one waveform has a length that is no multiple of the time per sample')
-        segment_lengths = segment_lengths.astype(dtype=int)
+        segment_lengths = [waveform.duration*sample_rate for waveform in self._waveforms]
+        if not all(abs(int(segment_length) - segment_length) < 1e-10 and segment_length > 0
+                   for segment_length in segment_lengths):
+            raise TaborException('At least one waveform has a length that is no integer or smaller zero')
+        segment_lengths = np.asarray(segment_lengths, dtype=np.uint64)
+
+        if np.any(segment_lengths % 16 > 0) or np.any(segment_lengths < 192):
+            raise TaborException('At least one waveform has a length that is smaller 192 or not a multiple of 16')
+        sample_rate = float(sample_rate)
         time_array = np.arange(np.max(segment_lengths)) / sample_rate
 
         def voltage_to_data(waveform, time, channel):
-            if self.__channels[channel]:
+            if self._channels[channel]:
                 return voltage_to_uint16(
-                    waveform[self.__channels[channel]].get_sampled(channel=self.__channels[channel],
-                                                                   sample_times=time),
+                    voltage_transformation[channel](
+                        waveform.get_sampled(channel=self._channels[channel],
+                                             sample_times=time)),
                     voltage_amplitude[channel],
                     voltage_offset[channel],
                     resolution=14)
@@ -99,21 +125,21 @@ class TaborProgram:
 
         def get_marker_data(waveform: MultiChannelWaveform, time):
             marker_data = np.zeros(len(time), dtype=np.uint16)
-            for marker_index, markerID in enumerate(self.__markers):
+            for marker_index, markerID in enumerate(self._markers):
                 if markerID is not None:
                     marker_data |= (waveform.get_sampled(channel=markerID, sample_times=time) != 0).\
                                        astype(dtype=np.uint16) << marker_index+14
             return marker_data
 
-        segments = len(self.__waveforms)*[None]
-        for i, waveform in enumerate(self.__waveforms):
+        segments = np.empty_like(self._waveforms, dtype=object)
+        for i, waveform in enumerate(self._waveforms):
             t = time_array[:int(waveform.duration*sample_rate)]
             segment_a = voltage_to_data(waveform, t, 0)
             segment_b = voltage_to_data(waveform, t, 1)
             assert (len(segment_a) == len(t))
             assert (len(segment_b) == len(t))
             seg_data = get_marker_data(waveform, t)
-            segment_b |= seg_data
+            segment_a |= seg_data
             segments[i] = TaborSegment(segment_a, segment_b)
         return segments, segment_lengths
 
@@ -121,9 +147,28 @@ class TaborProgram:
         self.__waveform_mode = 'sequence'
         if len(self.program) < self.__device_properties['min_seq_len']:
             raise TaborException('SEQuence:LENGth has to be >={min_seq_len}'.format(**self.__device_properties))
-        raise NotImplementedError()
+
+        sequencer_table = []
+        waveforms = []
+
+        for waveform, repetition_count in ((waveform_loop.waveform.get_subset_for_channels(self.__used_channels),
+                                            waveform_loop.repetition_count)
+                                           for waveform_loop in self.program):
+            if waveform in waveforms:
+                segment_no = waveforms.index(waveform) + 1
+            else:
+                segment_no = len(waveforms) + 1
+                waveforms.append(waveform)
+            sequencer_table.append((repetition_count, segment_no, 0))
+
+        self.__waveform_mode = 'sequence'
+        self._waveforms = waveforms
+        self._sequencer_tables = [sequencer_table]
+        self._advanced_sequencer_table = [(self.program.repetition_count, 1, 0)]
 
     def setup_advanced_sequence_mode(self) -> None:
+        if self.program.depth() == 1:
+            self.program.encapsulate()
         while self.program.depth() > 2 or not self.program.is_balanced():
             for i, sequence_table in enumerate(self.program):
                 if sequence_table.depth() == 0:
@@ -133,7 +178,7 @@ class TaborProgram:
                 elif len(sequence_table) == 1 and len(sequence_table[0]) == 1:
                     sequence_table.join_loops()
                 elif sequence_table.is_balanced():
-                    if len(self.program) < self.__device_properties['min_aseq_len'] or (sequence_table.repetition_count / self.__device_properties['max_aseq_len'] <
+                    if len(self.program) < self.__device_properties['min_aseq_len'] or (sequence_table.repetition_count // self.__device_properties['max_aseq_len'] <
                                                 max(entry.repetition_count for entry in sequence_table) /
                                                 self.__device_properties['max_seq_len']):
                         sequence_table.unroll()
@@ -223,11 +268,11 @@ class TaborProgram:
                                                 waveform_loop.repetition_count)
                                                for waveform_loop in sequencer_table_loop):
                 if waveform in waveforms:
-                    segment_no = waveforms.index(waveform) + 1
+                    wf_index = waveforms.index(waveform)
                 else:
-                    segment_no = len(waveforms) + 1
+                    wf_index = len(waveforms)
                     waveforms.append(waveform)
-                current_sequencer_table.append((repetition_count, segment_no, 0))
+                current_sequencer_table.append((repetition_count, wf_index, 0))
 
             if current_sequencer_table in sequencer_tables:
                 sequence_no = sequencer_tables.index(current_sequencer_table) + 1
@@ -237,42 +282,42 @@ class TaborProgram:
 
             advanced_sequencer_table.append((sequencer_table_loop.repetition_count, sequence_no, 0))
 
-        self.__advanced_sequencer_table = advanced_sequencer_table
-        self.__sequencer_tables = sequencer_tables
-        self.__waveforms = waveforms
+        self._advanced_sequencer_table = advanced_sequencer_table
+        self._sequencer_tables = sequencer_tables
+        self._waveforms = waveforms
 
     @property
     def program(self) -> Loop:
-        return self.__root_loop
+        return self._program
 
     def get_sequencer_tables(self) -> List[Tuple[int, int, int]]:
-        return self.__sequencer_tables
+        return self._sequencer_tables
 
     def get_advanced_sequencer_table(self) -> List[Tuple[int, int, int]]:
         """Advanced sequencer table that can be used  via the download_adv_seq_table pytabor command"""
-        return self.__advanced_sequencer_table
+        return self._advanced_sequencer_table
 
     def get_waveform_data(self,
                           device_properties,
                           sample_rate: float,
                           voltage_amplitude: Tuple[float, float],
                           voltage_offset: Tuple[float, float]) -> Tuple[np.ndarray, np.ndarray]:
-        if any(not(waveform.duration*sample_rate).is_integer() for waveform in self.__waveforms):
+        if any(not(waveform.duration*sample_rate).is_integer() for waveform in self._waveforms):
             raise TaborException('At least one waveform has a length that is no multiple of the time per sample')
-        maximal_length = int(max(waveform.duration for waveform in self.__waveforms) * sample_rate)
+        maximal_length = int(max(waveform.duration for waveform in self._waveforms) * sample_rate)
         time_array = np.arange(0, maximal_length, 1)
-        maximal_size = int(2 * (sample_rate*sum(waveform.duration for waveform in self.__waveforms) + 16*len(self.__waveforms)))
+        maximal_size = int(2 * (sample_rate * sum(waveform.duration for waveform in self._waveforms) + 16 * len(self._waveforms)))
         data = np.empty(maximal_size, dtype=np.uint16)
         offset = 0
-        segment_lengths = np.zeros(len(self.__waveforms), dtype=np.uint32)
+        segment_lengths = np.zeros(len(self._waveforms), dtype=np.uint32)
 
         def voltage_to_data(waveform, time, channel):
-            return voltage_to_uint16(waveform[self.__channels[channel]].sample(time),
+            return voltage_to_uint16(waveform[self._channels[channel]].sample(time),
                                      voltage_amplitude[channel],
                                      voltage_offset[channel],
-                                     resolution=14) if self.__channels[channel] else None
+                                     resolution=14) if self._channels[channel] else None
 
-        for i, waveform in enumerate(self.__waveforms):
+        for i, waveform in enumerate(self._waveforms):
             t = time_array[:int(waveform.duration*sample_rate)]
             segment1 = voltage_to_data(waveform, t, 0)
             segment2 = voltage_to_data(waveform, t, 1)
@@ -320,11 +365,67 @@ class TaborProgram:
             device.download_adv_seq_table(self.get_advanced_sequencer_table())
             device.send_cmd('SEQ:SEL 1')
 
+    @property
+    def waveform_mode(self):
+        return self.__waveform_mode
+
 
 class TaborAWGRepresentation(teawg.TEWXAwg):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, external_trigger=False, reset=False, **kwargs):
         super().__init__(*args, **kwargs)
-        self.__selected_channel = None
+        if reset:
+            self.visa_inst.write(':RES')
+
+        if external_trigger:
+            raise NotImplementedError()
+
+        def switch_group_off(grp):
+            switch_off_cmd = (":INST:SEL {}; :OUTP OFF; :INST:SEL {}; :OUTP OFF; "
+                              ":SOUR:MARK:SEL 1; :SOUR:MARK:STAT OFF; :SOUR:MARK:SOUR USER; "
+                              ":SOUR:MARK:SEL 2; :SOUR:MARK:STAT OFF; :SOUR:MARK:SOUR USER").format(grp+1, grp+2)
+            self.send_cmd(switch_off_cmd)
+        switch_group_off(0)
+        switch_group_off(1)
+
+        setup_command = (
+                         ":INIT:GATE OFF; :INIT:CONT ON; "
+                         ":INIT:CONT:ENAB ARM; :INIT:CONT:ENAB:SOUR BUS; "
+                         ":SOUR:SEQ:JUMP:EVEN BUS")
+        # Set Software Trigger Mode
+        self.select_channel(1)
+        self.send_cmd(setup_command)
+        self.select_channel(3)
+        self.send_cmd(setup_command)
+
+    def send_cmd(self, cmd_str, paranoia_level=None):
+        if paranoia_level is not None:
+            super().send_cmd(cmd_str=cmd_str, paranoia_level=paranoia_level)
+        else:
+            cmd_str = cmd_str.rstrip()
+
+            if len(cmd_str) > 0:
+                ask_str = cmd_str + '; *OPC?; :SYST:ERR?'
+            else:
+                ask_str = '*OPC?; :SYST:ERR?'
+
+            answer = self._visa_inst.ask(ask_str).split(';')
+
+            error_code, error_msg = answer[-1].split(',')
+            error_code = int(error_code)
+            if error_code != 0:
+                _ = self._visa_inst.ask('*CLS; *OPC?')
+
+                if error_code == -450:
+                    # query queue overflow
+                    self.send_cmd(cmd_str)
+                else:
+                    raise RuntimeError('Cannot execute command: {}\n{}: {}'.format(cmd_str, error_code, error_msg))
+            if len(answer) == 2:
+                return None
+            elif len(answer) == 3:
+                return answer[0]
+            else:
+                return tuple(answer[:-2])
 
     @property
     def is_open(self) -> bool:
@@ -333,73 +434,136 @@ class TaborAWGRepresentation(teawg.TEWXAwg):
     def select_channel(self, channel) -> None:
         if channel not in (1, 2, 3, 4):
             raise TaborException('Invalid channel: {}'.format(channel))
-        if self.__selected_channel != channel:
-            self.send_cmd(':INST:SEL {channel}'.format(channel=channel))
-            self.__selected_channel = channel
+
+        self.send_cmd(':INST:SEL {channel}'.format(channel=channel))
+
+    def select_marker(self, marker):
+        if marker not in (1, 2, 3, 4):
+            raise TaborException('Invalid marker: {}'.format(marker))
+        self.send_cmd(':SOUR:MARK:SEL {marker}'.format(marker=marker))
 
     def sample_rate(self, channel) -> int:
-        self.select_channel(channel)
-        return int(float(self.send_query(':FREQ:RAST?'.format(channel=channel))))
+        return int(float(self.send_query(':INST:SEL {channel}; :FREQ:RAST?'.format(channel=channel))))
 
     def amplitude(self, channel) -> float:
-        self.select_channel(channel)
-        coupling = self.send_query(':OUTP:COUP?'.format(channel=channel))
+        coupling = self.send_query(':INST:SEL {channel}; :OUTP:COUP?'.format(channel=channel))
         if coupling == 'DC':
             return float(self.send_query(':VOLT?'))
         elif coupling == 'HV':
             return float(self.send_query(':VOLD:HV?'))
 
     def offset(self, channel) -> float:
-        self.select_channel(channel)
-        return float(self.send_query(':VOLT:OFFS?'.format(channel=channel)))
+        return float(self.send_query(':INST:SEL {channel}; :VOLT:OFFS?'.format(channel=channel)))
+
+    def enable(self):
+        self.send_cmd(':ENAB')
+
+    def abort(self):
+        self.send_cmd(':ABOR')
+
+    def reset(self):
+        self.send_cmd(':RES')
+        self.send_cmd(':INST:SEL 1; :INIT:GATE OFF; :INIT:CONT ON; :INIT:CONT:ENAB ARM; :INIT:CONT:ENAB:SOUR BUS')
+        self.send_cmd(':INST:SEL 3; :INIT:GATE OFF; :INIT:CONT ON; :INIT:CONT:ENAB ARM; :INIT:CONT:ENAB:SOUR BUS')
 
 
 TaborProgramMemory = NamedTuple('TaborProgramMemory', [('segment_indices', np.ndarray),
-                                                       ])
+                                                       ('program', TaborProgram)])
+
+
+def with_configuration_guard(function_object):
+    def guarding_method(channel_pair: 'TaborChannelPair', *args, **kwargs):
+        if channel_pair._configuration_guard_count == 0:
+            channel_pair._enter_config_mode()
+        channel_pair._configuration_guard_count += 1
+
+        function_object(channel_pair, *args, **kwargs)
+
+        channel_pair._configuration_guard_count -= 1
+        if channel_pair._configuration_guard_count == 0:
+            channel_pair._exit_config_mode()
+
+    return guarding_method
+
 
 class TaborChannelPair(AWG):
     def __init__(self, tabor_device: TaborAWGRepresentation, channels: Tuple[int, int], identifier: str):
         super().__init__(identifier)
-        self.__device = tabor_device
+        self._device = tabor_device
+
+        self._configuration_guard_count = 0
+        self._is_in_config_mode = False
 
         if channels not in ((1, 2), (3, 4)):
             raise ValueError('Invalid channel pair: {}'.format(channels))
-        self.__channels = channels
+        self._channels = channels
 
-        self.__segment_lengths = np.zeros(0, dtype=int)
-        self.__segment_capacity = np.zeros(0, dtype=int)
-        self.__segment_hashes = np.zeros(0, dtype=int)
-        self.__segment_references = np.zeros(0, dtype=int)
+        self._enter_config_mode()
+
+        # Select channel 1
+        self._device.select_channel(self._channels[0])
+        self._device.send_cmd(':TRAC:DEL:ALL')
+        self._device.send_cmd(':SOUR:SEQ:DEL:ALL')
+        self._device.send_cmd(':ASEQ:DEL')
+
+        self._idle_segment = TaborSegment(voltage_to_uint16(voltage=np.zeros(192),
+                                                            output_amplitude=0.5,
+                                                            output_offset=0., resolution=14),
+                                          voltage_to_uint16(voltage=np.zeros(192),
+                                                            output_amplitude=0.5,
+                                                            output_offset=0., resolution=14))
+        self._idle_sequence_table = [(1, 1, 0), (1, 1, 0), (1, 1, 0)]
+
+        self._device.send_cmd(':TRAC:DEF 1, 192')
+        self._device.send_cmd(':TRAC:SEL 1')
+        self._device.send_cmd(':TRAC:MODE COMB')
+        self._device.send_binary_data(pref=':TRAC:DATA', bin_dat=self._idle_segment.get_as_binary())
+
+        self._segment_lengths = 192*np.ones(1, dtype=np.uint32)
+        self._segment_capacity = 192*np.ones(1, dtype=np.uint32)
+        self._segment_hashes = np.ones(1, dtype=np.int64) * hash(self._idle_segment)
+        self._segment_references = np.ones(1, dtype=np.uint32)
+
+        self._device.send_cmd('SEQ:SEL 1')
+        self._device.download_sequencer_table(self._idle_sequence_table)
+        self._sequencer_tables = [self._idle_sequence_table]
+
+        self._advanced_sequence_table = []
 
         self.total_capacity = int(16e6)
 
-        self.__known_programs = dict()  # type: Dict[str, TaborProgramMemory]
+        self._known_programs = dict()  # type: Dict[str, TaborProgramMemory]
+        self._current_program = None
+
+        self._exit_config_mode()
 
     def free_program(self, name: str) -> TaborProgramMemory:
-        program = self.__known_programs.pop(name)
-        self.__segment_references[program.segment_indices] -= 1
+        program = self._known_programs.pop(name)
+        self._segment_references[program.segment_indices] -= 1
         return program
 
     @property
-    def __segment_reserved(self) -> np.ndarray:
-        return self.__segment_references > 0
+    def _segment_reserved(self) -> np.ndarray:
+        return self._segment_references > 0
 
     @property
-    def __free_points_in_total(self) -> int:
-        return self.total_capacity - np.sum(self.__segment_capacity[self.__segment_reserved])
+    def _free_points_in_total(self) -> int:
+        return self.total_capacity - np.sum(self._segment_capacity[self._segment_reserved])
 
     @property
-    def __free_points_at_end(self) -> int:
-        reserved_index = np.where(self.__segment_reserved)
+    def _free_points_at_end(self) -> int:
+        reserved_index = np.flatnonzero(self._segment_reserved)
         if reserved_index:
-            return self.total_capacity - np.sum(self.__segment_capacity[:reserved_index[-1]])
+            return self.total_capacity - np.sum(self._segment_capacity[:reserved_index[-1]])
         else:
             return self.total_capacity
 
+    @with_configuration_guard
     def upload(self, name: str,
                program: Loop,
                channels: List[ChannelID],
                markers: List[ChannelID],
+               voltage_transformation: List[Callable],
                force: bool=False) -> None:
         """Upload a program to the AWG.
 
@@ -409,10 +573,12 @@ class TaborChannelPair(AWG):
             raise ValueError('Channel ID not specified')
         if len(markers) != self.num_markers:
             raise ValueError('Markers not specified')
+        if len(voltage_transformation) != self.num_channels:
+            raise ValueError('Wrong number of voltage transformations')
 
         # helper to restore previous state if upload is impossible
         to_restore = None
-        if name in self.__known_programs:
+        if name in self._known_programs:
             if force:
                 # save old program to restore in on error
                 to_restore = self.free_program(name)
@@ -421,90 +587,141 @@ class TaborChannelPair(AWG):
 
         try:
             # parse to tabor program
-            tabor_program = TaborProgram(program, channels=tuple(channels))
-            sample_rate = self.__device.sample_rate(self.__channels[0])
-            voltage_amplitudes = (self.__device.amplitude(self.__channels[0]),
-                                  self.__device.amplitude(self.__channels[1]))
-            voltage_offsets = (self.__device.offset(self.__channels[0]),
-                               self.__device.offset(self.__channels[1]))
+            tabor_program = TaborProgram(program,
+                                         channels=tuple(channels),
+                                         markers=markers,
+                                         device_properties=self._device.dev_properties)
+            sample_rate = self._device.sample_rate(self._channels[0])
+            voltage_amplitudes = (self._device.amplitude(self._channels[0]),
+                                  self._device.amplitude(self._channels[1]))
+            voltage_offsets = (self._device.offset(self._channels[0]),
+                               self._device.offset(self._channels[1]))
             segments, segment_lengths = tabor_program.sampled_segments(sample_rate=sample_rate,
-                                                      voltage_amplitude=voltage_amplitudes,
-                                                      voltage_offset=voltage_offsets)
-            segment_hashes = np.fromiter((hash(bytes(segment)) for segment in segments), count=len(segments), dtype=int)
+                                                                       voltage_amplitude=voltage_amplitudes,
+                                                                       voltage_offset=voltage_offsets,
+                                                                       voltage_transformation=voltage_transformation)
+            segment_hashes = np.fromiter((hash(segment) for segment in segments), count=len(segments), dtype=np.uint64)
 
-            known_waveforms = np.in1d(segment_hashes, self.__segment_hashes, assume_unique=True)
+            known_waveforms = np.in1d(segment_hashes, self._segment_hashes, assume_unique=True)
             to_upload_size = np.sum(segment_lengths[~known_waveforms] + 16)
 
             waveform_to_segment = np.full(len(segments), -1, dtype=int)
-            waveform_to_segment[known_waveforms] = np.where(
-                np.in1d(self.__segment_hashes, segment_hashes[known_waveforms]))
+            waveform_to_segment[known_waveforms] = np.flatnonzero(
+                np.in1d(self._segment_hashes, segment_hashes[known_waveforms]))
 
-            if name not in self.__known_programs:
-                if self.__free_points_in_total < to_upload_size:
+            to_amend = ~known_waveforms
+            to_insert = []
+
+            if name not in self._known_programs:
+                if self._free_points_in_total < to_upload_size:
                     raise MemoryError('Not enough free memory')
-                if self.__free_points_at_end < to_upload_size:
-                    reserved_indices = np.where(self.__segment_reserved)
+                if self._free_points_at_end < to_upload_size:
+                    reserved_indices = np.flatnonzero(self._segment_reserved)
                     if len(reserved_indices) == 0:
                         raise MemoryError('Fragmentation does not allow upload.')
 
                     last_reserved = reserved_indices[-1] if reserved_indices else 0
-                    free_segments = np.where(self.__segment_references[:last_reserved] == 0)[
-                        np.argsort(self.__segment_capacity[:last_reserved])[::-1]]
+                    free_segments = np.flatnonzero(self._segment_references[:last_reserved] == 0)[
+                        np.argsort(self._segment_capacity[:last_reserved])[::-1]]
 
-                    to_amend = ~known_waveforms
-                    to_insert = []
                     for wf_index in np.argsort(segment_lengths[~known_waveforms])[::-1]:
-                        if segment_lengths[wf_index] <= self.__segment_capacity[free_segments[0]]:
+                        if segment_lengths[wf_index] <= self._segment_capacity[free_segments[0]]:
                             to_insert.append((wf_index, free_segments[0]))
                             free_segments = free_segments[1:]
                             to_amend[wf_index] = False
 
-                    if np.sum(segment_lengths[to_amend] + 16) > self.__free_points_at_end:
+                    if np.sum(segment_lengths[to_amend] + 16) > self._free_points_at_end:
                         raise MemoryError('Fragmentation does not allow upload.')
 
         except:
             if to_restore:
-                self.__known_programs[name] = to_restore
-                self.__segment_reserved[to_restore.segment_indices] += 1
+                self._known_programs[name] = to_restore
+                self._segment_reserved[to_restore.segment_indices] += 1
             raise
 
-        self.__segment_references[waveform_to_segment[waveform_to_segment >= 0]] += 1
+        self._segment_references[waveform_to_segment[waveform_to_segment >= 0]] += 1
 
         if to_insert:
             # as we have to insert waveforms the waveforms behind the last referenced are discarded
             self.cleanup()
 
             for wf_index, segment_index in to_insert:
-                self.__upload_segment(segment_index, segments[wf_index])
+                self._upload_segment(segment_index, segments[wf_index])
                 waveform_to_segment[wf_index] = segment_index
 
         if np.any(to_amend):
             segments_to_amend = segments[to_amend]
-            self.__amend_segments(segments_to_amend)
-            waveform_to_segment[to_amend] = np.arange(len(self.__segment_capacity)-np.sum(to_amend),
-                                                      len(self.__segment_capacity), dtype=int)
+            self._amend_segments(segments_to_amend)
+            waveform_to_segment[to_amend] = np.arange(len(self._segment_capacity) - np.sum(to_amend),
+                                                      len(self._segment_capacity), dtype=int) + 1
 
-        self.__known_programs[name] = TaborProgramMemory(segment_index=waveform_to_segment,
-                                                         )
-        raise NotImplementedError()
+        self._known_programs[name] = TaborProgramMemory(segment_indices=waveform_to_segment,
+                                                        program=tabor_program)
 
-    def __upload_segment(self, segment_index: int, segment: TaborSegment) -> None:
-        self.__segment_references[segment_index] = 1
-        self.__segment_hashes[segment_index]
-        raise NotImplementedError()
+    @with_configuration_guard
+    def _upload_segment(self, segment_index: int, segment: TaborSegment) -> None:
+        if self._segment_references[segment_index] > 0:
+            raise ValueError('Reference count not zero')
+        if segment.num_points > self._segment_capacity[segment_index]:
+            raise ValueError('Cannot upload segment here.')
 
-    def __amend_segments(self, segments: List[TaborSegment]) -> None:
-        raise NotImplementedError()
+
+        self._device.send_cmd(':TRAC:DEF {}, {}'.format(segment_index, segment.num_points))
+        self._segment_lengths[segment_index] = segment.num_points
+
+        self._device.send_cmd(':TRAC:SEL {}'.format(segment_index))
+
+        self._device.send_cmd('TRAC:MODE COMB')
+        wf_data = segment.get_as_binary()
+
+        self._device.send_binary_data(pref=':TRAC:DATA', bin_dat=wf_data)
+        self._segment_references[segment_index] = 1
+        self._segment_hashes[segment_index] = hash(segment)
+
+    @with_configuration_guard
+    def _amend_segments(self, segments: List[TaborSegment]) -> None:
+        new_lengths = np.asarray([s.num_points for s in segments], dtype=np.uint32)
+
+        wf_data = make_combined_wave(segments)
+        trac_len = len(wf_data) // 2
+
+        segment_index = len(self._segment_capacity) + 1
+        self._device.send_cmd(':TRAC:DEF {}, {}'.format(segment_index, trac_len))
+        self._device.send_cmd(':TRAC:SEL {}'.format(segment_index))
+        self._device.send_cmd('TRAC:MODE COMB')
+        self._device.send_binary_data(pref=':TRAC:DATA', bin_dat=wf_data)
+
+        old_to_update = np.count_nonzero(self._segment_capacity != self._segment_lengths and self._segment_reserved)
+        segment_capacity = np.concatenate((self._segment_capacity, new_lengths))
+        segment_lengths = np.concatenate((self._segment_lengths, new_lengths))
+        segment_references = np.concatenate((self._segment_references, np.ones(len(segments), dtype=int)))
+        segment_hashes = np.concatenate((self._segment_hashes, [hash(s) for s in segments]))
+        if len(segments) < old_to_update:
+            for i, segment in enumerate(segments):
+                current_segment = segment_index + i
+                self._device.send_cmd(':TRAC:DEF {}, {}'.format(current_segment, segment.num_points))
+        else:
+            # flush the capacity
+            self._device.download_segment_lengths(segment_capacity)
+
+            # update non fitting lengths
+            for i in np.flatnonzero(np.logical_and(segment_capacity != segment_lengths, segment_references > 0)):
+                self._device.send_cmd(':TRAC:DEF {},{}'.format(i, segment_lengths[i]))
+
+        self._segment_capacity = segment_capacity
+        self._segment_lengths = segment_lengths
+        self._segment_hashes = segment_hashes
+        self._segment_references = segment_references
 
     def cleanup(self) -> None:
         """Discard all segments after the last which is still referenced"""
-        reserved_indices = np.where(self.__segment_references > 0)
+        reserved_indices = np.flatnonzero(self._segment_references > 0)
 
         new_end = reserved_indices[-1]+1 if reserved_indices else 0
-        self.__segment_lengths = self.__segment_lengths[:new_end]
-        self.__segment_capacity = self.__segment_capacity[:new_end]
-        self.__segment_hashes = self.__segment_capacity[:new_end]
-        self.__segment_references = self.__segment_capacity[:new_end]
+        self._segment_lengths = self._segment_lengths[:new_end]
+        self._segment_capacity = self._segment_capacity[:new_end]
+        self._segment_hashes = self._segment_capacity[:new_end]
+        self._segment_references = self._segment_capacity[:new_end]
 
     def remove(self, name: str) -> None:
         """Remove a program from the AWG.
@@ -516,17 +733,75 @@ class TaborChannelPair(AWG):
         """
         self.free_program(name)
 
+    def set_marker_state(self, marker, active) -> None:
+        command_string = ':INST:SEL {}; :SOUR:MARK:SEL {}; :SOUR:MARK:SOUR USER; :SOUR:MARK:STAT {}'.format(
+            self._channels[0],
+            marker+1,
+            'ON' if active else 'OFF')
+        self._device.send_cmd(command_string)
+
+    def set_channel_state(self, channel, active) -> None:
+        command_string = ':INST:SEL {}; :OUTP {}'.format(self._channels[channel], 'ON' if active else 'OFF')
+        self._device.send_cmd(command_string)
+
+    @with_configuration_guard
     def arm(self, name: str) -> None:
-        raise NotImplementedError()
+        if self._current_program == name:
+            self._device.send_cmd('SEQ:SEL 1')
+            return
+
+        waveform_to_segment, program = self._known_programs[name]
+
+        sequencer_tables = program.get_sequencer_tables()
+        sequencer_tables = [[(rep_count, waveform_to_segment[wf_index], jump_flag)
+                             for (rep_count, wf_index, jump_flag) in sequencer_table]
+                            for sequencer_table in sequencer_tables]
+        sequencer_tables = [self._idle_sequence_table] + sequencer_tables
+
+        advanced_sequencer_table = program.get_advanced_sequencer_table()
+        advanced_sequencer_table = [(rep_count, seq_no+1, jump_flag)
+                                    for rep_count, seq_no, jump_flag in advanced_sequencer_table]
+        advanced_sequencer_table = [(1, 1, 1)] + advanced_sequencer_table
+        while len(advanced_sequencer_table) < self._device.dev_properties['min_aseq_len']:
+            advanced_sequencer_table.append((1, 1, 0))
+
+        self.set_marker_state(0, False)
+        self.set_marker_state(1, False)
+
+        self.set_channel_state(0, False)
+        self.set_channel_state(1, False)
+
+        self._device.abort()
+
+        #download all sequence tables
+        for i, sequencer_table in enumerate(sequencer_tables):
+            if i >= len(self._sequencer_tables) or self._sequencer_tables[i] != sequencer_table:
+                self._device.send_cmd('SEQ:SEL {}'.format(i+1))
+                self._device.download_sequencer_table(sequencer_table)
+        self._sequencer_tables = sequencer_tables
+        self._device.send_cmd('SEQ:SEL 1')
+
+        self._device.download_adv_seq_table(advanced_sequencer_table)
+        self._advanced_sequence_table = advanced_sequencer_table
+
+        # this will set the DC voltage to the first value of the idle waveform
+        self._device.enable()
+        self._current_program = name
+
+    def run_current_program(self):
+        if self._current_program:
+            self._device.send_cmd(':TRIG')
+        else:
+            raise RuntimeError('No program active')
 
     @property
     def programs(self) -> Set[str]:
         """The set of program names that can currently be executed on the hardware AWG."""
-        raise set(program.name for program in self.__known_programs.keys())
+        raise set(program.name for program in self._known_programs.keys())
 
     @property
     def sample_rate(self) -> float:
-        return self.__device.sample_rate(self.__channels[0])
+        return self._device.sample_rate(self._channels[0])
 
     @property
     def num_channels(self) -> int:
@@ -535,6 +810,36 @@ class TaborChannelPair(AWG):
     @property
     def num_markers(self) -> int:
         return 2
+
+    def configuration_guard(self):
+        return self.ConfigurationGuard(self)
+
+    def _enter_config_mode(self):
+        if self._is_in_config_mode is False:
+            self.set_marker_state(0, False)
+            self.set_marker_state(1, False)
+
+            self.set_channel_state(0, False)
+            self.set_channel_state(1, False)
+
+            self._device.send_cmd(':SOUR:FUNC:MODE FIX')
+            self._is_in_config_mode = True
+
+    def _exit_config_mode(self):
+        if self._current_program:
+            _, program = self._known_programs[self._current_program]
+
+            self._device.send_cmd(':SOUR:FUNC:MODE ASEQ')
+
+            self.set_marker_state(0, program.markers[0] is not None)
+            self.set_marker_state(1, program.markers[1] is not None)
+
+            self.set_channel_state(0, program.channels[0] is not None)
+            self.set_channel_state(1, program.channels[1] is not None)
+
+            self._is_in_config_mode = False
+
+
 
 
 class TaborException(Exception):

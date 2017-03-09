@@ -34,6 +34,66 @@ class WaveformGenerator:
         return self.generate_multi_channel_waveform()
 
 
+def get_two_chan_test_block(wfg=WaveformGenerator(2)):
+    generate_waveform = wfg.generate_single_channel_waveform
+    generate_multi_channel_waveform = wfg.generate_multi_channel_waveform
+
+    loop_block11 = InstructionBlock()
+    loop_block11.add_instruction_exec(generate_multi_channel_waveform())
+
+    loop_block1 = InstructionBlock()
+    loop_block1.add_instruction_repj(5, ImmutableInstructionBlock(loop_block11))
+
+    loop_block21 = InstructionBlock()
+    loop_block21.add_instruction_exec(generate_multi_channel_waveform())
+    loop_block21.add_instruction_exec(generate_multi_channel_waveform())
+
+    loop_block2 = InstructionBlock()
+    loop_block2.add_instruction_repj(2, ImmutableInstructionBlock(loop_block21))
+    loop_block2.add_instruction_exec(generate_multi_channel_waveform())
+
+    loop_block3 = InstructionBlock()
+    loop_block3.add_instruction_exec(generate_multi_channel_waveform())
+    loop_block3.add_instruction_exec(generate_multi_channel_waveform())
+
+    loop_block411 = InstructionBlock()
+    loop_block411.add_instruction_exec(MultiChannelWaveform([generate_waveform('A')]))
+    loop_block412 = InstructionBlock()
+    loop_block412.add_instruction_exec(MultiChannelWaveform([generate_waveform('A')]))
+
+    loop_block41 = InstructionBlock()
+    loop_block41.add_instruction_repj(7, ImmutableInstructionBlock(loop_block411))
+    loop_block41.add_instruction_repj(8, ImmutableInstructionBlock(loop_block412))
+
+    loop_block421 = InstructionBlock()
+    loop_block421.add_instruction_exec(MultiChannelWaveform([generate_waveform('B')]))
+    loop_block422 = InstructionBlock()
+    loop_block422.add_instruction_exec(MultiChannelWaveform([generate_waveform('B')]))
+
+    loop_block42 = InstructionBlock()
+    loop_block42.add_instruction_repj(10, ImmutableInstructionBlock(loop_block421))
+    loop_block42.add_instruction_repj(11, ImmutableInstructionBlock(loop_block422))
+
+    chan_block4A = InstructionBlock()
+    chan_block4A.add_instruction_repj(6, ImmutableInstructionBlock(loop_block41))
+
+    chan_block4B = InstructionBlock()
+    chan_block4B.add_instruction_repj(9, ImmutableInstructionBlock(loop_block42))
+
+    loop_block4 = InstructionBlock()
+    loop_block4.add_instruction_chan({frozenset('A'): ImmutableInstructionBlock(chan_block4A),
+                                           frozenset('B'): ImmutableInstructionBlock(chan_block4B)})
+
+    root_block = InstructionBlock()
+    root_block.add_instruction_exec(generate_multi_channel_waveform())
+    root_block.add_instruction_repj(10, ImmutableInstructionBlock(loop_block1))
+    root_block.add_instruction_repj(17, ImmutableInstructionBlock(loop_block2))
+    root_block.add_instruction_repj(3, ImmutableInstructionBlock(loop_block3))
+    root_block.add_instruction_repj(4, ImmutableInstructionBlock(loop_block4))
+
+    return root_block
+
+
 class LoopTests(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
