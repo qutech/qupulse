@@ -36,13 +36,11 @@ class AlazarCard(DAC):
     def card(self) -> Any:
         return self.__card
 
-    def __make_mask(self, mask_id: str, begins, lengths) -> Mask:
+    def _make_mask(self, mask_id: str, begins, lengths) -> Mask:
         if mask_id not in self._mask_prototypes:
             raise KeyError('Measurement window {} can not be converted as it is not registered.'.format(mask_id))
 
         hardware_channel, mask_type = self._mask_prototypes[mask_id]
-        if mask_type not in ('auto', 'cross_buffer', None):
-            raise ValueError('Currently only can do cross buffer mask')
 
         if np.any(begins[:-1]+lengths[:-1] > begins[1:]):
             raise ValueError('Found overlapping windows in begins')
@@ -58,7 +56,7 @@ class AlazarCard(DAC):
                                      program_name: str,
                                      windows: Dict[str, Tuple[np.ndarray, np.ndarray]]) -> None:
         if not windows:
-            return
+            self._registered_programs[program_name].masks = []
         total_length = 0
         for mask_id, (begins, lengths) in windows.items():
 
@@ -77,7 +75,7 @@ class AlazarCard(DAC):
         total_length = np.ceil(total_length/self.__card.minimum_record_size) * self.__card.minimum_record_size
 
         self._registered_programs[program_name].masks = [
-            self.__make_mask(mask_id, *window_begin_length)
+            self._make_mask(mask_id, *window_begin_length)
             for mask_id, window_begin_length in windows.items()]
         self._registered_programs[program_name].total_length = total_length
 
@@ -87,6 +85,12 @@ class AlazarCard(DAC):
     def arm_program(self, program_name: str) -> None:
         config = self.config
         config.masks, config.operations, total_record_size = self._registered_programs[program_name]
+
+        if not config.masks:
+            if config.operations:
+                raise RuntimeError('Invalid configuration. Operations have no masks to work with')
+            else:
+                return
 
         if config.totalRecordSize == 0:
             config.totalRecordSize = total_record_size
@@ -105,6 +109,10 @@ class AlazarCard(DAC):
     def mask_prototypes(self):
         return self._mask_prototypes
 
-    def register_mask_for_channel(self, mask_id, hw_channel, mask_type='auto'):
+    def register_mask_for_channel(self, mask_id, hw_channel, mask_type='auto') -> None:
+        if hw_channel not in range(16):
+            raise ValueError('{} is not a valid hw channel'.format(hw_channel))
+        if mask_type not in ('auto', 'cross_buffer', None):
+            raise NotImplementedError('Currently only can do cross buffer mask')
         self._mask_prototypes[mask_id] = (hw_channel, mask_type)
 
