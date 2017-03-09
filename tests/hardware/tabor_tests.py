@@ -1,40 +1,18 @@
 import unittest
-import sys
 import numbers
 import itertools
 from copy import copy, deepcopy
-
 import numpy as np
 
 from . import dummy_modules
-
-failed_imports = set()
-try:
-    import pytabor
-except ImportError:
-    sys.modules['pytabor'] = dummy_modules.dummy_pytabor
-    failed_imports.add('pytabor')
-
-try:
-    import pyvisa
-except ImportError:
-    sys.modules['pyvisa'] = dummy_modules.dummy_pyvisa
-    failed_imports.add('pyvisa')
-
-try:
-    import teawg
-except ImportError:
-    sys.modules['teawg'] = dummy_modules.dummy_teawg
-    failed_imports.add('teawg')
-
 
 from qctoolkit.hardware.awgs.tabor import TaborAWGRepresentation, TaborException, TaborProgram, TaborChannelPair
 from qctoolkit.hardware.program import MultiChannelProgram
 from qctoolkit.pulses.instructions import InstructionBlock
 from qctoolkit.hardware.util import voltage_to_uint16
 
-
 from teawg import model_properties_dict
+import pytabor
 
 from .program_tests import LoopTests, WaveformGenerator, MultiChannelTests
 
@@ -49,7 +27,7 @@ class DummyTaborAWGRepresentation(dummy_modules.dummy_teawg.TEWXAwg):
     download_sequencer_table = send_cmd
 
 instrument = None
-if 'pytabor' not in failed_imports:
+if pytabor not in dummy_modules.failed_imports:
     # fix on your machine
     possible_addresses = ('127.0.0.1', )
     for instrument_address in possible_addresses:
