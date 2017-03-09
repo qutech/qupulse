@@ -109,11 +109,13 @@ def plot(pulse: PulseTemplate,
             because a parameter value could not be evaluated
         all Exceptions possibly raised during sequencing
     """
+    channels = pulse.defined_channels
+
     if parameters is None:
         parameters = dict()
     plotter = Plotter(sample_rate=sample_rate)
     sequencer = Sequencer()
-    sequencer.push(pulse, parameters)
+    sequencer.push(pulse, parameters, channel_mapping={ch: ch for ch in channels})
     sequence = sequencer.build()
     if not sequencer.has_finished():
         raise PlottingNotPossibleException(pulse)
@@ -122,13 +124,13 @@ def plot(pulse: PulseTemplate,
     # plot to figure
     figure = plt.figure()
     ax = figure.add_subplot(111)
-    for index, channel in enumerate(voltages):
-        ax.step(times, channel, where='post', label='channel {}'.format(index))
+    for ch_name, voltage in voltages.items():
+        ax.step(times, voltage, where='post', label='channel {}'.format(ch_name))
 
     ax.legend()
 
-    max_voltage = max(max(channel) for channel in voltages)
-    min_voltage = min(min(channel) for channel in voltages)
+    max_voltage = max(max(channel) for channel in voltages.values())
+    min_voltage = min(min(channel) for channel in voltages.values())
 
     # add some margins in the presentation
     plt.plot()
