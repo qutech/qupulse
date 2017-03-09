@@ -8,7 +8,7 @@ Classes:
 """
 
 from abc import ABCMeta, abstractmethod, abstractproperty
-from typing import Set, Tuple, List
+from typing import Set, Tuple, List, Callable, Optional
 
 from qctoolkit import MeasurementWindow, ChannelID
 from qctoolkit.hardware.program import Loop
@@ -44,8 +44,9 @@ class AWG(Comparable):
     @abstractmethod
     def upload(self, name: str,
                program: Loop,
-               channels: List[ChannelID],
-               markers: List[ChannelID],
+               channels: Tuple[Optional[ChannelID], ...],
+               markers: Tuple[Optional[ChannelID], ...],
+               voltage_transformation: Tuple[Optional[Callable], ...],
                force: bool=False) -> None:
         """Upload a program to the AWG.
 
@@ -57,8 +58,10 @@ class AWG(Comparable):
         Args:
             name (str): A name for the program on the AWG.
             program (Loop): The program (a sequence of instructions) to upload.
-            channels (List): List of channels in the program to use. Index of channel ID corresponds to the AWG channel
-            markers (List): List of channels in the program to use. Index of channel ID corresponds to the AWG channel
+            channels (List): Tuple of length num_channels that ChannelIDs of  in the program to use. Position in the list corresponds to the AWG channel
+            markers (List): List of channels in the program to use. Position in the List in the list corresponds to the AWG channel
+            voltage_transformation (List): transformations applied to the waveforms extracted rom the program. Position
+            in the list corresponds to the AWG channel
             force (bool): If a different sequence is already present with the same name, it is
                 overwritten if force is set to True. (default = False)
         """
@@ -85,7 +88,10 @@ class AWG(Comparable):
     def sample_rate(self) -> float:
         """The sample rate of the AWG."""
 
+    @property
     def compare_key(self) -> int:
+        """Comparison and hashing is based on the id of the AWG so different devices with the same properties
+        are ot equal"""
         return id(self)
 
     def __copy__(self) -> None:
@@ -101,7 +107,7 @@ class DummyAWG(AWG):
     def __init__(self,
                  memory: int=100,
                  sample_rate: float=10,
-                 output_range: Tuple[float, float]=(-5,5),
+                 output_range: Tuple[float, float]=(-5, 5),
                  num_channels: int=1,
                  num_markers: int=1) -> None:
         """Create a new DummyAWG instance.
@@ -120,17 +126,10 @@ class DummyAWG(AWG):
         self._output_range = output_range
         self._num_channels = num_channels
         self._num_markers = num_markers
+        self._channels = ('default',)
+        self._armed = None
 
-    def add_waveform(self, waveform) -> int:
-        try:
-            index = self._waveform_memory.index(None)
-        except ValueError:
-            raise OutOfWaveformMemoryException()
-        self._waveform_memory[index] = waveform
-        self._waveform_indices[hash(waveform)] = index
-        return index
-
-    def upload(self, name, program, force=False) -> None:
+    def upload(self, name, program, channels, markers, voltage_transformation, force=False) -> None:
         if name in self.programs:
             if not force:
                 raise ProgramOverwriteException(name)
@@ -138,28 +137,16 @@ class DummyAWG(AWG):
                 self.remove(name)
                 self.upload(name, program)
         else:
-            self._programs[name] = program
-            exec_blocks = filter(lambda x: type(x) == EXECInstruction, program)
-            indices = frozenset(self.add_waveform(block.waveform) for block in exec_blocks)
-            self._program_wfs[name] = indices
+            self._programs[name] = (program, channels, markers, voltage_transformation)
 
-    def remove(self,name) -> None:
+    def remove(self, name) -> None:
         if name in self.programs:
             self._programs.pop(name)
             self.program_wfs.pop(name)
             self.clean()
 
-    def clean(self) -> None:
-        necessary_wfs = reduce(lambda acc, s: acc.union(s), self._program_wfs.values(), set())
-        all_wfs = set(self._waveform_indices.values())
-        delete = all_wfs - necessary_wfs
-        for index in delete:
-            wf = self._waveform_memory(index)
-            self._waveform_indices.pop(wf)
-            self._waveform_memory = None
-
     def arm(self, name: str) -> None:
-        raise NotImplementedError()
+        self._armed = name
 
     @property
     def programs(self) -> Set[str]:
@@ -201,3 +188,11 @@ class OutOfWaveformMemoryException(Exception):
 
     def __str__(self) -> str:
         return "Out of memory error adding waveform to waveform memory."
+
+
+class ChannelNotFoundException(Exception):
+    def __init__(self, channel):
+        self.channel = channel
+
+    def __str__(self) -> str:
+        return 'Marker or channel not found: {}'.format(self.channel)
