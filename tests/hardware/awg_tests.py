@@ -17,23 +17,11 @@ class DummyAWGTest(unittest.TestCase):
             self.sequencer.push(self.pulse_template, pars, channel_mapping=dict(default='default'))
         self.program = self.sequencer.build()
 
-    def test_OutOfMemoryException(self):
-        dummy = awg.DummyAWG(10)
-        with self.assertRaises(awg.OutOfWaveformMemoryException):
-            dummy.upload('program', self.program)
-
     def test_ProgramOverwriteException(self):
         dummy = awg.DummyAWG(100)
-        dummy.upload('program', self.program)
+        dummy.upload('program', self.program, [], [], [])
         with self.assertRaises(awg.ProgramOverwriteException):
-            dummy.upload('program', self.program)
-
-    def test_upload(self):
-        dummy = awg.DummyAWG(100)
-        dummy.upload('program',self.program)
-        memory_part = [None for i in range(89)]
-        self.assertEqual(dummy._waveform_memory[11:], memory_part)
-        self.assertEqual(dummy.programs, set(['program']))
+            dummy.upload('program', self.program, [], [], [])
 
 
 class TektronixAWGTest(unittest.TestCase):

@@ -111,7 +111,7 @@ class RepetitionPulseTemplate(LoopPulseTemplate):
             value = self._repetition_count.get_value(parameters)
             if isinstance(value, float) and not value.is_integer():
                 raise ParameterNotIntegerException(self._repetition_count.name, value)
-            return value
+            return int(value)
         else: return self._repetition_count
 
     def __str__(self) -> str:

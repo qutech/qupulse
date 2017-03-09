@@ -10,7 +10,6 @@ from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyInterpolationStrategy, DummyParameter, DummyCondition
 from tests.serialization_dummies import DummySerializer
 
-
 class TablePulseTemplateTest(unittest.TestCase):
 
     def test_add_entry_known_interpolation_strategies(self) -> None:
@@ -43,9 +42,10 @@ class TablePulseTemplateTest(unittest.TestCase):
         pulse.add_entry(1, 1)
         pulse.add_entry(3, 0)
         pulse.add_entry(5, 0)
-        pulse.add_measurement_declaration('mw',0,5)
+        pulse.add_measurement_declaration('mw', 0, 5)
         windows = pulse.get_measurement_windows(parameters={}, measurement_mapping={'mw': 'asd'})
         self.assertEqual([('asd', 0, 5)], windows)
+        self.assertEqual(pulse.measurement_declarations, dict(mw=[(0, 5)]))
 
     def test_no_measurement_windows(self) -> None:
         pulse = TablePulseTemplate()
@@ -54,6 +54,7 @@ class TablePulseTemplateTest(unittest.TestCase):
         pulse.add_entry(5, 0)
         windows = pulse.get_measurement_windows({}, {'mw': 'asd'})
         self.assertEqual([], windows)
+        self.assertEqual(dict(), pulse.measurement_declarations)
 
     def test_measurement_windows_with_parameters(self) -> None:
         pulse = TablePulseTemplate()
@@ -63,6 +64,26 @@ class TablePulseTemplateTest(unittest.TestCase):
         parameters = dict(length=100)
         windows = pulse.get_measurement_windows(parameters, measurement_mapping={'mw': 'asd'})
         self.assertEqual(windows, [('asd', 1, 101/2)])
+        self.assertEqual(pulse.measurement_declarations, dict(mw=[(1, '(1+length)/2')]))
+
+    def test_multiple_measurement_windows(self) -> None:
+        pulse = TablePulseTemplate()
+        pulse.add_entry(1,        1)
+        pulse.add_entry('length', 0)
+
+        pulse.add_measurement_declaration('A', 0, '(1+length)/2')
+        pulse.add_measurement_declaration('A', 1, 3)
+        pulse.add_measurement_declaration('B', 'begin', 2)
+
+        parameters = dict(length=5, begin=1)
+        measurement_mapping = dict(A='A', B='C')
+        windows = pulse.get_measurement_windows(parameters=parameters,
+                                                measurement_mapping=measurement_mapping)
+        expected = [('A', 0, 3), ('A', 1, 3), ('C', 1, 2)]
+        self.assertEqual(sorted(windows), sorted(expected))
+        self.assertEqual(pulse.measurement_declarations,
+                         dict(A=[(0, '(1+length)/2'), (1, 3)],
+                              B=[('begin', 2)]))
 
     def test_add_entry_empty_time_is_negative(self) -> None:
         table = TablePulseTemplate()

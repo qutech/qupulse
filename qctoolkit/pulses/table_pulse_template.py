@@ -423,7 +423,7 @@ class TablePulseTemplate(AtomicPulseTemplate):
         as_builtin = lambda x: str(x) if isinstance(x, Expression) else x
         return {name: [(as_builtin(begin), as_builtin(end))
                        for begin, end in windows]
-                for name, windows in self.__measurement_windows.items() }
+                for name, windows in self.__measurement_windows.items()}
 
     @property
     def measurement_names(self) -> Set[str]:
@@ -620,6 +620,6 @@ class TablePulseTemplate(AtomicPulseTemplate):
 
         for name, windows in measurement_declarations.items():
             for window in windows:
-                template.add_measurement_declaration(name,*window)
+                template.add_measurement_declaration(name, *window)
 
         return template
