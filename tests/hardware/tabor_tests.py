@@ -6,7 +6,7 @@ from copy import copy, deepcopy
 
 import numpy as np
 
-failed_imports = {}
+failed_imports = set()
 try:
     import pytabor
 except ImportError:
@@ -28,6 +28,7 @@ try:
 except ImportError:
     class dummy_teawg:
         model_properties_dict = dict()
+
     sys.modules['teawg'] = dummy_teawg
     failed_imports.add('teawg')
 
@@ -43,20 +44,31 @@ from teawg import model_properties_dict
 from .program_tests import LoopTests, WaveformGenerator, MultiChannelTests
 
 
+class DummyTaborAWGRepresentation:
+    def __init__(self, *args, **kwargs):
+        pass
+    send_cmd = __init__
+    send_query = send_cmd
+    select_channel = send_cmd
+    send_binary_data = send_cmd
+    download_sequencer_table = send_cmd
+
+instrument = None
 if 'pytabor' not in failed_imports:
     # fix on your machine
     possible_addresses = ('127.0.0.1', )
-
-    instrument = None
-    try:
-        for instrument_address in possible_addresses:
+    for instrument_address in possible_addresses:
+        try:
             instrument = TaborAWGRepresentation(instrument_address,
                                                 reset=True,
                                                 paranoia_level=2)
             instrument._visa_inst.timeout = 25000
-    except:
-        pass
+            break
+        except:
+            pass
 
+    if instrument is None:
+        instrument = DummyTaborAWGRepresentation()
 
 class TaborProgramTests(unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -147,27 +159,23 @@ class TaborProgramTests(unittest.TestCase):
             self.assertTrue(np.all(sampled_seg[1] << 2 == data[1] << 2))
 
 
+@unittest.skipIf(isinstance(instrument, DummyTaborAWGRepresentation), "No instrument present")
 class TaborAWGRepresentationTests(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    @unittest.skipIf(instrument is None, "Instrument not present")
     def test_sample_rate(self):
-        if not instrument.is_open:
-            self.skipTest("No instrument found.")
         for ch in (1, 2, 3, 4):
             self.assertIsInstance(instrument.sample_rate(ch), numbers.Number)
         with self.assertRaises(TaborException):
             instrument.sample_rate(0)
 
-    @unittest.skipIf(instrument is None, "Instrument not present")
     def test_amplitude(self):
         for ch in range(1, 5):
             self.assertIsInstance(instrument.amplitude(ch), float)
 
 
 class TaborChannelPairTests(unittest.TestCase):
-    @unittest.skipIf(instrument is None, "Instrument not present")
     def test_copy(self):
         channel_pair = TaborChannelPair(instrument, identifier='asd', channels=(1, 2))
         with self.assertRaises(NotImplementedError):
