@@ -6,30 +6,25 @@ from copy import copy, deepcopy
 
 import numpy as np
 
+from . import dummy_modules
+
 failed_imports = set()
 try:
     import pytabor
 except ImportError:
-    class dummy_pytabor:
-        pass
-    sys.modules['pytabor'] = dummy_pytabor
+    sys.modules['pytabor'] = dummy_modules.dummy_pytabor
     failed_imports.add('pytabor')
 
 try:
     import pyvisa
 except ImportError:
-    class dummy_pyvisa:
-        pass
-    sys.modules['pyvisa'] = dummy_pyvisa
+    sys.modules['pyvisa'] = dummy_modules.dummy_pyvisa
     failed_imports.add('pyvisa')
 
 try:
     import teawg
 except ImportError:
-    class dummy_teawg:
-        model_properties_dict = dict()
-
-    sys.modules['teawg'] = dummy_teawg
+    sys.modules['teawg'] = dummy_modules.dummy_teawg
     failed_imports.add('teawg')
 
 
@@ -44,7 +39,7 @@ from teawg import model_properties_dict
 from .program_tests import LoopTests, WaveformGenerator, MultiChannelTests
 
 
-class DummyTaborAWGRepresentation:
+class DummyTaborAWGRepresentation(dummy_modules.dummy_pytabor.TEWXAwg):
     def __init__(self, *args, **kwargs):
         pass
     send_cmd = __init__
