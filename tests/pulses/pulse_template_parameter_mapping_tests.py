@@ -1,96 +1,109 @@
 import unittest
 
-from qctoolkit.pulses.pulse_template_parameter_mapping import PulseTemplateParameterMapping, MissingMappingException, UnnecessaryMappingException, MissingParameterDeclarationException
+from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingException,\
+    UnnecessaryMappingException, MissingParameterDeclarationException, MappingTemplate
 from qctoolkit.expressions import Expression
-from qctoolkit.pulses.parameters import MappedParameter, ParameterNotProvidedException, ConstantParameter
+from qctoolkit.pulses.parameters import ParameterNotProvidedException
+from qctoolkit.pulses.parameters import ConstantParameter
 
-from tests.pulses.sequencing_dummies import DummyPulseTemplate
+from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummySequencer, DummyInstructionBlock
 
 
-class PulseTemplateParameterMappingTests(unittest.TestCase):
+class MappingTemplateTests(unittest.TestCase):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
-    def __init__(self, methodName) -> None:
-        super().__init__(methodName=methodName)
+    def test_init(self):
+        template = DummyPulseTemplate(parameter_names={'foo', 'bar'})
+        parameter_mapping = {'foo': 't*k', 'bar': 't*l'}
 
-    def test_empty_init(self) -> None:
-        map = PulseTemplateParameterMapping()
-        self.assertEqual(set(), map.external_parameters)
-
-    def test_set_external_parameters(self) -> None:
-        map = PulseTemplateParameterMapping({'foo'})
-        self.assertEqual({'foo'}, map.external_parameters)
-        map.set_external_parameters(None)
-        self.assertEqual({'foo'}, map.external_parameters)
-        map.set_external_parameters({'bar'})
-        self.assertEqual({'bar'}, map.external_parameters)
-        map.set_external_parameters(set())
-        self.assertEqual(set(), map.external_parameters)
-
-    def test_add_unnecessary_mapping(self) -> None:
-        map = PulseTemplateParameterMapping()
-        dummy = DummyPulseTemplate(parameter_names={'foo'})
+        with self.assertRaises(MissingMappingException):
+            MappingTemplate(template, parameter_mapping={})
+        with self.assertRaises(MissingMappingException):
+            MappingTemplate(template, parameter_mapping={'bar': 'kneipe'})
         with self.assertRaises(UnnecessaryMappingException):
-            map.add(dummy, 'bar', '2')
+            MappingTemplate(template, dict(**parameter_mapping, foobar='asd'))
+        MappingTemplate(template, parameter_mapping=parameter_mapping)
 
-    def test_add_missing_external_parameter(self) -> None:
-        map = PulseTemplateParameterMapping()
-        dummy = DummyPulseTemplate(parameter_names={'foo'})
-        with self.assertRaises(MissingParameterDeclarationException):
-            map.add(dummy, 'foo', 'bar')
+        with self.assertRaises(UnnecessaryMappingException):
+            MappingTemplate(template, parameter_mapping, measurement_mapping=dict(a='b'))
+        with self.assertRaises(UnnecessaryMappingException):
+            MappingTemplate(template, parameter_mapping, channel_mapping=dict(a='b'))
 
-    def test_add(self) -> None:
-        map = PulseTemplateParameterMapping({'bar'})
-        dummy1 = DummyPulseTemplate(parameter_names={'foo', 'hugo'})
-        dummy2 = DummyPulseTemplate(parameter_names={'grr'})
-        map.add(dummy1, 'foo', '4*bar')
-        map.add(dummy2, 'grr', Expression('bar ** 2'))
-        map.add(dummy1, 'hugo', '3')
-        map.add(dummy2, 'grr', Expression('sin(bar)'))
-        self.assertEqual(dict(foo=Expression('4*bar'), hugo=Expression('3')), map.get_template_map(dummy1))
-        self.assertEqual(dict(grr=Expression('sin(bar)')), map.get_template_map(dummy2))
+    def test_external_params(self):
+        template = DummyPulseTemplate(parameter_names={'foo', 'bar'})
+        st = MappingTemplate(template, parameter_mapping={'foo': 't*k', 'bar': 't*l'})
+        external_params = {'t', 'l', 'k'}
+        self.assertEqual(st.parameter_names, external_params)
 
-    def test_get_template_map_no_key(self) -> None:
-        map = PulseTemplateParameterMapping()
-        dummy = DummyPulseTemplate()
-        self.assertEqual(dict(), map.get_template_map(dummy))
+    def test_map_parameters(self):
+        template = DummyPulseTemplate(parameter_names={'foo', 'bar'})
+        st = MappingTemplate(template, parameter_mapping={'foo': 't*k', 'bar': 't*l'})
 
-    def test_is_template_mapped(self) -> None:
-        map = PulseTemplateParameterMapping({'bar'})
-        dummy1 = DummyPulseTemplate(parameter_names={'foo', 'hugo'})
-        dummy2 = DummyPulseTemplate(parameter_names={'grr'})
-        map.add(dummy1, 'foo', '4*bar')
-        self.assertFalse(map.is_template_mapped(dummy1))
-        map.add(dummy1, 'hugo', 'bar + 1')
-        self.assertTrue(map.is_template_mapped(dummy1))
-        self.assertFalse(map.is_template_mapped(dummy2))
-
-    def test_get_remaining_mappings(self) -> None:
-        map = PulseTemplateParameterMapping({'bar', 'barbar'})
-        dummy = DummyPulseTemplate(parameter_names={'foo', 'hugo'})
-        self.assertEqual({'foo', 'hugo'}, map.get_remaining_mappings(dummy))
-        map.add(dummy, 'hugo', '4*bar')
-        self.assertEqual({'foo'}, map.get_remaining_mappings(dummy))
-        map.add(dummy, 'foo', Expression('barbar'))
-        self.assertEqual(set(), map.get_remaining_mappings(dummy))
-
-    def test_map_parameters_not_provided(self) -> None:
-        map = PulseTemplateParameterMapping({'bar', 'barbar'})
-        dummy = DummyPulseTemplate(parameter_names={'foo', 'hugo'})
-        map.add(dummy, 'hugo', '4*bar')
-        map.add(dummy, 'foo', Expression('barbar'))
+        parameters = {'t': ConstantParameter(3), 'k': ConstantParameter(2), 'l': ConstantParameter(7)}
+        values = {'foo': 6, 'bar': 21}
+        for k, v in st.map_parameters(parameters).items():
+            self.assertEqual(v.get_value(), values[k])
+        parameters.popitem()
         with self.assertRaises(ParameterNotProvidedException):
-            map.map_parameters(dummy, dict(bar=ConstantParameter(3)))
+            st.map_parameters(parameters)
 
-    def test_map_parameters(self) -> None:
-        map = PulseTemplateParameterMapping({'bar', 'barbar'})
-        dummy = DummyPulseTemplate(parameter_names={'foo', 'hugo'})
-        map.add(dummy, 'hugo', '4*bar')
-        map.add(dummy, 'foo', Expression('barbar'))
-        mapped = map.map_parameters(dummy, dict(bar=ConstantParameter(3), barbar=ConstantParameter(5)))
-        self.assertEqual(dict(
-            hugo=MappedParameter(Expression('4*bar'), dict(bar=ConstantParameter(3))),
-            foo=MappedParameter(Expression('barbar'), dict(barbar=ConstantParameter(5)))
-        ), mapped)
+    def test_get_updated_channel_mapping(self):
+        template = DummyPulseTemplate(defined_channels={'foo', 'bar'})
+        st = MappingTemplate(template, {}, channel_mapping={'bar': 'kneipe'})
+        with self.assertRaises(KeyError):
+            st.get_updated_channel_mapping(dict())
+        self.assertEqual(st.get_updated_channel_mapping({'kneipe': 'meas1', 'foo': 'meas2', 'troet': 'meas3'}),
+                         {'foo': 'meas2', 'bar': 'meas1'})
+
+    def test_measurement_names(self):
+        template = DummyPulseTemplate(measurement_names={'foo', 'bar'})
+        st = MappingTemplate(template, {}, measurement_mapping={'foo': 'froop', 'bar': 'kneipe'})
+        self.assertEqual( st.measurement_names, {'froop','kneipe'} )
+
+    def test_defined_channels(self):
+        mapping = {'asd': 'A', 'fgh': 'B'}
+        template = DummyPulseTemplate(defined_channels=set(mapping.keys()))
+        st = MappingTemplate(template, {}, channel_mapping=mapping)
+        self.assertEqual(st.defined_channels, set(mapping.values()))
+
+    def test_get_updated_measurement_mapping(self):
+        template = DummyPulseTemplate(measurement_names={'foo', 'bar'})
+        st = MappingTemplate(template, {}, measurement_mapping={'bar': 'kneipe'})
+        with self.assertRaises(KeyError):
+            st.get_updated_measurement_mapping(dict())
+        self.assertEqual(st.get_updated_measurement_mapping({'kneipe': 'meas1', 'foo': 'meas2', 'troet': 'meas3'}),
+                         {'foo': 'meas2', 'bar': 'meas1'})
+
+    def test_build_sequence(self):
+        measurement_mapping = {'meas1': 'meas2'}
+        parameter_mapping = {'t': 'k'}
+
+        template = DummyPulseTemplate(measurement_names=set(measurement_mapping.keys()),
+                                      parameter_names=set(parameter_mapping.keys()))
+        st = MappingTemplate(template, parameter_mapping, measurement_mapping=measurement_mapping)
+        sequencer = DummySequencer()
+        block = DummyInstructionBlock()
+        pre_parameters = {'k': ConstantParameter(5)}
+        pre_measurement_mapping = {'meas2': 'meas3'}
+        pre_channel_mapping = {'default': 'A'}
+        conditions = dict(a=True)
+        st.build_sequence(sequencer, pre_parameters, conditions, pre_measurement_mapping, pre_channel_mapping, block)
+
+        self.assertEqual(template.build_sequence_calls, 1)
+        forwarded_args = template.build_sequence_arguments[0]
+        self.assertEqual(forwarded_args[0], sequencer)
+        self.assertEqual(forwarded_args[1], st.map_parameters(pre_parameters))
+        self.assertEqual(forwarded_args[2], conditions)
+        self.assertEqual(forwarded_args[3],
+                         st.get_updated_measurement_mapping(pre_measurement_mapping))
+        self.assertEqual(forwarded_args[4],
+                         st.get_updated_channel_mapping(pre_channel_mapping))
+        self.assertEqual(forwarded_args[5], block)
+
+    @unittest.skip("Extend of dummy template for argument checking needed.")
+    def test_requires_stop(self):
+        pass
 
 
 class PulseTemplateParameterMappingExceptionsTests(unittest.TestCase):

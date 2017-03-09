@@ -11,21 +11,23 @@ if sys.version_info < (3, 5):
 else:
     requires_typing = []
 
-subpackages = ['pulses','utils','qcmatlab']
+subpackages = ['pulses', 'utils', 'qcmatlab', 'hardware']
 packages = ['qctoolkit'] + ['qctoolkit.' + subpackage for subpackage in subpackages]
 
 setup(name='qctoolkit',
-    version='0.1',
-    description='Quantum Computing Toolkit',
-    author='qutech',
-    package_dir = {'qctoolkit': 'qctoolkit'},
-    packages=packages,
-    tests_require=['pytest'],
-    install_requires= ['py_expression_eval', 'numpy'] + requires_typing,
-    extras_require={
-        'testing' : ['pytest'],
-        'plotting' : ['matplotlib'],
-        'faster expressions' : ['numexpr']
-    },
-    test_suite="tests",
+      version='0.1',
+      description='Quantum Computing Toolkit',
+      author='qutech',
+      package_dir={'qctoolkit': 'qctoolkit'},
+      packages=packages,
+      tests_require=['pytest'],
+      install_requires=['sympy', 'numpy'] + requires_typing,
+      extras_require={
+          'testing': ['pytest'],
+          'plotting': ['matplotlib'],
+          'faster expressions': ['numexpr'],
+          'VISA': ['pyvisa'],
+          'tabor instruments': ['pytabor', 'teawg']
+      },
+      test_suite="tests",
 )

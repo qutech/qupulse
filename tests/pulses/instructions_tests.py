@@ -1,5 +1,5 @@
 import unittest
-
+import numpy
 from typing import Dict, Any, List
 
 from qctoolkit.pulses.instructions import InstructionBlock, InstructionPointer,\
@@ -7,6 +7,66 @@ from qctoolkit.pulses.instructions import InstructionBlock, InstructionPointer,\
     InstructionSequence, AbstractInstructionBlock, ImmutableInstructionBlock, Instruction
 
 from tests.pulses.sequencing_dummies import DummyWaveform, DummyInstructionBlock
+
+
+class WaveformTest(unittest.TestCase):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
+
+    def test_get_sampled_exceptions(self):
+        wf = DummyWaveform(duration=2., sample_output=[1, 2], defined_channels={'A', 'B'})
+
+        with self.assertRaises(ValueError):
+            wf.get_sampled(channel='A',
+                           sample_times=numpy.asarray([2, 1], dtype=float))
+        with self.assertRaises(ValueError):
+            wf.get_sampled(channel='A',
+                           sample_times=numpy.asarray([-12, 1], dtype=float))
+        with self.assertRaises(KeyError):
+                wf.get_sampled(channel='C',
+                               sample_times=numpy.asarray([0.5, 1], dtype=float))
+        with self.assertRaises(ValueError):
+            wf.get_sampled(channel='A',
+                           sample_times=numpy.asarray([0.5, 1], dtype=float),
+                           output_array=numpy.empty(1))
+
+    def test_get_sampled_caching(self):
+        wf = DummyWaveform(duration=2., sample_output=[1, 2], defined_channels={'A', 'B'})
+
+        self.assertIs(wf.get_sampled('A', sample_times=numpy.arange(2)),
+                      wf.get_sampled('A', sample_times=numpy.arange(2)))
+
+    def test_get_sampled_argument_forwarding(self):
+        wf = DummyWaveform(duration=2., sample_output=[1, 2], defined_channels={'A', 'B'})
+
+        out_expected = numpy.empty(2)
+
+        out_received = wf.get_sampled('A', sample_times=numpy.arange(2), output_array=out_expected)
+
+        self.assertIs(out_expected, out_received)
+        self.assertEqual(len(wf.sample_calls), 1)
+        self.assertIs(wf.sample_calls[0][-1], out_expected)
+        self.assertEqual(out_received.tolist(), [1, 2])
+
+    def test_get_subset_for_channels(self):
+        wf_ab = DummyWaveform(defined_channels={'A', 'B'})
+        wf_a = DummyWaveform(defined_channels={'A'})
+
+        with self.assertRaises(KeyError):
+            wf_ab.get_subset_for_channels({'C'})
+        with self.assertRaises(KeyError):
+            wf_ab.get_subset_for_channels({'A', 'C'})
+        with self.assertRaises(KeyError):
+            wf_a.get_subset_for_channels({'C'})
+        with self.assertRaises(KeyError):
+            wf_a.get_subset_for_channels({'A', 'C'})
+
+        self.assertIs(wf_ab, wf_ab.get_subset_for_channels({'A', 'B'}))
+        self.assertIs(wf_a, wf_a.get_subset_for_channels({'A'}))
+
+        wf_sub = wf_ab.get_subset_for_channels({'A'})
+        self.assertEqual(wf_sub.defined_channels, {'A'})
 
  
 class InstructionPointerTest(unittest.TestCase):
@@ -323,6 +383,24 @@ class AbstractInstructionBlockTest(unittest.TestCase):
         self.assertEqual(EXECInstruction(wf), block[-2])
         with self.assertRaises(IndexError):
             block[-3]
+
+    def test_sliced_item_access(self) -> None:
+        wf = DummyWaveform()
+        parent_block = InstructionBlock()
+        block = AbstractInstructionBlockStub([EXECInstruction(wf), EXECInstruction(wf)], InstructionPointer(parent_block, 29))
+        for instruction in block[:-1]:
+            self.assertEqual(EXECInstruction(wf), instruction)
+
+        expections = [EXECInstruction(wf), EXECInstruction(wf), GOTOInstruction(InstructionPointer(parent_block, 29))]
+
+        for expected, instruction in zip(expections,block[:4]):
+            self.assertEqual(expected, instruction)
+
+        for instruction, expected in zip(block[::-1], reversed(expections)):
+            self.assertEqual(expected, instruction)
+
+        with self.assertRaises(StopIteration):
+            next(iter(block[3:]))
 
 
 class InstructionBlockTest(unittest.TestCase):
