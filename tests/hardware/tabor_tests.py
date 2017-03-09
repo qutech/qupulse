@@ -62,8 +62,8 @@ if 'pytabor' not in failed_imports:
         except:
             pass
 
-    if instrument is None:
-        instrument = DummyTaborAWGRepresentation()
+if instrument is None:
+    instrument = DummyTaborAWGRepresentation()
 
 class TaborProgramTests(unittest.TestCase):
     def __init__(self, *args, **kwargs):
