@@ -1,5 +1,15 @@
 import unittest
-from qctoolkit.hardware.awgs.tabor import TaborAWGRepresentation, TaborException, TaborProgram, TaborChannelPair
+
+
+try:
+    from qctoolkit.hardware.awgs.tabor import TaborAWGRepresentation, TaborException, TaborProgram, TaborChannelPair
+    imports_failed = (False, '')
+except ImportError as err:
+    if err.name in ('pytabor', 'pyvisa'):
+        imports_failed = (True, 'Could not import {}').format(err.name)
+    else:
+        raise
+
 from qctoolkit.hardware.program import MultiChannelProgram
 from qctoolkit.pulses.instructions import InstructionBlock
 import numbers
@@ -22,6 +32,7 @@ except:
     instrument = None
 
 
+@unittest.skipIf(*imports_failed)
 class TaborProgramTests(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -112,6 +123,7 @@ class TaborProgramTests(unittest.TestCase):
         program.upload_to_device(instrument, (1, 2))
 
 
+@unittest.skipIf(*imports_failed)
 class TaborAWGRepresentationTests(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -131,6 +143,7 @@ class TaborAWGRepresentationTests(unittest.TestCase):
             self.assertIsInstance(instrument.amplitude(ch), float)
 
 
+@unittest.skipIf(*imports_failed)
 class TaborChannelPairTests(unittest.TestCase):
     def test_copy(self):
         channel_pair = TaborChannelPair(instrument, identifier='asd', channels=(1, 2))
