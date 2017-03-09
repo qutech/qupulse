@@ -47,7 +47,7 @@ class MultiChannelWaveform(Waveform):
         assigned more than one channel of any Waveform object it consists of
     """
 
-    def __init__(self, subwaveforms: Iterable[Waveform]) -> None:
+    def __init__(self, sub_waveforms: Iterable[Waveform]) -> None:
         """Create a new MultiChannelWaveform instance.
 
         Requires a list of subwaveforms in the form (Waveform, List(int)) where the list defines
@@ -55,7 +55,7 @@ class MultiChannelWaveform(Waveform):
         subwaveform will be mapped to channel y of this MultiChannelWaveform object.
 
         Args:
-            subwaveforms (Iterable( Waveform )): The list of subwaveforms of this
+            sub_waveforms (Iterable( Waveform )): The list of sub waveforms of this
                 MultiChannelWaveform
         Raises:
             ValueError, if a channel mapping is out of bounds of the channels defined by this
@@ -65,18 +65,25 @@ class MultiChannelWaveform(Waveform):
             ValueError, if subwaveforms have inconsistent durations
         """
         super().__init__()
-        if not subwaveforms:
+        if not sub_waveforms:
             raise ValueError(
                 "MultiChannelWaveform cannot be constructed without channel waveforms."
             )
 
-        def flattened_sub_waveforms():
-            for sub_waveform in subwaveforms:
+        # avoid unnecessary multi channel nesting
+        def flatten_sub_waveforms(to_flatten):
+            for sub_waveform in to_flatten:
                 if isinstance(sub_waveform, MultiChannelWaveform):
                     yield from sub_waveform.__sub_waveforms
                 else:
                     yield sub_waveform
-        self.__sub_waveforms = tuple(flattened_sub_waveforms())
+
+        # sort the waveforms with their defined channels to make compare key reproducible
+        def get_sub_waveform_sort_key(waveform):
+            return sorted(tuple(waveform.defined_channels))
+
+        self.__sub_waveforms = sorted(flatten_sub_waveforms(sub_waveforms),
+                                      key=get_sub_waveform_sort_key)
 
         if not all(waveform.duration == self.__sub_waveforms[0].duration for waveform in self.__sub_waveforms[1:]):
             raise ValueError(
@@ -105,8 +112,8 @@ class MultiChannelWaveform(Waveform):
 
     @property
     def compare_key(self) -> Any:
-        # make independent of order
-        return set(self.__sub_waveforms)
+        # sort with channels
+        return tuple(sub_waveform.compare_key for sub_waveform in self.__sub_waveforms)
 
     def unsafe_sample(self,
                       channel: ChannelID,
@@ -259,8 +266,13 @@ class MultiChannelPulseTemplate(PossiblyAtomicPulseTemplate):
             raise ValueError('Cannot make atomic as not all sub templates are atomic')
         self.__atomicity = val
 
-    def build_waveform(self, parameters: Dict[str, Parameter]) -> Optional['MultiChannelWaveform']:
-        return MultiChannelWaveform([subtemplate.build_waveform(parameters) for subtemplate in self.__subtemplates])
+    def build_waveform(self, parameters: Dict[str, Parameter],
+                       measurement_mapping: Dict[str, str],
+                       channel_mapping: Dict[ChannelID, ChannelID]) -> Optional['MultiChannelWaveform']:
+        return MultiChannelWaveform(
+            [subtemplate.build_waveform(parameters,
+                                        measurement_mapping=measurement_mapping,
+                                        channel_mapping=channel_mapping) for subtemplate in self.__subtemplates])
 
     def build_sequence(self,
                        sequencer: 'Sequencer',
