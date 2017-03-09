@@ -30,17 +30,37 @@ class PlotterTests(unittest.TestCase):
         block.add_instruction_exec(wf1)
         block.add_instruction_exec(wf2)
 
+        wf1_expected = ('A', [0, 2, 4, 6, 8, 10, 12, 14, 16, 18])
+        wf2_expected = ('A', [x-19 for x in [20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40]])
+        wf1_output_array_len_expected = len(wf1_expected[1])
+        wf2_output_array_len_expected = len(wf2_expected[1])
+
+        wf1.sample_output = numpy.linspace(start=4, stop=5, num=len(wf1_expected[1]))
+        wf2.sample_output = numpy.linspace(6, 7, num=len(wf2_expected[1]))
+
+        expected_times = numpy.arange(start=0, stop=42, step=2)
+        expected_result = numpy.concatenate((wf1.sample_output, wf2.sample_output))
+
         plotter = Plotter(sample_rate=0.5)
         times, voltages = plotter.render(block)
 
-        wf1_expected = [([0, 2, 4, 6, 8, 10, 12, 14, 16, 18], 0)]
-        wf2_expected = [([20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40], 1)]
-        expected_result = numpy.array([range(0, 41, 2)])
-        self.assertEqual(wf1_expected, wf1.sample_calls)
-        self.assertEqual(wf2_expected, wf2.sample_calls)
-        self.assertTrue(numpy.all(expected_result == times))
-        self.assertTrue(numpy.all(expected_result == voltages))
-        self.assertEqual(expected_result.shape, voltages.shape)
+        self.assertEqual(len(wf1.sample_calls), 1)
+        self.assertEqual(len(wf2.sample_calls), 1)
+
+        self.assertEqual(wf1_expected[0], wf1.sample_calls[0][0])
+        self.assertEqual(wf2_expected[0], wf2.sample_calls[0][0])
+
+        numpy.testing.assert_almost_equal(wf1_expected[1], wf1.sample_calls[0][1])
+        numpy.testing.assert_almost_equal(wf2_expected[1], wf2.sample_calls[0][1])
+
+        self.assertEqual(wf1_output_array_len_expected, len(wf1.sample_calls[0][2]))
+        self.assertEqual(wf2_output_array_len_expected, len(wf2.sample_calls[0][2]))
+
+        self.assertEqual(voltages.keys(), dict(A=0).keys())
+
+        numpy.testing.assert_almost_equal(expected_times, times)
+        numpy.testing.assert_almost_equal(expected_result, voltages['A'])
+        self.assertEqual(expected_result.shape, voltages['A'].shape)
 
     def integrated_test_with_sequencer_and_pulse_templates(self) -> None:
         # Setup test data

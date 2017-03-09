@@ -49,9 +49,13 @@ class PulseControlInterface:
         Returns:
             a dictionary representing waveform as a waveform struct for pulse control
         """
+        if len(waveform.defined_channels) > 1:
+            raise ValueError('More than one channel')
+        channel = next(iter(waveform.defined_channels))
+
         sample_count = floor(waveform.duration * self.__time_scaling * self.__sample_rate) + 1
         sample_times = numpy.linspace(0, waveform.duration, sample_count)
-        sampled_waveform = waveform.sample(sample_times)
+        sampled_waveform = waveform.get_sampled(channel, sample_times)
         struct = dict(name=name,
                       data=dict(wf=sampled_waveform.tolist(),
                                 marker=numpy.zeros_like(sampled_waveform).tolist(),

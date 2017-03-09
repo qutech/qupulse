@@ -17,7 +17,7 @@ class PulseControlInterfaceTests(unittest.TestCase):
         result = pci.create_waveform_struct(waveform, name=name)
 
         expected_sample_times = numpy.linspace(0, 1, 11).tolist()
-        self.assertEqual((expected_sample_times, 0), waveform.sample_calls[0])
+        self.assertAlmostEqual(expected_sample_times, waveform.sample_calls[0][1])
         expected_result = dict(name=name,
                                data=dict(wf=expected_samples.tolist(),
                                          marker=numpy.zeros_like(expected_samples).tolist(),
