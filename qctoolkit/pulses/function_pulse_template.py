@@ -89,8 +89,9 @@ class FunctionPulseTemplate(AtomicPulseTemplate):
                        measurement_mapping: Dict[str, str],
                        channel_mapping: Dict[ChannelID, ChannelID]) -> 'FunctionWaveform':
         substitutions = dict((v, parameters[v].get_value()) for v in self.__expression.variables() if v != 't')
+        duration_parameters = dict((v, parameters[v].get_value()) for v in self.__duration_expression.variables())
         return FunctionWaveform(expression=self.__expression.evaluate_symbolic(substitutions=substitutions),
-                                duration=self.__duration_expression.evaluate_numeric(**parameters),
+                                duration=self.__duration_expression.evaluate_numeric(**duration_parameters),
                                 measurement_windows=self.get_measurement_windows(parameters=parameters,
                                                                                  measurement_mapping=measurement_mapping),
                                 channel=channel_mapping[self.__channel])
