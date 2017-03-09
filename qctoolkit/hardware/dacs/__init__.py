@@ -1,6 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from typing import Dict
-from collections import deque
+from typing import Dict, Tuple
 
 __all__ = ['DAC']
 
@@ -9,7 +8,8 @@ class DAC(metaclass=ABCMeta):
     """Representation of a data acquisition card"""
 
     @abstractmethod
-    def register_measurement_windows(self, program_name: str, windows: Dict[str, deque]) -> None:
+    def register_measurement_windows(self, program_name: str, windows: Dict[str, Tuple['numpy.ndarray',
+                                                                                       'numpy.ndarray']]) -> None:
         """"""
 
     @abstractmethod

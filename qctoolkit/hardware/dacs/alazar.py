@@ -1,5 +1,5 @@
-from typing import Union, Dict, NamedTuple, List, Any
-from collections import deque
+from typing import Union, Dict, NamedTuple, List, Any, Optional, Tuple
+from collections import deque, defaultdict
 
 import numpy as np
 
@@ -11,7 +11,7 @@ from qctoolkit.hardware.dacs import DAC
 
 
 class AlazarProgram:
-    def __init__(self, masks=None, operations=None, total_length=None):
+    def __init__(self, masks=list(), operations=list(), total_length=None):
         self.masks = masks
         self.operations = operations
         self.total_length = total_length
@@ -22,50 +22,51 @@ class AlazarProgram:
 
 
 class AlazarCard(DAC):
-    def __init__(self, card, config: Union[ScanlineConfiguration, None] = None):
+    def __init__(self, card, config: Optional[ScanlineConfiguration]=None):
         self.__card = card
 
         self.__definitions = dict()
         self.config = config
 
-        self.__mask_prototypes = dict()  # type: Dict[str, Tuple[Any, str]]
+        self._mask_prototypes = dict()  # type: Dict[str, Tuple[Any, str]]
 
-        self.__registered_programs = dict()  # type: Dict[str, AlazarProgram]
+        self._registered_programs = defaultdict(AlazarProgram)  # type: Dict[str, AlazarProgram]
 
     @property
     def card(self) -> Any:
         return self.__card
 
-    def __make_mask(self, mask_id: str, window_deque: deque) -> Mask:
-        if mask_id not in self.__mask_prototypes:
+    def __make_mask(self, mask_id: str, begins, lengths) -> Mask:
+        if mask_id not in self._mask_prototypes:
             raise KeyError('Measurement window {} can not be converted as it is not registered.'.format(mask_id))
 
-        hardware_channel, mask_type = self.__mask_prototypes[mask_id]
+        hardware_channel, mask_type = self._mask_prototypes[mask_id]
         if mask_type not in ('auto', 'cross_buffer', None):
             raise ValueError('Currently only can do cross buffer mask')
-        begins_lengths = np.asarray(window_deque)
 
-        begins = begins_lengths[:, 0]
-        lengths = begins_lengths[:, 1]
-
-        sorting_indices = np.argsort(begins)
-        begins = begins[sorting_indices]
-        lengths = lengths[sorting_indices]
-
-        if np.any(begins[:-1]+lengths[:-1] >= begins[1:]):
+        if np.any(begins[:-1]+lengths[:-1] > begins[1:]):
             raise ValueError('Found overlapping windows in begins')
 
         mask = CrossBufferMask()
+        mask.identifier = mask_id
         mask.begin = begins
         mask.length = lengths
         mask.channel = hardware_channel
         return mask
 
-    def register_measurement_windows(self, program_name: str, windows: Dict[str, deque]) -> None:
-        for mask_id, window_deque in windows.items():
-            begins_lengths = np.asarray(window_deque)
-            begins = begins_lengths[:, 0]
-            lengths = begins_lengths[:, 1]
+    def register_measurement_windows(self,
+                                     program_name: str,
+                                     windows: Dict[str, Tuple[np.ndarray, np.ndarray]]) -> None:
+        if not windows:
+            return
+        total_length = 0
+        for mask_id, (begins, lengths) in windows.items():
+
+            sample_factor = self.config.captureClockConfiguration.numeric_sample_rate(self.__card.model) / 10**9
+
+            begins = np.rint(begins*sample_factor).astype(dtype=np.uint64)
+            lengths = np.floor(lengths*sample_factor).astype(dtype=np.uint64)
+
             sorting_indices = np.argsort(begins)
             begins = begins[sorting_indices]
             lengths = lengths[sorting_indices]
@@ -75,30 +76,35 @@ class AlazarCard(DAC):
 
         total_length = np.ceil(total_length/self.__card.minimum_record_size) * self.__card.minimum_record_size
 
-        self.__registered_programs.get(program_name,
-                                       default=AlazarProgram()).masks = [
-            self.__make_mask(mask_id, window_deque)
-            for mask_id, window_deque in windows.items()]
-        self.__registered_programs[program_name].total_length = total_length
+        self._registered_programs[program_name].masks = [
+            self.__make_mask(mask_id, *window_begin_length)
+            for mask_id, window_begin_length in windows.items()]
+        self._registered_programs[program_name].total_length = total_length
 
     def register_operations(self, program_name: str, operations) -> None:
-        self.__registered_programs.get(program_name,
-                                       default=AlazarProgram()
-                                       ).operations = self.__registered_programs.get(program_name, self)
+        self._registered_programs[program_name].operations = operations
 
     def arm_program(self, program_name: str) -> None:
         config = self.config
-        config.masks, config.operations, total_record_size = self.__registered_programs[program_name]
+        config.masks, config.operations, total_record_size = self._registered_programs[program_name]
 
-        if config.totalRecordSize is None:
+        if config.totalRecordSize == 0:
             config.totalRecordSize = total_record_size
         elif config.totalRecordSize < total_record_size:
             raise ValueError('specified total record size is smaller than needed {} < {}'.format(config.totalRecordSize,
                                                                                                  total_record_size))
 
-        config.apply(self.__card)
+        config.apply(self.__card, True)
         self.__card.startAcquisition(1)
 
     def delete_program(self, program_name: str) -> None:
         self.__registered_operations.pop(program_name, None)
         self.__registered_masks.pop(program_name, None)
+
+    @property
+    def mask_prototypes(self):
+        return self._mask_prototypes
+
+    def register_mask_for_channel(self, mask_id, hw_channel, mask_type='auto'):
+        self._mask_prototypes[mask_id] = (hw_channel, mask_type)
+
