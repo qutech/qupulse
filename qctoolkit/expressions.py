@@ -84,7 +84,7 @@ class Expression(Serializable, Comparable):
             return result
         raise NonNumericEvaluation(self, result, kwargs)
 
-    def evaluate_symbolic(self, substitutions: Dict[Any, Any]=dict()) -> sympy.Expr:
+    def evaluate_symbolic(self, substitutions: Dict[Any, Any]=dict()) -> 'Expression':
         """Evaluate the expression symbolically.
 
         Args:
@@ -92,7 +92,7 @@ class Expression(Serializable, Comparable):
         Returns:
 
         """
-        return self.__expression.subs(substitutions)
+        return Expression(self.__expression.subs(substitutions))
 
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
         return dict(expression=str(self))
