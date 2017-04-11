@@ -74,16 +74,17 @@ class Plotter:
         times[-1] = np.nextafter(times[-1], times[-2])
 
         voltages = dict((ch, np.empty(len(times))) for ch in channels)
-        offset = 0
+        offsets = {ch: 0 for ch in channels}
         for waveform in waveforms:
             for channel in channels:
+                offset = offsets[channel]
                 indices = slice(*np.searchsorted(times, (offset, offset+waveform.duration)))
                 sample_times = times[indices] - offset
                 output_array = voltages[channel][indices]
                 waveform.get_sampled(channel=channel,
                                      sample_times=sample_times,
                                      output_array=output_array)
-                offset += waveform.duration
+                offsets[channel] += waveform.duration
         return times, voltages
 
 
@@ -115,7 +116,10 @@ def plot(pulse: PulseTemplate,
         parameters = dict()
     plotter = Plotter(sample_rate=sample_rate)
     sequencer = Sequencer()
-    sequencer.push(pulse, parameters, channel_mapping={ch: ch for ch in channels})
+    sequencer.push(pulse,
+                   parameters,
+                   channel_mapping={ch: ch for ch in channels},
+                   window_mapping={w: w for w in pulse.measurement_names})
     sequence = sequencer.build()
     if not sequencer.has_finished():
         raise PlottingNotPossibleException(pulse)

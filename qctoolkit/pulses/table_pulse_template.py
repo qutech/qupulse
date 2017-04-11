@@ -368,7 +368,7 @@ class TablePulseTemplate(AtomicPulseTemplate):
                             last_entry.t.name, last_entry.t.absolute_max_value, time.max_value
                         )
                     )
-            else:
+            if isinstance(time.min_value, numbers.Real) and isinstance(last_entry.t, numbers.Real):
                 if time.min_value < last_entry.t:
                     raise ValueError(
                         "Argument time's minimum value {0} must be no smaller than the previous"
