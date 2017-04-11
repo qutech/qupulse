@@ -11,16 +11,35 @@ class dummy_pytabor(dummy_package):
     pass
 
 class dummy_pyvisa(dummy_package):
-    pass
+    class resources(dummy_package):
+        class messagebased(dummy_package):
+            class MessageBasedResource:
+                def __init__(self, *args, **kwargs):
+                    self.logged_writes = []
+                    self.logged_asks = []
+                def write(self, *args, **kwargs):
+                    self.logged_writes.append((args, kwargs))
+                def ask(self, *args, **kwargs):
+                    self.logged_asks.append((args, kwargs))
+                    return ';'.join( '0, bla'*args[0].count('?') )
+dummy_pyvisa.resources.MessageBasedResource = dummy_pyvisa.resources.messagebased.MessageBasedResource
+
 
 class dummy_teawg(dummy_package):
     model_properties_dict = dict()
     class TEWXAwg:
         def __init__(self, *args, **kwargs):
-            pass
-        send_cmd = __init__
-        send_query = send_cmd
-        select_channel = send_cmd
+            self.logged_commands = []
+            self.logged_queries = []
+            self._visa_inst = dummy_pyvisa.resources.MessageBasedResource()
+        @property
+        def visa_inst(self):
+            return self._visa_inst
+        def send_cmd(self, *args, **kwargs):
+            self.logged_commands.append((args, kwargs))
+        def send_query(self, *args, **kwargs):
+            self.logged_queries.append((args, kwargs))
+            return 0
         send_binary_data = send_cmd
         download_sequencer_table = send_cmd
 

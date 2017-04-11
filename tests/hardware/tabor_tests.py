@@ -19,12 +19,9 @@ from .program_tests import LoopTests, WaveformGenerator, MultiChannelTests
 
 class DummyTaborAWGRepresentation(dummy_modules.dummy_teawg.TEWXAwg):
     def __init__(self, *args, **kwargs):
-        pass
-    send_cmd = __init__
-    send_query = send_cmd
-    select_channel = send_cmd
-    send_binary_data = send_cmd
-    download_sequencer_table = send_cmd
+        super().__init__(*args, **kwargs)
+    select_channel = dummy_modules.dummy_teawg.TEWXAwg.send_cmd
+
 
 instrument = None
 if pytabor not in dummy_modules.failed_imports:
