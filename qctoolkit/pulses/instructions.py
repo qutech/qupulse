@@ -78,9 +78,9 @@ class Waveform(Comparable, metaclass=ABCMeta):
             A numpy.ndarray of the sampled values of this Waveform at the provided sample times.
         """
         if numpy.any(sample_times[:-1] >= sample_times[1:]):
-            raise ValueError('The sample times are not in the range [0, duration]')
-        if sample_times[0] < 0 or sample_times[-1] > self.duration:
             raise ValueError('The sample times are not monotonously increasing')
+        if sample_times[0] < 0 or sample_times[-1] > self.duration:
+            raise ValueError('The sample times are not in the range [0, duration]')
         if channel not in self.defined_channels:
             raise KeyError('Channel not defined in this waveform: {}'.format(channel))
 
