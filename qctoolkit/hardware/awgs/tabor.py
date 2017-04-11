@@ -89,9 +89,6 @@ class TaborProgram:
     def channels(self) -> Tuple[Optional[ChannelID], Optional[ChannelID]]:
         return self._channels
 
-    def setup_single_waveform_mode(self) -> None:
-        raise NotImplementedError()
-
     def sampled_segments(self,
                          sample_rate: float,
                          voltage_amplitude: Tuple[float, float],
@@ -141,6 +138,12 @@ class TaborProgram:
             segment_a |= seg_data
             segments[i] = TaborSegment(segment_a, segment_b)
         return segments, segment_lengths
+
+    def setup_single_waveform_mode(self) -> None:
+        self.__waveform_mode = 'single'
+        self._waveforms = [self.program.waveform.get_subset_for_channels(self.__used_channels)]
+        self._sequencer_tables = [[(self.program.repetition_count, 1, 0)]]
+        self._advanced_sequencer_table = []
 
     def setup_single_sequence_mode(self) -> None:
         self.__waveform_mode = 'sequence'
@@ -304,6 +307,8 @@ class TaborProgram:
 class TaborAWGRepresentation(teawg.TEWXAwg):
     def __init__(self, *args, external_trigger=False, reset=False, **kwargs):
         super().__init__(*args, **kwargs)
+        self._clock_marker = [0, 0, 0, 0]
+
         if reset:
             self.visa_inst.write(':RES')
 
@@ -680,34 +685,43 @@ class TaborChannelPair(AWG):
         command_string = ':INST:SEL {}; :OUTP {}'.format(self._channels[channel], 'ON' if active else 'OFF')
         self._device.send_cmd(command_string)
 
-    @with_configuration_guard
-    def arm(self, name: str) -> None:
+    def arm(self, name: str):
         if self._current_program == name:
             self._device.send_cmd('SEQ:SEL 1')
-            return
+        else:
+            self.change_armed_program(name)
 
+    @with_configuration_guard
+    def change_armed_program(self, name: str) -> None:
         waveform_to_segment, program = self._known_programs[name]
 
-        sequencer_tables = program.get_sequencer_tables()
-        sequencer_tables = [[(rep_count, waveform_to_segment[wf_index], jump_flag)
+        # translate waveform number to actual segment
+        sequencer_tables = [[(rep_count, waveform_to_segment[wf_index-1], jump_flag)
                              for (rep_count, wf_index, jump_flag) in sequencer_table]
-                            for sequencer_table in sequencer_tables]
+                            for sequencer_table in program.get_sequencer_tables()]
+
+        # insert idle sequence
         sequencer_tables = [self._idle_sequence_table] + sequencer_tables
 
-        advanced_sequencer_table = program.get_advanced_sequencer_table()
-        advanced_sequencer_table = [(rep_count, seq_no+1, jump_flag)
-                                    for rep_count, seq_no, jump_flag in advanced_sequencer_table]
+        # adjust advanced sequence table entries by idle sequence table offset
+        advanced_sequencer_table = [(rep_count, seq_no + 1, jump_flag)
+                                    for rep_count, seq_no, jump_flag in program.get_advanced_sequencer_table()]
+
+        if program.waveform_mode == 'single':
+            assert len(advanced_sequencer_table) == 0
+            assert len(sequencer_tables) == 2
+            assert len(sequencer_tables[1]) == 1
+
+            while len(sequencer_tables[1]) < self._device.dev_properties['min_seq_len']:
+                sequencer_tables[1].append((1, 1, 0))
+
+            advanced_sequencer_table = [(1, 2, 0)]
+
+        # insert idle waveform
         advanced_sequencer_table = [(1, 1, 1)] + advanced_sequencer_table
+
         while len(advanced_sequencer_table) < self._device.dev_properties['min_aseq_len']:
             advanced_sequencer_table.append((1, 1, 0))
-
-        self.set_marker_state(0, False)
-        self.set_marker_state(1, False)
-
-        self.set_channel_state(0, False)
-        self.set_channel_state(1, False)
-
-        self._device.abort()
 
         #download all sequence tables
         for i, sequencer_table in enumerate(sequencer_tables):
@@ -756,6 +770,8 @@ class TaborChannelPair(AWG):
 
             self.set_channel_state(0, False)
             self.set_channel_state(1, False)
+
+            self._device.abort()
 
             self._device.send_cmd(':SOUR:FUNC:MODE FIX')
             self._is_in_config_mode = True
