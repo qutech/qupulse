@@ -50,3 +50,76 @@ class ExpressionTests(unittest.TestCase):
         }
         with self.assertRaises(ExpressionVariableMissingException):
             e.evaluate_numeric(**params)
+
+    def test_undefined_comparison(self):
+        valued = Expression(2)
+        unknown = Expression('a')
+
+        self.assertIsNone(unknown < 0)
+        self.assertIsNone(unknown > 0)
+        self.assertIsNone(unknown >= 0)
+        self.assertIsNone(unknown <= 0)
+        self.assertFalse(unknown == 0)
+
+        self.assertIsNone(0 < unknown)
+        self.assertIsNone(0 > unknown)
+        self.assertIsNone(0 <= unknown)
+        self.assertIsNone(0 >= unknown)
+        self.assertFalse(0 == unknown)
+
+        self.assertIsNone(unknown < valued)
+        self.assertIsNone(unknown > valued)
+        self.assertIsNone(unknown >= valued)
+        self.assertIsNone(unknown <= valued)
+        self.assertFalse(unknown == valued)
+
+        valued, unknown = unknown, valued
+        self.assertIsNone(unknown < valued)
+        self.assertIsNone(unknown > valued)
+        self.assertIsNone(unknown >= valued)
+        self.assertIsNone(unknown <= valued)
+        self.assertFalse(unknown == valued)
+        valued, unknown = unknown, valued
+
+        self.assertFalse(unknown == valued)
+
+    def test_defined_comparison(self):
+        small = Expression(2)
+        large = Expression(3)
+
+        self.assertIs(small < small, False)
+        self.assertIs(small > small, False)
+        self.assertIs(small <= small, True)
+        self.assertIs(small >= small, True)
+        self.assertIs(small == small, True)
+
+        self.assertIs(small < large, True)
+        self.assertIs(small > large, False)
+        self.assertIs(small <= large, True)
+        self.assertIs(small >= large, False)
+        self.assertIs(small == large, False)
+
+        self.assertIs(large < small, False)
+        self.assertIs(large > small, True)
+        self.assertIs(large <= small, False)
+        self.assertIs(large >= small, True)
+        self.assertIs(large == small, False)
+
+    def test_number_comparison(self):
+        valued = Expression(2)
+
+        self.assertIs(valued < 3, True)
+        self.assertIs(valued > 3, False)
+        self.assertIs(valued <= 3, True)
+        self.assertIs(valued >= 3, False)
+
+        self.assertIs(valued == 3, False)
+        self.assertIs(valued == 2, True)
+        self.assertIs(3 == valued, False)
+        self.assertIs(2 == valued, True)
+
+        self.assertIs(3 < valued, False)
+        self.assertIs(3 > valued, True)
+        self.assertIs(3 <= valued, False)
+        self.assertIs(3 >= valued, True)
+

@@ -16,7 +16,7 @@ __all__ = ["Expression", "ExpressionVariableMissingException"]
 class Expression(Serializable, Comparable):
     """A mathematical expression instantiated from a string representation."""
 
-    def __init__(self, ex: str) -> None:
+    def __init__(self, ex: Union[str, Number]) -> None:
         """Create an Expression object.
 
         Receives the mathematical expression which shall be represented by the object as a string
@@ -46,6 +46,25 @@ class Expression(Serializable, Comparable):
             return float(self.__expression)
         else:
             return str(self.__expression)
+
+    def __lt__(self, other) -> Union[bool, None]:
+        result = self.__expression < (other.__expression if isinstance(other, Expression) else other)
+        return None if isinstance(result, sympy.Rel) else bool(result)
+
+    def __gt__(self, other) -> Union[bool, None]:
+        result = self.__expression > (other.__expression if isinstance(other, Expression) else other)
+        return None if isinstance(result, sympy.Rel) else bool(result)
+
+    def __ge__(self, other) -> Union[bool, None]:
+        result = self.__expression >= (other.__expression if isinstance(other, Expression) else other)
+        return None if isinstance(result, sympy.Rel) else bool(result)
+
+    def __le__(self, other) -> Union[bool, None]:
+        result = self.__expression <= (other.__expression if isinstance(other, Expression) else other)
+        return None if isinstance(result, sympy.Rel) else bool(result)
+
+    def __eq__(self, other) -> bool:
+        return self.__expression == (other.__expression if isinstance(other, Expression) else other)
 
     @property
     def compare_key(self) -> sympy.Expr:
