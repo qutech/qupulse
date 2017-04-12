@@ -9,15 +9,17 @@ Classes:
 
 from typing import Union, Dict, List, Set, Optional, NamedTuple, Any, Iterable, Tuple
 import numbers
-import copy
+import itertools
+import warnings
 
 import numpy as np
+import sympy
 
 from qctoolkit import MeasurementWindow, ChannelID
 from qctoolkit.serialization import Serializer
 from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter, \
-    ParameterNotProvidedException
-from qctoolkit.pulses.pulse_template import AtomicPulseTemplate
+    ParameterNotProvidedException, ParameterConstraint, ParameterConstraintViolation
+from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration
 from qctoolkit.pulses.interpolation import InterpolationStrategy, LinearInterpolationStrategy, \
     HoldInterpolationStrategy, JumpInterpolationStrategy
 from qctoolkit.pulses.instructions import Waveform
@@ -27,7 +29,8 @@ from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 
 __all__ = ["TablePulseTemplate", "TableWaveform", "WaveformTableEntry"]
 
-WaveformTableEntry = NamedTuple( # pylint: disable=invalid-name
+
+WaveformTableEntry = NamedTuple(
     "WaveformTableEntry",
     [('t', float), ('v', float), ('interp', InterpolationStrategy)]
 )
@@ -46,12 +49,13 @@ class TableWaveform(Waveform):
             waveform_table (ImmutableList(WaveformTableEntry)): A list of instantiated table
                 entries of the form (time as float, voltage as float, interpolation strategy).
         """
-        if len(waveform_table) < 2:
-            raise ValueError("A given waveform table has less than two entries.")
         super().__init__()
         self.__table = tuple(waveform_table)
         self.__channel_id = channel
         self.__measurement_windows = tuple(measurement_windows)
+
+        if len(waveform_table) < 2:
+            raise ValueError("A given waveform table has less than two entries.")
 
     @property
     def compare_key(self) -> Any:
@@ -85,389 +89,99 @@ class TableWaveform(Waveform):
     def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> 'Waveform':
         return self
 
+ValueInInit = Union[Expression, str, numbers.Real]
+EntryInInit = Union['TableEntry',
+                    Tuple[ValueInInit, ValueInInit],
+                    Tuple[ValueInInit, ValueInInit, Union[str, InterpolationStrategy]]]
 
-TableValue = Union[float, ParameterDeclaration] # pylint: disable=invalid-name
-TableEntry = NamedTuple( # pylint: disable=invalid-name
-    "TableEntry",
-    [('t', TableValue), ('v', TableValue), ('interp', InterpolationStrategy)]
-)
-MeasurementDeclaration = Tuple[Union[float,Expression], Union[float,Expression]]
+
+class TableEntry(tuple):
+    def __new__(cls, t: ValueInInit, v: ValueInInit, interp: Union[str, InterpolationStrategy]='hold'):
+        return tuple.__new__(cls, (t if isinstance(t, Expression) else Expression(t),
+                                   v if isinstance(v, Expression) else Expression(v),
+                                   interp if isinstance(interp, InterpolationStrategy)
+                                   else TablePulseTemplate.interpolation_strategies[interp]))
+
+    @property
+    def t(self) -> Expression:
+        return self[0]
+
+    @property
+    def v(self) -> Expression:
+        return self[1]
+
+    @property
+    def interp(self) -> InterpolationStrategy:
+        return self[2]
 
 
 class TablePulseTemplate(AtomicPulseTemplate):
-    """Defines a pulse via interpolation of a sequence of (time,voltage)-pairs.
+    interpolation_strategies = {'linear': LinearInterpolationStrategy,
+                                'hold': HoldInterpolationStrategy,
+                                'jump': JumpInterpolationStrategy}
 
-    TablePulseTemplate stores a list of (time,voltage)-pairs (the table) which is sorted
-    by time and uniquely define a pulse structure via interpolation of voltages of subsequent
-    table entries.
-    TablePulseTemplate provides methods to declare parameters which may be referred to instead of
-    using concrete values for both, time and voltage.
-    A TablePulseTemplate may be flagged as representing a measurement pulse, meaning that it defines
-    a measurement window.
+    def __init__(self, entries: Dict[ChannelID, List[EntryInInit]],
+                 identifier: Optional[str]=None,
+                 parameter_constraints: Optional[List[str]]=None,
+                 measurements: Optional[List[MeasurementDeclaration]]=None,
+                 consistency_check=True):
+        super().__init__(identifier=identifier, measurements=measurements)
+        if parameter_constraints is None:
+            parameter_constraints = list()
 
-    Each TablePulseTemplate contains at least an entry at time 0.
-    """
+        self._entries = dict((ch, list()) for ch in entries.keys())
+        for channel, channel_entries in entries.items():
+            if len(channel_entries) == 0:
+                raise ValueError('Channel {} is empty'.format(channel))
 
-    def __init__(self, channels: List[ChannelID] = ['default'], identifier: Optional[str]=None) -> None:
-        """Create a new TablePulseTemplate.
+            for entry in channel_entries:
+                self._add_entry(channel, TableEntry(*entry))
+        self._parameter_constraints = [ParameterConstraint(constraint) for constraint in parameter_constraints]
 
-        Args:
-            channels (int): The list of channel identifiers defined in this TablePulseTemplate (default = 1).
-            measurement (bool): True, if this TablePulseTemplate shall define a measurement window.
-                (optional, default = False).
-            identifier (str): A unique identifier for use in serialization. (optional)
-        """
-        if len(set(channels)) != len(channels):
-            raise ValueError('ChannelIDs must be unique')
+        if self.duration == 0:
+            warnings.warn('Table pulse template with duration 0 on construction.',
+                          category=ZeroDurationTablePulseTemplate)
 
-        super().__init__(identifier)
-        self.__identifier = identifier
-        self.__interpolation_strategies = {'linear': LinearInterpolationStrategy(),
-                                           'hold': HoldInterpolationStrategy(),
-                                           'jump': JumpInterpolationStrategy()
-                                           }
-        self.__entries = dict((channel, [TableEntry(0, 0, self.__interpolation_strategies['hold'])])
-                              for channel in channels)
-        self.__time_parameter_declarations = {} # type: Dict[str, ParameterDeclaration]
-        self.__voltage_parameter_declarations = {} # type: Dict[str, ParameterDeclaration]
-        self.__measurement_windows = {} # type: Dict[str,List[MeasurementDeclaration]]
+        if consistency_check:
+            # perform a simple consistency check. All inequalities with more than one free variable are ignored as the
+            # sympy solver does not support them
 
-    @staticmethod
-    def from_array(times: np.ndarray, voltages: np.ndarray, channels: Optional[List[ChannelID]] = None) \
-            -> 'TablePulseTemplate':
-        """Static constructor to build a TablePulse from numpy arrays.
+            # collect all conditions
+            inequalities = [sympy.sympify(eq) for eq in parameter_constraints] +\
+                           [sympy.Le(previous_entry.t.compare_key, entry.t.compare_key)
+                            for channel_entries in self._entries.values()
+                            for previous_entry, entry in zip(channel_entries, channel_entries[1:])]
 
-        Args:
-            times: 1D numpy array with time values
-            voltages: 1D or 2D numpy array with voltage values
-            channels: list of channel IDs. Mandatory if voltages is 2D
+            # test if any condition is already dissatisfied
+            if any(isinstance(eq, sympy.boolalg.BooleanAtom) and bool(eq) is False
+                   for eq in inequalities):
+                raise ValueError('Table pulse template has impossible parametrization')
 
-        Returns:
-            TablePulseTemplate with the given values, hold interpolation everywhere and no free
-            parameters.
-        """
-        res = TablePulseTemplate(channels=channels) if channels else TablePulseTemplate()
-        if voltages.ndim == 1:
-            for time, voltage in zip(times, voltages):
-                res.add_entry(time, voltage, interpolation='hold')
-        elif voltages.ndim == 2:
-            if not channels:
-                raise ValueError('For a multi channel table pulse template a list of channel IDs mut be provided.')
-            if len(channels) != voltages.shape[1]:
-                raise ValueError('There has to be exactly one channel ID for each channel.')
-            for channel_index in range(len(channels)):
-                for time, voltage in zip(times, voltages[:, channel_index]):
-                    res.add_entry(time, voltage, interpolation='hold', channel=channels[channel_index])
-        return res
+            # filter conditions that are inequalities with one free variable and test if the solution set is empty
+            inequalities = [eq for eq in inequalities if isinstance(eq, sympy.Rel) and len(eq.free_symbols) == 1]
+            if not sympy.reduce_inequalities(inequalities):
+                raise ValueError('Table pulse template has impossible parametrization')
 
-    def add_entry(self,
-                  time: Union[float, str, ParameterDeclaration], 
-                  voltage: Union[float, str, ParameterDeclaration], 
-                  interpolation: str='hold',
-                  channel: Optional[ChannelID]=None) -> None:
-        """Add an entry to the end of this TablePulseTemplate.
+    def _add_entry(self, channel, new_entry: TableEntry):
 
-        The arguments time and voltage may either be real numbers or a string which
-        references a parameter declaration by name or a ParameterDeclaration object.
+        # comparisons with Expression can yield None -> use 'is True' and 'is False'
+        if (new_entry.t < 0) is True:
+            raise ValueError('Time parameter number {} of channel {} is negative.'.format(
+                len(self._entries[channel]), channel))
 
-        If the first entry provided to the table has a time > 0, a (0,0) entry is automatically
-        inserted in front.
+        for previous_entry in self._entries[channel]:
+            if (new_entry.t < previous_entry.t) is True:
+                raise ValueError('Time parameter number {} of channel {} is smaller than a previous one'.format(
+                    len(self._entries[channel]), channel))
 
-        The following constraints hold:
-        - If a non-existing parameter declaration is referenced (via string), it is created without
-            min, max and default values.
-        - Parameter declarations for the time domain may not be used multiple times in the same
-            channel.
-        - If a ParameterDeclaration is provided, its min and max values will be set to its
-            neighboring values if they were not set previously or would exceed neighboring bounds.
-        - Parameter declarations for the time domain used in different channels will have their
-            bounds set such that range conforms with any channel automatically.
-        - ParameterDeclaration objects for the time domain may not refer to other
-            ParameterDeclaration objects as min or max values.
-        - Each entries time value must be greater than its predecessor's, i.e.,
-            - if the time value is a float and the previous time value is a float, the new value
-                must be greater or equal
-            - if the time value is a float and the previous time value is a parameter declaration
-                and the new value is smaller then the maximum of the parameter declaration, the
-                maximum is adjusted to the new value
-            - if the time value is a float and the previous time value is a parameter declaration,
-                the new value must not be smaller than the minimum of the parameter declaration
-            - if the time value is a parameter declaration and the previous time value is a float,
-                the new values minimum must be no smaller
-            - if the time value is a parameter declaration and the previous time value is a
-                parameter declaration, the new minimum must not be smaller than the previous minimum
-                and the previous maximum must not be greater than the new maximum
-
-        Args:
-            time (float or str or ParameterDeclaration): The time value of the new entry. Either a
-                constant real number or some parameter name/declaration.
-            voltage (float or str or ParameterDeclaration): The voltage value of the new entry.
-                Either a constant real number or some parameter name/declaration.
-            interpolation (str): The interpolation strategy between the previously last and the new
-                entry. One of 'linear', 'hold' (hold previous value) or 'jump' (jump immediately
-                to new value).
-            channel (int): The channel in which the voltage value will be set. (default = 0)
-        Raises:
-            ValueError if the constraints listed above are violated.
-        """
-        # Check if channel is valid
-        if channel is None:
-            if len(self.__entries) == 1:
-                channel = next(iter(self.__entries.keys()))
-            else:
-                raise ValueError('Channel ID has to be specified if more than one channel is present')
-        elif channel not in self.__entries:
-            raise ValueError("Channel ID not known. Allowed values: {}".format(
-                ', '.join(self.__entries.keys()))
-            )
-
-        # Check if interpolation value is valid
-        if interpolation not in self.__interpolation_strategies.keys():
-            raise ValueError("Interpolation strategy not implemented. Allowed values: {}."
-                             .format(', '.join(self.__interpolation_strategies.keys())))
-        else:
-            interpolation = self.__interpolation_strategies[interpolation]
-
-        entries = self.__entries[channel]
-
-        last_entry = entries[-1]
-        # Handle time parameter/value
-        time = self.__add_entry_check_and_modify_time(time, entries)
-
-        # Handle voltage parameter/value
-        # construct a ParameterDeclaration if voltage is a parameter name string
-        if isinstance(voltage, str):
-            voltage = ParameterDeclaration(voltage)
-
-        # if voltage is (now) a ParameterDeclaration, make use of it
-        if isinstance(voltage, ParameterDeclaration):
-            # check whether a ParameterDeclaration with the same name already exists and, if so,
-            # use that instead such that the same object is used consistently for one declaration
-            if voltage.name in self.__voltage_parameter_declarations:
-                voltage = self.__voltage_parameter_declarations[voltage.name]
-            elif (voltage.name in self.__time_parameter_declarations or
-                  (isinstance(time, ParameterDeclaration) and voltage.name == time.name)):
-                raise ValueError(
-                    "Argument voltage <{}> must not refer to a time parameter declaration."
-                        .format(voltage.name)
-                )
-
-        # no special action if voltage is a real number
-
-        # add declarations to declaration sets if necessary
-        if isinstance(time, ParameterDeclaration):
-            self.__time_parameter_declarations[time.name] = time
-        if isinstance(voltage, ParameterDeclaration):
-            self.__voltage_parameter_declarations[voltage.name] = voltage
-        # in case we need a time 0 entry previous to the new entry
-        if not entries and (not isinstance(time, numbers.Real) or time > 0):
-            entries.append(last_entry)
-        # finally, add the new entry to the table
-        new_entry = TableEntry(time, voltage, interpolation)
-        if last_entry.t == time:
-            entries[-1] = new_entry
-        else:
-            entries.append(new_entry)
-        self.__entries[channel] = entries
-
-    def __add_entry_check_and_modify_time(self,
-                                          time: Union[float, str, Parameter],
-                                          entries: List[TableEntry]) -> TableValue:
-        last_entry = entries[-1]
-        # Handle time parameter/value
-
-        # first case: time is a real number
-        if isinstance(time, numbers.Real):
-            if isinstance(last_entry.t, ParameterDeclaration):
-                # set maximum value of previous entry if not already set
-                if last_entry.t.max_value == float('+inf'):
-                    last_entry.t.max_value = time
-
-                if time < last_entry.t.absolute_max_value:
-                    try:
-                        last_entry.t.max_value = time
-                    except ValueError:
-                        raise ValueError(
-                            "Argument time must not be smaller than the minimum of the previous"
-                            "parameter declaration ({}, was {}).".format(
-                                last_entry.t.absolute_min_value,
-                                time
-                            )
-                        )
-
-            # if time is a real number, ensure that is it not less than the previous entry
-            elif time < last_entry.t:
-                raise ValueError(
-                    "Argument time must not be less than previous time value {0}, was: {1}!".format(
-                        last_entry.t, time
-                    )
-                )
-
-        # second case: time is a string -> Create a new ParameterDeclaration and continue third case
-        elif isinstance(time, str):
-            time = ParameterDeclaration(time)
-
-        # third case: time is a ParameterDeclaration
-        # if time is (now) a ParameterDeclaration, verify it, insert it and establish
-        # references/dependencies to previous entries if necessary
-        if isinstance(time, ParameterDeclaration):
-            if time.name in self.__voltage_parameter_declarations:
-                raise ValueError(
-                    "Cannot use already declared voltage parameter '{}' in time domain.".format(
-                        time.name
-                    )
-                )
-            if time.name in [e.t.name for e in entries if isinstance(e.t, ParameterDeclaration)]:
-                raise ValueError(
-                    "A time parameter with the name {} already exists.".format(time.name)
-                )
-            if time.name not in self.__time_parameter_declarations:
-                if isinstance(time.min_value, ParameterDeclaration):
-                    raise ValueError(
-                        "A ParameterDeclaration for a time parameter may not have a minimum value "
-                        "reference to another ParameterDeclaration object."
-                    )
-                if isinstance(time.max_value, ParameterDeclaration):
-                    raise ValueError(
-                        "A ParameterDeclaration for a time parameter may not have a maximum value "
-                        "reference to another ParameterDeclaration object."
-                    )
-
-                # make a (shallow) copy of the ParameterDeclaration to ensure that it can't be
-                # changed from outside the table
-                time = ParameterDeclaration(time.name, min=time.min_value, max=time.max_value,
-                                            default=time.default_value)
-                # set minimum value if not previously set
-                # if last_entry.t is a ParameterDeclaration, its max_value field will be set
-                # accordingly by the min_value setter of the new entry, ensuring a correct boundary
-                # relationship between both declarations
-                if time.min_value == float('-inf'):
-                    time.min_value = last_entry.t
-            else:
-                time = self.__time_parameter_declarations[time.name]
-
-            # Check dependencies between successive time parameters
-            if isinstance(last_entry.t, ParameterDeclaration):
-
-                if last_entry.t.max_value == float('inf'):
-                    last_entry.t.max_value = time
-
-                if time.absolute_min_value < last_entry.t.absolute_min_value:
-                    raise ValueError(
-                        "Argument time's minimum value must be no smaller than the previous "
-                        "time parameter declaration's minimum value. Parameter '{0}', Minimum "
-                        "{1}, Provided {2}.".format(
-                            last_entry.t.name, last_entry.t.absolute_min_value, time.min_value
-                        )
-                    )
-                if time.absolute_max_value < last_entry.t.absolute_max_value:
-                    raise ValueError(
-                        "Argument time's maximum value must be no smaller than the previous "
-                        "time parameter declaration's maximum value. Parameter '{0}', Maximum "
-                        "{1}, Provided {2}.".format(
-                            last_entry.t.name, last_entry.t.absolute_max_value, time.max_value
-                        )
-                    )
-            if isinstance(time.min_value, numbers.Real) and isinstance(last_entry.t, numbers.Real):
-                if time.min_value < last_entry.t:
-                    raise ValueError(
-                        "Argument time's minimum value {0} must be no smaller than the previous"
-                        " time value {1}.".format(time.min_value, last_entry.t)
-                    )
-        return time
-        
-    @property
-    def entries(self) -> Union[List[TableEntry],Dict[ChannelID,List[TableEntry]]]:
-        """Immutable copies of this TablePulseTemplate's entries."""
-        if len(self.__entries) == 1:
-            return copy.deepcopy(next(iter(self.__entries.values())))
-        else:
-            return copy.deepcopy(self.__entries)
+        self._entries[channel].append(new_entry)
 
     @property
-    def parameter_names(self) -> Set[str]:
-        """The set of names of declared parameters."""
-        return set(self.__time_parameter_declarations.keys()) \
-               | set(self.__voltage_parameter_declarations.keys())
+    def entries(self) -> Dict[ChannelID, List[TableEntry]]:
+        return self._entries
 
-    @property
-    def parameter_declarations(self) -> Set[ParameterDeclaration]:
-        """A set of all parameter declaration objects of this TablePulseTemplate."""
-        return set(self.__time_parameter_declarations.values()) | \
-               set(self.__voltage_parameter_declarations.values())
-
-    def get_measurement_windows(self,
-                                parameters: Dict[str, Parameter],
-                                measurement_mapping: Dict[str, str]) -> List[MeasurementWindow]:
-        def get_val(v):
-            return v if not isinstance(v, Expression) else v.evaluate_numeric(
-              **{name_: parameters[name_].get_value() if isinstance(parameters[name_], Parameter) else parameters[name_]
-              for name_ in v.variables()})
-
-        t_max = [entry[-1][0] for entry in self.__entries.values()]
-        t_max = max([t if isinstance(t,numbers.Number) else t.get_value(parameters) for t in t_max])
-
-        resulting_windows = []
-        for name, windows in self.__measurement_windows.items():
-            for begin, end in windows:
-                resulting_windows.append((measurement_mapping[name], get_val(begin), get_val(end)))
-                if resulting_windows[-1][2] > t_max:
-                    raise ValueError('Measurement window out of pulse')
-        return resulting_windows
-
-    @property
-    def measurement_declarations(self):
-        """
-        :return: Measurement declarations as added by the add_measurement_declaration method
-        """
-        as_builtin = lambda x: str(x) if isinstance(x, Expression) else x
-        return {name: [(as_builtin(begin), as_builtin(end))
-                       for begin, end in windows]
-                for name, windows in self.__measurement_windows.items()}
-
-    @property
-    def measurement_names(self) -> Set[str]:
-        """
-        :return:
-        """
-        return set(self.__measurement_windows.keys())
-
-    def add_measurement_declaration(self, name: str, begin: Union[float,str], end: Union[float,str]) -> None:
-        if isinstance(begin,str):
-            begin = Expression(begin)
-            for v in begin.variables():
-                if not v in self.__time_parameter_declarations:
-                    if v in self.__voltage_parameter_declarations:
-                        raise ValueError("Argument begin=<{}> must not refer to a voltage parameter declaration."
-                                .format(str(begin)))
-                    self.__time_parameter_declarations[v] = ParameterDeclaration(v)
-        if isinstance(end,str):
-            end = Expression(end)
-            for v in end.variables():
-                if not v in self.__time_parameter_declarations:
-                    if v in self.__voltage_parameter_declarations:
-                        raise ValueError("Argument begin=<{}> must not refer to a voltage parameter declaration."
-                                .format(str(end)))
-                    self.__time_parameter_declarations[v] = ParameterDeclaration(v)
-        if name in self.__measurement_windows:
-            self.__measurement_windows[name].append((begin,end))
-        else:
-            self.__measurement_windows[name] = [(begin,end)]
-
-    @property
-    def is_interruptable(self) -> bool:
-        return False
-
-    @property
-    def defined_channels(self) -> Set[ChannelID]:
-        return set(self.__entries.keys())
-
-    @property
-    def num_channels(self) -> int:
-        return len(self.__entries)
-
-    def get_entries_instantiated(self, parameters: Dict[str, Parameter]) \
-            -> Dict[ChannelID, List[Tuple[float, float]]]:
+    def get_entries_instantiated(self, parameters: Dict[str, numbers.Real]) \
+            -> Dict[ChannelID, List[WaveformTableEntry]]:
         """Compute an instantiated list of the table's entries.
 
         Args:
@@ -476,50 +190,40 @@ class TablePulseTemplate(AtomicPulseTemplate):
              (float, float)-list of all table entries with concrete values provided by the given
                 parameters.
         """
-        instantiated_entries = dict() # type: Dict[ChannelID,List[Tuple[float, float]]]
-        max_time = 0
+        instantiated_entries = dict()  # type: Dict[ChannelID,List[WaveformTableEntry]]
 
-        for channel, channel_entries in self.__entries.items():
-            instantiated = []
-            if not channel_entries:
-                instantiated.append(TableEntry(0, 0, self.__interpolation_strategies['hold']))
-            else:
-                for entry in channel_entries:
-                    # resolve time parameter references
-                    if isinstance(entry.t, ParameterDeclaration):
-                        time_value = entry.t.get_value(parameters)
-                    else:
-                        time_value = entry.t
-                    if isinstance(entry.v, ParameterDeclaration):
-                        voltage_value = entry.v.get_value(parameters)
-                    else:
-                        voltage_value = entry.v
+        for channel, channel_entries in self._entries.items():
+            instantiated = [WaveformTableEntry(entry.t.evaluate_numeric(**parameters),
+                                               entry.v.evaluate_numeric(**parameters),
+                                               entry.interp)
+                            for entry in channel_entries]
 
-                    instantiated.append(TableEntry(time_value, voltage_value, entry.interp))
-            max_time = max(max_time, instantiated[-1].t)
+            # Add (0, v) entry if wf starts at finite time
+            if instantiated[0].t > 0:
+                instantiated.insert(0, WaveformTableEntry(0,
+                                                          instantiated[0],
+                                                          TablePulseTemplate.interpolation_strategies['hold']))
 
-            # ensure that no time value occurs twice
-            previous_time = -1
-            for (time, _, _) in instantiated:
-                if time <= previous_time:
+            for (previous_time, _, _), (time, _, _) in zip(instantiated, instantiated[1:]):
+                if time < previous_time:
                     raise Exception("Time value {0} is smaller than the previous value {1}."
                                     .format(time, previous_time))
-                previous_time = time
-
             instantiated_entries[channel] = instantiated
+
+        duration = max(instantiated[-1].t for instantiated in instantiated_entries.values())
 
         # ensure that all channels have equal duration
         for channel, instantiated in instantiated_entries.items():
             final_entry = instantiated[-1]
-            if final_entry.t != max_time:
-                instantiated.append(TableEntry(max_time,
-                                               final_entry.v,
-                                               self.__interpolation_strategies['hold']))
-            instantiated_entries[channel] = TablePulseTemplate.__clean_entries(instantiated)
+            if final_entry.t < duration:
+                instantiated.append(WaveformTableEntry(duration,
+                                                       final_entry.v,
+                                                       TablePulseTemplate.interpolation_strategies['hold']))
+            instantiated_entries[channel] = TablePulseTemplate._remove_redundant_entries(instantiated)
         return instantiated_entries
 
     @staticmethod
-    def __clean_entries(entries: List[Tuple[float, float]]) -> List[Tuple[float, float]]:
+    def _remove_redundant_entries(entries: List[WaveformTableEntry]) -> List[WaveformTableEntry]:
         """ Checks if three subsequent values in a list of table entries have the same value.
         If so, the intermediate is redundant and removed in-place.
 
@@ -532,7 +236,7 @@ class TablePulseTemplate(AtomicPulseTemplate):
         if not entries or length < 3:
             return entries
 
-        for index in range(length-2, 0, -1):
+        for index in range(length - 2, 0, -1):
             previous_step = entries[index - 1]
             step = entries[index]
             next_step = entries[index + 1]
@@ -540,22 +244,28 @@ class TablePulseTemplate(AtomicPulseTemplate):
                 entries.pop(index)
         return entries
 
-    def build_waveform(self,
-                       parameters: Dict[str, Parameter],
-                       measurement_mapping: Dict[str, str],
-                       channel_mapping: Dict[ChannelID, ChannelID]) -> Optional['Waveform']:
-        instantiated = [(channel_mapping[channel], instantiated_channel)
-                        for channel, instantiated_channel in self.get_entries_instantiated(parameters).items()]
-        measurement_windows = self.get_measurement_windows(parameters=parameters,
-                                                           measurement_mapping=measurement_mapping)
+    @property
+    def parameter_names(self) -> Set[str]:
+        return set(
+            var
+            for channel_entries in self.entries.values()
+            for entry in channel_entries
+            for var in itertools.chain(entry.t.variables(), entry.v.variables())
+        ) | set(var for constraint in self._parameter_constraints for var in constraint.affected_parameters)
 
-        if len(instantiated) == 1:
-            return TableWaveform(*instantiated.pop(), measurement_windows)
-        else:
-            return MultiChannelWaveform(
-                [TableWaveform(*instantiated.pop(), measurement_windows)]
-                +
-                [TableWaveform(channel, instantiated_channel, [])for channel, instantiated_channel in instantiated])
+    @property
+    def is_interruptable(self) -> bool:
+        return False
+
+    @property
+    def duration(self) -> Expression:
+        return Expression('Max({})'.format(','.join(
+            (str(entries[-1].t) for entries in self._entries.values())
+        )))
+
+    @property
+    def defined_channels(self) -> Set[ChannelID]:
+        return set(self._entries.keys())
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],
@@ -569,57 +279,56 @@ class TablePulseTemplate(AtomicPulseTemplate):
         except KeyError as key_error:
             raise ParameterNotProvidedException(str(key_error)) from key_error
 
-    def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
-        data = dict()
-        data['time_parameter_declarations'] = \
-            [serializer.dictify(self.__time_parameter_declarations[key])
-             for key in sorted(self.__time_parameter_declarations.keys())]
-        data['voltage_parameter_declarations'] = \
-            [serializer.dictify(self.__voltage_parameter_declarations[key])
-             for key in sorted(self.__voltage_parameter_declarations.keys())]
+    @property
+    def num_channels(self) -> int:
+        return len(self._entries)
 
-        serialized_entries = dict()
-        for channel, channel_entries in self.__entries.items():
-            serialized_channel_entries = []
-            for (time, voltage, interpolation) in channel_entries:
-                if isinstance(time, ParameterDeclaration):
-                    time = time.name
-                if isinstance(voltage, ParameterDeclaration):
-                    voltage = voltage.name
-                serialized_channel_entries.append((time, voltage, str(interpolation)))
-            serialized_entries[channel] = serialized_channel_entries
-        data['entries'] = serialized_entries
-        data['measurement_declarations'] = self.measurement_declarations
-        data['type'] = serializer.get_type_identifier(self)
+    def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
+        data = dict(
+            entries=dict(
+                (channel, [(entry.t.get_most_simple_representation(),
+                            entry.v.get_most_simple_representation(),
+                            str(entry.interp)) for entry in channel_entries])
+                for channel, channel_entries in self._entries.items()
+            ),
+            parameter_constraints=[str(constraint) for constraint in self._parameter_constraints]
+        )
         return data
 
     @staticmethod
     def deserialize(serializer: Serializer,
-                    time_parameter_declarations: Iterable[Any],
-                    voltage_parameter_declarations: Iterable[Any],
-                    entries: Dict[ChannelID,Any],
-                    measurement_declarations: Dict[str,Iterable[Any]],
+                    entries: Dict[ChannelID, List[EntryInInit]],
+                    parameter_constraints: List[str],
                     identifier: Optional[str]=None) -> 'TablePulseTemplate':
-        time_parameter_declarations = \
-            {declaration['name']: serializer.deserialize(declaration)
-             for declaration in time_parameter_declarations}
-        voltage_parameter_declarations = \
-            {declaration['name']: serializer.deserialize(declaration)
-             for declaration in voltage_parameter_declarations}
+        return TablePulseTemplate(entries=entries,
+                                  identifier=identifier,
+                                  parameter_constraints=parameter_constraints,
+                                  consistency_check=False)
 
-        template = TablePulseTemplate(channels=list(entries.keys()),
-                                      identifier=identifier)
+    def build_waveform(self,
+                       parameters: Dict[str, numbers.Real],
+                       measurement_mapping: Dict[str, str],
+                       channel_mapping: Dict[ChannelID, ChannelID]) -> Optional['Waveform']:
+        for constraint in self._parameter_constraints:
+            if not constraint.is_fulfilled(parameters):
+                affected_parameters = {name: parameters[name] for name in constraint.affected_parameters}
+                raise ParameterConstraintViolation(constraint, 'parameters: {}'.format(affected_parameters))
 
-        for channel, channel_entries in entries.items():
-            for (time, voltage, interpolation) in channel_entries:
-                if isinstance(time, str):
-                    time = time_parameter_declarations[time]
-                if isinstance(voltage, str):
-                    voltage = voltage_parameter_declarations[voltage]
-                template.add_entry(time, voltage, interpolation=interpolation, channel=channel)
+        instantiated = [(channel_mapping[channel], instantiated_channel)
+                        for channel, instantiated_channel in self.get_entries_instantiated(parameters).items()]
+        measurement_windows = self.get_measurement_windows(parameters=parameters,
+                                                           measurement_mapping=measurement_mapping)
+        if not measurement_windows and self.duration.evaluate_numeric(**parameters) == 0:
+            return None
 
-        for name, windows in measurement_declarations.items():
-            for window in windows:
-                template.add_measurement_declaration(name, *window)
+        if len(instantiated) == 1:
+            return TableWaveform(*instantiated.pop(), measurement_windows)
+        else:
+            return MultiChannelWaveform(
+                [TableWaveform(*instantiated.pop(), measurement_windows)]
+                +
+                [TableWaveform(channel, instantiated_channel, [])for channel, instantiated_channel in instantiated])
 
-        return template
+
+class ZeroDurationTablePulseTemplate(UserWarning):
+    pass
