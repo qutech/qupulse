@@ -7,7 +7,7 @@ from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
 from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
 from qctoolkit.pulses.sequencing import Sequencer
 
-from tests.pulses.sequencing_dummies import DummyWaveform, DummyInstruction
+from tests.pulses.sequencing_dummies import DummyWaveform, DummyInstruction, DummyPulseTemplate
 
 
 class PlotterTests(unittest.TestCase):
@@ -107,7 +107,7 @@ class PlotterTests(unittest.TestCase):
 class PlottingNotPossibleExceptionTests(unittest.TestCase):
 
     def test(self) -> None:
-        t = TablePulseTemplate()
+        t = DummyPulseTemplate()
         exception = PlottingNotPossibleException(t)
         self.assertIs(t, exception.pulse)
         self.assertIsInstance(str(exception), str)

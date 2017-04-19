@@ -68,12 +68,11 @@ class SequencePulseTemplateTest(unittest.TestCase):
         super().__init__(*args, **kwargs)
 
         # Setup test data
-        self.square = TablePulseTemplate()
-        self.square.add_entry('up', 'v', 'hold')
-        self.square.add_entry('down', 0, 'hold')
-        self.square.add_entry('length', 0)
-        self.square.add_measurement_declaration('mw1', 'up', 'down+length')
-
+        self.square = TablePulseTemplate({'default': [(0, 0),
+                                                      ('up', 'v', 'hold'),
+                                                      ('down', 0, 'hold'),
+                                                      ('length', 0)]},
+                                         measurements=[('mw1', 'up', 'length-up')])
         self.mapping1 = {
             'up': 'uptime',
             'down': 'uptime + length',
@@ -85,7 +84,7 @@ class SequencePulseTemplateTest(unittest.TestCase):
 
         self.outer_parameters = {'uptime', 'length', 'pulse_length', 'voltage'}
 
-        self.parameters = {}
+        self.parameters = dict()
         self.parameters['uptime'] = ConstantParameter(5)
         self.parameters['length'] = ConstantParameter(10)
         self.parameters['pulse_length'] = ConstantParameter(100)
@@ -137,15 +136,14 @@ class SequencePulseTemplateSerializationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.serializer = DummySerializer()
 
-        self.table_foo = TablePulseTemplate(identifier='foo')
-        self.table_foo.add_entry('hugo', 2)
-        self.table_foo.add_entry(ParameterDeclaration('albert', max=9.1), 'voltage')
-        self.table_foo.add_measurement_declaration('mw_foo','hugo','albert')
+        self.table_foo = TablePulseTemplate({'default': [('hugo', 2),
+                                                         ('albert', 'voltage')]},
+                                            parameter_constraints=['albert<9.1'],
+                                            measurements=[('mw_foo','hugo','albert')],
+                                            identifier='foo')
 
         self.foo_param_mappings = dict(hugo='ilse', albert='albert', voltage='voltage')
         self.foo_meas_mappings = dict(mw_foo='mw_bar')
-
-        self.table = TablePulseTemplate()
 
     def test_get_serialization_data(self) -> None:
         dummy1 = DummyPulseTemplate()
@@ -221,10 +219,9 @@ class SequencePulseTemplateSequencingTests(SequencePulseTemplateTest):
             SequencePulseTemplate(subtemplates, self.outer_parameters)
 
     def test_crash(self) -> None:
-        table = TablePulseTemplate(identifier='foo')
-        table.add_entry('ta', 'va', interpolation='hold')
-        table.add_entry('tb', 'vb', interpolation='linear')
-        table.add_entry('tend', 0, interpolation='jump')
+        table = TablePulseTemplate({'default': [('ta', 'va', 'hold'),
+                                                ('tb', 'vb', 'linear'),
+                                                ('tend', 0, 'jump')]}, identifier='foo')
 
         external_parameters = ['ta', 'tb', 'tc', 'td', 'va', 'vb', 'tend']
         first_mapping = {

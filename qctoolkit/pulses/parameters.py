@@ -143,7 +143,7 @@ class MappedParameter(Parameter):
         # filter only real dependencies from the dependencies dictionary
         try:
             return {dependency_name: self.dependencies[dependency_name]
-                    for dependency_name in self.__expression.variables()}
+                    for dependency_name in self.__expression.variables}
         except KeyError as key_error:
             raise ParameterNotProvidedException(str(key_error)) from key_error
 

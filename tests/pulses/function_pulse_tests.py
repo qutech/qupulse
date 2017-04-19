@@ -22,9 +22,8 @@ class FunctionPulseTest(unittest.TestCase):
         self.meas_list = [('mw', 1, 1), ('mw', 'x', 'z'), ('drup', 'j', 'u')]
         self.meas_dict = {'mw': [(1, 1), ('x', 'z')], 'drup': [('j', 'u')]}
 
-        self.fpt = FunctionPulseTemplate(self.s, self.s2,channel='A')
-        for mw in self.meas_list:
-            self.fpt.add_measurement_declaration(*mw)
+        self.fpt = FunctionPulseTemplate(self.s, self.s2, channel='A',
+                                         measurements=self.meas_list)
 
         self.pars = dict(a=DummyParameter(1), b=DummyParameter(2), c=DummyParameter(136.78))
 
@@ -51,26 +50,26 @@ class FunctionPulseTest(unittest.TestCase):
         expected_data = dict(duration_expression=str(self.s2),
                              expression=str(self.s),
                              channel='A',
-                             measurement_declarations=self.meas_dict)
+                             measurement_declarations=self.meas_list)
         self.assertEqual(expected_data, self.fpt.get_serialization_data(
-            DummySerializer(serialize_callback=lambda x: str(x))))
+            DummySerializer(serialize_callback=lambda x: x.original_expression)))
 
     def test_deserialize(self) -> None:
         basic_data = dict(duration_expression=str(self.s2),
-                          expression=str(self.s),
+                          expression=self.s,
                           channel='A',
                           identifier='hugo',
-                          measurement_declarations=self.meas_dict)
-        serializer = DummySerializer(serialize_callback=lambda x: str(x))
-        serializer.subelements[str(self.s2)] = Expression(self.s2)
-        serializer.subelements[str(self.s)] = Expression(self.s)
+                          measurement_declarations=self.meas_list)
+        serializer = DummySerializer(serialize_callback=lambda x: x.original_expression)
+        serializer.subelements[self.s2] = Expression(self.s2)
+        serializer.subelements[self.s] = Expression(self.s)
         template = FunctionPulseTemplate.deserialize(serializer, **basic_data)
         self.assertEqual('hugo', template.identifier)
         self.assertEqual({'a', 'b', 'c', 'x', 'z', 'j', 'u'}, template.parameter_names)
         self.assertEqual({ParameterDeclaration(name) for name in template.parameter_names},
                          template.parameter_declarations)
         self.assertEqual(template.measurement_declarations,
-                         self.meas_dict)
+                         self.meas_list)
         serialized_data = template.get_serialization_data(serializer)
         del basic_data['identifier']
         self.assertEqual(basic_data, serialized_data)
@@ -170,39 +169,34 @@ class FunctionPulseMeasurementTest(unittest.TestCase):
                 self.assert_window_equal(w1, w2)
 
     def test_measurement_windows(self) -> None:
-        pulse = FunctionPulseTemplate(5, 5)
+        pulse = FunctionPulseTemplate(5, 5, measurements=[('mw', 0, 5)])
 
-        pulse.add_measurement_declaration('mw', 0, 5)
         windows = pulse.get_measurement_windows(parameters={}, measurement_mapping={'mw': 'asd'})
         self.assertEqual([('asd', 0, 5)], windows)
-        self.assertEqual(pulse.measurement_declarations, dict(mw=[(0, 5)]))
+        self.assertEqual(pulse.measurement_declarations, [('mw', 0, 5)])
 
     def test_no_measurement_windows(self) -> None:
         pulse = FunctionPulseTemplate(5, 5)
 
         windows = pulse.get_measurement_windows({}, {'mw': 'asd'})
         self.assertEqual([], windows)
-        self.assertEqual(dict(), pulse.measurement_declarations)
+        self.assertEqual([], pulse.measurement_declarations)
 
     def test_measurement_windows_with_parameters(self) -> None:
-        pulse = FunctionPulseTemplate(5, 'length')
+        pulse = FunctionPulseTemplate(5, 'length', measurements=[('mw', 1, '(1+length)/2')])
 
-        pulse.add_measurement_declaration('mw',1,'(1+length)/2')
         parameters = dict(length=100)
         windows = pulse.get_measurement_windows(parameters, measurement_mapping={'mw': 'asd'})
         self.assertEqual(windows, [('asd', 1, 101/2)])
 
         declared = pulse.measurement_declarations
-        expected = dict(mw=[(1, '(1+length)/2')])
-
-        self.assert_declaration_dict_equal(declared, expected)
+        self.assertEqual(declared, [('mw', 1, '(1+length)/2')])
 
     def test_multiple_measurement_windows(self) -> None:
-        pulse = FunctionPulseTemplate(5, 'length')
-
-        pulse.add_measurement_declaration('A', 0, '(1+length)/2')
-        pulse.add_measurement_declaration('A', 1, 3)
-        pulse.add_measurement_declaration('B', 'begin', 2)
+        pulse = FunctionPulseTemplate(5, 'length',
+                                      measurements=[('A', 0, '(1+length)/2'),
+                                                    ('A', 1, 3),
+                                                    ('B', 'begin', 2)])
 
         parameters = dict(length=5, begin=1)
         measurement_mapping = dict(A='A', B='C')
@@ -210,7 +204,7 @@ class FunctionPulseMeasurementTest(unittest.TestCase):
                                                 measurement_mapping=measurement_mapping)
         expected = [('A', 0, 3), ('A', 1, 3), ('C', 1, 2)]
         self.assertEqual(sorted(windows), sorted(expected))
-
-        self.assert_declaration_dict_equal(pulse.measurement_declarations,
-                                           dict(A=[(0, '(1+length)/2'), (1, 3)],
-                                                B=[('begin', 2)]))
+        self.assertEqual(pulse.measurement_declarations,
+                         [('A', 0, '(1+length)/2'),
+                          ('A', 1, 3),
+                          ('B', 'begin', 2)])

@@ -13,16 +13,14 @@ from tests.pulses.sequencing_dummies import DummyParameter, DummyNoValueParamete
 class TableSequenceSequencerIntegrationTests(unittest.TestCase):
 
     def test_table_sequence_sequencer_integration(self) -> None:
-        t1 = TablePulseTemplate()
-        t1.add_entry(2, 'foo')
-        t1.add_entry(5, 0)
-        t1.add_measurement_declaration('foo', 2, 5)
+        t1 = TablePulseTemplate(entries={'default': [(2, 'foo'),
+                                                     (5, 0)]},
+                                measurements=[('foo', 2, 2)])
 
-        t2 = TablePulseTemplate()
-        t2.add_entry(4, 0)
-        t2.add_entry(4.5, 'bar', 'linear')
-        t2.add_entry(5, 0)
-        t2.add_measurement_declaration('foo', 4, 5)
+        t2 = TablePulseTemplate(entries={'default': [(4, 0),
+                                                     (4.5, 'bar', 'linear'),
+                                                     (5, 0)]},
+                                measurements=[('foo', 4, 1)])
 
         seqt = SequencePulseTemplate([MappingTemplate(t1, {'foo': 'foo'}, measurement_mapping={'foo': 'bar'}),
                                       MappingTemplate(t2, {'bar': '2 * hugo'})], {'foo', 'hugo'})
@@ -75,5 +73,5 @@ class TableSequenceSequencerIntegrationTests(unittest.TestCase):
         self.assertEqual(3, len(instructions))
 
         for instruction in instructions:
-            if isinstance(instruction,EXECInstruction):
-                self.assertIn(instruction.waveform.get_measurement_windows()[0], [('my', 2, 5), ('thy', 4, 5)])
+            if isinstance(instruction, EXECInstruction):
+                self.assertIn(instruction.waveform.get_measurement_windows()[0], [('my', 2, 2), ('thy', 4, 1)])
