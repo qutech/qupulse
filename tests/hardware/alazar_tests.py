@@ -1,6 +1,7 @@
 import unittest
 
 from . import dummy_modules
+dummy_modules.import_package('atsaverage')
 
 import atsaverage
 import atsaverage.config

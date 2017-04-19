@@ -379,14 +379,20 @@ class TaborAWGRepresentation(teawg.TEWXAwg):
         self.send_cmd(':SOUR:MARK:SEL {marker}'.format(marker=marker))
 
     def sample_rate(self, channel) -> int:
+        if channel not in (1, 2, 3, 4):
+            raise TaborException('Invalid channel: {}'.format(channel))
         return int(float(self.send_query(':INST:SEL {channel}; :FREQ:RAST?'.format(channel=channel))))
 
     def amplitude(self, channel) -> float:
+        if channel not in (1, 2, 3, 4):
+            raise TaborException('Invalid channel: {}'.format(channel))
         coupling = self.send_query(':INST:SEL {channel}; :OUTP:COUP?'.format(channel=channel))
         if coupling == 'DC':
             return float(self.send_query(':VOLT?'))
         elif coupling == 'HV':
-            return float(self.send_query(':VOLD:HV?'))
+            return float(self.send_query(':VOLT:HV?'))
+        else:
+            raise TaborException('Unknown coupling: {}'.format(coupling))
 
     def offset(self, channel) -> float:
         return float(self.send_query(':INST:SEL {channel}; :VOLT:OFFS?'.format(channel=channel)))

@@ -9,10 +9,10 @@ import qctoolkit.pulses as pls
 class DummyAWGTest(unittest.TestCase):
 
     def setUp(self):
-        self.pulse_template = pls.TablePulseTemplate()
-        self.pulse_template.add_entry('value', 5)
+        self.pulse_template = pls.TablePulseTemplate({'default': [('value', 5)]})
+
         self.sequencer = pls.Sequencer()
-        for i in range(1,12):
+        for i in range(1, 12):
             pars = dict(value=i)
             self.sequencer.push(self.pulse_template, pars, channel_mapping=dict(default='default'))
         self.program = self.sequencer.build()
@@ -27,8 +27,7 @@ class DummyAWGTest(unittest.TestCase):
 class TektronixAWGTest(unittest.TestCase):
 
     def setUp(self):
-        self.pulse_template = pls.TablePulseTemplate()
-        self.pulse_template.add_entry('value', 5)
+        self.pulse_template = pls.TablePulseTemplate({'default': [('value', 5)]})
         self.sequencer = pls.Sequencer()
         for i in range(1,12):
             pars = dict(value=i)

@@ -4,7 +4,13 @@ import itertools
 from copy import copy, deepcopy
 import numpy as np
 
-from . import dummy_modules
+with_hardware = False
+if not with_hardware:
+    from . import dummy_modules
+    dummy_modules.import_package('pytabor', dummy_modules.dummy_pytabor)
+    dummy_modules.import_package('pyvisa', dummy_modules.dummy_pyvisa)
+    dummy_modules.import_package('atsaverage', dummy_modules.dummy_atsaverage)
+    dummy_modules.import_package('teawg', dummy_modules.dummy_teawg)
 
 from qctoolkit.hardware.awgs.tabor import TaborAWGRepresentation, TaborException, TaborProgram, TaborChannelPair
 from qctoolkit.hardware.program import MultiChannelProgram
@@ -23,28 +29,27 @@ class DummyTaborAWGRepresentation(dummy_modules.dummy_teawg.TEWXAwg):
     select_channel = dummy_modules.dummy_teawg.TEWXAwg.send_cmd
 
 
-instrument = None
-if pytabor not in dummy_modules.failed_imports:
+if with_hardware:
     # fix on your machine
     possible_addresses = ('127.0.0.1', )
     for instrument_address in possible_addresses:
-        try:
-            instrument = TaborAWGRepresentation(instrument_address,
-                                                reset=True,
-                                                paranoia_level=2)
-            instrument._visa_inst.timeout = 25000
-            break
-        except:
-            pass
+        instrument = TaborAWGRepresentation(instrument_address,
+                                            reset=True,
+                                            paranoia_level=2)
+        instrument._visa_inst.timeout = 25000
+        break
+else:
+    instrument = TaborAWGRepresentation('dummy_address', reset=True, paranoia_level=2)
+    instrument._visa_inst.answers[':OUTP:COUP'] = 'DC'
+    instrument._visa_inst.answers[':VOLT'] = '1.0'
+    instrument._visa_inst.answers[':FREQ:RAST'] = '1e9'
 
-if instrument is None:
-    instrument = DummyTaborAWGRepresentation()
 
 class TaborProgramTests(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.instr_props = next(model_properties_dict.values().__iter__())
+        self.instr_props = model_properties_dict
 
     @property
     def waveform_data_generator(self):

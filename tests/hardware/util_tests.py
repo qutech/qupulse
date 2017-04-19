@@ -30,7 +30,7 @@ class VoltageToBinaryTests(unittest.TestCase):
         self.assertTrue(np.all(expected_data == received_data))
 
 
-@unittest.skipIf(pytabor in dummy_modules.failed_imports, "Cannot compare to pytabor results")
+@unittest.skipIf(pytabor is dummy_modules.dummy_pytabor, "Cannot compare to pytabor results")
 class TaborMakeCombinedTest(unittest.TestCase):
     def exec_general(self, data_1, data_2):
         tabor_segments = [TaborSegment(d1, d2) for d1, d2 in zip(data_1, data_2)]
