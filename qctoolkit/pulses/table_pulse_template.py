@@ -162,7 +162,7 @@ class TablePulseTemplate(AtomicPulseTemplate):
             if not sympy.reduce_inequalities(inequalities):
                 raise ValueError('Table pulse template has impossible parametrization')
 
-    def _add_entry(self, channel, new_entry: TableEntry):
+    def _add_entry(self, channel, new_entry: TableEntry) -> None:
 
         # comparisons with Expression can yield None -> use 'is True' and 'is False'
         if (new_entry.t < 0) is True:

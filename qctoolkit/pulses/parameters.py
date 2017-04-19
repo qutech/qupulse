@@ -197,17 +197,17 @@ class ParameterConstraint(Comparable, Serializable):
     def compare_key(self) -> sympy.Expr:
         return self._relation
 
-    def __str__(self):
+    def __str__(self) -> str:
         if isinstance(self._relation, sympy.Eq):
             return '{}=={}'.format(self._relation.lhs, self._relation.rhs)
         else:
             return str(self._relation)
 
-    def get_serialization_data(self, serializer: 'Serializer'):
+    def get_serialization_data(self, serializer: 'Serializer') -> Dict[str, str]:
         return dict(relation=str(self))
 
     @staticmethod
-    def deserialize(serializer: 'Serializer', relation: str):
+    def deserialize(serializer: 'Serializer', relation: str) -> 'ParameterConstraint':
         return ParameterConstraint(relation)
 
 

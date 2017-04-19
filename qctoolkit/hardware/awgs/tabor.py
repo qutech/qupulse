@@ -691,7 +691,7 @@ class TaborChannelPair(AWG):
         command_string = ':INST:SEL {}; :OUTP {}'.format(self._channels[channel], 'ON' if active else 'OFF')
         self._device.send_cmd(command_string)
 
-    def arm(self, name: str):
+    def arm(self, name: str) -> None:
         if self._current_program == name:
             self._device.send_cmd('SEQ:SEL 1')
         else:
