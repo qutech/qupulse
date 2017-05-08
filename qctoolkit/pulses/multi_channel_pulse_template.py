@@ -74,7 +74,7 @@ class MultiChannelWaveform(Waveform):
         def flatten_sub_waveforms(to_flatten):
             for sub_waveform in to_flatten:
                 if isinstance(sub_waveform, MultiChannelWaveform):
-                    yield from sub_waveform.__sub_waveforms
+                    yield from sub_waveform._sub_waveforms
                 else:
                     yield sub_waveform
 
@@ -82,26 +82,26 @@ class MultiChannelWaveform(Waveform):
         def get_sub_waveform_sort_key(waveform):
             return sorted(tuple(waveform.defined_channels))
 
-        self.__sub_waveforms = sorted(flatten_sub_waveforms(sub_waveforms),
-                                      key=get_sub_waveform_sort_key)
+        self._sub_waveforms = sorted(flatten_sub_waveforms(sub_waveforms),
+                                     key=get_sub_waveform_sort_key)
 
-        if not all(waveform.duration == self.__sub_waveforms[0].duration for waveform in self.__sub_waveforms[1:]):
+        if not all(waveform.duration == self._sub_waveforms[0].duration for waveform in self._sub_waveforms[1:]):
             raise ValueError(
                 "MultiChannelWaveform cannot be constructed from channel waveforms of different"
                 "lengths."
             )
         self.__defined_channels = set()
-        for waveform in self.__sub_waveforms:
+        for waveform in self._sub_waveforms:
             if waveform.defined_channels & self.__defined_channels:
                 raise ValueError('Channel may not be defined in multiple waveforms')
             self.__defined_channels |= waveform.defined_channels
 
     @property
     def duration(self) -> float:
-        return self.__sub_waveforms[0].duration
+        return self._sub_waveforms[0].duration
 
     def __getitem__(self, key: ChannelID) -> Waveform:
-        for waveform in self.__sub_waveforms:
+        for waveform in self._sub_waveforms:
             if key in waveform.defined_channels:
                 return waveform
         raise KeyError('Unknown channel ID: {}'.format(key), key)
@@ -113,7 +113,7 @@ class MultiChannelWaveform(Waveform):
     @property
     def compare_key(self) -> Any:
         # sort with channels
-        return tuple(sub_waveform.compare_key for sub_waveform in self.__sub_waveforms)
+        return tuple(sub_waveform.compare_key for sub_waveform in self._sub_waveforms)
 
     def unsafe_sample(self,
                       channel: ChannelID,
@@ -123,10 +123,10 @@ class MultiChannelWaveform(Waveform):
 
     def get_measurement_windows(self) -> Iterable[MeasurementWindow]:
         return itertools.chain.from_iterable(sub_waveform.get_measurement_windows()
-                                             for sub_waveform in self.__sub_waveforms)
+                                             for sub_waveform in self._sub_waveforms)
 
     def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> 'Waveform':
-        relevant_sub_waveforms = tuple(swf for swf in self.__sub_waveforms if swf.defined_channels & channels)
+        relevant_sub_waveforms = tuple(swf for swf in self._sub_waveforms if swf.defined_channels & channels)
         if len(relevant_sub_waveforms) == 1:
             return relevant_sub_waveforms[0].get_subset_for_channels(channels)
         elif len(relevant_sub_waveforms) > 1:

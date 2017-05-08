@@ -10,7 +10,10 @@ Classes:
 """
 
 from abc import ABCMeta, abstractmethod, abstractproperty
-from typing import Optional, Union, Dict, Any, Iterable
+from typing import Optional, Union, Dict, Any, Iterable, Set
+from numbers import Real
+
+import sympy
 
 from qctoolkit.serialization import Serializable, Serializer
 from qctoolkit.expressions import Expression
@@ -24,7 +27,7 @@ def make_parameter(value):
     """Convenience function """
     if isinstance(value, Parameter):
         return value
-    if isinstance(value, Number):
+    if isinstance(value, Real):
         return ConstantParameter(value)
     if isinstance(value, str):
         return MappedParameter(Expression(value))
@@ -140,7 +143,7 @@ class MappedParameter(Parameter):
         # filter only real dependencies from the dependencies dictionary
         try:
             return {dependency_name: self.dependencies[dependency_name]
-                    for dependency_name in self.__expression.variables()}
+                    for dependency_name in self.__expression.variables}
         except KeyError as key_error:
             raise ParameterNotProvidedException(str(key_error)) from key_error
 
@@ -171,6 +174,46 @@ class MappedParameter(Parameter):
     @staticmethod
     def deserialize(serializer: Serializer, expression: str) -> 'MappedParameter':
         return MappedParameter(serializer.deserialize(expression))
+
+
+class ParameterConstraint(Comparable, Serializable):
+    def __init__(self, relation: str):
+        if '==' in relation:
+            # The '==' operator is interpreted by sympy as exactly, however we need a symbolical evaluation
+            self._relation = sympy.Eq(*sympy.sympify(relation.split('==')))
+        else:
+            self._relation = sympy.sympify(relation)
+        if not isinstance(self._relation, (sympy.Rel, sympy.boolalg.BooleanAtom)):
+            raise ValueError('Constraint is no relation')
+
+    @property
+    def affected_parameters(self) -> Set[str]:
+        return set(str(v) for v in self._relation.free_symbols)
+
+    def is_fulfilled(self, parameter: Dict[str, Any]) -> bool:
+        return bool(self._relation.subs(parameter))
+
+    @property
+    def compare_key(self) -> sympy.Expr:
+        return self._relation
+
+    def __str__(self) -> str:
+        if isinstance(self._relation, sympy.Eq):
+            return '{}=={}'.format(self._relation.lhs, self._relation.rhs)
+        else:
+            return str(self._relation)
+
+    def get_serialization_data(self, serializer: 'Serializer') -> Dict[str, str]:
+        return dict(relation=str(self))
+
+    @staticmethod
+    def deserialize(serializer: 'Serializer', relation: str) -> 'ParameterConstraint':
+        return ParameterConstraint(relation)
+
+
+class ParameterConstraintViolation(Exception):
+    def __init__(self, constraint: ParameterConstraint, context: str):
+        super().__init__("The constraint '{}' is not fulfilled. ".format(constraint) + context)
 
 
 class ParameterDeclaration(Serializable, Comparable):

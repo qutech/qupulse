@@ -18,7 +18,7 @@ from qctoolkit.serialization import Serializer
 
 from qctoolkit import MeasurementWindow, ChannelID
 from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter
-from qctoolkit.pulses.pulse_template import AtomicPulseTemplate
+from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration
 from qctoolkit.pulses.instructions import Waveform
 from qctoolkit.pulses.pulse_template_parameter_mapping import ParameterNotProvidedException
 
@@ -41,6 +41,7 @@ class FunctionPulseTemplate(AtomicPulseTemplate):
     def __init__(self,
                  expression: Union[str, Expression],
                  duration_expression: Union[str, Expression],
+                 measurements: Optional[List[MeasurementDeclaration]]=None,
                  identifier: str=None,
                  channel: 'ChannelID' = 'default') -> None:
         """Create a new FunctionPulseTemplate instance.
@@ -56,21 +57,25 @@ class FunctionPulseTemplate(AtomicPulseTemplate):
                 window. (optional, default = False)
             identifier (str): A unique identifier for use in serialization. (optional)
         """
-        super().__init__(identifier)
+        super().__init__(identifier=identifier, measurements=measurements)
         self.__expression = expression
         if not isinstance(self.__expression, Expression):
             self.__expression = Expression(self.__expression)
         self.__duration_expression = duration_expression
         if not isinstance(self.__duration_expression, Expression):
             self.__duration_expression = Expression(self.__duration_expression)
-        self.__parameter_names = set(self.__duration_expression.variables()
-                                     + self.__expression.variables()) - set(['t'])
+        self.__parameter_names = set(self.__duration_expression.variables
+                                     + self.__expression.variables) - set(['t'])
         self.__channel = channel
         self.__measurement_windows = dict()
 
     @property
-    def parameter_names(self) -> Set[str]:
+    def function_parameters(self) -> Set[str]:
         return self.__parameter_names
+
+    @property
+    def parameter_names(self) -> Set[str]:
+        return self.function_parameters | self.measurement_parameters
 
     @property
     def parameter_declarations(self) -> Set[ParameterDeclaration]:
@@ -84,12 +89,16 @@ class FunctionPulseTemplate(AtomicPulseTemplate):
     def defined_channels(self) -> Set['ChannelID']:
         return {self.__channel}
 
+    @property
+    def duration(self) -> Expression:
+        return self.__duration_expression
+
     def build_waveform(self,
                        parameters: Dict[str, Parameter],
                        measurement_mapping: Dict[str, str],
                        channel_mapping: Dict[ChannelID, ChannelID]) -> 'FunctionWaveform':
-        substitutions = dict((v, parameters[v].get_value()) for v in self.__expression.variables() if v != 't')
-        duration_parameters = dict((v, parameters[v].get_value()) for v in self.__duration_expression.variables())
+        substitutions = dict((v, parameters[v].get_value()) for v in self.__expression.variables if v != 't')
+        duration_parameters = dict((v, parameters[v].get_value()) for v in self.__duration_expression.variables)
         return FunctionWaveform(expression=self.__expression.evaluate_symbolic(substitutions=substitutions),
                                 duration=self.__duration_expression.evaluate_numeric(**duration_parameters),
                                 measurement_windows=self.get_measurement_windows(parameters=parameters,
@@ -119,61 +128,13 @@ class FunctionPulseTemplate(AtomicPulseTemplate):
                     channel: 'ChannelID',
                     measurement_declarations: Dict[str, List],
                     identifier: Optional[bool]=None) -> 'FunctionPulseTemplate':
-        template = FunctionPulseTemplate(
+        return FunctionPulseTemplate(
             serializer.deserialize(expression),
             serializer.deserialize(duration_expression),
             channel=channel,
-            identifier=identifier
+            identifier=identifier,
+            measurements=measurement_declarations
         )
-        for name, windows in measurement_declarations.items():
-            for window in windows:
-                template.add_measurement_declaration(name, *window)
-        return template
-
-    def get_measurement_windows(self,
-                                parameters: Dict[str, Parameter],
-                                measurement_mapping: Dict[str, str]) -> List[MeasurementWindow]:
-        def get_val(v):
-            return v if not isinstance(v, Expression) else v.evaluate_numeric(
-              **{name_: parameters[name_].get_value() if isinstance(parameters[name_], Parameter) else parameters[name_]
-                 for name_ in v.variables()})
-
-        resulting_windows = []
-        for name, windows in self.__measurement_windows.items():
-            for begin, end in windows:
-                resulting_windows.append((measurement_mapping[name], get_val(begin), get_val(end)))
-        return resulting_windows
-
-    @property
-    def measurement_declarations(self):
-        """
-        :return: Measurement declarations as added by the add_measurement_declaration method
-        """
-
-        return {name: [(begin.get_most_simple_representation(),
-                        end.get_most_simple_representation())
-                       for begin, end in windows]
-                for name, windows in self.__measurement_windows.items() }
-
-    @property
-    def measurement_names(self) -> Set[str]:
-        """
-        :return:
-        """
-        return set(self.__measurement_windows.keys())
-
-    def add_measurement_declaration(self, name: str, begin: Union[float, str], end: Union[float, str]) -> None:
-        begin = Expression(begin)
-        end = Expression(end)
-        new_parameters = set(itertools.chain(begin.variables(), end.variables()))
-
-        if 't' in new_parameters:
-            raise ValueError('t is not an allowed measurement window parameter in function templates')
-        self.__parameter_names |= new_parameters
-        if name in self.__measurement_windows:
-            self.__measurement_windows[name].append((begin, end))
-        else:
-            self.__measurement_windows[name] = [(begin, end)]
 
 
 class FunctionWaveform(Waveform):
@@ -193,7 +154,7 @@ class FunctionWaveform(Waveform):
             measurement_windows (List): A list of measurement windows
         """
         super().__init__()
-        if set(expression.variables()) - set('t'):
+        if set(expression.variables) - set('t'):
             raise ValueError('FunctionWaveforms may not depend on anything but "t"')
 
         self._expression = expression

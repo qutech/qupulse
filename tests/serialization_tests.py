@@ -324,13 +324,14 @@ class SerializerTests(unittest.TestCase):
         self.assertEqual(self.deserialization_data['data'], deserialized.data)
 
     def test_serialization_and_deserialization_combined(self) -> None:
-        table_foo = TablePulseTemplate(identifier='foo')
-        table_foo.add_entry('hugo', 2)
-        table_foo.add_entry(ParameterDeclaration('albert', max=9.1), 'voltage')
-        table = TablePulseTemplate()
+        table_foo = TablePulseTemplate(identifier='foo', entries={'default': [('hugo', 2),
+                                                                              ('albert', 'voltage')]},
+                                       parameter_constraints=['albert<9.1'])
+        table = TablePulseTemplate({'default': [('t', 0)]})
+
         foo_mappings = dict(hugo='ilse', albert='albert', voltage='voltage')
-        sequence = SequencePulseTemplate([(table_foo, foo_mappings, {}),
-                                          (table, {}, {})],
+        sequence = SequencePulseTemplate([(table_foo, foo_mappings, dict()),
+                                          (table, dict(t=0), dict())],
                                          ['ilse', 'albert', 'voltage'],
                                          identifier=None)
 

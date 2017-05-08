@@ -16,7 +16,7 @@ __all__ = ["Expression", "ExpressionVariableMissingException"]
 class Expression(Serializable, Comparable):
     """A mathematical expression instantiated from a string representation."""
 
-    def __init__(self, ex: str) -> None:
+    def __init__(self, ex: Union[str, Number]) -> None:
         """Create an Expression object.
 
         Receives the mathematical expression which shall be represented by the object as a string
@@ -27,37 +27,66 @@ class Expression(Serializable, Comparable):
             ex (string): The mathematical expression represented as a string
         """
         super().__init__()
-        self.__string = str(ex)
-        self.__expression = sympy.sympify(ex)
-        self.__variables = tuple(str(var) for var in self.__expression.free_symbols)
-        self.__expression_lambda = sympy.lambdify(self.variables(), self.__expression, 'numpy')
+        self._original_expression = ex
+        self._sympified_expression = sympy.sympify(ex)
+        self._variables = tuple(str(var) for var in self._sympified_expression.free_symbols)
+        self._expression_lambda = sympy.lambdify(self._variables,
+                                                 self._sympified_expression, 'numpy')
 
     def __str__(self) -> str:
-        return self.__string
+        return str(self._sympified_expression)
+
+    def __repr__(self) -> str:
+        return 'Expression({})'.format(self._original_expression)
 
     def get_most_simple_representation(self) -> Union[str, int, float, complex]:
-        if self.__expression.free_symbols:
-            return str(self.__expression)
-        elif self.__expression.is_integer:
-            return int(self.__expression)
-        elif self.__expression.is_complex:
-            return complex(self.__expression)
-        elif self.__expression.is_real:
-            return float(self.__expression)
+        if self._sympified_expression.free_symbols:
+            return str(self._sympified_expression)
+        elif self._sympified_expression.is_integer:
+            return int(self._sympified_expression)
+        elif self._sympified_expression.is_complex:
+            return complex(self._sympified_expression)
+        elif self._sympified_expression.is_real:
+            return float(self._sympified_expression)
         else:
-            return str(self.__expression)
+            return self._original_expression
+
+    def __lt__(self, other: Union['Expression', Number, sympy.Expr]) -> Union[bool, None]:
+        result = self._sympified_expression < (other._sympified_expression if isinstance(other, Expression) else other)
+        return None if isinstance(result, sympy.Rel) else bool(result)
+
+    def __gt__(self, other: Union['Expression', Number, sympy.Expr]) -> Union[bool, None]:
+        result = self._sympified_expression > (other._sympified_expression if isinstance(other, Expression) else other)
+        return None if isinstance(result, sympy.Rel) else bool(result)
+
+    def __ge__(self, other: Union['Expression', Number, sympy.Expr]) -> Union[bool, None]:
+        result = self._sympified_expression >= (other._sympified_expression if isinstance(other, Expression) else other)
+        return None if isinstance(result, sympy.Rel) else bool(result)
+
+    def __le__(self, other: Union['Expression', Number, sympy.Expr]) -> Union[bool, None]:
+        result = self._sympified_expression <= (other._sympified_expression if isinstance(other, Expression) else other)
+        return None if isinstance(result, sympy.Rel) else bool(result)
+
+    def __eq__(self, other: Union['Expression', Number, sympy.Expr]) -> bool:
+        """Overwrite Comparable's test for equality to incorporate comparisons with Numbers"""
+        return self._sympified_expression == (other._sympified_expression if isinstance(other, Expression) else other)
 
     @property
     def compare_key(self) -> sympy.Expr:
-        return self.__expression
+        return self._sympified_expression
 
+    @property
+    def original_expression(self) -> Union[str, Number]:
+        return self._original_expression
+
+    @property
     def variables(self) -> Iterable[str]:
         """ Get all free variables in the expression.
 
         Returns:
             A collection of all free variables occurring in the expression.
         """
-        return self.__variables
+        return self._variables
 
     def evaluate_numeric(self, **kwargs) -> Union[Number, numpy.ndarray]:
         """Evaluate the expression with the required variables passed in as kwargs.
@@ -74,7 +103,7 @@ class Expression(Serializable, Comparable):
         """
         try:
             # drop irrelevant variables before passing to lambda
-            result = self.__expression_lambda(**dict((v, kwargs[v]) for v in self.variables()))
+            result = self._expression_lambda(**dict((v, kwargs[v]) for v in self.variables))
         except KeyError as key_error:
             raise ExpressionVariableMissingException(key_error.args[0], self) from key_error
 
@@ -92,10 +121,10 @@ class Expression(Serializable, Comparable):
         Returns:
 
         """
-        return Expression(self.__expression.subs(substitutions))
+        return Expression(self._sympified_expression.subs(substitutions))
 
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
-        return dict(expression=str(self))
+        return dict(expression=self.original_expression)
 
     @staticmethod
     def deserialize(serializer: 'Serializer', **kwargs) -> Serializable:

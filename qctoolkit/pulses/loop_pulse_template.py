@@ -89,7 +89,7 @@ class ParametrizedRange:
 
     @property
     def parameter_names(self) -> Set[str]:
-        return set(self.start.variables()) | set(self.stop.variables()) | set(self.step.variables())
+        return set(self.start.variables) | set(self.stop.variables) | set(self.step.variables)
 
 
 class ForLoopPulseTemplate(LoopPulseTemplate):

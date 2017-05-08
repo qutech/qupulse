@@ -47,7 +47,7 @@ class MappingTemplate(PossiblyAtomicPulseTemplate):
 
         self.__template = template
         self.__parameter_mapping = parameter_mapping
-        self.__external_parameters = set(itertools.chain(*(expr.variables() for expr in self.__parameter_mapping.values())))
+        self.__external_parameters = set(itertools.chain(*(expr.variables for expr in self.__parameter_mapping.values())))
         self.__measurement_mapping = dict(((name,name) for name in missing_name_mappings), **measurement_mapping)
         self.__channel_mapping = dict(((name,name) for name in missing_channel_mappings), **channel_mapping)
 
@@ -119,7 +119,7 @@ class MappingTemplate(PossiblyAtomicPulseTemplate):
         inner_parameters = {
             parameter: MappedParameter(
                 mapping_function,
-                {name: parameters[name] for name in mapping_function.variables()}
+                {name: parameters[name] for name in mapping_function.variables}
             )
             for (parameter, mapping_function) in self.__parameter_mapping.items()
         }
