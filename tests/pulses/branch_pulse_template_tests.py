@@ -1,8 +1,8 @@
 import unittest
 
 from qctoolkit.pulses.branch_pulse_template import BranchPulseTemplate
-from qctoolkit.pulses.parameters import ParameterDeclaration
 from qctoolkit.pulses.conditions import ConditionMissingException
+from qctoolkit.pulses.parameters import ParameterConstraint
 
 from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummyParameter, DummyCondition, DummySequencer, DummyInstructionBlock
 from tests.serialization_dummies import DummySerializer
@@ -27,7 +27,6 @@ class BranchPulseTemplateTest(unittest.TestCase):
         else_dummy = DummyPulseTemplate(defined_channels={'A', 'B'}, parameter_names={'foo', 'hugo'})
         template = BranchPulseTemplate('foo_condition', if_dummy, else_dummy)
         self.assertEqual({'foo', 'bar', 'hugo'}, template.parameter_names)
-        self.assertEqual({ParameterDeclaration(name) for name in {'foo', 'bar', 'hugo'}}, template.parameter_declarations)
 
     def test_defined_channels(self) -> None:
         if_dummy = DummyPulseTemplate(defined_channels={'A', 'B'})
@@ -185,6 +184,7 @@ class BranchPulseTemplateSerializationTests(unittest.TestCase):
         self.if_dummy = DummyPulseTemplate(defined_channels={'A', 'B'}, parameter_names={'foo', 'bar'}, measurement_names={'if_mease'})
         self.else_dummy = DummyPulseTemplate(defined_channels={'A', 'B'}, parameter_names={'foo', 'hugo'}, measurement_names={'else_meas'})
         self.template = BranchPulseTemplate('foo_condition', self.if_dummy, self.else_dummy)
+        self.constraints = ['']
 
     def test_get_serialization_data(self) -> None:
         expected_data = dict(

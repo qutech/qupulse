@@ -58,6 +58,7 @@ class AnnotationTest(unittest.TestCase):
                                     if method not in whitelist:
                                         if hasattr(imported, method):
                                             loaded_method = getattr(imported, method)
-                                            if hasattr(loaded_method,"__call__"):
+                                            if hasattr(loaded_method, "__call__") and hasattr(loaded_method,
+                                                                                              "__annotations__"):
                                                 self.assertIn("return",loaded_method.__annotations__,"No Return annotation found for Module: {}, Class: {}, Method: {}".format(package,name,method))
                                                 self.assertNotEqual(len(loaded_method.__annotations__.keys()),0,"No Annotation found. Module: {}, Class: {}, Method: {}".format(package,name,method))

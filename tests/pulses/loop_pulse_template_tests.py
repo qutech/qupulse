@@ -92,11 +92,9 @@ class WhileLoopPulseTemplateTest(unittest.TestCase):
         body = DummyPulseTemplate()
         t = WhileLoopPulseTemplate(condition, body)
         self.assertEqual(body.parameter_names, t.parameter_names)
-        self.assertEqual(body.parameter_declarations, t.parameter_declarations)
 
         body.parameter_names_ = {'foo', 't', 'bar'}
         self.assertEqual(body.parameter_names, t.parameter_names)
-        self.assertEqual(body.parameter_declarations, t.parameter_declarations)
 
     @unittest.skip
     def test_is_interruptable(self) -> None:
@@ -177,8 +175,7 @@ class LoopPulseTemplateSerializationTests(unittest.TestCase):
         serializer = DummySerializer()
         expected_data = dict(type=serializer.get_type_identifier(t),
                              body=str(id(body)),
-                             condition=condition_name,
-                             atomicity=False)
+                             condition=condition_name)
 
         data = t.get_serialization_data(serializer)
         self.assertEqual(expected_data, data)
@@ -187,8 +184,7 @@ class LoopPulseTemplateSerializationTests(unittest.TestCase):
         data = dict(
             identifier='foo_loop',
             condition='foo_cond',
-            body='bodyDummyPulse',
-            atomicity=False
+            body='bodyDummyPulse'
         )
 
         # prepare dependencies for deserialization

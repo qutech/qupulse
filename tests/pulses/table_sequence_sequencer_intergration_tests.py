@@ -22,8 +22,8 @@ class TableSequenceSequencerIntegrationTests(unittest.TestCase):
                                                      (5, 0)]},
                                 measurements=[('foo', 4, 1)])
 
-        seqt = SequencePulseTemplate([MappingTemplate(t1, {'foo': 'foo'}, measurement_mapping={'foo': 'bar'}),
-                                      MappingTemplate(t2, {'bar': '2 * hugo'})], {'foo', 'hugo'})
+        seqt = SequencePulseTemplate(MappingTemplate(t1, measurement_mapping={'foo': 'bar'}),
+                                     MappingTemplate(t2, parameter_mapping={'bar': '2 * hugo'}))
 
         with self.assertRaises(ParameterNotProvidedException):
             t1.requires_stop(dict(), dict())

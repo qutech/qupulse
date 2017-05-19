@@ -3,29 +3,61 @@ import sympy
 
 from qctoolkit.pulses.function_pulse_template import FunctionPulseTemplate,\
     FunctionWaveform
-from qctoolkit.pulses.parameters import ParameterDeclaration, ParameterNotProvidedException
+from qctoolkit.serialization import Serializer
+from qctoolkit.pulses.parameters import ParameterNotProvidedException
 from qctoolkit.expressions import Expression
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
+from qctoolkit.pulses.parameters import ParameterConstraintViolation
 import numpy as np
 
-from tests.serialization_dummies import DummySerializer
+from tests.serialization_dummies import DummySerializer, DummyStorageBackend
 from tests.pulses.sequencing_dummies import DummyParameter
+from tests.pulses.measurement_tests import MeasurementDefinerTest, ParameterConstrainerTest
+from tests.property_test_helper import assert_all_properties_tested
 
 
 class FunctionPulseTest(unittest.TestCase):
-
     def setUp(self) -> None:
         self.maxDiff = None
         self.s = 'a + b * t'
         self.s2 = 'c'
 
         self.meas_list = [('mw', 1, 1), ('mw', 'x', 'z'), ('drup', 'j', 'u')]
-        self.meas_dict = {'mw': [(1, 1), ('x', 'z')], 'drup': [('j', 'u')]}
+
+        self.constraints = ['a < b', 'c > 1', 'd > c']
+
+        self.valid_par_vals = dict(a=1,
+                             b=2,
+                             c=14.5,
+                             d=15,
+                             x=0.1,
+                             z=0.2,
+                             j=0.3,
+                             u=0.4)
+
+        self.invalid_par_vals = dict(a=1,
+                             b=2,
+                             c=14.5,
+                             d=14,
+                             x=0.1,
+                             z=0.2,
+                             j=0.3,
+                             u=0.4)
 
         self.fpt = FunctionPulseTemplate(self.s, self.s2, channel='A',
-                                         measurements=self.meas_list)
+                                         measurements=self.meas_list,
+                                         parameter_constraints=self.constraints)
 
         self.pars = dict(a=DummyParameter(1), b=DummyParameter(2), c=DummyParameter(136.78))
+
+
+@assert_all_properties_tested(to_test=FunctionPulseTemplate)
+class FunctionPulsePropertyTest(FunctionPulseTest):
+    def test_expression(self):
+        self.assertEqual(self.fpt.expression, self.s)
+
+    def test_function_parameters(self):
+        self.assertEqual(self.fpt.function_parameters, {'a', 'b', 'c'})
 
     def test_is_interruptable(self) -> None:
         self.assertFalse(self.fpt.is_interruptable)
@@ -33,24 +65,33 @@ class FunctionPulseTest(unittest.TestCase):
     def test_defined_channels(self) -> None:
         self.assertEqual({'A'}, self.fpt.defined_channels)
 
+    def test_parameter_names(self):
+        self.assertEqual(self.fpt.parameter_names, {'a', 'b', 'c', 'd', 'x', 'z', 'j', 'u'})
+
+    def test_duration(self):
+        self.assertEqual(self.fpt.duration, self.s2)
+
+    def test_measurement_names(self):
+        self.assertEqual(self.fpt.measurement_names, {'mw', 'drup'})
+
     def test_parameter_names_and_declarations_expression_input(self) -> None:
         template = FunctionPulseTemplate(Expression("3 * foo + bar * t"), Expression("5 * hugo"))
         expected_parameter_names = {'foo', 'bar', 'hugo'}
         self.assertEqual(expected_parameter_names, template.parameter_names)
-        self.assertEqual({ParameterDeclaration(name) for name in expected_parameter_names}, template.parameter_declarations)
 
     def test_parameter_names_and_declarations_string_input(self) -> None:
         template = FunctionPulseTemplate("3 * foo + bar * t", "5 * hugo",channel='A')
         expected_parameter_names = {'foo', 'bar', 'hugo'}
         self.assertEqual(expected_parameter_names, template.parameter_names)
-        self.assertEqual({ParameterDeclaration(name) for name in expected_parameter_names},
-                         template.parameter_declarations)
 
-    def test_serialization_data(self) -> None:
+
+class FunctionPulseSerializationTest(FunctionPulseTest):
+    def test_get_serialization_data(self) -> None:
         expected_data = dict(duration_expression=str(self.s2),
                              expression=str(self.s),
                              channel='A',
-                             measurement_declarations=self.meas_list)
+                             measurement_declarations=self.meas_list,
+                             parameter_constraints=self.constraints)
         self.assertEqual(expected_data, self.fpt.get_serialization_data(
             DummySerializer(serialize_callback=lambda x: x.original_expression)))
 
@@ -59,45 +100,91 @@ class FunctionPulseTest(unittest.TestCase):
                           expression=self.s,
                           channel='A',
                           identifier='hugo',
-                          measurement_declarations=self.meas_list)
+                          measurement_declarations=self.meas_list,
+                          parameter_constraints=self.constraints)
         serializer = DummySerializer(serialize_callback=lambda x: x.original_expression)
         serializer.subelements[self.s2] = Expression(self.s2)
         serializer.subelements[self.s] = Expression(self.s)
         template = FunctionPulseTemplate.deserialize(serializer, **basic_data)
         self.assertEqual('hugo', template.identifier)
-        self.assertEqual({'a', 'b', 'c', 'x', 'z', 'j', 'u'}, template.parameter_names)
-        self.assertEqual({ParameterDeclaration(name) for name in template.parameter_names},
-                         template.parameter_declarations)
+        self.assertEqual({'a', 'b', 'c', 'x', 'z', 'j', 'u', 'd'}, template.parameter_names)
         self.assertEqual(template.measurement_declarations,
                          self.meas_list)
         serialized_data = template.get_serialization_data(serializer)
         del basic_data['identifier']
         self.assertEqual(basic_data, serialized_data)
 
+    def test_serializer_integration(self):
+        before = FunctionPulseTemplate(expression=self.s,
+                                       duration_expression=self.s2,
+                                       channel='A',
+                                       measurements=self.meas_list,
+                                       parameter_constraints=self.constraints,
+                                       identifier='my_tpt')
+        serializer = Serializer(DummyStorageBackend())
+        serializer.serialize(before)
+        after = serializer.deserialize('my_tpt')
 
-class FunctionPulseSequencingTest(unittest.TestCase):
+        self.assertIsInstance(after, FunctionPulseTemplate)
+        self.assertEqual(before.expression, after.expression)
+        self.assertEqual(before.duration, after.duration)
+        self.assertEqual(before.defined_channels, after.defined_channels)
 
-    def setUp(self) -> None:
-        unittest.TestCase.setUp(self)
-        self.f = "a * t"
-        self.duration = "y"
-        self.args = dict(a=DummyParameter(3),y=DummyParameter(1))
-        self.fpt = FunctionPulseTemplate(self.f, self.duration)
+        self.assertEqual(before.measurement_declarations, after.measurement_declarations)
+        self.assertEqual(before.parameter_constraints, after.parameter_constraints)
 
-    @unittest.skip
+
+class FunctionPulseSequencingTest(FunctionPulseTest):
     def test_build_waveform(self) -> None:
-        wf = self.fpt.build_waveform(self.args, {}, channel_mapping={'default': 'default'})
+        with self.assertRaises(ParameterConstraintViolation):
+            self.fpt.build_waveform(self.invalid_par_vals, measurement_mapping={'mw': 'mw',
+                                                                                'drup': 'jupp'}, channel_mapping={'A': 'B'})
+
+        wf = self.fpt.build_waveform(self.valid_par_vals, measurement_mapping={'mw': 'mw',
+                                                                                'drup': 'jupp'}, channel_mapping={'A': 'B'})
         self.assertIsNotNone(wf)
-        self.assertIsInstance(wf, MultiChannelWaveform)
-        expected_waveform = MultiChannelWaveform({'default': FunctionWaveform(Expression(self.f),
-                                                                              Expression(self.duration))})
+        self.assertIsInstance(wf, FunctionWaveform)
+
+        expression = Expression(self.s).evaluate_symbolic(self.valid_par_vals)
+        duration = Expression(self.s2).evaluate_numeric(c=self.valid_par_vals['c'])
+
+        expected_waveform = FunctionWaveform(expression, duration=duration, channel='B',
+                                             measurement_windows=[('mw', 1, 1),
+                                                                  ('mw',
+                                                                   self.valid_par_vals['x'],
+                                                                   self.valid_par_vals['z']),
+                                                                  ('jupp',
+                                                                   self.valid_par_vals['j'],
+                                                                   self.valid_par_vals['u'])])
         self.assertEqual(expected_waveform, wf)
 
     def test_requires_stop(self) -> None:
-        parameters = dict(a=DummyParameter(36.126), y=DummyParameter(247.9543))
+        parameters = dict(a=DummyParameter(36.126), z=DummyParameter(247.9543))
         self.assertFalse(self.fpt.requires_stop(parameters, dict()))
-        parameters = dict(a=DummyParameter(36.126), y=DummyParameter(247.9543, requires_stop=True))
+        parameters = dict(a=DummyParameter(36.126), z=DummyParameter(247.9543, requires_stop=True))
         self.assertTrue(self.fpt.requires_stop(parameters, dict()))
+
+
+class TablePulseTemplateConstraintTest(ParameterConstrainerTest):
+    def __init__(self, *args, **kwargs):
+
+        def tpt_constructor(parameter_constraints=None):
+            return FunctionPulseTemplate('a*t', 'duration',
+                                         parameter_constraints=parameter_constraints, measurements=[('M', 'n', 1)])
+
+        super().__init__(*args,
+                         to_test_constructor=tpt_constructor, **kwargs)
+
+
+class TablePulseTemplateMeasurementTest(MeasurementDefinerTest):
+    def __init__(self, *args, **kwargs):
+
+        def tpt_constructor(measurements=None):
+            return FunctionPulseTemplate('a*t', 'duration',
+                                         parameter_constraints=['a < b'], measurements=measurements)
+
+        super().__init__(*args,
+                         to_test_constructor=tpt_constructor, **kwargs)
 
 
 class FunctionWaveformTest(unittest.TestCase):
@@ -136,17 +223,15 @@ class FunctionWaveformTest(unittest.TestCase):
         np.testing.assert_equal(result, expected_result)
         self.assertIs(result, out_array)
 
+    def test_unsafe_get_subset_for_channels(self):
+        fw = FunctionWaveform(Expression('sin(2*pi*t) + 3'), 5, channel='A',
+                              measurement_windows=[('asd', 0, 3), ('om', 1, 2)])
+        self.assertIs(fw.unsafe_get_subset_for_channels({'A'}), fw)
 
-    @unittest.skip
-    def test_sample(self) -> None:
-        f = Expression("(t+1)**b")
-        length = Expression("c**b")
-        par = {"b":2,"c":10}
-        fw = FunctionWaveform(f, length, measurement_windows=[], channel='A')
-        a = np.arange(4)
-        expected_result = [[1, 4, 9, 16]]
-        result = fw.sample(a)
-        self.assertTrue(np.all(result == expected_result))
+    def test_get_measurement_windows(self):
+        fw = FunctionWaveform(Expression('sin(2*pi*t) + 3'), 5, channel='A',
+                              measurement_windows=[('asd', 0, 3), ('om', 1, 2)])
+        self.assertEqual(fw.get_measurement_windows(), [('asd', 0, 3), ('om', 1, 2)])
 
 
 class FunctionPulseMeasurementTest(unittest.TestCase):

@@ -4,14 +4,14 @@ import numpy
 
 from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingException,\
     MissingParameterDeclarationException, UnnecessaryMappingException
-from qctoolkit.pulses.parameters import ParameterDeclaration, ParameterNotProvidedException, MappedParameter, ConstantParameter
-from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelPulseTemplate, MultiChannelWaveform, MappingTemplate, ChannelMappingException
+from qctoolkit.pulses.parameters import ParameterNotProvidedException, MappedParameter, ConstantParameter
+from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelPulseTemplate, MultiChannelWaveform, MappingTemplate, ChannelMappingException, AtomicMultiChannelPulseTemplate
 from qctoolkit.expressions import Expression
 from qctoolkit.pulses.instructions import CHANInstruction, EXECInstruction
 
 from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyPulseTemplate, DummyWaveform
 from tests.serialization_dummies import DummySerializer
-
+from tests.pulses.pulse_template_tests import PulseTemplateStub
 
 class MultiChannelWaveformTest(unittest.TestCase):
 
@@ -129,6 +129,128 @@ class MultiChannelWaveformTest(unittest.TestCase):
         self.assertIs(sub_ab.unsafe_get_subset_for_channels({'A'}), dwf_a)
         self.assertIs(sub_ab.unsafe_get_subset_for_channels({'B'}), dwf_b)
 
+
+class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
+    def __init__(self,*args,**kwargs):
+        super().__init__(*args,**kwargs)
+
+        self.subtemplates = [DummyPulseTemplate(parameter_names={'p1'},
+                                                measurement_names={'m1'},
+                                                defined_channels={'c1'}),
+                             DummyPulseTemplate(parameter_names={'p2'},
+                                                measurement_names={'m2'},
+                                                defined_channels={'c2'}),
+                             DummyPulseTemplate(parameter_names={'p3'},
+                                                measurement_names={'m3'},
+                                                defined_channels={'c3'})]
+        self.no_param_maps = [{'p1': '1'}, {'p2': '2'}, {'p3': '3'}]
+        self.param_maps = [{'p1': 'pp1'}, {'p2': 'pp2'}, {'p3': 'pp3'}]
+        self.chan_maps = [{'c1': 'cc1'}, {'c2': 'cc2'}, {'c3': 'cc3'}]
+
+    def test_init_empty(self) -> None:
+        with self.assertRaises(ValueError):
+            AtomicMultiChannelPulseTemplate()
+
+        with self.assertRaises(ValueError):
+            AtomicMultiChannelPulseTemplate(identifier='foo')
+
+        with self.assertRaises(ValueError):
+            AtomicMultiChannelPulseTemplate(external_parameters=set())
+
+        with self.assertRaises(ValueError):
+            AtomicMultiChannelPulseTemplate(identifier='foo', external_parameters=set())
+
+        with self.assertRaises(ValueError):
+            AtomicMultiChannelPulseTemplate(identifier='foo', external_parameters=set(), parameter_constraints=[])
+
+    def test_non_atomic_subtemplates(self):
+        non_atomic_pt = PulseTemplateStub(duration='t1', defined_channels={'A'}, parameter_names=set())
+        atomic_pt = DummyPulseTemplate(defined_channels={'B'}, duration='t1')
+
+        with self.assertRaises(TypeError):
+            AtomicMultiChannelPulseTemplate(non_atomic_pt)
+
+        with self.assertRaises(TypeError):
+            AtomicMultiChannelPulseTemplate(non_atomic_pt, atomic_pt)
+
+        with self.assertRaises(TypeError):
+            AtomicMultiChannelPulseTemplate(MappingTemplate(non_atomic_pt), atomic_pt)
+
+        with self.assertRaises(TypeError):
+            AtomicMultiChannelPulseTemplate((non_atomic_pt, {'B': 'C'}), atomic_pt)
+
+    def test_duration(self):
+        sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'}),
+               DummyPulseTemplate(duration='t1', defined_channels={'B'}),
+               DummyPulseTemplate(duration='t2', defined_channels={'C'})]
+        with self.assertRaises(ValueError):
+            AtomicMultiChannelPulseTemplate(*sts)
+
+        with self.assertRaises(ValueError):
+            AtomicMultiChannelPulseTemplate(sts[0], sts[2])
+        template = AtomicMultiChannelPulseTemplate(*sts[:1])
+
+        self.assertEqual(template.duration, 't1')
+
+    def test_external_parameters(self):
+        sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'}, parameter_names={'a', 'b'}),
+               DummyPulseTemplate(duration='t1', defined_channels={'B'}, parameter_names={'a', 'c'})]
+        constraints = ['a < d']
+        template = AtomicMultiChannelPulseTemplate(*sts,
+                                                   parameter_constraints=constraints,
+                                                   external_parameters={'a', 'b', 'c', 'd'})
+
+        with self.assertRaises(MissingParameterDeclarationException):
+            AtomicMultiChannelPulseTemplate(*sts,
+                                            external_parameters={'a', 'c', 'd'},
+                                            parameter_constraints=constraints)
+        with self.assertRaises(MissingParameterDeclarationException):
+            AtomicMultiChannelPulseTemplate(*sts, external_parameters={'a', 'b', 'd'},
+                                            parameter_constraints=constraints)
+        with self.assertRaises(MissingParameterDeclarationException):
+            AtomicMultiChannelPulseTemplate(*sts, external_parameters={'b', 'c', 'd'},
+                                            parameter_constraints=constraints)
+        with self.assertRaises(MissingParameterDeclarationException):
+            AtomicMultiChannelPulseTemplate(*sts, external_parameters={'a', 'c', 'b'},
+                                            parameter_constraints=constraints)
+
+        with self.assertRaises(MissingMappingException):
+            AtomicMultiChannelPulseTemplate(*sts, external_parameters={'a', 'b', 'c', 'd', 'e'},
+                                            parameter_constraints=constraints)
+
+        self.assertEqual(template.parameter_names, {'a', 'b', 'c', 'd'})
+
+    def test_mapping_template_pure_conversion(self):
+        template = AtomicMultiChannelPulseTemplate(*zip(self.subtemplates, self.param_maps, self.chan_maps))
+
+        for st, pm, cm in zip(template.subtemplates, self.param_maps, self.chan_maps):
+            self.assertEqual(st.parameter_names, set(pm.values()))
+            self.assertEqual(st.defined_channels, set(cm.values()))
+
+    def test_mapping_template_mixed_conversion(self):
+        subtemp_args = [
+            (self.subtemplates[0], self.param_maps[0], self.chan_maps[0]),
+            MappingTemplate(self.subtemplates[1], parameter_mapping=self.param_maps[1], channel_mapping=self.chan_maps[1]),
+            (self.subtemplates[2], self.param_maps[2], self.chan_maps[2])
+        ]
+        template = AtomicMultiChannelPulseTemplate(*subtemp_args)
+
+        for st, pm, cm in zip(template.subtemplates, self.param_maps, self.chan_maps):
+            self.assertEqual(st.parameter_names, set(pm.values()))
+            self.assertEqual(st.defined_channels, set(cm.values()))
+
+    def test_channel_intersection(self):
+        chan_maps = self.chan_maps.copy()
+        chan_maps[-1]['c3'] = 'cc1'
+        with self.assertRaises(ChannelMappingException):
+            AtomicMultiChannelPulseTemplate(*zip(self.subtemplates, self.param_maps, chan_maps))
+
+    def test_defined_channels(self):
+        subtemp_args = [*zip(self.subtemplates, self.param_maps, self.chan_maps)]
+        template = AtomicMultiChannelPulseTemplate(*subtemp_args)
+        self.assertEqual(template.defined_channels, {'cc1', 'cc2', 'cc3'})
+
+
 class MultiChannelPulseTemplateTest(unittest.TestCase):
     def __init__(self,*args,**kwargs):
         super().__init__(*args,**kwargs)
@@ -143,15 +265,9 @@ class MultiChannelPulseTemplateTest(unittest.TestCase):
         self.param_maps = [{'p1': 'pp1'}, {'p2': 'pp2'}, {'p3': 'pp3'}]
         self.chan_maps = [{'c1': 'cc1'}, {'c2': 'cc2'}, {'c3': 'cc3'}]
 
-    @unittest.skip('Consider forbidding empty multi channel templates')
     def test_init_empty(self) -> None:
-        template = MultiChannelPulseTemplate([], {}, identifier='foo')
-        self.assertEqual('foo', template.identifier)
-        self.assertFalse(template.parameter_names)
-        self.assertFalse(template.parameter_declarations)
-        self.assertTrue(template.is_interruptable)
-        self.assertFalse(template.requires_stop(dict(), dict()))
-        self.assertEqual(0, template.num_channels)
+        with self.assertRaises(ValueError):
+            MultiChannelPulseTemplate([], {}, identifier='foo')
 
     def test_mapping_template_pure_conversion(self):
         subtemp_args = [*zip(self.subtemplates, self.param_maps, self.chan_maps)]
@@ -164,7 +280,7 @@ class MultiChannelPulseTemplateTest(unittest.TestCase):
     def test_mapping_template_mixed_conversion(self):
         subtemp_args = [
             (self.subtemplates[0], self.param_maps[0], self.chan_maps[0]),
-            MappingTemplate(self.subtemplates[1], self.param_maps[1], channel_mapping=self.chan_maps[1]),
+            MappingTemplate(self.subtemplates[1], parameter_mapping=self.param_maps[1], channel_mapping=self.chan_maps[1]),
             (self.subtemplates[2], self.param_maps[2], self.chan_maps[2])
         ]
         template = MultiChannelPulseTemplate(subtemp_args, external_parameters={'pp1', 'pp2', 'pp3'})
@@ -209,8 +325,6 @@ class MultiChannelPulseTemplateSequencingTests(unittest.TestCase):
                                            (dummy, dict(foo='rab-5'), {'default': 'B'})],
                                           {'bar', 'rab'})
         self.assertEqual({'bar', 'rab'}, pulse.parameter_names)
-        self.assertEqual({ParameterDeclaration('bar'), ParameterDeclaration('rab')},
-                         pulse.parameter_declarations)
 
         parameters = dict(bar=ConstantParameter(-3.6), rab=ConstantParameter(35.26))
         self.assertFalse(pulse.requires_stop(parameters, dict()))
@@ -221,16 +335,14 @@ class MultiChannelPulseTemplateSequencingTests(unittest.TestCase):
                                            (dummy, dict(foo='rab-5'), {'default': 'B'})],
                                           {'bar', 'rab'})
         self.assertEqual({'bar', 'rab'}, pulse.parameter_names)
-        self.assertEqual({ParameterDeclaration('bar'), ParameterDeclaration('rab')},
-                         pulse.parameter_declarations)
         parameters = dict(bar=ConstantParameter(-3.6), rab=ConstantParameter(35.26))
         self.assertTrue(pulse.requires_stop(parameters, dict()))
 
-    def test_build_sequence(self) -> None:
-        dummy_wf1 = DummyWaveform(duration=2.3)
-        dummy_wf2 = DummyWaveform(duration=2.3)
-        dummy1 = DummyPulseTemplate(parameter_names={'bar'}, defined_channels={'A'}, waveform=dummy_wf1)
-        dummy2 = DummyPulseTemplate(parameter_names={}, defined_channels={'B'}, waveform=dummy_wf2)
+    def test_build_sequence_different_duration(self) -> None:
+        dummy_wf1 = DummyWaveform(duration=2.4, defined_channels={'A'})
+        dummy_wf2 = DummyWaveform(duration=2.3, defined_channels={'B'})
+        dummy1 = DummyPulseTemplate(parameter_names={'bar'}, defined_channels={'A'}, waveform=dummy_wf1, duration=2.4)
+        dummy2 = DummyPulseTemplate(parameter_names={}, defined_channels={'B'}, waveform=dummy_wf2, duration=2.3)
 
         sequencer = DummySequencer()
         pulse = MultiChannelPulseTemplate([dummy1, dummy2], {'bar'})
@@ -259,43 +371,32 @@ class MultiChannelPulseTemplateSequencingTests(unittest.TestCase):
                 self.assertEqual(sequencer.sequencing_stacks[sub_block_ptr.block],
                                  [(dummy2, parameters, conditions, measurement_mapping, channel_mapping)])
 
+    def test_build_sequence_same_duration(self) -> None:
+        dummy_wf1 = DummyWaveform(duration=2.3, defined_channels={'A'})
+        dummy_wf2 = DummyWaveform(duration=2.3, defined_channels={'B'})
+        dummy1 = DummyPulseTemplate(parameter_names={'bar'}, defined_channels={'A'}, waveform=dummy_wf1, duration=2.3)
+        dummy2 = DummyPulseTemplate(parameter_names={}, defined_channels={'B'}, waveform=dummy_wf2, duration=2.3)
 
-    @unittest.skip("Replace when/if there is an AtomicPulseTemplate detection.")
-    def test_integration_table_and_function_template(self) -> None:
-        from qctoolkit.pulses import TablePulseTemplate, FunctionPulseTemplate, Sequencer, EXECInstruction, STOPInstruction
+        sequencer = DummySequencer()
+        pulse = MultiChannelPulseTemplate([dummy1, dummy2], {'bar'})
 
-        table_template = TablePulseTemplate(channels=2)
-        table_template.add_entry(1, 4, channel=0)
-        table_template.add_entry('foo', 'bar', channel=0)
-        table_template.add_entry(10, 0, channel=0)
-        table_template.add_entry('foo', 2.7, interpolation='linear', channel=1)
-        table_template.add_entry(9, 'bar', interpolation='linear', channel=1)
+        parameters = {'bar': ConstantParameter(3)}
+        measurement_mapping = {}
+        channel_mapping = {'A': 'A', 'B': 'B'}
+        instruction_block = DummyInstructionBlock()
+        conditions = {}
 
-        function_template = FunctionPulseTemplate('sin(t)', '10')
+        pulse.build_sequence(sequencer, parameters=parameters,
+                                        conditions=conditions,
+                                        measurement_mapping=measurement_mapping,
+                                        channel_mapping=channel_mapping,
+                                        instruction_block=instruction_block)
 
-        template = MultiChannelPulseTemplate(
-            [(function_template, dict(), [1]),
-             (table_template, dict(foo='5', bar='2 * hugo'), [2, 0])],
-            {'hugo'}
-        )
+        self.assertEqual(len(instruction_block), 2)
+        self.assertIsInstance(instruction_block[0], EXECInstruction)
+        self.assertIsInstance(instruction_block[0].waveform, MultiChannelWaveform)
 
-        sample_times = numpy.linspace(98.5, 103.5, num=11)
-        function_template_samples = function_template.build_waveform(dict()).sample(sample_times)
-        table_template_samples = table_template.build_waveform(dict(foo=ConstantParameter(5), bar=ConstantParameter(2*(-1.3)))).sample(sample_times)
-
-        template_waveform = template.build_waveform(dict(hugo=ConstantParameter(-1.3)))
-        template_samples = template_waveform.sample(sample_times)
-
-        self.assertTrue(numpy.all(table_template_samples[0] == template_samples[2]))
-        self.assertTrue(numpy.all(table_template_samples[1] == template_samples[0]))
-        self.assertTrue(numpy.all(function_template_samples[0] == template_samples[1]))
-
-        sequencer = Sequencer()
-        sequencer.push(template, parameters=dict(hugo=-1.3), conditions=dict())
-        instructions = sequencer.build()
-        self.assertEqual(2, len(instructions))
-        self.assertIsInstance(instructions[0], EXECInstruction)
-        self.assertIsInstance(instructions[1], STOPInstruction)
+        self.assertEqual(instruction_block[0].waveform.compare_key, (dummy_wf1.compare_key, dummy_wf2.compare_key))
 
 
 class MultiChannelPulseTemplateSerializationTests(unittest.TestCase):

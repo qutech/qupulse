@@ -3,7 +3,8 @@ import unittest
 import numpy as np
 
 from qctoolkit.pulses.repetition_pulse_template import RepetitionPulseTemplate,ParameterNotIntegerException, RepetitionWaveform
-from qctoolkit.pulses.parameters import ParameterDeclaration, ParameterNotProvidedException, ParameterValueIllegalException
+from qctoolkit.pulses.parameters import ParameterNotProvidedException, ParameterConstraintViolation, ConstantParameter, \
+    ParameterConstraint
 from qctoolkit.pulses.instructions import REPJInstruction, InstructionPointer
 
 from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummySequencer, DummyInstructionBlock, DummyParameter,\
@@ -49,7 +50,7 @@ class RepetitionPulseTemplateTest(unittest.TestCase):
         self.assertEqual(repetition_count, t.repetition_count)
         self.assertEqual(body, t.body)
 
-        repetition_count = ParameterDeclaration('foo')
+        repetition_count = 'foo'
         t = RepetitionPulseTemplate(body, repetition_count)
         self.assertEqual(repetition_count, t.repetition_count)
         self.assertEqual(body, t.body)
@@ -58,11 +59,9 @@ class RepetitionPulseTemplateTest(unittest.TestCase):
         body = DummyPulseTemplate()
         t = RepetitionPulseTemplate(body, 5)
         self.assertEqual(body.parameter_names, t.parameter_names)
-        self.assertEqual(body.parameter_declarations, t.parameter_declarations)
 
         body.parameter_names_ = {'foo', 't', 'bar'}
         self.assertEqual(body.parameter_names, t.parameter_names)
-        self.assertEqual(body.parameter_declarations, t.parameter_declarations)
 
     @unittest.skip('is interruptable not implemented for loops')
     def test_is_interruptable(self) -> None:
@@ -77,7 +76,7 @@ class RepetitionPulseTemplateTest(unittest.TestCase):
         body = DummyPulseTemplate()
         t = RepetitionPulseTemplate(body, 9)
         self.assertIsInstance(str(t), str)
-        t = RepetitionPulseTemplate(body, ParameterDeclaration('foo'))
+        t = RepetitionPulseTemplate(body, 'foo')
         self.assertIsInstance(str(t), str)
 
 
@@ -92,7 +91,7 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
 
     def test_requires_stop_declaration(self) -> None:
         body = DummyPulseTemplate(requires_stop=False)
-        t = RepetitionPulseTemplate(body, ParameterDeclaration('foo'))
+        t = RepetitionPulseTemplate(body, 'foo')
 
         parameter = DummyParameter()
         parameters = dict(foo=parameter)
@@ -109,8 +108,8 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
 
     def setUp(self) -> None:
         self.body = DummyPulseTemplate()
-        self.repetitions = ParameterDeclaration('foo', max=5)
-        self.template = RepetitionPulseTemplate(self.body, self.repetitions)
+        self.repetitions = 'foo'
+        self.template = RepetitionPulseTemplate(self.body, self.repetitions, parameter_constraints=['foo<9'])
         self.sequencer = DummySequencer()
         self.block = DummyInstructionBlock()
 
@@ -118,7 +117,7 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
         repetitions = 3
         t = RepetitionPulseTemplate(self.body, repetitions)
         parameters = {}
-        measurement_mapping = {'my' : 'thy'}
+        measurement_mapping = {'my': 'thy'}
         conditions = dict(foo=DummyCondition(requires_stop=True))
         channel_mapping = {}
         t.build_sequence(self.sequencer, parameters, conditions, measurement_mapping, channel_mapping, self.block)
@@ -130,7 +129,7 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
         self.assertEqual([REPJInstruction(repetitions, InstructionPointer(body_block, 0))], self.block.instructions)
 
     def test_build_sequence_declaration_success(self) -> None:
-        parameters = dict(foo=3)
+        parameters = dict(foo=ConstantParameter(3))
         conditions = dict(foo=DummyCondition(requires_stop=True))
         measurement_mapping = dict(moth='fire')
         channel_mapping = dict(asd='f')
@@ -141,13 +140,12 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
         self.assertEqual({body_block}, set(self.sequencer.sequencing_stacks.keys()))
         self.assertEqual([(self.body, parameters, conditions, measurement_mapping, channel_mapping)],
                          self.sequencer.sequencing_stacks[body_block])
-        self.assertEqual([REPJInstruction(parameters['foo'], InstructionPointer(body_block, 0))], self.block.instructions)
-
+        self.assertEqual([REPJInstruction(3, InstructionPointer(body_block, 0))], self.block.instructions)
 
     def test_build_sequence_declaration_exceeds_bounds(self) -> None:
-        parameters = dict(foo=9)
+        parameters = dict(foo=ConstantParameter(9))
         conditions = dict(foo=DummyCondition(requires_stop=True))
-        with self.assertRaises(ParameterValueIllegalException):
+        with self.assertRaises(ParameterConstraintViolation):
             self.template.build_sequence(self.sequencer, parameters, conditions, {}, {}, self.block)
         self.assertFalse(self.sequencer.sequencing_stacks)
 
@@ -159,7 +157,7 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
         self.assertFalse(self.sequencer.sequencing_stacks)
 
     def test_build_sequence_declaration_parameter_value_not_whole(self) -> None:
-        parameters = dict(foo=3.3)
+        parameters = dict(foo=ConstantParameter(3.3))
         conditions = dict(foo=DummyCondition(requires_stop=True))
         with self.assertRaises(ParameterNotIntegerException):
             self.template.build_sequence(self.sequencer, parameters, conditions, {}, {}, self.block)
@@ -176,23 +174,19 @@ class RepetitionPulseTemplateSerializationTests(unittest.TestCase):
         repetition_count = 3
         template = RepetitionPulseTemplate(self.body, repetition_count)
         expected_data = dict(
-            type=self.serializer.get_type_identifier(template),
             body=str(id(self.body)),
             repetition_count=repetition_count,
-            atomicity=False
+            parameter_constraints=[]
         )
         data = template.get_serialization_data(self.serializer)
         self.assertEqual(expected_data, data)
 
     def test_get_serialization_data_declaration(self) -> None:
-        repetition_count = ParameterDeclaration('foo')
-        template = RepetitionPulseTemplate(self.body, repetition_count)
-        template.atomicity = True
+        template = RepetitionPulseTemplate(self.body, 'foo', parameter_constraints=['foo<3'])
         expected_data = dict(
-            type=self.serializer.get_type_identifier(template),
             body=str(id(self.body)),
-            repetition_count=str(id(repetition_count)),
-            atomicity=True
+            repetition_count='foo',
+            parameter_constraints=[ParameterConstraint('foo<3')]
         )
         data = template.get_serialization_data(self.serializer)
         self.assertEqual(expected_data, data)
@@ -203,7 +197,7 @@ class RepetitionPulseTemplateSerializationTests(unittest.TestCase):
             repetition_count=repetition_count,
             body=dict(name=str(id(self.body))),
             identifier='foo',
-            atomicity=True
+            parameter_constraints=['bar<3']
         )
         # prepare dependencies for deserialization
         self.serializer.subelements[str(id(self.body))] = self.body
@@ -212,25 +206,25 @@ class RepetitionPulseTemplateSerializationTests(unittest.TestCase):
         # compare!
         self.assertEqual(self.body, template.body)
         self.assertEqual(repetition_count, template.repetition_count)
-        self.assertTrue(template.atomicity)
+        self.assertEqual([str(c) for c in template.parameter_constraints], ['bar < 3'])
 
     def test_deserialize_declaration(self) -> None:
-        repetition_count = ParameterDeclaration('foo')
         data = dict(
-            repetition_count=dict(name='foo'),
+            repetition_count='foo',
             body=dict(name=str(id(self.body))),
             identifier='foo',
-            atomicity=False
+            parameter_constraints=['foo<3']
         )
         # prepare dependencies for deserialization
         self.serializer.subelements[str(id(self.body))] = self.body
-        self.serializer.subelements['foo'] = repetition_count
+
         # deserialize
         template = RepetitionPulseTemplate.deserialize(self.serializer, **data)
+
         # compare!
         self.assertEqual(self.body, template.body)
-        self.assertEqual(repetition_count, template.repetition_count)
-        self.assertFalse(template.atomicity)
+        self.assertEqual('foo', template.repetition_count)
+        self.assertEqual(template.parameter_constraints, [ParameterConstraint('foo < 3')])
 
 
 class ParameterNotIntegerExceptionTests(unittest.TestCase):

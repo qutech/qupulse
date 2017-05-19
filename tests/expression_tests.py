@@ -4,7 +4,7 @@ import numpy as np
 from sympy import sympify
 
 from qctoolkit.expressions import Expression, ExpressionVariableMissingException
-
+from qctoolkit.serialization import Serializer
 
 class ExpressionTests(unittest.TestCase):
 

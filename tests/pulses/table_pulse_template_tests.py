@@ -1,17 +1,19 @@
 import unittest
 import warnings
+import functools
 
 import numpy
 
 from qctoolkit.expressions import Expression
-from qctoolkit.pulses.instructions import EXECInstruction
+from qctoolkit.serialization import Serializer
 from qctoolkit.pulses.table_pulse_template import TablePulseTemplate, TableWaveform, TableEntry, WaveformTableEntry, ZeroDurationTablePulseTemplate
-from qctoolkit.pulses.parameters import ParameterDeclaration, ParameterNotProvidedException, ParameterValueIllegalException, ParameterConstraintViolation
+from qctoolkit.pulses.parameters import ParameterNotProvidedException, ParameterConstraintViolation
 from qctoolkit.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy, JumpInterpolationStrategy
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 
 from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyInterpolationStrategy, DummyParameter, DummyCondition
-from tests.serialization_dummies import DummySerializer
+from tests.serialization_dummies import DummySerializer, DummyStorageBackend
+from tests.pulses.measurement_tests import ParameterConstrainerTest, MeasurementDefinerTest
 
 
 class TableEntryTest(unittest.TestCase):
@@ -33,6 +35,8 @@ class TableEntryTest(unittest.TestCase):
 
 
 class TablePulseTemplateTest(unittest.TestCase):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
     def test_time_is_negative(self) -> None:
         with self.assertRaises(ValueError):
@@ -325,7 +329,6 @@ class TablePulseTemplateTest(unittest.TestCase):
             i: [TableEntry(time, voltage, HoldInterpolationStrategy())
                 for (time, voltage) in zip(times[i, :], voltages)]
             for i in range(2)}
-
         self.assertEqual(entries, pulse.entries)
 
     def test_add_entry_multi_same_time_param(self) -> None:
@@ -367,6 +370,32 @@ class TablePulseTemplateTest(unittest.TestCase):
         }
         self.assertEqual(expected, entries)
 
+    def test_measurement_names(self):
+        tpt = TablePulseTemplate({0: [(10, 1)]}, measurements=[('A', 2, 3), ('AB', 0, 1)])
+        self.assertEqual(tpt.measurement_names, {'A', 'AB'})
+
+
+class TablePulseTemplateConstraintTest(ParameterConstrainerTest):
+    def __init__(self, *args, **kwargs):
+
+        def tpt_constructor(parameter_constraints=None):
+            return TablePulseTemplate({0: [('a', 'b')]},
+                                      parameter_constraints=parameter_constraints, measurements=[('M', 'n', 1)])
+
+        super().__init__(*args,
+                         to_test_constructor=tpt_constructor, **kwargs)
+
+
+class TablePulseTemplateMeasurementTest(MeasurementDefinerTest):
+    def __init__(self, *args, **kwargs):
+
+        def tpt_constructor(measurements=None):
+            return TablePulseTemplate({0: [('a', 'b')]},
+                                      parameter_constraints=['a < b'], measurements=measurements)
+
+        super().__init__(*args,
+                         to_test_constructor=tpt_constructor, **kwargs)
+
 
 class TablePulseTemplateSerializationTests(unittest.TestCase):
 
@@ -400,6 +429,17 @@ class TablePulseTemplateSerializationTests(unittest.TestCase):
 
         self.assertEqual(template.entries, self.template.entries)
         self.assertEqual(template.measurement_declarations, self.template.measurement_declarations)
+        self.assertEqual(template.parameter_constraints, self.template.parameter_constraints)
+
+    def test_serializer_integration(self):
+        serializer = Serializer(DummyStorageBackend())
+        serializer.serialize(self.template)
+        template = serializer.deserialize('foo')
+
+        self.assertIsInstance(template, TablePulseTemplate)
+        self.assertEqual(template.entries, self.template.entries)
+        self.assertEqual(template.measurement_declarations, self.template.measurement_declarations)
+        self.assertEqual(template.parameter_constraints, self.template.parameter_constraints)
 
 
 class TablePulseTemplateSequencingTests(unittest.TestCase):
@@ -517,18 +557,11 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
         self.assertEqual(pulse.identifier, identifier)
 
 
-
-class TableWaveformDataTests(unittest.TestCase):
-
+class TableWaveformTests(unittest.TestCase):
     def test_duration(self) -> None:
         entries = [WaveformTableEntry(0, 0, HoldInterpolationStrategy()), WaveformTableEntry(5, 1, HoldInterpolationStrategy())]
         waveform = TableWaveform('A', entries, [])
         self.assertEqual(5, waveform.duration)
-
-    @unittest.skip("What is the point of empty waveforms?")
-    def test_duration_no_entries(self) -> None:
-        waveform = TableWaveform([])
-        self.assertEqual(0, waveform.duration)
 
     def test_duration_no_entries_exception(self) -> None:
         with self.assertRaises(ValueError):
@@ -540,6 +573,24 @@ class TableWaveformDataTests(unittest.TestCase):
             TableWaveform('A', [[]], [])
         with self.assertRaises(ValueError):
             TableWaveform('A', [WaveformTableEntry(0, 0, HoldInterpolationStrategy())], [])
+
+    def test_get_measurement_windows(self):
+        interp = DummyInterpolationStrategy()
+        entries = [WaveformTableEntry(0, 0, interp),
+                   WaveformTableEntry(2.1, -33.2, interp),
+                   WaveformTableEntry(5.7, 123.4, interp)]
+        waveform = TableWaveform('A', entries,
+                                 measurement_windows=[('a', 1, 2), ('b', 3, 4)])
+        self.assertEqual(waveform.get_measurement_windows(), (('a', 1, 2), ('b', 3, 4)))
+
+    def test_unsafe_get_subset_for_channels(self):
+        interp = DummyInterpolationStrategy()
+        entries = [WaveformTableEntry(0, 0, interp),
+                   WaveformTableEntry(2.1, -33.2, interp),
+                   WaveformTableEntry(5.7, 123.4, interp)]
+        waveform = TableWaveform('A', entries,
+                                 measurement_windows=[('a', 1, 2), ('b', 3, 4)])
+        self.assertIs(waveform.unsafe_get_subset_for_channels({'A'}), waveform)
 
     def test_unsafe_sample(self) -> None:
         interp = DummyInterpolationStrategy()
@@ -576,13 +627,6 @@ class TableWaveformDataTests(unittest.TestCase):
         self.assertEqual(list(waveform.get_measurement_windows()), meas)
         self.assertIs(waveform.unsafe_get_subset_for_channels('A'), waveform)
 
-
-class ParameterValueIllegalExceptionTest(unittest.TestCase):
-
-    def test(self) -> None:
-        decl = ParameterDeclaration('foo', max=8)
-        exception = ParameterValueIllegalException(decl, 8.1)
-        self.assertEqual("The value 8.1 provided for parameter foo is illegal (min = -inf, max = 8)", str(exception))
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

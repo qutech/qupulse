@@ -1,13 +1,13 @@
 import unittest
 import os.path
 import json
+import abc
 from tempfile import TemporaryDirectory
 from typing import Optional, Dict, Any
 
-from qctoolkit.serialization import FilesystemBackend, Serializer, CachingBackend, Serializable
+from qctoolkit.serialization import FilesystemBackend, Serializer, CachingBackend, Serializable, ExtendedJSONEncoder
 from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
 from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
-from qctoolkit.pulses.parameters import ParameterDeclaration
 
 from tests.serialization_dummies import DummyStorageBackend
 
@@ -41,7 +41,6 @@ class NestedDummySerializable(Serializable):
 
 
 class SerializableTests(unittest.TestCase):
-
     def test_identifier(self) -> None:
         serializable = DummySerializable()
         self.assertEqual(None, serializable.identifier)
@@ -330,9 +329,9 @@ class SerializerTests(unittest.TestCase):
         table = TablePulseTemplate({'default': [('t', 0)]})
 
         foo_mappings = dict(hugo='ilse', albert='albert', voltage='voltage')
-        sequence = SequencePulseTemplate([(table_foo, foo_mappings, dict()),
-                                          (table, dict(t=0), dict())],
-                                         ['ilse', 'albert', 'voltage'],
+        sequence = SequencePulseTemplate((table_foo, foo_mappings, dict()),
+                                         (table, dict(t=0), dict()),
+                                         external_parameters=['ilse', 'albert', 'voltage'],
                                          identifier=None)
 
         storage = DummyStorageBackend()
@@ -348,6 +347,30 @@ class SerializerTests(unittest.TestCase):
 
         self.assertEqual(serialized_foo, storage.stored_items['foo'])
         self.assertEqual(serialized_sequence, storage.stored_items['main'])
+
+
+class TriviallyRepresentableEncoderTest(unittest.TestCase):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def test_encoding(self):
+        class A:
+            def __str__(self):
+                return 'aaa'
+        ExtendedJSONEncoder.str_constructable_types.add(A)
+
+        class B:
+            pass
+
+        encoder = ExtendedJSONEncoder()
+
+        a = A()
+        self.assertEqual(encoder.default(a), 'aaa')
+
+        with self.assertRaises(TypeError):
+            encoder.default(B())
+
+        self.assertEqual(encoder.default({'a', 1}), list({'a', 1}))
 
 
 if __name__ == "__main__":

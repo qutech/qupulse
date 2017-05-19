@@ -8,7 +8,7 @@ from qctoolkit.expressions import Expression
 from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
 from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate, SequenceWaveform
 from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingException, UnnecessaryMappingException, MissingParameterDeclarationException, MappingTemplate
-from qctoolkit.pulses.parameters import ParameterDeclaration, ParameterNotProvidedException, ConstantParameter
+from qctoolkit.pulses.parameters import ParameterNotProvidedException, ConstantParameter, ParameterConstraint
 
 from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyPulseTemplate,\
     DummyNoValueParameter, DummyWaveform
@@ -90,45 +90,31 @@ class SequencePulseTemplateTest(unittest.TestCase):
         self.parameters['pulse_length'] = ConstantParameter(100)
         self.parameters['voltage'] = ConstantParameter(10)
 
-        self.sequence = SequencePulseTemplate([MappingTemplate(self.square, self.mapping1, measurement_mapping=self.window_name_mapping)], self.outer_parameters)
-
-    def test_missing_mapping(self) -> None:
-        mapping = self.mapping1
-        mapping.pop('v')
-
-        subtemplates = [(self.square, mapping, {})]
-        with self.assertRaises(MissingMappingException):
-            SequencePulseTemplate(subtemplates, self.outer_parameters)
-
-    def test_unnecessary_mapping(self) -> None:
-        mapping = self.mapping1
-        mapping['unnecessary'] = 'voltage'
-
-        subtemplates = [(self.square, mapping, {})]
-        with self.assertRaises(UnnecessaryMappingException):
-            SequencePulseTemplate(subtemplates, self.outer_parameters)
+        self.sequence = SequencePulseTemplate(MappingTemplate(self.square,
+                                                              parameter_mapping=self.mapping1,
+                                                              measurement_mapping=self.window_name_mapping),
+                                              external_parameters=self.outer_parameters)
 
     def test_identifier(self) -> None:
         identifier = 'some name'
-        pulse = SequencePulseTemplate([DummyPulseTemplate()], {}, identifier=identifier)
+        pulse = SequencePulseTemplate(DummyPulseTemplate(), external_parameters=set(), identifier=identifier)
         self.assertEqual(identifier, pulse.identifier)
 
     def test_multiple_channels(self) -> None:
         dummy = DummyPulseTemplate(parameter_names={'hugo'}, defined_channels={'A', 'B'})
         subtemplates = [(dummy, {'hugo': 'foo'}, {}), (dummy, {'hugo': '3'}, {})]
-        sequence = SequencePulseTemplate(subtemplates, {'foo'})
+        sequence = SequencePulseTemplate(*subtemplates, external_parameters={'foo'})
         self.assertEqual({'A', 'B'}, sequence.defined_channels)
 
     def test_multiple_channels_mismatch(self) -> None:
         with self.assertRaises(ValueError):
-            SequencePulseTemplate(
-                [DummyPulseTemplate(defined_channels={'A'}), DummyPulseTemplate(defined_channels={'B'})]
-                , set())
+            SequencePulseTemplate(DummyPulseTemplate(defined_channels={'A'}),
+                                  DummyPulseTemplate(defined_channels={'B'}))
 
         with self.assertRaises(ValueError):
             SequencePulseTemplate(
-                [DummyPulseTemplate(defined_channels={'A'}), DummyPulseTemplate(defined_channels={'A', 'B'})]
-                , set())
+                DummyPulseTemplate(defined_channels={'A'}), DummyPulseTemplate(defined_channels={'A', 'B'})
+                , external_parameters=set())
 
 
 class SequencePulseTemplateSerializationTests(unittest.TestCase):
@@ -149,12 +135,12 @@ class SequencePulseTemplateSerializationTests(unittest.TestCase):
         dummy1 = DummyPulseTemplate()
         dummy2 = DummyPulseTemplate()
 
-        sequence = SequencePulseTemplate([dummy1, dummy2], [])
+        sequence = SequencePulseTemplate(dummy1, dummy2, parameter_constraints=['a<b'])
         serializer = DummySerializer(serialize_callback=lambda x: str(x))
 
         expected_data = dict(
-            type=serializer.get_type_identifier(sequence),
-            subtemplates = [str(dummy1), str(dummy2)]
+            subtemplates=[str(dummy1), str(dummy2)],
+            parameter_constraints=[ParameterConstraint('a<b')]
         )
         data = sequence.get_serialization_data(serializer)
         self.assertEqual(expected_data, data)
@@ -166,12 +152,14 @@ class SequencePulseTemplateSerializationTests(unittest.TestCase):
         serializer = DummySerializer(serialize_callback=lambda x: str(id(x)))
 
         data = dict(
-            subtemplates = [serializer.dictify(dummy1), serializer.dictify(dummy2)],
-            identifier='foo'
+            subtemplates=[serializer.dictify(dummy1), serializer.dictify(dummy2)],
+            identifier='foo',
+            parameter_constraints=['a<b']
         )
 
-        template = SequencePulseTemplate.deserialize(serializer,**data)
+        template = SequencePulseTemplate.deserialize(serializer, **data)
         self.assertEqual(template.subtemplates, [dummy1, dummy2])
+        self.assertEqual(template.parameter_constraints, [ParameterConstraint('a<b')])
 
 
 class SequencePulseTemplateSequencingTests(SequencePulseTemplateTest):
@@ -182,13 +170,13 @@ class SequencePulseTemplateSequencingTests(SequencePulseTemplateTest):
 
         sequencer = DummySequencer()
         block = DummyInstructionBlock()
-        seq = SequencePulseTemplate([(sub1, {}, {}), (sub2, {'foo': 'foo'}, {})], {'foo'})
+        seq = SequencePulseTemplate(sub1, (sub2, {'foo': 'foo'}), external_parameters={'foo'})
         seq.build_sequence(sequencer, parameters, {}, {}, {}, block)
         self.assertEqual(2, len(sequencer.sequencing_stacks[block]))
 
         sequencer = DummySequencer()
         block = DummyInstructionBlock()
-        seq = SequencePulseTemplate([(sub2, {'foo': 'foo'}, {}), (sub1, {}, {})], {'foo'})
+        seq = SequencePulseTemplate((sub2, {'foo': 'foo'}), sub1, external_parameters={'foo'})
         seq.build_sequence(sequencer, parameters, {}, {}, {}, block)
         self.assertEqual(2, len(sequencer.sequencing_stacks[block]))
 
@@ -198,16 +186,16 @@ class SequencePulseTemplateSequencingTests(SequencePulseTemplateTest):
         sub2 = (DummyPulseTemplate(requires_stop=True, parameter_names={'foo'}), {'foo': 'foo'}, {})
         parameters = {'foo': DummyNoValueParameter()}
 
-        seq = SequencePulseTemplate([sub1], {})
+        seq = SequencePulseTemplate(sub1)
         self.assertFalse(seq.requires_stop(parameters, {}))
 
-        seq = SequencePulseTemplate([sub2], {'foo'})
+        seq = SequencePulseTemplate(sub2, external_parameters={'foo'})
         self.assertFalse(seq.requires_stop(parameters, {}))
 
-        seq = SequencePulseTemplate([sub1, sub2], {'foo'})
+        seq = SequencePulseTemplate(sub1, sub2, external_parameters={'foo'})
         self.assertFalse(seq.requires_stop(parameters, {}))
 
-        seq = SequencePulseTemplate([sub2, sub1], {'foo'})
+        seq = SequencePulseTemplate(sub2, sub1, external_parameters={'foo'})
         self.assertFalse(seq.requires_stop(parameters, {}))
 
     def test_missing_parameter_declaration_exception(self):
@@ -216,7 +204,7 @@ class SequencePulseTemplateSequencingTests(SequencePulseTemplateTest):
 
         subtemplates = [(self.square, mapping,{})]
         with self.assertRaises(MissingParameterDeclarationException):
-            SequencePulseTemplate(subtemplates, self.outer_parameters)
+            SequencePulseTemplate(*subtemplates, external_parameters=self.outer_parameters)
 
     def test_crash(self) -> None:
         table = TablePulseTemplate({'default': [('ta', 'va', 'hold'),
@@ -238,7 +226,8 @@ class SequencePulseTemplateSequencingTests(SequencePulseTemplateTest):
             'vb': 'va + vb',
             'tend': '2 * tend'
         }
-        sequence = SequencePulseTemplate([(table, first_mapping, {}), (table, second_mapping, {})], external_parameters)
+        sequence = SequencePulseTemplate((table, first_mapping, {}), (table, second_mapping, {}),
+                                         external_parameters=external_parameters)
 
         parameters = {
             'ta': ConstantParameter(2),
@@ -252,7 +241,12 @@ class SequencePulseTemplateSequencingTests(SequencePulseTemplateTest):
         sequencer = DummySequencer()
         block = DummyInstructionBlock()
         self.assertFalse(sequence.requires_stop(parameters, {}))
-        sequence.build_sequence(sequencer, parameters, {}, {}, {'default', 'default'}, block)
+        sequence.build_sequence(sequencer,
+                                parameters=parameters,
+                                conditions={},
+                                measurement_mapping={},
+                                channel_mapping={'default': 'default'},
+                                instruction_block=block)
         from qctoolkit.pulses.sequencing import Sequencer
         s = Sequencer()
         s.push(sequence, parameters, channel_mapping={'default': 'EXAMPLE_A'})
@@ -264,25 +258,22 @@ class SequencePulseTemplateSequencingTests(SequencePulseTemplateTest):
 
         subtemplates = [(self.square, mapping)]
         with self.assertRaises(MissingParameterDeclarationException):
-            SequencePulseTemplate(subtemplates, self.outer_parameters)
+            SequencePulseTemplate(*subtemplates, external_parameters=self.outer_parameters)
 
 
 class SequencePulseTemplateTestProperties(SequencePulseTemplateTest):
     def test_is_interruptable(self):
 
         self.assertTrue(
-            SequencePulseTemplate([DummyPulseTemplate(is_interruptable=True),
-                                   DummyPulseTemplate(is_interruptable=True)], []).is_interruptable)
+            SequencePulseTemplate(DummyPulseTemplate(is_interruptable=True),
+                                  DummyPulseTemplate(is_interruptable=True)).is_interruptable)
         self.assertTrue(
-            SequencePulseTemplate([DummyPulseTemplate(is_interruptable=True),
-                                   DummyPulseTemplate(is_interruptable=False)], []).is_interruptable)
+            SequencePulseTemplate(DummyPulseTemplate(is_interruptable=True),
+                                  DummyPulseTemplate(is_interruptable=False)).is_interruptable)
         self.assertFalse(
-            SequencePulseTemplate([DummyPulseTemplate(is_interruptable=False),
-                                   DummyPulseTemplate(is_interruptable=False)], []).is_interruptable)
-        
-    def test_parameter_declarations(self):
-        decl = self.sequence.parameter_declarations
-        self.assertEqual(decl, set([ParameterDeclaration(i) for i in self.outer_parameters]))
+            SequencePulseTemplate(DummyPulseTemplate(is_interruptable=False),
+                                  DummyPulseTemplate(is_interruptable=False)).is_interruptable)
+
 
 
 class PulseTemplateConcatenationTest(unittest.TestCase):
@@ -322,8 +313,8 @@ class PulseTemplateConcatenationTest(unittest.TestCase):
         c = DummyPulseTemplate(parameter_names={'snu'}, defined_channels={'A'})
         d = DummyPulseTemplate(parameter_names={'snu'}, defined_channels={'A'})
 
-        seq1 = SequencePulseTemplate([a, b], ['foo', 'bar'])
-        seq2 = SequencePulseTemplate([c, d], ['snu'])
+        seq1 = SequencePulseTemplate(a, b, external_parameters=['foo', 'bar'])
+        seq2 = SequencePulseTemplate(c, d, external_parameters=['snu'])
 
         seq = seq1 @ c
         self.assertTrue(len(seq.subtemplates) == 3)

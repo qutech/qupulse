@@ -9,10 +9,11 @@ from qctoolkit import MeasurementWindow, ChannelID
 from qctoolkit.serialization import Serializer
 from qctoolkit.pulses.instructions import Waveform, Instruction, CJMPInstruction, GOTOInstruction, REPJInstruction
 from qctoolkit.pulses.sequencing import Sequencer, InstructionBlock, SequencingElement
-from qctoolkit.pulses.parameters import Parameter, ParameterDeclaration
+from qctoolkit.pulses.parameters import Parameter
 from qctoolkit.pulses.pulse_template import AtomicPulseTemplate
 from qctoolkit.pulses.interpolation import InterpolationStrategy
 from qctoolkit.pulses.conditions import Condition
+from qctoolkit.expressions import Expression
 
 class DummyParameter(Parameter):
 
@@ -279,10 +280,11 @@ class DummyPulseTemplate(AtomicPulseTemplate):
                  is_interruptable: bool=False,
                  parameter_names: Set[str]={},
                  defined_channels: Set[ChannelID]={'default'},
-                 duration: float=0,
+                 duration: Any=0,
                  waveform: Waveform=None,
-                 measurement_names: Set[str] = set()) -> None:
-        super().__init__()
+                 measurement_names: Set[str] = set(),
+                 identifier=None) -> None:
+        super().__init__(identifier=identifier)
         self.requires_stop_ = requires_stop
         self.requires_stop_arguments = []
 
@@ -290,18 +292,18 @@ class DummyPulseTemplate(AtomicPulseTemplate):
         self.parameter_names_ = parameter_names
         self.build_sequence_arguments = []
         self.defined_channels_ = defined_channels
-        self.duration = duration
+        self._duration = Expression(duration)
         self.waveform = waveform
         self.build_waveform_calls = []
         self.measurement_names_ = measurement_names
 
     @property
-    def parameter_names(self) -> Set[str]:
-        return set(self.parameter_names_)
+    def duration(self):
+        return self._duration
 
     @property
-    def parameter_declarations(self) -> Set[str]:
-        return {ParameterDeclaration(name) for name in self.parameter_names}
+    def parameter_names(self) -> Set[str]:
+        return set(self.parameter_names_)
 
     def get_measurement_windows(self, parameters: Dict[str, Parameter] = None) -> List[MeasurementWindow]:
         """Return all measurement windows defined in this PulseTemplate."""
