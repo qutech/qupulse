@@ -8,13 +8,14 @@ import itertools
 from qctoolkit.serialization import Serializer
 
 from qctoolkit import MeasurementWindow, ChannelID
-from qctoolkit.pulses.pulse_template import PulseTemplate, PossiblyAtomicPulseTemplate
-from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter
+from qctoolkit.pulses.pulse_template import PulseTemplate
+from qctoolkit.pulses.parameters import Parameter, ParameterConstrainer
 from qctoolkit.pulses.sequencing import InstructionBlock, Sequencer
 from qctoolkit.pulses.conditions import Condition
 from qctoolkit.pulses.pulse_template_parameter_mapping import \
-    MissingMappingException, MappingTemplate, MissingParameterDeclarationException
+    MissingMappingException, MappingTemplate, MissingParameterDeclarationException, MappingTuple
 from qctoolkit.pulses.instructions import Waveform
+from qctoolkit.expressions import Expression
 
 __all__ = ["SequencePulseTemplate"]
 
@@ -90,7 +91,7 @@ class SequenceWaveform(Waveform):
             for sub_waveform in self.__sequenced_waveforms if sub_waveform.defined_channels & channels)
 
 
-class SequencePulseTemplate(PossiblyAtomicPulseTemplate):
+class SequencePulseTemplate(PulseTemplate, ParameterConstrainer):
     """A sequence of different PulseTemplates.
     
     SequencePulseTemplate allows to group several
@@ -103,13 +104,11 @@ class SequencePulseTemplate(PossiblyAtomicPulseTemplate):
     renaming and mathematical transformation of parameters.
     """
 
-    # a subtemplate consists of a pulse template and mapping functions for its "internal" parameters
-    SimpleSubTemplate = Tuple[PulseTemplate, Dict[str, str]]  # pylint: disable=invalid-name
-
     def __init__(self,
-                 subtemplates: Iterable[Union[SimpleSubTemplate, MappingTemplate]],
-                 external_parameters: Union[Iterable[str], Set[str]],  # pylint: disable=invalid-sequence-index
-                 identifier: Optional[str]=None) -> None:
+                 *subtemplates: Union[PulseTemplate, MappingTuple],
+                 external_parameters: Optional[Union[Iterable[str], Set[str]]]=None,
+                 identifier: Optional[str]=None,
+                 parameter_constraints: Optional[List[Union[str, Expression]]]=None) -> None:
         """Create a new SequencePulseTemplate instance.
 
         Requires a (correctly ordered) list of subtemplates in the form
@@ -136,35 +135,38 @@ class SequencePulseTemplate(PossiblyAtomicPulseTemplate):
             MissingParameterDeclarationException, if a parameter mapping requires a parameter
                 that was not declared in the external parameters of this SequencePulseTemplate.
         """
-        super().__init__(identifier)
+        PulseTemplate.__init__(self, identifier=identifier)
+        ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 
-        self.__subtemplates = [st if not isinstance(st, tuple) else MappingTemplate(*st) for st in subtemplates]
-        external_parameters = external_parameters if isinstance(external_parameters,set) else set(external_parameters)
+        self.__subtemplates = [MappingTemplate.from_tuple(st) if isinstance(st, tuple) else st
+                               for st in subtemplates]
 
-        # check that all subtempaltes live on the same channels
+
+        # check that all subtemplates live on the same channels
         defined_channels = self.__subtemplates[0].defined_channels
         for subtemplate in self.__subtemplates[1:]:
             if subtemplate.defined_channels != defined_channels:
                 raise ValueError('The subtemplates are defined for different channels')
 
-        remaining = external_parameters.copy()
-        for subtemplate in self.__subtemplates:
-            missing = subtemplate.parameter_names - external_parameters
-            if missing:
-                raise MissingParameterDeclarationException(subtemplate.template,missing.pop())
-            remaining = remaining - subtemplate.parameter_names
-        if remaining:
-            MissingMappingException(subtemplate.template,remaining.pop())
+        if external_parameters:
+            external_parameters = set(external_parameters)
+            remaining = external_parameters.copy()
+            for subtemplate in self.__subtemplates:
+                missing = subtemplate.parameter_names - external_parameters
+                if missing:
+                    raise MissingParameterDeclarationException(subtemplate, missing.pop())
+                remaining -= subtemplate.parameter_names
+            if not external_parameters >= self.constrained_parameters:
+                raise MissingParameterDeclarationException(self,
+                                                           (self.constrained_parameters-external_parameters).pop())
+            remaining -= self.constrained_parameters
+            if remaining:
+                MissingMappingException(self, remaining.pop())
         self.__atomicity = False
 
     @property
     def parameter_names(self) -> Set[str]:
         return set.union(*(st.parameter_names for st in self.__subtemplates))
-
-    @property
-    def parameter_declarations(self) -> Set[ParameterDeclaration]:
-        # TODO: min, max, default values not mapped (required?)
-        return {ParameterDeclaration(name) for name in self.parameter_names}
 
     @property
     def subtemplates(self) -> List[MappingTemplate]:
@@ -175,24 +177,16 @@ class SequencePulseTemplate(PossiblyAtomicPulseTemplate):
         return any(st.is_interruptable for st in self.subtemplates)
 
     @property
+    def duration(self) -> Expression:
+        return Expression(sum(sub.duration.sympified_expression for sub in self.__subtemplates))
+
+    @property
     def defined_channels(self) -> Set[ChannelID]:
         return self.__subtemplates[0].defined_channels if self.__subtemplates else set()
 
     @property
     def measurement_names(self) -> Set[str]:
         return set.union(*(st.measurement_names for st in self.subtemplates))
-
-    @property
-    def atomicity(self) -> bool:
-        if any(subtemplate.atomicity is False for subtemplate in self.__subtemplates):
-            self.__atomicity = False
-        return self.__atomicity
-
-    @atomicity.setter
-    def atomicity(self, val: bool) -> None:
-        if val and any(subtemplate.atomicity is False for subtemplate in self.__subtemplates):
-            raise ValueError('Cannot make atomic as not all sub templates are atomic')
-        self.__atomicity = val
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],
@@ -211,30 +205,23 @@ class SequencePulseTemplate(PossiblyAtomicPulseTemplate):
                        measurement_mapping: Dict[str, str],
                        channel_mapping: Dict['ChannelID', 'ChannelID'],
                        instruction_block: InstructionBlock) -> None:
-        # todo: currently ignores is_interruptable
-        if self.atomicity:
-            self.atomic_build_sequence(parameters=parameters,
-                                       measurement_mapping=measurement_mapping,
-                                       channel_mapping=channel_mapping,
-                                       instruction_block=instruction_block)
-        else:
             for subtemplate in reversed(self.subtemplates):
                 sequencer.push(subtemplate, parameters, conditions, measurement_mapping, channel_mapping,
                                instruction_block)
 
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
-        data = dict()
-
-        data['subtemplates'] = [serializer.dictify(subtemplate) for subtemplate in self.subtemplates]
-        data['type'] = serializer.get_type_identifier(self)
+        data = dict(subtemplates=[serializer.dictify(subtemplate) for subtemplate in self.subtemplates],
+                    parameter_constraints=self.parameter_constraints)
 
         return data
 
     @staticmethod
     def deserialize(serializer: Serializer,
                     subtemplates: Iterable[Dict[str, Any]],
+                    parameter_constraints: List[str],
                     identifier: Optional[str]=None) -> 'SequencePulseTemplate':
         subtemplates = [serializer.deserialize(st) for st in subtemplates]
-        external_parameters = set.union( *(st.parameter_names for st in subtemplates) )
-        seq_template = SequencePulseTemplate(subtemplates, external_parameters, identifier=identifier)
+        seq_template = SequencePulseTemplate(*subtemplates,
+                                             parameter_constraints=parameter_constraints,
+                                             identifier=identifier)
         return seq_template

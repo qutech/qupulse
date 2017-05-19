@@ -10,17 +10,17 @@ Classes:
 """
 
 from abc import ABCMeta, abstractmethod, abstractproperty
-from typing import Optional, Union, Dict, Any, Iterable, Set
+from typing import Optional, Union, Dict, Any, Iterable, Set, List
 from numbers import Real
 
 import sympy
 
-from qctoolkit.serialization import Serializable, Serializer
+from qctoolkit.serialization import Serializable, Serializer, ExtendedJSONEncoder
 from qctoolkit.expressions import Expression
 from qctoolkit.comparable import Comparable
 
-__all__ = ["make_parameter", "ParameterDict", "Parameter", "ParameterDeclaration", "ConstantParameter",
-           "ParameterNotProvidedException", "ParameterValueIllegalException"]
+__all__ = ["make_parameter", "ParameterDict", "Parameter", "ConstantParameter",
+           "ParameterNotProvidedException", "ParameterConstraintViolation"]
 
 
 def make_parameter(value):
@@ -176,357 +176,77 @@ class MappedParameter(Parameter):
         return MappedParameter(serializer.deserialize(expression))
 
 
-class ParameterConstraint(Comparable, Serializable):
-    def __init__(self, relation: str):
-        if '==' in relation:
+class ParameterConstraint(Comparable):
+    def __init__(self, relation: Union[str, sympy.Expr]):
+        super().__init__()
+        if isinstance(relation, str) and '==' in relation:
             # The '==' operator is interpreted by sympy as exactly, however we need a symbolical evaluation
-            self._relation = sympy.Eq(*sympy.sympify(relation.split('==')))
+            self._expression = sympy.Eq(*sympy.sympify(relation.split('==')))
         else:
-            self._relation = sympy.sympify(relation)
-        if not isinstance(self._relation, (sympy.Rel, sympy.boolalg.BooleanAtom)):
-            raise ValueError('Constraint is no relation')
+            self._expression = sympy.sympify(relation)
+        if not isinstance(self._expression, sympy.boolalg.Boolean):
+            raise ValueError('Constraint is not boolean')
 
     @property
     def affected_parameters(self) -> Set[str]:
-        return set(str(v) for v in self._relation.free_symbols)
+        return set(str(v) for v in self._expression.free_symbols)
 
     def is_fulfilled(self, parameter: Dict[str, Any]) -> bool:
-        return bool(self._relation.subs(parameter))
+        if not self.affected_parameters <= set(parameter.keys()):
+            raise ParameterNotProvidedException((self.affected_parameters-set(parameter.keys())).pop())
+        return bool(self._expression.subs(parameter))
+
+    @property
+    def sympified_expression(self) -> sympy.Expr:
+        return self._expression
 
     @property
     def compare_key(self) -> sympy.Expr:
-        return self._relation
+        return self._expression
 
     def __str__(self) -> str:
-        if isinstance(self._relation, sympy.Eq):
-            return '{}=={}'.format(self._relation.lhs, self._relation.rhs)
+        if isinstance(self._expression, sympy.Eq):
+            return '{}=={}'.format(self._expression.lhs, self._expression.rhs)
         else:
-            return str(self._relation)
+            return str(self._expression)
+ExtendedJSONEncoder.str_constructable_types.add(ParameterConstraint)
 
-    def get_serialization_data(self, serializer: 'Serializer') -> Dict[str, str]:
-        return dict(relation=str(self))
 
-    @staticmethod
-    def deserialize(serializer: 'Serializer', relation: str) -> 'ParameterConstraint':
-        return ParameterConstraint(relation)
+class ParameterConstrainer:
+    def __init__(self, *,
+                 parameter_constraints: Optional[Iterable[Union[str, ParameterConstraint]]]) -> None:
+        if parameter_constraints is None:
+            self._parameter_constraints = []
+        else:
+            self._parameter_constraints = [constraint if isinstance(constraint, ParameterConstraint)
+                                           else ParameterConstraint(constraint)
+                                           for constraint in parameter_constraints]
+
+    @property
+    def parameter_constraints(self) -> List[ParameterConstraint]:
+        return self._parameter_constraints
+
+    def validate_parameter_constraints(self, parameters: [str, Union[Parameter, Real]]) -> None:
+        for constraint in self._parameter_constraints:
+            constraint_parameters = {k: v.get_value() if isinstance(v, Parameter) else v for k, v in parameters.items()}
+            if not constraint.is_fulfilled(constraint_parameters):
+                raise ParameterConstraintViolation(constraint, constraint_parameters)
+
+    @property
+    def constrained_parameters(self) -> Set[str]:
+        if self._parameter_constraints:
+            return set.union(*(c.affected_parameters for c in self._parameter_constraints))
+        else:
+            return set()
 
 
 class ParameterConstraintViolation(Exception):
-    def __init__(self, constraint: ParameterConstraint, context: str):
-        super().__init__("The constraint '{}' is not fulfilled. ".format(constraint) + context)
+    def __init__(self, constraint: ParameterConstraint, parameters: Dict[str, Real]):
+        super().__init__("The constraint '{}' is not fulfilled.\nParameters: {}".format(constraint, parameters))
+        self.constraint = constraint
+        self.parameters = parameters
 
 
-class ParameterDeclaration(Serializable, Comparable):
-    """A declaration of a parameter required by a pulse template.
-    
-    PulseTemplates may declare parameters to allow for variations of values in an otherwise
-    static pulse structure. ParameterDeclaration represents a declaration of such a parameter
-    and allows for the definition of boundaries and a default value for a parameter. Boundaries
-    may be either defined as constant value or as references to another ParameterDeclaration object.
-    """
-    
-    BoundaryValue = Union[float, 'ParameterDeclaration']
-    
-    def __init__(self, name: str,
-                 min: BoundaryValue=float('-inf'),
-                 max: BoundaryValue=float('+inf'),
-                 default: Optional[float]=None) -> None:
-        """Creates a ParameterDeclaration object.
-        
-        Args:
-            name (str): A name for the declared parameter. The name must me a valid variable name.
-            min (float or ParameterDeclaration): An optional real number or
-                ParameterDeclaration object specifying the minimum value allowed. (default: -inf)
-            max (float or ParameterDeclaration): An optional real number or
-                ParameterDeclaration object specifying the maximum value allowed. (default: +inf)
-            default (float): An optional real number specifying a default value for the declared
-                pulse template parameter.
-        """
-        super().__init__(None)
-        if not name.isidentifier():
-            raise InvalidParameterNameException(name)
-
-        self.__name = name
-        self.__min_value = float('-inf')
-        self.__max_value = float('+inf')
-        self.__default_value = default # type: Optional[float]
-        self.min_value = min # type: BoundaryValue
-        self.max_value = max # type: BoundaryValue
-            
-        self.__assert_values_valid()
-
-    def __assert_values_valid(self) -> None:
-        # ensures that min <= default <= max or raises a ValueError
-        if self.absolute_min_value > self.absolute_max_value:
-            raise ValueError("Max value ({0}) is less than min value ({1}).".format(
-                    self.max_value, self.min_value
-                )
-            )
-        
-        if isinstance(self.min_value, ParameterDeclaration):
-            if self.min_value.absolute_max_value > self.absolute_max_value:
-                raise ValueError("Max value ({0}) is less than min value ({1}).".format(
-                        self.max_value, self.min_value
-                    )
-                )
-            
-        if isinstance(self.max_value, ParameterDeclaration):
-            if self.max_value.absolute_min_value < self.absolute_min_value:
-                raise ValueError("Max value ({0}) is less than min value ({1}).".format(
-                        self.max_value, self.min_value
-                    )
-                )
-            
-        if self.default_value is not None and self.absolute_min_value > self.default_value:
-            raise ValueError("Default value ({0}) is less than min value ({1}).".format(
-                    self.default_value, self.min_value
-                )
-            )
-        
-        if self.default_value is not None and self.absolute_max_value < self.default_value:
-            raise ValueError("Default value ({0}) is greater than max value ({1}).".format(
-                    self.__default_value, self.__max_value
-                )
-            )
-        
-    @property
-    def name(self) -> str:
-        """The name of the declared parameter."""
-        return self.__name
-        
-    @property
-    def min_value(self) -> BoundaryValue:
-        """This ParameterDeclaration's minimum value or reference."""
-        return self.__min_value
-    
-    @min_value.setter
-    def min_value(self, value: BoundaryValue) -> None:
-        """Set this ParameterDeclaration's minimum value or reference."""
-        old_value = self.__min_value
-        self.__min_value = value
-        try:
-            if (isinstance(value, ParameterDeclaration) and
-                    (isinstance(value.max_value, ParameterDeclaration) or
-                     value.absolute_max_value == float('+inf'))):
-                value.__internal_set_max_value(self)
-            self.__assert_values_valid()
-        except:
-            self.__min_value = old_value
-            raise
-        
-    def __internal_set_min_value(self, value: BoundaryValue) -> None:
-        old_value = self.__min_value
-        self.__min_value = value
-        try:
-            self.__assert_values_valid()
-        except:
-            self.__min_value = old_value
-            raise
-    
-    @property
-    def max_value(self) ->  BoundaryValue:
-        """This ParameterDeclaration's maximum value or reference."""
-        return self.__max_value
-    
-    @max_value.setter
-    def max_value(self, value: BoundaryValue) -> None:
-        """Set this ParameterDeclaration's maximum value or reference."""
-        old_value = self.__max_value
-        self.__max_value = value
-        try:
-            if (isinstance(value, ParameterDeclaration) and
-                    (isinstance(value.min_value, ParameterDeclaration) or
-                     value.absolute_min_value == float('-inf'))):
-                value.__internal_set_min_value(self)
-            self.__assert_values_valid()
-        except:
-            self.__max_value = old_value
-            raise
-        
-    def __internal_set_max_value(self, value: BoundaryValue) -> None:
-        old_value = self.__max_value
-        self.__max_value = value
-        try:
-            self.__assert_values_valid()
-        except:
-            self.__max_value = old_value
-            raise
-        
-    @property
-    def default_value(self) -> Optional[float]:
-        """This ParameterDeclaration's default value."""
-        return self.__default_value
-    
-    @property
-    def absolute_min_value(self) -> float:
-        """Return this ParameterDeclaration's minimum value.
-        
-        If the minimum value of this ParameterDeclaration instance is a reference to another
-        instance, references are resolved until a concrete value or None is obtained.
-        """ 
-        if isinstance(self.min_value, ParameterDeclaration):
-            return self.min_value.absolute_min_value
-        else:
-            return self.min_value
-
-    @property
-    def absolute_max_value(self) -> float:
-        """Return this ParameterDeclaration's maximum value.
-        
-        If the maximum value of this ParameterDeclaration instance is a reference to another
-        instance, references are resolved until a concrete value or None is obtained.
-        """
-        if isinstance(self.max_value, ParameterDeclaration):
-            return self.max_value.absolute_max_value
-        else:
-            return self.max_value
-
-    def is_parameter_valid(self, p: Parameter) -> bool:
-        """Check whether a given parameter satisfies this ParameterDeclaration statically.
-        
-        A parameter is valid if all of the following statements hold:
-        - If the declaration specifies a minimum value, the parameter's value must be greater or
-            equal
-        - If the declaration specifies a maximum value, the parameter's value must be less or equal
-
-        Checks only against the static boundaries. For example, if the min value for this
-        ParameterDeclaration would be another ParameterDeclaration named 'foo' with a min value of
-        3.5, this method only checks whether the given parameter value is greater than or equal to
-        3.5. However, the implicit meaning of the reference minimum declaration is, that the value
-        provided for this ParameterDeclaration must indeed by greater than or equal than the value
-        provided for the referenced minimum declaration.
-
-        Args:
-            p (Parameter): The Parameter object checked for validity.
-        Returns:
-            True, if p is a valid parameter for this ParameterDeclaration.
-        See also:
-            check_parameter_set_valid()
-        """
-        parameter_value = float(p)
-        is_valid = True
-        is_valid &= self.absolute_min_value <= parameter_value
-        is_valid &= self.absolute_max_value >= parameter_value
-        return is_valid
-    
-    def get_value(self, parameters: Dict[str, Parameter]) -> float:
-        """Retrieve the value of the parameter corresponding to this ParameterDeclaration object
-        from a set of parameter assignments.
-
-        Args:
-            parameters (Dict(str -> Parameter)): A mapping of parameter names to Parameter objects.
-        Returns:
-            The value of the parameter corresponding to this ParameterDeclaration as a float.
-        Raises:
-            ParameterNotProvidedException if no parameter is assigned to the name of this
-                ParameterDeclaration or any other ParameterDeclaration required to evaluate the
-                boundary conditions of this ParameterDeclaration.
-            ParameterValueIllegalException if a parameter exists but its value exceeds the bounds
-                specified by the corresponding ParameterDeclaration.
-        """
-        value = self.__get_value_internal(parameters)
-        if not self.check_parameter_set_valid(parameters):
-            raise ParameterValueIllegalException(self, value)
-        return value
-
-    def check_parameter_set_valid(self, parameters: Dict[str, Parameter]) -> bool:
-        """Check whether an entire set of parameters is consistent with this ParameterDeclaration.
-
-        Recursively evaluates referenced min and max ParameterDeclarations (if existent) and checks
-        whether the values provided for these compare correctly, i.e., does not only perform static
-        boundary checks.
-
-        Args:
-            parameters (Dict(str -> Parameter)): A mapping of parameter names to Parameter objects.
-        Returns:
-            True, if the values provided for the parameters satisfy all boundary checks for this
-                ParameterDeclaration.
-        Raises:
-            ParameterNotProvidedException if no parameter is assigned to the name of this
-                ParameterDeclaration or any other ParameterDeclaration required to evaluate the
-                boundary conditions of this ParameterDeclaration.
-            ParameterValueIllegalException if a parameter exists but its value exceeds the bounds
-                specified by the corresponding ParameterDeclaration.
-        """
-        parameter_value = self.__get_value_internal(parameters)
-
-        # get actual instantiated values for boundaries.
-        min_value = self.min_value
-        if isinstance(min_value, ParameterDeclaration):
-            min_value = min_value.__get_value_internal(parameters)
-
-        max_value = self.max_value
-        if isinstance(max_value, ParameterDeclaration):
-            max_value = max_value.__get_value_internal(parameters)
-
-        return min_value <= parameter_value and max_value >= parameter_value
-
-    def __get_value_internal(self, parameters: Dict[str, Parameter]) -> float:
-        try:
-            return float(parameters[self.name]) # float() wraps get_value for Parameters and works
-                                                # for normal floats also
-        except KeyError:
-            if self.default_value is not None:
-                return self.default_value
-            else:
-                raise ParameterNotProvidedException(self.name)
-
-    def __str__(self) -> str:
-        min_value_str = self.absolute_min_value
-        if isinstance(self.min_value, ParameterDeclaration):
-            min_value_str = "Parameter '{0}' (min {1})".format(self.min_value.name, min_value_str)
-        max_value_str = self.absolute_max_value
-        if isinstance(self.max_value, ParameterDeclaration):
-            max_value_str = "Parameter '{0}' (max {1})".format(self.max_value.name, max_value_str)
-        return "{4} '{0}', range ({1}, {2}), default {3}".format(
-            self.name, min_value_str, max_value_str, self.default_value, type(self)
-        )
-
-    def __repr__(self) -> str:
-        return "<"+self.__str__()+">"
-
-    @property
-    def compare_key(self) -> Any:
-        min_value = self.min_value
-        if isinstance(min_value, ParameterDeclaration):
-            min_value = min_value.name
-        max_value = self.max_value
-        if isinstance(max_value, ParameterDeclaration):
-            max_value = max_value.name
-        return (self.name, min_value, max_value, self.default_value)
-
-    def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
-        data = dict()
-
-        min_value = self.min_value
-        if isinstance(min_value, ParameterDeclaration):
-            min_value = min_value.name
-
-        max_value = self.max_value
-        if isinstance(max_value, ParameterDeclaration):
-            max_value = max_value.name
-
-        data['name'] = self.name
-        data['min_value'] = min_value
-        data['max_value'] = max_value
-        data['default_value'] = self.default_value
-        data['type'] = serializer.get_type_identifier(self)
-
-        return data
-
-    @staticmethod
-    def deserialize(serializer: Serializer,
-                    name: str,
-                    min_value: Union[str, float],
-                    max_value: Union[str, float],
-                    default_value: float) -> 'ParameterDeclaration':
-        if isinstance(min_value, str):
-            min_value = float("-inf")
-        if isinstance(max_value, str):
-            max_value = float("+inf")
-        return ParameterDeclaration(name, min=min_value, max=max_value, default=default_value)
-
-        
 class ParameterNotProvidedException(Exception):
     """Indicates that a required parameter value was not provided."""
     
@@ -537,21 +257,6 @@ class ParameterNotProvidedException(Exception):
     def __str__(self) -> str:
         return "No value was provided for parameter '{0}' " \
                "and no default value was specified.".format(self.parameter_name)
-
-
-class ParameterValueIllegalException(Exception):
-    """Indicates that the value provided for a parameter is illegal, i.e., is outside the
-    parameter's bounds or of wrong type."""
-
-    def __init__(self, parameter_declaration: ParameterDeclaration, parameter_value: float) -> None:
-        super().__init__()
-        self.parameter_value = parameter_value
-        self.parameter_declaration = parameter_declaration
-
-    def __str__(self) -> str:
-        return "The value {0} provided for parameter {1} is illegal (min = {2}, max = {3})".format(
-            self.parameter_value, self.parameter_declaration.name,
-            self.parameter_declaration.min_value, self.parameter_declaration.max_value)
 
 
 class InvalidParameterNameException(Exception):

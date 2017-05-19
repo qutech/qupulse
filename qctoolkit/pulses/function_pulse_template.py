@@ -9,7 +9,6 @@ Classes:
 
 from typing import Any, Dict, List, Set, Optional, Union
 import numbers
-import itertools
 
 import numpy as np
 
@@ -17,16 +16,16 @@ from qctoolkit.expressions import Expression
 from qctoolkit.serialization import Serializer
 
 from qctoolkit import MeasurementWindow, ChannelID
-from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter
+from qctoolkit.pulses.parameters import Parameter, ParameterConstrainer
 from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration
 from qctoolkit.pulses.instructions import Waveform
-from qctoolkit.pulses.pulse_template_parameter_mapping import ParameterNotProvidedException
+from qctoolkit.pulses.measurement import MeasurementDefiner
 
 
 __all__ = ["FunctionPulseTemplate", "FunctionWaveform"]
 
 
-class FunctionPulseTemplate(AtomicPulseTemplate):
+class FunctionPulseTemplate(AtomicPulseTemplate, MeasurementDefiner, ParameterConstrainer):
     """Defines a pulse via a time-domain expression.
 
     FunctionPulseTemplate stores the expression and its external parameters. The user must provide
@@ -41,9 +40,11 @@ class FunctionPulseTemplate(AtomicPulseTemplate):
     def __init__(self,
                  expression: Union[str, Expression],
                  duration_expression: Union[str, Expression],
+                 channel: ChannelID = 'default',
+                 identifier: Optional[str] = None,
+                 *,
                  measurements: Optional[List[MeasurementDeclaration]]=None,
-                 identifier: str=None,
-                 channel: 'ChannelID' = 'default') -> None:
+                 parameter_constraints: Optional[List[Union[str, 'ParameterConstraint']]]=None) -> None:
         """Create a new FunctionPulseTemplate instance.
 
         Args:
@@ -57,17 +58,23 @@ class FunctionPulseTemplate(AtomicPulseTemplate):
                 window. (optional, default = False)
             identifier (str): A unique identifier for use in serialization. (optional)
         """
-        super().__init__(identifier=identifier, measurements=measurements)
+        AtomicPulseTemplate.__init__(self, identifier=identifier)
+        MeasurementDefiner.__init__(self, measurements=measurements)
+        ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
+
         self.__expression = expression
         if not isinstance(self.__expression, Expression):
             self.__expression = Expression(self.__expression)
         self.__duration_expression = duration_expression
         if not isinstance(self.__duration_expression, Expression):
             self.__duration_expression = Expression(self.__duration_expression)
-        self.__parameter_names = set(self.__duration_expression.variables
-                                     + self.__expression.variables) - set(['t'])
+        self.__parameter_names = {*self.__duration_expression.variables, *self.__expression.variables} - {'t'}
         self.__channel = channel
         self.__measurement_windows = dict()
+
+    @property
+    def expression(self) -> Expression:
+        return self.__expression
 
     @property
     def function_parameters(self) -> Set[str]:
@@ -75,11 +82,7 @@ class FunctionPulseTemplate(AtomicPulseTemplate):
 
     @property
     def parameter_names(self) -> Set[str]:
-        return self.function_parameters | self.measurement_parameters
-
-    @property
-    def parameter_declarations(self) -> Set[ParameterDeclaration]:
-        return {ParameterDeclaration(param_name) for param_name in self.parameter_names}
+        return self.function_parameters | self.measurement_parameters | self.constrained_parameters
 
     @property
     def is_interruptable(self) -> bool:
@@ -93,12 +96,17 @@ class FunctionPulseTemplate(AtomicPulseTemplate):
     def duration(self) -> Expression:
         return self.__duration_expression
 
+    @property
+    def measurement_names(self) -> Set[str]:
+        return {name for name, _, _ in self._measurement_windows}
+
     def build_waveform(self,
-                       parameters: Dict[str, Parameter],
+                       parameters: Dict[str, numbers.Real],
                        measurement_mapping: Dict[str, str],
                        channel_mapping: Dict[ChannelID, ChannelID]) -> 'FunctionWaveform':
-        substitutions = dict((v, parameters[v].get_value()) for v in self.__expression.variables if v != 't')
-        duration_parameters = dict((v, parameters[v].get_value()) for v in self.__duration_expression.variables)
+        self.validate_parameter_constraints(parameters=parameters)
+        substitutions = {v: parameters[v] for v in self.__expression.variables if v != 't'}
+        duration_parameters = {v: parameters[v] for v in self.__duration_expression.variables}
         return FunctionWaveform(expression=self.__expression.evaluate_symbolic(substitutions=substitutions),
                                 duration=self.__duration_expression.evaluate_numeric(**duration_parameters),
                                 measurement_windows=self.get_measurement_windows(parameters=parameters,
@@ -118,7 +126,8 @@ class FunctionPulseTemplate(AtomicPulseTemplate):
             duration_expression=serializer.dictify(self.__duration_expression),
             expression=serializer.dictify(self.__expression),
             channel=self.__channel,
-            measurement_declarations=self.measurement_declarations
+            measurement_declarations=self.measurement_declarations,
+            parameter_constraints=[str(c) for c in self.parameter_constraints]
         )
 
     @staticmethod
@@ -126,14 +135,16 @@ class FunctionPulseTemplate(AtomicPulseTemplate):
                     expression: str,
                     duration_expression: str,
                     channel: 'ChannelID',
-                    measurement_declarations: Dict[str, List],
+                    measurement_declarations: List[MeasurementDeclaration],
+                    parameter_constraints: List,
                     identifier: Optional[bool]=None) -> 'FunctionPulseTemplate':
         return FunctionPulseTemplate(
             serializer.deserialize(expression),
             serializer.deserialize(duration_expression),
             channel=channel,
             identifier=identifier,
-            measurements=measurement_declarations
+            measurements=measurement_declarations,
+            parameter_constraints=parameter_constraints
         )
 
 

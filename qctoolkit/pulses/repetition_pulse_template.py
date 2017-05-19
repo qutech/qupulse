@@ -8,11 +8,12 @@ import numpy as np
 from qctoolkit.serialization import Serializer
 
 from qctoolkit import MeasurementWindow, ChannelID
-from qctoolkit.pulses.pulse_template import PulseTemplate, PossiblyAtomicPulseTemplate
+from qctoolkit.expressions import Expression
+from qctoolkit.pulses.pulse_template import PulseTemplate
 from qctoolkit.pulses.loop_pulse_template import LoopPulseTemplate
 from qctoolkit.pulses.sequencing import Sequencer
 from qctoolkit.pulses.instructions import InstructionBlock, InstructionPointer, Waveform
-from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter, ConstantParameter
+from qctoolkit.pulses.parameters import Parameter, ParameterConstrainer, ParameterNotProvidedException
 from qctoolkit.pulses.conditions import Condition
 
 
@@ -70,7 +71,7 @@ class RepetitionWaveform(Waveform):
                                   repetition_count=self._repetition_count)
 
 
-class RepetitionPulseTemplate(LoopPulseTemplate):
+class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer):
     """Repeat a PulseTemplate a constant number of times.
 
     The equivalent to a simple for-loop in common programming languages in qctoolkit's pulse
@@ -79,8 +80,9 @@ class RepetitionPulseTemplate(LoopPulseTemplate):
 
     def __init__(self,
                  body: PulseTemplate,
-                 repetition_count: Union[int, ParameterDeclaration, str],
-                 identifier: Optional[str]=None) -> None:
+                 repetition_count: Union[int, str, Expression],
+                 identifier: Optional[str]=None,
+                 parameter_constraints: Optional[List]=None) -> None:
         """Create a new RepetitionPulseTemplate instance.
 
         Args:
@@ -90,29 +92,30 @@ class RepetitionPulseTemplate(LoopPulseTemplate):
             loop_index (str): If specified the loop index
             identifier (str): A unique identifier for use in serialization. (optional)
         """
-        super().__init__(identifier=identifier, body=body)
-        if isinstance(repetition_count, float) and repetition_count.is_integer():
-            repetition_count = int(repetition_count)
+        LoopPulseTemplate.__init__(self, identifier=identifier, body=body)
+        ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 
-        if isinstance(repetition_count, str):
-            self._repetition_count = ParameterDeclaration(repetition_count, min=0)
-        elif isinstance(repetition_count, (int, ParameterDeclaration)):
-            self._repetition_count = repetition_count
-        else:
-            raise ValueError('Invalid repetition count type: {}'.format(type(repetition_count)))
+        if not isinstance(repetition_count, Expression):
+            repetition_count = Expression(repetition_count)
+
+        if (repetition_count < 0) is True:
+            raise ValueError('Repetition count may not be negative')
+
+        self._repetition_count = repetition_count
 
     @property
-    def repetition_count(self) -> ParameterDeclaration:
+    def repetition_count(self) -> Expression:
         """The amount of repetitions. Either a constant integer or a ParameterDeclaration object."""
         return self._repetition_count
 
-    def get_repetition_count_value(self, parameters: Dict[str, Parameter]) -> int:
-        if isinstance(self._repetition_count, ParameterDeclaration):
-            value = self._repetition_count.get_value(parameters)
-            if isinstance(value, float) and not value.is_integer():
-                raise ParameterNotIntegerException(self._repetition_count.name, value)
-            return int(value)
-        else: return self._repetition_count
+    def get_repetition_count_value(self, parameters: Dict[str, 'Real']) -> int:
+        value = self._repetition_count.evaluate_numeric(**parameters)
+        if isinstance(value, float):
+            if value.is_integer():
+                value = int(value)
+            else:
+                raise ParameterNotIntegerException(str(self._repetition_count), value)
+        return value
 
     def __str__(self) -> str:
         return "RepetitionPulseTemplate: <{}> times <{}>"\
@@ -120,20 +123,15 @@ class RepetitionPulseTemplate(LoopPulseTemplate):
 
     @property
     def parameter_names(self) -> Set[str]:
-        return set(parameter.name for parameter in self.parameter_declarations)
-
-    @property
-    def parameter_declarations(self) -> Set[str]:
-        return self.body.parameter_declarations | ({self._repetition_count} if isinstance(self._repetition_count,
-                                                                                          ParameterDeclaration)
-                                                   else set())
+        return self.body.parameter_names | set(self.repetition_count.variables)
 
     @property
     def measurement_names(self) -> Set[str]:
         return self.body.measurement_names
 
-    def build_waveform(self, parameters: Dict[str, Parameter]) -> RepetitionWaveform:
-        return RepetitionWaveform(self.body.build_waveform(parameters), self.get_repetition_count_value(parameters))
+    @property
+    def duration(self) -> Expression:
+        return Expression(self.repetition_count * self.body.duration.sympified_expression)
 
     def build_sequence(self,
                        sequencer: Sequencer,
@@ -142,51 +140,40 @@ class RepetitionPulseTemplate(LoopPulseTemplate):
                        measurement_mapping: Dict[str, str],
                        channel_mapping: Dict['ChannelID', 'ChannelID'],
                        instruction_block: InstructionBlock) -> None:
+        self.validate_parameter_constraints(parameters=parameters)
 
-        if self.atomicity:
-            # atomicity can only be enabled if the loop index is not used
-            self.atomic_build_sequence(parameters=parameters,
-                                       measurement_mapping=measurement_mapping,
-                                       channel_mapping=channel_mapping,
-                                       instruction_block=instruction_block)
-        else:
-            body_block = InstructionBlock()
-            body_block.return_ip = InstructionPointer(instruction_block, len(instruction_block))
+        body_block = InstructionBlock()
+        body_block.return_ip = InstructionPointer(instruction_block, len(instruction_block))
 
-            instruction_block.add_instruction_repj(self.get_repetition_count_value(parameters), body_block)
-            sequencer.push(self.body, parameters, conditions, measurement_mapping, channel_mapping, body_block)
+        try:
+            real_parameters = {v: parameters[v].get_value() for v in self._repetition_count.variables}
+        except KeyError:
+            raise ParameterNotProvidedException(next(v for v in self.repetition_count.variables if v not in parameters))
+
+        instruction_block.add_instruction_repj(self.get_repetition_count_value(real_parameters), body_block)
+        sequencer.push(self.body, parameters, conditions, measurement_mapping, channel_mapping, body_block)
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],
                       conditions: Dict[str, Condition]) -> bool:
-        if isinstance(self._repetition_count, ParameterDeclaration):
-            return parameters[self._repetition_count.name].requires_stop
-        else:
-            return False
+        return any(parameters[v].requires_stop for v in self.repetition_count.variables)
 
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
-        repetition_count = self._repetition_count
-        if isinstance(repetition_count, ParameterDeclaration):
-            repetition_count = serializer.dictify(repetition_count)
         return dict(
-            type=serializer.get_type_identifier(self),
             body=serializer.dictify(self.body),
-            repetition_count=repetition_count,
-            atomicity=self.atomicity,
+            repetition_count=self.repetition_count.original_expression,
+            parameter_constraints=self.parameter_constraints
         )
 
     @staticmethod
     def deserialize(serializer: Serializer,
-                    repetition_count: Dict[str, Any],
+                    repetition_count: Union[str, int],
                     body: Dict[str, Any],
-                    atomicity: bool,
+                    parameter_constraints: List[str],
                     identifier: Optional[str]=None) -> 'Serializable':
         body = serializer.deserialize(body)
-        if isinstance(repetition_count, dict):
-            repetition_count = serializer.deserialize(repetition_count)
-        result = RepetitionPulseTemplate(body, repetition_count, identifier=identifier)
-        result.atomicity = atomicity
-        return result
+        return RepetitionPulseTemplate(body, repetition_count,
+                                       identifier=identifier, parameter_constraints=parameter_constraints)
 
 
 class ParameterNotIntegerException(Exception):

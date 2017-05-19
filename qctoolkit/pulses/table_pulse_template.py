@@ -17,8 +17,8 @@ import sympy
 
 from qctoolkit import MeasurementWindow, ChannelID
 from qctoolkit.serialization import Serializer
-from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter, \
-    ParameterNotProvidedException, ParameterConstraint, ParameterConstraintViolation
+from qctoolkit.pulses.parameters import Parameter, \
+    ParameterNotProvidedException, ParameterConstraint, ParameterConstraintViolation, ParameterConstrainer
 from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration
 from qctoolkit.pulses.interpolation import InterpolationStrategy, LinearInterpolationStrategy, \
     HoldInterpolationStrategy, JumpInterpolationStrategy
@@ -26,6 +26,7 @@ from qctoolkit.pulses.instructions import Waveform
 from qctoolkit.pulses.conditions import Condition
 from qctoolkit.expressions import Expression
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
+from qctoolkit.pulses.measurement import MeasurementDefiner
 
 __all__ = ["TablePulseTemplate", "TableWaveform", "WaveformTableEntry"]
 
@@ -115,19 +116,20 @@ class TableEntry(tuple):
         return self[2]
 
 
-class TablePulseTemplate(AtomicPulseTemplate):
+class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer, MeasurementDefiner):
     interpolation_strategies = {'linear': LinearInterpolationStrategy(),
                                 'hold': HoldInterpolationStrategy(),
                                 'jump': JumpInterpolationStrategy()}
 
     def __init__(self, entries: Dict[ChannelID, List[EntryInInit]],
                  identifier: Optional[str]=None,
-                 parameter_constraints: Optional[List[str]]=None,
+                 *,
+                 parameter_constraints: Optional[List[Union[str, ParameterConstraint]]]=None,
                  measurements: Optional[List[MeasurementDeclaration]]=None,
                  consistency_check=True):
-        super().__init__(identifier=identifier, measurements=measurements)
-        if parameter_constraints is None:
-            parameter_constraints = list()
+        AtomicPulseTemplate.__init__(self, identifier=identifier)
+        ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
+        MeasurementDefiner.__init__(self, measurements=measurements)
 
         self._entries = dict((ch, list()) for ch in entries.keys())
         for channel, channel_entries in entries.items():
@@ -136,7 +138,6 @@ class TablePulseTemplate(AtomicPulseTemplate):
 
             for entry in channel_entries:
                 self._add_entry(channel, TableEntry(*entry))
-        self._parameter_constraints = [ParameterConstraint(constraint) for constraint in parameter_constraints]
 
         if self.duration == 0:
             warnings.warn('Table pulse template with duration 0 on construction.',
@@ -147,7 +148,7 @@ class TablePulseTemplate(AtomicPulseTemplate):
             # sympy solver does not support them
 
             # collect all conditions
-            inequalities = [sympy.sympify(eq) for eq in parameter_constraints] +\
+            inequalities = [eq.sympified_expression for eq in self._parameter_constraints] +\
                            [sympy.Le(previous_entry.t.compare_key, entry.t.compare_key)
                             for channel_entries in self._entries.values()
                             for previous_entry, entry in zip(channel_entries, channel_entries[1:])]
@@ -179,6 +180,10 @@ class TablePulseTemplate(AtomicPulseTemplate):
     @property
     def entries(self) -> Dict[ChannelID, List[TableEntry]]:
         return self._entries
+
+    @property
+    def measurement_names(self) -> Set[str]:
+        return {name for name, _, _ in self._measurement_windows}
 
     def get_entries_instantiated(self, parameters: Dict[str, numbers.Real]) \
             -> Dict[ChannelID, List[WaveformTableEntry]]:
@@ -254,11 +259,7 @@ class TablePulseTemplate(AtomicPulseTemplate):
             for channel_entries in self.entries.values()
             for entry in channel_entries
             for var in itertools.chain(entry.t.variables, entry.v.variables)
-        ) | set(
-            var
-            for constraint in self._parameter_constraints
-            for var in constraint.affected_parameters
-        )
+        ) | self.constrained_parameters
 
     @property
     def parameter_names(self) -> Set[str]:
@@ -295,17 +296,16 @@ class TablePulseTemplate(AtomicPulseTemplate):
         return len(self._entries)
 
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
-        data = dict(
+        return dict(
             entries=dict(
                 (channel, [(entry.t.get_most_simple_representation(),
                             entry.v.get_most_simple_representation(),
                             str(entry.interp)) for entry in channel_entries])
                 for channel, channel_entries in self._entries.items()
             ),
-            parameter_constraints=[str(constraint) for constraint in self._parameter_constraints],
+            parameter_constraints=[str(c) for c in self.parameter_constraints],
             measurements=self.measurement_declarations
         )
-        return data
 
     @staticmethod
     def deserialize(serializer: Serializer,
@@ -323,11 +323,7 @@ class TablePulseTemplate(AtomicPulseTemplate):
                        parameters: Dict[str, numbers.Real],
                        measurement_mapping: Dict[str, str],
                        channel_mapping: Dict[ChannelID, ChannelID]) -> Optional['Waveform']:
-        for constraint in self._parameter_constraints:
-            if not constraint.is_fulfilled(parameters):
-                raise ParameterConstraintViolation(constraint, 'parameters: {}'.format(
-                    {name: parameters[name] for name in constraint.affected_parameters}
-                ))
+        self.validate_parameter_constraints(parameters)
 
         instantiated = [(channel_mapping[channel], instantiated_channel)
                         for channel, instantiated_channel in self.get_entries_instantiated(parameters).items()]
@@ -336,10 +332,10 @@ class TablePulseTemplate(AtomicPulseTemplate):
 
         measurements = self.get_measurement_windows(parameters=parameters, measurement_mapping=measurement_mapping)
         if len(instantiated) == 1:
-            return TableWaveform(*instantiated.pop(), measurements)
+            return TableWaveform(*instantiated.pop(), measurement_windows=measurements)
         else:
             return MultiChannelWaveform(
-                [TableWaveform(*instantiated.pop(), measurements)]
+                [TableWaveform(*instantiated.pop(), measurement_windows=measurements)]
                 +
                 [TableWaveform(channel, instantiated_channel, [])for channel, instantiated_channel in instantiated])
 

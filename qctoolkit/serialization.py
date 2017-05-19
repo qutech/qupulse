@@ -410,7 +410,7 @@ class Serializer(object):
             storage_identifier = identifier
             if identifier == '':
                 storage_identifier = 'main'
-            json_str = json.dumps(repr_[identifier], indent=4, sort_keys=True)
+            json_str = json.dumps(repr_[identifier], indent=4, sort_keys=True, cls=ExtendedJSONEncoder)
             self.__storage_backend.put(storage_identifier, json_str, overwrite)
 
     def deserialize(self, representation: Union[str, Dict[str, Any]]) -> Serializable:
@@ -437,3 +437,19 @@ class Serializer(object):
 
         repr_.pop('type')
         return class_.deserialize(self, **repr_)
+
+
+class ExtendedJSONEncoder(json.JSONEncoder):
+    """Encodes types that are registered in str_constructable_types as str and sets as lists."""
+    str_constructable_types = set()
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def default(self, o: Any) -> Any:
+        if type(o) in ExtendedJSONEncoder.str_constructable_types:
+            return str(o)
+        elif type(o) is set:
+            return list(o)
+        else:
+            return super().default(o)

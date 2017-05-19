@@ -8,7 +8,7 @@ from qctoolkit.serialization import Serializer
 
 from qctoolkit.expressions import Expression
 from qctoolkit.pulses.parameters import Parameter, ConstantParameter, InvalidParameterNameException
-from qctoolkit.pulses.pulse_template import PulseTemplate, PossiblyAtomicPulseTemplate, ChannelID
+from qctoolkit.pulses.pulse_template import PulseTemplate, ChannelID
 from qctoolkit.pulses.conditions import Condition, ConditionMissingException
 from qctoolkit.pulses.instructions import InstructionBlock
 from qctoolkit.pulses.sequencing import Sequencer
@@ -17,12 +17,11 @@ from qctoolkit.pulses.sequence_pulse_template import SequenceWaveform as ForLoop
 __all__ = ['WhileLoopPulseTemplate', 'ConditionMissingException']
 
 
-class LoopPulseTemplate(PossiblyAtomicPulseTemplate):
+class LoopPulseTemplate(PulseTemplate):
     """Base class for loop based pulse templates"""
     def __init__(self, body: PulseTemplate, identifier: Optional[str]=None):
         super().__init__(identifier=identifier)
         self.__body = body
-        self.__atomicity = False
 
     @property
     def body(self) -> PulseTemplate:
@@ -39,18 +38,6 @@ class LoopPulseTemplate(PossiblyAtomicPulseTemplate):
     @property
     def is_interruptable(self):
         raise NotImplementedError()
-
-    @property
-    def atomicity(self) -> bool:
-        if self.__body.atomicity is False:
-            self.__atomicity = False
-        return self.__atomicity
-
-    @atomicity.setter
-    def atomicity(self, val) -> None:
-        if val and self.__body.atomicity is False:
-            raise ValueError('Cannot make {} atomic as the body is not'.format(type(self)))
-        self.__atomicity = val
 
 
 class ParametrizedRange:
@@ -134,6 +121,12 @@ class ForLoopPulseTemplate(LoopPulseTemplate):
         return self._loop_range
 
     @property
+    def duration(self) -> Expression:
+        count = (self._loop_range.stop.sympified_expression - self._loop_range.start.sympified_expression)
+        step = self._loop_range.step.sympified_expression
+        return Expression((count - count % step)/step * self.body.duration.sympified_expression)
+
+    @property
     def parameter_names(self) -> Set[str]:
         parameter_names = self.body.parameter_names
         parameter_names.remove(self._loop_index)
@@ -162,22 +155,14 @@ class ForLoopPulseTemplate(LoopPulseTemplate):
                        conditions: Dict[str, Condition],
                        measurement_mapping: Dict[str, str],
                        channel_mapping: Dict['ChannelID', 'ChannelID'],
-                       instruction_block: InstructionBlock) -> None:
-
-        if self.atomicity:
-            # atomicity can only be enabled if the loop index is not used
-            self.atomic_build_sequence(parameters=parameters,
-                                       measurement_mapping=measurement_mapping,
-                                       channel_mapping=channel_mapping,
-                                       instruction_block=instruction_block)
-        else:
-            for local_parameters in self._body_parameter_generator(parameters, forward=False):
-                sequencer.push(self.body,
-                               parameters=local_parameters,
-                               conditions=conditions,
-                               measurement_mapping=measurement_mapping,
-                               channel_mapping=channel_mapping,
-                               instruction_block=instruction_block)
+                        instruction_block: InstructionBlock) -> None:
+        for local_parameters in self._body_parameter_generator(parameters, forward=False):
+            sequencer.push(self.body,
+                           parameters=local_parameters,
+                           conditions=conditions,
+                           measurement_mapping=measurement_mapping,
+                           channel_mapping=channel_mapping,
+                           instruction_block=instruction_block)
 
     def build_waveform(self, parameters: Dict[str, Parameter]) -> ForLoopWaveform:
         return ForLoopWaveform([self.body.build_waveform(local_parameters)
@@ -186,13 +171,7 @@ class ForLoopPulseTemplate(LoopPulseTemplate):
     def requires_stop(self,
                       parameters: Dict[str, Parameter],
                       conditions: Dict[str, 'Condition']) -> bool:
-        if any(parameters[parameter_name].requires_stop() for parameter_name in self._loop_range.parameter_names):
-            return True
-        if self.atomicity:
-            return any(self.body.requires_stop(local_parameters, conditions)
-                       for local_parameters in self._body_parameter_generator(parameters=parameters))
-        else:
-            return False
+        return any(parameters[parameter_name].requires_stop for parameter_name in self._loop_range.parameter_names)
 
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
         data = dict(
@@ -249,6 +228,10 @@ class WhileLoopPulseTemplate(LoopPulseTemplate):
         return self.body.parameter_names
 
     @property
+    def duration(self) -> Expression:
+        return Expression('nan')
+
+    @property
     def parameter_declarations(self) -> Set[str]:
         return self.body.parameter_declarations
 
@@ -289,8 +272,7 @@ class WhileLoopPulseTemplate(LoopPulseTemplate):
         data = dict(
             type=serializer.get_type_identifier(self),
             condition=self._condition,
-            body=serializer.dictify(self.body),
-            atomicity=self.atomicity
+            body=serializer.dictify(self.body)
         )
         return data
 
@@ -298,13 +280,11 @@ class WhileLoopPulseTemplate(LoopPulseTemplate):
     def deserialize(serializer: Serializer,
                     condition: str,
                     body: Dict[str, Any],
-                    atomicity: bool,
                     identifier: Optional[str]=None) -> 'WhileLoopPulseTemplate':
         body = serializer.deserialize(body)
         result = WhileLoopPulseTemplate(condition=condition,
                                         body=body,
                                         identifier=identifier)
-        result.atomicity = atomicity
         return result
 
 

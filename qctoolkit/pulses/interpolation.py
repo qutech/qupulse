@@ -60,8 +60,7 @@ class LinearInterpolationStrategy(InterpolationStrategy):
                  end: Tuple[float, float],
                  times: np.ndarray) -> np.ndarray:
         m = (end[1] - start[1])/(end[0] - start[0])
-        interpolator = lambda t: m * (t - start[0]) + start[1]
-        return interpolator(times)
+        return m * (times - start[0]) + start[1]
 
     def __str__(self) -> str:
         return 'linear'
@@ -84,9 +83,7 @@ class HoldInterpolationStrategy(InterpolationStrategy):
                     start[0], end[0]
                 )
             )
-
-        voltages = np.ones_like(times) * start[1]
-        return voltages
+        return np.full_like(times, fill_value=start[1], dtype=float)
 
     def __str__(self) -> str:
         return 'hold'
@@ -109,9 +106,7 @@ class JumpInterpolationStrategy(InterpolationStrategy):
                     start[0], end[0]
                 )
             )
-
-        voltages = np.ones_like(times) * end[1]
-        return voltages
+        return np.full_like(times, fill_value=end[1], dtype=float)
 
     def __str__(self) -> str:
         return 'jump'

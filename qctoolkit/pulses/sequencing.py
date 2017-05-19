@@ -26,11 +26,11 @@ class SequencingElement(metaclass=ABCMeta):
     """
 
     def __init__(self) -> None:
-        super().__init__()
+        pass
 
-    @abstractproperty
     def atomicity(self) -> bool:
         """Is the element translated to a single EXECInstruction with one waveform"""
+        raise NotImplementedError()
 
     @abstractmethod
     def build_sequence(self,

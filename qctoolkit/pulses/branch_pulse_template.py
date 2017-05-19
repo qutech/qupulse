@@ -1,9 +1,11 @@
 """This module defines BranchPulseTemplate, a higher-order hierarchical pulse template that
 conditionally executes one out of two possible PulseTemplates."""
 
-from typing import Dict, Set, List, Optional, Any
+from typing import Dict, Set, List, Optional, Any, Union
 
-from qctoolkit.pulses.parameters import Parameter
+from qctoolkit.expressions import Expression
+
+from qctoolkit.pulses.parameters import Parameter, ParameterConstraint
 from qctoolkit.pulses.pulse_template import PulseTemplate
 from qctoolkit.pulses.conditions import Condition, ConditionMissingException
 from qctoolkit.pulses.sequencing import Sequencer, InstructionBlock
@@ -57,10 +59,6 @@ class BranchPulseTemplate(PulseTemplate):
         return self.__if_branch.parameter_names | self.__else_branch.parameter_names
 
     @property
-    def parameter_declarations(self) -> Set[str]:
-        return self.__if_branch.parameter_declarations | self.__else_branch.parameter_declarations
-
-    @property
     def is_interruptable(self) -> bool:
         return self.__if_branch.is_interruptable and self.__else_branch.is_interruptable
 
@@ -69,12 +67,12 @@ class BranchPulseTemplate(PulseTemplate):
         return self.__if_branch.defined_channels
 
     @property
-    def measurement_names(self) -> Set[str]:
-        return self.__if_branch.measurement_names | self.__else_branch.measurement_names
+    def duration(self) -> Expression:
+        return Expression('nan')
 
     @property
-    def atomicity(self) -> bool:
-        return False
+    def measurement_names(self) -> Set[str]:
+        return self.__if_branch.measurement_names | self.__else_branch.measurement_names
 
     def __obtain_condition_object(self, conditions: Dict[str, Condition]) -> Condition:
         try:

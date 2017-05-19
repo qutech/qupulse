@@ -8,7 +8,7 @@ import sympy
 import numpy
 
 from qctoolkit.comparable import Comparable
-from qctoolkit.serialization import Serializable, Serializer
+from qctoolkit.serialization import Serializable, Serializer, ExtendedJSONEncoder
 
 __all__ = ["Expression", "ExpressionVariableMissingException"]
 
@@ -16,7 +16,7 @@ __all__ = ["Expression", "ExpressionVariableMissingException"]
 class Expression(Serializable, Comparable):
     """A mathematical expression instantiated from a string representation."""
 
-    def __init__(self, ex: Union[str, Number]) -> None:
+    def __init__(self, ex: Union[str, Number, sympy.Expr]) -> None:
         """Create an Expression object.
 
         Receives the mathematical expression which shall be represented by the object as a string
@@ -27,7 +27,7 @@ class Expression(Serializable, Comparable):
             ex (string): The mathematical expression represented as a string
         """
         super().__init__()
-        self._original_expression = ex
+        self._original_expression = str(ex) if isinstance(ex, sympy.Expr) else ex
         self._sympified_expression = sympy.sympify(ex)
         self._variables = tuple(str(var) for var in self._sympified_expression.free_symbols)
         self._expression_lambda = sympy.lambdify(self._variables,
@@ -51,25 +51,29 @@ class Expression(Serializable, Comparable):
         else:
             return self._original_expression
 
+    @staticmethod
+    def _sympify(other: Union['Expression', Number, sympy.Expr]) -> sympy.Expr:
+        return other._sympified_expression if isinstance(other, Expression) else sympy.sympify(other)
+
     def __lt__(self, other: Union['Expression', Number, sympy.Expr]) -> Union[bool, None]:
-        result = self._sympified_expression < (other._sympified_expression if isinstance(other, Expression) else other)
+        result = self._sympified_expression < Expression._sympify(other)
         return None if isinstance(result, sympy.Rel) else bool(result)
 
     def __gt__(self, other: Union['Expression', Number, sympy.Expr]) -> Union[bool, None]:
-        result = self._sympified_expression > (other._sympified_expression if isinstance(other, Expression) else other)
+        result = self._sympified_expression > Expression._sympify(other)
         return None if isinstance(result, sympy.Rel) else bool(result)
 
     def __ge__(self, other: Union['Expression', Number, sympy.Expr]) -> Union[bool, None]:
-        result = self._sympified_expression >= (other._sympified_expression if isinstance(other, Expression) else other)
+        result = self._sympified_expression >= Expression._sympify(other)
         return None if isinstance(result, sympy.Rel) else bool(result)
 
     def __le__(self, other: Union['Expression', Number, sympy.Expr]) -> Union[bool, None]:
-        result = self._sympified_expression <= (other._sympified_expression if isinstance(other, Expression) else other)
+        result = self._sympified_expression <= Expression._sympify(other)
         return None if isinstance(result, sympy.Rel) else bool(result)
 
     def __eq__(self, other: Union['Expression', Number, sympy.Expr]) -> bool:
         """Overwrite Comparable's test for equality to incorporate comparisons with Numbers"""
-        return self._sympified_expression == (other._sympified_expression if isinstance(other, Expression) else other)
+        return self._sympified_expression == Expression._sympify(other)
 
     @property
     def compare_key(self) -> sympy.Expr:
@@ -78,6 +82,10 @@ class Expression(Serializable, Comparable):
     @property
     def original_expression(self) -> Union[str, Number]:
         return self._original_expression
+
+    @property
+    def sympified_expression(self) -> sympy.Expr:
+        return self._sympified_expression
 
     @property
     def variables(self) -> Iterable[str]:
@@ -113,7 +121,7 @@ class Expression(Serializable, Comparable):
             return result
         raise NonNumericEvaluation(self, result, kwargs)
 
-    def evaluate_symbolic(self, substitutions: Dict[Any, Any]=dict()) -> 'Expression':
+    def evaluate_symbolic(self, substitutions: Dict[Any, Any]) -> 'Expression':
         """Evaluate the expression symbolically.
 
         Args:
@@ -121,6 +129,8 @@ class Expression(Serializable, Comparable):
         Returns:
 
         """
+        substitutions = dict((k, v.sympified_expression if isinstance(v, Expression) else v)
+                             for k, v in substitutions.items())
         return Expression(self._sympified_expression.subs(substitutions))
 
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
@@ -133,6 +143,10 @@ class Expression(Serializable, Comparable):
     @property
     def identifier(self) -> Optional[str]:
         return None
+
+    def is_nan(self) -> bool:
+        return sympy.sympify('nan') == self._sympified_expression
+ExtendedJSONEncoder.str_constructable_types.add(Expression)
 
 
 class ExpressionVariableMissingException(Exception):
