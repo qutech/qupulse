@@ -21,7 +21,7 @@ class SequencerTest(unittest.TestCase):
         wm = {'foo' : 'bar'}
         elem = DummySequencingElement()
         
-        sequencer.push(elem, ps, cs, wm)
+        sequencer.push(elem, ps, cs, window_mapping=wm)
         self.assertFalse(sequencer.has_finished())
         sequencer.build()
         self.assertEqual(ps, elem.parameters)
@@ -80,7 +80,7 @@ class SequencerTest(unittest.TestCase):
         cs = {'foo': DummyCondition()}
         wm = {}
         target_block = InstructionBlock()
-        sequencer.push(elem, ps, cs, wm, target_block)
+        sequencer.push(elem, ps, cs, window_mapping=wm, target_block=target_block)
         sequencer.build()
         
         self.assertFalse(sequencer.has_finished())
@@ -97,11 +97,11 @@ class SequencerTest(unittest.TestCase):
         wm = {}
         cm = {}
         elem_main = DummySequencingElement(True)
-        sequencer.push(elem_main, ps, cs, cm)
+        sequencer.push(elem_main, ps, cs, channel_mapping=cm)
         
         elem_cstm = DummySequencingElement(True)
         target_block = InstructionBlock()
-        sequencer.push(elem_cstm, ps, cs, wm, cm, target_block)
+        sequencer.push(elem_cstm, ps, cs, window_mapping=wm, channel_mapping=cm, target_block=target_block)
         
         sequencer.build()
         
@@ -256,7 +256,7 @@ class SequencerTest(unittest.TestCase):
 
         target_block = InstructionBlock()
         elem = DummySequencingElement(False)
-        sequencer.push(elem, ps, cs, wm, cm, target_block=target_block)
+        sequencer.push(elem, ps, cs, window_mapping=wm, channel_mapping=cm, target_block=target_block)
         
         sequencer.build()
         
@@ -334,10 +334,10 @@ class SequencerTest(unittest.TestCase):
         
         target_block = InstructionBlock()
         elem2 = DummySequencingElement(True)
-        sequencer.push(elem2, ps, cs, wm, target_block=target_block)
+        sequencer.push(elem2, ps, cs, window_mapping=wm, target_block=target_block)
         
         elem1 = DummySequencingElement(False)
-        sequencer.push(elem1, ps, cs, wm, target_block=target_block)
+        sequencer.push(elem1, ps, cs, window_mapping=wm, target_block=target_block)
         
         sequencer.build()
         
@@ -361,10 +361,10 @@ class SequencerTest(unittest.TestCase):
         
         target_block = InstructionBlock()
         elem2 = DummySequencingElement(False)
-        sequencer.push(elem2, ps, cs, wm, target_block=target_block)
+        sequencer.push(elem2, ps, cs, window_mapping=wm, target_block=target_block)
         
         elem1 = DummySequencingElement(False)
-        sequencer.push(elem1, ps, cs, wm, target_block=target_block)
+        sequencer.push(elem1, ps, cs, window_mapping=wm, target_block=target_block)
         
         sequencer.build()
         
@@ -389,10 +389,10 @@ class SequencerTest(unittest.TestCase):
         
         target_block = InstructionBlock()
         elem2 = DummySequencingElement(True)
-        sequencer.push(elem2, ps, cs, wm, target_block=target_block)
+        sequencer.push(elem2, ps, cs, window_mapping=wm, target_block=target_block)
         
         elem1 = DummySequencingElement(False)
-        sequencer.push(elem1, ps, cs, wm, target_block=target_block)
+        sequencer.push(elem1, ps, cs, window_mapping=wm, target_block=target_block)
         
         elem_main = DummySequencingElement(True)
         sequencer.push(elem_main, ps, cs)
@@ -423,10 +423,10 @@ class SequencerTest(unittest.TestCase):
         
         target_block = InstructionBlock()
         elem2 = DummySequencingElement(True)
-        sequencer.push(elem2, ps, cs, wm, target_block=target_block)
+        sequencer.push(elem2, ps, cs, window_mapping=wm, target_block=target_block)
         
         elem1 = DummySequencingElement(False)
-        sequencer.push(elem1, ps, cs, wm, target_block=target_block)
+        sequencer.push(elem1, ps, cs, window_mapping=wm, target_block=target_block)
         
         elem_main = DummySequencingElement(False)
         sequencer.push(elem_main, ps, cs)
@@ -460,10 +460,10 @@ class SequencerTest(unittest.TestCase):
 
         target_block = InstructionBlock()
         elem2 = DummySequencingElement(False)
-        sequencer.push(elem2, ps, cs, wm, target_block=target_block)
+        sequencer.push(elem2, ps, cs, window_mapping=wm, target_block=target_block)
         
         elem1 = DummySequencingElement(False)
-        sequencer.push(elem1, ps, cs, wm, target_block=target_block)
+        sequencer.push(elem1, ps, cs, window_mapping=wm, target_block=target_block)
         
         elem_main = DummySequencingElement(False)
         sequencer.push(elem_main, ps, cs)
@@ -498,10 +498,10 @@ class SequencerTest(unittest.TestCase):
         
         target_block = InstructionBlock()
         elem2 = DummySequencingElement(True)
-        sequencer.push(elem2, ps, cs, wm, target_block=target_block)
+        sequencer.push(elem2, ps, cs, window_mapping=wm, target_block=target_block)
         
         elem1 = DummySequencingElement(False)
-        sequencer.push(elem1, ps, cs, wm, target_block=target_block)
+        sequencer.push(elem1, ps, cs, window_mapping=wm, target_block=target_block)
         
         elem_main2 = DummySequencingElement(True)
         sequencer.push(elem_main2, ps, cs)
@@ -543,10 +543,10 @@ class SequencerTest(unittest.TestCase):
         
         target_block = InstructionBlock()
         elem2 = DummySequencingElement(True)
-        sequencer.push(elem2, ps, cs, wm, target_block=target_block)
+        sequencer.push(elem2, ps, cs, window_mapping=wm, target_block=target_block)
         
         elem1 = DummySequencingElement(False)
-        sequencer.push(elem1, ps, cs, wm, target_block=target_block)
+        sequencer.push(elem1, ps, cs, window_mapping=wm, target_block=target_block)
         
         elem_main2 = DummySequencingElement(False)
         sequencer.push(elem_main2, ps, cs)
@@ -588,10 +588,10 @@ class SequencerTest(unittest.TestCase):
         
         target_block = InstructionBlock()
         elem2 = DummySequencingElement(False)
-        sequencer.push(elem2, ps, cs, wm, target_block=target_block)
+        sequencer.push(elem2, ps, cs, window_mapping=wm, target_block=target_block)
         
         elem1 = DummySequencingElement(False)
-        sequencer.push(elem1, ps, cs, wm, target_block=target_block)
+        sequencer.push(elem1, ps, cs, window_mapping=wm, target_block=target_block)
         
         elem_main2 = DummySequencingElement(False)
         sequencer.push(elem_main2, ps, cs)

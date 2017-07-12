@@ -206,8 +206,12 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer):
                        channel_mapping: Dict['ChannelID', 'ChannelID'],
                        instruction_block: InstructionBlock) -> None:
             for subtemplate in reversed(self.subtemplates):
-                sequencer.push(subtemplate, parameters, conditions, measurement_mapping, channel_mapping,
-                               instruction_block)
+                sequencer.push(subtemplate,
+                               parameters=parameters,
+                               conditions=conditions,
+                               window_mapping=measurement_mapping,
+                               channel_mapping=channel_mapping,
+                               target_block=instruction_block)
 
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
         data = dict(subtemplates=[serializer.dictify(subtemplate) for subtemplate in self.subtemplates],

@@ -88,7 +88,10 @@ class DummySequencingElement(SequencingElement):
         self.channel_mapping = channel_mapping
         if self.push_elements is not None:
             for element in self.push_elements[1]:
-                sequencer.push(element, parameters, conditions, measurement_mapping, channel_mapping, self.push_elements[0])
+                sequencer.push(element, parameters, conditions,
+                               window_mapping=measurement_mapping,
+                               channel_mapping=channel_mapping,
+                               target_block=self.push_elements[0])
 
     def requires_stop(self, parameters: Dict[str, Parameter], conditions: Dict[str, 'Conditions']) -> bool:
         self.requires_stop_call_counter += 1

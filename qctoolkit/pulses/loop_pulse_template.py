@@ -160,9 +160,9 @@ class ForLoopPulseTemplate(LoopPulseTemplate):
             sequencer.push(self.body,
                            parameters=local_parameters,
                            conditions=conditions,
-                           measurement_mapping=measurement_mapping,
+                           window_mapping=measurement_mapping,
                            channel_mapping=channel_mapping,
-                           instruction_block=instruction_block)
+                           target_block=instruction_block)
 
     def build_waveform(self, parameters: Dict[str, Parameter]) -> ForLoopWaveform:
         return ForLoopWaveform([self.body.build_waveform(local_parameters)
