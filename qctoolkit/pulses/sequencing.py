@@ -115,6 +115,7 @@ class Sequencer:
              sequencing_element: SequencingElement,
              parameters: Optional[Dict[str, Union[Parameter, float]]]=None,
              conditions: Optional[Dict[str, 'Condition']]=None,
+             *,
              window_mapping: Optional[Dict[str,str]]=None,
              channel_mapping: Optional[Dict['ChannelID','ChannelID']]=None,
              target_block: Optional[InstructionBlock]=None) -> None:
@@ -146,10 +147,15 @@ class Sequencer:
         if target_block is None:
             target_block = self.__main_block
         if window_mapping is None:
-            window_mapping = dict()
+            if hasattr(sequencing_element, 'measurement_names'):
+                window_mapping = {wn: wn for wn in sequencing_element.measurement_names}
+            else:
+                window_mapping = dict()
         if channel_mapping is None:
-            channel_mapping = dict()
-
+            if hasattr(sequencing_element, 'defined_channels'):
+                channel_mapping = {cn: cn for cn in sequencing_element.defined_channels}
+            else:
+                channel_mapping = dict()
         for (key, value) in parameters.items():
             if isinstance(value, numbers.Real):
                 parameters[key] = ConstantParameter(value)

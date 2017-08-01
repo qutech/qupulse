@@ -11,7 +11,7 @@ MeasurementWindow = Tuple[str, Real, Real]
 
 
 class MeasurementDefiner:
-    def __init__(self, measurements: Optional[List[MeasurementDeclaration]]=None):
+    def __init__(self, measurements: Optional[List[MeasurementDeclaration]]):
         if measurements is None:
             self._measurement_windows = []
         else:
@@ -50,3 +50,7 @@ class MeasurementDefiner:
                  begin.original_expression,
                  length.original_expression)
                 for name, begin, length in self._measurement_windows]
+
+    @property
+    def measurement_names(self) -> Set[str]:
+        return {name for name, *_ in self._measurement_windows}

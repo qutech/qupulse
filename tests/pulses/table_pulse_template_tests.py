@@ -6,7 +6,7 @@ import numpy
 
 from qctoolkit.expressions import Expression
 from qctoolkit.serialization import Serializer
-from qctoolkit.pulses.table_pulse_template import TablePulseTemplate, TableWaveform, TableEntry, WaveformTableEntry, ZeroDurationTablePulseTemplate
+from qctoolkit.pulses.table_pulse_template import TablePulseTemplate, TableWaveform, TableEntry, WaveformTableEntry, ZeroDurationTablePulseTemplate, AmbiguousTablePulseEntry
 from qctoolkit.pulses.parameters import ParameterNotProvidedException, ParameterConstraintViolation
 from qctoolkit.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy, JumpInterpolationStrategy
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
@@ -330,6 +330,46 @@ class TablePulseTemplateTest(unittest.TestCase):
                 for (time, voltage) in zip(times[i, :], voltages)]
             for i in range(2)}
         self.assertEqual(entries, pulse.entries)
+
+    def test_from_entry_list_exceptions(self):
+        TablePulseTemplate.from_entry_list([(1, 2, 3, 'hold'), (2, 2, 2)], channel_names=['A', 'B'])
+
+        with self.assertRaises(ValueError):
+            TablePulseTemplate.from_entry_list([(1, 2, 3, 'hold'), (2, 2)])
+
+        with self.assertRaises(ValueError):
+            TablePulseTemplate.from_entry_list([(1, 2, 3, 'hold'), (2, 2, 2)], channel_names=['A'])
+
+        with self.assertWarns(AmbiguousTablePulseEntry):
+            TablePulseTemplate.from_entry_list([(1, 2, 3, 'hold'), (2, 2, 'linear')], channel_names=['A', 'B'])
+
+    def test_from_entry_list(self):
+        entries = {0: [(0, 9, HoldInterpolationStrategy()),
+                       (1, 2, HoldInterpolationStrategy()),
+                       (4, 1, LinearInterpolationStrategy())],
+                   1: [(0, 8, HoldInterpolationStrategy()),
+                       (1, 1, HoldInterpolationStrategy()),
+                       (4, 2, LinearInterpolationStrategy())],
+                   2: [(0, 7, HoldInterpolationStrategy()),
+                       (1, 3, HoldInterpolationStrategy()),
+                       (4, 3, LinearInterpolationStrategy())]}
+
+        tpt = TablePulseTemplate.from_entry_list([(0, 9, 8, 7),
+                                                  (1, 2, 1, 3, 'hold'),
+                                                  (4, 1, 2, 3, 'linear')],
+                                                 identifier='tpt')
+        self.assertEqual(tpt.entries, entries)
+        self.assertEqual(tpt.identifier, 'tpt')
+
+        entries = {k: entries[i]
+                   for k, i in zip('ABC', [0, 1, 2])}
+        tpt = TablePulseTemplate.from_entry_list([(0, 9, 8, 7),
+                                                  (1, 2, 1, 3, 'hold'),
+                                                  (4, 1, 2, 3, 'linear')],
+                                                 identifier='tpt',
+                                                 channel_names=['A', 'B', 'C'])
+        self.assertEqual(tpt.entries, entries)
+        self.assertEqual(tpt.identifier, 'tpt')
 
     def test_add_entry_multi_same_time_param(self) -> None:
         pulse = TablePulseTemplate({0: [(1, 3),

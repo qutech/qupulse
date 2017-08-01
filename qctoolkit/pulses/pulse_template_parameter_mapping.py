@@ -30,7 +30,8 @@ class MappingTemplate(PulseTemplate, ParameterConstrainer):
                  parameter_mapping: Optional[Dict[str, str]]=None,
                  measurement_mapping: Optional[Dict[str, str]] = None,
                  channel_mapping: Optional[Dict[ChannelID, ChannelID]] = None,
-                 parameter_constraints: Optional[List[str]]=None):
+                 parameter_constraints: Optional[List[str]]=None,
+                 allow_partial_parameter_mapping=False):
         """TODO mention nested mappings
         
         :param template: 
@@ -46,10 +47,14 @@ class MappingTemplate(PulseTemplate, ParameterConstrainer):
         else:
             mapped_internal_parameters = set(parameter_mapping.keys())
             internal_parameters = template.parameter_names
+            missing_parameter_mappings = internal_parameters - mapped_internal_parameters
             if mapped_internal_parameters - internal_parameters:
                 raise UnnecessaryMappingException(template, mapped_internal_parameters - internal_parameters)
-            elif internal_parameters - mapped_internal_parameters:
-                raise MissingMappingException(template, internal_parameters - mapped_internal_parameters)
+            elif missing_parameter_mappings:
+                if allow_partial_parameter_mapping:
+                    parameter_mapping.update({p: p for p in missing_parameter_mappings})
+                else:
+                    raise MissingMappingException(template, internal_parameters - mapped_internal_parameters)
         parameter_mapping = dict((k, Expression(v)) for k, v in parameter_mapping.items())
 
         measurement_mapping = dict() if measurement_mapping is None else measurement_mapping

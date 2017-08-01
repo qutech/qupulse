@@ -7,10 +7,12 @@ Classes:
         declared parameters.
 """
 
-from typing import Union, Dict, List, Set, Optional, NamedTuple, Any, Iterable, Tuple
+from typing import Union, Dict, List, Set, Optional, NamedTuple, Any, Iterable, Tuple, Sequence
 import numbers
 import itertools
 import warnings
+from operator import itemgetter
+from collections import namedtuple
 
 import numpy as np
 import sympy
@@ -39,10 +41,9 @@ WaveformTableEntry = NamedTuple(
 
 class TableWaveform(Waveform):
     """Waveform obtained from instantiating a TablePulseTemplate."""
-
     def __init__(self,
                  channel: ChannelID,
-                 waveform_table: Iterable[WaveformTableEntry],
+                 waveform_table: Sequence[WaveformTableEntry],
                  measurement_windows: Iterable[MeasurementWindow]) -> None:
         """Create a new TableWaveform instance.
 
@@ -51,12 +52,29 @@ class TableWaveform(Waveform):
                 entries of the form (time as float, voltage as float, interpolation strategy).
         """
         super().__init__()
-        self._table = tuple(waveform_table)
+
+        self._table = TableWaveform._validate_input(waveform_table)
         self._channel_id = channel
         self._measurement_windows = tuple(measurement_windows)
 
-        if len(waveform_table) < 2:
-            raise ValueError("A given waveform table has less than two entries.")
+    @staticmethod
+    def _validate_input(input_waveform_table: Sequence[WaveformTableEntry]) -> Tuple[WaveformTableEntry]:
+        if len(input_waveform_table) < 2:
+            raise ValueError("Waveform table has less than two entries.")
+
+        times = np.fromiter((t for t, *_ in input_waveform_table), dtype=float, count=len(input_waveform_table))
+        if times[0] != 0:
+            raise ValueError('First time point has to be 0')
+
+        diff_times = np.diff(times)
+        if np.any(diff_times) < 0:
+            raise ValueError('Times are not increasing')
+
+        # filter 3 subsequent equal times
+        to_keep = np.full_like(times, True, dtype=np.bool_)
+        to_keep[1:-1] = np.logical_or(0 != diff_times[:-1], diff_times[:-1] != diff_times[1:])
+
+        return itemgetter(*np.flatnonzero(to_keep))(input_waveform_table)
 
     @property
     def compare_key(self) -> Any:
@@ -84,7 +102,7 @@ class TableWaveform(Waveform):
     def defined_channels(self) -> Set[ChannelID]:
         return {self._channel_id}
 
-    def get_measurement_windows(self) -> Iterable[MeasurementWindow]:
+    def get_measurement_windows(self) -> Sequence[MeasurementWindow]:
         return self._measurement_windows
 
     def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> 'Waveform':
@@ -97,11 +115,15 @@ EntryInInit = Union['TableEntry',
 
 
 class TableEntry(tuple):
-    def __new__(cls, t: ValueInInit, v: ValueInInit, interp: Union[str, InterpolationStrategy]='hold'):
-        return tuple.__new__(cls, (t if isinstance(t, Expression) else Expression(t),
-                                   v if isinstance(v, Expression) else Expression(v),
-                                   interp if isinstance(interp, InterpolationStrategy)
-                                   else TablePulseTemplate.interpolation_strategies[interp]))
+    def __new__(cls, t: ValueInInit, v: ValueInInit, interp: Union[str, InterpolationStrategy]='default'):
+        if interp in TablePulseTemplate.interpolation_strategies:
+            interp = TablePulseTemplate.interpolation_strategies[interp]
+        if not isinstance(interp, InterpolationStrategy):
+            raise KeyError(interp, 'is not a valid interpolation strategy')
+
+        return super().__new__(cls, (t if isinstance(t, Expression) else Expression(t),
+                                     v if isinstance(v, Expression) else Expression(v),
+                                     interp))
 
     @property
     def t(self) -> Expression:
@@ -115,11 +137,18 @@ class TableEntry(tuple):
     def interp(self) -> InterpolationStrategy:
         return self[2]
 
+    def instantiate(self, parameters: Dict[str, numbers.Real]) -> WaveformTableEntry:
+        return WaveformTableEntry(self.t.evaluate_numeric(**parameters),
+                                  self.v.evaluate_numeric(**parameters),
+                                  self.interp)
+
 
 class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer, MeasurementDefiner):
+    """TablePulseTemplate"""
     interpolation_strategies = {'linear': LinearInterpolationStrategy(),
                                 'hold': HoldInterpolationStrategy(),
-                                'jump': JumpInterpolationStrategy()}
+                                'jump': JumpInterpolationStrategy(),
+                                'default': HoldInterpolationStrategy()}
 
     def __init__(self, entries: Dict[ChannelID, List[EntryInInit]],
                  identifier: Optional[str]=None,
@@ -371,6 +400,61 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer, MeasurementD
                                                           voltages if voltages.ndim == 1 else voltages[i, :])))
                                        for i, channel in enumerate(channels)))
 
+    @staticmethod
+    def from_entry_list(entry_list: List[Tuple],
+                        channel_names: Optional[List[ChannelID]]=None, **kwargs) -> 'TablePulseTemplate':
+        """Static constructor for a TablePulseTemplate where all channel's entries share the same times.
+
+        :param entry_list: List of tuples of the form (t, v_1, ..., v_N[, interp])
+        :param channel_names: Optional list of channel identifiers to use. Default is [0, ..., N-1]
+        :param kwargs: Forwarded to TablePulseTemplate constructor
+        :return: TablePulseTemplate with
+        """
+        # TODO: Better doc string
+        def is_valid_interpolation_strategy(inter):
+            return inter in TablePulseTemplate.interpolation_strategies or isinstance(inter, InterpolationStrategy)
+
+        # determine number of channels
+        max_len = max(len(data) for data in entry_list)
+        min_len = min(len(data) for data in entry_list)
+
+        if max_len - min_len > 1:
+            raise ValueError('There are entries of contradicting lengths: {}'.format(set(len(t) for t in entry_list)))
+        elif max_len - min_len == 1:
+            num_chan = min_len - 1
+        else:
+            # figure out whether all last entries are interpolation strategies
+            if all(is_valid_interpolation_strategy(interp) for *data, interp in entry_list):
+                num_chan = min_len - 2
+            else:
+                num_chan = min_len - 1
+
+        # insert default interpolation strategy key
+        entry_list = [(t, *data, interp) if len(data) == num_chan else (t, *data, interp, 'default')
+                      for t, *data, interp in entry_list]
+
+        for *_, last_voltage, _ in entry_list:
+            if last_voltage in TablePulseTemplate.interpolation_strategies:
+                warnings.warn('{} is also an interpolation strategy name but handled as a voltage. Is it intended?'
+                              .format(last_voltage), AmbiguousTablePulseEntry)
+
+        if channel_names is None:
+            channel_names = list(range(num_chan))
+        elif len(channel_names) != num_chan:
+            raise ValueError('Number of channel identifiers does not correspond to the number of channels.')
+
+        parsed = {channel_name: [] for channel_name in channel_names}
+
+        for time, *voltages, interp in entry_list:
+            for channel_name, volt in zip(channel_names, voltages):
+                parsed[channel_name].append((time, volt, interp))
+
+        return TablePulseTemplate(parsed, **kwargs)
+
 
 class ZeroDurationTablePulseTemplate(UserWarning):
+    pass
+
+
+class AmbiguousTablePulseEntry(UserWarning):
     pass

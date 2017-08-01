@@ -193,7 +193,7 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer):
                       conditions: Dict[str, 'Condition']) -> bool:
         """Returns the stop requirement of the first subtemplate. If a later subtemplate requires a stop the
         SequencePulseTemplate can be partially sequenced."""
-        return self.__subtemplates[0].requires_stop(parameters,conditions) if self.__subtemplates else False
+        return self.__subtemplates[0].requires_stop(parameters, conditions) if self.__subtemplates else False
 
     def build_waveform(self, parameters: Dict[str, Parameter]) -> SequenceWaveform:
         return SequenceWaveform([subtemplate.build_waveform(parameters) for subtemplate in self.__subtemplates])
