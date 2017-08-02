@@ -88,10 +88,10 @@ class PointPulseTemplate(ParameterConstrainer, MeasurementDefiner, AtomicPulseTe
                  for channel, ch_entries in zip(mapped_channels[1:], waveform_entries[1:])])
 
     @property
-    def point_pulse_entries(self):
+    def point_pulse_entries(self) -> Sequence[PointPulseEntry]:
         return self._entries
 
-    def get_serialization_data(self, serializer):
+    def get_serialization_data(self, serializer) -> Dict:
         data = {'time_point_tuple_list': [(t.get_most_simple_representation(),
                                            v.get_most_simple_representation(),
                                            str(interp))
@@ -104,7 +104,7 @@ class PointPulseTemplate(ParameterConstrainer, MeasurementDefiner, AtomicPulseTe
         return data
 
     @staticmethod
-    def deserialize(serializer, **kwargs):
+    def deserialize(serializer, **kwargs) -> 'PointPulseTemplate':
         return PointPulseTemplate(**kwargs)
 
     @property
