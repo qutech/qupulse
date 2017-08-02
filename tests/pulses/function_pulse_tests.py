@@ -13,7 +13,6 @@ import numpy as np
 from tests.serialization_dummies import DummySerializer, DummyStorageBackend
 from tests.pulses.sequencing_dummies import DummyParameter
 from tests.pulses.measurement_tests import MeasurementDefinerTest, ParameterConstrainerTest
-from tests.property_test_helper import assert_all_properties_tested
 
 
 class FunctionPulseTest(unittest.TestCase):
@@ -51,7 +50,6 @@ class FunctionPulseTest(unittest.TestCase):
         self.pars = dict(a=DummyParameter(1), b=DummyParameter(2), c=DummyParameter(136.78))
 
 
-@assert_all_properties_tested(to_test=FunctionPulseTemplate)
 class FunctionPulsePropertyTest(FunctionPulseTest):
     def test_expression(self):
         self.assertEqual(self.fpt.expression, self.s)
