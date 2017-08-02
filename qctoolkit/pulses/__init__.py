@@ -1,4 +1,3 @@
-from qctoolkit.pulses.branch_pulse_template import *
 from qctoolkit.pulses.conditions import *
 from qctoolkit.pulses.function_pulse_template import *
 from qctoolkit.pulses.instructions import *
