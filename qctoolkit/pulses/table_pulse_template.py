@@ -30,20 +30,33 @@ from qctoolkit.expressions import Expression
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 from qctoolkit.pulses.measurement import MeasurementDefiner
 
-__all__ = ["TablePulseTemplate", "TableWaveform", "WaveformTableEntry"]
+__all__ = ["TablePulseTemplate", "TableWaveform", "TableWaveformEntry"]
 
 
-WaveformTableEntry = NamedTuple(
-    "WaveformTableEntry",
-    [('t', float), ('v', float), ('interp', InterpolationStrategy)]
-)
+class TableWaveformEntry(tuple):
+    def __new__(cls, t: float, v: float, interp: InterpolationStrategy):
+        if not isinstance(interp, InterpolationStrategy):
+            raise TypeError('{} is no object of type interpolation strategy'.format(interp))
+        return super().__new__(cls, (t, v, interp))
+
+    @property
+    def t(self) -> float:
+        return self[0]
+
+    @property
+    def v(self) -> float:
+        return self[1]
+
+    @property
+    def interp(self) -> InterpolationStrategy:
+        return self[2]
 
 
 class TableWaveform(Waveform):
     """Waveform obtained from instantiating a TablePulseTemplate."""
     def __init__(self,
                  channel: ChannelID,
-                 waveform_table: Sequence[WaveformTableEntry],
+                 waveform_table: Sequence[TableWaveformEntry],
                  measurement_windows: Iterable[MeasurementWindow]) -> None:
         """Create a new TableWaveform instance.
 
@@ -58,7 +71,7 @@ class TableWaveform(Waveform):
         self._measurement_windows = tuple(measurement_windows)
 
     @staticmethod
-    def _validate_input(input_waveform_table: Sequence[WaveformTableEntry]) -> Tuple[WaveformTableEntry]:
+    def _validate_input(input_waveform_table: Sequence[TableWaveformEntry]) -> Tuple[TableWaveformEntry]:
         if len(input_waveform_table) < 2:
             raise ValueError("Waveform table has less than two entries.")
 
@@ -74,7 +87,8 @@ class TableWaveform(Waveform):
         to_keep = np.full_like(times, True, dtype=np.bool_)
         to_keep[1:-1] = np.logical_or(0 != diff_times[:-1], diff_times[:-1] != diff_times[1:])
 
-        return itemgetter(*np.flatnonzero(to_keep))(input_waveform_table)
+        return tuple(entry if isinstance(entry, TableWaveformEntry) else TableWaveformEntry(*entry)
+                     for entry, keep_entry in zip(input_waveform_table, to_keep) if keep_entry)
 
     @property
     def compare_key(self) -> Any:
@@ -137,8 +151,8 @@ class TableEntry(tuple):
     def interp(self) -> InterpolationStrategy:
         return self[2]
 
-    def instantiate(self, parameters: Dict[str, numbers.Real]) -> WaveformTableEntry:
-        return WaveformTableEntry(self.t.evaluate_numeric(**parameters),
+    def instantiate(self, parameters: Dict[str, numbers.Real]) -> TableWaveformEntry:
+        return TableWaveformEntry(self.t.evaluate_numeric(**parameters),
                                   self.v.evaluate_numeric(**parameters),
                                   self.interp)
 
@@ -215,7 +229,7 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer, MeasurementD
         return {name for name, _, _ in self._measurement_windows}
 
     def get_entries_instantiated(self, parameters: Dict[str, numbers.Real]) \
-            -> Dict[ChannelID, List[WaveformTableEntry]]:
+            -> Dict[ChannelID, List[TableWaveformEntry]]:
         """Compute an instantiated list of the table's entries.
 
         Args:
@@ -227,17 +241,17 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer, MeasurementD
         if not (self.table_parameters <= set(parameters.keys())):
             raise ParameterNotProvidedException((self.table_parameters - set(parameters.keys())).pop())
 
-        instantiated_entries = dict()  # type: Dict[ChannelID,List[WaveformTableEntry]]
+        instantiated_entries = dict()  # type: Dict[ChannelID,List[TableWaveformEntry]]
 
         for channel, channel_entries in self._entries.items():
-            instantiated = [WaveformTableEntry(entry.t.evaluate_numeric(**parameters),
+            instantiated = [TableWaveformEntry(entry.t.evaluate_numeric(**parameters),
                                                entry.v.evaluate_numeric(**parameters),
                                                entry.interp)
                             for entry in channel_entries]
 
             # Add (0, v) entry if wf starts at finite time
             if instantiated[0].t > 0:
-                instantiated.insert(0, WaveformTableEntry(0,
+                instantiated.insert(0, TableWaveformEntry(0,
                                                           instantiated[0].v,
                                                           TablePulseTemplate.interpolation_strategies['hold']))
 
@@ -253,14 +267,14 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer, MeasurementD
         for channel, instantiated in instantiated_entries.items():
             final_entry = instantiated[-1]
             if final_entry.t < duration:
-                instantiated.append(WaveformTableEntry(duration,
+                instantiated.append(TableWaveformEntry(duration,
                                                        final_entry.v,
                                                        TablePulseTemplate.interpolation_strategies['hold']))
             instantiated_entries[channel] = TablePulseTemplate._remove_redundant_entries(instantiated)
         return instantiated_entries
 
     @staticmethod
-    def _remove_redundant_entries(entries: List[WaveformTableEntry]) -> List[WaveformTableEntry]:
+    def _remove_redundant_entries(entries: List[TableWaveformEntry]) -> List[TableWaveformEntry]:
         """ Checks if three subsequent values in a list of table entries have the same value.
         If so, the intermediate is redundant and removed in-place.
 
