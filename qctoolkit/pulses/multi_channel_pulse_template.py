@@ -100,7 +100,8 @@ class MultiChannelWaveform(Waveform):
 
         # sort the waveforms with their defined channels to make compare key reproducible
         def get_sub_waveform_sort_key(waveform):
-            return tuple(sorted(tuple(waveform.defined_channels)))
+            return tuple(sorted(tuple('{}_stringified_numeric_channel'.format(ch) if isinstance(ch, int) else ch
+                                      for ch in waveform.defined_channels)))
 
         self._sub_waveforms = sorted(flatten_sub_waveforms(sub_waveforms),
                                      key=get_sub_waveform_sort_key)

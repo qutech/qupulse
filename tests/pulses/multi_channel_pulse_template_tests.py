@@ -372,9 +372,9 @@ class MultiChannelPulseTemplateSequencingTests(unittest.TestCase):
                                  [(dummy2, parameters, conditions, measurement_mapping, channel_mapping)])
 
     def test_build_sequence_same_duration(self) -> None:
-        dummy_wf1 = DummyWaveform(duration=2.3, defined_channels={'A'})
+        dummy_wf1 = DummyWaveform(duration=2.3, defined_channels={0})
         dummy_wf2 = DummyWaveform(duration=2.3, defined_channels={'B'})
-        dummy1 = DummyPulseTemplate(parameter_names={'bar'}, defined_channels={'A'}, waveform=dummy_wf1, duration=2.3)
+        dummy1 = DummyPulseTemplate(parameter_names={'bar'}, defined_channels={0}, waveform=dummy_wf1, duration=2.3)
         dummy2 = DummyPulseTemplate(parameter_names={}, defined_channels={'B'}, waveform=dummy_wf2, duration=2.3)
 
         sequencer = DummySequencer()
@@ -382,7 +382,7 @@ class MultiChannelPulseTemplateSequencingTests(unittest.TestCase):
 
         parameters = {'bar': ConstantParameter(3)}
         measurement_mapping = {}
-        channel_mapping = {'A': 'A', 'B': 'B'}
+        channel_mapping = {0: 1, 'B': 'B'}
         instruction_block = DummyInstructionBlock()
         conditions = {}
 
