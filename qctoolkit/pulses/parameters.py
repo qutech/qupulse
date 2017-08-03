@@ -59,7 +59,7 @@ class Parameter(Serializable, Comparable, metaclass=ABCMeta):
         super().__init__(None)
 
     @abstractmethod
-    def get_value(self) -> float:
+    def get_value(self) -> Real:
         """Compute and return the parameter value."""
 
     @abstractproperty
@@ -71,9 +71,6 @@ class Parameter(Serializable, Comparable, metaclass=ABCMeta):
         Returns:
             True, if evaluating this Parameter instance requires an interruption.
         """
-    
-    def __float__(self) -> float:
-        return float(self.get_value())
 
     @property
     def compare_key(self) -> Any:
@@ -83,16 +80,16 @@ class Parameter(Serializable, Comparable, metaclass=ABCMeta):
 class ConstantParameter(Parameter):
     """A pulse parameter with a constant value."""
     
-    def __init__(self, value: float) -> None:
+    def __init__(self, value: Real) -> None:
         """Create a ConstantParameter instance.
 
         Args:
-            value (float): The value of the parameter
+            value (Real): The value of the parameter
         """
         super().__init__()
         self.__value = value
         
-    def get_value(self) -> float:
+    def get_value(self) -> Real:
         return self.__value
         
     @property
@@ -106,7 +103,7 @@ class ConstantParameter(Parameter):
         return dict(type=serializer.get_type_identifier(self), constant=self.__value)
 
     @staticmethod
-    def deserialize(serializer: Serializer, constant: float) -> 'ConstantParameter':
+    def deserialize(serializer: Serializer, constant: Real) -> 'ConstantParameter':
         return ConstantParameter(constant)
 
 
@@ -147,12 +144,12 @@ class MappedParameter(Parameter):
         except KeyError as key_error:
             raise ParameterNotProvidedException(str(key_error)) from key_error
 
-    def get_value(self) -> float:
+    def get_value(self) -> Real:
         if self.requires_stop:
             raise Exception("Cannot evaluate MappedParameter because at least one dependency "
                             "cannot be evaluated.")
         dependencies = self.__collect_dependencies()
-        variables = {k: float(dependencies[k]) for k in dependencies}
+        variables = {k: dependencies[k].get_value() for k in dependencies}
         return self.__expression.evaluate_numeric(**variables)
 
     @property

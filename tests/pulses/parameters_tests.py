@@ -9,18 +9,10 @@ from tests.serialization_dummies import DummySerializer
 from tests.pulses.sequencing_dummies import DummyParameter
 
 
-class ParameterTest(unittest.TestCase):
-    
-    def test_float_conversion_method(self) -> None:
-        parameter = DummyParameter()
-        self.assertEqual(parameter.value, float(parameter))
-
-
 class ConstantParameterTest(unittest.TestCase):
     def __test_valid_params(self, value: float) -> None:
         constant_parameter = ConstantParameter(value)
         self.assertEqual(value, constant_parameter.get_value())
-        self.assertEqual(value, float(constant_parameter))
         
     def test_float_values(self) -> None:
         self.__test_valid_params(-0.3)
