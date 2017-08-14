@@ -70,9 +70,17 @@ class ParametrizedRange:
                 self.step.get_most_simple_representation())
 
     def to_range(self, parameters: Dict[str, Any]) -> range:
-        return range(self.start.evaluate_numeric(**parameters),
-                     self.stop.evaluate_numeric(**parameters),
-                     self.step.evaluate_numeric(**parameters))
+        def to_int(x) -> int:
+            if isinstance(x, int):
+                return x
+            int_x = int(round(x))
+            if abs(x-int_x) > 1e-10:
+                raise ValueError('Non integer in range')
+            return int_x
+
+        return range(to_int(self.start.evaluate_numeric(**parameters)),
+                     to_int(self.stop.evaluate_numeric(**parameters)),
+                     to_int(self.step.evaluate_numeric(**parameters)))
 
     @property
     def parameter_names(self) -> Set[str]:
@@ -96,7 +104,7 @@ class ForLoopPulseTemplate(LoopPulseTemplate):
             self._loop_range = loop_range
         elif isinstance(loop_range, (int, str)):
             self._loop_range = ParametrizedRange(loop_range)
-        elif isinstance(loop_range, tuple):
+        elif isinstance(loop_range, (tuple, list)):
             self._loop_range = ParametrizedRange(*loop_range)
         elif isinstance(loop_range, range):
             self._loop_range = ParametrizedRange(start=loop_range.start,
