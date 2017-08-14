@@ -27,6 +27,7 @@ MappingTuple = Union[Tuple[PulseTemplate],
 
 class MappingTemplate(PulseTemplate, ParameterConstrainer):
     def __init__(self, template: PulseTemplate, *,
+                 identifier: Optional[str]=None,
                  parameter_mapping: Optional[Dict[str, str]]=None,
                  measurement_mapping: Optional[Dict[str, str]] = None,
                  channel_mapping: Optional[Dict[ChannelID, ChannelID]] = None,
@@ -39,7 +40,7 @@ class MappingTemplate(PulseTemplate, ParameterConstrainer):
         :param measurement_mapping: mappings for other measurement names are inserted
         :param channel_mapping: mappings for other channels are auto inserted
         """
-        PulseTemplate.__init__(self, identifier=None)
+        PulseTemplate.__init__(self, identifier=identifier)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 
         if parameter_mapping is None:
@@ -183,9 +184,9 @@ class MappingTemplate(PulseTemplate, ParameterConstrainer):
 
     @staticmethod
     def deserialize(serializer: 'Serializer',
-                    template: Union[str, Dict[str, Any]],
-                    identifier: Optional[str]=None, **kwargs) -> 'MappingTemplate':
-        return MappingTemplate(template=serializer.deserialize(template), **kwargs)
+                    template: Union[str, Dict[str, Any]], **kwargs) -> 'MappingTemplate':
+        return MappingTemplate(template=serializer.deserialize(template),
+                               **kwargs)
 
     def map_parameters(self,
                        parameters: Dict[str, Union[Parameter, numbers.Real]]) -> Dict[str, Parameter]:
