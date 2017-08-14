@@ -25,6 +25,9 @@ class AlazarCard(DAC):
     def __init__(self, card, config: Optional[ScanlineConfiguration]=None):
         self.__card = card
 
+        self.__armed_program = None
+        self.update_settings = True
+
         self.__definitions = dict()
         self.config = config
 
@@ -83,22 +86,26 @@ class AlazarCard(DAC):
         self._registered_programs[program_name].operations = operations
 
     def arm_program(self, program_name: str) -> None:
-        config = self.config
-        config.masks, config.operations, total_record_size = self._registered_programs[program_name]
+        to_arm = self._registered_programs[program_name]
+        if self.update_settings or self.__armed_program is not to_arm:
+            config = self.config
+            config.masks, config.operations, total_record_size = self._registered_programs[program_name]
 
-        if not config.masks:
-            if config.operations:
-                raise RuntimeError('Invalid configuration. Operations have no masks to work with')
-            else:
-                return
+            if not config.masks:
+                if config.operations:
+                    raise RuntimeError('Invalid configuration. Operations have no masks to work with')
+                else:
+                    return
 
-        if config.totalRecordSize == 0:
-            config.totalRecordSize = total_record_size
-        elif config.totalRecordSize < total_record_size:
-            raise ValueError('specified total record size is smaller than needed {} < {}'.format(config.totalRecordSize,
-                                                                                                 total_record_size))
+            if config.totalRecordSize == 0:
+                config.totalRecordSize = total_record_size
+            elif config.totalRecordSize < total_record_size:
+                raise ValueError('specified total record size is smaller than needed {} < {}'.format(config.totalRecordSize,
+                                                                                                     total_record_size))
+            config.apply(self.__card, True)
 
-        config.apply(self.__card, True)
+            self.update_settings = False
+            self.__armed_program = to_arm
         self.__card.startAcquisition(1)
 
     def delete_program(self, program_name: str) -> None:
