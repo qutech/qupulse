@@ -1,7 +1,7 @@
 import unittest
 import numpy
 
-from qctoolkit.pulses.plotting import Plotter, PlottingNotPossibleException
+from qctoolkit.pulses.plotting import PlottingNotPossibleException, render
 from qctoolkit.pulses.instructions import InstructionBlock
 from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
 from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
@@ -15,12 +15,12 @@ class PlotterTests(unittest.TestCase):
     def test_render_unsupported_instructions(self) -> None:
         block = InstructionBlock()
         block.add_instruction(DummyInstruction())
-        plotter = Plotter()
+
         with self.assertRaises(NotImplementedError):
-            plotter.render(block)
+            render(block)
 
     def test_render_no_waveforms(self) -> None:
-        self.assertEqual(([], []), Plotter().render(InstructionBlock()))
+        self.assertEqual(([], []), render(InstructionBlock()))
 
     def test_render(self) -> None:
         wf1 = DummyWaveform(duration=19)
@@ -41,8 +41,7 @@ class PlotterTests(unittest.TestCase):
         expected_times = numpy.arange(start=0, stop=42, step=2)
         expected_result = numpy.concatenate((wf1.sample_output, wf2.sample_output))
 
-        plotter = Plotter(sample_rate=0.5)
-        times, voltages = plotter.render(block)
+        times, voltages = render(block, sample_rate=0.5)
 
         self.assertEqual(len(wf1.sample_calls), 1)
         self.assertEqual(len(wf2.sample_calls), 1)
@@ -88,11 +87,10 @@ class PlotterTests(unittest.TestCase):
 
         # run the sequencer and render the plot
         sample_rate = 20
-        plotter = Plotter(sample_rate=sample_rate)
-        sequencer = Sequencer(plotter)
+        sequencer = Sequencer()
         sequencer.push(sequence, parameters)
         block = sequencer.build()
-        times, voltages = plotter.render(block)
+        times, voltages = render(block, sample_rate=sample_rate)
 
         # compute expected values
         expected_times = numpy.linspace(0, 100, sample_rate)

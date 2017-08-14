@@ -10,7 +10,6 @@ Functions:
 from typing import Dict, Tuple
 
 import numpy as np
-from matplotlib import pyplot as plt
 
 from qctoolkit import ChannelID
 from qctoolkit.pulses.pulse_template import PulseTemplate
@@ -20,77 +19,61 @@ from qctoolkit.pulses.instructions import EXECInstruction, STOPInstruction, Inst
     REPJInstruction
 
 
-__all__ = ["Plotter", "plot", "PlottingNotPossibleException"]
+__all__ = ["render", "plot", "PlottingNotPossibleException"]
 
 
-class Plotter:
-    """Plotter converts an InstructionSequence compiled by Sequencer from a PulseTemplate structure
-    into a series of voltage values regularly sampled over the entire time domain for plotting.
+def render(sequence: InstructionSequence, sample_rate: int=10) -> Tuple[np.ndarray, Dict[ChannelID, np.ndarray]]:
+    """'Render' an instruction sequence (sample all contained waveforms into an array).
 
-    It currently is not able to handle instruction sequences that contain branching / jumping.
+    Returns:
+        a tuple (times, values) of numpy.ndarrays of similar size. times contains the time value
+        of all sample times and values the corresponding sampled value.
     """
+    if not all(isinstance(x, (EXECInstruction, STOPInstruction, REPJInstruction)) for x in sequence):
+        raise NotImplementedError('Can only plot waveforms without branching so far.')
 
-    def __init__(self, sample_rate: int=10) -> None:
-        """Create a new Plotter instance.
+    def get_waveform_generator(instruction_block):
+        for instruction in instruction_block:
+            if isinstance(instruction, EXECInstruction):
+                yield instruction.waveform
+            elif isinstance(instruction, REPJInstruction):
+                for _ in range(instruction.count):
+                    yield from get_waveform_generator(instruction.target.block[instruction.target.offset:])
+            else:
+                return
 
-        Args:
-            sample_rate (int): The sample rate in samples per time unit. (default = 10)
-        """
-        super().__init__()
-        self.__sample_rate = sample_rate
+    waveforms = [wf for wf in get_waveform_generator(sequence)]
+    if not waveforms:
+        return [], []
 
-    def render(self, sequence: InstructionSequence) -> Tuple[np.ndarray, Dict[ChannelID, np.ndarray]]:
-        """'Render' an instruction sequence (sample all contained waveforms into an array).
+    total_time = sum(waveform.duration for waveform in waveforms)
 
-        Returns:
-            a tuple (times, values) of numpy.ndarrays of similar size. times contains the time value
-            of all sample times and values the corresponding sampled value.
-        """
-        if not all(isinstance(x, (EXECInstruction, STOPInstruction, REPJInstruction)) for x in sequence):
-            raise NotImplementedError('Can only plot waveforms without branching so far.')
+    channels = waveforms[0].defined_channels
 
-        def get_waveform_generator(instruction_block):
-            for instruction in instruction_block:
-                if isinstance(instruction, EXECInstruction):
-                    yield instruction.waveform
-                elif isinstance(instruction, REPJInstruction):
-                    for _ in range(instruction.count):
-                        yield from get_waveform_generator(instruction.target.block[instruction.target.offset:])
-                else:
-                    return
+    # add one sample to see the end of the waveform
+    sample_count = total_time * sample_rate + 1
+    times = np.linspace(0, total_time, num=sample_count)
+    # move the last sample inside the waveform
+    times[-1] = np.nextafter(times[-1], times[-2])
 
-        waveforms = [wf for wf in get_waveform_generator(sequence)]
-        if not waveforms:
-            return [], []
-
-        total_time = sum(waveform.duration for waveform in waveforms)
-
-        channels = waveforms[0].defined_channels
-
-        # add one sample to see the end of the waveform
-        sample_count = total_time * self.__sample_rate + 1
-        times = np.linspace(0, total_time, num=sample_count)
-        # move the last sample inside the waveform
-        times[-1] = np.nextafter(times[-1], times[-2])
-
-        voltages = dict((ch, np.empty(len(times))) for ch in channels)
-        offsets = {ch: 0 for ch in channels}
-        for waveform in waveforms:
-            for channel in channels:
-                offset = offsets[channel]
-                indices = slice(*np.searchsorted(times, (offset, offset+waveform.duration)))
-                sample_times = times[indices] - offset
-                output_array = voltages[channel][indices]
-                waveform.get_sampled(channel=channel,
-                                     sample_times=sample_times,
-                                     output_array=output_array)
-                offsets[channel] += waveform.duration
-        return times, voltages
+    voltages = dict((ch, np.empty(len(times))) for ch in channels)
+    offsets = {ch: 0 for ch in channels}
+    for waveform in waveforms:
+        for channel in channels:
+            offset = offsets[channel]
+            indices = slice(*np.searchsorted(times, (offset, offset+waveform.duration)))
+            sample_times = times[indices] - offset
+            output_array = voltages[channel][indices]
+            waveform.get_sampled(channel=channel,
+                                 sample_times=sample_times,
+                                 output_array=output_array)
+            offsets[channel] += waveform.duration
+    return times, voltages
 
 
 def plot(pulse: PulseTemplate,
          parameters: Dict[str, Parameter]=None,
-         sample_rate: int=10) -> plt.Figure: # pragma: no cover
+         sample_rate: int=10) -> 'plt.Figure': # pragma: no cover
     """Plot a pulse using matplotlib.
 
     The given pulse will first be sequenced using the Sequencer class. The resulting
@@ -110,11 +93,12 @@ def plot(pulse: PulseTemplate,
             because a parameter value could not be evaluated
         all Exceptions possibly raised during sequencing
     """
+    from matplotlib import pyplot as plt
+
     channels = pulse.defined_channels
 
     if parameters is None:
         parameters = dict()
-    plotter = Plotter(sample_rate=sample_rate)
     sequencer = Sequencer()
     sequencer.push(pulse,
                    parameters,
@@ -123,7 +107,7 @@ def plot(pulse: PulseTemplate,
     sequence = sequencer.build()
     if not sequencer.has_finished():
         raise PlottingNotPossibleException(pulse)
-    times, voltages = plotter.render(sequence)
+    times, voltages = render(sequence, sample_rate)
 
     # plot to figure
     figure = plt.figure()
