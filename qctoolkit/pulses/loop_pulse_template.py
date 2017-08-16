@@ -136,7 +136,7 @@ class ForLoopPulseTemplate(LoopPulseTemplate):
 
     @property
     def parameter_names(self) -> Set[str]:
-        parameter_names = self.body.parameter_names
+        parameter_names = self.body.parameter_names.copy()
         parameter_names.remove(self._loop_index)
         return parameter_names | self._loop_range.parameter_names
 
