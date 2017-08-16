@@ -258,13 +258,12 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
     @staticmethod
     def deserialize(serializer: Serializer,
                     subtemplates: Iterable[Dict[str, Any]],
-                    atomicity: bool,
-                    identifier: Optional[str] = None) -> 'MultiChannelPulseTemplate':
+                    parameter_constraints: Any,
+                    identifier: Optional[str] = None) -> 'AtomicMultiChannelPulseTemplate':
         subtemplates = [serializer.deserialize(st) for st in subtemplates]
-        external_parameters = set.union(*(st.parameter_names for st in subtemplates))
-        mul_template = MultiChannelPulseTemplate(subtemplates, external_parameters, identifier=identifier)
-        mul_template.atomicity = atomicity
-        return mul_template
+        return AtomicMultiChannelPulseTemplate(*subtemplates,
+                                               parameter_constraints=parameter_constraints,
+                                               identifier=identifier)
 
 
 class MultiChannelPulseTemplate(PulseTemplate):
