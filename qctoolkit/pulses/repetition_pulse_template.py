@@ -89,7 +89,6 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer):
             body (PulseTemplate): The PulseTemplate which will be repeated.
             repetition_count (int or ParameterDeclaration): The number of repetitions either as a
                 constant integer value or as a parameter declaration.
-            loop_index (str): If specified the loop index
             identifier (str): A unique identifier for use in serialization. (optional)
         """
         LoopPulseTemplate.__init__(self, identifier=identifier, body=body)
