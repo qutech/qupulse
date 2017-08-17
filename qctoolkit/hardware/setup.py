@@ -4,9 +4,9 @@ from collections import defaultdict, deque
 
 from ctypes import c_int64 as MutableInt
 
-from qctoolkit.hardware.awgs import AWG
+from qctoolkit.hardware.awgs.base import AWG
 from qctoolkit.hardware.dacs import DAC
-from qctoolkit.hardware.program import MultiChannelProgram, Loop
+from qctoolkit.hardware.program import MultiChannelProgram
 
 from qctoolkit import ChannelID
 

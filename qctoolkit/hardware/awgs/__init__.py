@@ -1,6 +1,13 @@
-from qctoolkit.hardware.awgs.base import AWG, DummyAWG
+__all__ = []
 
-__all__ = [
-    'AWG',
-    'DummyAWG'
-]
+try:
+    from qctoolkit.hardware.awgs.tabor import TaborAWGRepresentation, TaborChannelPair
+    __all__.extend(["TaborAWGRepresentation", "TaborChannelPair"])
+except ImportError:
+    pass
+
+try:
+    from qctoolkit.hardware.awgs.tektronix import TektronixAWG
+    __all__.extend("TektronixAWG")
+except ImportError:
+    pass

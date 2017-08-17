@@ -1,7 +1,7 @@
 """"""
 import fractions
 import sys
-from typing import List, Tuple, Set, NamedTuple, Callable, Optional, Any, Sequence, cast
+from typing import List, Tuple, Set, NamedTuple, Callable, Optional, Any, Sequence
 from enum import Enum
 
 # Provided by Tabor electronics for python 2.7
@@ -14,7 +14,7 @@ from qctoolkit import ChannelID
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 from qctoolkit.hardware.program import Loop
 from qctoolkit.hardware.util import voltage_to_uint16, make_combined_wave
-from qctoolkit.hardware.awgs import AWG
+from qctoolkit.hardware.awgs.base import AWG
 
 
 assert(sys.byteorder == 'little')
