@@ -160,7 +160,7 @@ class HardwareSetup:
             raise ValueError('Channel must be either a playback or a marker channel')
 
     def rm_channel(self, identifier: ChannelID) -> None:
-        self._playback_channel_map.pop(identifier)
+        self._channel_map.pop(identifier)
 
     def registered_channels(self) -> Set[PlaybackChannel]:
         return self._channel_map.copy()
