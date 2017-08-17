@@ -1,7 +1,8 @@
 """"""
 import fractions
 import sys
-from typing import List, Tuple, Set, NamedTuple, Callable, Optional, Any
+from typing import List, Tuple, Set, NamedTuple, Callable, Optional, Any, Sequence, cast
+from enum import Enum
 
 # Provided by Tabor electronics for python 2.7
 # a python 3 version is in a private repository on https://git.rwth-aachen.de/qutech
@@ -30,13 +31,12 @@ class TaborSegment(tuple):
     def __init__(self, ch_a, ch_b):
         if ch_a is None and ch_b is None:
             raise TaborException('Empty TaborSegments are not allowed')
+        if ch_a is not None and ch_b is not None and len(ch_a) != len(ch_b):
+            raise TaborException('Channel entries to have to have the same length')
 
     def __hash__(self) -> int:
         return hash((bytes(self[0]) if self[0] is not None else 0,
                      bytes(self[1]) if self[1] is not None else 0))
-
-    def __eq__(self, other) -> bool:
-        return
 
     @property
     def num_points(self) -> int:
@@ -47,9 +47,12 @@ class TaborSegment(tuple):
         return make_combined_wave([self])
 
 
-class TaborProgram:
-    WAVEFORM_MODES = ('single', 'advanced', 'sequence')
+class TaborSequencing(Enum):
+    SINGLE = 1
+    ADVANCED = 2
 
+
+class TaborProgram:
     def __init__(self,
                  program: Loop,
                  device_properties,
@@ -64,7 +67,7 @@ class TaborProgram:
                                                                                                     markers if marker is not None)
         self._program = program
 
-        self.__waveform_mode = 'advanced'
+        self.__waveform_mode = None
         self._channels = tuple(channels)
         self._markers = tuple(markers)
         self.__used_channels = channel_set
@@ -74,12 +77,17 @@ class TaborProgram:
         self._sequencer_tables = []
         self._advanced_sequencer_table = []
 
-        if self.program.depth() == 0:
-            self.setup_single_waveform_mode()
-        elif self.program.depth() == 1:
-            self.setup_single_sequence_mode()
-        else:
+        if self.program.repetition_count > 1:
+            self.program.encapsulate()
+
+        if self.program.depth() > 1:
             self.setup_advanced_sequence_mode()
+            self.__waveform_mode = TaborSequencing.ADVANCED
+        else:
+            if self.program.depth() == 0:
+                self.program.encapsulate()
+            self.setup_single_sequence_mode()
+            self.__waveform_mode = TaborSequencing.SINGLE
 
     @property
     def markers(self) -> Tuple[Optional[ChannelID], Optional[ChannelID]]:
@@ -93,7 +101,8 @@ class TaborProgram:
                          sample_rate: float,
                          voltage_amplitude: Tuple[float, float],
                          voltage_offset: Tuple[float, float],
-                         voltage_transformation: Tuple[Callable, Callable]) -> List[TaborSegment]:
+                         voltage_transformation: Tuple[Callable, Callable]) -> Tuple[Sequence[TaborSegment],
+                                                                                     Sequence[int]]:
         sample_rate = fractions.Fraction(sample_rate, 10**9)
 
         segment_lengths = [waveform.duration*sample_rate for waveform in self._waveforms]
@@ -127,7 +136,7 @@ class TaborProgram:
                                        astype(dtype=np.uint16) << marker_index+14
             return marker_data
 
-        segments = np.empty_like(self._waveforms, dtype=object)
+        segments = np.empty_like(self._waveforms, dtype=TaborSegment)
         for i, waveform in enumerate(self._waveforms):
             t = time_array[:int(waveform.duration*sample_rate)]
             segment_a = voltage_to_data(waveform, t, 0)
@@ -139,16 +148,8 @@ class TaborProgram:
             segments[i] = TaborSegment(segment_a, segment_b)
         return segments, segment_lengths
 
-    def setup_single_waveform_mode(self) -> None:
-        self.__waveform_mode = 'single'
-        self._waveforms = [self.program.waveform.get_subset_for_channels(self.__used_channels)]
-        self._sequencer_tables = [[(self.program.repetition_count, 1, 0)]]
-        self._advanced_sequencer_table = []
-
     def setup_single_sequence_mode(self) -> None:
-        self.__waveform_mode = 'sequence'
-        if len(self.program) < self.__device_properties['min_seq_len']:
-            raise TaborException('SEQuence:LENGth has to be >={min_seq_len}'.format(**self.__device_properties))
+        assert self.program.depth() == 1
 
         sequencer_table = []
         waveforms = []
@@ -163,36 +164,15 @@ class TaborProgram:
                 waveforms.append(waveform)
             sequencer_table.append((repetition_count, segment_no, 0))
 
-        self.__waveform_mode = 'sequence'
         self._waveforms = waveforms
         self._sequencer_tables = [sequencer_table]
         self._advanced_sequencer_table = [(self.program.repetition_count, 1, 0)]
 
     def setup_advanced_sequence_mode(self) -> None:
-        if self.program.depth() == 1:
-            self.program.encapsulate()
-        while self.program.depth() > 2 or not self.program.is_balanced():
-            for i, sequence_table in enumerate(self.program):
-                if sequence_table.depth() == 0:
-                    sequence_table.encapsulate()
-                elif sequence_table.depth() == 1:
-                    assert (sequence_table.is_balanced())
-                elif len(sequence_table) == 1 and len(sequence_table[0]) == 1:
-                    sequence_table.join_loops()
-                elif sequence_table.is_balanced():
-                    if len(self.program) < self.__device_properties['min_aseq_len'] or (sequence_table.repetition_count // self.__device_properties['max_aseq_len'] <
-                                                max(entry.repetition_count for entry in sequence_table) /
-                                                self.__device_properties['max_seq_len']):
-                        sequence_table.unroll()
-                    else:
-                        for entry in sequence_table.children:
-                            entry.unroll()
+        assert self.program.depth() > 1
+        assert self.program.repetition_count == 1
 
-                else:
-                    depth_to_unroll = sequence_table.depth() - 1
-                    for entry in sequence_table:
-                        if entry.depth() == depth_to_unroll:
-                            entry.unroll()
+        self.program.flatten_and_balance(2)
 
         min_seq_len = self.__device_properties['min_seq_len']
         max_seq_len = self.__device_properties['max_seq_len']
@@ -234,10 +214,16 @@ class TaborProgram:
                     elif check_partial_unroll(self.program, i):
                         i += 1
 
-                    elif i > 0 and len(self.program[i]) + len(self.program[i-1]) < max_seq_len:
+                    # check if sequence table can be extended by unrolling a neighbor
+                    elif (i > 0
+                          and self.program[i - 1].repetition_count > 1
+                          and len(self.program[i]) + len(self.program[i-1]) < max_seq_len):
                         self.program[i][:0] = self.program[i-1].copy_tree_structure()[:]
                         self.program[i - 1].repetition_count -= 1
-                    elif i+1 < len(self.program) and len(self.program[i]) + len(self.program[i+1]) < max_seq_len:
+
+                    elif (i+1 < len(self.program)
+                          and self.program[i+1].repetition_count > 1
+                          and len(self.program[i]) + len(self.program[i+1]) < max_seq_len):
                         self.program[i][len(self.program[i]):] = self.program[i+1].copy_tree_structure()[:]
                         self.program[i+1].repetition_count -= 1
 
@@ -250,11 +236,6 @@ class TaborProgram:
             else:
                 i += 1
 
-        assert (self.program.repetition_count == 1)
-        if len(self.program) < self.__device_properties['min_aseq_len']:
-            raise TaborException()
-        if len(self.program) > self.__device_properties['max_aseq_len']:
-            raise TaborException()
         for sequence_table in self.program:
             if len(sequence_table) < self.__device_properties['min_seq_len']:
                 raise TaborException('Sequence table is too short')
@@ -589,9 +570,6 @@ class TaborChannelPair(AWG):
         self._segment_references[waveform_to_segment[waveform_to_segment >= 0]] += 1
 
         if to_insert:
-            # as we have to insert waveforms the waveforms behind the last referenced are discarded
-            self.cleanup()
-
             for wf_index, segment_index in to_insert:
                 self._upload_segment(segment_index, segments[wf_index])
                 waveform_to_segment[wf_index] = segment_index
@@ -679,6 +657,7 @@ class TaborChannelPair(AWG):
             name (str): The name of the program to remove.
         """
         self.free_program(name)
+        self.cleanup()
 
     def set_marker_state(self, marker, active) -> None:
         command_string = ':INST:SEL {}; :SOUR:MARK:SEL {}; :SOUR:MARK:SOUR USER; :SOUR:MARK:STAT {}'.format(
@@ -713,17 +692,14 @@ class TaborChannelPair(AWG):
         advanced_sequencer_table = [(rep_count, seq_no + 1, jump_flag)
                                     for rep_count, seq_no, jump_flag in program.get_advanced_sequencer_table()]
 
-        if program.waveform_mode == 'single':
-            assert len(advanced_sequencer_table) == 0
+        if program.waveform_mode == TaborSequencing.SINGLE:
+            assert len(advanced_sequencer_table) == 1
             assert len(sequencer_tables) == 2
-            assert len(sequencer_tables[1]) == 1
 
             while len(sequencer_tables[1]) < self._device.dev_properties['min_seq_len']:
                 sequencer_tables[1].append((1, 1, 0))
 
-            advanced_sequencer_table = [(1, 2, 0)]
-
-        # insert idle waveform
+        # insert idle sequence in advanced sequence table
         advanced_sequencer_table = [(1, 1, 1)] + advanced_sequencer_table
 
         while len(advanced_sequencer_table) < self._device.dev_properties['min_aseq_len']:

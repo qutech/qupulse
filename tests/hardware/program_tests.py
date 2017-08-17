@@ -212,6 +212,83 @@ LOOP 1 times:
         self.assertTrue(root_loop[3].is_balanced())
         self.assertTrue(root_loop[4].is_balanced())
 
+    def test_flatten_and_balance(self):
+        before = LoopTests.get_test_loop(lambda: DummyWaveform())
+        before[1][0].encapsulate()
+
+        after = before.copy_tree_structure()
+        after.flatten_and_balance(2)
+
+        wf_reprs = dict(zip(ascii_uppercase,
+                            (repr(loop.waveform)
+                             for loop in before.get_depth_first_iterator()
+                             if loop.is_leaf())))
+
+        before_repr = """\
+LOOP 1 times:
+  ->EXEC {A} 1 times
+  ->LOOP 10 times:
+      ->LOOP 1 times:
+          ->EXEC {B} 50 times
+  ->LOOP 17 times:
+      ->LOOP 2 times:
+          ->EXEC {C} 1 times
+          ->EXEC {D} 1 times
+      ->EXEC {E} 1 times
+  ->LOOP 3 times:
+      ->EXEC {F} 1 times
+      ->EXEC {G} 1 times
+  ->LOOP 4 times:
+      ->LOOP 6 times:
+          ->EXEC {H} 7 times
+          ->EXEC {I} 8 times
+      ->LOOP 9 times:
+          ->EXEC {J} 10 times
+          ->EXEC {K} 11 times""".format(**wf_reprs)
+        self.assertEqual(repr(before), before_repr)
+
+        expected_after_repr = """\
+LOOP 1 times:
+  ->LOOP 1 times:
+      ->EXEC {A} 1 times
+  ->LOOP 10 times:
+      ->EXEC {B} 50 times
+  ->LOOP 17 times:
+      ->EXEC {C} 1 times
+      ->EXEC {D} 1 times
+      ->EXEC {C} 1 times
+      ->EXEC {D} 1 times
+      ->EXEC {E} 1 times
+  ->LOOP 3 times:
+      ->EXEC {F} 1 times
+      ->EXEC {G} 1 times
+  ->LOOP 6 times:
+      ->EXEC {H} 7 times
+      ->EXEC {I} 8 times
+  ->LOOP 9 times:
+      ->EXEC {J} 10 times
+      ->EXEC {K} 11 times
+  ->LOOP 6 times:
+      ->EXEC {H} 7 times
+      ->EXEC {I} 8 times
+  ->LOOP 9 times:
+      ->EXEC {J} 10 times
+      ->EXEC {K} 11 times
+  ->LOOP 6 times:
+      ->EXEC {H} 7 times
+      ->EXEC {I} 8 times
+  ->LOOP 9 times:
+      ->EXEC {J} 10 times
+      ->EXEC {K} 11 times
+  ->LOOP 6 times:
+      ->EXEC {H} 7 times
+      ->EXEC {I} 8 times
+  ->LOOP 9 times:
+      ->EXEC {J} 10 times
+      ->EXEC {K} 11 times""".format(**wf_reprs)
+
+        self.assertEqual(expected_after_repr, repr(after))
+
 
 class MultiChannelTests(unittest.TestCase):
     def __init__(self, *args, **kwargs):

@@ -1,5 +1,5 @@
 import itertools
-from typing import Union, Dict, Set, Iterable, FrozenSet, List, NamedTuple, Any, Callable, Tuple
+from typing import Union, Dict, Set, Iterable, FrozenSet, List, NamedTuple, Any, Callable, Tuple, cast
 from collections import deque, defaultdict
 from copy import deepcopy
 from ctypes import c_double as MutableFloat
@@ -170,6 +170,36 @@ class Loop(Comparable, Node):
 
         self[child_index+1:child_index+1] = (new_child,)
         self.assert_tree_integrity()
+
+    def flatten_and_balance(self, depth: int) -> None:
+        """
+        Modifies the program so all tree branches have the same depth
+        :param depth: Target depth of the program
+        :return:
+        """
+        i = 0
+        while i < len(self):
+            # only used by type checker
+            sub_program = cast(Loop, self[i])
+
+            if sub_program.depth() < depth - 1:
+                sub_program.encapsulate()
+
+            elif not sub_program.is_balanced():
+                sub_program.flatten_and_balance(depth - 1)
+
+            elif sub_program.depth() == depth - 1:
+                i += 1
+
+            elif len(sub_program) == 1 and len(sub_program[0]) == 1:
+                sub_sub_program = cast(Loop, sub_program[0])
+
+                sub_program.repetition_count = sub_program.repetition_count * sub_sub_program.repetition_count
+                sub_program[:] = sub_sub_program[:]
+                sub_program.waveform = sub_sub_program.waveform
+
+            else:
+                sub_program.unroll()
 
 
 class ChannelSplit(Exception):

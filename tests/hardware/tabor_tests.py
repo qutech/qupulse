@@ -12,7 +12,8 @@ if not with_hardware:
     dummy_modules.import_package('atsaverage', dummy_modules.dummy_atsaverage)
     dummy_modules.import_package('teawg', dummy_modules.dummy_teawg)
 
-from qctoolkit.hardware.awgs.tabor import TaborAWGRepresentation, TaborException, TaborProgram, TaborChannelPair
+from qctoolkit.hardware.awgs.tabor import TaborAWGRepresentation, TaborException, TaborProgram, TaborChannelPair,\
+    TaborSegment
 from qctoolkit.hardware.program import MultiChannelProgram
 from qctoolkit.pulses.instructions import InstructionBlock
 from qctoolkit.hardware.util import voltage_to_uint16
@@ -22,13 +23,6 @@ import pytabor
 
 from .program_tests import LoopTests, WaveformGenerator, MultiChannelTests
 
-
-class DummyTaborAWGRepresentation(dummy_modules.dummy_teawg.TEWXAwg):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-    select_channel = dummy_modules.dummy_teawg.TEWXAwg.send_cmd
-
-
 if with_hardware:
     # fix on your machine
     possible_addresses = ('127.0.0.1', )
@@ -37,12 +31,33 @@ if with_hardware:
                                             reset=True,
                                             paranoia_level=2)
         instrument._visa_inst.timeout = 25000
-        break
+        if instrument.is_open:
+            break
+    if not instrument.is_open:
+        raise RuntimeError('Could not connect to instrument')
 else:
     instrument = TaborAWGRepresentation('dummy_address', reset=True, paranoia_level=2)
     instrument._visa_inst.answers[':OUTP:COUP'] = 'DC'
     instrument._visa_inst.answers[':VOLT'] = '1.0'
     instrument._visa_inst.answers[':FREQ:RAST'] = '1e9'
+
+
+class TaborSegmentTests(unittest.TestCase):
+    def test_init(self):
+        with self.assertRaises(TaborException):
+            TaborSegment(None, None)
+        with self.assertRaises(TaborException):
+            TaborSegment(np.zeros(5), np.zeros(4))
+
+        ch_a = np.zeros(5)
+        ch_b = np.ones(5)
+
+        ts = TaborSegment(ch_a=ch_a, ch_b=ch_b)
+        self.assertIs(ts[0], ch_a)
+        self.assertIs(ts[1], ch_b)
+
+    def test_num_points(self):
+        self.assertEqual(TaborSegment(np.zeros(5), np.zeros(5)).num_points, 5)
 
 
 class TaborProgramTests(unittest.TestCase):
@@ -67,12 +82,15 @@ class TaborProgramTests(unittest.TestCase):
     def test_init(self):
         prog = MultiChannelProgram(MultiChannelTests().root_block)
         TaborProgram(prog['A'], self.instr_props, ('A', None), (None, None))
+
         with self.assertRaises(KeyError):
             TaborProgram(prog['A'], self.instr_props, ('A', 'B'), (None, None))
 
-    @unittest.skip
-    def test_setup_single_waveform_mode(self):
-        pass
+        with self.assertRaises(TaborException):
+            TaborProgram(prog['A'], self.instr_props, ('A', 'B'), (None, None, None))
+        with self.assertRaises(TaborException):
+            TaborProgram(prog['A'], self.instr_props, ('A', 'B', 'C'), (None, None))
+
 
     def test_sampled_segments(self):
 
@@ -134,7 +152,6 @@ class TaborProgramTests(unittest.TestCase):
             self.assertTrue(np.all(sampled_seg[1] << 2 == data[1] << 2))
 
 
-@unittest.skipIf(isinstance(instrument, DummyTaborAWGRepresentation), "No instrument present")
 class TaborAWGRepresentationTests(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
