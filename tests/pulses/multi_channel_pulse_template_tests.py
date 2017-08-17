@@ -3,11 +3,9 @@ import unittest
 import numpy
 
 from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingException,\
-    MissingParameterDeclarationException, UnnecessaryMappingException
-from qctoolkit.pulses.parameters import ParameterNotProvidedException, MappedParameter, ConstantParameter
+    MissingParameterDeclarationException
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform, MappingTemplate, ChannelMappingException, AtomicMultiChannelPulseTemplate
-from qctoolkit.expressions import Expression
-from qctoolkit.pulses.instructions import CHANInstruction, EXECInstruction
+from qctoolkit.pulses.parameters import ParameterConstraint
 
 from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyPulseTemplate, DummyWaveform
 from tests.serialization_dummies import DummySerializer
@@ -250,8 +248,44 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
         template = AtomicMultiChannelPulseTemplate(*subtemp_args)
         self.assertEqual(template.defined_channels, {'cc1', 'cc2', 'cc3'})
 
-    def test_deserialization(self):
-        self.assertTrue(False)
+    def test_deserialize(self):
+        sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'}, parameter_names={'a', 'b'}),
+               DummyPulseTemplate(duration='t1', defined_channels={'B'}, parameter_names={'a', 'c'})]
+
+        def deserialization_callback(ident: str):
+            self.assertIn(ident, ('0', '1'))
+
+            if ident == '0':
+                return 0
+            else:
+                return 1
+
+        serializer = DummySerializer(deserialize_callback=deserialization_callback)
+        serializer.subelements = sts
+
+        data = dict(subtemplates=['0', '1'], parameter_constraints=['a < d'])
+
+        template = AtomicMultiChannelPulseTemplate.deserialize(serializer, **data)
+
+        self.assertIs(template.subtemplates[0], sts[0])
+        self.assertIs(template.subtemplates[1], sts[1])
+        self.assertEqual(template.parameter_constraints, [ParameterConstraint('a < d')])
 
     def test_serialize(self):
-        self.assertTrue(False)
+        sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'}, parameter_names={'a', 'b'}),
+               DummyPulseTemplate(duration='t1', defined_channels={'B'}, parameter_names={'a', 'c'})]
+        constraints = ['a < d']
+        template = AtomicMultiChannelPulseTemplate(*sts,
+                                                   parameter_constraints=constraints)
+
+        expected_data = dict(subtemplates=['0', '1'], parameter_constraints=['a < d'])
+
+        def serialize_callback(obj) -> str:
+            self.assertIn(obj, sts)
+            return str(sts.index(obj))
+
+        serializer = DummySerializer(serialize_callback=serialize_callback, identifier_callback=serialize_callback)
+
+        data = template.get_serialization_data(serializer=serializer)
+
+        self.assertEqual(expected_data, data)

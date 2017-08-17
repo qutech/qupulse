@@ -248,7 +248,7 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
 
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
         data = dict(subtemplates=[serializer.dictify(subtemplate) for subtemplate in self.subtemplates],
-                    parameter_constraints=self.parameter_constraints)
+                    parameter_constraints=[str(constraint) for constraint in self.parameter_constraints])
         return data
 
     @staticmethod
