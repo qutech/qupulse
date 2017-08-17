@@ -4,26 +4,19 @@ import itertools
 from copy import copy, deepcopy
 import numpy as np
 
-with_hardware = False
-if not with_hardware:
-    from . import dummy_modules
-    dummy_modules.import_package('pytabor', dummy_modules.dummy_pytabor)
-    dummy_modules.import_package('pyvisa', dummy_modules.dummy_pyvisa)
-    dummy_modules.import_package('atsaverage', dummy_modules.dummy_atsaverage)
-    dummy_modules.import_package('teawg', dummy_modules.dummy_teawg)
 
 from qctoolkit.hardware.awgs.tabor import TaborAWGRepresentation, TaborException, TaborProgram, TaborChannelPair,\
     TaborSegment
 from qctoolkit.hardware.program import MultiChannelProgram
 from qctoolkit.pulses.instructions import InstructionBlock
 from qctoolkit.hardware.util import voltage_to_uint16
+from ..hardware import use_dummy_tabor
 
 from teawg import model_properties_dict
-import pytabor
 
 from .program_tests import LoopTests, WaveformGenerator, MultiChannelTests
 
-if with_hardware:
+if not use_dummy_tabor:
     # fix on your machine
     possible_addresses = ('127.0.0.1', )
     for instrument_address in possible_addresses:
@@ -36,7 +29,7 @@ if with_hardware:
     if not instrument.is_open:
         raise RuntimeError('Could not connect to instrument')
 else:
-    instrument = TaborAWGRepresentation('dummy_address', reset=True, paranoia_level=2)
+    instrument = TaborAWGRepresentation('dummy_address', reset=False, paranoia_level=2)
     instrument._visa_inst.answers[':OUTP:COUP'] = 'DC'
     instrument._visa_inst.answers[':VOLT'] = '1.0'
     instrument._visa_inst.answers[':FREQ:RAST'] = '1e9'

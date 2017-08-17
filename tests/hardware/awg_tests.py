@@ -3,15 +3,16 @@ import numpy as np
 
 import qctoolkit.hardware.awgs.base as awg
 import qctoolkit.hardware.awgs.tektronix as tek
-import qctoolkit.pulses as pls
+from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
+from qctoolkit.pulses.sequencing import Sequencer
 
 
 class DummyAWGTest(unittest.TestCase):
 
     def setUp(self):
-        self.pulse_template = pls.TablePulseTemplate({'default': [('value', 5)]})
+        self.pulse_template = TablePulseTemplate({'default': [('value', 5)]})
 
-        self.sequencer = pls.Sequencer()
+        self.sequencer = Sequencer()
         for i in range(1, 12):
             pars = dict(value=i)
             self.sequencer.push(self.pulse_template, pars, channel_mapping=dict(default='default'))
@@ -27,8 +28,8 @@ class DummyAWGTest(unittest.TestCase):
 class TektronixAWGTest(unittest.TestCase):
 
     def setUp(self):
-        self.pulse_template = pls.TablePulseTemplate({'default': [('value', 5)]})
-        self.sequencer = pls.Sequencer()
+        self.pulse_template = TablePulseTemplate({'default': [('value', 5)]})
+        self.sequencer = Sequencer()
         for i in range(1,12):
             pars = dict(value=i)
             self.sequencer.push(self.pulse_template, pars, channel_mapping=dict(default='default'))
