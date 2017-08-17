@@ -151,7 +151,8 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer):
             raise ParameterNotProvidedException(next(v for v in self.repetition_count.variables if v not in parameters))
 
         instruction_block.add_instruction_repj(self.get_repetition_count_value(real_parameters), body_block)
-        sequencer.push(self.body, parameters, conditions, measurement_mapping, channel_mapping, body_block)
+        sequencer.push(self.body, parameters=parameters, conditions=conditions,
+                       window_mapping=measurement_mapping, channel_mapping=channel_mapping, target_block=body_block)
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],
