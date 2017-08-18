@@ -123,7 +123,7 @@ class MappingTemplateTests(unittest.TestCase):
         parameters = dict(t=3, k=2, l=7)
         values = {'foo': 6, 'bar': 21}
         for k, v in st.map_parameters(parameters).items():
-            self.assertEqual(v.get_value(), values[k])
+            self.assertEqual(v, values[k])
 
     def test_partial_parameter_mapping(self):
         template = DummyPulseTemplate(parameter_names={'foo', 'bar'})
