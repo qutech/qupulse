@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 from sympy import sympify
 
-from qctoolkit.expressions import Expression, ExpressionVariableMissingException
+from qctoolkit.expressions import Expression, ExpressionVariableMissingException, NonNumericEvaluation
 from qctoolkit.serialization import Serializer
 
 class ExpressionTests(unittest.TestCase):
@@ -16,6 +16,10 @@ class ExpressionTests(unittest.TestCase):
             'c': -7
         }
         self.assertEqual(2 * 1.5 - 7, e.evaluate_numeric(**params))
+
+        with self.assertRaises(NonNumericEvaluation):
+            params['a'] = sympify('h')
+            e.evaluate_numeric(**params)
 
     def test_evaluate_numpy(self):
         self
@@ -137,3 +141,42 @@ class ExpressionTests(unittest.TestCase):
         self.assertIs(3 <= valued, False)
         self.assertIs(3 >= valued, True)
 
+    def test_get_most_simple_representation(self):
+        cpl = Expression('1 + 1j').get_most_simple_representation()
+        self.assertIsInstance(cpl, complex)
+        self.assertEqual(cpl, 1 + 1j)
+
+        integer = Expression('3').get_most_simple_representation()
+        self.assertIsInstance(integer, int)
+        self.assertEqual(integer, 3)
+
+        flt = Expression('3.').get_most_simple_representation()
+        self.assertIsInstance(flt, float)
+        self.assertEqual(flt, 3.)
+
+    def test_is_nan(self):
+        self.assertTrue(Expression('nan').is_nan())
+        self.assertTrue(Expression('0./0.').is_nan())
+
+        self.assertFalse(Expression(456).is_nan())
+
+
+class ExpressionExceptionTests(unittest.TestCase):
+    def test_expression_variable_missing(self):
+        variable = 's'
+        expression = Expression('s*t')
+
+        self.assertEqual(str(ExpressionVariableMissingException(variable, expression)),
+                         "Could not evaluate <s*t>: A value for variable <s> is missing!")
+
+    def test_non_numeric_evaluation(self):
+        expression = Expression('a*b')
+        call_arguments = dict()
+
+        expected = "The result of evaluate_numeric is of type {} " \
+                   "which is not a number".format(float)
+        self.assertEqual(str(NonNumericEvaluation(expression, 1., call_arguments)), expected)
+
+        expected = "The result of evaluate_numeric is of type {} " \
+                   "which is not a number".format(np.zeros(1).dtype)
+        self.assertEqual(str(NonNumericEvaluation(expression, np.zeros(1), call_arguments)), expected)

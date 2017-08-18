@@ -5,6 +5,7 @@ corresponding exception classes.
 from typing import Any, Dict, Iterable, Optional, Union
 from numbers import Number
 import sympy
+from sympy.core.numbers import Number as SympyNumber
 import numpy
 
 from qctoolkit.comparable import Comparable
@@ -44,12 +45,12 @@ class Expression(Serializable, Comparable):
             return str(self._sympified_expression)
         elif self._sympified_expression.is_integer:
             return int(self._sympified_expression)
-        elif self._sympified_expression.is_complex:
-            return complex(self._sympified_expression)
         elif self._sympified_expression.is_real:
             return float(self._sympified_expression)
+        elif self._sympified_expression.is_complex:
+            return complex(self._sympified_expression)
         else:
-            return self._original_expression
+            return self._original_expression  # pragma: no cover
 
     @staticmethod
     def _sympify(other: Union['Expression', Number, sympy.Expr]) -> sympy.Expr:

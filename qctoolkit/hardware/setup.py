@@ -1,11 +1,7 @@
-from typing import NamedTuple, Any, Set, Callable, Dict, Tuple, Union
-import itertools
+from typing import NamedTuple, Set, Callable, Dict, Tuple, Union
 from collections import defaultdict, deque
 
-from ctypes import c_int64 as MutableInt
-
 from qctoolkit.hardware.awgs.base import AWG
-from qctoolkit.hardware.dacs import DAC
 from qctoolkit.hardware.program import MultiChannelProgram
 
 from qctoolkit import ChannelID

@@ -7,7 +7,7 @@ Classes:
     - MultiChannelWaveform: A waveform defined for several channels by combining waveforms
 """
 
-from typing import Dict, List, Tuple, FrozenSet, Optional, Any, Iterable, Union, Set
+from typing import Dict, List, Optional, Any, Iterable, Union, Set
 import itertools
 import numbers
 
@@ -17,11 +17,11 @@ import numpy
 from qctoolkit.serialization import Serializer
 
 from qctoolkit import MeasurementWindow, ChannelID
-from qctoolkit.pulses.instructions import InstructionBlock, Waveform, InstructionPointer
+from qctoolkit.pulses.instructions import Waveform
 from qctoolkit.pulses.pulse_template import PulseTemplate, AtomicPulseTemplate
 from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingException, MappingTemplate,\
     MissingParameterDeclarationException, MappingTuple
-from qctoolkit.pulses.parameters import Parameter, ParameterConstraint, ParameterConstrainer
+from qctoolkit.pulses.parameters import Parameter, ParameterConstrainer
 from qctoolkit.pulses.conditions import Condition
 from qctoolkit.expressions import Expression
 

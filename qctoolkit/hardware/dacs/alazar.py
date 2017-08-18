@@ -1,11 +1,10 @@
-from typing import Union, Dict, NamedTuple, List, Any, Optional, Tuple
-from collections import deque, defaultdict
+from typing import Dict, Any, Optional, Tuple
+from collections import defaultdict
 
 import numpy as np
 
 from atsaverage.config import ScanlineConfiguration
 from atsaverage.masks import CrossBufferMask, Mask
-from atsaverage.operations import OperationDefinition
 
 from qctoolkit.hardware.dacs import DAC
 

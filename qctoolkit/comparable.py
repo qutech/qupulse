@@ -34,32 +34,3 @@ class Comparable(metaclass=ABCMeta):
     def __ne__(self, other: Any) -> bool:
         """True, if other is not equal to this Comparable object."""
         return not self == other
-
-
-def extend_comparison(cls):
-    if not hasattr(cls, '__lt__'):
-        raise ValueError('Class does not implement __lt__')
-
-    def __eq__(self, other):
-        return not self < other and not other < self
-
-    def __ne__(self, other):
-        return self < other or other < self
-
-    def __gt__(self, other):
-        return other < self
-
-    def __ge__(self, other):
-        return not self < other
-
-    def __le__(self, other):
-        return not other < self
-    operations = {'__eq__': __eq__,
-                  '__ne__': __ne__,
-                  '__gt__': __gt__,
-                  '__ge__': __ge__,
-                  '__le__': __le__}
-    for operation_name, operation_func in operations.items():
-        if not hasattr(cls, operation_name):
-            setattr(cls, operation_name, operation_func)
-    return cls

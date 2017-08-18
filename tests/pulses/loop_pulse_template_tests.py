@@ -2,12 +2,39 @@ import unittest
 
 from sympy import sympify
 
+from qctoolkit.expressions import Expression
 from qctoolkit.pulses.loop_pulse_template import ForLoopPulseTemplate, WhileLoopPulseTemplate,\
-    ConditionMissingException, ParametrizedRange, LoopIndexNotUsedException
+    ConditionMissingException, ParametrizedRange, LoopIndexNotUsedException, LoopPulseTemplate
 from qctoolkit.pulses.parameters import ConstantParameter
 
-from tests.pulses.sequencing_dummies import DummyCondition, DummyPulseTemplate, DummySequencer, DummyInstructionBlock
+from tests.pulses.sequencing_dummies import DummyCondition, DummyPulseTemplate, DummySequencer, DummyInstructionBlock,\
+    DummyParameter
 from tests.serialization_dummies import DummySerializer
+
+
+class DummyLoopPulseTemplate(LoopPulseTemplate):
+    pass
+DummyLoopPulseTemplate.__abstractmethods__ = set()
+
+
+class LoopPulseTemplateTests(unittest.TestCase):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def test_body(self):
+        body = DummyPulseTemplate()
+        tpl = DummyLoopPulseTemplate(body)
+        self.assertIs(tpl.body, body)
+
+    def test_defined_channels(self):
+        body = DummyPulseTemplate(defined_channels={'A'})
+        tpl = DummyLoopPulseTemplate(body)
+        self.assertIs(tpl.defined_channels, body.defined_channels)
+
+    def test_measurement_names(self):
+        body = DummyPulseTemplate(measurement_names={'A'})
+        tpl = DummyLoopPulseTemplate(body)
+        self.assertIs(tpl.measurement_names, body.measurement_names)
 
 
 class ParametrizedRangeTest(unittest.TestCase):
@@ -29,6 +56,9 @@ class ParametrizedRangeTest(unittest.TestCase):
             ParametrizedRange()
         with self.assertRaises(TypeError):
             ParametrizedRange(1, 2, 3, 4)
+
+        with self.assertRaises(TypeError):
+            ParametrizedRange(1, 2, stop=6)
 
     def test_to_range(self):
         pr = ParametrizedRange(4, 'l*k', 'k')
@@ -83,6 +113,92 @@ class ForLoopPulseTemplateTest(unittest.TestCase):
         for local_params, i in zip(forward_parameter_dicts, expected_range):
             expected_local_params = dict(k=ConstantParameter(5), i=ConstantParameter(i))
             self.assertEqual(expected_local_params, local_params)
+
+    def test_loop_index(self):
+        loop_index = 'i'
+        dt = DummyPulseTemplate(parameter_names={'i', 'k'})
+        flt = ForLoopPulseTemplate(body=dt, loop_index=loop_index, loop_range=('a', 'b', 'c'))
+        self.assertIs(loop_index, flt.loop_index)
+
+    def test_duration(self):
+        dt = DummyPulseTemplate(parameter_names={'i', 'k'}, duration=Expression('d'))
+        flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=(3, 9, 2))
+
+        self.assertEqual(flt.duration, Expression('d*3'))
+
+    def test_parameter_names(self):
+        dt = DummyPulseTemplate(parameter_names={'i', 'k'})
+        flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=('a', 'b', 'c'))
+
+        self.assertEqual(flt.parameter_names, {'k', 'a', 'b', 'c'})
+
+    def test_build_sequence(self):
+        dt = DummyPulseTemplate(parameter_names={'i'})
+        flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=('a', 'b', 'c'))
+
+        sequencer = DummySequencer()
+        block = DummyInstructionBlock()
+        parameters = {'a': ConstantParameter(1), 'b': ConstantParameter(4), 'c': ConstantParameter(2)}
+        measurement_mapping = dict(A='B')
+        channel_mapping = dict(C='D')
+        flt.build_sequence(sequencer, parameters, dict(), measurement_mapping, channel_mapping, block)
+
+        expected_stack = [(dt, {'i': ConstantParameter(3)}, dict(), measurement_mapping, channel_mapping),
+                          (dt, {'i': ConstantParameter(1)}, dict(), measurement_mapping, channel_mapping)]
+
+        self.assertEqual(sequencer.sequencing_stacks[block], expected_stack)
+
+    def test_requires_stop(self):
+        parameters = dict(A=DummyParameter(requires_stop=False), B=DummyParameter(requires_stop=False))
+
+        dt = DummyPulseTemplate(parameter_names={'i'})
+        flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=('A', 'B'))
+
+        self.assertFalse(flt.requires_stop(parameters, dict()))
+
+        parameters['A'] = DummyParameter(requires_stop=True)
+        self.assertTrue(flt.requires_stop(parameters, dict()))
+
+    def test_get_serialization_data(self):
+
+        dt = DummyPulseTemplate(parameter_names={'i'})
+        flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=('A', 'B'))
+
+        def check_dt(to_dictify) -> str:
+            self.assertIs(to_dictify, dt)
+            return 'dt'
+
+        serializer = DummySerializer(serialize_callback=check_dt)
+
+        data = flt.get_serialization_data(serializer)
+        expected_data = dict(body='dt',
+                             loop_range=('A', 'B', 1),
+                             loop_index='i')
+        self.assertEqual(data, expected_data)
+
+    def test_deserialize(self):
+        body_str = 'dt'
+        dt = DummyPulseTemplate(parameter_names={'i'})
+
+        def make_dt(ident: str):
+            self.assertEqual(body_str, ident)
+            return ident
+
+        data = dict(body=body_str,
+                    loop_range=('A', 'B', 1),
+                    loop_index='i',
+                    identifier='meh')
+
+        serializer = DummySerializer(deserialize_callback=make_dt)
+        serializer.subelements['dt'] = dt
+
+        flt = ForLoopPulseTemplate.deserialize(serializer, **data)
+        self.assertEqual(flt.identifier, 'meh')
+        self.assertEqual(flt.body, dt)
+        self.assertEqual(flt.loop_index, 'i')
+        self.assertEqual(flt.loop_range.to_tuple(), ('A', 'B', 1))
+
+
 
 
 class WhileLoopPulseTemplateTest(unittest.TestCase):
@@ -205,6 +321,11 @@ class ConditionMissingExceptionTest(unittest.TestCase):
     def test(self) -> None:
         exc = ConditionMissingException('foo')
         self.assertIsInstance(str(exc), str)
+
+
+class LoopIndexNotUsedExceptionTest(unittest.TestCase):
+    def str_test(self):
+        self.assertEqual(str(LoopIndexNotUsedException('a', {'b', 'c'})), "The parameter a is missing in the body's parameter names: {}".format({'b', 'c'}))
 
 
 if __name__ == "__main__":

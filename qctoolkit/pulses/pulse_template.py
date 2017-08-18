@@ -7,11 +7,11 @@ Classes:
         directly translated into a waveform.
 """
 from abc import ABCMeta, abstractmethod, abstractproperty
-from typing import Dict, List, Tuple, Set, Optional, Union, Any, Iterable
+from typing import Dict, Tuple, Set, Optional, Union
 import itertools
 from numbers import Real
 
-from qctoolkit import ChannelID, MeasurementWindow
+from qctoolkit import ChannelID
 from qctoolkit.serialization import Serializable
 from qctoolkit.expressions import Expression
 

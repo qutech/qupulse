@@ -1,12 +1,11 @@
 import itertools
-from typing import Union, Dict, Set, Iterable, FrozenSet, List, NamedTuple, Any, Callable, Tuple, cast
+from typing import Union, Dict, Set, Iterable, FrozenSet, Tuple, cast
 from collections import deque, defaultdict
 from copy import deepcopy
-from ctypes import c_double as MutableFloat
 
 import numpy as np
 
-from qctoolkit import MeasurementWindow, ChannelID
+from qctoolkit import ChannelID
 from qctoolkit.pulses.instructions import AbstractInstructionBlock, EXECInstruction, REPJInstruction, GOTOInstruction, STOPInstruction, InstructionPointer, CHANInstruction, Waveform
 from qctoolkit.comparable import Comparable
 from qctoolkit.utils.tree import Node, is_tree_circular

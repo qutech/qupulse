@@ -7,6 +7,7 @@ from typing import Dict, Set, Optional, Any, Union, Tuple, Generator
 from qctoolkit.serialization import Serializer
 
 from qctoolkit.expressions import Expression
+from qctoolkit.utils import checked_int_cast
 from qctoolkit.pulses.parameters import Parameter, ConstantParameter, InvalidParameterNameException
 from qctoolkit.pulses.pulse_template import PulseTemplate, ChannelID
 from qctoolkit.pulses.conditions import Condition, ConditionMissingException
@@ -37,7 +38,7 @@ class LoopPulseTemplate(PulseTemplate):
 
     @property
     def is_interruptable(self):
-        raise NotImplementedError()
+        raise NotImplementedError()  # pragma: no cover
 
 
 class ParametrizedRange:
@@ -70,17 +71,9 @@ class ParametrizedRange:
                 self.step.get_most_simple_representation())
 
     def to_range(self, parameters: Dict[str, Any]) -> range:
-        def to_int(x) -> int:
-            if isinstance(x, int):
-                return x
-            int_x = int(round(x))
-            if abs(x-int_x) > 1e-10:
-                raise ValueError('Non integer in range')
-            return int_x
-
-        return range(to_int(self.start.evaluate_numeric(**parameters)),
-                     to_int(self.stop.evaluate_numeric(**parameters)),
-                     to_int(self.step.evaluate_numeric(**parameters)))
+        return range(checked_int_cast(self.start.evaluate_numeric(**parameters)),
+                     checked_int_cast(self.stop.evaluate_numeric(**parameters)),
+                     checked_int_cast(self.step.evaluate_numeric(**parameters)))
 
     @property
     def parameter_names(self) -> Set[str]:
@@ -140,10 +133,6 @@ class ForLoopPulseTemplate(LoopPulseTemplate):
         parameter_names.remove(self._loop_index)
         return parameter_names | self._loop_range.parameter_names
 
-    @property
-    def parameter_declarations(self) -> Set['ParameterDeclaration']:
-        raise NotImplementedError()
-
     def _body_parameter_generator(self, parameters: Dict[str, Parameter], forward=True) -> Generator:
         loop_range_parameters = dict((parameter_name, parameters[parameter_name].get_value())
                                      for parameter_name in self._loop_range.parameter_names)
@@ -163,7 +152,7 @@ class ForLoopPulseTemplate(LoopPulseTemplate):
                        conditions: Dict[str, Condition],
                        measurement_mapping: Dict[str, str],
                        channel_mapping: Dict['ChannelID', 'ChannelID'],
-                        instruction_block: InstructionBlock) -> None:
+                       instruction_block: InstructionBlock) -> None:
         for local_parameters in self._body_parameter_generator(parameters, forward=False):
             sequencer.push(self.body,
                            parameters=local_parameters,
@@ -183,7 +172,6 @@ class ForLoopPulseTemplate(LoopPulseTemplate):
 
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
         data = dict(
-            type=serializer.get_type_identifier(self),
             body=serializer.dictify(self.body),
             loop_range=self._loop_range.to_tuple(),
             loop_index=self._loop_index
@@ -248,12 +236,6 @@ class WhileLoopPulseTemplate(LoopPulseTemplate):
             return conditions[self._condition]
         except:
             raise ConditionMissingException(self._condition)
-
-    def build_waveform(self,
-                       parameters: Dict[str, Parameter],
-                       measurement_mapping: Dict[str, str],
-                       channel_mapping: Dict[ChannelID, ChannelID]) -> None:
-        raise NotImplementedError()
 
     def build_sequence(self,
                        sequencer: Sequencer,

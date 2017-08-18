@@ -40,6 +40,9 @@ class MappingTemplateTests(unittest.TestCase):
         template = DummyPulseTemplate(parameter_names={'foo', 'bar'},
                                       measurement_names={'foo', 'foobar'},
                                       defined_channels={'bar', 'foobar'})
+
+        with self.assertRaises(ValueError):
+            MappingTemplate.from_tuple((template, {'A': 'B'}))
         with self.assertRaises(AmbiguousMappingException):
             MappingTemplate.from_tuple((template, {'foo': 'foo'}))
         with self.assertRaises(AmbiguousMappingException):
@@ -50,6 +53,14 @@ class MappingTemplateTests(unittest.TestCase):
         template = DummyPulseTemplate(parameter_names={'foo', 'bar'})
         with self.assertRaises(MappingCollisionException):
             MappingTemplate.from_tuple((template, {'foo': '1', 'bar': 2}, {'foo': '1', 'bar': 4}))
+
+        template = DummyPulseTemplate(defined_channels={'A'})
+        with self.assertRaises(MappingCollisionException):
+            MappingTemplate.from_tuple((template, {'A': 'N'}, {'A': 'C'}))
+
+        template = DummyPulseTemplate(measurement_names={'M'})
+        with self.assertRaises(MappingCollisionException):
+            MappingTemplate.from_tuple((template, {'M': 'N'}, {'M': 'N'}))
 
     def test_from_tuple(self):
         template = DummyPulseTemplate(parameter_names={'foo', 'bar'},
@@ -108,6 +119,34 @@ class MappingTemplateTests(unittest.TestCase):
         parameters.popitem()
         with self.assertRaises(ParameterNotProvidedException):
             st.map_parameters(parameters)
+
+        parameters = dict(t=3, k=2, l=7)
+        values = {'foo': 6, 'bar': 21}
+        for k, v in st.map_parameters(parameters).items():
+            self.assertEqual(v.get_value(), values[k])
+
+    def test_partial_parameter_mapping(self):
+        template = DummyPulseTemplate(parameter_names={'foo', 'bar'})
+        st = MappingTemplate(template, parameter_mapping={'foo': 't*k'}, allow_partial_parameter_mapping=True)
+
+        self.assertEqual(st.parameter_mapping, {'foo': 't*k', 'bar': 'bar'})
+
+    def test_nested_mapping_avoidance(self):
+        template = DummyPulseTemplate(parameter_names={'foo', 'bar'})
+        st_1 = MappingTemplate(template, parameter_mapping={'foo': 't*k'}, allow_partial_parameter_mapping=True)
+        st_2 = MappingTemplate(st_1, parameter_mapping={'bar': 't*l'}, allow_partial_parameter_mapping=True)
+
+        self.assertIs(st_2.template, template)
+        self.assertEqual(st_2.parameter_mapping, {'foo': 't*k', 'bar': 't*l'})
+
+        st_3 = MappingTemplate(template,
+                               parameter_mapping={'foo': 't*k'},
+                               allow_partial_parameter_mapping=True,
+                               identifier='käse')
+        st_4 = MappingTemplate(st_3, parameter_mapping={'bar': 't*l'}, allow_partial_parameter_mapping=True)
+        self.assertIs(st_4.template, st_3)
+        self.assertEqual(st_4.parameter_mapping, {'t': 't', 'k': 'k', 'bar': 't*l'})
+
 
     def test_get_updated_channel_mapping(self):
         template = DummyPulseTemplate(defined_channels={'foo', 'bar'})

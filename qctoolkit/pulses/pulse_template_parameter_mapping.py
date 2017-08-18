@@ -64,6 +64,8 @@ class MappingTemplate(PulseTemplate, ParameterConstrainer):
         if mapped_internal_names - internal_names:
             raise UnnecessaryMappingException(template, mapped_internal_names - internal_names)
         missing_name_mappings = internal_names - mapped_internal_names
+        measurement_mapping = dict(itertools.chain(((name, name) for name in missing_name_mappings),
+                                                   measurement_mapping.items()))
 
         channel_mapping = dict() if channel_mapping is None else channel_mapping
         internal_channels = template.defined_channels
@@ -71,8 +73,10 @@ class MappingTemplate(PulseTemplate, ParameterConstrainer):
         if mapped_internal_channels - internal_channels:
             raise UnnecessaryMappingException(template,mapped_internal_channels - internal_channels)
         missing_channel_mappings = internal_channels - mapped_internal_channels
+        channel_mapping = dict(itertools.chain(((name, name) for name in missing_channel_mappings),
+                                               channel_mapping.items()))
 
-        if isinstance(template, MappingTemplate):
+        if isinstance(template, MappingTemplate) and template.identifier is None:
             # avoid nested mappings
             parameter_mapping = {p: expr.evaluate_symbolic(parameter_mapping)
                                  for p, expr in template.parameter_mapping.items()}
@@ -86,10 +90,8 @@ class MappingTemplate(PulseTemplate, ParameterConstrainer):
         self.__parameter_mapping = parameter_mapping
         self.__external_parameters = set(itertools.chain(*(expr.variables for expr in self.__parameter_mapping.values())))
         self.__external_parameters |= self.constrained_parameters
-        self.__measurement_mapping = dict(itertools.chain(((name, name) for name in missing_name_mappings),
-                                                          measurement_mapping.items()))
-        self.__channel_mapping = dict(itertools.chain(((name, name) for name in missing_channel_mappings),
-                                                      channel_mapping.items()))
+        self.__measurement_mapping = measurement_mapping
+        self.__channel_mapping = channel_mapping
 
     @staticmethod
     def from_tuple(mapping_tuple: MappingTuple) -> 'MappingTemplate':
@@ -161,15 +163,11 @@ class MappingTemplate(PulseTemplate, ParameterConstrainer):
 
     @property
     def is_interruptable(self) -> bool:
-        return self.template.is_interruptable
+        return self.template.is_interruptable  # pragma: no cover
 
     @property
     def defined_channels(self) -> Set[ChannelID]:
         return {self.__channel_mapping[k] for k in self.template.defined_channels}
-
-    @property
-    def atomicity(self) -> bool:
-        return self.__template.atomicity
 
     @property
     def duration(self) -> Expression:
