@@ -3,7 +3,7 @@ combines several other PulseTemplate objects for sequential execution."""
 
 import numpy as np
 from typing import Dict, List, Tuple, Set, Optional, Any, Iterable, Union
-import itertools
+from numbers import Real
 
 from qctoolkit.serialization import Serializer
 
@@ -161,8 +161,7 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer):
                                                            (self.constrained_parameters-external_parameters).pop())
             remaining -= self.constrained_parameters
             if remaining:
-                MissingMappingException(self, remaining.pop())
-        self.__atomicity = False
+                raise MissingMappingException(self, remaining.pop())
 
     @property
     def parameter_names(self) -> Set[str]:
@@ -195,8 +194,15 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer):
         SequencePulseTemplate can be partially sequenced."""
         return self.__subtemplates[0].requires_stop(parameters, conditions) if self.__subtemplates else False
 
-    def build_waveform(self, parameters: Dict[str, Parameter]) -> SequenceWaveform:
-        return SequenceWaveform([subtemplate.build_waveform(parameters) for subtemplate in self.__subtemplates])
+    def build_waveform(self,
+                       parameters: Dict[str, Real],
+                       measurement_mapping: Dict[str, str],
+                       channel_mapping: Dict[ChannelID, ChannelID]) -> SequenceWaveform:
+        self.validate_parameter_constraints(parameters=parameters)
+        return SequenceWaveform([sub_template.build_waveform(parameters,
+                                                             measurement_mapping=measurement_mapping,
+                                                             channel_mapping=channel_mapping)
+                                 for sub_template in self.__subtemplates])
 
     def build_sequence(self,
                        sequencer: Sequencer,
@@ -205,13 +211,14 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer):
                        measurement_mapping: Dict[str, str],
                        channel_mapping: Dict['ChannelID', 'ChannelID'],
                        instruction_block: InstructionBlock) -> None:
-            for subtemplate in reversed(self.subtemplates):
-                sequencer.push(subtemplate,
-                               parameters=parameters,
-                               conditions=conditions,
-                               window_mapping=measurement_mapping,
-                               channel_mapping=channel_mapping,
-                               target_block=instruction_block)
+        self.validate_parameter_constraints(parameters=parameters)
+        for subtemplate in reversed(self.subtemplates):
+            sequencer.push(subtemplate,
+                           parameters=parameters,
+                           conditions=conditions,
+                           window_mapping=measurement_mapping,
+                           channel_mapping=channel_mapping,
+                           target_block=instruction_block)
 
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
         data = dict(subtemplates=[serializer.dictify(subtemplate) for subtemplate in self.subtemplates],

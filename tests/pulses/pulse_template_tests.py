@@ -17,12 +17,14 @@ class PulseTemplateStub(PulseTemplate):
     def __init__(self, identifier=None,
                  defined_channels=None,
                  duration=None,
-                 parameter_names=None):
+                 parameter_names=None,
+                 measurement_names=None):
         super().__init__(identifier=identifier)
 
         self._defined_channels = defined_channels
         self._duration = duration
         self._parameter_names = parameter_names
+        self._measurement_names = set() if measurement_names is None else measurement_names
 
     @property
     def defined_channels(self) -> Set['ChannelID']:
@@ -69,8 +71,9 @@ class PulseTemplateStub(PulseTemplate):
     def is_interruptable(self):
         raise NotImplementedError()
 
+    @property
     def measurement_names(self):
-        raise NotImplementedError()
+        return self._measurement_names
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],

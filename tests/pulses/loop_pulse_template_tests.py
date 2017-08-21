@@ -5,7 +5,7 @@ from sympy import sympify
 from qctoolkit.expressions import Expression
 from qctoolkit.pulses.loop_pulse_template import ForLoopPulseTemplate, WhileLoopPulseTemplate,\
     ConditionMissingException, ParametrizedRange, LoopIndexNotUsedException, LoopPulseTemplate
-from qctoolkit.pulses.parameters import ConstantParameter
+from qctoolkit.pulses.parameters import ConstantParameter, InvalidParameterNameException
 
 from tests.pulses.sequencing_dummies import DummyCondition, DummyPulseTemplate, DummySequencer, DummyInstructionBlock,\
     DummyParameter
@@ -89,6 +89,9 @@ class ForLoopPulseTemplateTest(unittest.TestCase):
         self.assertEqual(ForLoopPulseTemplate(body=dt, loop_index='i',
                                               loop_range=ParametrizedRange('a', 'b', 'c')).loop_range.to_tuple(),
                          ('a', 'b', 'c'))
+
+        with self.assertRaises(InvalidParameterNameException):
+            ForLoopPulseTemplate(body=dt, loop_index='1i', loop_range=6)
 
         with self.assertRaises(ValueError):
             ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=slice(None))

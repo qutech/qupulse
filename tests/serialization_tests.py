@@ -1,11 +1,13 @@
 import unittest
 import os.path
 import json
-import abc
+import zipfile
+
 from tempfile import TemporaryDirectory
 from typing import Optional, Dict, Any
 
-from qctoolkit.serialization import FilesystemBackend, Serializer, CachingBackend, Serializable, ExtendedJSONEncoder
+from qctoolkit.serialization import FilesystemBackend, Serializer, CachingBackend, Serializable, ExtendedJSONEncoder,\
+    ZipFileBackend
 from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
 from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
 
@@ -102,6 +104,103 @@ class FileSystemBackendTest(unittest.TestCase):
         name = 'test_get_not_existing'
         with self.assertRaises(FileNotFoundError):
             self.backend.get(name)
+
+
+class ZipFileBackendTests(unittest.TestCase):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def test_init(self):
+        with TemporaryDirectory() as tmp_dir:
+
+            with self.assertRaises(NotADirectoryError):
+                ZipFileBackend(os.path.join(tmp_dir, 'fantasie', 'mehr_phantasie'))
+
+            root = os.path.join(tmp_dir, 'root.zip')
+
+            ZipFileBackend(root)
+
+            self.assertTrue(zipfile.is_zipfile(root))
+
+    def test_init_keeps_data(self):
+        with TemporaryDirectory() as tmp_dir:
+            root = os.path.join(tmp_dir, 'root.zip')
+            with zipfile.ZipFile(root, mode='w', compression=zipfile.ZIP_DEFLATED) as zip_file:
+                zip_file.writestr('test_file.txt', 'chichichi')
+
+            ZipFileBackend(root)
+
+            with zipfile.ZipFile(root, 'r') as zip_file:
+                ma_string = zip_file.read('test_file.txt')
+                self.assertEqual(b'chichichi', ma_string)
+
+    def test_path(self):
+        with TemporaryDirectory() as tmp_dir:
+            root = os.path.join(tmp_dir, 'root.zip')
+            be = ZipFileBackend(root)
+            self.assertEqual(be._path('foo'), 'foo.json')
+
+    def test_exists(self):
+        with TemporaryDirectory() as tmp_dir:
+            root = os.path.join(tmp_dir, 'root.zip')
+            be = ZipFileBackend(root)
+
+            self.assertFalse(be.exists('foo'))
+
+            with zipfile.ZipFile(root, mode='w', compression=zipfile.ZIP_DEFLATED) as zip_file:
+                zip_file.writestr('foo.json', 'chichichi')
+
+            self.assertTrue(be.exists('foo'))
+
+    def test_put(self):
+        with TemporaryDirectory() as tmp_dir:
+            root = os.path.join(tmp_dir, 'root.zip')
+
+            be = ZipFileBackend(root)
+
+            be.put('foo', 'foo_data')
+
+            with zipfile.ZipFile(root, 'r') as zip_file:
+                ma_string = zip_file.read('foo.json')
+                self.assertEqual(b'foo_data', ma_string)
+
+            with self.assertRaises(FileExistsError):
+                be.put('foo', 'bar_data')
+            with zipfile.ZipFile(root, 'r') as zip_file:
+                ma_string = zip_file.read('foo.json')
+                self.assertEqual(b'foo_data', ma_string)
+
+            be.put('foo', 'foo_bar_data', overwrite=True)
+            with zipfile.ZipFile(root, 'r') as zip_file:
+                ma_string = zip_file.read('foo.json')
+                self.assertEqual(b'foo_bar_data', ma_string)
+
+    def test_get(self):
+        with TemporaryDirectory() as tmp_dir:
+            root = os.path.join(tmp_dir, 'root.zip')
+            be = ZipFileBackend(root)
+
+            with self.assertRaises(KeyError):
+                be.get('foo')
+
+            data = 'foo_data'
+            with zipfile.ZipFile(root, 'a') as zip_file:
+                zip_file.writestr('foo.json', data)
+
+            self.assertEqual(be.get('foo'), data)
+
+    def test_update(self):
+        with TemporaryDirectory() as tmp_dir:
+            root = os.path.join(tmp_dir, 'root.zip')
+            be = ZipFileBackend(root)
+
+            be.put('foo', 'foo_data')
+            be.put('bar', 'bar_data')
+
+            be._update('foo.json', 'foo_bar_data')
+
+            self.assertEqual(be.get('foo'), 'foo_bar_data')
+            self.assertEqual(be.get('bar'), 'bar_data')
 
 
 class CachingBackendTests(unittest.TestCase):

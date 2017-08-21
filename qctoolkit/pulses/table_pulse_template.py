@@ -71,21 +71,37 @@ class TableWaveform(Waveform):
         self._measurement_windows = tuple(measurement_windows)
 
     @staticmethod
-    def _validate_input(input_waveform_table: Sequence[TableWaveformEntry]) -> Tuple[TableWaveformEntry]:
+    def _validate_input(input_waveform_table: Sequence[TableWaveformEntry]) -> Tuple[TableWaveformEntry, ...]:
+        """ Checks that:
+         - the time is increasing,
+         - there are at least two entries
+        and removes subsequent entries with same time or voltage values.
+
+        :param input_waveform_table:
+        :return:
+        """
         if len(input_waveform_table) < 2:
             raise ValueError("Waveform table has less than two entries.")
 
         times = np.fromiter((t for t, *_ in input_waveform_table), dtype=float, count=len(input_waveform_table))
         if times[0] != 0:
             raise ValueError('First time point has to be 0')
+        if times[-1] == 0:
+            raise ValueError('Last time point has to be larger 0')
 
         diff_times = np.diff(times)
-        if np.any(diff_times) < 0:
+        if np.any(diff_times < 0):
             raise ValueError('Times are not increasing')
 
         # filter 3 subsequent equal times
         to_keep = np.full_like(times, True, dtype=np.bool_)
         to_keep[1:-1] = np.logical_or(0 != diff_times[:-1], diff_times[:-1] != diff_times[1:])
+
+        voltages = np.fromiter((v for _, v, _ in input_waveform_table), dtype=float, count=len(input_waveform_table))
+        diff_voltages = np.diff(voltages[to_keep])
+
+        # filter 3 subsequent equal voltages
+        to_keep[1:-1][to_keep[1:-1]] = np.logical_or(0 != diff_voltages[:-1], diff_voltages[1:] != 0)
 
         return tuple(entry if isinstance(entry, TableWaveformEntry) else TableWaveformEntry(*entry)
                      for entry, keep_entry in zip(input_waveform_table, to_keep) if keep_entry)
@@ -244,9 +260,7 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer, MeasurementD
         instantiated_entries = dict()  # type: Dict[ChannelID,List[TableWaveformEntry]]
 
         for channel, channel_entries in self._entries.items():
-            instantiated = [TableWaveformEntry(entry.t.evaluate_numeric(**parameters),
-                                               entry.v.evaluate_numeric(**parameters),
-                                               entry.interp)
+            instantiated = [entry.instantiate(parameters)
                             for entry in channel_entries]
 
             # Add (0, v) entry if wf starts at finite time
@@ -254,11 +268,6 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer, MeasurementD
                 instantiated.insert(0, TableWaveformEntry(0,
                                                           instantiated[0].v,
                                                           TablePulseTemplate.interpolation_strategies['hold']))
-
-            for (previous_time, _, _), (time, _, _) in zip(instantiated, instantiated[1:]):
-                if time < previous_time:
-                    raise Exception("Time value {0} is smaller than the previous value {1}."
-                                    .format(time, previous_time))
             instantiated_entries[channel] = instantiated
 
         duration = max(instantiated[-1].t for instantiated in instantiated_entries.values())
@@ -270,30 +279,8 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer, MeasurementD
                 instantiated.append(TableWaveformEntry(duration,
                                                        final_entry.v,
                                                        TablePulseTemplate.interpolation_strategies['hold']))
-            instantiated_entries[channel] = TablePulseTemplate._remove_redundant_entries(instantiated)
+            instantiated_entries[channel] = instantiated
         return instantiated_entries
-
-    @staticmethod
-    def _remove_redundant_entries(entries: List[TableWaveformEntry]) -> List[TableWaveformEntry]:
-        """ Checks if three subsequent values in a list of table entries have the same value.
-        If so, the intermediate is redundant and removed in-place.
-
-        Args:
-            entries (List(TableEntry)): List of table entries to clean. Will be modified in-place.
-        Returns:
-            a reference to entries
-        """
-        length = len(entries)
-        if not entries or length < 3:
-            return entries
-
-        for index in range(length - 2, 0, -1):
-            previous_step = entries[index - 1]
-            step = entries[index]
-            next_step = entries[index + 1]
-            if step.v == previous_step.v and step.v == next_step.v:
-                entries.pop(index)
-        return entries
 
     @property
     def table_parameters(self) -> Set[str]:
@@ -333,10 +320,6 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer, MeasurementD
             )
         except KeyError as key_error:
             raise ParameterNotProvidedException(str(key_error)) from key_error
-
-    @property
-    def num_channels(self) -> int:
-        return len(self._entries)
 
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
         return dict(

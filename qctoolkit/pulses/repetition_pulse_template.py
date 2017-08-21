@@ -9,6 +9,7 @@ from qctoolkit.serialization import Serializer
 
 from qctoolkit import MeasurementWindow, ChannelID
 from qctoolkit.expressions import Expression
+from qctoolkit.utils import checked_int_cast
 from qctoolkit.pulses.pulse_template import PulseTemplate
 from qctoolkit.pulses.loop_pulse_template import LoopPulseTemplate
 from qctoolkit.pulses.sequencing import Sequencer
@@ -109,12 +110,10 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer):
 
     def get_repetition_count_value(self, parameters: Dict[str, 'Real']) -> int:
         value = self._repetition_count.evaluate_numeric(**parameters)
-        if isinstance(value, float):
-            if value.is_integer():
-                value = int(value)
-            else:
-                raise ParameterNotIntegerException(str(self._repetition_count), value)
-        return value
+        try:
+            return checked_int_cast(value)
+        except ValueError:
+            raise ParameterNotIntegerException(str(self._repetition_count), value)
 
     def __str__(self) -> str:
         return "RepetitionPulseTemplate: <{}> times <{}>"\
@@ -130,7 +129,7 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer):
 
     @property
     def duration(self) -> Expression:
-        return Expression(self.repetition_count * self.body.duration.sympified_expression)
+        return Expression(self.repetition_count.sympified_expression * self.body.duration.sympified_expression)
 
     def build_sequence(self,
                        sequencer: Sequencer,
@@ -179,7 +178,7 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer):
 class ParameterNotIntegerException(Exception):
     """Indicates that the value of the parameter given as repetition count was not an integer."""
 
-    def __init__(self, parameter_name: str, parameter_value: float) -> None:
+    def __init__(self, parameter_name: str, parameter_value: Any) -> None:
         super().__init__()
         self.parameter_name = parameter_name
         self.parameter_value = parameter_value

@@ -8,7 +8,7 @@ from qctoolkit.expressions import Expression
 from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
 from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate, SequenceWaveform
 from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingException, UnnecessaryMappingException, MissingParameterDeclarationException, MappingTemplate
-from qctoolkit.pulses.parameters import ParameterNotProvidedException, ConstantParameter, ParameterConstraint
+from qctoolkit.pulses.parameters import ParameterNotProvidedException, ConstantParameter, ParameterConstraint, ParameterConstraintViolation
 
 from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyPulseTemplate,\
     DummyNoValueParameter, DummyWaveform
@@ -22,6 +22,9 @@ class SequenceWaveformTest(unittest.TestCase):
     def test_init(self):
         dwf_ab = DummyWaveform(duration=1.1, defined_channels={'A', 'B'})
         dwf_abc = DummyWaveform(duration=2.2, defined_channels={'A', 'B', 'C'})
+
+        with self.assertRaises(ValueError):
+            SequenceWaveform([])
 
         with self.assertRaises(ValueError):
             SequenceWaveform((dwf_ab, dwf_abc))
@@ -50,6 +53,25 @@ class SequenceWaveformTest(unittest.TestCase):
 
         output_2 = swf.unsafe_sample('A', sample_times=sample_times, output_array=output)
         self.assertIs(output_2, output)
+
+    def test_unsafe_get_subset_for_channels(self):
+        dwf_1 = DummyWaveform(duration=2.2, defined_channels={'A', 'B', 'C'})
+        dwf_2 = DummyWaveform(duration=3.3, defined_channels={'A', 'B', 'C'})
+
+        wf = SequenceWaveform([dwf_1, dwf_2])
+
+        subset = {'A', 'C'}
+        sub_wf = wf.unsafe_get_subset_for_channels(subset)
+        self.assertIsInstance(sub_wf, SequenceWaveform)
+
+        self.assertEqual(len(sub_wf.compare_key), 2)
+        self.assertEqual(sub_wf.compare_key[0].defined_channels, subset)
+        self.assertEqual(sub_wf.compare_key[1].defined_channels, subset)
+
+        self.assertEqual(sub_wf.compare_key[0].duration, 2.2)
+        self.assertEqual(sub_wf.compare_key[1].duration, 3.3)
+
+
 
     def test_get_measurement_windows(self):
         dwfs = (DummyWaveform(duration=1., measurement_windows=[('M', 0.2, 0.5)]),
@@ -94,6 +116,47 @@ class SequencePulseTemplateTest(unittest.TestCase):
                                                               parameter_mapping=self.mapping1,
                                                               measurement_mapping=self.window_name_mapping),
                                               external_parameters=self.outer_parameters)
+
+    def test_init(self):
+        with self.assertRaises(MissingParameterDeclarationException):
+            SequencePulseTemplate(DummyPulseTemplate(parameter_names={'a', 'b'}), external_parameters={'a'})
+
+        with self.assertRaises(MissingParameterDeclarationException):
+            SequencePulseTemplate(DummyPulseTemplate(parameter_names={'a'}),
+                                  parameter_constraints=['b < 4'],
+                                  external_parameters={'a'})
+
+        with self.assertRaises(MissingMappingException):
+            SequencePulseTemplate(DummyPulseTemplate(parameter_names={'a'}),
+                                  parameter_constraints=['b < 4'],
+                                  external_parameters={'a', 'b', 'c'})
+
+    def test_duration(self):
+        pt = SequencePulseTemplate(DummyPulseTemplate(duration='a'),
+                                   DummyPulseTemplate(duration='a'),
+                                   DummyPulseTemplate(duration='b'))
+        self.assertEqual(pt.duration, Expression('a+a+b'))
+
+    def test_build_waveform(self):
+        wfs = [DummyWaveform(), DummyWaveform()]
+        pts = [DummyPulseTemplate(waveform=wf) for wf in wfs]
+
+        spt = SequencePulseTemplate(*pts, parameter_constraints=['a < 3'])
+        with self.assertRaises(ParameterConstraintViolation):
+            spt.build_waveform(dict(a=4), dict(), dict())
+
+        parameters = dict(a=2)
+        channel_mapping = dict()
+        measurement_mapping = dict()
+        wf = spt.build_waveform(parameters, channel_mapping=channel_mapping, measurement_mapping=measurement_mapping)
+
+        for wfi, pt in zip(wfs, pts):
+            self.assertEqual(pt.build_waveform_calls, [(parameters, dict(), dict())])
+            self.assertIs(pt.build_waveform_calls[0][0], parameters)
+
+        self.assertIsInstance(wf, SequenceWaveform)
+        for wfa, wfb in zip(wf.compare_key, wfs):
+            self.assertIs(wfa, wfb)
 
     def test_identifier(self) -> None:
         identifier = 'some name'

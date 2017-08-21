@@ -323,8 +323,9 @@ class CHANInstruction(Instruction):
         return self.channel_to_instruction_block
 
     def __str__(self) -> str:
-        return "chan " + ",".join("{target} for {channel}"
-                                  .format(target=v,channel=k) for k,v in self.channel_to_instruction_block.items())
+        return "chan " + ", ".join("{target} for {channel}"
+                                  .format(target=v, channel=k)
+                                   for k, v in sorted(self.channel_to_instruction_block.items(), key=lambda arg: arg[0]))
 
     def __getitem__(self, item) -> InstructionPointer:
         return self.channel_to_instruction_block[item]
@@ -392,11 +393,11 @@ class AbstractInstructionBlock(Comparable, metaclass=ABCMeta):
 
         if index > len(self.instructions) or index < -(len(self.instructions) + 1):
             raise IndexError()
-        if index < 0:
+        elif index < 0:
             return self[len(self) + index]
-        if index < len(self.instructions):
+        elif index < len(self.instructions):
             return self.instructions[index]
-        elif index == len(self.instructions):
+        else:
             if self.return_ip is None:
                 return STOPInstruction()
             else:

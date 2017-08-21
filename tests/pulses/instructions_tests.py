@@ -4,7 +4,7 @@ from typing import Dict, Any, List
 
 from qctoolkit.pulses.instructions import InstructionBlock, InstructionPointer,\
     Trigger, CJMPInstruction, REPJInstruction, GOTOInstruction, EXECInstruction, STOPInstruction,\
-    InstructionSequence, AbstractInstructionBlock, ImmutableInstructionBlock, Instruction
+    InstructionSequence, AbstractInstructionBlock, ImmutableInstructionBlock, Instruction, CHANInstruction
 
 from tests.pulses.sequencing_dummies import DummyWaveform, DummyInstructionBlock
 
@@ -228,6 +228,27 @@ class GOTOInstructionTest(unittest.TestCase):
         instr = GOTOInstruction(InstructionPointer(block, 3))
         self.assertEqual("goto to {}".format(str(InstructionPointer(block, 3))), str(instr))
 
+
+class CHANInstructionTest(unittest.TestCase):
+    def test_compare_key(self):
+        c_to_i = dict(a=5)
+
+        instr = CHANInstruction(c_to_i)
+
+        self.assertIs(instr.compare_key, c_to_i)
+        self.assertIs(instr.channel_to_instruction_block, c_to_i)
+
+    def test_get_item(self):
+        c_to_i = dict(a='b')
+        instr = CHANInstruction(c_to_i)
+
+        self.assertIs(instr['a'], c_to_i['a'])
+
+    def test_str(self):
+        c_to_i = dict(a='b', c='d')
+        instr = CHANInstruction(c_to_i)
+
+        self.assertEqual(str(instr), 'chan b for a, d for c')
 
 class EXECInstructionTest(unittest.TestCase):
     

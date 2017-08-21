@@ -99,6 +99,10 @@ class TablePulseTemplateTest(unittest.TestCase):
             TablePulseTemplate({0: [('a', 1),
                                     (2, 0)]}, parameter_constraints=['a>3'])
 
+        with self.assertRaises(ValueError):
+            TablePulseTemplate({0: [('a', 1),
+                                    (2, 0)]}, parameter_constraints=['2>3'])
+
     @unittest.skip(reason='Needs a better inequality solver')
     def test_time_not_increasing_hard(self):
         with self.assertRaises(ValueError):
@@ -240,33 +244,6 @@ class TablePulseTemplateTest(unittest.TestCase):
         ]
         self.assertEqual({0: expected}, entries)
 
-    def test_get_entries_instantiated_removal_for_three_subsequent_equal_entries(self) -> None:
-        table = TablePulseTemplate({0: [(1, 5),
-                                        (1.5, 5),
-                                        (2, 5),
-                                        (3, 0)]})
-        entries = table.get_entries_instantiated(dict())
-        expected = [
-            TableEntry(0, 5, HoldInterpolationStrategy()),
-            TableEntry(2, 5, HoldInterpolationStrategy()),
-            TableEntry(3, 0, HoldInterpolationStrategy())
-        ]
-        self.assertEqual({0: expected}, entries)
-
-    def test_get_entries_instantiated_removal_for_three_subsequent_equal_entries_does_not_destroy_linear_interpolation(self) -> None:
-        table = TablePulseTemplate({0: [(0, 5),
-                                        (2, 5, 'linear'),
-                                        (5, 5),
-                                        (10, 0, 'linear')]})
-        entries = table.get_entries_instantiated(dict())
-
-        expected = [
-            TableEntry(0, 5, HoldInterpolationStrategy()),
-            TableEntry(5, 5, HoldInterpolationStrategy()),
-            TableEntry(10, 0, LinearInterpolationStrategy())
-        ]
-        self.assertEqual({0: expected}, entries)
-
     def test_from_array_exceptions(self):
         with self.assertRaises(ValueError):
             TablePulseTemplate.from_array(numpy.arange(0), numpy.arange(1), [0])
@@ -278,20 +255,21 @@ class TablePulseTemplateTest(unittest.TestCase):
             TablePulseTemplate.from_array(numpy.array(numpy.ndindex((1, 2, 1))), numpy.arange(2), [0])
 
         with self.assertRaises(ValueError):
-            TablePulseTemplate.from_array(numpy.array(numpy.ndindex((3, 4))),
-                                          numpy.array(numpy.ndindex((3, 5))), [3, 4, 5])
+            TablePulseTemplate.from_array(numpy.zeros(3),
+                                          numpy.zeros((3, 2, 3)),
+                                          [3, 4, 5])
 
         with self.assertRaises(ValueError):
-            TablePulseTemplate.from_array(numpy.array(numpy.ndindex((3, 5))),
-                                          numpy.array(numpy.ndindex((3, 4))), [3, 4, 5])
+            TablePulseTemplate.from_array(numpy.zeros((4, 2)),
+                                          numpy.zeros((3, 4)), [3, 4, 5])
 
         with self.assertRaises(ValueError):
-            TablePulseTemplate.from_array(numpy.array(numpy.ndindex((2, 4))),
-                                          numpy.array(numpy.ndindex((3, 4))), [3, 4, 5])
+            TablePulseTemplate.from_array(numpy.zeros((3, 2)),
+                                          numpy.array(numpy.ndindex((4, 6))), [3, 4, 5])
 
         with self.assertRaises(ValueError):
-            TablePulseTemplate.from_array(numpy.array(numpy.ndindex((3, 4))),
-                                          numpy.array(numpy.ndindex((2, 4))), [3, 4, 5])
+            TablePulseTemplate.from_array(numpy.zeros((3, 5)),
+                                          numpy.array(numpy.ndindex((3, 6))), [3, 4, 5])
 
     def test_from_array_1D(self) -> None:
         times = numpy.array([0, 1, 3])
@@ -366,6 +344,12 @@ class TablePulseTemplateTest(unittest.TestCase):
         self.assertEqual(tpt.entries, entries)
         self.assertEqual(tpt.identifier, 'tpt')
 
+        tpt = TablePulseTemplate.from_entry_list([(0, 9, 8, 7, 'hold'),
+                                                  (1, 2, 1, 3, 'hold'),
+                                                  (4, 1, 2, 3, 'linear')],
+                                                 identifier='tpt')
+        self.assertEqual(tpt.entries, entries)
+
         entries = {k: entries[i]
                    for k, i in zip('ABC', [0, 1, 2])}
         tpt = TablePulseTemplate.from_entry_list([(0, 9, 8, 7),
@@ -375,6 +359,21 @@ class TablePulseTemplateTest(unittest.TestCase):
                                                  channel_names=['A', 'B', 'C'])
         self.assertEqual(tpt.entries, entries)
         self.assertEqual(tpt.identifier, 'tpt')
+
+        entries = {0: [(0, 9, HoldInterpolationStrategy()),
+                       (1, 2, HoldInterpolationStrategy()),
+                       (4, 1, HoldInterpolationStrategy())],
+                   1: [(0, 8, HoldInterpolationStrategy()),
+                       (1, 1, HoldInterpolationStrategy()),
+                       (4, 2, HoldInterpolationStrategy())],
+                   2: [(0, 7, HoldInterpolationStrategy()),
+                       (1, 3, HoldInterpolationStrategy()),
+                       (4, 3, HoldInterpolationStrategy())]}
+        tpt = TablePulseTemplate.from_entry_list([(0, 9, 8, 7),
+                                                  (1, 2, 1, 3),
+                                                  (4, 1, 2, 3)],
+                                                 identifier='tpt')
+        self.assertEqual(tpt.entries, entries)
 
     def test_add_entry_multi_same_time_param(self) -> None:
         pulse = TablePulseTemplate({0: [(1, 3),
@@ -603,6 +602,37 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
 
 
 class TableWaveformTests(unittest.TestCase):
+    def test_validate_input(self):
+        with self.assertRaises(ValueError):
+            TableWaveform._validate_input([TableWaveformEntry(0.0, 0.2, HoldInterpolationStrategy())])
+
+        with self.assertRaises(ValueError):
+            TableWaveform._validate_input([TableWaveformEntry(0.0, 0.2, HoldInterpolationStrategy()),
+                                           TableWaveformEntry(0.0, 0.3, HoldInterpolationStrategy())])
+
+        with self.assertRaises(ValueError):
+            TableWaveform._validate_input([TableWaveformEntry(0.1, 0.2, HoldInterpolationStrategy()),
+                                           TableWaveformEntry(0.2, 0.2, HoldInterpolationStrategy())])
+
+        with self.assertRaises(ValueError):
+            TableWaveform._validate_input([TableWaveformEntry(0.0, 0.2, HoldInterpolationStrategy()),
+                                           TableWaveformEntry(0.2, 0.2, HoldInterpolationStrategy()),
+                                           TableWaveformEntry(0.1, 0.2, HoldInterpolationStrategy())])
+
+        validated = TableWaveform._validate_input([TableWaveformEntry(0.0, 0.2, HoldInterpolationStrategy()),
+                                                   TableWaveformEntry(0.1, 0.2, LinearInterpolationStrategy()),
+                                                   TableWaveformEntry(0.1, 0.3, JumpInterpolationStrategy()),
+                                                   TableWaveformEntry(0.1, 0.3, HoldInterpolationStrategy()),
+                                                   TableWaveformEntry(0.2, 0.3, LinearInterpolationStrategy()),
+                                                   TableWaveformEntry(0.3, 0.3, JumpInterpolationStrategy())])
+
+        self.assertEqual(validated, (TableWaveformEntry(0.0, 0.2, HoldInterpolationStrategy()),
+                                     TableWaveformEntry(0.1, 0.2, LinearInterpolationStrategy()),
+                                     TableWaveformEntry(0.1, 0.3, HoldInterpolationStrategy()),
+                                     TableWaveformEntry(0.3, 0.3, JumpInterpolationStrategy())))
+
+
+
     def test_duration(self) -> None:
         entries = [TableWaveformEntry(0, 0, HoldInterpolationStrategy()), TableWaveformEntry(5, 1, HoldInterpolationStrategy())]
         waveform = TableWaveform('A', entries, [])

@@ -3,7 +3,7 @@ from typing import Union
 
 from qctoolkit.expressions import Expression
 from qctoolkit.pulses.parameters import ConstantParameter, MappedParameter, ParameterNotProvidedException,\
-    ParameterConstraint, ParameterConstraintViolation
+    ParameterConstraint, ParameterConstraintViolation, InvalidParameterNameException
 
 from tests.serialization_dummies import DummySerializer
 from tests.pulses.sequencing_dummies import DummyParameter
@@ -117,12 +117,25 @@ class ParameterConstraintTest(unittest.TestCase):
             ParameterConstraint('a*b')
         ParameterConstraint('1 < 2')
 
+    def test_str(self):
+        self.assertEqual(str(ParameterConstraint('a < b')), 'a < b')
+
+        self.assertEqual(str(ParameterConstraint('a==b')), 'a==b')
+
 
 class ParameterNotProvidedExceptionTests(unittest.TestCase):
 
     def test(self) -> None:
         exc = ParameterNotProvidedException('foo')
         self.assertEqual("No value was provided for parameter 'foo' and no default value was specified.", str(exc))
+
+
+class InvalidParameterNameExceptionTests(unittest.TestCase):
+    def test(self):
+        exception = InvalidParameterNameException('asd')
+
+        self.assertEqual(exception.parameter_name, 'asd')
+        self.assertEqual(str(exception), 'asd is an invalid parameter name')
 
         
 if __name__ == "__main__":

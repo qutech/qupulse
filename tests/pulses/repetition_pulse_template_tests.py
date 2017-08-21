@@ -2,6 +2,7 @@ import unittest
 
 import numpy as np
 
+from qctoolkit.expressions import Expression
 from qctoolkit.pulses.repetition_pulse_template import RepetitionPulseTemplate,ParameterNotIntegerException, RepetitionWaveform
 from qctoolkit.pulses.parameters import ParameterNotProvidedException, ParameterConstraintViolation, ConstantParameter, \
     ParameterConstraint
@@ -15,6 +16,43 @@ from tests.serialization_dummies import DummySerializer
 class RepetitionWaveformTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+    def test_init(self):
+        body_wf = DummyWaveform()
+
+        with self.assertRaises(ValueError):
+            RepetitionWaveform(body_wf, -1)
+
+        with self.assertRaises(ValueError):
+            RepetitionWaveform(body_wf, 1.1)
+
+        wf = RepetitionWaveform(body_wf, 3)
+        self.assertIs(wf._body, body_wf)
+        self.assertEqual(wf._repetition_count, 3)
+
+    def test_duration(self):
+        wf = RepetitionWaveform(DummyWaveform(duration=2.2), 3)
+        self.assertEqual(wf.duration, 2.2*3)
+
+    def test_defined_channels(self):
+        body_wf = DummyWaveform(defined_channels={'a'})
+        self.assertIs(RepetitionWaveform(body_wf, 2).defined_channels, body_wf.defined_channels)
+
+    def test_compare_key(self):
+        body_wf = DummyWaveform(defined_channels={'a'})
+        wf = RepetitionWaveform(body_wf, 2)
+        self.assertEqual(wf.compare_key, (body_wf.compare_key, 2))
+
+    def test_unsafe_get_subset_for_channels(self):
+        body_wf = DummyWaveform(defined_channels={'a', 'b'})
+
+        chs = {'a'}
+
+        subset = RepetitionWaveform(body_wf, 3).get_subset_for_channels(chs)
+        self.assertIsInstance(subset, RepetitionWaveform)
+        self.assertIsInstance(subset._body, DummyWaveform)
+        self.assertIs(subset._body.defined_channels, chs)
+        self.assertEqual(subset._repetition_count, 3)
 
     def test_unsafe_sample(self):
         body_wf = DummyWaveform(duration=7)
@@ -55,6 +93,9 @@ class RepetitionPulseTemplateTest(unittest.TestCase):
         self.assertEqual(repetition_count, t.repetition_count)
         self.assertEqual(body, t.body)
 
+        with self.assertRaises(ValueError):
+            RepetitionPulseTemplate(body, Expression(-1))
+
     def test_parameter_names_and_declarations(self) -> None:
         body = DummyPulseTemplate()
         t = RepetitionPulseTemplate(body, 5)
@@ -78,6 +119,19 @@ class RepetitionPulseTemplateTest(unittest.TestCase):
         self.assertIsInstance(str(t), str)
         t = RepetitionPulseTemplate(body, 'foo')
         self.assertIsInstance(str(t), str)
+
+    def test_measurement_names(self):
+        measurement_names = {'M'}
+        body = DummyPulseTemplate(measurement_names=measurement_names)
+        t = RepetitionPulseTemplate(body, 9)
+
+        self.assertIs(measurement_names, t.measurement_names)
+
+    def test_duration(self):
+        body = DummyPulseTemplate(duration='foo')
+        t = RepetitionPulseTemplate(body, 'bar')
+
+        self.assertEqual(t.duration, Expression('foo*bar'))
 
 
 class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
@@ -141,6 +195,19 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
         self.assertEqual([(self.body, parameters, conditions, measurement_mapping, channel_mapping)],
                          self.sequencer.sequencing_stacks[body_block])
         self.assertEqual([REPJInstruction(3, InstructionPointer(body_block, 0))], self.block.instructions)
+
+    def test_parameter_not_provided(self):
+        parameters = dict(foo=ConstantParameter(4))
+        conditions = dict(foo=DummyCondition(requires_stop=True))
+        measurement_mapping = dict(moth='fire')
+        channel_mapping = dict(asd='f')
+
+        template = RepetitionPulseTemplate(self.body, 'foo*bar', parameter_constraints=['foo<9'])
+
+        with self.assertRaises(ParameterNotProvidedException):
+            template.build_sequence(self.sequencer, parameters, conditions, measurement_mapping, channel_mapping,
+                                     self.block)
+
 
     def test_build_sequence_declaration_exceeds_bounds(self) -> None:
         parameters = dict(foo=ConstantParameter(9))
