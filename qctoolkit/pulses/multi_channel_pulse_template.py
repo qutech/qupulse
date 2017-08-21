@@ -28,22 +28,6 @@ from qctoolkit.expressions import Expression
 __all__ = ["MultiChannelWaveform", "AtomicMultiChannelPulseTemplate"]
 
 
-def _parse_subtemplates(subtemplates):
-    subtemplates = [st if isinstance(st, PulseTemplate) else MappingTemplate.from_tuple(st) for st in subtemplates]
-
-    defined_channels = [st.defined_channels for st in subtemplates]
-
-    # check there are no intersections between channels
-    for i, channels_i in enumerate(defined_channels):
-        for j, channels_j in enumerate(defined_channels[i + 1:]):
-            if channels_i & channels_j:
-                raise ChannelMappingException(subtemplates[i],
-                                              subtemplates[i + 1 + j],
-                                              (channels_i | channels_j).pop())
-
-    return subtemplates
-
-
 class MultiChannelWaveform(Waveform):
     """A MultiChannelWaveform is a Waveform object that allows combining arbitrary Waveform objects
     to into a single waveform defined for several channels.

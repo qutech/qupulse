@@ -23,29 +23,6 @@ __all__ = ["make_parameter", "ParameterDict", "Parameter", "ConstantParameter",
            "ParameterNotProvidedException", "ParameterConstraintViolation"]
 
 
-def make_parameter(value):
-    """Convenience function """
-    if isinstance(value, Parameter):
-        return value
-    if isinstance(value, Real):
-        return ConstantParameter(value)
-    if isinstance(value, str):
-        return MappedParameter(Expression(value))
-    raise TypeError('Can not convert object of type {} to a parameter'.format(type(value)))
-
-
-class ParameterDict(dict):
-    """Conve"""
-    def __init__(self, *args, **kwargs):
-        super().__init__(
-            *((k, make_parameter(v)) for k, v in args),
-            **dict((k, make_parameter(v)) for k, v in kwargs.items())
-        )
-
-    def __setitem__(self, key, value) -> None:
-        super().__setitem__(key, make_parameter(value))
-
-
 class Parameter(Serializable, Comparable, metaclass=ABCMeta):
     """A parameter for pulses.
     
