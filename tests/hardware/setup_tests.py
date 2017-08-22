@@ -3,9 +3,9 @@ import itertools
 
 
 from qctoolkit.hardware.setup import HardwareSetup, ChannelID, PlaybackChannel, _SingleChannel, MarkerChannel
-from qctoolkit.hardware.awgs.base import DummyAWG
 
-from.program_tests import get_two_chan_test_block, WaveformGenerator
+from tests.hardware.dummy_devices import DummyAWG
+from tests.hardware.program_tests import get_two_chan_test_block, WaveformGenerator
 
 
 class SingleChannelTests(unittest.TestCase):
