@@ -5,9 +5,3 @@ try:
     __all__.extend(["TaborAWGRepresentation", "TaborChannelPair"])
 except ImportError:
     pass
-
-try:
-    from qctoolkit.hardware.awgs.tektronix import TektronixAWG
-    __all__.extend("TektronixAWG")
-except ImportError:
-    pass
