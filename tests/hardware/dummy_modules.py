@@ -78,12 +78,19 @@ class dummy_atsaverage(dummy_package):
         class AlazarCard:
             model = 'DUMMY'
             minimum_record_size = 256
+            def __init__(self):
+                self._startAcquisition_calls = []
+            def startAcquisition(self, x: int):
+                self._startAcquisition_calls.append(x)
     class config(dummy_package):
         class CaptureClockConfig:
             def numeric_sample_rate(self, card):
                 return 10**8
         class ScanlineConfiguration:
-            pass
+            def __init__(self):
+                self._apply_calls = []
+            def apply(self, card, print_debug_output):
+                self._apply_calls.append((card, print_debug_output))
         ScanlineConfiguration.captureClockConfiguration = CaptureClockConfig()
     class operations(dummy_package):
         class OperationDefinition:
