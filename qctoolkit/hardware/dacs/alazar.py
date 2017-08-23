@@ -90,6 +90,9 @@ class AlazarCard(DAC):
             config = self.config
             config.masks, config.operations, total_record_size = self._registered_programs[program_name]
 
+            if len(config.operations) == 0:
+                raise RuntimeError('No operations configured for program {}'.format(program_name))
+
             if not config.masks:
                 if config.operations:
                     raise RuntimeError('Invalid configuration. Operations have no masks to work with')
@@ -108,8 +111,7 @@ class AlazarCard(DAC):
         self.__card.startAcquisition(1)
 
     def delete_program(self, program_name: str) -> None:
-        self.__registered_operations.pop(program_name, None)
-        self.__registered_masks.pop(program_name, None)
+        self._registered_programs.pop(program_name)
 
     @property
     def mask_prototypes(self):

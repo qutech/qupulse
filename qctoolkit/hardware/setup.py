@@ -76,6 +76,9 @@ class HardwareSetup:
             raise TypeError('The provided run_callback is not callable')
 
         mcp = MultiChannelProgram(instruction_block)
+        if mcp.channels - set(self._channel_map.keys()):
+            raise KeyError('The following channels are unknown to the HardwareSetup: {}'.format(
+                mcp.channels - set(self._channel_map.keys())))
 
         temp_measurement_windows = defaultdict(deque)
         for program in mcp.programs.values():

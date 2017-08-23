@@ -1,6 +1,34 @@
-from typing import Tuple, Set
+from typing import Tuple, Set, Dict
 
 from qctoolkit.hardware.awgs.base import AWG, ProgramOverwriteException
+from qctoolkit.hardware.dacs import DAC
+
+class DummyDAC(DAC):
+    def __init__(self):
+        self._measurement_windows = dict()
+        self._operations = dict()
+
+        self._armed_program = None
+
+    @property
+    def armed_program(self):
+        return self._armed_program
+
+    def register_measurement_windows(self, program_name: str, windows: Dict[str, Tuple['numpy.ndarray',
+                                                                                       'numpy.ndarray']]):
+        self._measurement_windows[program_name] = windows
+
+    def register_operations(self, program_name: str, operations):
+        self._operations[program_name] = operations
+
+    def arm_program(self, program_name: str):
+        self._armed_program = program_name
+
+    def delete_program(self, program_name):
+        if program_name in self._operations:
+            self._operations.pop(program_name)
+        if program_name in self._measurement_windows:
+            self._measurement_windows.pop(program_name)
 
 
 class DummyAWG(AWG):
