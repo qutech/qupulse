@@ -6,6 +6,8 @@ import qctoolkit.hardware.awgs.tektronix as tek
 from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
 from qctoolkit.pulses.sequencing import Sequencer
 
+from tests.hardware.dummy_devices import DummyAWG
+
 
 class DummyAWGTest(unittest.TestCase):
 
@@ -19,7 +21,7 @@ class DummyAWGTest(unittest.TestCase):
         self.program = self.sequencer.build()
 
     def test_ProgramOverwriteException(self):
-        dummy = awg.DummyAWG(100)
+        dummy = DummyAWG(100)
         dummy.upload('program', self.program, [], [], [])
         with self.assertRaises(awg.ProgramOverwriteException):
             dummy.upload('program', self.program, [], [], [])

@@ -54,10 +54,11 @@ class dummy_teawg(dummy_package):
         'digital_support': False,  # is digital-wave supported?
     }
     class TEWXAwg:
-        def __init__(self, *args, **kwargs):
+        def __init__(self, *args, paranoia_level=1, **kwargs):
             self.logged_commands = []
             self.logged_queries = []
             self._visa_inst = dummy_pyvisa.resources.MessageBasedResource()
+            self.paranoia_level = paranoia_level
         @property
         def visa_inst(self):
             return self._visa_inst

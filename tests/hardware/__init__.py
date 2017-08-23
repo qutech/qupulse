@@ -1,13 +1,11 @@
-
-from . import dummy_modules
-
+from tests.hardware.dummy_modules import import_package
 
 use_dummy_tabor = True
 if use_dummy_tabor:
-    dummy_modules.import_package('pytabor', dummy_modules.dummy_pytabor)
-    dummy_modules.import_package('pyvisa', dummy_modules.dummy_pyvisa)
-    dummy_modules.import_package('teawg', dummy_modules.dummy_teawg)
+    import_package('pytabor')
+    import_package('pyvisa')
+    import_package('teawg')
 
 use_dummy_atsaverage = True
 if use_dummy_atsaverage:
-    dummy_modules.import_package('atsaverage')
+    import_package('atsaverage')

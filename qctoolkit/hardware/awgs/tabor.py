@@ -158,11 +158,11 @@ class TaborProgram:
                                             waveform_loop.repetition_count)
                                            for waveform_loop in self.program):
             if waveform in waveforms:
-                segment_no = waveforms.index(waveform) + 1
+                waveform_index = waveforms.index(waveform)
             else:
-                segment_no = len(waveforms) + 1
+                waveform_index = len(waveforms)
                 waveforms.append(waveform)
-            sequencer_table.append((repetition_count, segment_no, 0))
+            sequencer_table.append((repetition_count, waveform_index, 0))
 
         self._waveforms = waveforms
         self._sequencer_tables = [sequencer_table]
@@ -201,9 +201,8 @@ class TaborProgram:
             if len(self.program[i]) > max_seq_len:
                 raise TaborException('The algorithm is not smart enough to make sequence tables shorter')
             elif len(self.program[i]) < min_seq_len:
-                if self.program[i].repetition_count == 0:
-                    raise TaborException('Invalid repetition count')
-                elif self.program[i].repetition_count == 1:
+                assert self.program[i].repetition_count > 0
+                if self.program[i].repetition_count == 1:
                     # check if merging with neighbour is possible
                     if i > 0 and check_merge_with_next(self.program, i-1):
                         pass
@@ -237,10 +236,8 @@ class TaborProgram:
                 i += 1
 
         for sequence_table in self.program:
-            if len(sequence_table) < self.__device_properties['min_seq_len']:
-                raise TaborException('Sequence table is too short')
-            if len(sequence_table) > self.__device_properties['max_seq_len']:
-                raise TaborException()
+            assert len(sequence_table) >= self.__device_properties['min_seq_len']
+            assert len(sequence_table) <= self.__device_properties['max_seq_len']
 
         advanced_sequencer_table = []
         sequencer_tables = []
@@ -294,7 +291,7 @@ class TaborAWGRepresentation(teawg.TEWXAwg):
             self.visa_inst.write(':RES')
 
         if external_trigger:
-            raise NotImplementedError()
+            raise NotImplementedError()  # pragma: no cover
 
         def switch_group_off(grp):
             switch_off_cmd = (":INST:SEL {}; :OUTP OFF; :INST:SEL {}; :OUTP OFF; "
@@ -315,8 +312,12 @@ class TaborAWGRepresentation(teawg.TEWXAwg):
         self.send_cmd(setup_command)
 
     def send_cmd(self, cmd_str, paranoia_level=None) -> Any:
-        if paranoia_level is not None:
-            super().send_cmd(cmd_str=cmd_str, paranoia_level=paranoia_level)
+        """Overwrite send_cmd for paranoia_level > 3"""
+        if paranoia_level is None:
+            paranoia_level = self.paranoia_level
+
+        if paranoia_level < 3:
+            super().send_cmd(cmd_str=cmd_str, paranoia_level=paranoia_level)  # pragma: no cover
         else:
             cmd_str = cmd_str.rstrip()
 
@@ -325,9 +326,9 @@ class TaborAWGRepresentation(teawg.TEWXAwg):
             else:
                 ask_str = '*OPC?; :SYST:ERR?'
 
-            answer = self._visa_inst.ask(ask_str).split(';')
+            *answers, opc, error_code_msg = self._visa_inst.ask(ask_str).split(';')
 
-            error_code, error_msg = answer[-1].split(',')
+            error_code, error_msg = error_code_msg.split(',')
             error_code = int(error_code)
             if error_code != 0:
                 _ = self._visa_inst.ask('*CLS; *OPC?')
@@ -337,16 +338,12 @@ class TaborAWGRepresentation(teawg.TEWXAwg):
                     self.send_cmd(cmd_str)
                 else:
                     raise RuntimeError('Cannot execute command: {}\n{}: {}'.format(cmd_str, error_code, error_msg))
-            if len(answer) == 2:
-                return None
-            elif len(answer) == 3:
-                return answer[0]
-            else:
-                return tuple(answer[:-2])
+
+            assert len(answers) == 0
 
     @property
     def is_open(self) -> bool:
-        return self.visa_inst is not None
+        return self.visa_inst is not None  # pragma: no cover
 
     def select_channel(self, channel) -> None:
         if channel not in (1, 2, 3, 4):
