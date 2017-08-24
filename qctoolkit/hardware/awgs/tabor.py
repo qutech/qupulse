@@ -607,8 +607,9 @@ class TaborChannelPair(AWG):
         # try to find places that are larger than the segments to fit in starting with the large segments and large
         # free spaces
         segment_indices = np.flatnonzero(to_amend)[np.argsort(segment_lengths[to_amend])[::-1]]
+        capacities = self._segment_capacity[:last_reserved]
         for segment_idx in segment_indices:
-            free_capacities = self._segment_capacity[free_segments]
+            free_capacities = capacities[free_segments]
             free_segments_indices = np.flatnonzero(free_segments)[np.argsort(free_capacities)[::-1]]
 
             if len(free_segments_indices) == 0:
