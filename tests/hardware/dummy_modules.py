@@ -59,6 +59,12 @@ class dummy_teawg(dummy_package):
             self.logged_queries = []
             self._visa_inst = dummy_pyvisa.resources.MessageBasedResource()
             self.paranoia_level = paranoia_level
+            self.dev_properties = dummy_teawg.model_properties_dict
+
+            self._download_segment_lengths_calls = []
+            self._send_binary_data_calls = []
+            self._download_adv_seq_table_calls = []
+            self._download_sequencer_table_calls = []
         @property
         def visa_inst(self):
             return self._visa_inst
@@ -66,8 +72,14 @@ class dummy_teawg(dummy_package):
             self.logged_commands.append((args, kwargs))
         def send_query(self, *args, **kwargs):
             return self._visa_inst.ask(*args, **kwargs)
-        send_binary_data = send_cmd
-        download_sequencer_table = send_cmd
+        def download_segment_lengths(self, seg_len_list, pref='dummy_pref', paranoia_level='dummy_paranoia'):
+            self._download_segment_lengths_calls.append((seg_len_list, pref, paranoia_level))
+        def send_binary_data(self, pref, bin_dat, paranoia_level='dummy_paranoia'):
+            self._send_binary_data_calls.append((pref, bin_dat, paranoia_level))
+        def download_adv_seq_table(self, advanced_sequencer_table):
+            self._download_adv_seq_table_calls.append(advanced_sequencer_table)
+        def download_sequencer_table(self, sequencer_table):
+            self._download_sequencer_table_calls.append(sequencer_table)
 
 class dummy_atsaverage(dummy_package):
     class atsaverage(dummy_package):

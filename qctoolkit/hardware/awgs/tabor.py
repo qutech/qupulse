@@ -1,7 +1,7 @@
 """"""
 import fractions
 import sys
-from typing import List, Tuple, Set, NamedTuple, Callable, Optional, Any, Sequence
+from typing import List, Tuple, Set, NamedTuple, Callable, Optional, Any, Sequence, cast
 from enum import Enum
 
 # Provided by Tabor electronics for python 2.7
@@ -13,7 +13,7 @@ import numpy as np
 from qctoolkit import ChannelID
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 from qctoolkit.hardware.program import Loop
-from qctoolkit.hardware.util import voltage_to_uint16, make_combined_wave
+from qctoolkit.hardware.util import voltage_to_uint16, make_combined_wave, find_positions
 from qctoolkit.hardware.awgs.base import AWG
 
 
@@ -402,11 +402,12 @@ def with_configuration_guard(function_object: Callable[['TaborChannelPair'], Any
             channel_pair._enter_config_mode()
         channel_pair._configuration_guard_count += 1
 
-        function_object(channel_pair, *args, **kwargs)
-
-        channel_pair._configuration_guard_count -= 1
-        if channel_pair._configuration_guard_count == 0:
-            channel_pair._exit_config_mode()
+        try:
+            return function_object(channel_pair, *args, **kwargs)
+        finally:
+            channel_pair._configuration_guard_count -= 1
+            if channel_pair._configuration_guard_count == 0:
+                channel_pair._exit_config_mode()
 
     return guarding_method
 
@@ -478,7 +479,7 @@ class TaborChannelPair(AWG):
     @property
     def _free_points_at_end(self) -> int:
         reserved_index = np.flatnonzero(self._segment_reserved)
-        if reserved_index:
+        if len(reserved_index):
             return self.total_capacity - np.sum(self._segment_capacity[:reserved_index[-1]])
         else:
             return self.total_capacity
@@ -486,9 +487,9 @@ class TaborChannelPair(AWG):
     @with_configuration_guard
     def upload(self, name: str,
                program: Loop,
-               channels: List[ChannelID],
-               markers: List[ChannelID],
-               voltage_transformation: List[Callable],
+               channels: Tuple[Optional[ChannelID], Optional[ChannelID]],
+               markers: Tuple[Optional[ChannelID], Optional[ChannelID]],
+               voltage_transformation: Tuple[Callable, Callable],
                force: bool=False) -> None:
         """Upload a program to the AWG.
 
@@ -519,66 +520,115 @@ class TaborChannelPair(AWG):
             sample_rate = self._device.sample_rate(self._channels[0])
             voltage_amplitudes = (self._device.amplitude(self._channels[0]),
                                   self._device.amplitude(self._channels[1]))
-            voltage_offsets = (self._device.offset(self._channels[0]),
-                               self._device.offset(self._channels[1]))
+            voltage_offsets = (0, 0)
             segments, segment_lengths = tabor_program.sampled_segments(sample_rate=sample_rate,
                                                                        voltage_amplitude=voltage_amplitudes,
                                                                        voltage_offset=voltage_offsets,
                                                                        voltage_transformation=voltage_transformation)
-            segment_hashes = np.fromiter((hash(segment) for segment in segments), count=len(segments), dtype=np.uint64)
 
-            known_waveforms = np.in1d(segment_hashes, self._segment_hashes, assume_unique=True)
-            to_upload_size = np.sum(segment_lengths[~known_waveforms] + 16)
-
-            waveform_to_segment = np.full(len(segments), -1, dtype=int)
-            waveform_to_segment[known_waveforms] = np.flatnonzero(
-                np.in1d(self._segment_hashes, segment_hashes[known_waveforms]))
-
-            to_amend = ~known_waveforms
-            to_insert = []
-
-            if name not in self._known_programs:
-                if self._free_points_in_total < to_upload_size:
-                    raise MemoryError('Not enough free memory')
-                if self._free_points_at_end < to_upload_size:
-                    reserved_indices = np.flatnonzero(self._segment_reserved)
-                    if len(reserved_indices) == 0:
-                        raise MemoryError('Fragmentation does not allow upload.')
-
-                    last_reserved = reserved_indices[-1] if reserved_indices else 0
-                    free_segments = np.flatnonzero(self._segment_references[:last_reserved] == 0)[
-                        np.argsort(self._segment_capacity[:last_reserved])[::-1]]
-
-                    for wf_index in np.argsort(segment_lengths[~known_waveforms])[::-1]:
-                        if segment_lengths[wf_index] <= self._segment_capacity[free_segments[0]]:
-                            to_insert.append((wf_index, free_segments[0]))
-                            free_segments = free_segments[1:]
-                            to_amend[wf_index] = False
-
-                    if np.sum(segment_lengths[to_amend] + 16) > self._free_points_at_end:
-                        raise MemoryError('Fragmentation does not allow upload.')
-
+            waveform_to_segment, to_amend, to_insert = self._find_place_for_segments_in_memory(segments,
+                                                                                               segment_lengths)
         except:
             if to_restore:
-                self._known_programs[name] = to_restore
-                self._segment_reserved[to_restore.segment_indices] += 1
+                self.upload(name, to_restore)
             raise
 
         self._segment_references[waveform_to_segment[waveform_to_segment >= 0]] += 1
 
-        if to_insert:
-            for wf_index, segment_index in to_insert:
-                self._upload_segment(segment_index, segments[wf_index])
-                waveform_to_segment[wf_index] = segment_index
+        for wf_index in np.flatnonzero(to_insert > 0):
+            segment_index = to_insert[wf_index]
+            self._upload_segment(to_insert[wf_index], segments[wf_index])
+            waveform_to_segment[wf_index] = segment_index
 
         if np.any(to_amend):
             segments_to_amend = segments[to_amend]
             self._amend_segments(segments_to_amend)
-            waveform_to_segment[to_amend] = np.arange(len(self._segment_capacity) - np.sum(to_amend),
-                                                      len(self._segment_capacity), dtype=int) + 1
+            waveform_to_segment[to_amend] = self._amend_segments(segments_to_amend)
 
         self._known_programs[name] = TaborProgramMemory(segment_indices=waveform_to_segment,
                                                         program=tabor_program)
+
+    def _find_place_for_segments_in_memory(self, segments: Sequence, segment_lengths: Sequence) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        1. Find known segments
+        2. Find empty spaces with fitting length
+        3. Find empty spaces with bigger length
+        4. Amend remaining segments
+        :param segments:
+        :param segment_lengths:
+        :return:
+        """
+        segment_hashes = np.fromiter((hash(segment) for segment in segments), count=len(segments), dtype=np.int64)
+
+        waveform_to_segment = find_positions(self._segment_hashes, segment_hashes)
+
+        # separate into known and unknown
+        unknown = (waveform_to_segment == -1)
+        known = ~unknown
+
+        known_pos_in_memory = waveform_to_segment[known]
+
+        assert len(known_pos_in_memory) == 0 or np.all(self._segment_hashes[known_pos_in_memory] == segment_hashes[known])
+
+        new_reference_counter = self._segment_references.copy()
+        new_reference_counter[known_pos_in_memory] += 1
+
+        to_upload_size = np.sum(segment_lengths[unknown] + 16)
+        free_points_in_total = self.total_capacity - np.sum(self._segment_capacity[self._segment_references > 0])
+        if free_points_in_total < to_upload_size:
+            raise MemoryError('Not enough free memory',
+                              free_points_in_total,
+                              to_upload_size,
+                              self._free_points_in_total)
+
+        to_amend = cast(np.ndarray, unknown)
+        to_insert = np.full(len(segments), fill_value=-1, dtype=np.int64)
+
+        reserved_indices = np.flatnonzero(new_reference_counter > 0)
+        last_reserved = reserved_indices[-1] if len(reserved_indices) else 0
+
+        free_segments = new_reference_counter[:last_reserved] == 0
+        free_segment_count = np.sum(free_segments)
+
+        # look for a free segment place with the same length
+        for segment_idx in np.flatnonzero(to_amend):
+            if free_segment_count == 0:
+                break
+
+            pos_of_same_length = np.logical_and(free_segments, segment_lengths[segment_idx] == self._segment_capacity[:last_reserved])
+            idx_same_length = np.argmax(pos_of_same_length)
+            if pos_of_same_length[idx_same_length]:
+                free_segments[idx_same_length] = False
+                free_segment_count -= 1
+
+                to_amend[segment_idx] = False
+                to_insert[segment_idx] = idx_same_length
+
+        # try to find places that are larger than the segments to fit in starting with the large segments and large
+        # free spaces
+        segment_indices = np.flatnonzero(to_amend)[np.argsort(segment_lengths[to_amend])[::-1]]
+        for segment_idx in segment_indices:
+            free_capacities = self._segment_capacity[free_segments]
+            free_segments_indices = np.flatnonzero(free_segments)[np.argsort(free_capacities)[::-1]]
+
+            if len(free_segments_indices) == 0:
+                break
+
+            fitting_segment = np.argmax((free_capacities >= segment_lengths[segment_idx])[::-1])
+            fitting_segment = free_segments_indices[fitting_segment]
+            if self._segment_capacity[fitting_segment] >= segment_lengths[segment_idx]:
+                free_segments[fitting_segment] = False
+                to_amend[segment_idx] = False
+                to_insert[segment_idx] = fitting_segment
+
+        free_points_at_end = self.total_capacity - np.sum(self._segment_capacity[:last_reserved])
+        if np.sum(segment_lengths[to_amend] + 16) > free_points_at_end:
+            raise MemoryError('Fragmentation does not allow upload.',
+                              np.sum(segment_lengths[to_amend] + 16),
+                              free_points_at_end,
+                              self._free_points_at_end)
+
+        return waveform_to_segment, to_amend, to_insert
 
     @with_configuration_guard
     def _upload_segment(self, segment_index: int, segment: TaborSegment) -> None:
@@ -587,13 +637,14 @@ class TaborChannelPair(AWG):
         if segment.num_points > self._segment_capacity[segment_index]:
             raise ValueError('Cannot upload segment here.')
 
+        segment_no = segment_index + 1
 
-        self._device.send_cmd(':TRAC:DEF {}, {}'.format(segment_index, segment.num_points))
+        self._device.send_cmd(':TRAC:DEF {}, {}'.format(segment_no, segment.num_points))
         self._segment_lengths[segment_index] = segment.num_points
 
-        self._device.send_cmd(':TRAC:SEL {}'.format(segment_index))
+        self._device.send_cmd(':TRAC:SEL {}'.format(segment_no))
 
-        self._device.send_cmd('TRAC:MODE COMB')
+        self._device.send_cmd(':TRAC:MODE COMB')
         wf_data = segment.get_as_binary()
 
         self._device.send_binary_data(pref=':TRAC:DATA', bin_dat=wf_data)
@@ -601,19 +652,19 @@ class TaborChannelPair(AWG):
         self._segment_hashes[segment_index] = hash(segment)
 
     @with_configuration_guard
-    def _amend_segments(self, segments: List[TaborSegment]) -> None:
+    def _amend_segments(self, segments: List[TaborSegment]) -> np.ndarray:
         new_lengths = np.asarray([s.num_points for s in segments], dtype=np.uint32)
 
         wf_data = make_combined_wave(segments)
         trac_len = len(wf_data) // 2
 
         segment_index = len(self._segment_capacity) + 1
-        self._device.send_cmd(':TRAC:DEF {}, {}'.format(segment_index, trac_len))
+        self._device.send_cmd(':TRAC:DEF {},{}'.format(segment_index, trac_len))
         self._device.send_cmd(':TRAC:SEL {}'.format(segment_index))
-        self._device.send_cmd('TRAC:MODE COMB')
+        self._device.send_cmd(':TRAC:MODE COMB')
         self._device.send_binary_data(pref=':TRAC:DATA', bin_dat=wf_data)
 
-        old_to_update = np.count_nonzero(self._segment_capacity != self._segment_lengths and self._segment_reserved)
+        old_to_update = np.count_nonzero(self._segment_capacity != self._segment_lengths)
         segment_capacity = np.concatenate((self._segment_capacity, new_lengths))
         segment_lengths = np.concatenate((self._segment_lengths, new_lengths))
         segment_references = np.concatenate((self._segment_references, np.ones(len(segments), dtype=int)))
@@ -621,29 +672,31 @@ class TaborChannelPair(AWG):
         if len(segments) < old_to_update:
             for i, segment in enumerate(segments):
                 current_segment = segment_index + i
-                self._device.send_cmd(':TRAC:DEF {}, {}'.format(current_segment, segment.num_points))
+                self._device.send_cmd(':TRAC:DEF {},{}'.format(current_segment, segment.num_points))
         else:
             # flush the capacity
             self._device.download_segment_lengths(segment_capacity)
 
             # update non fitting lengths
-            for i in np.flatnonzero(np.logical_and(segment_capacity != segment_lengths, segment_references > 0)):
-                self._device.send_cmd(':TRAC:DEF {},{}'.format(i, segment_lengths[i]))
+            for i in np.flatnonzero(segment_capacity != segment_lengths):
+                self._device.send_cmd(':TRAC:DEF {},{}'.format(i+1, segment_lengths[i]))
 
         self._segment_capacity = segment_capacity
         self._segment_lengths = segment_lengths
         self._segment_hashes = segment_hashes
         self._segment_references = segment_references
 
+        return segment_index + np.arange(len(segments), dtype=np.int64) - 1
+
     def cleanup(self) -> None:
         """Discard all segments after the last which is still referenced"""
         reserved_indices = np.flatnonzero(self._segment_references > 0)
 
-        new_end = reserved_indices[-1]+1 if reserved_indices else 0
+        new_end = reserved_indices[-1]+1 if len(reserved_indices) else 0
         self._segment_lengths = self._segment_lengths[:new_end]
         self._segment_capacity = self._segment_capacity[:new_end]
-        self._segment_hashes = self._segment_capacity[:new_end]
-        self._segment_references = self._segment_capacity[:new_end]
+        self._segment_hashes = self._segment_hashes[:new_end]
+        self._segment_references = self._segment_references[:new_end]
 
     def remove(self, name: str) -> None:
         """Remove a program from the AWG.
@@ -694,6 +747,7 @@ class TaborChannelPair(AWG):
             assert len(sequencer_tables) == 2
 
             while len(sequencer_tables[1]) < self._device.dev_properties['min_seq_len']:
+                assert advanced_sequencer_table[0][0] == 1
                 sequencer_tables[1].append((1, 1, 0))
 
         # insert idle sequence in advanced sequence table
@@ -702,7 +756,7 @@ class TaborChannelPair(AWG):
         while len(advanced_sequencer_table) < self._device.dev_properties['min_aseq_len']:
             advanced_sequencer_table.append((1, 1, 0))
 
-        #download all sequence tables
+        # download all sequence tables
         for i, sequencer_table in enumerate(sequencer_tables):
             if i >= len(self._sequencer_tables) or self._sequencer_tables[i] != sequencer_table:
                 self._device.send_cmd('SEQ:SEL {}'.format(i+1))
@@ -726,7 +780,7 @@ class TaborChannelPair(AWG):
     @property
     def programs(self) -> Set[str]:
         """The set of program names that can currently be executed on the hardware AWG."""
-        raise set(program.name for program in self._known_programs.keys())
+        return set(program.name for program in self._known_programs.keys())
 
     @property
     def sample_rate(self) -> float:

@@ -6,7 +6,7 @@ import pytabor
 import numpy as np
 
 from qctoolkit.hardware.awgs.tabor import TaborSegment
-from qctoolkit.hardware.util import voltage_to_uint16, make_combined_wave
+from qctoolkit.hardware.util import voltage_to_uint16, make_combined_wave, find_positions
 
 
 from . import dummy_modules
@@ -161,3 +161,13 @@ class TaborMakeCombinedPyTaborCompareTest(TaborMakeCombinedTest):
 
         with self.assertRaises(ValueError):
             make_combined_wave(tabor_segments, destination_array=np.ones(16))
+
+
+class FindPositionTest(unittest.TestCase):
+    def test_find_position(self):
+        data = [2, 6, -24, 65, 46, 5, -10, 9]
+        to_find = [54, 12, 5, -10, 45, 6, 2]
+
+        positions = find_positions(data, to_find)
+
+        self.assertEqual(positions.tolist(), [-1, -1, 5, 6, -1, 1, 0])

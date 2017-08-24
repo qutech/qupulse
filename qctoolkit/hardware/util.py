@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Sequence
 
 import numpy as np
 
@@ -66,3 +66,18 @@ def make_combined_wave(segments: List['TaborSegment'], destination_array=None, f
         current_quantum += segment_quanta
     return destination_array.ravel()
 
+
+def find_positions(data: Sequence, to_find: Sequence) -> np.ndarray:
+    """Find indices of the first occurrence of the elements of to_find in data. Elements that are not in data result in
+    -1"""
+    data_sorter = np.argsort(data)
+
+    pos_left = np.searchsorted(data, to_find, side='left', sorter=data_sorter)
+    pos_right = np.searchsorted(data, to_find, side='right', sorter=data_sorter)
+
+    found = pos_left < pos_right
+
+    positions = np.full_like(to_find, fill_value=-1, dtype=np.int64)
+    positions[found] = data_sorter[pos_left[found]]
+
+    return positions
