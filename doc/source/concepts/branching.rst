@@ -7,6 +7,6 @@ The qctoolkit was designed to model conditional branching in pulse execution usi
 
 Future Work
 ^^^^^^^^^^^
-Currently, there is no detailed concept on hardware abstraction and thus no meaningful representation of triggers and no hardware driver implementation that configures any device. This is still an open task.
+Currently, the implemented hardware support does not support any triggers or conditional branching. This is still an open task.
 
-It is quite common for hardware to allow triggers that are represented not only a boolean signal but, e.g., any 8-bit signal, thus enabling more than two branching options. While this could still be represented by the current classes by nesting :class:`.BranchPulseTemplate` objects and configuring triggers appropriately, the implementation of a template class which acts like a C-style switch statement might be a worthwhile consideration.
+It is possible for hardware to allow triggers that are represented not only a boolean signal but, e.g., any 8-bit signal, thus enabling more than two branching options. While this could still be represented by the current classes by nesting :class:`.BranchPulseTemplate` objects and configuring triggers appropriately, the implementation of a template class which acts like a C-style switch statement might be a worthwhile consideration.
