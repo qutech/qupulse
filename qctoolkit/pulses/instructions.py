@@ -22,9 +22,8 @@ from weakref import WeakValueDictionary
 
 import numpy
 
-from qctoolkit import ChannelID
+from qctoolkit.utils.types import ChannelID, MeasurementWindow
 from qctoolkit.comparable import Comparable
-from qctoolkit import MeasurementWindow
 
 __all__ = ["Waveform", "Trigger",
            "InstructionPointer", "Instruction", "CJMPInstruction", "EXECInstruction",
@@ -54,11 +53,11 @@ class Waveform(Comparable, metaclass=ABCMeta):
         monotonously increasing and lie in the range of [0, waveform.duration]
 
         Args:
-            numpy.ndarray sample_times: Times at which this Waveform will be sampled.
-            numpy.ndarray output_array: Has to be either None or an array of the same size and type as sample_times. If
-            not None, the sampled values will be written here and this array will be returned
+            sample_times: Times at which this Waveform will be sampled.
+            output_array: Has to be either None or an array of the same size and type as sample_times. If
+                not None, the sampled values will be written here and this array will be returned
         Result:
-            numpy.ndarray of the sampled values of this Waveform at the provided sample times. Has the same number of
+            The sampled values of this Waveform at the provided sample times. Has the same number of
             elements as sample_times.
         """
 
@@ -70,12 +69,12 @@ class Waveform(Comparable, metaclass=ABCMeta):
         unsafe_sample expects and caches the result to save memory.
 
         Args/Result:
-            numpy.ndarray sample_times: Times at which this Waveform will be sampled.
-            numpy.ndarray output_array: Has to be either None or an array of the same size and type as sample_times.
-            If None, a new array will be created and cached to save memory.
-            If not None, the sampled values will be written here and this array will be returned.
+            sample_times: Times at which this Waveform will be sampled.
+            output_array: Has to be either None or an array of the same size and type as sample_times.
+                 - If None, a new array will be created and cached to save memory.
+                 - If not None, the sampled values will be written here and this array will be returned.
         Result:
-            A numpy.ndarray of the sampled values of this Waveform at the provided sample times.
+            The sampled values of this Waveform at the provided sample times.
         """
         if numpy.any(sample_times[:-1] >= sample_times[1:]):
             raise ValueError('The sample times are not monotonously increasing')
@@ -102,22 +101,29 @@ class Waveform(Comparable, metaclass=ABCMeta):
 
     @abstractproperty
     def defined_channels(self) -> Set[ChannelID]:
-        """"""
+        """The channels this waveform should played on. Use
+            :func:`~qctoolkit.pulses.instructions.get_measurement_windows` to get a waveform for a subset of these."""
 
     @abstractmethod
     def get_measurement_windows(self) -> Iterable[MeasurementWindow]:
-        """This function will in must cases return a generator to fill the measurement windows in a more efficient
+        """This function will in most cases return a generator to fill the measurement windows in a more efficient
         data structure like a dict."""
 
     @abstractmethod
     def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> 'Waveform':
-        """"""
+        """Unsafe version of :func:`~qctoolkit.pulses.instructions.get_measurement_windows`."""
 
     def get_subset_for_channels(self, channels: Set[ChannelID]) -> 'Waveform':
-        """
+        """Get a waveform that only describes the channels contained in `channels`.
 
-        :param channels:
-        :return:
+        Args:
+            channels: A channel set the return value should confine to.
+
+        Raises:
+            KeyError: If `channels` is not a subset of the waveform's defined channels.
+
+        Returns:
+            A waveform with waveform.defined_channels == `channels`
         """
         if not channels <= self.defined_channels:
             raise KeyError('Channels not defined on waveform: {}'.format(channels))
@@ -151,11 +157,11 @@ class InstructionPointer(Comparable):
         """Create a new InstructionPointer instance.
 
         Args:
-            block (AbstractInstructionBlock): The instruction block the referenced instruction
+            block: The instruction block the referenced instruction
                 resides in.
-            offset (int): The position/offset of the referenced instruction in its block.
+            offset: The position/offset of the referenced instruction in its block.
         Raises:
-            ValueError, if offset is negative
+            ValueError: If offset is negative
         """
         super().__init__()
         if offset < 0:
@@ -276,17 +282,17 @@ class GOTOInstruction(Instruction):
 class EXECInstruction(Instruction):
     """An instruction to execute/play back a waveform."""
 
-    def __init__(self, waveform: 'MultiChannelWaveform') -> None:
+    def __init__(self, waveform: Waveform) -> None:
         """Create a new EXECInstruction object.
 
         Args:
-            waveform (MultiChannelWaveform): The waveform that will be executed by this instruction.
+            waveform: The waveform that will be executed by this instruction.
         """
         super().__init__()
         self.waveform = waveform
 
     @property
-    def compare_key(self) -> Any:
+    def compare_key(self) -> Waveform:
         return self.waveform
 
     def __str__(self) -> str:
@@ -442,7 +448,7 @@ class InstructionBlock(AbstractInstructionBlock):
         """
         self.__instruction_list.append(instruction)
 
-    def add_instruction_exec(self, waveform: 'MultiChannelWaveform') -> None:
+    def add_instruction_exec(self, waveform: Waveform) -> None:
         """Create and append a new EXECInstruction object for the given waveform at the end of this
         instruction block.
 

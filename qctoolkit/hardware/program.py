@@ -6,7 +6,7 @@ from enum import Enum
 
 import numpy as np
 
-from qctoolkit import ChannelID
+from qctoolkit.utils.types import ChannelID
 from qctoolkit.pulses.instructions import AbstractInstructionBlock, EXECInstruction, REPJInstruction, GOTOInstruction, STOPInstruction, InstructionPointer, CHANInstruction, Waveform
 from qctoolkit.comparable import Comparable
 from qctoolkit.utils.tree import Node, is_tree_circular

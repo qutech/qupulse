@@ -1,6 +1,6 @@
 import unittest
 
-from qctoolkit.pulses.multi_channel_pulse_template import MappingTemplate
+from qctoolkit.pulses.multi_channel_pulse_template import MappingPulseTemplate
 from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
 from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
 from qctoolkit.pulses.parameters import ParameterNotProvidedException
@@ -22,8 +22,8 @@ class TableSequenceSequencerIntegrationTests(unittest.TestCase):
                                                      (5, 0)]},
                                 measurements=[('foo', 4, 1)])
 
-        seqt = SequencePulseTemplate(MappingTemplate(t1, measurement_mapping={'foo': 'bar'}),
-                                     MappingTemplate(t2, parameter_mapping={'bar': '2 * hugo'}))
+        seqt = SequencePulseTemplate(MappingPulseTemplate(t1, measurement_mapping={'foo': 'bar'}),
+                                     MappingPulseTemplate(t2, parameter_mapping={'bar': '2 * hugo'}))
 
         with self.assertRaises(ParameterNotProvidedException):
             t1.requires_stop(dict(), dict())

@@ -1,6 +1,8 @@
 from abc import ABCMeta, abstractmethod
 from typing import Dict, Tuple
 
+import numpy
+
 __all__ = ['DAC']
 
 

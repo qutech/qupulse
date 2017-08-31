@@ -7,7 +7,7 @@ Classes:
     - MultiChannelWaveform: A waveform defined for several channels by combining waveforms
 """
 
-from typing import Dict, List, Optional, Any, Iterable, Union, Set
+from typing import Dict, List, Optional, Any, Iterable, Union, Set, Sequence
 import itertools
 import numbers
 
@@ -16,10 +16,10 @@ import numpy
 
 from qctoolkit.serialization import Serializer
 
-from qctoolkit import MeasurementWindow, ChannelID
+from qctoolkit.utils.types import MeasurementWindow, ChannelID
 from qctoolkit.pulses.instructions import Waveform
 from qctoolkit.pulses.pulse_template import PulseTemplate, AtomicPulseTemplate
-from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingException, MappingTemplate,\
+from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingException, MappingPulseTemplate,\
     MissingParameterDeclarationException, MappingTuple
 from qctoolkit.pulses.parameters import Parameter, ParameterConstrainer
 from qctoolkit.pulses.conditions import Condition
@@ -140,24 +140,24 @@ class MultiChannelWaveform(Waveform):
 
 class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
     def __init__(self,
-                 *subtemplates: Union[AtomicPulseTemplate, MappingTuple, MappingTemplate],
+                 *subtemplates: Union[AtomicPulseTemplate, MappingTuple, MappingPulseTemplate],
                  external_parameters: Optional[Set[str]]=None,
                  identifier: Optional[str]=None,
                  parameter_constraints: Optional[List]=None) -> None:
         AtomicPulseTemplate.__init__(self, identifier=identifier)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 
-        self._subtemplates = [st if isinstance(st, PulseTemplate) else MappingTemplate.from_tuple(st) for st in
+        self._subtemplates = [st if isinstance(st, PulseTemplate) else MappingPulseTemplate.from_tuple(st) for st in
                               subtemplates]
 
         for subtemplate in self._subtemplates:
             if isinstance(subtemplate, AtomicPulseTemplate):
                 continue
-            elif isinstance(subtemplate, MappingTemplate):
+            elif isinstance(subtemplate, MappingPulseTemplate):
                 if isinstance(subtemplate.template, AtomicPulseTemplate):
                     continue
                 else:
-                    raise TypeError('Non atomic subtemplate of MappingTemplate: {}'.format(subtemplate.template))
+                    raise TypeError('Non atomic subtemplate of MappingPulseTemplate: {}'.format(subtemplate.template))
             else:
                 raise TypeError('Non atomic subtemplate: {}'.format(subtemplate))
 
@@ -186,7 +186,7 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
                 raise MissingParameterDeclarationException(self, missing.pop())
             remaining -= self.constrained_parameters
             if remaining:
-                raise MissingMappingException(subtemplate, remaining.pop())
+                raise MissingMappingException(self, remaining.pop())
 
         duration = self._subtemplates[0].duration
         for subtemplate in self._subtemplates[1:]:
@@ -205,7 +205,7 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
         return set.union(*(st.parameter_names for st in self._subtemplates)) | self.constrained_parameters
 
     @property
-    def subtemplates(self) -> List[AtomicPulseTemplate]:
+    def subtemplates(self) -> Sequence[AtomicPulseTemplate]:
         return self._subtemplates
 
     @property
@@ -253,4 +253,4 @@ class ChannelMappingException(Exception):
         self.obj2 = obj2
 
     def __str__(self) -> str:
-        return 'Channels {chs} defined in {} and {}'.format(self.intersect_set, self.obj1, self.obj2)
+        return 'Channels {chs} defined in {o1} and {o2}'.format(chs=self.intersect_set, o1=self.obj1, o2=self.obj2)

@@ -2,12 +2,13 @@
 represents the n-times repetition of another PulseTemplate."""
 
 from typing import Dict, List, Set, Optional, Union, Any, Iterable, Tuple
+from numbers import Real
 
 import numpy as np
 
 from qctoolkit.serialization import Serializer
 
-from qctoolkit import MeasurementWindow, ChannelID
+from qctoolkit.utils.types import MeasurementWindow, ChannelID
 from qctoolkit.expressions import Expression
 from qctoolkit.utils import checked_int_cast
 from qctoolkit.pulses.pulse_template import PulseTemplate
@@ -24,10 +25,6 @@ __all__ = ["RepetitionPulseTemplate", "ParameterNotIntegerException"]
 class RepetitionWaveform(Waveform):
     """This class allows putting multiple PulseTemplate together in one waveform on the hardware."""
     def __init__(self, body: Waveform, repetition_count: int):
-        """
-
-        :param subwaveforms: All waveforms must have the same defined channels
-        """
         self._body = body
         self._repetition_count = repetition_count
         if repetition_count < 1 or not isinstance(repetition_count, int):
@@ -47,8 +44,8 @@ class RepetitionWaveform(Waveform):
         for i in range(self._repetition_count):
             indices = slice(*np.searchsorted(sample_times, (i*body_duration, (i+1)*body_duration)))
             self._body.unsafe_sample(channel=channel,
-                                      sample_times=sample_times[indices],
-                                      output_array=output_array[indices])
+                                     sample_times=sample_times[indices],
+                                     output_array=output_array[indices])
         return output_array
 
     @property
@@ -108,7 +105,7 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer):
         """The amount of repetitions. Either a constant integer or a ParameterDeclaration object."""
         return self._repetition_count
 
-    def get_repetition_count_value(self, parameters: Dict[str, 'Real']) -> int:
+    def get_repetition_count_value(self, parameters: Dict[str, Real]) -> int:
         value = self._repetition_count.evaluate_numeric(**parameters)
         try:
             return checked_int_cast(value)
@@ -136,7 +133,7 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer):
                        parameters: Dict[str, Parameter],
                        conditions: Dict[str, Condition],
                        measurement_mapping: Dict[str, str],
-                       channel_mapping: Dict['ChannelID', 'ChannelID'],
+                       channel_mapping: Dict[ChannelID, ChannelID],
                        instruction_block: InstructionBlock) -> None:
         self.validate_parameter_constraints(parameters=parameters)
 
@@ -169,7 +166,7 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer):
                     repetition_count: Union[str, int],
                     body: Dict[str, Any],
                     parameter_constraints: List[str],
-                    identifier: Optional[str]=None) -> 'Serializable':
+                    identifier: Optional[str]=None) -> 'RepetitionPulseTemplate':
         body = serializer.deserialize(body)
         return RepetitionPulseTemplate(body, repetition_count,
                                        identifier=identifier, parameter_constraints=parameter_constraints)

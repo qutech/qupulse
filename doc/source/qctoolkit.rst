@@ -8,7 +8,6 @@ Subpackages
 
     qctoolkit.hardware
     qctoolkit.pulses
-    qctoolkit.qcmatlab
     qctoolkit.utils
 
 Submodules

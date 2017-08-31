@@ -10,12 +10,12 @@ Classes:
 from abc import abstractmethod, abstractproperty
 from typing import Set, Tuple, List, Callable, Optional
 
-from qctoolkit import ChannelID
+from qctoolkit.utils.types import ChannelID
 from qctoolkit.hardware.program import Loop
 from qctoolkit.comparable import Comparable
 from qctoolkit.pulses.instructions import InstructionSequence
 
-__all__ = ["AWG", "Program", "DummyAWG", "ProgramOverwriteException",
+__all__ = ["AWG", "Program", "ProgramOverwriteException",
            "OutOfWaveformMemoryException"]
 
 Program = InstructionSequence
@@ -27,6 +27,7 @@ class AWG(Comparable):
     It represents a set of channels that have to have(hardware enforced) the same:
         -control flow
         -sample rate
+
     It keeps track of the AWG state and manages waveforms and programs on the hardware.
     """
 
@@ -60,13 +61,13 @@ class AWG(Comparable):
         for syncing. Programs that are uploaded should be fast(~1 sec) to arm.
 
         Args:
-            name (str): A name for the program on the AWG.
-            program (Loop): The program (a sequence of instructions) to upload.
-            channels (List): Tuple of length num_channels that ChannelIDs of  in the program to use. Position in the list corresponds to the AWG channel
-            markers (List): List of channels in the program to use. Position in the List in the list corresponds to the AWG channel
-            voltage_transformation (List): transformations applied to the waveforms extracted rom the program. Position
+            name: A name for the program on the AWG.
+            program: The program (a sequence of instructions) to upload.
+            channels: Tuple of length num_channels that ChannelIDs of  in the program to use. Position in the list corresponds to the AWG channel
+            markers: List of channels in the program to use. Position in the List in the list corresponds to the AWG channel
+            voltage_transformation: transformations applied to the waveforms extracted rom the program. Position
             in the list corresponds to the AWG channel
-            force (bool): If a different sequence is already present with the same name, it is
+            force: If a different sequence is already present with the same name, it is
                 overwritten if force is set to True. (default = False)
         """
 
@@ -77,7 +78,7 @@ class AWG(Comparable):
         Also discards all waveforms referenced only by the program identified by name.
 
         Args:
-            name (str): The name of the program to remove.
+            name: The name of the program to remove.
         """
 
     @abstractmethod

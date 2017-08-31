@@ -16,7 +16,7 @@ import zipfile
 import tempfile
 import json
 
-__all__ = ["StorageBackend", "FilesystemBackend", "ZipFileBackend" "CachingBackend", "Serializable", "Serializer"]
+__all__ = ["StorageBackend", "FilesystemBackend", "ZipFileBackend", "CachingBackend", "Serializable", "Serializer"]
 
 
 class StorageBackend(metaclass=ABCMeta):
@@ -74,10 +74,10 @@ class FilesystemBackend(StorageBackend):
         """Create a new FilesystemBackend.
 
         Args:
-            root (str): The path of the directory in which all data files are located. (default: ".",
+            root: The path of the directory in which all data files are located. (default: ".",
                 i.e. the current directory)
         Raises:
-            NotADirectoryError if root is not a valid directory path.
+            NotADirectoryError: if root is not a valid directory path.
         """
         if not os.path.isdir(root):
             raise NotADirectoryError()
@@ -280,12 +280,12 @@ class Serializable(metaclass=ABCMeta):
         """Reconstruct the Serializable object from a dictionary.
 
         Implementation hint:
-        For greater clarity, implementations of this method should be precise in their return value,
-        i.e., give their exact class name, and also replace the **kwargs argument by a list of
-        arguments required, i.e., those returned by get_serialization_data.
-        If this Serializable contains complex objects which are itself Serializables, their
-        dictionary representations MUST be converted into objects using serializers deserialize()
-        method.
+            For greater clarity, implementations of this method should be precise in their return value,
+            i.e., give their exact class name, and also replace the **kwargs argument by a list of
+            arguments required, i.e., those returned by get_serialization_data.
+            If this Serializable contains complex objects which are itself Serializables, their
+            dictionary representations MUST be converted into objects using serializers deserialize()
+            method.
 
          Args:
              serializer (Serializer): A serializer instance used when deserializing subelements.

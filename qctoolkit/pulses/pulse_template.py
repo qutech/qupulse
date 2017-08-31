@@ -11,13 +11,14 @@ from typing import Dict, Tuple, Set, Optional, Union
 import itertools
 from numbers import Real
 
-from qctoolkit import ChannelID
+from qctoolkit.utils.types import ChannelID, DocStringABCMeta
 from qctoolkit.serialization import Serializable
 from qctoolkit.expressions import Expression
 
+from qctoolkit.pulses.conditions import Condition
 from qctoolkit.pulses.parameters import Parameter
-from qctoolkit.pulses.sequencing import SequencingElement, InstructionBlock
-
+from qctoolkit.pulses.sequencing import Sequencer, SequencingElement, InstructionBlock
+from qctoolkit.pulses.instructions import Waveform
 
 __all__ = ["PulseTemplate", "AtomicPulseTemplate", "DoubleParameterNameException"]
 
@@ -27,7 +28,7 @@ MeasurementDeclaration = Tuple[str,
                                Union[Real, str, Expression]]
 
 
-class PulseTemplate(Serializable, SequencingElement, metaclass=ABCMeta):
+class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta):
     """A PulseTemplate represents the parametrized general structure of a pulse.
 
     A PulseTemplate described a pulse in an abstract way: It defines the structure of a pulse
@@ -48,7 +49,7 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=ABCMeta):
 
     @abstractproperty
     def measurement_names(self) -> Set[str]:
-        """The set of measurement identifiers in this pulse template"""
+        """The set of measurement identifiers in this pulse template."""
 
     @abstractproperty
     def is_interruptable(self) -> bool:
@@ -58,18 +59,20 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=ABCMeta):
     @property
     @abstractmethod
     def duration(self) -> Expression:
-        """An expression for the duration"""
+        """An expression for the duration of this PulseTemplate."""
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def defined_channels(self) -> Set['ChannelID']:
         """Returns the number of hardware output channels this PulseTemplate defines."""
 
     @property
     def num_channels(self) -> int:
+        """The number of channels this PulseTemplate defines"""
         return len(self.defined_channels)
 
-    def __matmul__(self, other: 'PulseTemplate') -> 'SequencePulseTemplate':
-        """This method enables us to use the @-operator (intended for matrix multiplication) for
+    def __matmul__(self, other: 'PulseTemplate') -> 'PulseTemplate':
+        """This method enables using the @-operator (intended for matrix multiplication) for
          concatenating pulses. If one of the pulses is a SequencePulseTemplate the other pulse gets merged into it"""
 
         from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
@@ -103,11 +106,11 @@ class AtomicPulseTemplate(PulseTemplate, metaclass=ABCMeta):
         return True
 
     def build_sequence(self,
-                       sequencer: 'Sequencer',
+                       sequencer: Sequencer,
                        parameters: Dict[str, Parameter],
-                       conditions: Dict[str, 'Condition'],
+                       conditions: Dict[str, Condition],
                        measurement_mapping: Dict[str, str],
-                       channel_mapping: Dict['ChannelID', 'ChannelID'],
+                       channel_mapping: Dict[ChannelID, ChannelID],
                        instruction_block: InstructionBlock) -> None:
         parameters = {parameter_name: parameter_value.get_value()
                       for parameter_name, parameter_value in parameters.items()
@@ -122,7 +125,7 @@ class AtomicPulseTemplate(PulseTemplate, metaclass=ABCMeta):
     def build_waveform(self,
                        parameters: Dict[str, Real],
                        measurement_mapping: Dict[str, str],
-                       channel_mapping: Dict[ChannelID, ChannelID]) -> Optional['Waveform']:
+                       channel_mapping: Dict[ChannelID, ChannelID]) -> Optional[Waveform]:
         """Translate this PulseTemplate into a waveform according to the given parameters.
 
         Args:

@@ -7,11 +7,14 @@ Classes:
     - Sequencer: Controller of the sequencing/translation process.
 """
 
-from abc import ABCMeta, abstractmethod, abstractproperty
-from typing import Tuple, Dict, Union, Optional
+from abc import ABCMeta, abstractmethod
+from typing import Tuple, Dict, Union, Optional, List
 import numbers
 
-from qctoolkit.pulses.instructions import InstructionBlock, ImmutableInstructionBlock
+from qctoolkit.utils.types import ChannelID
+
+from . import conditions
+from qctoolkit.pulses.instructions import InstructionBlock, ImmutableInstructionBlock, Waveform
 from qctoolkit.pulses.parameters import Parameter, ConstantParameter
 
 
@@ -34,11 +37,11 @@ class SequencingElement(metaclass=ABCMeta):
 
     @abstractmethod
     def build_sequence(self,
-                       sequencer: "Sequencer",
+                       sequencer: 'Sequencer',
                        parameters: Dict[str, Parameter],
-                       conditions: Dict[str, 'Condition'],
+                       conditions: Dict[str, 'conditions.Condition'],
                        measurement_mapping: Dict[str, str],
-                       channel_mapping: Dict['ChannelID', 'ChannelID'],
+                       channel_mapping: Dict[ChannelID, ChannelID],
                        instruction_block: InstructionBlock) -> None:
         """Translate this SequencingElement into an instruction sequence for the given
         instruction_block using sequencer and the given parameter and condition sets.
@@ -59,7 +62,7 @@ class SequencingElement(metaclass=ABCMeta):
     @abstractmethod
     def requires_stop(self,
                       parameters: Dict[str, Parameter],
-                      conditions: Dict[str, 'Condition']) -> bool:
+                      conditions: Dict[str, 'conditions.Condition']) -> bool:
         """Return True if this SequencingElement cannot be translated yet.
 
         Sequencer will check requires_stop() before calling build_sequence(). If requires_stop()
@@ -106,18 +109,18 @@ class Sequencer:
     def __init__(self) -> None:
         """Create a Sequencer."""
         super().__init__()
-        self.__waveforms = dict() #type: Dict[int, Waveform]
+        self.__waveforms = dict()  # type: Dict[int, Waveform]
         self.__main_block = InstructionBlock()
         self.__sequencing_stacks = \
-            {self.__main_block: []} #type: Dict[InstructionBlock, List[StackElement]]
+            {self.__main_block: []}  # type: Dict[InstructionBlock, List[Sequencer.StackElement]]
 
     def push(self,
              sequencing_element: SequencingElement,
              parameters: Optional[Dict[str, Union[Parameter, float]]]=None,
-             conditions: Optional[Dict[str, 'Condition']]=None,
+             conditions: Optional[Dict[str, 'conditions.Condition']]=None,
              *,
-             window_mapping: Optional[Dict[str,str]]=None,
-             channel_mapping: Optional[Dict['ChannelID','ChannelID']]=None,
+             window_mapping: Optional[Dict[str, str]]=None,
+             channel_mapping: Optional[Dict[ChannelID, ChannelID]]=None,
              target_block: Optional[InstructionBlock]=None) -> None:
         """Add an element to the translation stack of the target_block with the given set of
          parameters.
@@ -163,9 +166,10 @@ class Sequencer:
         if target_block not in self.__sequencing_stacks:
             self.__sequencing_stacks[target_block] = []
 
-        self.__sequencing_stacks[target_block].append((sequencing_element, parameters, conditions, window_mapping, channel_mapping))
+        self.__sequencing_stacks[target_block].append((sequencing_element, parameters, conditions, window_mapping,
+                                                       channel_mapping))
 
-    def build(self) -> InstructionBlock:
+    def build(self) -> ImmutableInstructionBlock:
         """Start the translation process. Translate all elements currently on the translation stacks
         into an InstructionBlock hierarchy.
 

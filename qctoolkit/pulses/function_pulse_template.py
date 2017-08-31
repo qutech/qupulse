@@ -15,8 +15,9 @@ import numpy as np
 from qctoolkit.expressions import Expression
 from qctoolkit.serialization import Serializer
 
-from qctoolkit import MeasurementWindow, ChannelID
-from qctoolkit.pulses.parameters import Parameter, ParameterConstrainer
+from qctoolkit.utils.types import MeasurementWindow, ChannelID
+from qctoolkit.pulses.conditions import Condition
+from qctoolkit.pulses.parameters import Parameter, ParameterConstrainer, ParameterConstraint
 from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration
 from qctoolkit.pulses.instructions import Waveform
 from qctoolkit.pulses.measurement import MeasurementDefiner
@@ -44,19 +45,21 @@ class FunctionPulseTemplate(AtomicPulseTemplate, MeasurementDefiner, ParameterCo
                  identifier: Optional[str] = None,
                  *,
                  measurements: Optional[List[MeasurementDeclaration]]=None,
-                 parameter_constraints: Optional[List[Union[str, 'ParameterConstraint']]]=None) -> None:
-        """Create a new FunctionPulseTemplate instance.
-
+                 parameter_constraints: Optional[List[Union[str, ParameterConstraint]]]=None) -> None:
+        """
         Args:
-            expression (str or Expression): The function represented by this FunctionPulseTemplate
+            expression: The function represented by this FunctionPulseTemplate
                 as a mathematical expression where 't' denotes the time variable and other variables
                 will be parameters of the pulse.
-            duration_expression (str or Expression): A mathematical expression which reliably
+            duration_expression: A mathematical expression which reliably
                 computes the duration of an instantiation of this FunctionPulseTemplate from
                 provided parameter values.
-            measurement (bool): True, if this FunctionPulseTemplate shall define a measurement
-                window. (optional, default = False)
-            identifier (str): A unique identifier for use in serialization. (optional)
+            channel: The channel this pulse template is defined on.
+            identifier: A unique identifier for use in serialization.
+            measurements: A list of measurement declarations forwarded to the
+                :class:`~qctoolkit.pulses.measurement.MeasurementDefiner` superclass
+            parameter_constraints: A list of parameter constraints forwarded to the
+                :class:`~`qctoolkit.pulses.measurement.ParameterConstrainer superclass
         """
         AtomicPulseTemplate.__init__(self, identifier=identifier)
         MeasurementDefiner.__init__(self, measurements=measurements)
@@ -89,7 +92,7 @@ class FunctionPulseTemplate(AtomicPulseTemplate, MeasurementDefiner, ParameterCo
         return False
 
     @property
-    def defined_channels(self) -> Set['ChannelID']:
+    def defined_channels(self) -> Set[ChannelID]:
         return {self.__channel}
 
     @property
@@ -115,7 +118,7 @@ class FunctionPulseTemplate(AtomicPulseTemplate, MeasurementDefiner, ParameterCo
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],
-                      conditions: Dict[str, 'Condition']) -> bool:
+                      conditions: Dict[str, Condition]) -> bool:
         return any(
             parameters[name].requires_stop
             for name in parameters.keys() if (name in self.parameter_names)
@@ -131,7 +134,7 @@ class FunctionPulseTemplate(AtomicPulseTemplate, MeasurementDefiner, ParameterCo
         )
 
     @staticmethod
-    def deserialize(serializer: 'Serializer',
+    def deserialize(serializer: Serializer,
                     expression: str,
                     duration_expression: str,
                     channel: 'ChannelID',
@@ -158,11 +161,11 @@ class FunctionWaveform(Waveform):
         """Creates a new FunctionWaveform instance.
 
         Args:
-            expression (Expression): The function represented by this FunctionWaveform
-                as a mathematical expression where 't' denotes the time variable. It may not have other variables
-            duration (float): A mathematical expression which reliably
-                computes the duration of this FunctionPulseTemplate.
-            measurement_windows (List): A list of measurement windows
+            expression: The function represented by this FunctionWaveform
+                as a mathematical expression where 't' denotes the time variable. It must not have other variables
+            duration: The duration of the waveform
+            measurement_windows: A list of measurement windows
+            channel: The channel this waveform is played on
         """
         super().__init__()
         if set(expression.variables) - set('t'):

@@ -5,7 +5,7 @@ import copy
 import numpy
 
 """LOCAL IMPORTS"""
-from qctoolkit import MeasurementWindow, ChannelID
+from qctoolkit.utils.types import MeasurementWindow, ChannelID
 from qctoolkit.serialization import Serializer
 from qctoolkit.pulses.instructions import Waveform, Instruction, CJMPInstruction, GOTOInstruction, REPJInstruction
 from qctoolkit.pulses.sequencing import Sequencer, InstructionBlock, SequencingElement

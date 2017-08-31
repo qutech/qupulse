@@ -5,8 +5,10 @@ import numbers
 
 import numpy as np
 
-from qctoolkit import ChannelID
+from qctoolkit.utils.types import ChannelID
 from qctoolkit.expressions import Expression
+from qctoolkit.pulses.conditions import Condition
+from qctoolkit.pulses.instructions import Waveform
 from qctoolkit.pulses.parameters import Parameter, ParameterNotProvidedException, ParameterConstraint,\
     ParameterConstrainer
 from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration
@@ -60,7 +62,7 @@ class PointPulseTemplate(ParameterConstrainer, MeasurementDefiner, AtomicPulseTe
     def build_waveform(self,
                        parameters: Dict[str, Real],
                        measurement_mapping: Dict[str, str],
-                       channel_mapping: Dict[ChannelID, ChannelID]) -> Optional['Waveform']:
+                       channel_mapping: Dict[ChannelID, ChannelID]) -> Optional[Waveform]:
         self.validate_parameter_constraints(parameters)
 
         if self.duration.evaluate_numeric(**parameters) == 0:
@@ -125,7 +127,7 @@ class PointPulseTemplate(ParameterConstrainer, MeasurementDefiner, AtomicPulseTe
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],
-                      conditions: Dict[str, 'Condition']) -> bool:
+                      conditions: Dict[str, Condition]) -> bool:
         try:
             return any(
                 parameters[name].requires_stop

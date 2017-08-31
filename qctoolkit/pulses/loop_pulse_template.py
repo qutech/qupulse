@@ -15,11 +15,11 @@ from qctoolkit.pulses.instructions import InstructionBlock
 from qctoolkit.pulses.sequencing import Sequencer
 from qctoolkit.pulses.sequence_pulse_template import SequenceWaveform as ForLoopWaveform
 
-__all__ = ['WhileLoopPulseTemplate', 'ConditionMissingException']
+__all__ = ['ForLoopPulseTemplate', 'LoopPulseTemplate', 'LoopIndexNotUsedException']
 
 
 class LoopPulseTemplate(PulseTemplate):
-    """Base class for loop based pulse templates"""
+    """Base class for loop based pulse templates. This class is still abstract and cannot be instantiated."""
     def __init__(self, body: PulseTemplate, identifier: Optional[str]=None):
         super().__init__(identifier=identifier)
         self.__body = body
@@ -42,8 +42,17 @@ class LoopPulseTemplate(PulseTemplate):
 
 
 class ParametrizedRange:
-    """Parametrized range """
+    """Like the builtin python range but with parameters."""
     def __init__(self, *args, **kwargs):
+        """Positional and keyword arguments cannot be mixed.
+
+        Args:
+            *args: Interpreted as ``(start, )`` or ``(start, stop[, step])``
+            **kwargs: Expected to contain ``start``, ``stop`` and ``step``
+        Raises:
+            TypeError: If positional and keyword arguments are mixed
+            KeyError: If keyword arguments but one of ``start``, ``stop`` or ``step`` is missing
+        """
         if args and kwargs:
             raise TypeError('ParametrizedRange only takes either positional or keyword arguments')
         elif kwargs:
@@ -81,6 +90,9 @@ class ParametrizedRange:
 
 
 class ForLoopPulseTemplate(LoopPulseTemplate):
+    """This pulse template allows looping through an parametrized integer range and provides the loop index as a
+    parameter to the body. If you do not need the index in the pulse template, consider using
+    :class:`~qctoolkit.pulses.repetition_pulse_template.RepetitionPulseTemplate`"""
     def __init__(self,
                  body: PulseTemplate,
                  loop_index: str,
@@ -91,6 +103,13 @@ class ForLoopPulseTemplate(LoopPulseTemplate):
                                    Tuple[Any, Any, Any],
                                    ParametrizedRange],
                  identifier: Optional[str]=None):
+        """
+        Args:
+            body: The loop body. It is expected to have `loop_index` as an parameter
+            loop_index: Loop index of the for loop
+            loop_range: Range to loop through
+            identifier: Used for serialization
+        """
         super().__init__(body=body, identifier=identifier)
 
         if isinstance(loop_range, ParametrizedRange):
@@ -151,7 +170,7 @@ class ForLoopPulseTemplate(LoopPulseTemplate):
                        parameters: Dict[str, Parameter],
                        conditions: Dict[str, Condition],
                        measurement_mapping: Dict[str, str],
-                       channel_mapping: Dict['ChannelID', 'ChannelID'],
+                       channel_mapping: Dict[ChannelID, ChannelID],
                        instruction_block: InstructionBlock) -> None:
         for local_parameters in self._body_parameter_generator(parameters, forward=False):
             sequencer.push(self.body,
@@ -191,10 +210,11 @@ class ForLoopPulseTemplate(LoopPulseTemplate):
                                     loop_index=loop_index)
 
 
+
 class WhileLoopPulseTemplate(LoopPulseTemplate):
     """Conditional looping in a pulse.
     
-    A LoopPulseTemplate is a PulseTemplate which body (subtemplate) is repeated
+    A LoopPulseTemplate is a PulseTemplate whose body is repeated
     during execution as long as a certain condition holds.
     """
     
@@ -242,7 +262,7 @@ class WhileLoopPulseTemplate(LoopPulseTemplate):
                        parameters: Dict[str, Parameter],
                        conditions: Dict[str, Condition],
                        measurement_mapping: Dict[str, str],
-                       channel_mapping: Dict['ChannelID', 'ChannelID'],
+                       channel_mapping: Dict[ChannelID, ChannelID],
                        instruction_block: InstructionBlock) -> None:
         self.__obtain_condition_object(conditions).build_sequence_loop(self,
                                                                        self.body,

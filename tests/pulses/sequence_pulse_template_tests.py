@@ -7,7 +7,7 @@ from qctoolkit.pulses.pulse_template import DoubleParameterNameException
 from qctoolkit.expressions import Expression
 from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
 from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate, SequenceWaveform
-from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingException, UnnecessaryMappingException, MissingParameterDeclarationException, MappingTemplate
+from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingException, UnnecessaryMappingException, MissingParameterDeclarationException, MappingPulseTemplate
 from qctoolkit.pulses.parameters import ParameterNotProvidedException, ConstantParameter, ParameterConstraint, ParameterConstraintViolation
 
 from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyPulseTemplate,\
@@ -112,9 +112,9 @@ class SequencePulseTemplateTest(unittest.TestCase):
         self.parameters['pulse_length'] = ConstantParameter(100)
         self.parameters['voltage'] = ConstantParameter(10)
 
-        self.sequence = SequencePulseTemplate(MappingTemplate(self.square,
-                                                              parameter_mapping=self.mapping1,
-                                                              measurement_mapping=self.window_name_mapping),
+        self.sequence = SequencePulseTemplate(MappingPulseTemplate(self.square,
+                                                                   parameter_mapping=self.mapping1,
+                                                                   measurement_mapping=self.window_name_mapping),
                                               external_parameters=self.outer_parameters)
 
     def test_init(self):

@@ -4,7 +4,7 @@ from collections import defaultdict, deque
 from qctoolkit.hardware.awgs.base import AWG
 from qctoolkit.hardware.program import MultiChannelProgram
 
-from qctoolkit import ChannelID
+from qctoolkit.utils.types import ChannelID
 
 import numpy as np
 

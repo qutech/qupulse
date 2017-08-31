@@ -1,9 +1,8 @@
-from typing import Optional, List, Tuple, Union, Dict, Set, Iterable
+from typing import Optional, List, Tuple, Union, Dict, Set
 from numbers import Real
 import itertools
 
 from qctoolkit.expressions import Expression
-from qctoolkit.pulses.parameters import ParameterConstraint, ParameterConstraintViolation, Parameter
 
 
 MeasurementDeclaration = Tuple[str, Union[Expression, str, Real], Union[Expression, str, Real]]

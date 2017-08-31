@@ -7,11 +7,11 @@ Functions:
     - plot: Plot a pulse using matplotlib.
 """
 
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Any
 
 import numpy as np
 
-from qctoolkit import ChannelID
+from qctoolkit.utils.types import ChannelID
 from qctoolkit.pulses.pulse_template import PulseTemplate
 from qctoolkit.pulses.parameters import Parameter
 from qctoolkit.pulses.sequencing import Sequencer
@@ -73,7 +73,7 @@ def render(sequence: InstructionSequence, sample_rate: int=10) -> Tuple[np.ndarr
 
 def plot(pulse: PulseTemplate,
          parameters: Dict[str, Parameter]=None,
-         sample_rate: int=10) -> 'plt.Figure': # pragma: no cover
+         sample_rate: int=10) -> Any: # pragma: no cover
     """Plot a pulse using matplotlib.
 
     The given pulse will first be sequenced using the Sequencer class. The resulting
@@ -81,10 +81,10 @@ def plot(pulse: PulseTemplate,
     arrays are then plotted in a matplotlib figure.
 
     Args:
-        pulse (PulseTemplate): The pulse to be plotted.
-        parameters (Dict(str -> Parameter)): An optional mapping of parameter names to Parameter
+        pulse: The pulse to be plotted.
+        parameters: An optional mapping of parameter names to Parameter
             objects.
-        sample_rate (int): The rate with which the waveforms are sampled for the plot in
+        sample_rate: The rate with which the waveforms are sampled for the plot in
             samples per time unit. (default = 10)
     Returns:
         matplotlib.pyplot.Figure instance in which the pulse is rendered

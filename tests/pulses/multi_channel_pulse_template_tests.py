@@ -4,7 +4,7 @@ import numpy
 
 from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingException,\
     MissingParameterDeclarationException
-from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform, MappingTemplate, ChannelMappingException, AtomicMultiChannelPulseTemplate
+from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform, MappingPulseTemplate, ChannelMappingException, AtomicMultiChannelPulseTemplate
 from qctoolkit.pulses.parameters import ParameterConstraint, ParameterConstraintViolation
 
 from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyPulseTemplate, DummyWaveform
@@ -178,7 +178,7 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
     def test_non_atomic_subtemplates(self):
         non_atomic_pt = PulseTemplateStub(duration='t1', defined_channels={'A'}, parameter_names=set())
         atomic_pt = DummyPulseTemplate(defined_channels={'B'}, duration='t1')
-        non_atomic_mapping = MappingTemplate(non_atomic_pt)
+        non_atomic_mapping = MappingPulseTemplate(non_atomic_pt)
 
         with self.assertRaises(TypeError):
             AtomicMultiChannelPulseTemplate(non_atomic_pt)
@@ -243,7 +243,7 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
     def test_mapping_template_mixed_conversion(self):
         subtemp_args = [
             (self.subtemplates[0], self.param_maps[0], self.chan_maps[0]),
-            MappingTemplate(self.subtemplates[1], parameter_mapping=self.param_maps[1], channel_mapping=self.chan_maps[1]),
+            MappingPulseTemplate(self.subtemplates[1], parameter_mapping=self.param_maps[1], channel_mapping=self.chan_maps[1]),
             (self.subtemplates[2], self.param_maps[2], self.chan_maps[2])
         ]
         template = AtomicMultiChannelPulseTemplate(*subtemp_args)

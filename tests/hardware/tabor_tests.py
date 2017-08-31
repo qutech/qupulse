@@ -489,7 +489,7 @@ class TaborChannelPairTests(unittest.TestCase):
         my_class = DummyTaborProgramClass(segments=segments, segment_lengths=segment_lengths)
         sys.modules['qctoolkit.hardware.awgs.tabor'].TaborProgram = my_class
         try:
-            program = Loop()
+            program = Loop(waveform=DummyWaveform(duration=192))
 
             channel_pair = TaborChannelPair(get_instrument(), identifier='asd', channels=(1, 2))
             channel_pair._segment_references = segment_references

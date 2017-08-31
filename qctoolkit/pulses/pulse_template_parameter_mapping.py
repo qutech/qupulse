@@ -1,18 +1,21 @@
 """This module defines PulseTemplateParameterMapping, a helper class for pulse templates that
 offer mapping of parameters of subtemplates."""
 
-from typing import Optional, Set, Dict, Union, Iterable, List, Any, Tuple
+from typing import Optional, Set, Dict, Union, List, Any, Tuple
 import itertools
 import numbers
 
-from qctoolkit import ChannelID
+from qctoolkit.utils.types import ChannelID
 from qctoolkit.expressions import Expression
 from qctoolkit.pulses.pulse_template import PulseTemplate
 from qctoolkit.pulses.parameters import Parameter, MappedParameter, ParameterNotProvidedException, ParameterConstrainer
-
+from qctoolkit.pulses.sequencing import Sequencer
+from qctoolkit.pulses.instructions import InstructionBlock, Waveform
+from qctoolkit.pulses.conditions import Condition
+from qctoolkit.serialization import Serializer
 
 __all__ = [
-    "MappingTemplate",
+    "MappingPulseTemplate",
     "MissingMappingException",
     "MissingParameterDeclarationException",
     "UnnecessaryMappingException",
@@ -25,7 +28,10 @@ MappingTuple = Union[Tuple[PulseTemplate],
                      Tuple[PulseTemplate, Dict, Dict, Dict]]
 
 
-class MappingTemplate(PulseTemplate, ParameterConstrainer):
+class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
+    """This class can be used to remap parameters, the names of measurement windows and the names of channels. Besides
+    the standard constructor, there is a static member function from_tuple for convenience. The class also allows
+    constraining parameters by deriving from ParameterConstrainer"""
     def __init__(self, template: PulseTemplate, *,
                  identifier: Optional[str]=None,
                  parameter_mapping: Optional[Dict[str, str]]=None,
@@ -33,12 +39,22 @@ class MappingTemplate(PulseTemplate, ParameterConstrainer):
                  channel_mapping: Optional[Dict[ChannelID, ChannelID]] = None,
                  parameter_constraints: Optional[List[str]]=None,
                  allow_partial_parameter_mapping=False):
-        """TODO mention nested mappings
+        """Standard constructor for the MappingPulseTemplate.
+
+        Mappings that are not specified are defaulted to identity mappings. Channels and measurement names of the
+        encapsulated template can be mapped partially by default. F.i. if channel_mapping only contains one of two
+        channels the other channel name is mapped to itself.
+        However, if a parameter mapping is specified and one or more parameters are not mapped a MissingMappingException
+        is raised. To allow partial mappings and enable the same behaviour as for the channel and measurement name
+        mapping allow_partial_parameter_mapping must be set to True.
+        Furthermore parameter constrains can be specified.
         
-        :param template: 
+        :param template: The encapsulated pulse template whose parameters, measurement names and channels are mapped
         :param parameter_mapping: if not none, mappings for all parameters must be specified
         :param measurement_mapping: mappings for other measurement names are inserted
         :param channel_mapping: mappings for other channels are auto inserted
+        :param parameter_constraints:
+        :param allow_partial_parameter_mapping:
         """
         PulseTemplate.__init__(self, identifier=identifier)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
@@ -76,7 +92,7 @@ class MappingTemplate(PulseTemplate, ParameterConstrainer):
         channel_mapping = dict(itertools.chain(((name, name) for name in missing_channel_mappings),
                                                channel_mapping.items()))
 
-        if isinstance(template, MappingTemplate) and template.identifier is None:
+        if isinstance(template, MappingPulseTemplate) and template.identifier is None:
             # avoid nested mappings
             parameter_mapping = {p: expr.evaluate_symbolic(parameter_mapping)
                                  for p, expr in template.parameter_mapping.items()}
@@ -94,8 +110,12 @@ class MappingTemplate(PulseTemplate, ParameterConstrainer):
         self.__channel_mapping = channel_mapping
 
     @staticmethod
-    def from_tuple(mapping_tuple: MappingTuple) -> 'MappingTemplate':
-        """Auto detect what mappings are meant"""
+    def from_tuple(mapping_tuple: MappingTuple) -> 'MappingPulseTemplate':
+        """Construct a MappingPulseTemplate from a tuple of mappings. The mappings are automatically assigned to the
+        mapped elements based on their content.
+        :param mapping_tuple: A tuple of mappings
+        :return: Constructed MappingPulseTemplate
+        """
         template, *mappings = mapping_tuple
 
         parameter_mapping = None
@@ -132,10 +152,10 @@ class MappingTemplate(PulseTemplate, ParameterConstrainer):
                 channel_mapping = mapping
             else:
                 raise ValueError('Could not match mapping to mapped objects: {}'.format(mapping))
-        return MappingTemplate(template,
-                               parameter_mapping=parameter_mapping,
-                               measurement_mapping=measurement_mapping,
-                               channel_mapping=channel_mapping)
+        return MappingPulseTemplate(template,
+                                    parameter_mapping=parameter_mapping,
+                                    measurement_mapping=measurement_mapping,
+                                    channel_mapping=channel_mapping)
 
     @property
     def template(self) -> PulseTemplate:
@@ -173,7 +193,7 @@ class MappingTemplate(PulseTemplate, ParameterConstrainer):
     def duration(self) -> Expression:
         return self.__template.duration.evaluate_symbolic(self.__parameter_mapping)
 
-    def get_serialization_data(self, serializer: 'Serializer') -> Dict[str, Any]:
+    def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
         parameter_mapping_dict = dict((key, str(expression)) for key, expression in self.__parameter_mapping.items())
         return dict(template=serializer.dictify(self.template),
                     parameter_mapping=parameter_mapping_dict,
@@ -181,10 +201,10 @@ class MappingTemplate(PulseTemplate, ParameterConstrainer):
                     channel_mapping=self.__channel_mapping)
 
     @staticmethod
-    def deserialize(serializer: 'Serializer',
-                    template: Union[str, Dict[str, Any]], **kwargs) -> 'MappingTemplate':
-        return MappingTemplate(template=serializer.deserialize(template),
-                               **kwargs)
+    def deserialize(serializer: Serializer,
+                    template: Union[str, Dict[str, Any]], **kwargs) -> 'MappingPulseTemplate':
+        return MappingPulseTemplate(template=serializer.deserialize(template),
+                                    **kwargs)
 
     def map_parameters(self,
                        parameters: Dict[str, Union[Parameter, numbers.Real]]) -> Dict[str, Parameter]:
@@ -218,12 +238,12 @@ class MappingTemplate(PulseTemplate, ParameterConstrainer):
         return {inner_ch: channel_mapping[outer_ch] for inner_ch, outer_ch in self.__channel_mapping.items()}
 
     def build_sequence(self,
-                       sequencer: "Sequencer",
+                       sequencer: Sequencer,
                        parameters: Dict[str, Parameter],
-                       conditions: Dict[str, 'Condition'],
+                       conditions: Dict[str, Condition],
                        measurement_mapping: Dict[str, str],
                        channel_mapping: Dict[ChannelID, ChannelID],
-                       instruction_block: 'InstructionBlock') -> None:
+                       instruction_block: InstructionBlock) -> None:
         self.template.build_sequence(sequencer,
                                      parameters=self.map_parameters(parameters),
                                      conditions=conditions,
@@ -234,7 +254,7 @@ class MappingTemplate(PulseTemplate, ParameterConstrainer):
     def build_waveform(self,
                        parameters: Dict[str, numbers.Real],
                        measurement_mapping: Dict[str, str],
-                       channel_mapping: Dict[ChannelID, ChannelID]) -> 'Waveform':
+                       channel_mapping: Dict[ChannelID, ChannelID]) -> Waveform:
         """This gets called if the parent is atomic"""
         return self.template.build_waveform(
             parameters=self.map_parameters(parameters),
@@ -243,7 +263,7 @@ class MappingTemplate(PulseTemplate, ParameterConstrainer):
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],
-                      conditions: Dict[str, 'Condition']) -> bool:
+                      conditions: Dict[str, Condition]) -> bool:
         return self.template.requires_stop(
             self.map_parameters(parameters),
             conditions

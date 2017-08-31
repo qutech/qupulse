@@ -7,20 +7,18 @@ Classes:
         declared parameters.
 """
 
-from typing import Union, Dict, List, Set, Optional, NamedTuple, Any, Iterable, Tuple, Sequence
+from typing import Union, Dict, List, Set, Optional, Any, Iterable, Tuple, Sequence
 import numbers
 import itertools
 import warnings
-from operator import itemgetter
-from collections import namedtuple
 
 import numpy as np
 import sympy
 
-from qctoolkit import MeasurementWindow, ChannelID
+from qctoolkit.utils.types import MeasurementWindow, ChannelID
 from qctoolkit.serialization import Serializer
 from qctoolkit.pulses.parameters import Parameter, \
-    ParameterNotProvidedException, ParameterConstraint, ParameterConstraintViolation, ParameterConstrainer
+    ParameterNotProvidedException, ParameterConstraint, ParameterConstrainer
 from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration
 from qctoolkit.pulses.interpolation import InterpolationStrategy, LinearInterpolationStrategy, \
     HoldInterpolationStrategy, JumpInterpolationStrategy
@@ -174,18 +172,36 @@ class TableEntry(tuple):
 
 
 class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer, MeasurementDefiner):
-    """TablePulseTemplate"""
+    """The TablePulseTemplate class implements pulses described by a table with time, voltage and interpolation strategy
+    inputs. The interpolation strategy describes how the voltage between the entries is interpolated(see also
+    InterpolationStrategy.) It can define multiple channels of which each has a separate table. If they do not have the
+    same length the shorter channels are extended to the longest duration.
+
+    If the time entries of all channels are equal it is more convenient to use the :paramrefPointPulseTemplate`."""
     interpolation_strategies = {'linear': LinearInterpolationStrategy(),
                                 'hold': HoldInterpolationStrategy(),
                                 'jump': JumpInterpolationStrategy(),
                                 'default': HoldInterpolationStrategy()}
 
-    def __init__(self, entries: Dict[ChannelID, List[EntryInInit]],
+    def __init__(self, entries: Dict[ChannelID, Sequence[EntryInInit]],
                  identifier: Optional[str]=None,
                  *,
                  parameter_constraints: Optional[List[Union[str, ParameterConstraint]]]=None,
                  measurements: Optional[List[MeasurementDeclaration]]=None,
                  consistency_check=True):
+        """
+        Construct a `TablePulseTemplate` from a dict which maps channels to their entries. By default the consistency
+        of the provided entries is checked. There are two static functions for convenience construction: from_array and
+        from_entry_list.
+
+        Args:
+            entries: A dictionary that maps channel ids to a list of entries. An entry is a
+                (time, voltage[, interpolation strategy]) tuple or a TableEntry
+            identifier: Used for serialization
+            parameter_constraints: Constraint list that is forwarded to the ParameterConstrainer superclass
+            measurements: Measurement declaration list that is forwarded to the MeasurementDefiner superclass
+            consistency_check: If True the consistency of the times will be checked on construction as far as possible
+        """
         AtomicPulseTemplate.__init__(self, identifier=identifier)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
         MeasurementDefiner.__init__(self, measurements=measurements)

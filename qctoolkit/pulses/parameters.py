@@ -4,7 +4,6 @@ Classes:
     - Parameter: A base class representing a single pulse parameter.
     - ConstantParameter: A single parameter with a constant value.
     - MappedParameter: A parameter whose value is mathematically computed from another parameter.
-    - ParameterDeclaration: The declaration of a parameter within a pulse template.
     - ParameterNotProvidedException.
     - ParameterValueIllegalException.
 """
@@ -19,7 +18,7 @@ from qctoolkit.serialization import Serializable, Serializer, ExtendedJSONEncode
 from qctoolkit.expressions import Expression
 from qctoolkit.comparable import Comparable
 
-__all__ = ["make_parameter", "ParameterDict", "Parameter", "ConstantParameter",
+__all__ = ["Parameter", "ConstantParameter",
            "ParameterNotProvidedException", "ParameterConstraintViolation"]
 
 
@@ -132,7 +131,7 @@ class MappedParameter(Parameter):
     @property
     def requires_stop(self) -> bool:
         try:
-            return any([p.requires_stop for p in self.__collect_dependencies().values()])
+            return any(p.requires_stop for p in self.__collect_dependencies().values())
         except:
             raise
 
@@ -151,6 +150,7 @@ class MappedParameter(Parameter):
 
 
 class ParameterConstraint(Comparable):
+    """A parameter constraint like 't_2 < 2.7' that can be used to set bounds to parameters."""
     def __init__(self, relation: Union[str, sympy.Expr]):
         super().__init__()
         if isinstance(relation, str) and '==' in relation:
@@ -187,6 +187,7 @@ ExtendedJSONEncoder.str_constructable_types.add(ParameterConstraint)
 
 
 class ParameterConstrainer:
+    """A class that implements the testing of parameter constraints. It is used by the subclassing pulse templates."""
     def __init__(self, *,
                  parameter_constraints: Optional[Iterable[Union[str, ParameterConstraint]]]) -> None:
         if parameter_constraints is None:
@@ -201,6 +202,10 @@ class ParameterConstrainer:
         return self._parameter_constraints
 
     def validate_parameter_constraints(self, parameters: [str, Union[Parameter, Real]]) -> None:
+        """Raises a ParameterConstraintViolation exception if one of the constraints is violated.
+        :param parameters: These parameters are checked.
+        :return:
+        """
         for constraint in self._parameter_constraints:
             constraint_parameters = {k: v.get_value() if isinstance(v, Parameter) else v for k, v in parameters.items()}
             if not constraint.is_fulfilled(constraint_parameters):

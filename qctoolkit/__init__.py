@@ -1,6 +1,4 @@
-import typing
+from qctoolkit.utils.types import MeasurementWindow, ChannelID
+from . import pulses
 
-__all__ = ["MeasurementWindow", "ChannelID"]
-
-MeasurementWindow = typing.Tuple[str, float, float]
-ChannelID = typing.Union[str, int]
+__all__ = ["MeasurementWindow", "ChannelID", "pulses"]

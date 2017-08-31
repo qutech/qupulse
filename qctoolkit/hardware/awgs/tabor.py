@@ -10,7 +10,7 @@ from enum import Enum
 import teawg
 import numpy as np
 
-from qctoolkit import ChannelID
+from qctoolkit.utils.types import ChannelID
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 from qctoolkit.hardware.program import Loop, make_compatible
 from qctoolkit.hardware.util import voltage_to_uint16, make_combined_wave, find_positions
@@ -521,7 +521,6 @@ class TaborChannelPair(AWG):
                                          channels=tuple(channels),
                                          markers=markers,
                                          device_properties=self._device.dev_properties)
-            sample_rate = self._device.sample_rate(self._channels[0])
             voltage_amplitudes = (self._device.amplitude(self._channels[0]),
                                   self._device.amplitude(self._channels[1]))
             voltage_offsets = (0, 0)
