@@ -132,11 +132,15 @@ class PointPulseTemplateTests(unittest.TestCase):
                                      (1., 0., HoldInterpolationStrategy()),
                                      (1.1, 21., LinearInterpolationStrategy())],
                                  [('K', 0.2, 1), ('L', 0.2, 1)])
-        expected_A = PointWaveform(1, [(0, 1., HoldInterpolationStrategy()),
+        expected_A = PointWaveform('A', [(0, 1., HoldInterpolationStrategy()),
                                      (0.1, 1., HoldInterpolationStrategy()),
                                      (1., 0., HoldInterpolationStrategy()),
                                      (1.1, 21., LinearInterpolationStrategy())], [])
         self.assertEqual(wf.defined_channels, {1, 'A'})
+        self.assertEqual(wf._sub_waveforms[0].defined_channels, {1})
+        self.assertEqual(wf._sub_waveforms[0], expected_1)
+        self.assertEqual(wf._sub_waveforms[1].defined_channels, {'A'})
+        self.assertEqual(wf._sub_waveforms[1], expected_A)
 
     def test_build_waveform_multi_channel_vectorized(self):
         ppt = PointPulseTemplate([('t1', 'A'),
@@ -150,11 +154,15 @@ class PointPulseTemplateTests(unittest.TestCase):
                                        (1., 0., HoldInterpolationStrategy()),
                                        (1.1, 19., LinearInterpolationStrategy())],
                                  [('K', 0.2, 1), ('L', 0.2, 1)])
-        expected_A = PointWaveform(1, [(0, 1., HoldInterpolationStrategy()),
+        expected_A = PointWaveform('A', [(0, 1., HoldInterpolationStrategy()),
                                      (0.1, 1., HoldInterpolationStrategy()),
                                      (1., 0., HoldInterpolationStrategy()),
                                      (1.1, 20., LinearInterpolationStrategy())], [])
         self.assertEqual(wf.defined_channels, {1, 'A'})
+        self.assertEqual(wf._sub_waveforms[0].defined_channels, {1})
+        self.assertEqual(wf._sub_waveforms[0], expected_1)
+        self.assertEqual(wf._sub_waveforms[1].defined_channels, {'A'})
+        self.assertEqual(wf._sub_waveforms[1], expected_A)
 
 
 class TablePulseTemplateConstraintTest(ParameterConstrainerTest):

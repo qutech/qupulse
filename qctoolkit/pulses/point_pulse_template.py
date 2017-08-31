@@ -70,9 +70,10 @@ class PointPulseTemplate(ParameterConstrainer, MeasurementDefiner, AtomicPulseTe
 
         mapped_channels = tuple(channel_mapping[c] for c in self._channels)
 
-        waveform_entries = [[]]*len(mapped_channels)
+        waveform_entries = list([] for _ in range(len(mapped_channels)))
         for entry in self._entries:
-            for ch_entries, wf_entry in zip(waveform_entries, entry.instantiate(parameters, len(self._channels))):
+            instantiated_entries = entry.instantiate(parameters, len(self._channels))
+            for ch_entries, wf_entry in zip(waveform_entries, instantiated_entries):
                 ch_entries.append(wf_entry)
 
         if waveform_entries[0][0].t > 0:
