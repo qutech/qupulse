@@ -73,7 +73,9 @@ def render(sequence: InstructionSequence, sample_rate: int=10) -> Tuple[np.ndarr
 
 def plot(pulse: PulseTemplate,
          parameters: Dict[str, Parameter]=None,
-         sample_rate: int=10) -> Any: # pragma: no cover
+         sample_rate: int=10,
+         axes: Any=None,
+         show: bool=True) -> Any:  # pragma: no cover
     """Plot a pulse using matplotlib.
 
     The given pulse will first be sequenced using the Sequencer class. The resulting
@@ -86,6 +88,8 @@ def plot(pulse: PulseTemplate,
             objects.
         sample_rate: The rate with which the waveforms are sampled for the plot in
             samples per time unit. (default = 10)
+        axes: matplotlib Axes object the pulse will be drawn into if provided
+        show: If true, the figure will be shown
     Returns:
         matplotlib.pyplot.Figure instance in which the pulse is rendered
     Raises:
@@ -109,13 +113,14 @@ def plot(pulse: PulseTemplate,
         raise PlottingNotPossibleException(pulse)
     times, voltages = render(sequence, sample_rate)
 
-    # plot to figure
-    figure = plt.figure()
-    ax = figure.add_subplot(111)
+    if axes is None:
+        # plot to figure
+        figure = plt.figure()
+        axes = figure.add_subplot(111)
     for ch_name, voltage in voltages.items():
-        ax.step(times, voltage, where='post', label='channel {}'.format(ch_name))
+        axes.step(times, voltage, where='post', label='channel {}'.format(ch_name))
 
-    ax.legend()
+    axes.legend()
 
     max_voltage = max(max(channel) for channel in voltages.values())
     min_voltage = min(min(channel) for channel in voltages.values())
@@ -130,8 +135,9 @@ def plot(pulse: PulseTemplate,
     if pulse.identifier:
         plt.title(pulse.identifier)
 
-    figure.show()
-    return figure
+    if show:
+        axes.get_figure().show()
+    return axes.get_figure()
 
 
 class PlottingNotPossibleException(Exception):

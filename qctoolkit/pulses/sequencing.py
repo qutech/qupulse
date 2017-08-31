@@ -160,7 +160,7 @@ class Sequencer:
             else:
                 channel_mapping = dict()
         for (key, value) in parameters.items():
-            if isinstance(value, numbers.Real):
+            if not isinstance(value, Parameter):
                 parameters[key] = ConstantParameter(value)
 
         if target_block not in self.__sequencing_stacks:
