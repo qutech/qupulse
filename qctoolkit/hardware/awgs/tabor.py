@@ -12,7 +12,7 @@ import numpy as np
 
 from qctoolkit import ChannelID
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
-from qctoolkit.hardware.program import Loop
+from qctoolkit.hardware.program import Loop, make_compatible
 from qctoolkit.hardware.util import voltage_to_uint16, make_combined_wave, find_positions
 from qctoolkit.hardware.awgs.base import AWG
 
@@ -501,6 +501,10 @@ class TaborChannelPair(AWG):
             raise ValueError('Markers not specified')
         if len(voltage_transformation) != self.num_channels:
             raise ValueError('Wrong number of voltage transformations')
+
+        # adjust program to fit criteria
+        sample_rate = self._device.sample_rate(self._channels[0])
+        make_compatible(program, minimal_waveform_length=192, waveform_quantum=16, sample_rate=sample_rate)
 
         # helper to restore previous state if upload is impossible
         to_restore = None

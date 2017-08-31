@@ -2,6 +2,7 @@ import itertools
 from typing import Union, Dict, Set, Iterable, FrozenSet, Tuple, cast
 from collections import deque, defaultdict
 from copy import deepcopy
+from enum import Enum
 
 import numpy as np
 
@@ -9,9 +10,12 @@ from qctoolkit import ChannelID
 from qctoolkit.pulses.instructions import AbstractInstructionBlock, EXECInstruction, REPJInstruction, GOTOInstruction, STOPInstruction, InstructionPointer, CHANInstruction, Waveform
 from qctoolkit.comparable import Comparable
 from qctoolkit.utils.tree import Node, is_tree_circular
+from qctoolkit.utils import checked_int_cast, is_integer
 
+from qctoolkit.pulses.sequence_pulse_template import SequenceWaveform
+from qctoolkit.pulses.repetition_pulse_template import RepetitionWaveform
 
-__all__ = ['Loop', 'MultiChannelProgram', '']
+__all__ = ['Loop', 'MultiChannelProgram', 'make_compatible']
 
 
 class Loop(Comparable, Node):
@@ -315,3 +319,91 @@ class MultiChannelProgram:
             if item.issubset(channels):
                 return program
         raise KeyError(item)
+
+
+def to_waveform(program: Loop) -> Waveform:
+    if program.is_leaf():
+        if program.repetition_count == 1:
+            return program.waveform
+        else:
+            return RepetitionWaveform(program.waveform, program.repetition_count)
+    else:
+        if len(program) == 1:
+            sequenced_waveform = to_waveform(cast(Loop, program[0]))
+        else:
+            sequenced_waveform = SequenceWaveform([to_waveform(cast(Loop, sub_program))
+                                                   for sub_program in program])
+        if program.repetition_count > 1:
+            return RepetitionWaveform(sequenced_waveform, program.repetition_count)
+        else:
+            return sequenced_waveform
+
+
+class _CompatibilityLevel(Enum):
+    compatible = 0
+    action_required = 1
+    incompatible = 2
+
+
+def _is_compatible(program: Loop, min_len: int, quantum: int, sample_rate: float) -> _CompatibilityLevel:
+    try:
+        program_duration = checked_int_cast(program.duration * sample_rate)
+    except ValueError:
+        return _CompatibilityLevel.incompatible
+
+    if program_duration < min_len or program_duration % quantum > 0:
+        return _CompatibilityLevel.incompatible
+
+    if program.is_leaf():
+        waveform_duration = program.waveform.duration * sample_rate
+        if not is_integer(waveform_duration / quantum) or waveform_duration < min_len:
+            return _CompatibilityLevel.action_required
+        else:
+            return _CompatibilityLevel.compatible
+    else:
+        if all(_is_compatible(cast(Loop, sub_program), min_len, quantum, sample_rate) == _CompatibilityLevel.compatible
+               for sub_program in program):
+            return _CompatibilityLevel.compatible
+        else:
+            return _CompatibilityLevel.action_required
+
+
+def _make_compatible(program: Loop, min_len: int, quantum: int, sample_rate: float) -> None:
+
+    if program.is_leaf():
+        program.waveform = to_waveform(program.copy_tree_structure())
+        program.repetition_count = 1
+
+    else:
+        comp_levels = np.array([_is_compatible(cast(Loop, sub_program), min_len, quantum, sample_rate)
+                                for sub_program in program])
+        incompatible = comp_levels == _CompatibilityLevel.incompatible
+        if np.any(incompatible):
+            single_run = program.duration * sample_rate / program.repetition_count
+            if is_integer(single_run / quantum) and single_run >= min_len:
+                new_repetition_count = program.repetition_count
+            else:
+                new_repetition_count = 1
+            program.repetition_count = 1
+            program.waveform = to_waveform(program.copy_tree_structure())
+            program.repetition_count = new_repetition_count
+            program[:] = []
+            return
+        else:
+            for sub_program, comp_level in zip(program, comp_levels):
+                if comp_level == _CompatibilityLevel.action_required:
+                    _make_compatible(sub_program, min_len, quantum, sample_rate)
+
+
+def make_compatible(program: Loop, minimal_waveform_length: int, waveform_quantum: int, sample_rate: float):
+    comp_level = _is_compatible(program,
+                                min_len=minimal_waveform_length,
+                                quantum=waveform_quantum,
+                                sample_rate=sample_rate)
+    if comp_level == _CompatibilityLevel.incompatible:
+        raise ValueError('The program cannot be made compatible to restrictions')
+    elif comp_level == _CompatibilityLevel.action_required:
+        _make_compatible(program,
+                         min_len=minimal_waveform_length,
+                         quantum=waveform_quantum,
+                         sample_rate=sample_rate)
