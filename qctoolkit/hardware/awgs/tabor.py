@@ -465,7 +465,9 @@ class TaborChannelPair(AWG):
 
     def free_program(self, name: str) -> TaborProgramMemory:
         program = self._known_programs.pop(name)
-        self._segment_references[program.segment_indices] -= 1
+        self._segment_references[program.segment_indices-1] -= 1
+        if self._current_program == name:
+            self._current_program = None
         return program
 
     @property
@@ -545,7 +547,6 @@ class TaborChannelPair(AWG):
 
         if np.any(to_amend):
             segments_to_amend = segments[to_amend]
-            self._amend_segments(segments_to_amend)
             waveform_to_segment[to_amend] = self._amend_segments(segments_to_amend)
 
         self._known_programs[name] = TaborProgramMemory(segment_indices=waveform_to_segment,
@@ -588,9 +589,9 @@ class TaborChannelPair(AWG):
         to_insert = np.full(len(segments), fill_value=-1, dtype=np.int64)
 
         reserved_indices = np.flatnonzero(new_reference_counter > 0)
-        last_reserved = reserved_indices[-1] if len(reserved_indices) else 0
+        first_free = reserved_indices[-1] + 1 if len(reserved_indices) else 0
 
-        free_segments = new_reference_counter[:last_reserved] == 0
+        free_segments = new_reference_counter[:first_free] == 0
         free_segment_count = np.sum(free_segments)
 
         # look for a free segment place with the same length
@@ -598,7 +599,7 @@ class TaborChannelPair(AWG):
             if free_segment_count == 0:
                 break
 
-            pos_of_same_length = np.logical_and(free_segments, segment_lengths[segment_idx] == self._segment_capacity[:last_reserved])
+            pos_of_same_length = np.logical_and(free_segments, segment_lengths[segment_idx] == self._segment_capacity[:first_free])
             idx_same_length = np.argmax(pos_of_same_length)
             if pos_of_same_length[idx_same_length]:
                 free_segments[idx_same_length] = False
@@ -610,7 +611,7 @@ class TaborChannelPair(AWG):
         # try to find places that are larger than the segments to fit in starting with the large segments and large
         # free spaces
         segment_indices = np.flatnonzero(to_amend)[np.argsort(segment_lengths[to_amend])[::-1]]
-        capacities = self._segment_capacity[:last_reserved]
+        capacities = self._segment_capacity[:first_free]
         for segment_idx in segment_indices:
             free_capacities = capacities[free_segments]
             free_segments_indices = np.flatnonzero(free_segments)[np.argsort(free_capacities)[::-1]]
@@ -625,7 +626,7 @@ class TaborChannelPair(AWG):
                 to_amend[segment_idx] = False
                 to_insert[segment_idx] = fitting_segment
 
-        free_points_at_end = self.total_capacity - np.sum(self._segment_capacity[:last_reserved])
+        free_points_at_end = self.total_capacity - np.sum(self._segment_capacity[:first_free])
         if np.sum(segment_lengths[to_amend] + 16) > free_points_at_end:
             raise MemoryError('Fragmentation does not allow upload.',
                               np.sum(segment_lengths[to_amend] + 16),
@@ -690,17 +691,20 @@ class TaborChannelPair(AWG):
         self._segment_hashes = segment_hashes
         self._segment_references = segment_references
 
-        return segment_index + np.arange(len(segments), dtype=np.int64) - 1
+        return segment_index + np.arange(len(segments), dtype=np.int64)
 
     def cleanup(self) -> None:
         """Discard all segments after the last which is still referenced"""
         reserved_indices = np.flatnonzero(self._segment_references > 0)
-
+        old_end = len(self._segment_lengths)
         new_end = reserved_indices[-1]+1 if len(reserved_indices) else 0
         self._segment_lengths = self._segment_lengths[:new_end]
         self._segment_capacity = self._segment_capacity[:new_end]
         self._segment_hashes = self._segment_hashes[:new_end]
         self._segment_references = self._segment_references[:new_end]
+
+        delete_cmd = ';'.join('TRAC:DEL {}'.format(i+1) for i in range(new_end, old_end))
+        self._device.send_cmd(delete_cmd)
 
     def remove(self, name: str) -> None:
         """Remove a program from the AWG.
