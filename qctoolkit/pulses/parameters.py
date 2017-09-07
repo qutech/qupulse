@@ -238,7 +238,7 @@ class ParameterNotProvidedException(Exception):
         self.parameter_name = parameter_name
         
     def __str__(self) -> str:
-        return "No value was provided for parameter '{0}' ".format(self.parameter_name)
+        return "No value was provided for parameter '{0}'.".format(self.parameter_name)
 
 
 class InvalidParameterNameException(Exception):

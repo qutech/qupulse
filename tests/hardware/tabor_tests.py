@@ -519,7 +519,7 @@ class TaborChannelPairTests(unittest.TestCase):
             np.testing.assert_equal(channel_pair._segment_references, np.array([1, 2, 3, 0, 1]))
 
             self.assertEqual(len(channel_pair._known_programs), 1)
-            np.testing.assert_equal(channel_pair._known_programs['test'].segment_indices,
+            np.testing.assert_equal(channel_pair._known_programs['test'].waveform_to_segment,
                                     np.array([5, 3, 1, 2, 6], dtype=np.int64))
             self.assertIs(channel_pair._known_programs['test'].program, my_class.created[0])
 
@@ -820,10 +820,10 @@ class TaborChannelPairTests(unittest.TestCase):
         instrument._send_binary_data_calls = []
 
         advanced_sequencer_table = [(2, 1, 0)]
-        sequencer_tables = [[(3, 1, 0), (2, 2, 0), (1, 1, 0), (1, 3, 0), (1, 4, 0)]]
+        sequencer_tables = [[(3, 0, 0), (2, 1, 0), (1, 0, 0), (1, 2, 0), (1, 3, 0)]]
         w2s = np.array([2, 5, 3, 1])
 
-        expected_sequencer_table = [(3, 2, 0), (2, 5, 0), (1, 2, 0), (1, 3, 0), (1, 1, 0)]
+        expected_sequencer_table = [(3, 3, 0), (2, 6, 0), (1, 3, 0), (1, 4, 0), (1, 2, 0)]
         idle_sequencer_table = [(1, 1, 0), (1, 1, 0), (1, 1, 0)]
 
         program = DummyTaborProgramClass(advanced_sequencer_table=advanced_sequencer_table,
@@ -850,10 +850,10 @@ class TaborChannelPairTests(unittest.TestCase):
         instrument._send_binary_data_calls = []
 
         advanced_sequencer_table = [(1, 1, 0)]
-        sequencer_tables = [[(10, 1, 0)]]
+        sequencer_tables = [[(10, 0, 0)]]
         w2s = np.array([4])
 
-        expected_sequencer_table = [(10, 4, 0), (1, 1, 0), (1, 1, 0)]
+        expected_sequencer_table = [(10, 5, 0), (1, 1, 0), (1, 1, 0)]
         idle_sequencer_table = [(1, 1, 0), (1, 1, 0), (1, 1, 0)]
 
         program = DummyTaborProgramClass(advanced_sequencer_table=advanced_sequencer_table,
@@ -880,20 +880,20 @@ class TaborChannelPairTests(unittest.TestCase):
         instrument._send_binary_data_calls = []
 
         advanced_sequencer_table = [(2, 1, 0), (3, 2, 0)]
-        sequencer_tables = [[(3, 1, 0), (2, 2, 0), (1, 1, 0), (1, 3, 0), (1, 4, 0)],
-                            [(4, 2, 0), (2, 2, 0), (1, 1, 0), (1, 3, 0), (1, 4, 0)]]
-        w2s = np.array([2, 5, 3, 1])
+        sequencer_tables = [[(3, 0, 0), (2, 1, 0), (1, 0, 0), (1, 2, 0), (1, 3, 0)],
+                            [(4, 1, 0), (2, 1, 0), (1, 0, 0), (1, 2, 0), (1, 3, 0)]]
+        wf_idx2seg_idx = np.array([2, 5, 3, 1])
 
         idle_sequencer_table = [(1, 1, 0), (1, 1, 0), (1, 1, 0)]
         expected_sequencer_tables = [idle_sequencer_table,
-                                     [(3, 2, 0), (2, 5, 0), (1, 2, 0), (1, 3, 0), (1, 1, 0)],
-                                     [(4, 5, 0), (2, 5, 0), (1, 2, 0), (1, 3, 0), (1, 1, 0)]]
+                                     [(3, 3, 0), (2, 6, 0), (1, 3, 0), (1, 4, 0), (1, 2, 0)],
+                                     [(4, 6, 0), (2, 6, 0), (1, 3, 0), (1, 4, 0), (1, 2, 0)]]
 
         program = DummyTaborProgramClass(advanced_sequencer_table=advanced_sequencer_table,
                                          sequencer_tables=sequencer_tables,
                                          waveform_mode=TaborSequencing.ADVANCED)(None, None, None, None)
 
-        channel_pair._known_programs['test'] = TaborProgramMemory(w2s, program)
+        channel_pair._known_programs['test'] = TaborProgramMemory(wf_idx2seg_idx, program)
 
         channel_pair.change_armed_program('test')
 

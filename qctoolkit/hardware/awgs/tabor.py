@@ -390,7 +390,7 @@ class TaborAWGRepresentation(teawg.TEWXAwg):
         self.send_cmd(':TRIG')
 
 
-TaborProgramMemory = NamedTuple('TaborProgramMemory', [('segment_indices', np.ndarray),
+TaborProgramMemory = NamedTuple('TaborProgramMemory', [('waveform_to_segment', np.ndarray),
                                                        ('program', TaborProgram)])
 
 
@@ -465,7 +465,7 @@ class TaborChannelPair(AWG):
 
     def free_program(self, name: str) -> TaborProgramMemory:
         program = self._known_programs.pop(name)
-        self._segment_references[program.segment_indices-1] -= 1
+        self._segment_references[program.waveform_to_segment] -= 1
         if self._current_program == name:
             self._current_program = None
         return program
@@ -549,7 +549,7 @@ class TaborChannelPair(AWG):
             segments_to_amend = segments[to_amend]
             waveform_to_segment[to_amend] = self._amend_segments(segments_to_amend)
 
-        self._known_programs[name] = TaborProgramMemory(segment_indices=waveform_to_segment,
+        self._known_programs[name] = TaborProgramMemory(waveform_to_segment=waveform_to_segment,
                                                         program=tabor_program)
 
     def _find_place_for_segments_in_memory(self, segments: Sequence, segment_lengths: Sequence) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -663,9 +663,10 @@ class TaborChannelPair(AWG):
         wf_data = make_combined_wave(segments)
         trac_len = len(wf_data) // 2
 
-        segment_index = len(self._segment_capacity) + 1
-        self._device.send_cmd(':TRAC:DEF {},{}'.format(segment_index, trac_len))
-        self._device.send_cmd(':TRAC:SEL {}'.format(segment_index))
+        segment_index = len(self._segment_capacity)
+        first_segment_number = segment_index + 1
+        self._device.send_cmd(':TRAC:DEF {},{}'.format(first_segment_number, trac_len))
+        self._device.send_cmd(':TRAC:SEL {}'.format(first_segment_number))
         self._device.send_cmd(':TRAC:MODE COMB')
         self._device.send_binary_data(pref=':TRAC:DATA', bin_dat=wf_data)
 
@@ -676,8 +677,8 @@ class TaborChannelPair(AWG):
         segment_hashes = np.concatenate((self._segment_hashes, [hash(s) for s in segments]))
         if len(segments) < old_to_update:
             for i, segment in enumerate(segments):
-                current_segment = segment_index + i
-                self._device.send_cmd(':TRAC:DEF {},{}'.format(current_segment, segment.num_points))
+                current_segment_number = first_segment_number + i
+                self._device.send_cmd(':TRAC:DEF {},{}'.format(current_segment_number, segment.num_points))
         else:
             # flush the capacity
             self._device.download_segment_lengths(segment_capacity)
@@ -736,12 +737,13 @@ class TaborChannelPair(AWG):
 
     @with_configuration_guard
     def change_armed_program(self, name: str) -> None:
-        waveform_to_segment, program = self._known_programs[name]
+        waveform_to_segment_index, program = self._known_programs[name]
+        waveform_to_segment_number = waveform_to_segment_index + 1
 
         # translate waveform number to actual segment
-        sequencer_tables = [[(rep_count, waveform_to_segment[wf_index-1], jump_flag)
+        sequencer_tables = [[(rep_count, waveform_to_segment_number[wf_index], jump_flag)
                              for (rep_count, wf_index, jump_flag) in sequencer_table]
-                            for sequencer_table in program.get_sequencer_tables()]
+                             for sequencer_table in program.get_sequencer_tables()]
 
         # insert idle sequence
         sequencer_tables = [self._idle_sequence_table] + sequencer_tables

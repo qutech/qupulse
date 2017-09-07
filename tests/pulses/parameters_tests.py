@@ -127,7 +127,7 @@ class ParameterNotProvidedExceptionTests(unittest.TestCase):
 
     def test(self) -> None:
         exc = ParameterNotProvidedException('foo')
-        self.assertEqual("No value was provided for parameter 'foo' and no default value was specified.", str(exc))
+        self.assertEqual("No value was provided for parameter 'foo'.", str(exc))
 
 
 class InvalidParameterNameExceptionTests(unittest.TestCase):
