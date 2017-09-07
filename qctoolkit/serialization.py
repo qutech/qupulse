@@ -240,11 +240,11 @@ class Serializable(metaclass=ABCMeta):
         """Initialize a Serializable.
 
         Args:
-            identifier (str): An optional, non-empty identifier for this Serializable.
+            identifier: An optional, non-empty identifier for this Serializable.
                 If set, this Serializable will always be stored as a separate data item and never
-                be embedded. (default=None)
+                be embedded.
         Raises:
-            ValueError if identifier is the empty string
+            ValueError: If identifier is the empty string
         """
         super().__init__()
         if identifier == '':
@@ -283,12 +283,12 @@ class Serializable(metaclass=ABCMeta):
             For greater clarity, implementations of this method should be precise in their return value,
             i.e., give their exact class name, and also replace the **kwargs argument by a list of
             arguments required, i.e., those returned by get_serialization_data.
-            If this Serializable contains complex objects which are itself Serializables, their
+            If this Serializable contains complex objects which are itself of type Serializable, their
             dictionary representations MUST be converted into objects using serializers deserialize()
             method.
 
          Args:
-             serializer (Serializer): A serializer instance used when deserializing subelements.
+             serializer: A serializer instance used when deserializing subelements.
              <property_name>: All relevant properties of the object as keyword arguments. For every
                 (key,value) pair returned by get_serialization_data, the same pair is given as
                 keyword argument as input to this method.

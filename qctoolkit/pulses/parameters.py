@@ -13,6 +13,7 @@ from typing import Optional, Union, Dict, Any, Iterable, Set, List
 from numbers import Real
 
 import sympy
+import numpy
 
 from qctoolkit.serialization import Serializable, Serializer, ExtendedJSONEncoder
 from qctoolkit.expressions import Expression
@@ -160,29 +161,32 @@ class ParameterConstraint(Comparable):
             self._expression = sympy.sympify(relation)
         if not isinstance(self._expression, sympy.boolalg.Boolean):
             raise ValueError('Constraint is not boolean')
+        self._expression = Expression(self._expression)
 
     @property
     def affected_parameters(self) -> Set[str]:
-        return set(str(v) for v in self._expression.free_symbols)
+        return set(self._expression.variables)
 
     def is_fulfilled(self, parameter: Dict[str, Any]) -> bool:
         if not self.affected_parameters <= set(parameter.keys()):
             raise ParameterNotProvidedException((self.affected_parameters-set(parameter.keys())).pop())
-        return bool(self._expression.subs(parameter))
+
+        return numpy.all(self._expression.evaluate_numeric(**parameter))
 
     @property
     def sympified_expression(self) -> sympy.Expr:
-        return self._expression
+        return self._expression.sympified_expression
 
     @property
     def compare_key(self) -> sympy.Expr:
-        return self._expression
+        return self._expression.compare_key
 
     def __str__(self) -> str:
-        if isinstance(self._expression, sympy.Eq):
-            return '{}=={}'.format(self._expression.lhs, self._expression.rhs)
+        if isinstance(self._expression.sympified_expression, sympy.Eq):
+            return '{}=={}'.format(self._expression.sympified_expression.lhs,
+                                   self._expression.sympified_expression.rhs)
         else:
-            return str(self._expression)
+            return str(self._expression.sympified_expression)
 ExtendedJSONEncoder.str_constructable_types.add(ParameterConstraint)
 
 
@@ -234,8 +238,7 @@ class ParameterNotProvidedException(Exception):
         self.parameter_name = parameter_name
         
     def __str__(self) -> str:
-        return "No value was provided for parameter '{0}' " \
-               "and no default value was specified.".format(self.parameter_name)
+        return "No value was provided for parameter '{0}' ".format(self.parameter_name)
 
 
 class InvalidParameterNameException(Exception):

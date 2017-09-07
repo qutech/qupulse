@@ -170,8 +170,8 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
         for i, channels_i in enumerate(defined_channels):
             for j, channels_j in enumerate(defined_channels[i + 1:]):
                 if channels_i & channels_j:
-                    raise ChannelMappingException(self._subtemplates[i],
-                                                  self._subtemplates[i + 1 + j],
+                    raise ChannelMappingException('subtemplate {}'.format(i + 1),
+                                                  'subtemplate {}'.format(i + 2 + j),
                                                   (channels_i | channels_j).pop())
 
         if external_parameters is not None:
@@ -253,4 +253,4 @@ class ChannelMappingException(Exception):
         self.obj2 = obj2
 
     def __str__(self) -> str:
-        return 'Channels {chs} defined in {o1} and {o2}'.format(chs=self.intersect_set, o1=self.obj1, o2=self.obj2)
+        return 'Channel <{chs}> is defined in {o1} and {o2}'.format(chs=self.intersect_set, o1=self.obj1, o2=self.obj2)

@@ -116,9 +116,10 @@ class Expression(Serializable, Comparable):
         except KeyError as key_error:
             raise ExpressionVariableMissingException(key_error.args[0], self) from key_error
 
-        if isinstance(result, numpy.ndarray) and issubclass(result.dtype.type, Number):
+        allowed_types = (Number, bool, numpy.bool_)
+        if isinstance(result, numpy.ndarray) and issubclass(result.dtype.type, allowed_types):
             return result
-        if isinstance(result, Number):
+        if isinstance(result, allowed_types):
             return result
         raise NonNumericEvaluation(self, result, kwargs)
 
