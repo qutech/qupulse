@@ -75,7 +75,8 @@ def plot(pulse: PulseTemplate,
          parameters: Dict[str, Parameter]=None,
          sample_rate: int=10,
          axes: Any=None,
-         show: bool=True) -> Any:  # pragma: no cover
+         show: bool=True,
+         plot_channels=None) -> Any:  # pragma: no cover
     """Plot a pulse using matplotlib.
 
     The given pulse will first be sequenced using the Sequencer class. The resulting
@@ -118,7 +119,8 @@ def plot(pulse: PulseTemplate,
         figure = plt.figure()
         axes = figure.add_subplot(111)
     for ch_name, voltage in voltages.items():
-        axes.step(times, voltage, where='post', label='channel {}'.format(ch_name))
+        if plot_channels is None or ch_name in plot_channels:
+            axes.step(times, voltage, where='post', label='channel {}'.format(ch_name))
 
     axes.legend()
 
