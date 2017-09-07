@@ -1,13 +1,21 @@
-qctoolkit.utils package
-=======================
+qctoolkit\.utils package
+========================
 
 Submodules
 ----------
 
-qctoolkit.utils.type_check module
----------------------------------
+qctoolkit\.utils\.tree module
+-----------------------------
 
-.. automodule:: qctoolkit.utils.type_check
+.. automodule:: qctoolkit.utils.tree
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+qctoolkit\.utils\.types module
+------------------------------
+
+.. automodule:: qctoolkit.utils.types
     :members:
     :undoc-members:
     :show-inheritance:
