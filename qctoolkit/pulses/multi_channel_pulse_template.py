@@ -7,21 +7,25 @@ Classes:
     - MultiChannelWaveform: A waveform defined for several channels by combining waveforms
 """
 
-from typing import Dict, List, Tuple, Set, Optional, Any, Iterable
+from typing import Dict, List, Optional, Any, Iterable, Union, Set, Sequence
+import itertools
+import numbers
 
 import numpy
 
+
 from qctoolkit.serialization import Serializer
 
+from qctoolkit.utils.types import MeasurementWindow, ChannelID
 from qctoolkit.pulses.instructions import Waveform
-from qctoolkit.pulses.pulse_template import AtomicPulseTemplate
-from qctoolkit.pulses.pulse_template_parameter_mapping import PulseTemplateParameterMapping, \
-    MissingMappingException
-from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter, \
-    ParameterNotProvidedException
+from qctoolkit.pulses.pulse_template import PulseTemplate, AtomicPulseTemplate
+from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingException, MappingPulseTemplate,\
+    MissingParameterDeclarationException, MappingTuple
+from qctoolkit.pulses.parameters import Parameter, ParameterConstrainer
 from qctoolkit.pulses.conditions import Condition
+from qctoolkit.expressions import Expression
 
-__all__ = ["MultiChannelWaveform", "MultiChannelPulseTemplate"]
+__all__ = ["MultiChannelWaveform", "AtomicMultiChannelPulseTemplate"]
 
 
 class MultiChannelWaveform(Waveform):
@@ -43,7 +47,7 @@ class MultiChannelWaveform(Waveform):
         assigned more than one channel of any Waveform object it consists of
     """
 
-    def __init__(self, subwaveforms: List[Tuple[Waveform, List[int]]]) -> None:
+    def __init__(self, sub_waveforms: Iterable[Waveform]) -> None:
         """Create a new MultiChannelWaveform instance.
 
         Requires a list of subwaveforms in the form (Waveform, List(int)) where the list defines
@@ -51,8 +55,8 @@ class MultiChannelWaveform(Waveform):
         subwaveform will be mapped to channel y of this MultiChannelWaveform object.
 
         Args:
-            subwaveforms (List( (Waveform, List(int)) )): The list of subwaveforms of this
-                MultiChannelWaveform as tuples of the form (Waveform, List(int))
+            sub_waveforms (Iterable( Waveform )): The list of sub waveforms of this
+                MultiChannelWaveform
         Raises:
             ValueError, if a channel mapping is out of bounds of the channels defined by this
                 MultiChannelWaveform
@@ -61,224 +65,192 @@ class MultiChannelWaveform(Waveform):
             ValueError, if subwaveforms have inconsistent durations
         """
         super().__init__()
-        if not subwaveforms:
+        if not sub_waveforms:
             raise ValueError(
                 "MultiChannelWaveform cannot be constructed without channel waveforms."
             )
 
-        self.__channel_waveforms = subwaveforms
-        num_channels = self.num_channels
-        duration = subwaveforms[0][0].duration
-        assigned_channels = set()
-        for waveform, channel_mapping in self.__channel_waveforms:
-            if waveform.duration != duration:
-                raise ValueError(
-                    "MultiChannelWaveform cannot be constructed from channel waveforms of different"
-                    "lengths."
-                )
-            # ensure that channel mappings stay within bounds
-            out_of_bounds_channel = [channel for channel in channel_mapping
-                                     if channel >= num_channels or channel < 0]
-            if out_of_bounds_channel:
-                raise ValueError(
-                    "The channel mapping {}, assigned to a channel waveform, is not valid (must be "
-                    "greater than 0 and less than {}).".format(out_of_bounds_channel.pop(),
-                                                               num_channels)
-                )
-            # ensure that only a single waveform is mapped to each channel
-            for channel in channel_mapping:
-                if channel in assigned_channels:
-                    raise ValueError("The channel {} has multiple channel waveform assignments"
-                                     .format(channel))
+        # avoid unnecessary multi channel nesting
+        def flatten_sub_waveforms(to_flatten):
+            for sub_waveform in to_flatten:
+                if isinstance(sub_waveform, MultiChannelWaveform):
+                    yield from sub_waveform._sub_waveforms
                 else:
-                    assigned_channels.add(channel)
+                    yield sub_waveform
 
+        # sort the waveforms with their defined channels to make compare key reproducible
+        def get_sub_waveform_sort_key(waveform):
+            return tuple(sorted(tuple('{}_stringified_numeric_channel'.format(ch) if isinstance(ch, int) else ch
+                                      for ch in waveform.defined_channels)))
+
+        self._sub_waveforms = sorted(flatten_sub_waveforms(sub_waveforms),
+                                     key=get_sub_waveform_sort_key)
+
+        if not all(waveform.duration == self._sub_waveforms[0].duration for waveform in self._sub_waveforms[1:]):
+            raise ValueError(
+                "MultiChannelWaveform cannot be constructed from channel waveforms of different"
+                "lengths."
+            )
+        self.__defined_channels = set()
+        for waveform in self._sub_waveforms:
+            if waveform.defined_channels & self.__defined_channels:
+                raise ValueError('Channel may not be defined in multiple waveforms')
+            self.__defined_channels |= waveform.defined_channels
 
     @property
     def duration(self) -> float:
-        return self.__channel_waveforms[0][0].duration
+        return self._sub_waveforms[0].duration
 
-    def sample(self, sample_times: numpy.ndarray, first_offset: float=0) -> numpy.ndarray:
-        voltages_transposed = numpy.empty((self.num_channels, len(sample_times)))
-        for waveform, channel_mapping in self.__channel_waveforms:
-            waveform_voltages_transposed = waveform.sample(sample_times, first_offset)
-            for old_c, new_c in enumerate(channel_mapping):
-                voltages_transposed[new_c] = waveform_voltages_transposed[old_c]
-        return voltages_transposed
+    def __getitem__(self, key: ChannelID) -> Waveform:
+        for waveform in self._sub_waveforms:
+            if key in waveform.defined_channels:
+                return waveform
+        raise KeyError('Unknown channel ID: {}'.format(key), key)
 
     @property
-    def num_channels(self) -> int:
-        return sum([waveform.num_channels for waveform, _ in self.__channel_waveforms])
+    def defined_channels(self) -> Set[ChannelID]:
+        return self.__defined_channels
 
     @property
     def compare_key(self) -> Any:
-        return self.__channel_waveforms
+        # sort with channels
+        return tuple(sub_waveform.compare_key for sub_waveform in self._sub_waveforms)
+
+    def unsafe_sample(self,
+                      channel: ChannelID,
+                      sample_times: numpy.ndarray,
+                      output_array: Union[numpy.ndarray, None]=None) -> numpy.ndarray:
+        return self[channel].unsafe_sample(channel, sample_times, output_array)
+
+    def get_measurement_windows(self) -> Iterable[MeasurementWindow]:
+        return itertools.chain.from_iterable(sub_waveform.get_measurement_windows()
+                                             for sub_waveform in self._sub_waveforms)
+
+    def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> 'Waveform':
+        relevant_sub_waveforms = tuple(swf for swf in self._sub_waveforms if swf.defined_channels & channels)
+        if len(relevant_sub_waveforms) == 1:
+            return relevant_sub_waveforms[0].get_subset_for_channels(channels)
+        elif len(relevant_sub_waveforms) > 1:
+            return MultiChannelWaveform(
+                sub_waveform.get_subset_for_channels(channels & sub_waveform.defined_channels)
+                for sub_waveform in relevant_sub_waveforms)
+        else:
+            raise KeyError('Unknown channels: {}'.format(channels))
 
 
-class MultiChannelPulseTemplate(AtomicPulseTemplate):
-    """A multi-channel group of several AtomicPulseTemplate objects.
-
-    While SequencePulseTemplate combines several subtemplates (with an identical number of channels)
-    for subsequent execution, MultiChannelPulseTemplate combines several subtemplates into a new
-    template defined for the sum of the channels of the subtemplates.
-    A constraint is that the subtemplates must only be AtomicPulseTemplate objects, i.e., not define
-    any changes in the control flow and be directly translatable into waveforms. Additionally,
-    for each possible set of parameter value assignments, the waveforms resulting from the templates
-    must be of the same duration. However, this cannot be enforced during the construction of the
-    MultiChannelPulseTemplate object. Instead, if subtemplate misbehave, an exception will be raised
-    during translation in the build_waveform and build_sequence methods.
-
-    MultiChannelPulseTemplate allows an arbitrary mapping of channels defined by the subtemplates
-    and the channels it defines. For example, if the MultiChannelPulseTemplate consists
-    of a two subtemplates A and B which define two channels each, then the channels of the
-    MultiChannelPulseTemplate may be 0: A.1, 1: B.0, 2: B.1, 3: A.0 where A.0 means channel 0 of A.
-    The channel mapping must be sane, i.e., to no channel of the MultiChannelPulseTemplate must be
-    assigned more than one channel of any subtemplate.
-
-    Finally, MultiChannelPulseTemplate allows a mapping of parameter in the same way and with
-    the same constraints as SequencePulseTemplate.
-
-    See Also:
-        - SequencePulseTemplate
-        - AtomicPulseTemplate
-        - MultiChannelWaveform
-    """
-
-    Subtemplate = Tuple[AtomicPulseTemplate, Dict[str, str], List[int]]
-
+class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
     def __init__(self,
-                 subtemplates: Iterable[Subtemplate],
-                 external_parameters: Set[str],
-                 identifier: str=None) -> None:
-        """Creates a new MultiChannelPulseTemplate instance.
+                 *subtemplates: Union[AtomicPulseTemplate, MappingTuple, MappingPulseTemplate],
+                 external_parameters: Optional[Set[str]]=None,
+                 identifier: Optional[str]=None,
+                 parameter_constraints: Optional[List]=None) -> None:
+        AtomicPulseTemplate.__init__(self, identifier=identifier)
+        ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 
-        Requires a list of subtemplates in the form
-        (PulseTemplate, Dict(str -> str), List(int)) where the dictionary is a mapping between the
-        external parameters exposed by this SequencePulseTemplate to the parameters declared by the
-        subtemplates, specifying how the latter are derived from the former, i.e., the mapping is
-        subtemplate_parameter_name -> mapping_expression (as str) where the free variables in the
-        mapping_expression are parameters declared by this MultiChannelPulseTemplate.
-        The list defines the channel mapping, i.e., a value y at index x in the list means that
-        channel x of the subtemplate will be mapped to channel y of this MultiChannelPulseTemplate.
+        self._subtemplates = [st if isinstance(st, PulseTemplate) else MappingPulseTemplate.from_tuple(st) for st in
+                              subtemplates]
 
-        Args:
-            subtemplates (List(Subtemplate)): The list of subtemplates of this
-                MultiChannelPulseTemplate as tuples of the form
-                (PulseTemplate, Dict(str -> str), List(int)).
-            external_parameters (List(str)): A set of names for external parameters of this
-                MultiChannelPulseTemplate.
-            identifier (str): A unique identifier for use in serialization. (optional)
-        Raises:
-            ValueError, if a channel mapping is out of bounds of the channels defined by this
-                MultiChannelPulseTemplate.
-            ValueError, if several subtemplate channels are assigned to a single channel of this
-                MultiChannelPulseTemplate.
-            MissingMappingException, if a parameter of a subtemplate is not mapped to the external
-                parameters of this MultiChannelPulseTemplate.
-            MissingParameterDeclarationException, if a parameter mapping requires a parameter
-                that was not declared in the external parameters of this MultiChannelPulseTemplate.
-        """
-        super().__init__(identifier=identifier)
-        self.__parameter_mapping = PulseTemplateParameterMapping(external_parameters)
-        self.__subtemplates = [(template, channel_mapping) for (template, _, channel_mapping)
-                               in subtemplates]
-
-        assigned_channels = set()
-        num_channels = self.num_channels
-        for template, mapping_functions, channel_mapping in subtemplates:
-            # Consistency checks
-            for parameter, mapping_function in mapping_functions.items():
-                self.__parameter_mapping.add(template, parameter, mapping_function)
-
-            remaining = self.__parameter_mapping.get_remaining_mappings(template)
-            if remaining:
-                raise MissingMappingException(template,
-                                              remaining.pop())
-
-
-            # ensure that channel mappings stay within bounds
-            out_of_bounds_channel = [channel for channel in channel_mapping
-                                     if channel >= num_channels or channel < 0]
-            if out_of_bounds_channel:
-                raise ValueError(
-                    "The channel mapping {}, assigned to a channel waveform, is not valid (must be "
-                    "greater than 0 and less than {}).".format(out_of_bounds_channel.pop(),
-                                                               num_channels)
-                )
-            # ensure that only a single waveform is mapped to each channel
-            for channel in channel_mapping:
-                if channel in assigned_channels:
-                    raise ValueError("The channel {} has multiple channel waveform assignments"
-                                     .format(channel))
+        for subtemplate in self._subtemplates:
+            if isinstance(subtemplate, AtomicPulseTemplate):
+                continue
+            elif isinstance(subtemplate, MappingPulseTemplate):
+                if isinstance(subtemplate.template, AtomicPulseTemplate):
+                    continue
                 else:
-                    assigned_channels.add(channel)
+                    raise TypeError('Non atomic subtemplate of MappingPulseTemplate: {}'.format(subtemplate.template))
+            else:
+                raise TypeError('Non atomic subtemplate: {}'.format(subtemplate))
+
+        if not self._subtemplates:
+            raise ValueError('Cannot create empty MultiChannelPulseTemplate')
+
+        defined_channels = [st.defined_channels for st in self._subtemplates]
+
+        # check there are no intersections between channels
+        for i, channels_i in enumerate(defined_channels):
+            for j, channels_j in enumerate(defined_channels[i + 1:]):
+                if channels_i & channels_j:
+                    raise ChannelMappingException('subtemplate {}'.format(i + 1),
+                                                  'subtemplate {}'.format(i + 2 + j),
+                                                  (channels_i | channels_j).pop())
+
+        if external_parameters is not None:
+            remaining = external_parameters.copy()
+            for subtemplate in self._subtemplates:
+                missing = subtemplate.parameter_names - external_parameters
+                if missing:
+                    raise MissingParameterDeclarationException(subtemplate, missing.pop())
+                remaining -= subtemplate.parameter_names
+            missing = self.constrained_parameters - external_parameters
+            if missing:
+                raise MissingParameterDeclarationException(self, missing.pop())
+            remaining -= self.constrained_parameters
+            if remaining:
+                raise MissingMappingException(self, remaining.pop())
+
+        duration = self._subtemplates[0].duration
+        for subtemplate in self._subtemplates[1:]:
+            if (duration == subtemplate.duration) is True:
+                continue
+            else:
+                raise ValueError('Could not assert duration equality of {} and {}'.format(duration,
+                                                                                          subtemplate.duration))
+
+    @property
+    def duration(self) -> Expression:
+        return self._subtemplates[0].duration
 
     @property
     def parameter_names(self) -> Set[str]:
-        return self.__parameter_mapping.external_parameters
+        return set.union(*(st.parameter_names for st in self._subtemplates)) | self.constrained_parameters
 
     @property
-    def parameter_declarations(self) -> Set[ParameterDeclaration]:
-        # TODO: min, max, default values not mapped (required?)
-        return {ParameterDeclaration(parameter_name) for parameter_name in self.parameter_names}
-
-    def get_measurement_windows(self, parameters: Dict[str, Parameter] = None) \
-            -> List['MeasurementWindow']:
-        raise NotImplementedError()
+    def subtemplates(self) -> Sequence[AtomicPulseTemplate]:
+        return self._subtemplates
 
     @property
-    def is_interruptable(self) -> bool:
-        return all(t.is_interruptable for t, _ in self.__subtemplates)
+    def defined_channels(self) -> Set[ChannelID]:
+        return set.union(*(st.defined_channels for st in self._subtemplates))
 
     @property
-    def num_channels(self) -> int:
-        return sum(t.num_channels for t, _ in self.__subtemplates)
+    def measurement_names(self) -> Set[str]:
+        return set.union(*(st.measurement_names for st in self._subtemplates))
+
+    def build_waveform(self, parameters: Dict[str, numbers.Real],
+                       measurement_mapping: Dict[str, str],
+                       channel_mapping: Dict[ChannelID, ChannelID]) -> Optional['MultiChannelWaveform']:
+        self.validate_parameter_constraints(parameters=parameters)
+        return MultiChannelWaveform(
+            [subtemplate.build_waveform(parameters,
+                                        measurement_mapping=measurement_mapping,
+                                        channel_mapping=channel_mapping) for subtemplate in self._subtemplates])
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],
-                      conditions: Dict[str, Condition]) -> bool:
-        return any(t.requires_stop(self.__parameter_mapping.map_parameters(t, parameters),
-                                   conditions)
-                   for t, _ in self.__subtemplates)
-
-    def build_waveform(self, parameters: Dict[str, Parameter]) -> Optional[Waveform]:
-        missing = self.parameter_names - parameters.keys()
-        if missing:
-            raise ParameterNotProvidedException(missing.pop())
-
-        channel_waveforms = []
-        for template, channel_mapping in self.__subtemplates:
-            inner_parameters = self.__parameter_mapping.map_parameters(template, parameters)
-            waveform = template.build_waveform(inner_parameters)
-            channel_waveforms.append((waveform, channel_mapping))
-        waveform = MultiChannelWaveform(channel_waveforms)
-        return waveform
+                      conditions: Dict[str, 'Condition']) -> bool:
+        return any(st.requires_stop(parameters, conditions) for st in self._subtemplates)
 
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
-        subtemplates = []
-        for subtemplate, channel_mapping in self.__subtemplates:
-            mapping_functions = self.__parameter_mapping.get_template_map(subtemplate)
-            mapping_function_strings = \
-                {k: serializer.dictify(m) for k, m in mapping_functions.items()}
-            subtemplate = serializer.dictify(subtemplate)
-            subtemplates.append(dict(template=subtemplate,
-                                     parameter_mappings=mapping_function_strings,
-                                     channel_mappings=channel_mapping))
-        return dict(subtemplates=subtemplates,
-                    external_parameters=sorted(list(self.parameter_names)))
+        data = dict(subtemplates=[serializer.dictify(subtemplate) for subtemplate in self.subtemplates],
+                    parameter_constraints=[str(constraint) for constraint in self.parameter_constraints])
+        return data
 
     @staticmethod
     def deserialize(serializer: Serializer,
                     subtemplates: Iterable[Dict[str, Any]],
-                    external_parameters: Iterable[str],
-                    identifier: Optional[str]=None) -> 'MultiChannelPulseTemplate':
-        subtemplates = \
-            [(serializer.deserialize(subt['template']),
-              {k: str(serializer.deserialize(m)) for k, m in subt['parameter_mappings'].items()},
-              subt['channel_mappings'])
-             for subt in subtemplates]
+                    parameter_constraints: Any,
+                    identifier: Optional[str] = None) -> 'AtomicMultiChannelPulseTemplate':
+        subtemplates = [serializer.deserialize(st) for st in subtemplates]
+        return AtomicMultiChannelPulseTemplate(*subtemplates,
+                                               parameter_constraints=parameter_constraints,
+                                               identifier=identifier)
 
-        template = MultiChannelPulseTemplate(subtemplates,
-                                             external_parameters,
-                                             identifier=identifier)
-        return template
+
+class ChannelMappingException(Exception):
+    def __init__(self, obj1, obj2, intersect_set):
+        self.intersect_set = intersect_set
+        self.obj1 = obj1
+        self.obj2 = obj2
+
+    def __str__(self) -> str:
+        return 'Channel <{chs}> is defined in {o1} and {o2}'.format(chs=self.intersect_set, o1=self.obj1, o2=self.obj2)

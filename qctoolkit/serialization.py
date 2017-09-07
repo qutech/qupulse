@@ -16,7 +16,7 @@ import zipfile
 import tempfile
 import json
 
-__all__ = ["StorageBackend", "FilesystemBackend", "ZipFileBackend" "CachingBackend", "Serializable", "Serializer"]
+__all__ = ["StorageBackend", "FilesystemBackend", "ZipFileBackend", "CachingBackend", "Serializable", "Serializer"]
 
 
 class StorageBackend(metaclass=ABCMeta):
@@ -74,10 +74,10 @@ class FilesystemBackend(StorageBackend):
         """Create a new FilesystemBackend.
 
         Args:
-            root (str): The path of the directory in which all data files are located. (default: ".",
+            root: The path of the directory in which all data files are located. (default: ".",
                 i.e. the current directory)
         Raises:
-            NotADirectoryError if root is not a valid directory path.
+            NotADirectoryError: if root is not a valid directory path.
         """
         if not os.path.isdir(root):
             raise NotADirectoryError()
@@ -240,11 +240,11 @@ class Serializable(metaclass=ABCMeta):
         """Initialize a Serializable.
 
         Args:
-            identifier (str): An optional, non-empty identifier for this Serializable.
+            identifier: An optional, non-empty identifier for this Serializable.
                 If set, this Serializable will always be stored as a separate data item and never
-                be embedded. (default=None)
+                be embedded.
         Raises:
-            ValueError if identifier is the empty string
+            ValueError: If identifier is the empty string
         """
         super().__init__()
         if identifier == '':
@@ -280,15 +280,15 @@ class Serializable(metaclass=ABCMeta):
         """Reconstruct the Serializable object from a dictionary.
 
         Implementation hint:
-        For greater clarity, implementations of this method should be precise in their return value,
-        i.e., give their exact class name, and also replace the **kwargs argument by a list of
-        arguments required, i.e., those returned by get_serialization_data.
-        If this Serializable contains complex objects which are itself Serializables, their
-        dictionary representations MUST be converted into objects using serializers deserialize()
-        method.
+            For greater clarity, implementations of this method should be precise in their return value,
+            i.e., give their exact class name, and also replace the **kwargs argument by a list of
+            arguments required, i.e., those returned by get_serialization_data.
+            If this Serializable contains complex objects which are itself of type Serializable, their
+            dictionary representations MUST be converted into objects using serializers deserialize()
+            method.
 
          Args:
-             serializer (Serializer): A serializer instance used when deserializing subelements.
+             serializer: A serializer instance used when deserializing subelements.
              <property_name>: All relevant properties of the object as keyword arguments. For every
                 (key,value) pair returned by get_serialization_data, the same pair is given as
                 keyword argument as input to this method.
@@ -410,7 +410,7 @@ class Serializer(object):
             storage_identifier = identifier
             if identifier == '':
                 storage_identifier = 'main'
-            json_str = json.dumps(repr_[identifier], indent=4, sort_keys=True)
+            json_str = json.dumps(repr_[identifier], indent=4, sort_keys=True, cls=ExtendedJSONEncoder)
             self.__storage_backend.put(storage_identifier, json_str, overwrite)
 
     def deserialize(self, representation: Union[str, Dict[str, Any]]) -> Serializable:
@@ -437,3 +437,19 @@ class Serializer(object):
 
         repr_.pop('type')
         return class_.deserialize(self, **repr_)
+
+
+class ExtendedJSONEncoder(json.JSONEncoder):
+    """Encodes types that are registered in str_constructable_types as str and sets as lists."""
+    str_constructable_types = set()
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def default(self, o: Any) -> Any:
+        if type(o) in ExtendedJSONEncoder.str_constructable_types:
+            return str(o)
+        elif type(o) is set:
+            return list(o)
+        else:
+            return super().default(o)

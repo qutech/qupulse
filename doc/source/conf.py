@@ -33,15 +33,19 @@ sys.path.insert(0, os.path.abspath('../..'))
 extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.napoleon',
+    'sphinx_autodoc_typehints',
     'sphinx.ext.intersphinx',
     'sphinx.ext.todo',
     'sphinx.ext.coverage',
     'sphinx.ext.mathjax',
     'sphinx.ext.ifconfig',
     'sphinx.ext.viewcode',
-    'sphinx.ext.autodoc',
     'nbsphinx'
 ]
+
+autodoc_default_flags = ['members', 'undoc-members', 'show-inheritance']  # 'private-members', 'special-members', 'inherited-members'
+autoclass_content = 'both'
+napoleon_include_init_with_doc = True
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -299,3 +303,19 @@ texinfo_documents = [
 
 # Example configuration for intersphinx: refer to the Python standard library.
 intersphinx_mapping = {'https://docs.python.org/': None}
+
+
+def skip(app, what, name, obj, skip, options):
+    if name == "__init__" and hasattr(obj, '__doc__') and isinstance(obj.__doc__, str) and len(obj.__doc__):
+        return True
+    return skip
+
+def change_property_rtype_to_type(app, what, name, obj, options, lines):
+    if what == 'attribute':
+        for i, line in enumerate(lines):
+            print(line)
+            lines[i] = line.replace(':rtype: :py:class:', ':type:')
+
+def setup(app):
+    app.connect('autodoc-skip-member', skip)
+    #app.connect('autodoc-process-docstring', change_property_rtype_to_type)

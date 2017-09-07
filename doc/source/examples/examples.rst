@@ -7,12 +7,13 @@ All examples are provided as static text in this documentation and, additionally
 
 .. toctree::
     00SimpleTablePulse
-    01SequencePulse
+    01AdvancedTablePulse
     02FunctionPulse
-    03Serialization
-    04Sequencing
-    05Parameters
-    06ConditionalExecution
-    07PulseControl
-    08RealWorldCase
-    09DetailedSequencingWalkthrough
+    03PointPulse
+    04Serialization
+    05MappingTemplate
+    06SequencePulse
+    07MultiChannelTemplates
+    08Measurements
+    09ParameterConstraints
+    10FreeInductionDecayExample

@@ -1,705 +1,589 @@
 import unittest
+import warnings
+import functools
+
 import numpy
 
-from qctoolkit.pulses.instructions import EXECInstruction
-from qctoolkit.pulses.table_pulse_template import TablePulseTemplate, TableWaveform, TableEntry, WaveformTableEntry
-from qctoolkit.pulses.parameters import ParameterDeclaration, ParameterNotProvidedException, ParameterValueIllegalException
+from qctoolkit.expressions import Expression
+from qctoolkit.serialization import Serializer
+from qctoolkit.pulses.table_pulse_template import TablePulseTemplate, TableWaveform, TableEntry, TableWaveformEntry, ZeroDurationTablePulseTemplate, AmbiguousTablePulseEntry
+from qctoolkit.pulses.parameters import ParameterNotProvidedException, ParameterConstraintViolation
 from qctoolkit.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy, JumpInterpolationStrategy
+from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 
 from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyInterpolationStrategy, DummyParameter, DummyCondition
-from tests.serialization_dummies import DummySerializer
+from tests.serialization_dummies import DummySerializer, DummyStorageBackend
+from tests.pulses.measurement_tests import ParameterConstrainerTest, MeasurementDefinerTest
+
+
+class WaveformEntryTest(unittest.TestCase):
+    def test_interpolation_exception(self):
+        with self.assertRaises(TypeError):
+            TableWaveformEntry(1, 2, 3)
+
+class TableEntryTest(unittest.TestCase):
+    def test_known_interpolation_strategies(self):
+        strategies = [("linear", LinearInterpolationStrategy()),
+                      ("hold", HoldInterpolationStrategy()),
+                      ("jump", JumpInterpolationStrategy())]
+
+        for strat_name, strat_val in strategies:
+            entry = TableEntry('a', Expression('b'), strat_name)
+
+            self.assertEqual(entry.t, Expression('a'))
+            self.assertEqual(entry.v, Expression('b'))
+            self.assertEqual(entry.interp, strat_val)
+
+    def test_unknown_interpolation_strategy(self):
+        with self.assertRaises(KeyError):
+            TableEntry(0, 0, 'foo')
 
 
 class TablePulseTemplateTest(unittest.TestCase):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
-    def test_add_entry_known_interpolation_strategies(self) -> None:
-        table = TablePulseTemplate()
-        strategies = ["linear", "hold", "jump"]
-        for i,strategy in enumerate(strategies):
-            table.add_entry(i, i, strategy)
-
-        manual = [[(0,0,LinearInterpolationStrategy()), (1,1,HoldInterpolationStrategy()), (2,2,JumpInterpolationStrategy())]]
-        self.assertEqual(manual, table.entries)
-
-    def test_add_entry_unknown_interpolation_strategy(self) -> None:
-        table = TablePulseTemplate()
+    def test_time_is_negative(self) -> None:
         with self.assertRaises(ValueError):
-            table.add_entry(0, 0, 'foo')
-        with self.assertRaises(ValueError):
-            table.add_entry(3.2, 0, 'foo')
-
-    def test_add_entry_for_interpolation(self) -> None:
-        table = TablePulseTemplate()
-        strategies = ["linear","hold","jump","hold"]
-        for i,strategy in enumerate(strategies):
-            table.add_entry(2*(i+1), i+1, strategy)
+            TablePulseTemplate({0: [(1, 2),
+                                   (2, 3),
+                                   (-1, 3)]})
 
         with self.assertRaises(ValueError):
-            table.add_entry(1,2, "bar")
+            TablePulseTemplate({0: [(-1, 2),
+                                   (2, 3),
+                                   (3, 3)]})
 
-    def test_measurement_windows(self) -> None:
-        pulse = TablePulseTemplate(measurement=True)
-        pulse.add_entry(1, 1)
-        pulse.add_entry(3, 0)
-        pulse.add_entry(5, 0)
-        windows = pulse.get_measurement_windows()
-        self.assertEqual([(0,5)], windows)
-
-    def test_no_measurement_windows(self) -> None:
-        pulse = TablePulseTemplate(measurement=False)
-        pulse.add_entry(1, 1)
-        pulse.add_entry(3, 0)
-        pulse.add_entry(5, 0)
-        windows = pulse.get_measurement_windows()
-        self.assertEqual([], windows)
-
-    def test_measurement_windows_with_parameters(self) -> None:
-        pulse = TablePulseTemplate(measurement=True)
-        pulse.add_entry('length', 0)
-        parameters = dict(length=100)
-        windows = pulse.get_measurement_windows(parameters)
-        self.assertEqual(windows, [(0, 100)])
-
-    def test_add_entry_empty_time_is_negative(self) -> None:
-        table = TablePulseTemplate()
+    def test_time_not_increasing(self):
         with self.assertRaises(ValueError):
-            table.add_entry(-2, 0)
-        self.assertEqual([[TableEntry(0, 0, HoldInterpolationStrategy())]], table.entries)
-        #self.assertFalse(table.entries[0])
-        self.assertFalse(table.parameter_declarations)
-        self.assertFalse(table.parameter_names)
+            TablePulseTemplate({0: [(1, 2),
+                                    (2, 3),
+                                    (1.9, 3),
+                                    (3, 1.1)]})
 
-    def test_add_entry_empty_time_is_0(self) -> None:
-        table = TablePulseTemplate()
-        table.add_entry(0, 3.1)
-        self.assertEqual([[(0, 3.1, HoldInterpolationStrategy())]], table.entries)
-        self.assertFalse(table.parameter_names)
-        self.assertFalse(table.parameter_declarations)
-
-    def test_add_entry_empty_time_is_0_voltage_is_parameter(self) -> None:
-        table = TablePulseTemplate()
-        table.add_entry(0, 'foo')
-        decl = ParameterDeclaration('foo')
-        self.assertEqual([[(0, decl, HoldInterpolationStrategy())]], table.entries)
-        self.assertEqual({'foo'}, table.parameter_names)
-        self.assertEqual({decl}, table.parameter_declarations)
-
-    def test_add_entry_empty_time_is_positive(self) -> None:
-        table = TablePulseTemplate()
-        table.add_entry(2, -254.67)
-        self.assertEqual([[(0, 0, HoldInterpolationStrategy()), (2, -254.67, HoldInterpolationStrategy())]], table.entries)
-        self.assertFalse(table.parameter_names)
-        self.assertFalse(table.parameter_declarations)
-
-    def test_add_entry_empty_time_is_str(self) -> None:
-        table = TablePulseTemplate()
-        table.add_entry('t', 0)
-        decl = ParameterDeclaration('t', min=0)
-        self.assertEqual([[(0, 0, HoldInterpolationStrategy()), (decl, 0, HoldInterpolationStrategy())]], table.entries)
-        self.assertEqual({'t'}, table.parameter_names)
-        self.assertEqual({decl}, table.parameter_declarations)
-
-    def test_add_entry_empty_time_is_declaration(self) -> None:
-        table = TablePulseTemplate()
-        decl = ParameterDeclaration('foo')
-        table.add_entry(decl, 0)
-        decl.min_value = 0
-        self.assertEqual([[(0, 0, HoldInterpolationStrategy()), (decl, 0, HoldInterpolationStrategy())]], table.entries)
-        self.assertEqual({'foo'}, table.parameter_names)
-        self.assertEqual({decl}, table.parameter_declarations)
-
-    def test_add_entry_time_float_after_float(self) -> None:
-        table = TablePulseTemplate()
-        table.add_entry(1.2, -3.8)
-        # expect ValueError if next float is smaller than previous
         with self.assertRaises(ValueError):
-            table.add_entry(0.423, 0)
-        # adding a higher value or equal value as last entry should work
-        table.add_entry(1.2, 2.5252)
-        table.add_entry(3.7, 1.34875)
-        self.assertEqual([[(0, 0, HoldInterpolationStrategy()), (1.2, 2.5252, HoldInterpolationStrategy()), (3.7, 1.34875, HoldInterpolationStrategy())]], table.entries)
-        self.assertFalse(table.parameter_names)
-        self.assertFalse(table.parameter_declarations)
+            TablePulseTemplate({0: [('a', 2),
+                                    (2, 3),
+                                    (1.9, 3),
+                                    ('b', 1.1)]})
 
-    def test_add_entry_time_float_after_declaration_no_bound(self) -> None:
-        table = TablePulseTemplate()
-        table.add_entry('t', 7.1)
-        table.add_entry(2.1, 5.5)
-        decl = ParameterDeclaration('t', min=0, max=2.1)
-        self.assertEqual([[(0, 0, HoldInterpolationStrategy()), (decl, 7.1, HoldInterpolationStrategy()), (2.1, 5.5, HoldInterpolationStrategy())]], table.entries)
-        self.assertEqual({'t'}, table.parameter_names)
-        self.assertEqual({decl}, table.parameter_declarations)
-
-    def test_add_entry_time_float_after_declaration_greater_bound(self) -> None:
-        table = TablePulseTemplate()
-        decl = ParameterDeclaration('t', max=3.4)
-        table.add_entry(decl, 7.1)
-        table.add_entry(2.1, 5.5)
-        expected_decl = ParameterDeclaration('t', min=0, max=2.1)
-        self.assertEqual([[(0, 0, HoldInterpolationStrategy()), (expected_decl, 7.1, HoldInterpolationStrategy()), (2.1, 5.5, HoldInterpolationStrategy())]], table.entries)
-        self.assertEqual({'t'}, table.parameter_names)
-        self.assertEqual({expected_decl}, table.parameter_declarations)
-
-    def test_add_entry_time_float_after_declaration_smaller_bound(self) -> None:
-        table = TablePulseTemplate()
-        decl = ParameterDeclaration('t', min=1.0, max=1.3)
-        table.add_entry(decl, 7.1)
-        table.add_entry(2.1, 5.5)
-        self.assertEqual([[(0, 0, HoldInterpolationStrategy()), (decl, 7.1, HoldInterpolationStrategy()), (2.1, 5.5, HoldInterpolationStrategy())]], table.entries)
-        self.assertEqual({'t'}, table.parameter_names)
-        self.assertEqual({decl}, table.parameter_declarations)
-
-    def test_add_entry_time_float_after_declaration_smaller_than_min_bound(self) -> None:
-        table = TablePulseTemplate()
-        decl = ParameterDeclaration('t', min=1.2, max=83456.2)
-        table.add_entry(decl, 2.2)
         with self.assertRaises(ValueError):
-            table.add_entry(1.1, -6.3)
-        self.assertEqual([[(0, 0, HoldInterpolationStrategy()), (decl, 2.2, HoldInterpolationStrategy())]], table.entries)
-        self.assertEqual({'t'}, table.parameter_names)
-        self.assertEqual({decl}, table.parameter_declarations)
+            TablePulseTemplate({0: [(2, 3),
+                                    ('a', 2),
+                                    (1.9, 3),
+                                    ('b', 1.1)]})
 
-    def test_add_entry_time_parameter_name_in_use_as_voltage(self) -> None:
-        table = TablePulseTemplate()
-        table.add_entry(0, 'foo')
-        foo_decl = ParameterDeclaration('foo')
-        self.assertEqual({'foo'}, table.parameter_names)
-        self.assertEqual({foo_decl}, table.parameter_declarations)
         with self.assertRaises(ValueError):
-            table.add_entry('foo', 4.3)
-        self.assertEqual({'foo'}, table.parameter_names)
-        self.assertEqual({foo_decl}, table.parameter_declarations)
-        self.assertEqual([[(0, foo_decl, HoldInterpolationStrategy())]], table.entries)
+            TablePulseTemplate({0: [(1, 2),
+                                    (2, 3),
+                                    (1.9, 3)]})
 
-    def test_add_entry_time_parmeter_name_in_use_as_time(self) -> None:
-        table = TablePulseTemplate()
-        table.add_entry('foo', 'bar')
-        foo_decl = ParameterDeclaration('foo', min=0)
-        bar_decl = ParameterDeclaration('bar')
         with self.assertRaises(ValueError):
-            table.add_entry(ParameterDeclaration('foo'), 3.4)
-        self.assertEqual([[(0, 0, HoldInterpolationStrategy()), (foo_decl, bar_decl, HoldInterpolationStrategy())]], table.entries)
-        self.assertEqual({'foo', 'bar'}, table.parameter_names)
-        self.assertEqual({foo_decl, bar_decl}, table.parameter_declarations)
+            TablePulseTemplate({0: [(2, 3),
+                                    (1.9, 'k')]})
 
-    def test_add_entry_time_declaration_invalid_bounds(self) -> None:
-        table = TablePulseTemplate()
-        bar_decl = ParameterDeclaration('bar')
-        foo_decl = ParameterDeclaration('foo')
-        foo_decl.min_value = bar_decl
         with self.assertRaises(ValueError):
-            table.add_entry(foo_decl, 23857.23)
+            TablePulseTemplate({0: [('a', 3),
+                                    (2, 'n'),
+                                    (3, 'm'),
+                                    ('a', 'k')]})
+
+    def test_inconsistent_parameters(self):
         with self.assertRaises(ValueError):
-            table.add_entry(bar_decl, -4967.1)
-        self.assertEquals([[TableEntry(0, 0, HoldInterpolationStrategy())]], table.entries)
-        self.assertFalse(table.parameter_names)
-        self.assertFalse(table.parameter_declarations)
+            TablePulseTemplate({0: [('a', 1),
+                                    (2, 0)],
+                                1: [(3, 6),
+                                    ('a', 7)]})
 
-    def test_add_entry_time_declaration_no_bounds_after_float(self) -> None:
-        table = TablePulseTemplate()
-        table.add_entry(3.2, 92.1)
-        table.add_entry('t', 1.2)
-        decl = ParameterDeclaration('t', min=3.2)
-        self.assertEqual([[(0, 0, HoldInterpolationStrategy()), (3.2, 92.1, HoldInterpolationStrategy()), (decl, 1.2, HoldInterpolationStrategy())]], table.entries)
-        self.assertEqual({'t'}, table.parameter_names)
-        self.assertEqual({decl}, table.parameter_declarations)
-
-    def test_add_entry_time_declaration_higher_min_after_float(self) -> None:
-        table = TablePulseTemplate()
-        table.add_entry(3.2, 92.1)
-        decl = ParameterDeclaration('t', min=4.5)
-        table.add_entry(decl, 1.2)
-        self.assertEqual([[(0, 0, HoldInterpolationStrategy()), (3.2, 92.1, HoldInterpolationStrategy()), (decl, 1.2, HoldInterpolationStrategy())]], table.entries)
-        self.assertEqual({'t'}, table.parameter_names)
-        self.assertEqual({decl}, table.parameter_declarations)
-
-    def test_add_entry_time_declaration_lower_min_after_float(self) -> None:
-        table = TablePulseTemplate()
-        table.add_entry(3.2, 92.1)
-        decl = ParameterDeclaration('t', min=0.1)
         with self.assertRaises(ValueError):
-            table.add_entry(decl, 1.2)
-        self.assertEqual([[(0, 0, HoldInterpolationStrategy()), (3.2, 92.1, HoldInterpolationStrategy())]], table.entries)
-        self.assertFalse(table.parameter_names)
-        self.assertFalse(table.parameter_declarations)
+            TablePulseTemplate({0: [('a', 1),
+                                    (2, 0)]}, parameter_constraints=['a>3'])
 
-    def test_add_entry_time_declaration_after_declaration_no_upper_bound(self) -> None:
-        table = TablePulseTemplate()
-        table.add_entry('bar', 72.14)
-        table.add_entry('foo', 0)
-        bar_decl = ParameterDeclaration('bar', min=0)
-        foo_decl = ParameterDeclaration('foo')
-        foo_decl.min_value = bar_decl
-        self.assertEqual([[(0, 0, HoldInterpolationStrategy()), (bar_decl, 72.14, HoldInterpolationStrategy()), (foo_decl, 0, HoldInterpolationStrategy())]], table.entries)
-        self.assertEqual({'bar', 'foo'}, table.parameter_names)
-        self.assertEqual({bar_decl, foo_decl}, table.parameter_declarations)
-
-    def test_add_entry_time_declaration_after_declaration_upper_bound(self) -> None:
-        table = TablePulseTemplate()
-        bar_decl = ParameterDeclaration('bar', min=1, max=2)
-        foo_decl = ParameterDeclaration('foo')
-        table.add_entry(bar_decl, -3)
-        table.add_entry(foo_decl, 0.1)
-        foo_decl.min_value = bar_decl
-        self.assertEqual([[(0, 0, HoldInterpolationStrategy()), (bar_decl, -3, HoldInterpolationStrategy()), (foo_decl, 0.1, HoldInterpolationStrategy())]], table.entries)
-        self.assertEqual({'foo', 'bar'}, table.parameter_names)
-        self.assertEqual({foo_decl, bar_decl}, table.parameter_declarations)
-
-    def test_add_entry_time_declaration_lower_bound_after_declaration_upper_bound(self) -> None:
-        table = TablePulseTemplate()
-        bar_decl = ParameterDeclaration('bar', min=1, max=2)
-        foo_decl = ParameterDeclaration('foo', min=1)
-        table.add_entry(bar_decl, -3)
-        table.add_entry(foo_decl, 0.1)
-        self.assertEqual([[(0, 0, HoldInterpolationStrategy()), (bar_decl, -3, HoldInterpolationStrategy()), (foo_decl, 0.1, HoldInterpolationStrategy())]], table.entries)
-        self.assertEqual({'foo', 'bar'}, table.parameter_names)
-        self.assertEqual({foo_decl, bar_decl}, table.parameter_declarations)
-
-    def test_add_entry_time_declaration_lower_bound_after_declaration_no_upper_bound(self) -> None:
-        table = TablePulseTemplate()
-        self.maxDiff = None
-        bar_decl = ParameterDeclaration('bar', min=1)
-        foo_decl = ParameterDeclaration('foo', min=1)
-        table.add_entry(bar_decl, -3)
-        table.add_entry(foo_decl, 0.1)
-        bar_decl.max_value = foo_decl
-        self.assertEqual([[(0, 0, HoldInterpolationStrategy()), (bar_decl, -3, HoldInterpolationStrategy()), (foo_decl, 0.1, HoldInterpolationStrategy())]], table.entries)
-        self.assertEqual({'foo', 'bar'}, table.parameter_names)
-        self.assertEqual({foo_decl, bar_decl}, table.parameter_declarations)
-
-    def test_add_entry_time_declaration_lower_bound_too_small_after_declaration_no_upper_bound(self) -> None:
-        table = TablePulseTemplate()
-        bar_decl = ParameterDeclaration('bar', min=1, max=5)
-        foo_decl = ParameterDeclaration('foo', min=0)
-        table.add_entry(bar_decl, -3)
         with self.assertRaises(ValueError):
-            table.add_entry(foo_decl, 0.1)
-        self.assertEqual([[(0, 0, HoldInterpolationStrategy()), (bar_decl, -3, HoldInterpolationStrategy())]], table.entries)
-        self.assertEqual({'bar'}, table.parameter_names)
-        self.assertEqual({bar_decl}, table.parameter_declarations)
+            TablePulseTemplate({0: [('a', 1),
+                                    (2, 0)]}, parameter_constraints=['2>3'])
 
-    def test_add_entry_time_declaration_no_lower_bound_upper_bound_too_small_after_declaration(self) -> None:
-        table = TablePulseTemplate()
-        bar_decl = ParameterDeclaration('bar', min=1, max=2)
-        foo_decl = ParameterDeclaration('foo', max=1)
-        table.add_entry(bar_decl, -3)
+    @unittest.skip(reason='Needs a better inequality solver')
+    def test_time_not_increasing_hard(self):
         with self.assertRaises(ValueError):
-            table.add_entry(foo_decl, 0.1)
-        self.assertEqual([[(0, 0, HoldInterpolationStrategy()), (bar_decl, -3, HoldInterpolationStrategy())]], table.entries)
-        self.assertEqual({'bar'}, table.parameter_names)
-        self.assertEqual({bar_decl}, table.parameter_declarations)
+            TablePulseTemplate({0: [('a*c', 3),
+                                    ('b', 1),
+                                    ('c*a', 'k')]}, parameter_constraints=['a*c < b'])
 
-    def test_add_entry_time_declaration_lower_bound_upper_bound_too_small_after_declaration(self) -> None:
-        table = TablePulseTemplate()
-        bar_decl = ParameterDeclaration('bar', min=1, max=2)
-        foo_decl = ParameterDeclaration('foo', min=1, max=1.5)
-        table.add_entry(bar_decl, -3)
-        with self.assertRaises(ValueError):
-            table.add_entry(foo_decl, 0.1)
-        self.assertEqual([[(0, 0, HoldInterpolationStrategy()), (bar_decl, -3, HoldInterpolationStrategy())]], table.entries)
-        self.assertEqual({'bar'}, table.parameter_names)
-        self.assertEqual({bar_decl}, table.parameter_declarations)
+    def test_time_is_0_on_construction(self) -> None:
+        with self.assertWarns(ZeroDurationTablePulseTemplate):
+            warnings.simplefilter('default', ZeroDurationTablePulseTemplate)
+            table = TablePulseTemplate({0: [(0, 1.4)]})
+            self.assertTrue(table.duration == 0)
+        self.assertTrue(table.duration == 0)
 
-    def test_add_entry_voltage_declaration_reuse(self) -> None:
-        table = TablePulseTemplate()
-        foo_decl = ParameterDeclaration('foo', min=0, max=3.3)
-        bar_decl = ParameterDeclaration('bar', min=-3.3, max=1.15)
-        table.add_entry(0, foo_decl)
-        table.add_entry(1.51, bar_decl)
-        table.add_entry(3, 'foo')
-        table.add_entry('t', foo_decl)
-        t_decl = ParameterDeclaration('t', min=3)
-        self.assertEqual([[(0, foo_decl, HoldInterpolationStrategy()), (1.51, bar_decl, HoldInterpolationStrategy()),
-                          (3, foo_decl, HoldInterpolationStrategy()), (t_decl, foo_decl, HoldInterpolationStrategy())]], table.entries)
-        self.assertEqual({'foo', 'bar', 't'}, table.parameter_names)
-        self.assertEqual({foo_decl, bar_decl, t_decl}, table.parameter_declarations)
+        self.assertIsNone(table.build_waveform(parameters=dict(),
+                                               measurement_mapping=dict(),
+                                               channel_mapping={0: 0}))
 
-    def test_add_entry_voltage_declaration_in_use_as_time(self) -> None:
-        table = TablePulseTemplate()
-        foo_decl = ParameterDeclaration('foo', min=0, max=2)
-        table.add_entry(foo_decl, 0)
-        with self.assertRaises(ValueError):
-            table.add_entry(4, foo_decl)
-        self.assertEqual([[(0, 0, HoldInterpolationStrategy()), (foo_decl, 0, HoldInterpolationStrategy())]], table.entries)
-        self.assertEqual({'foo'}, table.parameter_names)
-        self.assertEqual({foo_decl}, table.parameter_declarations)
+    def test_time_is_0_on_instantiation(self):
+        table = TablePulseTemplate({0: [('a', 1)]})
+        self.assertEqual(table.duration, Expression('a'))
+        self.assertEqual(table.parameter_names, {'a'})
 
-    def test_add_entry_time_and_voltage_same_declaration(self) -> None:
-        table = TablePulseTemplate()
-        with self.assertRaises(ValueError):
-            table.add_entry('foo', 'foo')
-        self.assertEquals([[TableEntry(0, 0, HoldInterpolationStrategy())]], table.entries)
-        self.assertFalse(table.parameter_names)
-        self.assertFalse(table.parameter_declarations)
+        self.assertIsNone(table.build_waveform(parameters=dict(a=0),
+                                               measurement_mapping=dict(),
+                                               channel_mapping={0: 0}))
+
+    def test_single_channel_no_parameters(self):
+        raw_entries = [(0., 1.1), (1.1, 2.), (2.2, 2.4)]
+        table = TablePulseTemplate({0: raw_entries})
+        expected = [TableEntry(*entry) for entry in raw_entries]
+        self.assertEqual(table.entries, dict([(0, expected)]))
+        self.assertEqual(table.duration, 2.2)
+        self.assertEqual(table.parameter_names, set())
+
+    def test_internal_constraints(self):
+        table = TablePulseTemplate({0: [(1, 'v'), (2, 'w')],
+                                    1: [('t', 'x'), ('t+2', 'y')]},
+                                   parameter_constraints=['x<2', 'y<w', 't<1'])
+        self.assertEqual(table.parameter_names, {'v', 'w', 't', 'x', 'y'})
+
+        with self.assertRaises(ParameterConstraintViolation):
+            table.build_waveform(parameters=dict(v=1, w=2, t=0.1, x=2.2, y=1),
+                                 measurement_mapping=dict(),
+                                 channel_mapping={0: 0, 1: 1})
+        with self.assertRaises(ParameterConstraintViolation):
+            table.build_waveform(parameters=dict(v=1, w=2, t=0.1, x=1.2, y=2),
+                                 measurement_mapping=dict(),
+                                 channel_mapping={0: 0, 1: 1})
+        with self.assertRaises(ParameterConstraintViolation):
+            table.build_waveform(parameters=dict(v=1, w=2, t=3, x=1.2, y=1),
+                                 measurement_mapping=dict(),
+                                 channel_mapping={0: 0, 1: 1})
+        table.build_waveform(parameters=dict(v=1, w=2, t=0.1, x=1.2, y=1),
+                             measurement_mapping=dict(),
+                             channel_mapping={0: 0, 1: 1})
+
+    def test_external_constraints(self):
+        table = TablePulseTemplate({0: [(1, 'v'), (2, 'w')],
+                                    1: [('t', 'x'), ('t+2', 'y')]},
+                                   parameter_constraints=['x<h', 'y<w', 't<1'])
+        self.assertEqual(table.parameter_names, {'v', 'w', 't', 'x', 'y', 'h'})
+
+        with self.assertRaises(ParameterConstraintViolation):
+            table.build_waveform(parameters=dict(v=1., w=2, t=0.1, x=2.2, y=1, h=1),
+                                 measurement_mapping={0: 0, 1: 1},
+                                 channel_mapping={0: 0, 1: 1})
+        table.build_waveform(parameters=dict(v=1., w=2, t=0.1, x=1.2, y=1, h=2),
+                             measurement_mapping={0: 0, 1: 1},
+                             channel_mapping={0: 0, 1: 1})
 
     def test_is_interruptable(self) -> None:
-        self.assertFalse(TablePulseTemplate().is_interruptable)
+        self.assertFalse(TablePulseTemplate({0: [(1, 1)]}).is_interruptable)
 
     def test_get_entries_instantiated_one_entry_float_float(self) -> None:
-        table = TablePulseTemplate()
-        table.add_entry(0, 2)
-        instantiated_entries = table.get_entries_instantiated({})
-        self.assertEqual([[(0, 2, HoldInterpolationStrategy())]], instantiated_entries)
+        table = TablePulseTemplate({0: [(0, 2)]})
+        instantiated_entries = table.get_entries_instantiated(dict())[0]
+        self.assertEqual([(0, 2, HoldInterpolationStrategy())], instantiated_entries)
 
     def test_get_entries_instantiated_one_entry_float_declaration(self) -> None:
-        table = TablePulseTemplate()
-        table.add_entry(0, 'foo')
-        instantiated_entries = table.get_entries_instantiated({'foo': 2})
-        self.assertEqual([[(0, 2, HoldInterpolationStrategy())]], instantiated_entries)
+        table = TablePulseTemplate({0: [(0, 'foo')]})
+        instantiated_entries = table.get_entries_instantiated({'foo': 2})[0]
+        self.assertEqual([(0, 2, HoldInterpolationStrategy())], instantiated_entries)
 
     def test_get_entries_instantiated_two_entries_float_float_declaration_float(self) -> None:
-        table = TablePulseTemplate()
-        table.add_entry('foo', -3.1415)
-        instantiated_entries = table.get_entries_instantiated({'foo': 2})
-        self.assertEqual([[(0, 0, HoldInterpolationStrategy()), (2, -3.1415, HoldInterpolationStrategy())]], instantiated_entries)
+        table = TablePulseTemplate({0: [('foo', -2.)]})
+        instantiated_entries = table.get_entries_instantiated({'foo': 2})[0]
+        self.assertEqual([(0, -2., HoldInterpolationStrategy()),
+                          (2, -2., HoldInterpolationStrategy())], instantiated_entries)
 
     def test_get_entries_instantiated_two_entries_float_declaraton_declaration_declaration(self) -> None:
-        table = TablePulseTemplate()
-        table.add_entry(0, 'v1')
-        table.add_entry('t', 'v2')
-        instantiated_entries = table.get_entries_instantiated({'v1': -5, 'v2': 5, 't': 3})
-        self.assertEqual([[(0, -5, HoldInterpolationStrategy()), (3, 5, HoldInterpolationStrategy())]], instantiated_entries)
+        table = TablePulseTemplate({0: [(0, 'v1'),
+                                        ('t', 'v2')]})
+        instantiated_entries = table.get_entries_instantiated({'v1': -5, 'v2': 5, 't': 3})[0]
+        self.assertEqual([(0, -5, HoldInterpolationStrategy()),
+                          (3, 5, HoldInterpolationStrategy())], instantiated_entries)
 
-    def test_get_entries_instantiated_two_entries_invalid_parameters(self) -> None:
-        table = TablePulseTemplate()
-        table.add_entry(0, 'v1')
-        t_decl = ParameterDeclaration('t', min=1, max=2)
-        v2_decl = ParameterDeclaration('v2', min=10, max=30)
-        table.add_entry(t_decl, v2_decl)
-        with self.assertRaises(ParameterValueIllegalException):
-            table.get_entries_instantiated({'v1': -5, 't': 0, 'v2': 20})
-        with self.assertRaises(ParameterValueIllegalException):
-            table.get_entries_instantiated({'v1': -5, 't': 1, 'v2': -20})
-
-    def test_get_entries_instantiated_two_entries_parameter_missing(self) -> None:
-        table = TablePulseTemplate()
-        t_decl = ParameterDeclaration('t', min=1, max=2)
-        v2_decl = ParameterDeclaration('v2', min=10, max=30)
-        table.add_entry(t_decl, v2_decl)
+    def test_get_entries_instantiated_multiple_parameters_missing(self) -> None:
+        table = TablePulseTemplate({0: [(0, 'v1'),
+                                        ('t', 'v2')]})
         with self.assertRaises(ParameterNotProvidedException):
             table.get_entries_instantiated(dict())
+        with self.assertRaises(ParameterNotProvidedException):
+            table.get_entries_instantiated(dict(v1=1))
+        with self.assertRaises(ParameterNotProvidedException):
+            table.get_entries_instantiated(dict(v1=1, t=2))
+        table.get_entries_instantiated(dict(v1=1, t=2, v2=2))
 
-    def test_get_entries_instantiated_linked_time_declarations(self) -> None:
-        table = TablePulseTemplate()
-        foo_decl = ParameterDeclaration('foo', min=1)
-        bar_decl = ParameterDeclaration('bar')
-        table.add_entry(foo_decl, 'v', 'linear')
-        table.add_entry(bar_decl, 0, 'jump')
+    def test_get_entries_auto_insert(self) -> None:
+        table = TablePulseTemplate({0: [('foo', 'v', 'linear'),
+                                        ('bar', 0, 'jump')],
+                                    1: [(0, 3, 'linear'),
+                                        ('bar+foo', 2, 'linear')]})
         instantiated_entries = table.get_entries_instantiated({'v': 2.3, 'foo': 1, 'bar': 4})
-        self.assertEqual([[(0, 0, HoldInterpolationStrategy()), (1, 2.3, LinearInterpolationStrategy()), (4, 0, JumpInterpolationStrategy())]], instantiated_entries)
-        with self.assertRaises(Exception):
-            table.get_entries_instantiated({'v': 2.3, 'foo': 1, 'bar': 1})
-        with self.assertRaises(Exception):
-            table.get_entries_instantiated({'v': 2.3, 'foo': 1, 'bar': 0.2})
+        self.assertEqual({0: [(0, 2.3, HoldInterpolationStrategy()),
+                              (1, 2.3, LinearInterpolationStrategy()),
+                              (4, 0, JumpInterpolationStrategy()),
+                              (5, 0, HoldInterpolationStrategy())],
+                          1: [(0, 3, LinearInterpolationStrategy()),
+                              (5, 2, LinearInterpolationStrategy())]}, instantiated_entries)
 
-    def test_get_entries_instantiated_unlinked_time_declarations(self) -> None:
-        table = TablePulseTemplate()
-        foo_decl = ParameterDeclaration('foo', min=1, max=2)
-        bar_decl = ParameterDeclaration('bar', min=1.5, max=4)
-        table.add_entry(foo_decl, 'v', 'linear')
-        table.add_entry(bar_decl, 0, 'jump')
-        instantiated_entries = table.get_entries_instantiated({'v': 2.3, 'foo': 1, 'bar': 4})
-        self.assertEqual([[(0, 0, HoldInterpolationStrategy()), (1, 2.3, LinearInterpolationStrategy()), (4, 0, JumpInterpolationStrategy())]], instantiated_entries)
-        with self.assertRaises(Exception):
-            table.get_entries_instantiated({'v': 2.3, 'foo': 2, 'bar': 1.5})
-
-    def test_get_entries_instantiated_empty(self) -> None:
-        table = TablePulseTemplate()
-        self.assertEquals([[(0, 0, HoldInterpolationStrategy())]], table.get_entries_instantiated({}))
+    def test_empty_instantiated(self) -> None:
+        with self.assertRaises(TypeError):
+            TablePulseTemplate()
+        with self.assertRaises(ValueError):
+            TablePulseTemplate(entries=dict())
 
     def test_get_entries_instantiated_two_equal_entries(self) -> None:
-        table = TablePulseTemplate()
-        table.add_entry(0, 0)
-        table.add_entry(1, 5)
-        table.add_entry(3, 5)
-        table.add_entry(5, 1)
-        entries = table.get_entries_instantiated({})
-        expected = [[
+        table = TablePulseTemplate({0: [(0, 0),
+                                        (1, 5),
+                                        (3, 5),
+                                        (5, 1)]})
+        entries = table.get_entries_instantiated(dict())
+        expected = [
             TableEntry(0, 0, HoldInterpolationStrategy()),
             TableEntry(1, 5, HoldInterpolationStrategy()),
             TableEntry(3, 5, HoldInterpolationStrategy()),
             TableEntry(5, 1, HoldInterpolationStrategy())
-        ]]
-        self.assertEqual(expected, entries)
-
-    def test_get_entries_instantiated_removal_for_three_subsequent_equal_entries(self) -> None:
-        table = TablePulseTemplate()
-        table.add_entry(1, 5)
-        table.add_entry(1.5, 5)
-        table.add_entry(2, 5)
-        table.add_entry(3, 0)
-        entries = table.get_entries_instantiated({})
-        expected = [[
-            TableEntry(0, 0, HoldInterpolationStrategy()),
-            TableEntry(1, 5, HoldInterpolationStrategy()),
-            TableEntry(2, 5, HoldInterpolationStrategy()),
-            TableEntry(3, 0, HoldInterpolationStrategy())
-        ]]
-        self.assertEqual(expected, entries)
-
-    def test_get_entries_instantiated_removal_for_three_subsequent_equal_entries_does_not_destroy_linear_interpolation(self) -> None:
-        table = TablePulseTemplate()
-        table.add_entry(0, 5)
-        table.add_entry(2, 5, 'linear')
-        table.add_entry(5, 5)
-        table.add_entry(10, 0, 'linear')
-
-        entries = table.get_entries_instantiated({})
-
-        expected = [[
-            TableEntry(0, 5, HoldInterpolationStrategy()),
-            TableEntry(5, 5, HoldInterpolationStrategy()),
-            TableEntry(10, 0, LinearInterpolationStrategy())
-        ]]
-        self.assertEqual(expected, entries)
-
-        result_sampled = TableWaveform(entries).sample(numpy.linspace(0, 10, 11), 0)
-
-        numbers = [5, 5, 5, 5, 5, 5, 4, 3, 2, 1, 0]
-        expected = [[float(x) for x in numbers]]
-        self.assertEqual(expected, result_sampled.tolist())
-
-    def test_get_entries_instantiated_two_channels_one_empty(self) -> None:
-        table = TablePulseTemplate(channels=2)
-        table.add_entry('foo', 4)
-        parameters = {'foo': 10}
-
-        entries = table.get_entries_instantiated(parameters)
-
-        expected = [
-            [
-                TableEntry(0, 0, HoldInterpolationStrategy()),
-                TableEntry(10, 4, HoldInterpolationStrategy()),
-            ],
-            [
-                TableEntry(0, 0, HoldInterpolationStrategy()),
-                TableEntry(10, 0, HoldInterpolationStrategy())
-            ]
         ]
+        self.assertEqual({0: expected}, entries)
 
-        self.assertEqual(expected, entries)
+    def test_from_array_exceptions(self):
+        with self.assertRaises(ValueError):
+            TablePulseTemplate.from_array(numpy.arange(0), numpy.arange(1), [0])
+
+        with self.assertRaises(ValueError):
+            TablePulseTemplate.from_array(numpy.arange(1), numpy.arange(0), [0])
+
+        with self.assertRaises(ValueError):
+            TablePulseTemplate.from_array(numpy.array(numpy.ndindex((1, 2, 1))), numpy.arange(2), [0])
+
+        with self.assertRaises(ValueError):
+            TablePulseTemplate.from_array(numpy.zeros(3),
+                                          numpy.zeros((3, 2, 3)),
+                                          [3, 4, 5])
+
+        with self.assertRaises(ValueError):
+            TablePulseTemplate.from_array(numpy.zeros((4, 2)),
+                                          numpy.zeros((3, 4)), [3, 4, 5])
+
+        with self.assertRaises(ValueError):
+            TablePulseTemplate.from_array(numpy.zeros((3, 2)),
+                                          numpy.array(numpy.ndindex((4, 6))), [3, 4, 5])
+
+        with self.assertRaises(ValueError):
+            TablePulseTemplate.from_array(numpy.zeros((3, 5)),
+                                          numpy.array(numpy.ndindex((3, 6))), [3, 4, 5])
 
     def test_from_array_1D(self) -> None:
         times = numpy.array([0, 1, 3])
         voltages = numpy.array([5, 0, 5])
-        pulse = TablePulseTemplate.from_array(times, voltages)
-        entries = [[]]
+        pulse = TablePulseTemplate.from_array(times, voltages, [0])
+        entries = []
         for (time, voltage) in zip(times, voltages):
-            entries[0].append(TableEntry(time, voltage, HoldInterpolationStrategy()))
+            entries.append(TableEntry(time, voltage, HoldInterpolationStrategy()))
+        self.assertEqual({0: entries}, pulse.entries)
+
+    def test_from_array_multi_one_time(self) -> None:
+        times = numpy.array([0, 1, 3])
+        voltages = numpy.array([[1, 2, 3],
+                                [2, 3, 4]])
+        pulse = TablePulseTemplate.from_array(times, voltages, [0, 1])
+        entries = {
+            i: [TableEntry(time, voltage, HoldInterpolationStrategy())
+                for (time, voltage) in zip(times, voltages[i, :])]
+            for i in range(2)}
+
         self.assertEqual(entries, pulse.entries)
 
     def test_from_array_multi(self) -> None:
-        times = numpy.array([0, 1, 3])
-        voltages = numpy.array([[1,2,3],
-                                [2,3,4]]).T # todo: why transposed??
-        pulse = TablePulseTemplate.from_array(times, voltages)
-        entries = [[],[]]
-        for i, channel in enumerate(voltages.T):
-            for (time, voltage) in zip(times, channel):
-                entries[i].append(TableEntry(time, voltage, HoldInterpolationStrategy()))
+        times = numpy.array([[0, 1, 3], [2, 3, 4]])
+        voltages = numpy.array([[1, 2, 3],
+                                [2, 3, 4]])
+        pulse = TablePulseTemplate.from_array(times, voltages, [0, 1])
+        entries = {
+            i: [TableEntry(time, voltage, HoldInterpolationStrategy())
+                for (time, voltage) in zip(times[i, :], voltages[i, :])]
+            for i in range(2)}
+
         self.assertEqual(entries, pulse.entries)
 
-    def test_add_entry_multi_invalid_channel(self) -> None:
-        pulse = TablePulseTemplate()
+    def test_from_array_multi_one_voltage(self) -> None:
+        times = numpy.array([[0, 1, 3], [2, 3, 4]])
+        voltages = numpy.array([1, 2, 3])
+        pulse = TablePulseTemplate.from_array(times, voltages, [0, 1])
+        entries = {
+            i: [TableEntry(time, voltage, HoldInterpolationStrategy())
+                for (time, voltage) in zip(times[i, :], voltages)]
+            for i in range(2)}
+        self.assertEqual(entries, pulse.entries)
+
+    def test_from_entry_list_exceptions(self):
+        TablePulseTemplate.from_entry_list([(1, 2, 3, 'hold'), (2, 2, 2)], channel_names=['A', 'B'])
+
         with self.assertRaises(ValueError):
-            pulse.add_entry(2,2, channel=1)
+            TablePulseTemplate.from_entry_list([(1, 2, 3, 'hold'), (2, 2)])
 
-    def test_add_entry_multi(self) -> None:
-        pulse = TablePulseTemplate(channels=2)
-        pulse.add_entry(1,1, channel=0)
-        pulse.add_entry(1,1, channel=1)
-        entries = [[(0,0,HoldInterpolationStrategy()),
-                    (1,1,HoldInterpolationStrategy())],
-                   [(0,0,HoldInterpolationStrategy()),
-                    (1,1,HoldInterpolationStrategy())]]
-        self.assertEqual(entries, pulse.entries)
+        with self.assertRaises(ValueError):
+            TablePulseTemplate.from_entry_list([(1, 2, 3, 'hold'), (2, 2, 2)], channel_names=['A'])
+
+        with self.assertWarns(AmbiguousTablePulseEntry):
+            TablePulseTemplate.from_entry_list([(1, 2, 3, 'hold'), (2, 2, 'linear')], channel_names=['A', 'B'])
+
+    def test_from_entry_list(self):
+        entries = {0: [(0, 9, HoldInterpolationStrategy()),
+                       (1, 2, HoldInterpolationStrategy()),
+                       (4, 1, LinearInterpolationStrategy())],
+                   1: [(0, 8, HoldInterpolationStrategy()),
+                       (1, 1, HoldInterpolationStrategy()),
+                       (4, 2, LinearInterpolationStrategy())],
+                   2: [(0, 7, HoldInterpolationStrategy()),
+                       (1, 3, HoldInterpolationStrategy()),
+                       (4, 3, LinearInterpolationStrategy())]}
+
+        tpt = TablePulseTemplate.from_entry_list([(0, 9, 8, 7),
+                                                  (1, 2, 1, 3, 'hold'),
+                                                  (4, 1, 2, 3, 'linear')],
+                                                 identifier='tpt')
+        self.assertEqual(tpt.entries, entries)
+        self.assertEqual(tpt.identifier, 'tpt')
+
+        tpt = TablePulseTemplate.from_entry_list([(0, 9, 8, 7, 'hold'),
+                                                  (1, 2, 1, 3, 'hold'),
+                                                  (4, 1, 2, 3, 'linear')],
+                                                 identifier='tpt')
+        self.assertEqual(tpt.entries, entries)
+
+        entries = {k: entries[i]
+                   for k, i in zip('ABC', [0, 1, 2])}
+        tpt = TablePulseTemplate.from_entry_list([(0, 9, 8, 7),
+                                                  (1, 2, 1, 3, 'hold'),
+                                                  (4, 1, 2, 3, 'linear')],
+                                                 identifier='tpt',
+                                                 channel_names=['A', 'B', 'C'])
+        self.assertEqual(tpt.entries, entries)
+        self.assertEqual(tpt.identifier, 'tpt')
+
+        entries = {0: [(0, 9, HoldInterpolationStrategy()),
+                       (1, 2, HoldInterpolationStrategy()),
+                       (4, 1, HoldInterpolationStrategy())],
+                   1: [(0, 8, HoldInterpolationStrategy()),
+                       (1, 1, HoldInterpolationStrategy()),
+                       (4, 2, HoldInterpolationStrategy())],
+                   2: [(0, 7, HoldInterpolationStrategy()),
+                       (1, 3, HoldInterpolationStrategy()),
+                       (4, 3, HoldInterpolationStrategy())]}
+        tpt = TablePulseTemplate.from_entry_list([(0, 9, 8, 7),
+                                                  (1, 2, 1, 3),
+                                                  (4, 1, 2, 3)],
+                                                 identifier='tpt')
+        self.assertEqual(tpt.entries, entries)
 
     def test_add_entry_multi_same_time_param(self) -> None:
-        pulse = TablePulseTemplate(channels=2)
-        pulse.add_entry(1, 3)
-        pulse.add_entry('foo', 'bar')
-        pulse.add_entry(7, 3)
-
-        pulse.add_entry(0, -5, channel=1)
-        pulse.add_entry(0.5, -2, channel=1)
-        pulse.add_entry('foo', 0, channel=1)
-        pulse.add_entry(5, 'bar', channel=1)
-
-        expected_foo = ParameterDeclaration('foo', min=1, max=5)
-        expected_bar = ParameterDeclaration('bar')
-        entries = [[TableEntry(0, 0, HoldInterpolationStrategy()),
-                    TableEntry(1, 3, HoldInterpolationStrategy()),
-                    TableEntry(expected_foo, expected_bar, HoldInterpolationStrategy()),
-                    TableEntry(7, 3, HoldInterpolationStrategy())],
-                   [TableEntry(0, -5, HoldInterpolationStrategy()),
-                    TableEntry(0.5, -2, HoldInterpolationStrategy()),
-                    TableEntry(expected_foo, 0, HoldInterpolationStrategy()),
-                    TableEntry(5, expected_bar, HoldInterpolationStrategy())]]
-        self.assertEqual(entries, pulse.entries)
+        pulse = TablePulseTemplate({0: [(1, 3),
+                                        ('foo', 'bar'),
+                                        (7, 3)],
+                                    1: [(0, -5),
+                                        (0.5, -2),
+                                        ('foo', 0),
+                                        (5, 'bar')]})
         self.assertEqual({'foo', 'bar'}, pulse.parameter_names)
-        self.assertEqual({expected_bar, expected_foo}, pulse.parameter_declarations)
 
     def test_get_instantiated_entries_multi_same_time_param(self) -> None:
-        table = TablePulseTemplate(channels=2)
-        table.add_entry(1, 3)
-        table.add_entry('foo', 'bar')
-        table.add_entry(7, 3)
-
-        table.add_entry(0, -5, channel=1)
-        table.add_entry(0.5, -2, channel=1)
-        table.add_entry('foo', 0, channel=1)
-        table.add_entry(5, 'bar', channel=1)
-
+        table = TablePulseTemplate({0: [(1, 3),
+                                        ('foo', 'bar'),
+                                        (7, 3)],
+                                    1: [(0, -5),
+                                        (0.5, -2),
+                                        ('foo', 0),
+                                        (5, 'bar')]})
         parameters = {'foo': 2.7, 'bar': -3.3}
 
         entries = table.get_entries_instantiated(parameters)
 
-        expected = [
-            [
-                TableEntry(0, 0, HoldInterpolationStrategy()),
+        expected = {
+            0: [
+                TableEntry(0, 3, HoldInterpolationStrategy()),
                 TableEntry(1, 3, HoldInterpolationStrategy()),
                 TableEntry(2.7, -3.3, HoldInterpolationStrategy()),
                 TableEntry(7, 3, HoldInterpolationStrategy()),
             ],
-            [
+            1: [
                 TableEntry(0, -5, HoldInterpolationStrategy()),
                 TableEntry(0.5, -2, HoldInterpolationStrategy()),
                 TableEntry(2.7, 0, HoldInterpolationStrategy()),
                 TableEntry(5, -3.3, HoldInterpolationStrategy()),
                 TableEntry(7, -3.3, HoldInterpolationStrategy())
             ]
-        ]
-
+        }
         self.assertEqual(expected, entries)
 
-    def test_get_instaniated_entries_multi_one_empty_channel(self) -> None:
-        table = TablePulseTemplate(channels=2)
-        table.add_entry(1, 3, channel=1)
-        table.add_entry('foo', 'bar', 'linear', channel=1)
+    def test_measurement_names(self):
+        tpt = TablePulseTemplate({0: [(10, 1)]}, measurements=[('A', 2, 3), ('AB', 0, 1)])
+        self.assertEqual(tpt.measurement_names, {'A', 'AB'})
 
-        parameters = {'foo': 5.2, 'bar': -83.8}
 
-        entries = table.get_entries_instantiated(parameters)
+class TablePulseTemplateConstraintTest(ParameterConstrainerTest):
+    def __init__(self, *args, **kwargs):
 
-        expected = [
-            [
-                TableEntry(0, 0, HoldInterpolationStrategy()),
-                TableEntry(5.2, 0, HoldInterpolationStrategy())
-            ],
-            [
-                TableEntry(0, 0, HoldInterpolationStrategy()),
-                TableEntry(1, 3, HoldInterpolationStrategy()),
-                TableEntry(5.2, -83.8, LinearInterpolationStrategy())
-            ]
-        ]
+        def tpt_constructor(parameter_constraints=None):
+            return TablePulseTemplate({0: [('a', 'b')]},
+                                      parameter_constraints=parameter_constraints, measurements=[('M', 'n', 1)])
 
-        self.assertEqual(expected, entries)
+        super().__init__(*args,
+                         to_test_constructor=tpt_constructor, **kwargs)
 
-    def test_measurement_windows_multi(self) -> None:
-        pulse = TablePulseTemplate(measurement=True, channels=2)
-        pulse.add_entry(1, 1)
-        pulse.add_entry(3, 0)
-        pulse.add_entry(5, 0)
 
-        pulse.add_entry(1, 1, channel=1)
-        pulse.add_entry(3, 0, channel=1)
-        pulse.add_entry(10, 0, channel=1)
-        windows = pulse.get_measurement_windows()
-        self.assertEqual([(0,10)], windows)
+class TablePulseTemplateMeasurementTest(MeasurementDefinerTest):
+    def __init__(self, *args, **kwargs):
+
+        def tpt_constructor(measurements=None):
+            return TablePulseTemplate({0: [('a', 'b')]},
+                                      parameter_constraints=['a < b'], measurements=measurements)
+
+        super().__init__(*args,
+                         to_test_constructor=tpt_constructor, **kwargs)
 
 
 class TablePulseTemplateSerializationTests(unittest.TestCase):
 
     def setUp(self) -> None:
         self.serializer = DummySerializer(lambda x: dict(name=x.name), lambda x: x.name, lambda x: x['name'])
-        self.template = TablePulseTemplate(measurement=True, identifier='foo')
+        self.entries = dict(A=[('foo', 2, 'hold'), ('hugo', 'ilse', 'linear')],
+                            B=[(0, 5, 'hold'), (1, 7, 'jump'), ('k', 't', 'hold')])
+        self.measurements = [('m', 1, 1), ('foo', 'z', 'o')]
+        self.template = TablePulseTemplate(entries=self.entries,
+                                           measurements=self.measurements,
+                                           identifier='foo', parameter_constraints=['ilse>2', 'k>foo'])
         self.expected_data = dict(type=self.serializer.get_type_identifier(self.template))
+        self.maxDiff = None
 
     def test_get_serialization_data(self) -> None:
-        self.template.add_entry('foo', 2)
-        self.template.add_entry('hugo', 'ilse', interpolation='linear')
+        expected_data = dict(measurements=self.measurements,
+                             entries=self.entries,
+                             parameter_constraints=[str(Expression('ilse>2')), str(Expression('k>foo'))])
 
-        self.expected_data['is_measurement_pulse'] = True
-        self.expected_data['time_parameter_declarations'] = [dict(name='foo'), dict(name='hugo')]
-        self.expected_data['voltage_parameter_declarations'] = [dict(name='ilse')]
-        self.expected_data['entries'] = [[(0, 0, 'hold'), ('foo', 2, 'hold'), ('hugo', 'ilse', 'linear')]]
         data = self.template.get_serialization_data(self.serializer)
-        self.assertEqual(self.expected_data, data)
+        self.assertEqual(expected_data, data)
 
     def test_deserialize(self) -> None:
-        data = dict(is_measurement_pulse=True,
-                    time_parameter_declarations=[dict(name='hugo'), dict(name='foo')],
-                    voltage_parameter_declarations=[dict(name='ilse')],
-                    entries=[[(0, 0, 'hold'), ('foo', 2, 'hold'), ('hugo', 'ilse', 'linear')]],
+        data = dict(measurements=self.measurements,
+                    entries=self.entries,
+                    parameter_constraints=['ilse>2', 'k>foo'],
                     identifier='foo')
-
-        # prepare dependencies for deserialization
-        self.serializer.subelements['foo'] = ParameterDeclaration('foo')
-        self.serializer.subelements['hugo'] = ParameterDeclaration('hugo')
-        self.serializer.subelements['ilse'] = ParameterDeclaration('ilse')
 
         # deserialize
         template = TablePulseTemplate.deserialize(self.serializer, **data)
 
-        # prepare expected parameter declarations
-        self.serializer.subelements['foo'].min_value = 0
-        self.serializer.subelements['foo'].max_value = self.serializer.subelements['hugo']
-        all_declarations = set(self.serializer.subelements.values())
+        self.assertEqual(template.entries, self.template.entries)
+        self.assertEqual(template.measurement_declarations, self.template.measurement_declarations)
+        self.assertEqual(template.parameter_constraints, self.template.parameter_constraints)
 
-        # prepare expected entries
-        entries = [[(0, 0, HoldInterpolationStrategy()),
-                   (self.serializer.subelements['foo'], 2, HoldInterpolationStrategy()),
-                   (self.serializer.subelements['hugo'], self.serializer.subelements['ilse'], LinearInterpolationStrategy())]]
+    def test_serializer_integration(self):
+        serializer = Serializer(DummyStorageBackend())
+        serializer.serialize(self.template)
+        template = serializer.deserialize('foo')
 
-        # compare!
-        self.assertEqual(all_declarations, template.parameter_declarations)
-        self.assertEqual({'foo', 'hugo', 'ilse'}, template.parameter_names)
-        self.assertEqual(entries, template.entries)
-        self.assertEqual('foo', template.identifier)
+        self.assertIsInstance(template, TablePulseTemplate)
+        self.assertEqual(template.entries, self.template.entries)
+        self.assertEqual(template.measurement_declarations, self.template.measurement_declarations)
+        self.assertEqual(template.parameter_constraints, self.template.parameter_constraints)
 
 
 class TablePulseTemplateSequencingTests(unittest.TestCase):
+    def test_build_waveform_single_channel(self):
+        table = TablePulseTemplate({0: [(0, 0),
+                                        ('foo', 'v', 'linear'),
+                                        ('bar', 0, 'jump')]},
+                                   parameter_constraints=['foo>1'],
+                                   measurements=[('M', 'b', 'l'),
+                                                 ('N', 1, 2)])
 
-    def test_build_sequence(self) -> None:
-        table = TablePulseTemplate()
-        foo_decl = ParameterDeclaration('foo', min=1)
-        bar_decl = ParameterDeclaration('bar')
-        table.add_entry(foo_decl, 'v', 'linear')
-        table.add_entry(bar_decl, 0, 'jump')
-        parameters = {'v': 2.3, 'foo': 1, 'bar': 4}
-        instantiated_entries = tuple(table.get_entries_instantiated(parameters))
-        waveform = table.build_waveform(parameters)
-        sequencer = DummySequencer()
-        instruction_block = DummyInstructionBlock()
-        table.build_sequence(sequencer, parameters, {}, instruction_block)
-        expected_waveform = TableWaveform(instantiated_entries)
-        self.assertEqual(1, len(instruction_block.instructions))
-        instruction = instruction_block.instructions[0]
-        self.assertIsInstance(instruction, EXECInstruction)
-        self.assertEqual(expected_waveform, instruction.waveform)
-        self.assertEqual(expected_waveform, waveform)
+        parameters = {'v': 2.3, 'foo': 1, 'bar': 4, 'b': 2, 'l': 1}
+        measurement_mapping = {'M': 'P', 'N': 'N'}
+        channel_mapping = {0: 'ch'}
 
-    def test_build_sequence_empty(self) -> None:
-        table = TablePulseTemplate()
-        sequencer = DummySequencer()
-        instruction_block = DummyInstructionBlock()
-        table.build_sequence(sequencer, {}, {}, instruction_block)
-        self.assertFalse(instruction_block.instructions)
-        self.assertIsNone(table.build_waveform({}))
+        with self.assertRaises(ParameterConstraintViolation):
+            table.build_waveform(parameters=parameters,
+                                 measurement_mapping=measurement_mapping,
+                                 channel_mapping=channel_mapping)
+
+        parameters['foo'] = 1.1
+        waveform = table.build_waveform(parameters=parameters,
+                                        measurement_mapping=measurement_mapping,
+                                        channel_mapping=channel_mapping)
+
+        self.assertIsInstance(waveform, TableWaveform)
+        self.assertEqual(waveform._table,
+                         ((0, 0, HoldInterpolationStrategy()),
+                          (1.1, 2.3, LinearInterpolationStrategy()),
+                          (4, 0, JumpInterpolationStrategy())))
+        self.assertEqual(sorted(waveform._measurement_windows),
+                         sorted((('P', 2, 1),
+                                 ('N', 1, 2))))
+        self.assertEqual(waveform._channel_id,
+                         'ch')
+
+    def test_build_waveform_multi_channel(self):
+        table = TablePulseTemplate({0: [(0, 0),
+                                        ('foo', 'v', 'linear'),
+                                        ('bar', 0, 'jump')],
+                                    3: [(0, 1),
+                                        ('bar+foo', 0, 'linear')]},
+                                   parameter_constraints=['foo>1'],
+                                   measurements=[('M', 'b', 'l'),
+                                                 ('N', 1, 2)])
+
+        parameters = {'v': 2.3, 'foo': 1, 'bar': 4, 'b': 2, 'l': 1}
+        measurement_mapping = {'M': 'P', 'N': 'N'}
+        channel_mapping = {0: 'ch', 3: 'oh'}
+
+        with self.assertRaises(ParameterConstraintViolation):
+            table.build_waveform(parameters=parameters,
+                                 measurement_mapping=measurement_mapping,
+                                 channel_mapping=channel_mapping)
+
+        parameters['foo'] = 1.1
+        waveform = table.build_waveform(parameters=parameters,
+                                        measurement_mapping=measurement_mapping,
+                                        channel_mapping=channel_mapping)
+
+        self.assertIsInstance(waveform, MultiChannelWaveform)
+        self.assertEqual(len(waveform._sub_waveforms), 2)
+
+        channels = {'oh', 'ch'}
+        found_measurements = False
+        for wf in waveform._sub_waveforms:
+            self.assertIsInstance(wf, TableWaveform)
+            self.assertIn(wf._channel_id, channels)
+            channels.remove(wf._channel_id)
+            if wf.defined_channels == {'ch'}:
+                self.assertEqual(wf._table,
+                                 ((0, 0, HoldInterpolationStrategy()),
+                                  (1.1, 2.3, LinearInterpolationStrategy()),
+                                  (4, 0, JumpInterpolationStrategy()),
+                                  (5.1, 0, HoldInterpolationStrategy())))
+            elif wf.defined_channels == {'oh'}:
+                self.assertEqual(wf._table,
+                                 ((0, 1, HoldInterpolationStrategy()),
+                                  (5.1, 0, LinearInterpolationStrategy())))
+
+            if wf._measurement_windows:
+                self.assertFalse(found_measurements, 'Measurements found twice')
+                self.assertEqual(sorted(wf._measurement_windows),
+                                 sorted((('P', 2, 1),
+                                         ('N', 1, 2))))
+                found_measurements = True
+        self.assertTrue(found_measurements, 'Measurements not found')
+
+    def test_build_waveform_empty(self) -> None:
+        table = TablePulseTemplate(dict(a=[('t', 0)]))
+        self.assertIsNone(table.build_waveform(dict(t=0), dict(), dict(a='a')))
 
     def test_requires_stop_missing_param(self) -> None:
-        table = TablePulseTemplate()
-        foo_decl = ParameterDeclaration('foo')
-        table.add_entry(foo_decl, 'v', 'linear')
+        table = TablePulseTemplate({0: [('foo', 'v')]})
         with self.assertRaises(ParameterNotProvidedException):
             table.requires_stop({'foo': DummyParameter(0, False)}, {})
 
     def test_requires_stop(self) -> None:
-        table = TablePulseTemplate()
-        foo_decl = ParameterDeclaration('foo', min=1)
-        bar_decl = ParameterDeclaration('bar')
-        table.add_entry(foo_decl, 'v', 'linear')
-        table.add_entry(bar_decl, 0, 'jump')
+        table = TablePulseTemplate({0: [('foo', 'v'),
+                                        ('bar', 0)]})
         test_sets = [(False, {'foo': DummyParameter(0, False), 'bar': DummyParameter(0, False), 'v': DummyParameter(0, False)}, {'foo': DummyCondition(False)}),
                      (False, {'foo': DummyParameter(0, False), 'bar': DummyParameter(0, False), 'v': DummyParameter(0, False)}, {'foo': DummyCondition(True)}),
                      (True, {'foo': DummyParameter(0, True), 'bar': DummyParameter(0, False), 'v': DummyParameter(0, False)}, {'foo': DummyCondition(False)}),
@@ -713,138 +597,111 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
 
     def test_identifier(self) -> None:
         identifier = 'some name'
-        pulse = TablePulseTemplate(identifier=identifier)
+        pulse = TablePulseTemplate(entries={0: [(1, 0)]}, identifier=identifier)
         self.assertEqual(pulse.identifier, identifier)
 
-    def test_build_sequence_multi(self) -> None:
-        table = TablePulseTemplate(channels=2)
-        table.add_entry(1, 3)
-        table.add_entry('foo', 'bar')
-        table.add_entry(7, 3)
 
-        table.add_entry(0, -5, channel=1)
-        table.add_entry('foo', 0, channel=1)
-        table.add_entry(5, 'bar', channel=1)
+class TableWaveformTests(unittest.TestCase):
+    def test_validate_input(self):
+        with self.assertRaises(ValueError):
+            TableWaveform._validate_input([TableWaveformEntry(0.0, 0.2, HoldInterpolationStrategy())])
 
-        parameters = {'foo': 3, 'bar': 17}
+        with self.assertRaises(ValueError):
+            TableWaveform._validate_input([TableWaveformEntry(0.0, 0.2, HoldInterpolationStrategy()),
+                                           TableWaveformEntry(0.0, 0.3, HoldInterpolationStrategy())])
 
-        instantiated_entries = table.get_entries_instantiated(parameters)
+        with self.assertRaises(ValueError):
+            TableWaveform._validate_input([TableWaveformEntry(0.1, 0.2, HoldInterpolationStrategy()),
+                                           TableWaveformEntry(0.2, 0.2, HoldInterpolationStrategy())])
 
-        sequencer = DummySequencer()
-        instruction_block = DummyInstructionBlock()
-        table.build_sequence(sequencer, parameters, {}, instruction_block)
-        expected_waveform = TableWaveform(instantiated_entries)
-        self.assertEqual(1, len(instruction_block.instructions))
-        instruction = instruction_block.instructions[0]
-        self.assertIsInstance(instruction, EXECInstruction)
-        self.assertEqual(expected_waveform, instruction.waveform)
-        waveform = table.build_waveform(parameters)
-        self.assertEqual(expected_waveform, waveform)
+        with self.assertRaises(ValueError):
+            TableWaveform._validate_input([TableWaveformEntry(0.0, 0.2, HoldInterpolationStrategy()),
+                                           TableWaveformEntry(0.2, 0.2, HoldInterpolationStrategy()),
+                                           TableWaveformEntry(0.1, 0.2, HoldInterpolationStrategy())])
 
-    def test_build_sequence_multi_one_channel_empty(self) -> None:
-        table = TablePulseTemplate(channels=2)
-        table.add_entry('foo', 4)
-        parameters = {'foo': 3}
+        validated = TableWaveform._validate_input([TableWaveformEntry(0.0, 0.2, HoldInterpolationStrategy()),
+                                                   TableWaveformEntry(0.1, 0.2, LinearInterpolationStrategy()),
+                                                   TableWaveformEntry(0.1, 0.3, JumpInterpolationStrategy()),
+                                                   TableWaveformEntry(0.1, 0.3, HoldInterpolationStrategy()),
+                                                   TableWaveformEntry(0.2, 0.3, LinearInterpolationStrategy()),
+                                                   TableWaveformEntry(0.3, 0.3, JumpInterpolationStrategy())])
 
-        instantiated_entries = table.get_entries_instantiated(parameters)
-
-        sequencer = DummySequencer()
-        instruction_block = DummyInstructionBlock()
-        table.build_sequence(sequencer, parameters, {}, instruction_block)
-        expected_waveform = TableWaveform(instantiated_entries)
-        self.assertEqual(1, len(instruction_block.instructions))
-        instruction = instruction_block.instructions[0]
-        self.assertIsInstance(instruction, EXECInstruction)
-        self.assertEqual(expected_waveform, instruction.waveform)
-        waveform = table.build_waveform(parameters)
-        self.assertEqual(expected_waveform, waveform)
+        self.assertEqual(validated, (TableWaveformEntry(0.0, 0.2, HoldInterpolationStrategy()),
+                                     TableWaveformEntry(0.1, 0.2, LinearInterpolationStrategy()),
+                                     TableWaveformEntry(0.1, 0.3, HoldInterpolationStrategy()),
+                                     TableWaveformEntry(0.3, 0.3, JumpInterpolationStrategy())))
 
 
-class TableWaveformDataTests(unittest.TestCase):
 
     def test_duration(self) -> None:
-        entries = [[WaveformTableEntry(0, 0, HoldInterpolationStrategy()), WaveformTableEntry(5, 1, HoldInterpolationStrategy())]]
-        waveform = TableWaveform(entries)
+        entries = [TableWaveformEntry(0, 0, HoldInterpolationStrategy()), TableWaveformEntry(5, 1, HoldInterpolationStrategy())]
+        waveform = TableWaveform('A', entries, [])
         self.assertEqual(5, waveform.duration)
 
-    def test_duration_no_entries(self) -> None:
-        waveform = TableWaveform([])
-        self.assertEqual(0, waveform.duration)
+    def test_duration_no_entries_exception(self) -> None:
+        with self.assertRaises(ValueError):
+            waveform = TableWaveform('A', [], [])
+            self.assertEqual(0, waveform.duration)
 
     def test_few_entries(self) -> None:
         with self.assertRaises(ValueError):
-            TableWaveform([[]])
+            TableWaveform('A', [[]], [])
         with self.assertRaises(ValueError):
-            TableWaveform([[WaveformTableEntry(0, 0, HoldInterpolationStrategy())]])
+            TableWaveform('A', [TableWaveformEntry(0, 0, HoldInterpolationStrategy())], [])
 
-    def test_sample(self) -> None:
+    def test_get_measurement_windows(self):
         interp = DummyInterpolationStrategy()
-        entries = [[WaveformTableEntry(0, 0, interp),
-                    WaveformTableEntry(2.1, -33.2, interp),
-                    WaveformTableEntry(5.7, 123.4, interp)]]
-        waveform = TableWaveform(entries)
-        sample_times = numpy.linspace(98.5, 103.5, num=11)
+        entries = [TableWaveformEntry(0, 0, interp),
+                   TableWaveformEntry(2.1, -33.2, interp),
+                   TableWaveformEntry(5.7, 123.4, interp)]
+        waveform = TableWaveform('A', entries,
+                                 measurement_windows=[('a', 1, 2), ('b', 3, 4)])
+        self.assertEqual(waveform.get_measurement_windows(), (('a', 1, 2), ('b', 3, 4)))
 
-        offset = 0.5
-        result = waveform.sample(sample_times, offset)
-        expected_data = [((0, 0), (2.1, -33.2), [0.5, 1.0, 1.5, 2.0]),
-                         ((2.1, -33.2), (5.7, 123.4), [2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5])]
-        self.assertEqual(expected_data, interp.call_arguments)
-        expected_result = [sample_times - 98]
-        self.assertTrue(numpy.all(expected_result == result))
-
-    def test_few_entries_multi(self) -> None:
-        with self.assertRaises(ValueError):
-            TableWaveform([[],[WaveformTableEntry(0, 0, HoldInterpolationStrategy())]])
-
-        with self.assertRaises(ValueError):
-            TableWaveform([[WaveformTableEntry(0, 0, HoldInterpolationStrategy())],[]])
-
-    def test_sample_multi(self) -> None:
+    def test_unsafe_get_subset_for_channels(self):
         interp = DummyInterpolationStrategy()
-        entries = [[WaveformTableEntry(0, 0, interp),
-                    WaveformTableEntry(2.1, -33.2, interp),
-                    WaveformTableEntry(5.7, 123.4, interp)],
-                   [WaveformTableEntry(0,0,interp),
-                    WaveformTableEntry(2.1,-33.2,interp),
-                    WaveformTableEntry(5.7, 123.4, interp)]]
-        waveform = TableWaveform(entries)
-        sample_times = numpy.linspace(98.5, 103.5, num=11)
-        expected_result = numpy.vstack([sample_times, sample_times]) - 98
-        offset = 0.5
-        result = waveform.sample(sample_times, offset)
-        expected_data = [((0, 0), (2.1, -33.2), [0.5, 1.0, 1.5, 2.0]),
-                         ((2.1, -33.2), (5.7, 123.4), [2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5]),((0, 0), (2.1, -33.2), [0.5, 1.0, 1.5, 2.0]),
-                         ((2.1, -33.2), (5.7, 123.4), [2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5])]
-        self.assertEqual(expected_data, interp.call_arguments)
-        self.assertTrue(numpy.all(expected_result == result))
+        entries = [TableWaveformEntry(0, 0, interp),
+                   TableWaveformEntry(2.1, -33.2, interp),
+                   TableWaveformEntry(5.7, 123.4, interp)]
+        waveform = TableWaveform('A', entries,
+                                 measurement_windows=[('a', 1, 2), ('b', 3, 4)])
+        self.assertIs(waveform.unsafe_get_subset_for_channels({'A'}), waveform)
 
-    def test_num_channels(self) -> None:
-        waveform = TableWaveform([])
-        self.assertEqual(0, waveform.num_channels)
-
+    def test_unsafe_sample(self) -> None:
         interp = DummyInterpolationStrategy()
-        entries = [[WaveformTableEntry(0, 0, interp),
-                    WaveformTableEntry(5, 1, interp)]]
-        waveform = TableWaveform(entries)
-        self.assertEqual(1, waveform.num_channels)
+        entries = [TableWaveformEntry(0, 0, interp),
+                   TableWaveformEntry(2.1, -33.2, interp),
+                   TableWaveformEntry(5.7, 123.4, interp)]
+        waveform = TableWaveform('A', entries, [])
+        sample_times = numpy.linspace(.5, 5.5, num=11)
 
-        entries = [[WaveformTableEntry(0, 0, interp),
-                    WaveformTableEntry(2.1, -33.2, interp),
-                    WaveformTableEntry(5.7, 123.4, interp)],
-                   [WaveformTableEntry(0, 0, interp),
-                    WaveformTableEntry(2.1, -33.2, interp),
-                    WaveformTableEntry(5.7, 123.4, interp)]]
-        waveform = TableWaveform(entries)
-        self.assertEqual(2, waveform.num_channels)
+        expected_interp_arguments = [((0, 0), (2.1, -33.2), [0.5, 1.0, 1.5, 2.0]),
+                                     ((2.1, -33.2), (5.7, 123.4), [2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5])]
+        expected_result = numpy.copy(sample_times)
 
+        result = waveform.unsafe_sample('A', sample_times)
 
-class ParameterValueIllegalExceptionTest(unittest.TestCase):
+        self.assertEqual(expected_interp_arguments, interp.call_arguments)
+        numpy.testing.assert_equal(expected_result, result)
 
-    def test(self) -> None:
-        decl = ParameterDeclaration('foo', max=8)
-        exception = ParameterValueIllegalException(decl, 8.1)
-        self.assertEqual("The value 8.1 provided for parameter foo is illegal (min = -inf, max = 8)", str(exception))
+        output_expected = numpy.empty_like(expected_result)
+        output_received = waveform.unsafe_sample('A', sample_times, output_array=output_expected)
+        self.assertIs(output_expected, output_received)
+        numpy.testing.assert_equal(expected_result, output_received)
+
+    def test_simple_properties(self):
+        interp = DummyInterpolationStrategy()
+        entries = [TableWaveformEntry(0, 0, interp),
+                   TableWaveformEntry(2.1, -33.2, interp),
+                   TableWaveformEntry(5.7, 123.4, interp)]
+        meas = [('M', 1, 2)]
+        chan = 'A'
+        waveform = TableWaveform(chan, entries, meas)
+
+        self.assertEqual(waveform.defined_channels, {chan})
+        self.assertEqual(list(waveform.get_measurement_windows()), meas)
+        self.assertIs(waveform.unsafe_get_subset_for_channels('A'), waveform)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

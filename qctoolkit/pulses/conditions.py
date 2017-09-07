@@ -11,8 +11,9 @@ Classes:
 from abc import ABCMeta, abstractmethod
 from typing import Dict, Optional, Callable
 
+from qctoolkit.utils.types import ChannelID
 from qctoolkit.pulses.parameters import Parameter
-from qctoolkit.pulses.sequencing import Sequencer, SequencingElement
+from . import sequencing
 from qctoolkit.pulses.instructions import InstructionBlock, InstructionPointer, Trigger
 
 __all__ = ["Condition", "ConditionEvaluationException", "ConditionMissingException",
@@ -41,25 +42,27 @@ class Condition(metaclass=ABCMeta):
         
     @abstractmethod
     def build_sequence_loop(self, 
-                            delegator: SequencingElement,
-                            body: SequencingElement,
-                            sequencer: Sequencer,
+                            delegator: sequencing.SequencingElement,
+                            body: sequencing.SequencingElement,
+                            sequencer: sequencing.Sequencer,
                             parameters: Dict[str, Parameter],
                             conditions: Dict[str, 'Condition'],
+                            measurement_mapping: Dict[str, str],
+                            channel_mapping: Dict[ChannelID, ChannelID],
                             instruction_block: InstructionBlock) -> None:
         """Translate a looping SequencingElement using this Condition into an instruction sequence
         for the given instruction block using sequencer and the given parameter sets.
 
         Args:
-            delegator (SequencingElement): The SequencingElement which has delegated the invocation
+            delegator: The SequencingElement which has delegated the invocation
                 of its build_sequence method to this Condition object.
-            body (SequencingElement): The SequencingElement representing the loops body.
-            sequencer (Sequencer): The Sequencer object coordinating the current sequencing process.
-            parameters (Dict(str -> Parameter): A mapping of parameter names to Parameter objects
+            body: The SequencingElement representing the loops body.
+            sequencer: The Sequencer object coordinating the current sequencing process.
+            parameters: A mapping of parameter names to Parameter objects
                 which will be passed to the loop body.
-            conditions (Dict(str -> Conditions): A mapping of condition identifier to Condition
+            conditions: A mapping of condition identifier to Condition
                 objects which will be passed to the loop body.
-            instruction_block (InstructionBlock): The instruction block into which instructions
+            instruction_block: The instruction block into which instructions
                 resulting from the translation of this Condition object will be placed.
         See Also:
             SequencingElement.build_sequence()
@@ -67,29 +70,32 @@ class Condition(metaclass=ABCMeta):
     
     @abstractmethod
     def build_sequence_branch(self,
-                              delegator: SequencingElement,
-                              if_branch: SequencingElement,
-                              else_branch: SequencingElement,
-                              sequencer: Sequencer,
+                              delegator: sequencing.SequencingElement,
+                              if_branch: sequencing.SequencingElement,
+                              else_branch: sequencing.SequencingElement,
+                              sequencer: sequencing.Sequencer,
                               parameters: Dict[str, Parameter],
                               conditions: Dict[str, 'Condition'],
+                              measurement_mapping: Dict[str, str],
+                              channel_mapping: Dict['ChannelID', 'ChannelID'],
                               instruction_block: InstructionBlock) -> None:
         """Translate a branching SequencingElement using this Condition into an instruction sequence
-         for the given instruction block using sequencer and the given parameter sets.
+        for the given instruction block using sequencer and the given parameter sets.
 
-         Args:
-            delegator (SequencingElement): The SequencingElement which has delegated the invocation
-                of its build_sequence method to this Condition object.
-            if_branch (SequencingElement): The SequencingElement representing the branch executed
-                if the condition holds.
-            else_branch (SequencingElement): The SequencingElement representing the branch executed
-                if the condition does not hold.
-            parameters (Dict(str -> Parameter): A mapping of parameter names to Parameter objects
-                which will be passed to the loop body.
-            conditions (Dict(str -> Conditions): A mapping of condition identifier to Condition
-                objects which will be passed to the loop body.
-            instruction_block (InstructionBlock): The instruction block into which instructions
-                resulting from the translation of this Condition object will be placed.
+        Args:
+           delegator: The SequencingElement which has delegated the invocation
+               of its build_sequence method to this Condition object.
+           if_branch: The SequencingElement representing the branch executed
+               if the condition holds.
+           else_branch: The SequencingElement representing the branch executed
+               if the condition does not hold.
+           parameters: A mapping of parameter names to Parameter objects
+               which will be passed to the loop body.
+           conditions: A mapping of condition identifier to Condition
+               objects which will be passed to the loop body.
+           instruction_block: The instruction block into which instructions
+               resulting from the translation of this Condition object will be placed.
+
         See Also:
             SequencingElement.build_sequence()
         """
@@ -109,43 +115,53 @@ class HardwareCondition(Condition):
         """Create a new HardwareCondition instance.
 
         Args:
-             trigger (Trigger): The trigger handle of the corresponding hardware device."""
+             trigger: The trigger handle of the corresponding hardware device."""
         super().__init__()
-        self.__trigger = trigger # type: Trigger
+        self.__trigger = trigger  # type: Trigger
         
     def requires_stop(self) -> bool:
         return False
 
     def build_sequence_loop(self, 
-                            delegator: SequencingElement,
-                            body: SequencingElement,
-                            sequencer: Sequencer,
+                            delegator: sequencing.SequencingElement,
+                            body: sequencing.SequencingElement,
+                            sequencer: sequencing.Sequencer,
                             parameters: Dict[str, Parameter],
                             conditions: Dict[str, Condition],
+                            measurement_mapping: Dict[str, str],
+                            channel_mapping: Dict[ChannelID, ChannelID],
                             instruction_block: InstructionBlock) -> None:
         body_block = InstructionBlock()
         body_block.return_ip = InstructionPointer(instruction_block,
                                                   len(instruction_block.instructions))
         
         instruction_block.add_instruction_cjmp(self.__trigger, body_block)
-        sequencer.push(body, parameters, conditions, body_block)
+        sequencer.push(body, parameters, conditions, window_mapping=measurement_mapping,
+                       channel_mapping=channel_mapping,
+                       target_block=body_block)
         
     def build_sequence_branch(self,
-                              delegator: SequencingElement,
-                              if_branch: SequencingElement,
-                              else_branch: SequencingElement,
-                              sequencer: Sequencer,
+                              delegator: sequencing.SequencingElement,
+                              if_branch: sequencing.SequencingElement,
+                              else_branch: sequencing.SequencingElement,
+                              sequencer: sequencing.Sequencer,
                               parameters: Dict[str, Parameter],
                               conditions: Dict[str, Condition],
+                              measurement_mapping: Dict[str, str],
+                              channel_mapping: Dict[ChannelID, ChannelID],
                               instruction_block: InstructionBlock) -> None:
         if_block = InstructionBlock()
         else_block = InstructionBlock()
         
         instruction_block.add_instruction_cjmp(self.__trigger, if_block)
-        sequencer.push(if_branch, parameters, conditions, if_block)
+        sequencer.push(if_branch, parameters, conditions, window_mapping=measurement_mapping,
+                       channel_mapping=channel_mapping,
+                       target_block=if_block)
         
         instruction_block.add_instruction_goto(else_block)
-        sequencer.push(else_branch, parameters, conditions, else_block)
+        sequencer.push(else_branch, parameters, conditions, window_mapping=measurement_mapping,
+                       channel_mapping=channel_mapping,
+                       target_block=else_block)
         
         if_block.return_ip = InstructionPointer(instruction_block,
                                                 len(instruction_block.instructions))
@@ -187,37 +203,49 @@ class SoftwareCondition(Condition):
         return evaluation_result is None
 
     def build_sequence_loop(self, 
-                            delegator: SequencingElement,
-                            body: SequencingElement,
-                            sequencer: Sequencer,
+                            delegator: sequencing.SequencingElement,
+                            body: sequencing.SequencingElement,
+                            sequencer: sequencing.Sequencer,
                             parameters: Dict[str, Parameter],
                             conditions: Dict[str, Condition],
+                            measurement_mapping: Dict[str, str],
+                            channel_mapping: Dict[ChannelID, ChannelID],
                             instruction_block: InstructionBlock) -> None:
         
         evaluation_result = self.__callback(self.__loop_iteration)
         if evaluation_result is None:
             raise ConditionEvaluationException()
         if evaluation_result is True:
-            sequencer.push(delegator, parameters, conditions, instruction_block)
-            sequencer.push(body, parameters, conditions, instruction_block)
+            sequencer.push(delegator, parameters, conditions, window_mapping=measurement_mapping,
+                           channel_mapping=channel_mapping,
+                           target_block=instruction_block)
+            sequencer.push(body, parameters, conditions, window_mapping=measurement_mapping,
+                           channel_mapping=channel_mapping,
+                           target_block=instruction_block)
             self.__loop_iteration += 1 # next time, evaluate for next iteration
 
     def build_sequence_branch(self,
-                              delegator: SequencingElement,
-                              if_branch: SequencingElement,
-                              else_branch: SequencingElement,
-                              sequencer: Sequencer,
+                              delegator: sequencing.SequencingElement,
+                              if_branch: sequencing.SequencingElement,
+                              else_branch: sequencing.SequencingElement,
+                              sequencer: sequencing.Sequencer,
                               parameters: Dict[str, Parameter],
                               conditions: Dict[str, Condition],
+                              measurement_mapping: Dict[str, str],
+                              channel_mapping: Dict[ChannelID, ChannelID],
                               instruction_block: InstructionBlock) -> None:
         
         evaluation_result = self.__callback(self.__loop_iteration)
         if evaluation_result is None:
             raise ConditionEvaluationException()
         if evaluation_result is True:
-            sequencer.push(if_branch, parameters, conditions, instruction_block)
+            sequencer.push(if_branch, parameters, conditions, window_mapping=measurement_mapping,
+                           channel_mapping=channel_mapping,
+                           target_block=instruction_block)
         else:
-            sequencer.push(else_branch, parameters, conditions, instruction_block)
+            sequencer.push(else_branch, parameters, conditions, window_mapping=measurement_mapping,
+                           channel_mapping=channel_mapping,
+                           target_block=instruction_block)
 
 
 class ConditionEvaluationException(Exception):

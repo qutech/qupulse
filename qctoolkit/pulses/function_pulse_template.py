@@ -15,15 +15,18 @@ import numpy as np
 from qctoolkit.expressions import Expression
 from qctoolkit.serialization import Serializer
 
-from qctoolkit.pulses.parameters import ParameterDeclaration, Parameter
-from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementWindow
-from qctoolkit.pulses.sequence_pulse_template import ParameterNotProvidedException
+from qctoolkit.utils.types import MeasurementWindow, ChannelID
+from qctoolkit.pulses.conditions import Condition
+from qctoolkit.pulses.parameters import Parameter, ParameterConstrainer, ParameterConstraint
+from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration
 from qctoolkit.pulses.instructions import Waveform
+from qctoolkit.pulses.measurement import MeasurementDefiner
+
 
 __all__ = ["FunctionPulseTemplate", "FunctionWaveform"]
 
 
-class FunctionPulseTemplate(AtomicPulseTemplate):
+class FunctionPulseTemplate(AtomicPulseTemplate, MeasurementDefiner, ParameterConstrainer):
     """Defines a pulse via a time-domain expression.
 
     FunctionPulseTemplate stores the expression and its external parameters. The user must provide
@@ -38,152 +41,164 @@ class FunctionPulseTemplate(AtomicPulseTemplate):
     def __init__(self,
                  expression: Union[str, Expression],
                  duration_expression: Union[str, Expression],
-                 measurement: bool=False,
-                 identifier: str=None) -> None:
-        """Create a new FunctionPulseTemplate instance.
-
+                 channel: ChannelID = 'default',
+                 identifier: Optional[str] = None,
+                 *,
+                 measurements: Optional[List[MeasurementDeclaration]]=None,
+                 parameter_constraints: Optional[List[Union[str, ParameterConstraint]]]=None) -> None:
+        """
         Args:
-            expression (str or Expression): The function represented by this FunctionPulseTemplate
+            expression: The function represented by this FunctionPulseTemplate
                 as a mathematical expression where 't' denotes the time variable and other variables
                 will be parameters of the pulse.
-            duration_expression (str or Expression): A mathematical expression which reliably
+            duration_expression: A mathematical expression which reliably
                 computes the duration of an instantiation of this FunctionPulseTemplate from
                 provided parameter values.
-            measurement (bool): True, if this FunctionPulseTemplate shall define a measurement
-                window. (optional, default = False)
-            identifier (str): A unique identifier for use in serialization. (optional)
+            channel: The channel this pulse template is defined on.
+            identifier: A unique identifier for use in serialization.
+            measurements: A list of measurement declarations forwarded to the
+                :class:`~qctoolkit.pulses.measurement.MeasurementDefiner` superclass
+            parameter_constraints: A list of parameter constraints forwarded to the
+                :class:`~`qctoolkit.pulses.measurement.ParameterConstrainer superclass
         """
-        super().__init__(identifier)
+        AtomicPulseTemplate.__init__(self, identifier=identifier)
+        MeasurementDefiner.__init__(self, measurements=measurements)
+        ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
+
         self.__expression = expression
         if not isinstance(self.__expression, Expression):
             self.__expression = Expression(self.__expression)
         self.__duration_expression = duration_expression
         if not isinstance(self.__duration_expression, Expression):
             self.__duration_expression = Expression(self.__duration_expression)
-        self.__is_measurement_pulse = measurement # type: bool
-        self.__parameter_names = set(self.__duration_expression.variables()
-                                     + self.__expression.variables()) - set(['t'])
+        self.__parameter_names = {*self.__duration_expression.variables, *self.__expression.variables} - {'t'}
+        self.__channel = channel
+        self.__measurement_windows = dict()
 
     @property
-    def parameter_names(self) -> Set[str]:
+    def expression(self) -> Expression:
+        return self.__expression
+
+    @property
+    def function_parameters(self) -> Set[str]:
         return self.__parameter_names
 
     @property
-    def parameter_declarations(self) -> Set[ParameterDeclaration]:
-        return {ParameterDeclaration(param_name) for param_name in self.parameter_names}
-
-    def get_pulse_length(self, parameters: Dict[str, Parameter]) -> float:
-        """Return the length of this pulse for the given parameters.
-
-        OBSOLETE/FLAWED? Just used in by get_measurement_windows which days are counted.
-
-        Args:
-            parameters (Dict(str -> Parameter)): A mapping of parameter name to parameter objects.
-        """
-        missing_parameters = self.__parameter_names - set(parameters.keys())
-        for missing_parameter in missing_parameters:
-            raise ParameterNotProvidedException(missing_parameter)
-        return self.__duration_expression.evaluate(
-            **{parameter_name: parameter.get_value()
-               for (parameter_name, parameter) in parameters.items()}
-        )
-
-    def get_measurement_windows(self,
-                                parameters: Optional[Dict[str, Parameter]]=None) \
-            -> List[MeasurementWindow]:
-        raise NotImplementedError()
-        if not self.__is_measurement_pulse:
-            return
-        else:
-            return [(0, self.get_pulse_length(parameters))]
+    def parameter_names(self) -> Set[str]:
+        return self.function_parameters | self.measurement_parameters | self.constrained_parameters
 
     @property
     def is_interruptable(self) -> bool:
         return False
 
     @property
-    def num_channels(self) -> int:
-        return 1
+    def defined_channels(self) -> Set[ChannelID]:
+        return {self.__channel}
 
-    def build_waveform(self, parameters: Dict[str, Parameter]) -> Optional[Waveform]:
-        return FunctionWaveform(
-            {parameter_name: parameter.get_value()
-             for (parameter_name, parameter) in parameters.items()},
-            self.__expression,
-            self.__duration_expression
-        )
+    @property
+    def duration(self) -> Expression:
+        return self.__duration_expression
+
+    @property
+    def measurement_names(self) -> Set[str]:
+        return {name for name, _, _ in self._measurement_windows}
+
+    def build_waveform(self,
+                       parameters: Dict[str, numbers.Real],
+                       measurement_mapping: Dict[str, str],
+                       channel_mapping: Dict[ChannelID, ChannelID]) -> 'FunctionWaveform':
+        self.validate_parameter_constraints(parameters=parameters)
+        substitutions = {v: parameters[v] for v in self.__expression.variables if v != 't'}
+        duration_parameters = {v: parameters[v] for v in self.__duration_expression.variables}
+        return FunctionWaveform(expression=self.__expression.evaluate_symbolic(substitutions=substitutions),
+                                duration=self.__duration_expression.evaluate_numeric(**duration_parameters),
+                                measurement_windows=self.get_measurement_windows(parameters=parameters,
+                                                                                 measurement_mapping=measurement_mapping),
+                                channel=channel_mapping[self.__channel])
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],
-                      conditions: Dict[str, 'Condition']) -> bool:
+                      conditions: Dict[str, Condition]) -> bool:
         return any(
             parameters[name].requires_stop
             for name in parameters.keys() if (name in self.parameter_names)
         )
 
-    def get_serialization_data(self, serializer: Serializer) -> None:
+    def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
         return dict(
             duration_expression=serializer.dictify(self.__duration_expression),
             expression=serializer.dictify(self.__expression),
-            measurement=self.__is_measurement_pulse
+            channel=self.__channel,
+            measurement_declarations=self.measurement_declarations,
+            parameter_constraints=[str(c) for c in self.parameter_constraints]
         )
 
     @staticmethod
-    def deserialize(serializer: 'Serializer',
+    def deserialize(serializer: Serializer,
                     expression: str,
                     duration_expression: str,
-                    measurement: bool,
+                    channel: 'ChannelID',
+                    measurement_declarations: List[MeasurementDeclaration],
+                    parameter_constraints: List,
                     identifier: Optional[bool]=None) -> 'FunctionPulseTemplate':
         return FunctionPulseTemplate(
             serializer.deserialize(expression),
             serializer.deserialize(duration_expression),
-            measurement,
-            identifier=identifier
+            channel=channel,
+            identifier=identifier,
+            measurements=measurement_declarations,
+            parameter_constraints=parameter_constraints
         )
 
 
 class FunctionWaveform(Waveform):
     """Waveform obtained from instantiating a FunctionPulseTemplate."""
 
-    def __init__(self,
-                 parameters: Dict[str, float],
-                 expression: Expression,
-                 duration_expression: Expression) -> None:
+    def __init__(self, expression: Expression,
+                 duration: float,
+                 measurement_windows: List[MeasurementWindow],
+                 channel: ChannelID) -> None:
         """Creates a new FunctionWaveform instance.
 
         Args:
-            parameters (Dict(str -> float)): A mapping of parameter names to parameter values.
-            expression (Expression): The function represented by this FunctionWaveform
-                as a mathematical expression where 't' denotes the time variable and other variables
-                are filled with values from the parameters mapping.
-            duration_expression (Expression): A mathematical expression which reliably
-                computes the duration of this FunctionPulseTemplate.
+            expression: The function represented by this FunctionWaveform
+                as a mathematical expression where 't' denotes the time variable. It must not have other variables
+            duration: The duration of the waveform
+            measurement_windows: A list of measurement windows
+            channel: The channel this waveform is played on
         """
         super().__init__()
-        self.__expression = expression
-        self.__parameters = parameters
-        self.__duration = duration_expression.evaluate(**self.__parameters)
+        if set(expression.variables) - set('t'):
+            raise ValueError('FunctionWaveforms may not depend on anything but "t"')
+
+        self._expression = expression
+        self._duration = duration
+        self._channel_id = channel
+        self._measurement_windows = measurement_windows
 
     @property
-    def num_channels(self):
-        return 1
-    
-    def __evaluate_partially(self, t):
-        params = self.__parameters.copy()
-        params.update({"t":t})
-        return self.__expression.evaluate(**params)
+    def defined_channels(self) -> Set[ChannelID]:
+        return {self._channel_id}
+
+    def get_measurement_windows(self) -> List[MeasurementWindow]:
+        return self._measurement_windows
     
     @property
     def compare_key(self) -> Any:
-        return self.__expression, self.__duration, self.__parameters
+        return self._channel_id, self._expression, self._duration, self._measurement_windows
 
     @property
     def duration(self) -> float:
-        return self.__duration
+        return self._duration
 
-    def sample(self, sample_times: np.ndarray, first_offset: float=0) -> np.ndarray:
-        sample_times -= (sample_times[0] - first_offset)
-        func = np.vectorize(self.__evaluate_partially)
-        voltages = np.empty((1, len(sample_times)))
-        voltages[0] = func(sample_times)
-        return voltages
+    def unsafe_sample(self,
+                      channel: ChannelID,
+                      sample_times: np.ndarray,
+                      output_array: Union[np.ndarray, None] = None) -> np.ndarray:
+        if output_array is None:
+            output_array = np.empty(len(sample_times))
+        output_array[:] = self._expression.evaluate_numeric(t=sample_times)
+        return output_array
+
+    def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> Waveform:
+        return self

@@ -6,5 +6,6 @@ __all__ = [
     'format_tests',
     'pyflakes_syntax_tests',
     'serialization_dummies',
-    'serialization_tests'
+    'serialization_tests',
+    'coverage_tests'
 ]

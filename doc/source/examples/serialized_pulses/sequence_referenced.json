@@ -1,31 +1,20 @@
 {
-    "external_parameters": [],
-    "is_interruptable": true,
+    "parameter_constraints": [],
     "subtemplates": [
         {
-            "mappings": {
-                "ta": {
-                    "expression": "1",
-                    "type": "qctoolkit.expressions.Expression"
-                },
-                "tb": {
-                    "expression": "2",
-                    "type": "qctoolkit.expressions.Expression"
-                },
-                "tend": {
-                    "expression": "5",
-                    "type": "qctoolkit.expressions.Expression"
-                },
-                "va": {
-                    "expression": "5",
-                    "type": "qctoolkit.expressions.Expression"
-                },
-                "vb": {
-                    "expression": "0",
-                    "type": "qctoolkit.expressions.Expression"
-                }
+            "channel_mapping": {
+                "A": "A"
             },
-            "template": "table_template"
+            "measurement_mapping": {},
+            "parameter_mapping": {
+                "ta": "1",
+                "tb": "2",
+                "tend": "5",
+                "va": "5",
+                "vb": "0"
+            },
+            "template": "table_template",
+            "type": "qctoolkit.pulses.pulse_template_parameter_mapping.MappingTemplate"
         }
     ],
     "type": "qctoolkit.pulses.sequence_pulse_template.SequencePulseTemplate"

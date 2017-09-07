@@ -8,10 +8,13 @@ Classes:
 """
 
 from abc import ABCMeta, abstractmethod
-from typing import Tuple, Dict, Union, Optional
+from typing import Tuple, Dict, Union, Optional, List
 import numbers
 
-from qctoolkit.pulses.instructions import InstructionBlock, ImmutableInstructionBlock
+from qctoolkit.utils.types import ChannelID
+
+from . import conditions
+from qctoolkit.pulses.instructions import InstructionBlock, ImmutableInstructionBlock, Waveform
 from qctoolkit.pulses.parameters import Parameter, ConstantParameter
 
 
@@ -26,13 +29,19 @@ class SequencingElement(metaclass=ABCMeta):
     """
 
     def __init__(self) -> None:
-        super().__init__()
+        pass
+
+    def atomicity(self) -> bool:
+        """Is the element translated to a single EXECInstruction with one waveform"""
+        raise NotImplementedError()
 
     @abstractmethod
     def build_sequence(self,
-                       sequencer: "Sequencer",
+                       sequencer: 'Sequencer',
                        parameters: Dict[str, Parameter],
-                       conditions: Dict[str, 'Condition'],
+                       conditions: Dict[str, 'conditions.Condition'],
+                       measurement_mapping: Dict[str, str],
+                       channel_mapping: Dict[ChannelID, ChannelID],
                        instruction_block: InstructionBlock) -> None:
         """Translate this SequencingElement into an instruction sequence for the given
         instruction_block using sequencer and the given parameter and condition sets.
@@ -45,6 +54,7 @@ class SequencingElement(metaclass=ABCMeta):
             Dict[str -> Parameter] parameters: A mapping of parameter names to Parameter objects.
             Dict[str -> Condition] conditions: A mapping of condition identifiers to Condition
                 objects.
+            Dict[str -> str] measurement_mapping: A mapping of measurement window names
             InstructionBlock instruction_block: The instruction block into which instructions
                 resulting from the translation of this SequencingElement will be placed.
         """
@@ -52,7 +62,7 @@ class SequencingElement(metaclass=ABCMeta):
     @abstractmethod
     def requires_stop(self,
                       parameters: Dict[str, Parameter],
-                      conditions: Dict[str, 'Condition']) -> bool:
+                      conditions: Dict[str, 'conditions.Condition']) -> bool:
         """Return True if this SequencingElement cannot be translated yet.
 
         Sequencer will check requires_stop() before calling build_sequence(). If requires_stop()
@@ -94,20 +104,23 @@ class Sequencer:
         SequencingElement
     """
 
-    StackElement = Tuple[SequencingElement, Dict[str, Parameter], Dict[str, 'Condition']]
+    StackElement = Tuple[SequencingElement, Dict[str, Parameter], Dict[str, 'Condition'], Dict[str,str]]
 
     def __init__(self) -> None:
         """Create a Sequencer."""
         super().__init__()
-        self.__waveforms = dict() #type: Dict[int, Waveform]
+        self.__waveforms = dict()  # type: Dict[int, Waveform]
         self.__main_block = InstructionBlock()
         self.__sequencing_stacks = \
-            {self.__main_block: []} #type: Dict[InstructionBlock, List[StackElement]]
-        
+            {self.__main_block: []}  # type: Dict[InstructionBlock, List[Sequencer.StackElement]]
+
     def push(self,
              sequencing_element: SequencingElement,
              parameters: Optional[Dict[str, Union[Parameter, float]]]=None,
-             conditions: Optional[Dict[str, 'Condition']]=None,
+             conditions: Optional[Dict[str, 'conditions.Condition']]=None,
+             *,
+             window_mapping: Optional[Dict[str, str]]=None,
+             channel_mapping: Optional[Dict[ChannelID, ChannelID]]=None,
              target_block: Optional[InstructionBlock]=None) -> None:
         """Add an element to the translation stack of the target_block with the given set of
          parameters.
@@ -124,6 +137,8 @@ class Sequencer:
             conditions (Dict(str -> Condition)): A mapping of condition identifier defined by the
                 SequencingElement to Condition objects. Optional, if no conditions are defined by
                 the SequencingElement. (default: None)
+            window_mapping (Dict(str -> str)): Mapping of the measurement window names of the sequence element
+            channel_mapping (Dict(ChannelID -> ChannelID)): Mapping of the defined channels
             target_block (InstructionBlock): The instruction block into which instructions resulting
                 from the translation of the SequencingElement will be placed. Optional. If not
                 provided, the main instruction block will be targeted. (default: None)
@@ -134,17 +149,27 @@ class Sequencer:
             conditions = dict()
         if target_block is None:
             target_block = self.__main_block
-
+        if window_mapping is None:
+            if hasattr(sequencing_element, 'measurement_names'):
+                window_mapping = {wn: wn for wn in sequencing_element.measurement_names}
+            else:
+                window_mapping = dict()
+        if channel_mapping is None:
+            if hasattr(sequencing_element, 'defined_channels'):
+                channel_mapping = {cn: cn for cn in sequencing_element.defined_channels}
+            else:
+                channel_mapping = dict()
         for (key, value) in parameters.items():
-            if isinstance(value, numbers.Real):
+            if not isinstance(value, Parameter):
                 parameters[key] = ConstantParameter(value)
 
         if target_block not in self.__sequencing_stacks:
             self.__sequencing_stacks[target_block] = []
 
-        self.__sequencing_stacks[target_block].append((sequencing_element, parameters, conditions))
+        self.__sequencing_stacks[target_block].append((sequencing_element, parameters, conditions, window_mapping,
+                                                       channel_mapping))
 
-    def build(self) -> InstructionBlock:
+    def build(self) -> ImmutableInstructionBlock:
         """Start the translation process. Translate all elements currently on the translation stacks
         into an InstructionBlock hierarchy.
 
@@ -157,18 +182,19 @@ class Sequencer:
             The instruction block (hierarchy) resulting from the translation of the (remaining)
                 SequencingElements on the sequencing stacks.
         """
-        if not self.has_finished():            
+        if not self.has_finished():
             shall_continue = True # shall_continue will only be False, if the first element on all
                                   # stacks requires a stop or all stacks are empty
             while shall_continue:
                 shall_continue = False
                 for target_block, sequencing_stack in self.__sequencing_stacks.copy().items():
                     while sequencing_stack:
-                        (element, parameters, conditions) = sequencing_stack[-1]
+                        (element, parameters, conditions, window_mapping, channel_mapping) = sequencing_stack[-1]
                         if not element.requires_stop(parameters, conditions):
                             shall_continue |= True
                             sequencing_stack.pop()
-                            element.build_sequence(self, parameters, conditions, target_block)
+                            element.build_sequence(self, parameters, conditions, window_mapping,
+                                                   channel_mapping, target_block)
                         else: break
 
         return ImmutableInstructionBlock(self.__main_block, dict())
@@ -176,7 +202,7 @@ class Sequencer:
     def has_finished(self) -> bool:
         """Check whether all translation stacks are empty. Indicates that the translation is
         complete.
-        
+
         Note that has_finished will return False, if there are stack elements that require a stop.
         In this case, calling build will only have an effect if these elements no longer require a
         stop, e.g. when required measurement results have been acquired since the last translation.
