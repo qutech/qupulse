@@ -50,6 +50,9 @@ class WaveformTest(unittest.TestCase):
         self.assertIs(wf.get_sampled('A', sample_times=sample_times, output_array=output_array), output_array)
         self.assertEqual(len(output_array), 0)
 
+        with self.assertRaises(ValueError):
+            wf.get_sampled('A', sample_times=sample_times, output_array=numpy.zeros(1))
+
     def test_get_sampled_argument_forwarding(self):
         wf = DummyWaveform(duration=2., sample_output=[1, 2], defined_channels={'A', 'B'})
 

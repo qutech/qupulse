@@ -79,8 +79,11 @@ class Waveform(Comparable, metaclass=ABCMeta):
         if len(sample_times) == 0:
             if output_array is None:
                 return numpy.zeros_like(sample_times)
+            elif len(output_array) == len(sample_times):
+                return output_array
             else:
-                return output_array[:0]
+                raise ValueError('Output array length and sample time length are different')
+
         if numpy.any(sample_times[:-1] >= sample_times[1:]):
             raise ValueError('The sample times are not monotonously increasing')
         if sample_times[0] < 0 or sample_times[-1] > self.duration:
