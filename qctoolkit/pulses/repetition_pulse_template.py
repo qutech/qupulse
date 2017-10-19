@@ -26,7 +26,7 @@ class RepetitionWaveform(Waveform):
     """This class allows putting multiple PulseTemplate together in one waveform on the hardware."""
     def __init__(self, body: Waveform, repetition_count: int):
         self._body = body
-        self._repetition_count = repetition_count
+        self._repetition_count = checked_int_cast(repetition_count)
         if repetition_count < 1 or not isinstance(repetition_count, int):
             raise ValueError('Repetition count must be an integer >0')
 
