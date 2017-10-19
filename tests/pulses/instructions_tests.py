@@ -37,6 +37,19 @@ class WaveformTest(unittest.TestCase):
         self.assertIs(wf.get_sampled('A', sample_times=numpy.arange(2)),
                       wf.get_sampled('A', sample_times=numpy.arange(2)))
 
+    def test_get_sampled_empty(self):
+        wf = DummyWaveform(duration=2., defined_channels={'A', 'B'})
+
+        sample_times = numpy.zeros(0)
+        output_array = numpy.zeros(0)
+
+        sampled = wf.get_sampled('A', sample_times=sample_times)
+        self.assertIsInstance(sampled, numpy.ndarray)
+        self.assertEqual(len(sampled), 0)
+
+        self.assertIs(wf.get_sampled('A', sample_times=sample_times, output_array=output_array), output_array)
+        self.assertEqual(len(output_array), 0)
+
     def test_get_sampled_argument_forwarding(self):
         wf = DummyWaveform(duration=2., sample_output=[1, 2], defined_channels={'A', 'B'})
 
