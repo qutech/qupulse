@@ -215,6 +215,14 @@ class ExpressionTests(unittest.TestCase):
         self.assertIsInstance(flt, float)
         self.assertEqual(flt, 3.)
 
+        st = Expression('a + b').get_most_simple_representation()
+        self.assertIsInstance(st, str)
+        self.assertEqual(st, 'a + b')
+
+        st_n = Expression('a+b', numpy_evaluation=False).get_most_simple_representation()
+        self.assertIsInstance(st_n, Expression)
+        self.assertEqual(st_n, 'a+b')
+
     def test_is_nan(self):
         self.assertTrue(Expression('nan').is_nan())
         self.assertTrue(Expression('0./0.').is_nan())

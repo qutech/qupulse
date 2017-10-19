@@ -9,15 +9,15 @@ from sympy.core.numbers import Number as SympyNumber
 import numpy
 
 from qctoolkit.comparable import Comparable
-from qctoolkit.serialization import Serializable, Serializer, ExtendedJSONEncoder
+from qctoolkit.serialization import AnonymousSerializable, ExtendedJSONEncoder
 
 __all__ = ["Expression", "ExpressionVariableMissingException"]
 
 
-class Expression(Serializable, Comparable):
+class Expression(AnonymousSerializable, Comparable):
     """A mathematical expression instantiated from a string representation."""
 
-    def __init__(self, ex: Union[str, Number, sympy.Expr], numpy_evaluation: bool=True) -> None:
+    def __init__(self, ex: Union[str, Number, sympy.Expr, Dict], numpy_evaluation: bool=True) -> None:
         """Create an Expression object.
 
         Receives the mathematical expression which shall be represented by the object as a string
@@ -29,6 +29,9 @@ class Expression(Serializable, Comparable):
             numpy_evaluation: If True the evaluation will be done via sympy.lambdify with the numpy argument
         """
         super().__init__()
+        if isinstance(ex, dict):
+            ex, numpy_evaluation = ex['expression'], ex['numpy_evaluation']
+
         self._original_expression = str(ex) if isinstance(ex, sympy.Expr) else ex
         self._sympified_expression = sympy.sympify(ex)
         self._variables = tuple(str(var) for var in self._sympified_expression.free_symbols)
@@ -42,10 +45,15 @@ class Expression(Serializable, Comparable):
         return str(self._sympified_expression)
 
     def __repr__(self) -> str:
-        return 'Expression({})'.format(repr(self._original_expression))
+        if self.numpy_evaluation:
+            return 'Expression({})'.format(repr(self._original_expression))
+        else:
+            return 'Expression({}, numpy_evaluation=False)'.format(repr(self._original_expression))
 
-    def get_most_simple_representation(self) -> Union[str, int, float, complex]:
-        if self._sympified_expression.free_symbols:
+    def get_most_simple_representation(self) -> Union[str, int, float, complex, 'Expression']:
+        if self.numpy_evaluation is False:
+            return self
+        elif self._sympified_expression.free_symbols:
             return str(self._sympified_expression)
         elif self._sympified_expression.is_integer:
             return int(self._sympified_expression)
@@ -186,8 +194,6 @@ class Expression(Serializable, Comparable):
             except TypeError as type_error:
                 raise NonNumericEvaluation(self, result, kwargs) from type_error
 
-
-
     def evaluate_symbolic(self, substitutions: Dict[Any, Any]) -> 'Expression':
         """Evaluate the expression symbolically.
 
@@ -196,24 +202,21 @@ class Expression(Serializable, Comparable):
         Returns:
 
         """
+        numpy_evaluation = Expression.all_numpy_evaluated(self,
+                                                          *(ex for ex in substitutions if isinstance(ex, Expression)))
         substitutions = dict((k, v.sympified_expression if isinstance(v, Expression) else v)
                              for k, v in substitutions.items())
-        return Expression(self._sympified_expression.subs(substitutions))
+        return Expression(self._sympified_expression.subs(substitutions),
+                          numpy_evaluation=numpy_evaluation)
 
-    def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
-        return dict(expression=self.original_expression)
-
-    @staticmethod
-    def deserialize(serializer: 'Serializer', **kwargs) -> Serializable:
-        return Expression(kwargs['expression'])
-
-    @property
-    def identifier(self) -> Optional[str]:
-        return None
+    def get_serialization_data(self) -> Union[str, Dict]:
+        if self.numpy_evaluation is True:
+            return self.original_expression
+        else:
+            return dict(expression=self.original_expression, numpy_evaluation=self.numpy_evaluation)
 
     def is_nan(self) -> bool:
         return sympy.sympify('nan') == self._sympified_expression
-ExtendedJSONEncoder.str_constructable_types.add(Expression)
 
 
 class ExpressionVariableMissingException(Exception):
