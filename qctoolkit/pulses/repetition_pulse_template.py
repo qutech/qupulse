@@ -126,7 +126,7 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer):
 
     @property
     def duration(self) -> Expression:
-        return Expression(self.repetition_count.sympified_expression * self.body.duration.sympified_expression)
+        return self.repetition_count * self.body.duration
 
     def build_sequence(self,
                        sequencer: Sequencer,

@@ -176,7 +176,7 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer):
 
     @property
     def duration(self) -> Expression:
-        return Expression(sum(sub.duration.sympified_expression for sub in self.__subtemplates))
+        return sum(sub.duration for sub in self.__subtemplates)
 
     @property
     def defined_channels(self) -> Set[ChannelID]:

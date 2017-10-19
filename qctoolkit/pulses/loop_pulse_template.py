@@ -4,6 +4,8 @@ another PulseTemplate based on a condition."""
 
 from typing import Dict, Set, Optional, Any, Union, Tuple, Generator
 
+import sympy
+
 from qctoolkit.serialization import Serializer
 
 from qctoolkit.expressions import Expression
@@ -142,9 +144,26 @@ class ForLoopPulseTemplate(LoopPulseTemplate):
 
     @property
     def duration(self) -> Expression:
-        count = (self._loop_range.stop.sympified_expression - self._loop_range.start.sympified_expression)
-        step = self._loop_range.step.sympified_expression
-        return Expression((count - count % step)/step * self.body.duration.sympified_expression)
+        step_size = self._loop_range.step.sympified_expression
+        loop_index = sympy.symbols(self._loop_index)
+        sum_index = sympy.symbols(self._loop_index)
+
+        # replace loop_index with sum_index dependable expression
+        body_duration = self.body.duration.sympified_expression.subs({loop_index: self._loop_range.start.sympified_expression + sum_index*step_size})
+
+        # number of sum contributions
+        step_count = sympy.ceiling((self._loop_range.stop.sympified_expression-self._loop_range.start.sympified_expression) / step_size)
+        sum_start = 0
+        sum_stop = sum_start + (sympy.functions.Max(step_count, 1) - 1)
+
+        # expression used if step_count >= 0
+        finite_duration_expression = sympy.Sum(body_duration, (sum_index, sum_start, sum_stop))
+
+        duration_expression = sympy.Piecewise((0, step_count <= 0),
+                                              (finite_duration_expression, True))
+
+        # disable numpy because it breaks sum evaluation
+        return Expression(duration_expression, numpy_evaluation=False)
 
     @property
     def parameter_names(self) -> Set[str]:

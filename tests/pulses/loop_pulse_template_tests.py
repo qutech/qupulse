@@ -124,10 +124,22 @@ class ForLoopPulseTemplateTest(unittest.TestCase):
         self.assertIs(loop_index, flt.loop_index)
 
     def test_duration(self):
-        dt = DummyPulseTemplate(parameter_names={'i', 'k'}, duration=Expression('d'))
-        flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=(3, 9, 2))
+        dt = DummyPulseTemplate(parameter_names={'idx', 'd'}, duration=Expression('d+idx*2'))
 
-        self.assertEqual(flt.duration, Expression('d*3'))
+        flt = ForLoopPulseTemplate(body=dt, loop_index='idx', loop_range='n')
+        self.assertEqual(flt.duration.evaluate_numeric(n=4, d=100), 4 * 100 + 2 * (1 + 2 + 3))
+
+        flt = ForLoopPulseTemplate(body=dt, loop_index='idx', loop_range=(3, 'n', 2))
+        self.assertEqual(flt.duration.evaluate_numeric(n=9, d=100), 3*100 + 2*(3 + 5 + 7))
+        self.assertEqual(flt.duration.evaluate_numeric(n=8, d=100), 3 * 100 + 2 * (3 + 5 + 7))
+
+        flt = ForLoopPulseTemplate(body=dt, loop_index='idx', loop_range=('m', 'n', -2))
+        self.assertEqual(flt.duration.evaluate_numeric(n=9, d=100, m=14),
+                         3 * 100 + 2 * (14 + 12 + 10))
+
+        flt = ForLoopPulseTemplate(body=dt, loop_index='idx', loop_range=('m', 'n', -2))
+        self.assertEqual(flt.duration.evaluate_numeric(n=9, d=100, m=14),
+                         3 * 100 + 2*(14 + 12 + 10))
 
     def test_parameter_names(self):
         dt = DummyPulseTemplate(parameter_names={'i', 'k'})
