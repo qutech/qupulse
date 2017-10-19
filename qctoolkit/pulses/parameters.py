@@ -15,7 +15,7 @@ from numbers import Real
 import sympy
 import numpy
 
-from qctoolkit.serialization import Serializable, Serializer, ExtendedJSONEncoder
+from qctoolkit.serialization import Serializable, Serializer, AnonymousSerializable
 from qctoolkit.expressions import Expression
 from qctoolkit.comparable import Comparable
 
@@ -150,7 +150,7 @@ class MappedParameter(Parameter):
         return MappedParameter(serializer.deserialize(expression))
 
 
-class ParameterConstraint(Comparable):
+class ParameterConstraint(Comparable, AnonymousSerializable):
     """A parameter constraint like 't_2 < 2.7' that can be used to set bounds to parameters."""
     def __init__(self, relation: Union[str, sympy.Expr]):
         super().__init__()
@@ -187,7 +187,9 @@ class ParameterConstraint(Comparable):
                                    self._expression.sympified_expression.rhs)
         else:
             return str(self._expression.sympified_expression)
-ExtendedJSONEncoder.str_constructable_types.add(ParameterConstraint)
+
+    def get_serialization_data(self) -> str:
+        return str(self)
 
 
 class ParameterConstrainer:
