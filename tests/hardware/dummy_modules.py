@@ -54,6 +54,8 @@ class dummy_teawg(dummy_package):
         'digital_support': False,  # is digital-wave supported?
     }
     class TEWXAwg:
+        _make_combined_wave_calls = []
+
         def __init__(self, *args, paranoia_level=1, **kwargs):
             self.logged_commands = []
             self.logged_queries = []
@@ -65,6 +67,7 @@ class dummy_teawg(dummy_package):
             self._send_binary_data_calls = []
             self._download_adv_seq_table_calls = []
             self._download_sequencer_table_calls = []
+
         @property
         def visa_inst(self):
             return self._visa_inst
@@ -76,10 +79,14 @@ class dummy_teawg(dummy_package):
             self._download_segment_lengths_calls.append((seg_len_list, pref, paranoia_level))
         def send_binary_data(self, pref, bin_dat, paranoia_level='dummy_paranoia'):
             self._send_binary_data_calls.append((pref, bin_dat, paranoia_level))
-        def download_adv_seq_table(self, advanced_sequencer_table):
-            self._download_adv_seq_table_calls.append(advanced_sequencer_table)
-        def download_sequencer_table(self, sequencer_table):
-            self._download_sequencer_table_calls.append(sequencer_table)
+        def download_adv_seq_table(self, advanced_sequencer_table, pref=':ASEQ:DATA', paranoia_level=None):
+            self._download_adv_seq_table_calls.append((advanced_sequencer_table, pref, paranoia_level))
+        def download_sequencer_table(self, *args, **kwargs):
+            self._download_sequencer_table_calls.append((args, kwargs))
+
+        @staticmethod
+        def make_combined_wave(wav1, wav2, dest_array, dest_array_offset=0, add_idle_pts=False, quantum=16):
+            dummy_teawg.TEWXAwg._make_combined_wave_calls.append((wav1, wav2, dest_array, dest_array_offset, add_idle_pts, quantum))
 
 class dummy_atsaverage(dummy_package):
     class atsaverage(dummy_package):

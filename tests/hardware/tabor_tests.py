@@ -4,6 +4,7 @@ import itertools
 from copy import copy, deepcopy
 import numpy as np
 import sys
+from typing import List, Tuple, Dict
 
 from qctoolkit.pulses.table_pulse_template import TableWaveform, HoldInterpolationStrategy
 from qctoolkit.hardware.awgs.tabor import TaborAWGRepresentation, TaborException, TaborProgram, TaborChannelPair,\
@@ -21,11 +22,14 @@ from tests.hardware.program_tests import LoopTests, WaveformGenerator, MultiChan
 hardware_instrument = None
 def get_instrument():
     if use_dummy_tabor:
-        instrument = TaborAWGRepresentation('dummy_address', reset=True, paranoia_level=2)
-        instrument._visa_inst.answers[':OUTP:COUP'] = 'DC'
-        instrument._visa_inst.answers[':VOLT'] = '1.0'
-        instrument._visa_inst.answers[':FREQ:RAST'] = '1e9'
-        instrument._visa_inst.answers[':VOLT:HV'] = '0.7'
+        instrument = TaborAWGRepresentation('main_instrument',
+                                            reset=True,
+                                            paranoia_level=2,
+                                            mirror_addresses=['mirror_instrument'])
+        instrument.main_instrument.visa_inst.answers[':OUTP:COUP'] = 'DC'
+        instrument.main_instrument.visa_inst.answers[':VOLT'] = '1.0'
+        instrument.main_instrument.visa_inst.answers[':FREQ:RAST'] = '1e9'
+        instrument.main_instrument.visa_inst.answers[':VOLT:HV'] = '0.7'
         return instrument
     else:
         instrument_address = ('127.0.0.1', )
@@ -33,11 +37,17 @@ def get_instrument():
             hardware_instrument = TaborAWGRepresentation(instrument_address,
                                             reset=True,
                                             paranoia_level=2)
-            hardware_instrument._visa_inst.timeout = 25000
+            hardware_instrument.main_instrument.visa_inst.timeout = 25000
 
             if not hardware_instrument.is_open:
                 raise RuntimeError('Could not connect to instrument')
         return hardware_instrument
+
+
+def reset_instrument_logs(inst: TaborAWGRepresentation):
+    for device in inst.all_devices:
+        device.logged_commands = []
+        device._send_binary_data_calls = []
 
 
 class TaborSegmentTests(unittest.TestCase):
@@ -298,36 +308,45 @@ class TaborAWGRepresentationTests(unittest.TestCase):
 
 @unittest.skipIf(not use_dummy_tabor, "Tests only possible with dummy tabor driver module injection")
 class TaborAWGRepresentationDummyBasedTests(unittest.TestCase):
+    def assertAllCommandLogsEqual(self, inst: TaborAWGRepresentation, expected_log: List):
+        for device in inst.all_devices:
+            self.assertEqual(device.logged_commands, expected_log)
+
     def test_send_cmd(self):
         inst = get_instrument()
 
-        inst.send_cmd('', paranoia_level=3)
-        self.assertEqual(inst.visa_inst.logged_asks[-1], (('*OPC?; :SYST:ERR?',), {}))
+        reset_instrument_logs(inst)
 
-        inst.visa_inst.answers['enemene'] = '1;2;3;4'
+        inst.send_cmd('bleh', paranoia_level=3)
 
-        inst.paranoia_level = 3
-        with self.assertRaises(AssertionError):
-            inst.send_cmd('enemene?')
+        self.assertAllCommandLogsEqual(inst, [((), dict(paranoia_level=3, cmd_str='bleh'))])
 
-        inst.visa_inst.default_answer = '-451, bla'
-        with self.assertRaises(RuntimeError):
-            inst.send_cmd('')
+        inst.send_cmd('bleho')
+        self.assertAllCommandLogsEqual(inst, [((), dict(paranoia_level=3, cmd_str='bleh')),
+                                              ((), dict(cmd_str='bleho', paranoia_level=None))])
 
     def test_trigger(self):
         inst = get_instrument()
-        inst.paranoia_level = 0
 
-        inst.logged_commands = []
+        reset_instrument_logs(inst)
         inst.trigger()
 
-        self.assertEqual(inst.logged_commands, [((), dict(cmd_str=':TRIG', paranoia_level=inst.paranoia_level))])
+        self.assertAllCommandLogsEqual(inst, [((), dict(cmd_str=':TRIG', paranoia_level=None))])
+
+    def test_paranoia_level(self):
+        inst = get_instrument()
+
+        self.assertEqual(inst.paranoia_level, inst.main_instrument.paranoia_level)
+        inst.paranoia_level = 30
+        for device in inst.all_devices:
+            self.assertEqual(device.paranoia_level, 30)
 
     def test_reset(self):
         inst = get_instrument()
-        inst.paranoia_level = 0
 
-        inst.logged_commands = []
+        reset_instrument_logs(inst)
+
+        inst.main_instrument.logged_commands = []
         inst.reset()
 
         expected_commands = [':RES',
@@ -335,21 +354,20 @@ class TaborAWGRepresentationDummyBasedTests(unittest.TestCase):
                              ':INIT:CONT:ENAB ARM; :INIT:CONT:ENAB:SOUR BUS',
                              ':INST:SEL 3; :INIT:GATE OFF; :INIT:CONT ON; '
                              ':INIT:CONT:ENAB ARM; :INIT:CONT:ENAB:SOUR BUS']
-        expected_log = [((), dict(cmd_str=cmd, paranoia_level=inst.paranoia_level))
+        expected_log = [((), dict(cmd_str=cmd, paranoia_level=None))
                         for cmd in expected_commands]
-        self.assertEqual(inst.logged_commands, expected_log)
+        self.assertEqual(inst.main_instrument.logged_commands, expected_log)
 
     def test_enable(self):
         inst = get_instrument()
-        inst.paranoia_level = 0
 
-        inst.logged_commands = []
+        reset_instrument_logs(inst)
         inst.enable()
 
         expected_commands = [':ENAB']
-        expected_log = [((), dict(cmd_str=cmd, paranoia_level=inst.paranoia_level))
+        expected_log = [((), dict(cmd_str=cmd, paranoia_level=None))
                         for cmd in expected_commands]
-        self.assertEqual(inst.logged_commands, expected_log)
+        self.assertAllCommandLogsEqual(inst, expected_log)
 
 
 class ConfigurationGuardTest(unittest.TestCase):
@@ -429,7 +447,7 @@ class DummyTaborProgramClass:
         return self.created[-1]
 
 
-class TaborChannelPairTests(unittest.TestCase):
+class TaborChannelPairTests(TaborAWGRepresentationDummyBasedTests):
     def test_copy(self):
         channel_pair = TaborChannelPair(get_instrument(), identifier='asd', channels=(1, 2))
         with self.assertRaises(NotImplementedError):
@@ -622,9 +640,7 @@ class TaborChannelPairTests(unittest.TestCase):
         channel_pair = TaborChannelPair(instrument, identifier='asd', channels=(1, 2))
 
         instrument.paranoia_level = 0
-        instrument.logged_commands = []
-        instrument.logged_queries = []
-        instrument._send_binary_data_calls = []
+        reset_instrument_logs(instrument)
 
         channel_pair._segment_references = np.array([1, 2, 0, 1], dtype=np.uint32)
         channel_pair._segment_capacity = 192 + np.array([0, 16, 32, 32], dtype=np.uint32)
@@ -651,12 +667,13 @@ class TaborChannelPairTests(unittest.TestCase):
         expected_commands = [':TRAC:DEF 3, 208',
                              ':TRAC:SEL 3',
                              ':TRAC:MODE COMB']
-        expected_log = [((), dict(cmd_str=cmd, paranoia_level=instrument.paranoia_level))
+        expected_log = [((), dict(cmd_str=cmd, paranoia_level=None))
                         for cmd in expected_commands]
-        self.assertEqual(instrument.logged_commands, expected_log)
+        self.assertAllCommandLogsEqual(instrument, expected_log)
 
-        expected_send_binary_data_log = [(':TRAC:DATA', segment_binary, 'dummy_paranoia')]
-        np.testing.assert_equal(instrument._send_binary_data_calls, expected_send_binary_data_log)
+        expected_send_binary_data_log = [(':TRAC:DATA', segment_binary, None)]
+        for device in instrument.all_devices:
+            np.testing.assert_equal(device._send_binary_data_calls, expected_send_binary_data_log)
 
     def test_amend_segments_flush(self):
         instrument = get_instrument()
@@ -664,10 +681,10 @@ class TaborChannelPairTests(unittest.TestCase):
         # prevent entering and exiting configuration mode
         channel_pair._configuration_guard_count = 2
 
-        instrument.paranoia_level = 0
-        instrument.logged_commands = []
-        instrument.logged_queries = []
-        instrument._send_binary_data_calls = []
+        instrument.main_instrument.paranoia_level = 0
+        instrument.main_instrument.logged_commands = []
+        instrument.main_instrument.logged_queries = []
+        instrument.main_instrument._send_binary_data_calls = []
 
         channel_pair._segment_references = np.array([1, 2, 0, 1], dtype=np.uint32)
         channel_pair._segment_capacity = 192 + np.array([0, 16, 32, 32], dtype=np.uint32)
@@ -695,27 +712,26 @@ class TaborChannelPairTests(unittest.TestCase):
                              ':TRAC:SEL 5',
                              ':TRAC:MODE COMB',
                              ':TRAC:DEF 3,208']
-        expected_log = [((), dict(cmd_str=cmd, paranoia_level=instrument.paranoia_level))
+        expected_log = [((), dict(cmd_str=cmd, paranoia_level=None))
                         for cmd in expected_commands]
-        self.assertEqual(expected_log, instrument.logged_commands)
+        self.assertEqual(expected_log, instrument.main_instrument.logged_commands)
 
-        expected_download_segment_calls = [(expected_capacities, 'dummy_pref', 'dummy_paranoia')]
-        np.testing.assert_equal(instrument._download_segment_lengths_calls, expected_download_segment_calls)
+        expected_download_segment_calls = [(expected_capacities, ':SEGM:DATA', None)]
+        np.testing.assert_equal(instrument.main_instrument._download_segment_lengths_calls, expected_download_segment_calls)
 
         expected_bin_blob = make_combined_wave(segments)
-        expected_send_binary_data_log = [(':TRAC:DATA', expected_bin_blob, 'dummy_paranoia')]
-        np.testing.assert_equal(instrument._send_binary_data_calls, expected_send_binary_data_log)
+        expected_send_binary_data_log = [(':TRAC:DATA', expected_bin_blob, None)]
+        np.testing.assert_equal(instrument.main_instrument._send_binary_data_calls, expected_send_binary_data_log)
 
     def test_amend_segments_iter(self):
         instrument = get_instrument()
+
         channel_pair = TaborChannelPair(instrument, identifier='asd', channels=(1, 2))
         # prevent entering and exiting configuration mode
         channel_pair._configuration_guard_count = 2
 
         instrument.paranoia_level = 0
-        instrument.logged_commands = []
-        instrument.logged_queries = []
-        instrument._send_binary_data_calls = []
+        reset_instrument_logs(instrument)
 
         channel_pair._segment_references = np.array([1, 2, 0, 1], dtype=np.uint32)
         channel_pair._segment_capacity = 192 + np.array([0, 16, 32, 32], dtype=np.uint32)
@@ -746,16 +762,18 @@ class TaborChannelPairTests(unittest.TestCase):
                              ':TRAC:MODE COMB',
                              ':TRAC:DEF 5,192',
                              ':TRAC:DEF 6,192']
-        expected_log = [((), dict(cmd_str=cmd, paranoia_level=instrument.paranoia_level))
+        expected_log = [((), dict(cmd_str=cmd, paranoia_level=None))
                         for cmd in expected_commands]
-        self.assertEqual(expected_log, instrument.logged_commands)
+        self.assertAllCommandLogsEqual(instrument, expected_log)
 
         expected_download_segment_calls = []
-        self.assertEqual(instrument._download_segment_lengths_calls, expected_download_segment_calls)
+        for device in instrument.all_devices:
+            self.assertEqual(device._download_segment_lengths_calls, expected_download_segment_calls)
 
         expected_bin_blob = make_combined_wave(segments)
-        expected_send_binary_data_log = [(':TRAC:DATA', expected_bin_blob, 'dummy_paranoia')]
-        np.testing.assert_equal(instrument._send_binary_data_calls, expected_send_binary_data_log)
+        expected_send_binary_data_log = [(':TRAC:DATA', expected_bin_blob, None)]
+        for device in instrument.all_devices:
+            np.testing.assert_equal(device._send_binary_data_calls, expected_send_binary_data_log)
 
     def test_cleanup(self):
         instrument = get_instrument()
@@ -834,9 +852,13 @@ class TaborChannelPairTests(unittest.TestCase):
 
         channel_pair.change_armed_program('test')
 
-        self.assertEqual(instrument._download_adv_seq_table_calls, [[(1, 1, 1), (2, 2, 0), (1, 1, 0)]])
-        self.assertEqual(instrument._download_sequencer_table_calls, [idle_sequencer_table,
-                                                                      expected_sequencer_table])
+        expected_adv_seq_table_log = [([(1, 1, 1), (2, 2, 0), (1, 1, 0)], ':ASEQ:DATA', None)]
+        expected_sequencer_table_log = [((sequencer_table,), dict(pref=':SEQ:DATA', paranoia_level=None))
+                                        for sequencer_table in [idle_sequencer_table, expected_sequencer_table]]
+
+        for device in instrument.all_devices:
+            self.assertEqual(device._download_adv_seq_table_calls, expected_adv_seq_table_log)
+            self.assertEqual(device._download_sequencer_table_calls, expected_sequencer_table_log)
 
     def test_change_armed_program_single_waveform(self):
         instrument = get_instrument()
@@ -864,9 +886,13 @@ class TaborChannelPairTests(unittest.TestCase):
 
         channel_pair.change_armed_program('test')
 
-        self.assertEqual(instrument._download_adv_seq_table_calls, [[(1, 1, 1), (1, 2, 0), (1, 1, 0)]])
-        self.assertEqual(instrument._download_sequencer_table_calls, [idle_sequencer_table,
-                                                                      expected_sequencer_table])
+        expected_adv_seq_table_log = [([(1, 1, 1), (1, 2, 0), (1, 1, 0)], ':ASEQ:DATA', None)]
+        expected_sequencer_table_log = [((sequencer_table,), dict(pref=':SEQ:DATA', paranoia_level=None))
+                                        for sequencer_table in [idle_sequencer_table, expected_sequencer_table]]
+
+        for device in instrument.all_devices:
+            self.assertEqual(device._download_adv_seq_table_calls, expected_adv_seq_table_log)
+            self.assertEqual(device._download_sequencer_table_calls, expected_sequencer_table_log)
 
     def test_change_armed_program_advanced_sequence(self):
         instrument = get_instrument()
@@ -897,5 +923,10 @@ class TaborChannelPairTests(unittest.TestCase):
 
         channel_pair.change_armed_program('test')
 
-        self.assertEqual(instrument._download_adv_seq_table_calls, [[(1, 1, 1), (2, 2, 0), (3, 3, 0)]])
-        self.assertEqual(instrument._download_sequencer_table_calls, expected_sequencer_tables)
+        expected_adv_seq_table_log = [([(1, 1, 1), (2, 2, 0), (3, 3, 0)], ':ASEQ:DATA', None)]
+        expected_sequencer_table_log = [((sequencer_table,), dict(pref=':SEQ:DATA', paranoia_level=None))
+                                        for sequencer_table in expected_sequencer_tables]
+
+        for device in instrument.all_devices:
+            self.assertEqual(device._download_adv_seq_table_calls, expected_adv_seq_table_log)
+            self.assertEqual(device._download_sequencer_table_calls, expected_sequencer_table_log)

@@ -1,8 +1,8 @@
-""""""
 import fractions
 import sys
-from typing import List, Tuple, Set, NamedTuple, Callable, Optional, Any, Sequence, cast
+from typing import List, Tuple, Set, NamedTuple, Callable, Optional, Any, Sequence, cast, Generator
 from enum import Enum
+import functools
 
 # Provided by Tabor electronics for python 2.7
 # a python 3 version is in a private repository on https://git.rwth-aachen.de/qutech
@@ -282,13 +282,23 @@ class TaborProgram:
         return self.__waveform_mode
 
 
-class TaborAWGRepresentation(teawg.TEWXAwg):
-    def __init__(self, *args, external_trigger=False, reset=False, **kwargs):
-        super().__init__(*args, **kwargs)
+class TaborAWGRepresentation:
+    def __init__(self, instr_addr=None, paranoia_level=1, external_trigger=False, reset=False, mirror_addresses=()):
+        """
+        :param instr_addr:        Instrument address that is forwarded to teawag
+        :param paranoia_level:    Paranoia level that is forwarded to teawg
+        :param external_trigger:  Not supported yet
+        :param reset:
+        :param mirror_addresses:
+        """
+        self._instr = teawg.TEWXAwg(instr_addr, paranoia_level)
+        self._mirrors = tuple(teawg.TEWXAwg(address, paranoia_level) for address in mirror_addresses)
+
         self._clock_marker = [0, 0, 0, 0]
 
         if reset:
-            self.visa_inst.write(':RES')
+            for instr in self.all_devices:
+                instr.visa_inst.write(':RES')
 
         if external_trigger:
             raise NotImplementedError()  # pragma: no cover
@@ -311,7 +321,64 @@ class TaborAWGRepresentation(teawg.TEWXAwg):
         self.select_channel(3)
         self.send_cmd(setup_command)
 
+    @property
+    def main_instrument(self) -> teawg.TEWXAwg:
+        return self._instr
+
+    @property
+    def mirrored_instruments(self) -> Sequence[teawg.TEWXAwg]:
+        return self._mirrors
+
+    @property
+    def paranoia_level(self):
+        return self._instr.paranoia_level
+
+    @paranoia_level.setter
+    def paranoia_level(self, val):
+        for instr in self.all_devices:
+            instr.paranoia_level = val
+
+    @property
+    def dev_properties(self):
+        return self._instr.dev_properties
+
+    #@property
+    #def visa_instrument(self):
+    #    return self._instr._visa_inst
+
+    @property
+    def all_devices(self) -> Sequence[teawg.TEWXAwg]:
+        return (self._instr, ) + self._mirrors
+
     def send_cmd(self, cmd_str, paranoia_level=None) -> Any:
+        for instr in self.all_devices:
+            instr.send_cmd(cmd_str=cmd_str, paranoia_level=paranoia_level)
+
+    def send_query(self, query_str, query_mirrors=False) -> Any:
+        if query_mirrors:
+            return tuple(instr.send_query(query_str) for instr in self.all_devices)
+        else:
+            return self._instr.send_query(query_str)
+
+    def send_binary_data(self, pref, bin_dat, paranoia_level=None):
+        for instr in self.all_devices:
+            instr.send_binary_data(pref, bin_dat=bin_dat, paranoia_level=paranoia_level)
+
+    def download_segment_lengths(self, seg_len_list, pref=':SEGM:DATA', paranoia_level=None):
+        for instr in self.all_devices:
+            instr.download_segment_lengths(seg_len_list, pref=pref, paranoia_level=paranoia_level)
+
+    def download_sequencer_table(self, seq_table, pref=':SEQ:DATA', paranoia_level=None):
+        for instr in self.all_devices:
+            instr.download_sequencer_table(seq_table, pref=pref, paranoia_level=paranoia_level)
+
+    def download_adv_seq_table(self, seq_table, pref=':ASEQ:DATA', paranoia_level=None):
+        for instr in self.all_devices:
+            instr.download_adv_seq_table(seq_table, pref=pref, paranoia_level=paranoia_level)
+
+    make_combined_wave = staticmethod(teawg.TEWXAwg.make_combined_wave)
+
+    def _send_cmd(self, cmd_str, paranoia_level=None) -> Any:
         """Overwrite send_cmd for paranoia_level > 3"""
         if paranoia_level is None:
             paranoia_level = self.paranoia_level
@@ -343,7 +410,7 @@ class TaborAWGRepresentation(teawg.TEWXAwg):
 
     @property
     def is_open(self) -> bool:
-        return self.visa_inst is not None  # pragma: no cover
+        return self._instr.visa_inst is not None  # pragma: no cover
 
     def select_channel(self, channel) -> None:
         if channel not in (1, 2, 3, 4):
@@ -389,6 +456,16 @@ class TaborAWGRepresentation(teawg.TEWXAwg):
     def trigger(self) -> None:
         self.send_cmd(':TRIG')
 
+    def get_readable_device(self, simulator=True) -> teawg.TEWXAwg:
+        for device in self.all_devices:
+            if device.fw_ver >= 3.0:
+                if simulator:
+                    if device.is_simulator:
+                        return device
+                else:
+                    return device
+        raise TaborException('No device capable of device data read')
+
 
 TaborProgramMemory = NamedTuple('TaborProgramMemory', [('waveform_to_segment', np.ndarray),
                                                        ('program', TaborProgram)])
@@ -410,6 +487,36 @@ def with_configuration_guard(function_object: Callable[['TaborChannelPair'], Any
                 channel_pair._exit_config_mode()
 
     return guarding_method
+
+
+class PlotableProgram:
+    TableEntry = NamedTuple('TableEntry', [('repetition_count', int),
+                                           ('element_number', int),
+                                           ('jump_flag', int)])
+
+    def __init__(self, waveforms: List[np.ndarray],
+                 sequence_tables: List[Tuple[np.ndarray, np.ndarray, np.ndarray]],
+                 advanced_sequence_table: Tuple[np.ndarray, np.ndarray, np.ndarray]):
+        self._waveforms = waveforms
+        self._sequence_tables = [PlotableProgram._reformat_rep_seg_jump(sequence_table)
+                                 for sequence_table in sequence_tables]
+        self._advanced_sequence_table = PlotableProgram._reformat_rep_seg_jump(advanced_sequence_table)
+
+    @staticmethod
+    def _reformat_rep_seg_jump(rep_seg_jump_tuple: Tuple[np.ndarray, np.ndarray, np.ndarray]) -> List['PlotableProgram.TableEntry']:
+        return list(PlotableProgram.TableEntry(int(rep), int(seg_no), int(jump))
+                    for rep, seg_no, jump in zip(*rep_seg_jump_tuple))
+
+    def __iter__(self) -> Generator[np.ndarray, None, None]:
+        if self._advanced_sequence_table[0] == (1, 1, 1):
+            adv_seq_tab = self._advanced_sequence_table[1:]
+        else:
+            adv_seq_tab = self._advanced_sequence_table
+
+        for sequence_repeat, sequence_no, _ in adv_seq_tab:
+            for segment_repeat, segment_no, _ in self._sequence_tables[sequence_no - 1]:
+                for _ in range(segment_repeat):
+                    yield self._waveforms[segment_no - 1]
 
 
 class TaborChannelPair(AWG):
@@ -485,6 +592,33 @@ class TaborChannelPair(AWG):
             return self.total_capacity - np.sum(self._segment_capacity[:reserved_index[-1]])
         else:
             return self.total_capacity
+
+    def read_waveforms(self) -> List[np.ndarray]:
+        device = self._device.get_readable_device(simulator=True)
+
+        old_segment = device.send_query(':TRAC:SEL?')
+        waveforms = []
+        uploaded_waveform_indices = np.flatnonzero(self._segment_references) + 1
+        for segment in uploaded_waveform_indices:
+            device.send_cmd(':TRAC:SEL {}'.format(segment))
+            waveforms.append(device.read_act_seg_dat())
+        device.send_cmd(':TRAC:SEL {}'.format(old_segment))
+        return waveforms
+
+    def read_sequence_tables(self) -> List[Tuple[np.ndarray, np.ndarray, np.ndarray]]:
+        device = self._device.get_readable_device(simulator=True)
+
+        old_sequence = device.send_query(':SEQ:SEL?')
+        sequences = []
+        uploaded_sequence_indices = np.arange(len(self._sequencer_tables)) + 1
+        for sequence in uploaded_sequence_indices:
+            device.send_cmd(':SEQ:SEL {}'.format(sequence))
+            sequences.append(device.read_sequencer_table())
+        device.send_cmd(':SEQ:SEL {}'.format(old_sequence))
+        return sequences
+
+    def read_advanced_sequencer_table(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        return self._device.get_readable_device(simulator=True).read_adv_seq_table()
 
     @with_configuration_guard
     def upload(self, name: str,
