@@ -2,7 +2,7 @@ import fractions
 import sys
 from typing import List, Tuple, Set, NamedTuple, Callable, Optional, Any, Sequence, cast, Generator
 from enum import Enum
-import functools
+import itertools
 
 # Provided by Tabor electronics for python 2.7
 # a python 3 version is in a private repository on https://git.rwth-aachen.de/qutech
@@ -507,16 +507,34 @@ class PlotableProgram:
         return list(PlotableProgram.TableEntry(int(rep), int(seg_no), int(jump))
                     for rep, seg_no, jump in zip(*rep_seg_jump_tuple))
 
-    def __iter__(self) -> Generator[np.ndarray, None, None]:
+    def _get_advanced_sequence_table_without_idle(self) -> List['PlotableProgram.TableEntry']:
         if self._advanced_sequence_table[0] == (1, 1, 1):
             adv_seq_tab = self._advanced_sequence_table[1:]
         else:
             adv_seq_tab = self._advanced_sequence_table
 
-        for sequence_repeat, sequence_no, _ in adv_seq_tab:
-            for segment_repeat, segment_no, _ in self._sequence_tables[sequence_no - 1]:
-                for _ in range(segment_repeat):
-                    yield self._waveforms[segment_no - 1]
+        #  remove idle pulse at end
+        while adv_seq_tab[-1] == (1, 1, 0):
+            adv_seq_tab = adv_seq_tab[:-1]
+        return adv_seq_tab
+
+    def _iter_segment_table_entry(self) -> Generator[TableEntry, None, None]:
+        for sequence_repeat, sequence_no, _ in self._get_advanced_sequence_table_without_idle():
+            for _ in range(sequence_repeat):
+                yield from self._sequence_tables[sequence_no - 1]
+
+    def __iter__(self) -> Generator[np.ndarray, None, None]:
+        for segment_repeat, segment_no, _ in self._iter_segment_table_entry():
+            for _ in range(segment_repeat):
+                yield self._waveforms[segment_no - 1]
+
+    def get_waveforms(self) -> List[np.ndarray]:
+        return [self._waveforms[segment_no - 1]
+                for _, segment_no, _ in self._iter_segment_table_entry()]
+
+    def get_repetitions(self) -> np.ndarray:
+        return np.fromiter((segment_repeat
+                            for segment_repeat, *_ in self._iter_segment_table_entry()), dtype=int)
 
 
 class TaborChannelPair(AWG):
@@ -619,6 +637,9 @@ class TaborChannelPair(AWG):
 
     def read_advanced_sequencer_table(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         return self._device.get_readable_device(simulator=True).read_adv_seq_table()
+
+    def read_complete_program(self) -> PlotableProgram:
+        return PlotableProgram(self.read_waveforms(), self.read_sequence_tables(), self.read_advanced_sequencer_table())
 
     @with_configuration_guard
     def upload(self, name: str,
