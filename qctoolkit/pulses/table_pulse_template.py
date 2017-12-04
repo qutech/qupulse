@@ -317,9 +317,10 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer, MeasurementD
 
     @property
     def duration(self) -> Expression:
-        return Expression('Max({})'.format(','.join(
-            (str(entries[-1].t) for entries in self._entries.values())
-        )))
+        duration_expressions = [entries[-1].t for entries in self._entries.values()]
+        duration_expression = sympy.Max(*(expr.sympified_expression for expr in duration_expressions))
+        return Expression(duration_expression,
+                          numpy_evaluation=all(expr.numpy_evaluation for expr in duration_expressions))
 
     @property
     def defined_channels(self) -> Set[ChannelID]:
