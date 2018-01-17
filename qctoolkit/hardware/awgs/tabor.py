@@ -487,7 +487,7 @@ def with_configuration_guard(function_object: Callable[['TaborChannelPair'], Any
     return guarding_method
 
 
-class PlotableProgram:
+class PlottableProgram:
     TableEntry = NamedTuple('TableEntry', [('repetition_count', int),
                                            ('element_number', int),
                                            ('jump_flag', int)])
@@ -495,17 +495,24 @@ class PlotableProgram:
     def __init__(self, waveforms: List[np.ndarray],
                  sequence_tables: List[Tuple[np.ndarray, np.ndarray, np.ndarray]],
                  advanced_sequence_table: Tuple[np.ndarray, np.ndarray, np.ndarray]):
-        self._waveforms = waveforms
-        self._sequence_tables = [PlotableProgram._reformat_rep_seg_jump(sequence_table)
+
+        self._waveforms = self._reformat_waveforms(waveforms)
+        self._sequence_tables = [PlottableProgram._reformat_rep_seg_jump(sequence_table)
                                  for sequence_table in sequence_tables]
-        self._advanced_sequence_table = PlotableProgram._reformat_rep_seg_jump(advanced_sequence_table)
+        self._advanced_sequence_table = PlottableProgram._reformat_rep_seg_jump(advanced_sequence_table)
 
     @staticmethod
-    def _reformat_rep_seg_jump(rep_seg_jump_tuple: Tuple[np.ndarray, np.ndarray, np.ndarray]) -> List['PlotableProgram.TableEntry']:
-        return list(PlotableProgram.TableEntry(int(rep), int(seg_no), int(jump))
+    def _reformat_waveforms(waveforms: List[np.ndarray]) -> Tuple[Tuple[np.ndarray], Tuple[np.ndarray]]:
+        """De-interleave the individual channels' waveform data"""
+        return tuple(zip(*((waveform.reshape((-1, 16))[1::2, :].ravel(), waveform.reshape((-1, 16))[0::2, :].ravel())
+                           for waveform in waveforms)))
+
+    @classmethod
+    def _reformat_rep_seg_jump(cls, rep_seg_jump_tuple: Tuple[np.ndarray, np.ndarray, np.ndarray]) -> List['PlottableProgram.TableEntry']:
+        return list(cls.TableEntry(int(rep), int(seg_no), int(jump))
                     for rep, seg_no, jump in zip(*rep_seg_jump_tuple))
 
-    def _get_advanced_sequence_table_without_idle(self) -> List['PlotableProgram.TableEntry']:
+    def _get_advanced_sequence_table_without_idle(self) -> List['PlottableProgram.TableEntry']:
         if self._advanced_sequence_table[0] == (1, 1, 1):
             adv_seq_tab = self._advanced_sequence_table[1:]
         else:
@@ -526,8 +533,8 @@ class PlotableProgram:
             for _ in range(segment_repeat):
                 yield self._waveforms[segment_no - 1]
 
-    def get_waveforms(self) -> List[np.ndarray]:
-        return [self._waveforms[segment_no - 1]
+    def get_waveforms(self, channel: int) -> List[np.ndarray]:
+        return [self._waveforms[channel][segment_no - 1]
                 for _, segment_no, _ in self._iter_segment_table_entry()]
 
     def get_repetitions(self) -> np.ndarray:
@@ -636,8 +643,8 @@ class TaborChannelPair(AWG):
     def read_advanced_sequencer_table(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         return self._device.get_readable_device(simulator=True).read_adv_seq_table()
 
-    def read_complete_program(self) -> PlotableProgram:
-        return PlotableProgram(self.read_waveforms(), self.read_sequence_tables(), self.read_advanced_sequencer_table())
+    def read_complete_program(self) -> PlottableProgram:
+        return PlottableProgram(self.read_waveforms(), self.read_sequence_tables(), self.read_advanced_sequencer_table())
 
     @with_configuration_guard
     def upload(self, name: str,
