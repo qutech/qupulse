@@ -3,13 +3,15 @@ import subprocess
 import time
 import platform
 
+if platform.system() != 'Windows':
+    raise unittest.SkipTest("Simulator currently only available on Windows :(")
+
 import pytabor
 import numpy as np
 
 from qctoolkit.hardware.awgs.tabor import TaborAWGRepresentation, TaborException, TaborSegment, TaborChannelPair, PlottableProgram
 
 
-@unittest.skipIf(platform.system() != 'Windows', "Simulator currently only available on Windows :(")
 class TaborSimulatorBasedTest(unittest.TestCase):
     try_connecting_to_existing_simulator = True
     simulator_executable = 'WX2184C.exe'
