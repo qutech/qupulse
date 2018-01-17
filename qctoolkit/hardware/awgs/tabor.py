@@ -297,8 +297,7 @@ class TaborAWGRepresentation:
         self._clock_marker = [0, 0, 0, 0]
 
         if reset:
-            for instr in self.all_devices:
-                instr.visa_inst.write(':RES')
+            self.send_cmd(':RES')
 
         if external_trigger:
             raise NotImplementedError()  # pragma: no cover
@@ -341,10 +340,6 @@ class TaborAWGRepresentation:
     @property
     def dev_properties(self):
         return self._instr.dev_properties
-
-    #@property
-    #def visa_instrument(self):
-    #    return self._instr._visa_inst
 
     @property
     def all_devices(self) -> Sequence[teawg.TEWXAwg]:
@@ -418,8 +413,9 @@ class TaborAWGRepresentation:
 
         self.send_cmd(':INST:SEL {channel}'.format(channel=channel))
 
-    def select_marker(self, marker) -> None:
-        if marker not in (1, 2, 3, 4):
+    def select_marker(self, marker: int) -> None:
+        """Select marker 1 or 2 of the currently active channel pair."""
+        if marker not in (1, 2):
             raise TaborException('Invalid marker: {}'.format(marker))
         self.send_cmd(':SOUR:MARK:SEL {marker}'.format(marker=marker))
 
@@ -439,7 +435,9 @@ class TaborAWGRepresentation:
         else:
             raise TaborException('Unknown coupling: {}'.format(coupling))
 
-    def offset(self, channel) -> float:
+    def offset(self, channel: int) -> float:
+        if channel not in (1, 2, 3, 4):
+            raise TaborException('Invalid channel: {}'.format(channel))
         return float(self.send_query(':INST:SEL {channel}; :VOLT:OFFS?'.format(channel=channel)))
 
     def enable(self) -> None:
