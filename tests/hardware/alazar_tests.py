@@ -1,16 +1,9 @@
 import unittest
 
-from ..hardware import *
-
-import atsaverage
-import atsaverage.config
-from atsaverage.config import ScanlineConfiguration
-
 import numpy as np
 
+from ..hardware import *
 from qctoolkit.hardware.dacs.alazar import AlazarCard, AlazarProgram
-
-from tests.hardware import use_dummy_atsaverage
 
 
 class AlazarProgramTest(unittest.TestCase):

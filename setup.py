@@ -27,7 +27,7 @@ setup(name='qctoolkit',
           'plotting': ['matplotlib'],
           'faster expressions': ['numexpr'],
           'VISA': ['pyvisa'],
-          'tabor instruments': ['pytabor', 'teawg']
+          'tabor instruments': ['pytabor>=1.0.1', 'teawg']
       },
       test_suite="tests",
 )
