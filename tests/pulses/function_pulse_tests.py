@@ -4,9 +4,7 @@ import sympy
 from qctoolkit.pulses.function_pulse_template import FunctionPulseTemplate,\
     FunctionWaveform
 from qctoolkit.serialization import Serializer
-from qctoolkit.pulses.parameters import ParameterNotProvidedException
 from qctoolkit.expressions import Expression
-from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 from qctoolkit.pulses.parameters import ParameterConstraintViolation
 import numpy as np
 
