@@ -138,12 +138,12 @@ class dummy_teawg(dummy_package):
     class TEWXAwg:
         _make_combined_wave_calls = []
 
-        def __init__(self, *args, paranoia_level=1, **kwargs):
+        def __init__(self, *args, paranoia_level=1, model='WX2184C', **kwargs):
             self.logged_commands = []
             self.logged_queries = []
             self._visa_inst = dummy_pyvisa.resources.MessageBasedResource()
             self.paranoia_level = paranoia_level
-            self.dev_properties = dummy_teawg.model_properties_dict
+            self.dev_properties = dummy_teawg.model_properties_dict[model]
 
             self._download_segment_lengths_calls = []
             self._send_binary_data_calls = []
