@@ -2,7 +2,6 @@ import fractions
 import sys
 from typing import List, Tuple, Set, NamedTuple, Callable, Optional, Any, Sequence, cast, Generator
 from enum import Enum
-import itertools
 
 # Provided by Tabor electronics for python 2.7
 # a python 3 version is in a private repository on https://git.rwth-aachen.de/qutech
@@ -993,8 +992,6 @@ class TaborChannelPair(AWG):
             self.set_channel_state(1, program.channels[1] is not None)
 
             self._is_in_config_mode = False
-
-
 
 
 class TaborException(Exception):
