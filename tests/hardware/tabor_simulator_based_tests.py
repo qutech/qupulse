@@ -3,8 +3,7 @@ import subprocess
 import time
 import platform
 
-if platform.system() == 'Windows':
-    import pytabor
+import pytabor
 import numpy as np
 
 from qctoolkit.hardware.awgs.tabor import TaborAWGRepresentation, TaborException, TaborSegment, TaborChannelPair, PlottableProgram
