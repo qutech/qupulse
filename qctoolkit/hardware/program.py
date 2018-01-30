@@ -236,7 +236,7 @@ class MultiChannelProgram:
         channels = frozenset(channels)
 
         root = Loop()
-        stacks = {channels: (root, [([], [*instruction_block[:-1]])])}
+        stacks = {channels: (root, [([], list(instruction_block.instructions))])}
         self.__programs = dict()
 
         while len(stacks) > 0:
