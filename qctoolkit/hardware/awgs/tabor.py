@@ -2,6 +2,7 @@ import fractions
 import sys
 from typing import List, Tuple, Set, NamedTuple, Callable, Optional, Any, Sequence, cast, Generator
 from enum import Enum
+from collections import OrderedDict
 
 # Provided by Tabor electronics for python 2.7
 # a python 3 version is in a private repository on https://git.rwth-aachen.de/qutech
@@ -151,19 +152,19 @@ class TaborProgram:
         assert self.program.depth() == 1
 
         sequencer_table = []
-        waveforms = []
+        waveforms = OrderedDict()
 
         for waveform, repetition_count in ((waveform_loop.waveform.get_subset_for_channels(self.__used_channels),
                                             waveform_loop.repetition_count)
                                            for waveform_loop in self.program):
             if waveform in waveforms:
-                waveform_index = waveforms.index(waveform)
+                waveform_index = waveforms[waveform]
             else:
                 waveform_index = len(waveforms)
-                waveforms.append(waveform)
+                waveforms[waveform] = waveform_index
             sequencer_table.append((repetition_count, waveform_index, 0))
 
-        self._waveforms = waveforms
+        self._waveforms = tuple(waveforms.keys())
         self._sequencer_tables = [sequencer_table]
         self._advanced_sequencer_table = [(self.program.repetition_count, 1, 0)]
 
