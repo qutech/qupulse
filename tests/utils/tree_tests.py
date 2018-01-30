@@ -84,3 +84,18 @@ class NodeTests(unittest.TestCase):
 
         with self.assertRaises(AssertionError):
             root.assert_tree_integrity()
+
+    def test_depth_iteration(self):
+        root = Node(children=[Node(children=[Node(), Node()]), Node()])
+
+        depth_nodes = tuple(root.get_depth_first_iterator())
+
+        self.assertEqual(depth_nodes, (root[0][0], root[0][1], root[0], root[1], root))
+
+    def test_breadth_iteration(self):
+        root = Node(children=[Node(children=[Node(), Node()]), Node()])
+
+        breadth_nodes = tuple(root.get_breadth_first_iterator())
+
+        self.assertEqual(breadth_nodes, (root, root[0], root[1], root[0][0], root[0][1]))
+

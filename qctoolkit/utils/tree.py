@@ -55,17 +55,23 @@ class Node:
         return len(self.__children)
 
     def get_depth_first_iterator(self) -> Generator['Node', None, None]:
-        if not self.is_leaf():
-            for e in self.__children:
-                yield from e.get_depth_first_iterator()
-        yield self
+        stack = [(self, self.__children)]
 
-    def get_breadth_first_iterator(self, queue=deque()) -> Generator['Node', None, None]:
-        yield self
-        if not self.is_leaf():
-            queue.extend(self.__children)
-        if queue:
-            yield from queue.popleft().get_breadth_first_iterator(queue)
+        while stack:
+            node, children = stack.pop()
+
+            if children:
+                stack.append((node, None))
+                stack.extend((child, child.__children) for child in reversed(children))
+            else:
+                yield node
+
+    def get_breadth_first_iterator(self) -> Generator['Node', None, None]:
+        queue = deque([self])
+        while queue:
+            elem = queue.popleft()
+            queue.extend(elem.children)
+            yield elem
 
     def assert_tree_integrity(self) -> None:
         for child in self.__children:
