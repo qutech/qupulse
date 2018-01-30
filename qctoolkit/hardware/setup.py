@@ -181,13 +181,13 @@ class HardwareSetup:
         else:
             raise ValueError('Channel must be either a playback or a marker channel')
 
-    def set_measurement(self, measurement_name: str, measurement_mask: MeasurementMask):
+    def set_measurement(self, new_measurement_name: str, new_measurement_mask: MeasurementMask):
         for measurement_name, mask_set in self._measurement_map.items():
-            if measurement_mask in mask_set:
+            if new_measurement_mask in mask_set:
                 raise ValueError('Measurement mask already registered for measurement "{}"'.format(measurement_name))
 
-        if isinstance(measurement_mask, MeasurementMask):
-            self._measurement_map.setdefault(measurement_name, set()).add(measurement_mask)
+        if isinstance(new_measurement_mask, MeasurementMask):
+            self._measurement_map.setdefault(new_measurement_name, set()).add(new_measurement_mask)
         else:
             raise ValueError('Mask must be of type MeasurementMask')
 
