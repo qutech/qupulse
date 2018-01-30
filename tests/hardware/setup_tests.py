@@ -4,7 +4,7 @@ import itertools
 import numpy as np
 
 from qctoolkit.pulses.instructions import InstructionBlock, EXECInstruction
-from qctoolkit.hardware.setup import HardwareSetup, ChannelID, PlaybackChannel, _SingleChannel, MarkerChannel
+from qctoolkit.hardware.setup import HardwareSetup, ChannelID, PlaybackChannel, _SingleChannel, MarkerChannel, MeasurementMask
 
 from tests.pulses.sequencing_dummies import DummyWaveform
 
@@ -104,7 +104,7 @@ class HardwareSetupTests(unittest.TestCase):
                          dict(A={PlaybackChannel(awg1, 0)}))
 
     def test_arm_program(self):
-        wf = DummyWaveform(duration=1.1, defined_channels={'A', 'B'})
+        wf = DummyWaveform(duration=1.1, defined_channels={'A', 'B'}, measurement_windows=[('m1', 0., 1.)])
 
         block = InstructionBlock()
         block.add_instruction_exec(wf)
@@ -122,8 +122,8 @@ class HardwareSetupTests(unittest.TestCase):
         setup.set_channel('B', MarkerChannel(awg2, 0))
         setup.set_channel('C', MarkerChannel(awg3, 0))
 
-        setup.register_dac(dac1)
-        setup.register_dac(dac2)
+        setup.set_measurement('m1', MeasurementMask(dac1, 'DAC_1'))
+        setup.set_measurement('m2', MeasurementMask(dac2, 'DAC_2'))
 
         setup.register_program('test', block)
 
@@ -139,7 +139,7 @@ class HardwareSetupTests(unittest.TestCase):
         self.assertEqual(awg2._armed, 'test')
         self.assertIsNone(awg3._armed)
         self.assertEqual(dac1._armed_program, 'test')
-        self.assertEqual(dac2._armed_program, 'test')
+        self.assertIsNone(dac2._armed_program)
 
     def test_register_program(self):
         awg1 = DummyAWG()
@@ -152,7 +152,7 @@ class HardwareSetupTests(unittest.TestCase):
         wfg = WaveformGenerator(num_channels=2, duration_generator=itertools.repeat(1))
         block = get_two_chan_test_block(wfg)
 
-        block.instructions[0].waveform._sub_waveforms[0].measurement_windows_ = [('M', 0.1, 0.2)]
+        block.instructions[0].waveform._sub_waveforms[0].measurement_windows_ = [('m1', 0.1, 0.2)]
 
         class ProgStart:
             def __init__(self):
@@ -167,7 +167,7 @@ class HardwareSetupTests(unittest.TestCase):
         setup.set_channel('A', PlaybackChannel(awg1, 0, trafo1))
         setup.set_channel('B', MarkerChannel(awg2, 1))
 
-        setup.register_dac(dac)
+        setup.set_measurement('m1', MeasurementMask(dac, 'DAC'))
 
         setup.register_program('p1', block, program_started)
 
@@ -193,10 +193,10 @@ class HardwareSetupTests(unittest.TestCase):
         self.assertEqual(awg2._armed, None)
 
         np.testing.assert_equal(dac._measurement_windows,
-                                dict(p1=dict(M=(np.array([0.1, 0.1]), np.array([0.2, 0.2])))))
+                                dict(p1=dict(m1=(np.array([0.1, 0.1]), np.array([0.2, 0.2])))))
 
     def test_run_program(self):
-        wf = DummyWaveform(duration=1.1, defined_channels={'A', 'B'})
+        wf = DummyWaveform(duration=1.1, defined_channels={'A', 'B'}, measurement_windows=[('m1', 0., 1.)])
 
         block = InstructionBlock()
         block.add_instruction_exec(wf)
@@ -214,8 +214,8 @@ class HardwareSetupTests(unittest.TestCase):
         setup.set_channel('B', MarkerChannel(awg2, 0))
         setup.set_channel('C', MarkerChannel(awg3, 0))
 
-        setup.register_dac(dac1)
-        setup.register_dac(dac2)
+        setup.set_measurement('m1', MeasurementMask(dac1, 'DAC_1'))
+        setup.set_measurement('m2', MeasurementMask(dac2, 'DAC_2'))
 
         class ProgStart:
             def __init__(self):
@@ -239,7 +239,7 @@ class HardwareSetupTests(unittest.TestCase):
         self.assertEqual(awg2._armed, 'test')
         self.assertIsNone(awg3._armed)
         self.assertEqual(dac1._armed_program, 'test')
-        self.assertEqual(dac2._armed_program, 'test')
+        self.assertIsNone(dac2._armed_program)
 
         self.assertTrue(program_started.was_started)
 
