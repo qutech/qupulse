@@ -236,7 +236,7 @@ class MultiChannelProgram:
         channels = frozenset(channels)
 
         root = Loop()
-        stacks = {channels: (root, [([], [*instruction_block[:-1]])])}
+        stacks = {channels: (root, [([], list(instruction_block.instructions))])}
         self.__programs = dict()
 
         while len(stacks) > 0:
@@ -252,17 +252,17 @@ class MultiChannelProgram:
 
         for channels, program in self.__programs.items():
             iterable = program.get_breadth_first_iterator()
-            while True:
-                try:
+            try:
+                while True:
                     loop = next(iterable)
                     if len(loop) == 1:
                         loop.waveform = loop[0].waveform
                         loop.repetition_count = loop.repetition_count * loop[0].repetition_count
                         loop[:] = loop[0][:]
-
-                        iterable = itertools.chain((loop,), iterable)
-                except StopIteration:
-                    break
+                        if len(loop):
+                            iterable = itertools.chain((loop,), iterable)
+            except StopIteration:
+                pass
 
     @property
     def programs(self) -> Dict[FrozenSet[ChannelID], Loop]:
