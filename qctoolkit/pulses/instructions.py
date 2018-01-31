@@ -17,7 +17,7 @@ Classes:
 """
 
 from abc import ABCMeta, abstractmethod, abstractproperty
-from typing import List, Any, Dict, Iterable, Optional, Tuple, Union, Set
+from typing import List, Any, Dict, Iterable, Optional, Sequence, Union, Set, Tuple
 from weakref import WeakValueDictionary
 
 import numpy
@@ -378,7 +378,7 @@ class AbstractInstructionBlock(Comparable, metaclass=ABCMeta):
         super().__init__()
 
     @abstractproperty
-    def instructions(self) -> List[Instruction]:
+    def instructions(self) -> Sequence[Instruction]:
         """The instructions contained in this block (excluding a final stop or return goto)."""
 
     @abstractproperty
@@ -548,36 +548,41 @@ class ImmutableInstructionBlock(AbstractInstructionBlock):
         super().__init__()
         if context is None:
             context = dict()
-        self.__instruction_list = []
         self.__return_ip = None
         return_ip = block.return_ip
         if return_ip is not None:
             self.__return_ip = InstructionPointer(context[return_ip.block], return_ip.offset)
         context[block] = self
-        for instruction in block.instructions:
-            immutable_instruction = instruction
-            if isinstance(instruction, (GOTOInstruction, CJMPInstruction, REPJInstruction)):
-                target_block = instruction.target.block
-                immutable_target_block = ImmutableInstructionBlock(target_block, context)
-                if isinstance(instruction, GOTOInstruction):
-                    immutable_instruction = GOTOInstruction(
-                        InstructionPointer(immutable_target_block, instruction.target.offset)
-                    )
-                elif isinstance(instruction, REPJInstruction):
-                    immutable_instruction = REPJInstruction(
-                        instruction.count,
-                        InstructionPointer(immutable_target_block, instruction.target.offset)
-                    )
-                else:
-                    immutable_instruction = CJMPInstruction(
-                        instruction.trigger,
-                        InstructionPointer(immutable_target_block, instruction.target.offset)
-                    )
-            self.__instruction_list.append(immutable_instruction)
+
+        def make_immutable(instruction: Instruction) -> Instruction:
+            if isinstance(instruction, GOTOInstruction):
+                return GOTOInstruction(
+                    InstructionPointer(
+                        ImmutableInstructionBlock(instruction.target.block, context),
+                        instruction.target.offset)
+                )
+            elif isinstance(instruction, REPJInstruction):
+                return REPJInstruction(
+                    instruction.count,
+                    InstructionPointer(
+                        ImmutableInstructionBlock(instruction.target.block, context),
+                        instruction.target.offset)
+                )
+            elif isinstance(instruction, CJMPInstruction):
+                return CJMPInstruction(
+                    instruction.trigger,
+                    InstructionPointer(
+                        ImmutableInstructionBlock(instruction.target.block, context),
+                        instruction.target.offset)
+                )
+            else:
+                return instruction
+
+        self._instruction_tuple = tuple(make_immutable(instr) for instr in block.instructions)
 
     @property
-    def instructions(self) -> List[Instruction]:
-        return self.__instruction_list.copy()
+    def instructions(self) -> Tuple[Instruction, ...]:
+        return self._instruction_tuple
 
     @property
     def return_ip(self) -> InstructionPointer:
