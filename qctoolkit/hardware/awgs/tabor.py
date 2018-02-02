@@ -296,29 +296,13 @@ class TaborAWGRepresentation:
 
         self._clock_marker = [0, 0, 0, 0]
 
-        if reset:
-            self.send_cmd(':RES')
-
         if external_trigger:
             raise NotImplementedError()  # pragma: no cover
 
-        def switch_group_off(grp):
-            switch_off_cmd = (":INST:SEL {}; :OUTP OFF; :INST:SEL {}; :OUTP OFF; "
-                              ":SOUR:MARK:SEL 1; :SOUR:MARK:STAT OFF; :SOUR:MARK:SOUR USER; "
-                              ":SOUR:MARK:SEL 2; :SOUR:MARK:STAT OFF; :SOUR:MARK:SOUR USER").format(grp+1, grp+2)
-            self.send_cmd(switch_off_cmd)
-        switch_group_off(0)
-        switch_group_off(1)
+        if reset:
+            self.send_cmd(':RES')
 
-        setup_command = (
-                         ":INIT:GATE OFF; :INIT:CONT ON; "
-                         ":INIT:CONT:ENAB ARM; :INIT:CONT:ENAB:SOUR BUS; "
-                         ":SOUR:SEQ:JUMP:EVEN BUS")
-        # Set Software Trigger Mode
-        self.select_channel(1)
-        self.send_cmd(setup_command)
-        self.select_channel(3)
-        self.send_cmd(setup_command)
+        self.initialize()
 
     @property
     def main_instrument(self) -> teawg.TEWXAwg:
@@ -446,10 +430,26 @@ class TaborAWGRepresentation:
     def abort(self) -> None:
         self.send_cmd(':ABOR')
 
+    def initialize(self) -> None:
+        # 1. Select channel
+        # 2. Turn off gated mode
+        # 3. continous mode
+        # 4. Armed mode (onlz generate waveforms after enab command)
+        # 5. Expect enable signal from (USB / LAN / GPIB)
+        # 6. Use arbitrary waveforms as marker source
+        # 7. Expect jump command for sequencing from (USB / LAN / GPIB)
+        setup_command = (
+                    ":INIT:GATE OFF; :INIT:CONT ON; "
+                    ":INIT:CONT:ENAB ARM; :INIT:CONT:ENAB:SOUR BUS; "
+                    ":SOUR:MARK:SOUR USER; :SOUR:SEQ:JUMP:EVEN BUS")
+        self.send_cmd(':INST:SEL 1')
+        self.send_cmd(setup_command)
+        self.send_cmd(':INST:SEL 3')
+        self.send_cmd(setup_command)
+
     def reset(self) -> None:
         self.send_cmd(':RES')
-        self.send_cmd(':INST:SEL 1; :INIT:GATE OFF; :INIT:CONT ON; :INIT:CONT:ENAB ARM; :INIT:CONT:ENAB:SOUR BUS')
-        self.send_cmd(':INST:SEL 3; :INIT:GATE OFF; :INIT:CONT ON; :INIT:CONT:ENAB ARM; :INIT:CONT:ENAB:SOUR BUS')
+        self.initialize()
 
     def trigger(self) -> None:
         self.send_cmd(':TRIG')
@@ -854,6 +854,7 @@ class TaborChannelPair(AWG):
 
         return segment_index + np.arange(len(segments), dtype=np.int64)
 
+    @with_configuration_guard
     def cleanup(self) -> None:
         """Discard all segments after the last which is still referenced"""
         reserved_indices = np.flatnonzero(self._segment_references > 0)
@@ -878,10 +879,10 @@ class TaborChannelPair(AWG):
         self.free_program(name)
         self.cleanup()
 
-    def set_marker_state(self, marker, active) -> None:
-        command_string = ':INST:SEL {}; :SOUR:MARK:SEL {}; :SOUR:MARK:SOUR USER; :SOUR:MARK:STAT {}'.format(
+    def set_marker_state(self, active) -> None:
+        """Sets the marker state of this channel pair. According to the manual one connot turn them off/on seperatly."""
+        command_string = ':INST:SEL {}; :SOUR:MARK:SEL 1; :SOUR:MARK:SOUR USER; :SOUR:MARK:STAT {}'.format(
             self._channels[0],
-            marker+1,
             'ON' if active else 'OFF')
         self._device.send_cmd(command_string)
 
@@ -937,8 +938,8 @@ class TaborChannelPair(AWG):
         self._device.download_adv_seq_table(advanced_sequencer_table)
         self._advanced_sequence_table = advanced_sequencer_table
 
-        # this will set the DC voltage to the first value of the idle waveform
         self._device.enable()
+
         self._current_program = name
 
     def run_current_program(self) -> None:
@@ -965,18 +966,17 @@ class TaborChannelPair(AWG):
         return 2
 
     def _enter_config_mode(self) -> None:
-        """Enter the configuration mode if not already in. All outputs are turned of and the sequencing is disabled
-        as the manual states this speeds up sequence validation when uploading multiple sequences"""
+        """Enter the configuration mode if not already in. All outputs are set to the DC offset of the device and the sequencing is disabled
+        as the manual states this speeds up sequence validation when uploading multiple sequences."""
         if self._is_in_config_mode is False:
-            self.set_marker_state(0, False)
-            self.set_marker_state(1, False)
 
-            self.set_channel_state(0, False)
-            self.set_channel_state(1, False)
-
+            # 1. Selct channel pair
+            # 2. Select DC as function shape
+            # 3. Select build-in waveform mode
+            self.set_marker_state(False)
+            self._device.send_cmd(':INST:SEL {}; :SOUR:FUNC:SHAPE DC; :INST:SEL {}; :SOUR:FUNC:SHAPE DC; :SOUR:FUNC:MODE FIX'.format(*self._channels))
             self._device.abort()
 
-            self._device.send_cmd(':SOUR:FUNC:MODE FIX')
             self._is_in_config_mode = True
 
     def _exit_config_mode(self) -> None:
@@ -985,12 +985,7 @@ class TaborChannelPair(AWG):
             _, program = self._known_programs[self._current_program]
 
             self._device.send_cmd(':SOUR:FUNC:MODE ASEQ')
-
-            self.set_marker_state(0, program.markers[0] is not None)
-            self.set_marker_state(1, program.markers[1] is not None)
-
-            self.set_channel_state(0, program.channels[0] is not None)
-            self.set_channel_state(1, program.channels[1] is not None)
+            self.set_marker_state(True)
 
             self._is_in_config_mode = False
 

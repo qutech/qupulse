@@ -104,6 +104,10 @@ class AlazarCard(DAC):
             elif config.totalRecordSize < total_record_size:
                 raise ValueError('specified total record size is smaller than needed {} < {}'.format(config.totalRecordSize,
                                                                                                      total_record_size))
+            # work around for measurments not working with one buffer
+            if config.totalRecordSize < 5*config.aimedBufferSize:
+                config.aimedBufferSize = config.totalRecordSize // 5
+
             config.apply(self.__card, True)
 
             self.update_settings = False

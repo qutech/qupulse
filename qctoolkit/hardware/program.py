@@ -233,7 +233,7 @@ class MultiChannelProgram:
 
             channels = find_defined_channels(instruction_block.instructions)
 
-        channels = frozenset(channels)
+        channels = frozenset(channels - {None})
 
         root = Loop()
         stacks = {channels: (root, [([], list(instruction_block.instructions))])}
