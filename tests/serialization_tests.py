@@ -7,9 +7,10 @@ from tempfile import TemporaryDirectory
 from typing import Optional, Dict, Any
 
 from qctoolkit.serialization import FilesystemBackend, Serializer, CachingBackend, Serializable, ExtendedJSONEncoder,\
-    ZipFileBackend
+    ZipFileBackend, AnonymousSerializable
 from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
 from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
+from qctoolkit.expressions import Expression
 
 from tests.serialization_dummies import DummyStorageBackend
 
@@ -422,7 +423,8 @@ class SerializerTests(unittest.TestCase):
         self.assertEqual(self.deserialization_data['data'], deserialized.data)
 
     def test_serialization_and_deserialization_combined(self) -> None:
-        table_foo = TablePulseTemplate(identifier='foo', entries={'default': [('hugo', 2),
+        table_foo = TablePulseTemplate(identifier='foo', entries={'default': [(Expression('hugo',
+                                                                                          numpy_evaluation=False), 2),
                                                                               ('albert', 'voltage')]},
                                        parameter_constraints=['albert<9.1'])
         table = TablePulseTemplate({'default': [('t', 0)]})
@@ -447,16 +449,17 @@ class SerializerTests(unittest.TestCase):
         self.assertEqual(serialized_foo, storage.stored_items['foo'])
         self.assertEqual(serialized_sequence, storage.stored_items['main'])
 
+        self.assertFalse(deserialized_sequence.subtemplates[0].template.entries['default'][0].t.numpy_evaluation)
+
 
 class TriviallyRepresentableEncoderTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
     def test_encoding(self):
-        class A:
-            def __str__(self):
+        class A(AnonymousSerializable):
+            def get_serialization_data(self):
                 return 'aaa'
-        ExtendedJSONEncoder.str_constructable_types.add(A)
 
         class B:
             pass

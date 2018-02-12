@@ -16,7 +16,7 @@ import zipfile
 import tempfile
 import json
 
-__all__ = ["StorageBackend", "FilesystemBackend", "ZipFileBackend", "CachingBackend", "Serializable", "Serializer"]
+__all__ = ["StorageBackend", "FilesystemBackend", "ZipFileBackend", "CachingBackend", "Serializable", "Serializer", "AnonymousSerializable"]
 
 
 class StorageBackend(metaclass=ABCMeta):
@@ -295,6 +295,26 @@ class Serializable(metaclass=ABCMeta):
          """
 
 
+class AnonymousSerializable(metaclass=ABCMeta):
+    """Any object that can be converted into a serialized representation for storage and back which NEVER has an
+    identifier. This class is used for implicit serialization and does not work necessarily with dicts.
+
+    The type information is not saved explicitly but implicitly by the position in the JSON-document.
+
+    See also:
+        Serializable
+
+    """
+
+    @abstractmethod
+    def get_serialization_data(self) -> Any:
+        """Return all data relevant for serialization as a JSON compatible type that is accepted as constructor argument
+
+        Returns:
+            A JSON compatible type that can be used to construct an equal object.
+        """
+
+
 class Serializer(object):
     """Serializes Serializable objects and stores them persistently.
 
@@ -440,15 +460,14 @@ class Serializer(object):
 
 
 class ExtendedJSONEncoder(json.JSONEncoder):
-    """Encodes types that are registered in str_constructable_types as str and sets as lists."""
-    str_constructable_types = set()
+    """Encodes AnonymousSerializable and sets as lists."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
     def default(self, o: Any) -> Any:
-        if type(o) in ExtendedJSONEncoder.str_constructable_types:
-            return str(o)
+        if isinstance(o, AnonymousSerializable):
+            return o.get_serialization_data()
         elif type(o) is set:
             return list(o)
         else:

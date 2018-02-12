@@ -214,6 +214,8 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer, MeasurementD
             for entry in channel_entries:
                 self._add_entry(channel, TableEntry(*entry))
 
+        self._duration = self.calculate_duration()
+
         if self.duration == 0:
             warnings.warn('Table pulse template with duration 0 on construction.',
                           category=ZeroDurationTablePulseTemplate)
@@ -317,9 +319,13 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer, MeasurementD
 
     @property
     def duration(self) -> Expression:
-        return Expression('Max({})'.format(','.join(
-            (str(entries[-1].t) for entries in self._entries.values())
-        )))
+        return self._duration
+
+    def calculate_duration(self) -> Expression:
+        duration_expressions = [entries[-1].t for entries in self._entries.values()]
+        duration_expression = sympy.Max(*(expr.sympified_expression for expr in duration_expressions))
+        return Expression(duration_expression,
+                          numpy_evaluation=all(expr.numpy_evaluation for expr in duration_expressions))
 
     @property
     def defined_channels(self) -> Set[ChannelID]:
@@ -369,6 +375,7 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer, MeasurementD
 
         instantiated = [(channel_mapping[channel], instantiated_channel)
                         for channel, instantiated_channel in self.get_entries_instantiated(parameters).items()]
+
         if self.duration.evaluate_numeric(**parameters) == 0:
             return None
 

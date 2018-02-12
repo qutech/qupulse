@@ -1,7 +1,7 @@
 import unittest
 
 import numpy as np
-from sympy import sympify
+from sympy import sympify, Eq
 
 from qctoolkit.expressions import Expression, ExpressionVariableMissingException, NonNumericEvaluation
 from qctoolkit.serialization import Serializer
@@ -22,7 +22,6 @@ class ExpressionTests(unittest.TestCase):
             e.evaluate_numeric(**params)
 
     def test_evaluate_numpy(self):
-        self
         e = Expression('a * b + c')
         params = {
             'a': 2*np.ones(4),
@@ -30,6 +29,38 @@ class ExpressionTests(unittest.TestCase):
             'c': -7*np.ones(4)
         }
         np.testing.assert_equal((2 * 1.5 - 7) * np.ones(4), e.evaluate_numeric(**params))
+
+    def test_evaluate_numeric_without_numpy(self):
+        e = Expression('a * b + c', numpy_evaluation=False)
+
+        params = {
+            'a': 2,
+            'b': 1.5,
+            'c': -7
+        }
+        self.assertEqual(2 * 1.5 - 7, e.evaluate_numeric(**params))
+
+        params = {
+            'a': 2j,
+            'b': 1.5,
+            'c': -7
+        }
+        self.assertEqual(2j * 1.5 - 7, e.evaluate_numeric(**params))
+
+        params = {
+            'a': 2,
+            'b': 6,
+            'c': -7
+        }
+        self.assertEqual(2 * 6 - 7, e.evaluate_numeric(**params))
+
+        params = {
+            'a': 2,
+            'b': sympify('k'),
+            'c': -7
+        }
+        with self.assertRaises(NonNumericEvaluation):
+            e.evaluate_numeric(**params)
 
     def test_evaluate_symbolic(self):
         e = Expression('a * b + c')
@@ -58,7 +89,7 @@ class ExpressionTests(unittest.TestCase):
     def test_repr(self):
         s = 'a    *    b'
         e = Expression(s)
-        self.assertEqual('Expression(a    *    b)', repr(e))
+        self.assertEqual("Expression('a    *    b')", repr(e))
 
     def test_str(self):
         s = 'a    *    b'
@@ -141,6 +172,36 @@ class ExpressionTests(unittest.TestCase):
         self.assertIs(3 <= valued, False)
         self.assertIs(3 >= valued, True)
 
+    def assertExpressionEqual(self, lhs: Expression, rhs: Expression):
+        self.assertTrue(bool(Eq(lhs.sympified_expression, rhs.sympified_expression)), '{} and {} are not equal'.format(lhs, rhs))
+
+    def test_number_math(self):
+        a = Expression('a')
+        b = 3.3
+
+        self.assertExpressionEqual(a + b, b + a)
+        self.assertExpressionEqual(a - b, -(b - a))
+        self.assertExpressionEqual(a * b, b * a)
+        self.assertExpressionEqual(a / b, 1 / (b / a))
+
+    def test_symbolic_math(self):
+        a = Expression('a')
+        b = Expression('b')
+
+        self.assertExpressionEqual(a + b, b + a)
+        self.assertExpressionEqual(a - b, -(b - a))
+        self.assertExpressionEqual(a * b, b * a)
+        self.assertExpressionEqual(a / b, 1 / (b / a))
+
+    def test_sympy_math(self):
+        a = Expression('a')
+        b = sympify('b')
+
+        self.assertExpressionEqual(a + b, b + a)
+        self.assertExpressionEqual(a - b, -(b - a))
+        self.assertExpressionEqual(a * b, b * a)
+        self.assertExpressionEqual(a / b, 1 / (b / a))
+
     def test_get_most_simple_representation(self):
         cpl = Expression('1 + 1j').get_most_simple_representation()
         self.assertIsInstance(cpl, complex)
@@ -153,6 +214,14 @@ class ExpressionTests(unittest.TestCase):
         flt = Expression('3.').get_most_simple_representation()
         self.assertIsInstance(flt, float)
         self.assertEqual(flt, 3.)
+
+        st = Expression('a + b').get_most_simple_representation()
+        self.assertIsInstance(st, str)
+        self.assertEqual(st, 'a + b')
+
+        st_n = Expression('a+b', numpy_evaluation=False).get_most_simple_representation()
+        self.assertIsInstance(st_n, Expression)
+        self.assertEqual(st_n, 'a+b')
 
     def test_is_nan(self):
         self.assertTrue(Expression('nan').is_nan())
