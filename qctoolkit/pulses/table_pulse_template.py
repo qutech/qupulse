@@ -328,7 +328,6 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer, MeasurementD
             return any(
                 parameters[name].requires_stop
                 for name in self.parameter_names
-                if not isinstance(parameters[name], numbers.Number)
             )
         except KeyError as key_error:
             raise ParameterNotProvidedException(str(key_error)) from key_error
