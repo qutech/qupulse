@@ -1,5 +1,6 @@
 import fractions
 import sys
+import functools
 from typing import List, Tuple, Set, NamedTuple, Callable, Optional, Any, Sequence, cast, Generator
 from enum import Enum
 from collections import OrderedDict
@@ -469,9 +470,10 @@ TaborProgramMemory = NamedTuple('TaborProgramMemory', [('waveform_to_segment', n
                                                        ('program', TaborProgram)])
 
 
-def with_configuration_guard(function_object: Callable[['TaborChannelPair'], Any]) -> Callable[['TaborChannelPair'],
+def with_configuration_guard(function_object: Callable[['TaborChannelPair', Any], Any]) -> Callable[['TaborChannelPair'],
                                                                                                Any]:
     """This decorator assures that the AWG is in configuration mode while the decorated method runs."""
+    @functools.wraps(function_object)
     def guarding_method(channel_pair: 'TaborChannelPair', *args, **kwargs) -> Any:
         if channel_pair._configuration_guard_count == 0:
             channel_pair._enter_config_mode()
@@ -485,6 +487,16 @@ def with_configuration_guard(function_object: Callable[['TaborChannelPair'], Any
                 channel_pair._exit_config_mode()
 
     return guarding_method
+
+
+def with_select(function_object: Callable[['TaborChannelPair', Any], Any]) -> Callable[['TaborChannelPair'], Any]:
+    """Asserts the channel pair is selcted when the wrapped function is called"""
+    @functools.wraps(function_object)
+    def selector(channel_pair: 'TaborChannelPair', *args, **kwargs) -> Any:
+        channel_pair.select()
+        return function_object(channel_pair, *args, **kwargs)
+
+    return selector
 
 
 class PlottableProgram:
@@ -616,6 +628,7 @@ class TaborChannelPair(AWG):
         else:
             return self.total_capacity
 
+    @with_select
     def read_waveforms(self) -> List[np.ndarray]:
         device = self._device.get_readable_device(simulator=True)
 
@@ -628,6 +641,7 @@ class TaborChannelPair(AWG):
         device.send_cmd(':TRAC:SEL {}'.format(old_segment))
         return waveforms
 
+    @with_select
     def read_sequence_tables(self) -> List[Tuple[np.ndarray, np.ndarray, np.ndarray]]:
         device = self._device.get_readable_device(simulator=True)
 
@@ -640,6 +654,7 @@ class TaborChannelPair(AWG):
         device.send_cmd(':SEQ:SEL {}'.format(old_sequence))
         return sequences
 
+    @with_select
     def read_advanced_sequencer_table(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         return self._device.get_readable_device(simulator=True).read_adv_seq_table()
 
@@ -647,6 +662,7 @@ class TaborChannelPair(AWG):
         return PlottableProgram(self.read_waveforms(), self.read_sequence_tables(), self.read_advanced_sequencer_table())
 
     @with_configuration_guard
+    @with_select
     def upload(self, name: str,
                program: Loop,
                channels: Tuple[Optional[ChannelID], Optional[ChannelID]],
@@ -711,6 +727,37 @@ class TaborChannelPair(AWG):
 
         self._known_programs[name] = TaborProgramMemory(waveform_to_segment=waveform_to_segment,
                                                         program=tabor_program)
+
+    @with_configuration_guard
+    @with_select
+    def clear(self):
+        """Delete all segments and clear memory"""
+        self._device.select_channel(self._channels[0])
+        self._device.send_cmd(':TRAC:DEL:ALL')
+        self._device.send_cmd(':SOUR:SEQ:DEL:ALL')
+        self._device.send_cmd(':ASEQ:DEL')
+
+        self._device.send_cmd(':TRAC:DEF 1, 192')
+        self._device.send_cmd(':TRAC:SEL 1')
+        self._device.send_cmd(':TRAC:MODE COMB')
+        self._device.send_binary_data(pref=':TRAC:DATA', bin_dat=self._idle_segment.get_as_binary())
+
+        self._segment_lengths = 192*np.ones(1, dtype=np.uint32)
+        self._segment_capacity = 192*np.ones(1, dtype=np.uint32)
+        self._segment_hashes = np.ones(1, dtype=np.int64) * hash(self._idle_segment)
+        self._segment_references = np.ones(1, dtype=np.uint32)
+
+        self._device.send_cmd('SEQ:SEL 1')
+        self._device.download_sequencer_table(self._idle_sequence_table)
+        self._sequencer_tables = [self._idle_sequence_table]
+
+        self._advanced_sequence_table = [(1, 1, 0), (1, 1, 0), (1, 1, 1)]
+        self._device.download_adv_seq_table(self._advanced_sequence_table)
+
+        self._device.send_cmd('SEQ:SEL 1')
+
+        self._known_programs = dict()
+        self._current_program = None
 
     def _find_place_for_segments_in_memory(self, segments: Sequence, segment_lengths: Sequence) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
@@ -795,6 +842,7 @@ class TaborChannelPair(AWG):
 
         return waveform_to_segment, to_amend, to_insert
 
+    @with_select
     @with_configuration_guard
     def _upload_segment(self, segment_index: int, segment: TaborSegment) -> None:
         if self._segment_references[segment_index] > 0:
@@ -816,6 +864,7 @@ class TaborChannelPair(AWG):
         self._segment_references[segment_index] = 1
         self._segment_hashes[segment_index] = hash(segment)
 
+    @with_select
     @with_configuration_guard
     def _amend_segments(self, segments: List[TaborSegment]) -> np.ndarray:
         new_lengths = np.asarray([s.num_points for s in segments], dtype=np.uint32)
@@ -854,6 +903,7 @@ class TaborChannelPair(AWG):
 
         return segment_index + np.arange(len(segments), dtype=np.int64)
 
+    @with_select
     @with_configuration_guard
     def cleanup(self) -> None:
         """Discard all segments after the last which is still referenced"""
@@ -890,12 +940,14 @@ class TaborChannelPair(AWG):
         command_string = ':INST:SEL {}; :OUTP {}'.format(self._channels[channel], 'ON' if active else 'OFF')
         self._device.send_cmd(command_string)
 
+    @with_select
     def arm(self, name: str) -> None:
         if self._current_program == name:
             self._device.send_cmd('SEQ:SEL 1')
         else:
             self.change_armed_program(name)
 
+    @with_select
     @with_configuration_guard
     def change_armed_program(self, name: str) -> None:
         waveform_to_segment_index, program = self._known_programs[name]
@@ -942,6 +994,7 @@ class TaborChannelPair(AWG):
 
         self._current_program = name
 
+    @with_select
     def run_current_program(self) -> None:
         if self._current_program:
             self._device.send_cmd(':TRIG')
@@ -979,6 +1032,7 @@ class TaborChannelPair(AWG):
 
             self._is_in_config_mode = True
 
+    @with_select
     def _exit_config_mode(self) -> None:
         """Leave the configuration mode. Enter advanced sequence mode and turn on all outputs"""
         if self._current_program:
