@@ -175,7 +175,7 @@ class Expression(AnonymousSerializable, Comparable):
         if self._expression_lambda:
             result = self._expression_lambda(**dict((v, kwargs[v]) for v in self.variables))
 
-            allowed_types = (Number, bool, numpy.bool_)
+            allowed_types = (int, float, bool, numpy.generic)
             if isinstance(result, numpy.ndarray) and issubclass(result.dtype.type, allowed_types):
                 return result
             if isinstance(result, allowed_types):
