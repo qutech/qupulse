@@ -566,44 +566,33 @@ class TaborChannelPair(AWG):
             raise ValueError('Invalid channel pair: {}'.format(channels))
         self._channels = channels
 
-        self._enter_config_mode()
-
-        # Select channel 1
-        self._device.select_channel(self._channels[0])
-        self._device.send_cmd(':TRAC:DEL:ALL')
-        self._device.send_cmd(':SOUR:SEQ:DEL:ALL')
-        self._device.send_cmd(':ASEQ:DEL')
-
         self._idle_segment = TaborSegment(voltage_to_uint16(voltage=np.zeros(192),
-                                                            output_amplitude=0.5,
-                                                            output_offset=0., resolution=14),
-                                          voltage_to_uint16(voltage=np.zeros(192),
-                                                            output_amplitude=0.5,
-                                                            output_offset=0., resolution=14))
+                                                    output_amplitude=0.5,
+                                                    output_offset=0., resolution=14),
+                                    voltage_to_uint16(voltage=np.zeros(192),
+                                                    output_amplitude=0.5,
+                                                    output_offset=0., resolution=14))
         self._idle_sequence_table = [(1, 1, 0), (1, 1, 0), (1, 1, 0)]
-
-        self._device.send_cmd(':TRAC:DEF 1, 192')
-        self._device.send_cmd(':TRAC:SEL 1')
-        self._device.send_cmd(':TRAC:MODE COMB')
-        self._device.send_binary_data(pref=':TRAC:DATA', bin_dat=self._idle_segment.get_as_binary())
-
-        self._segment_lengths = 192*np.ones(1, dtype=np.uint32)
-        self._segment_capacity = 192*np.ones(1, dtype=np.uint32)
-        self._segment_hashes = np.ones(1, dtype=np.int64) * hash(self._idle_segment)
-        self._segment_references = np.ones(1, dtype=np.uint32)
-
-        self._device.send_cmd('SEQ:SEL 1')
-        self._device.download_sequencer_table(self._idle_sequence_table)
-        self._sequencer_tables = [self._idle_sequence_table]
-
-        self._advanced_sequence_table = []
-
-        self.total_capacity = int(16e6)
 
         self._known_programs = dict()  # type: Dict[str, TaborProgramMemory]
         self._current_program = None
 
-        self._exit_config_mode()
+        self._segment_lengths = None
+        self._segment_capacity = None
+        self._segment_hashes = None
+        self._segment_references = None
+
+        self._sequencer_tables = None
+        self._advanced_sequence_table = None
+
+        self.clear()
+
+    def select(self):
+        self._device.send_cmd(':INST:SEL {}'.format(self._channels[0]))
+
+    @property
+    def total_capacity(self):
+        return int(self._device.dev_properties['max_arb_mem']) // 2
 
     def free_program(self, name: str) -> TaborProgramMemory:
         program = self._known_programs.pop(name)
@@ -611,6 +600,12 @@ class TaborChannelPair(AWG):
         if self._current_program == name:
             self._current_program = None
         return program
+
+    def _restore_program(self, name: str, program: TaborProgram):
+        if name in self._known_programs:
+            raise ValueError('Program cannot be restored as it is already known.')
+        self._segment_references[program.waveform_to_segment] += 1
+        self._known_programs[name] = program
 
     @property
     def _segment_reserved(self) -> np.ndarray:
@@ -689,7 +684,7 @@ class TaborChannelPair(AWG):
         if name in self._known_programs:
             if force:
                 # save old program to restore in on error
-                to_restore = self.free_program(name)
+                to_restore = (self.free_program(name), self._current_program)
             else:
                 raise ValueError('{} is already known on {}'.format(name, self.identifier))
 
@@ -711,7 +706,8 @@ class TaborChannelPair(AWG):
                                                                                                segment_lengths)
         except:
             if to_restore:
-                self.upload(name, to_restore)
+                self._restore_program(name, to_restore[1])
+                self._current_program = to_restore[0]
             raise
 
         self._segment_references[waveform_to_segment[waveform_to_segment >= 0]] += 1
@@ -1028,7 +1024,6 @@ class TaborChannelPair(AWG):
             # 3. Select build-in waveform mode
             self.set_marker_state(False)
             self._device.send_cmd(':INST:SEL {}; :SOUR:FUNC:SHAPE DC; :INST:SEL {}; :SOUR:FUNC:SHAPE DC; :SOUR:FUNC:MODE FIX'.format(*self._channels))
-            self._device.abort()
 
             self._is_in_config_mode = True
 
