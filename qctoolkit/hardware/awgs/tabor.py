@@ -264,7 +264,7 @@ class TaborProgram:
 
         self._advanced_sequencer_table = advanced_sequencer_table
         self._sequencer_tables = sequencer_tables
-        self._waveforms = waveforms
+        self._waveforms = tuple(waveforms.keys())
 
     @property
     def program(self) -> Loop:
