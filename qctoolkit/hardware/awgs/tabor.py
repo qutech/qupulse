@@ -242,17 +242,17 @@ class TaborProgram:
 
         advanced_sequencer_table = []
         sequencer_tables = []
-        waveforms = []
+        waveforms = OrderedDict()
         for sequencer_table_loop in self.program:
             current_sequencer_table = []
             for waveform, repetition_count in ((waveform_loop.waveform.get_subset_for_channels(self.__used_channels),
                                                 waveform_loop.repetition_count)
                                                for waveform_loop in sequencer_table_loop):
                 if waveform in waveforms:
-                    wf_index = waveforms.index(waveform)
+                    wf_index = waveforms[waveform]
                 else:
                     wf_index = len(waveforms)
-                    waveforms.append(waveform)
+                    waveforms[waveform] = wf_index
                 current_sequencer_table.append((repetition_count, wf_index, 0))
 
             if current_sequencer_table in sequencer_tables:
@@ -265,7 +265,7 @@ class TaborProgram:
 
         self._advanced_sequencer_table = advanced_sequencer_table
         self._sequencer_tables = sequencer_tables
-        self._waveforms = waveforms
+        self._waveforms = tuple(waveforms.keys())
 
     @property
     def program(self) -> Loop:

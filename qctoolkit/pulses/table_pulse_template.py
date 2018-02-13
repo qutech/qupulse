@@ -215,6 +215,12 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer, MeasurementD
                 self._add_entry(channel, TableEntry(*entry))
 
         self._duration = self.calculate_duration()
+        self._table_parameters = set(
+            var
+            for channel_entries in self.entries.values()
+            for entry in channel_entries
+            for var in itertools.chain(entry.t.variables, entry.v.variables)
+        ) | self.constrained_parameters
 
         if self.duration == 0:
             warnings.warn('Table pulse template with duration 0 on construction.',
@@ -302,12 +308,7 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer, MeasurementD
 
     @property
     def table_parameters(self) -> Set[str]:
-        return set(
-            var
-            for channel_entries in self.entries.values()
-            for entry in channel_entries
-            for var in itertools.chain(entry.t.variables, entry.v.variables)
-        ) | self.constrained_parameters
+        return self._table_parameters
 
     @property
     def parameter_names(self) -> Set[str]:
