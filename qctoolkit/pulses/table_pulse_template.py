@@ -91,18 +91,7 @@ class TableWaveform(Waveform):
         if np.any(diff_times < 0):
             raise ValueError('Times are not increasing')
 
-        # filter 3 subsequent equal times
-        to_keep = np.full_like(times, True, dtype=np.bool_)
-        to_keep[1:-1] = np.logical_or(0 != diff_times[:-1], diff_times[:-1] != diff_times[1:])
-
-        voltages = np.fromiter((v for _, v, _ in input_waveform_table), dtype=float, count=len(input_waveform_table))
-        diff_voltages = np.diff(voltages[to_keep])
-
-        # filter 3 subsequent equal voltages
-        to_keep[1:-1][to_keep[1:-1]] = np.logical_or(0 != diff_voltages[:-1], diff_voltages[1:] != 0)
-
-        return tuple(entry if isinstance(entry, TableWaveformEntry) else TableWaveformEntry(*entry)
-                     for entry, keep_entry in zip(input_waveform_table, to_keep) if keep_entry)
+        return tuple(input_waveform_table)
 
     @property
     def compare_key(self) -> Any:
