@@ -522,6 +522,9 @@ class InstructionBlock(AbstractInstructionBlock):
     def return_ip(self, value: InstructionPointer) -> None:
         self.__return_ip = value
 
+    def __len__(self):
+        return len(self.__instruction_list) + 1
+
 
 class ImmutableInstructionBlock(AbstractInstructionBlock):
     """An immutable instruction block which cannot be altered.
