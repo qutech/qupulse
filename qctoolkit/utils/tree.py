@@ -12,9 +12,15 @@ def make_empty_weak_reference() -> weakref.ref:
 
 
 class Node:
+    debug = False
+
     def __init__(self, parent: Union['Node', None]=None, children: Iterable=list()):
         self.__parent = make_empty_weak_reference() if parent is None else weakref.ref(parent)
         self.__children = [self.parse_child(child) for child in children]
+        self.__parent_index = None
+
+        for i, child in enumerate(self.__children):
+            self.__children[i].__parent_index = i
 
     def parse_child(self, child) -> 'Node':
         if isinstance(child, dict):
@@ -43,10 +49,22 @@ class Node:
         if isinstance(idx, slice):
             if isinstance(value, Node):
                 raise TypeError('can only assign an iterable (Loop does not count)')
-            value = (self.parse_child(child) for child in value)
+            value = tuple(self.parse_child(child) for child in value)
+            indices = range(*idx.indices(len(self.__children)))
+            self.__children.__setitem__(idx, value)
+
+            if len(value) != len(indices):
+                first_invalid = indices.start if indices.step > 0 else indices.stop
+                for index in range(first_invalid, len(self)):
+                    self.__children[index].__parent_index = index
+            elif len(value) > 0:
+                for index in range(indices.start, indices.start + indices.step*len(value)):
+                    self.__children[index].__parent_index = index
+
         else:
             value = self.parse_child(value)
-        self.__children.__setitem__(idx, value)
+            value.__parent_index = idx
+            self.__children.__setitem__(idx, value)
 
     def __getitem__(self, *args, **kwargs) ->Union['Node', List['Node']]:
         return self.__children.__getitem__(*args, **kwargs)
@@ -74,13 +92,19 @@ class Node:
             yield elem
 
     def assert_tree_integrity(self) -> None:
-        for child in self.__children:
-            if id(child.parent) != id(self):
-                raise AssertionError('Child is missing parent reference')
-            child.assert_tree_integrity()
-        if self.parent:
-            if id(self) not in (id(c) for c in self.parent.__children):
-                raise AssertionError('Parent is missing child reference')
+        if self.debug:
+            for child in self.__children:
+                if id(child.parent) != id(self):
+                    raise AssertionError('Child is missing parent reference')
+                child.assert_tree_integrity()
+            if self.parent:
+                if self.__parent_index not in range(len(self.parent)):
+                    raise AssertionError('Out of range parent index')
+                if id(self.parent[self.__parent_index]) != id(self):
+                    if id(self) in (id(c) for c in self.parent.__children):
+                        raise AssertionError('Wrong parent index')
+                    else:
+                        raise AssertionError('Parent is missing child reference')
 
     @property
     def children(self) -> List['Node']:
@@ -100,11 +124,9 @@ class Node:
             return self
 
     def get_location(self) -> Tuple[int, ...]:
+        self.assert_tree_integrity()
         if self.parent:
-            for i, c in enumerate(self.parent.__children):
-                if id(c) == id(self):
-                    return (*self.parent.get_location(), i)
-            raise AssertionError('Self not found in parent')
+            return (*self.parent.get_location(), self.__parent_index)
         else:
             return tuple()
 

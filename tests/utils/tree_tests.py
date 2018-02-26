@@ -1,4 +1,5 @@
 import unittest
+import weakref
 
 from qctoolkit.utils.tree import Node
 
@@ -81,9 +82,25 @@ class NodeTests(unittest.TestCase):
         root_children = getattr(root, '_Node__children')
 
         root_children[1] = Node()
+        root_children[1]._Node__parent_index = -1
+
+        root.assert_tree_integrity()
+
+        Node.debug = True
 
         with self.assertRaises(AssertionError):
             root.assert_tree_integrity()
+
+        root_children[1]._Node__parent = weakref.ref(root)
+        with self.assertRaises(AssertionError):
+            root.assert_tree_integrity()
+
+        root_children[1]._Node__parent_index = 0
+        with self.assertRaises(AssertionError):
+            root.assert_tree_integrity()
+
+        root_children[1]._Node__parent_index = 1
+        root.assert_tree_integrity()
 
     def test_depth_iteration(self):
         root = Node(children=[Node(children=[Node(), Node()]), Node()])
