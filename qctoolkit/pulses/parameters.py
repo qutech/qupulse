@@ -18,12 +18,13 @@ import numpy
 from qctoolkit.serialization import Serializable, Serializer, AnonymousSerializable
 from qctoolkit.expressions import Expression
 from qctoolkit.comparable import Comparable
+from qctoolkit.utils.types import HashableNumpyArray
 
 __all__ = ["Parameter", "ConstantParameter",
            "ParameterNotProvidedException", "ParameterConstraintViolation"]
 
 
-class Parameter(Serializable, Comparable, metaclass=ABCMeta):
+class Parameter:
     """A parameter for pulses.
     
     Parameter specifies a concrete value which is inserted instead
@@ -32,14 +33,11 @@ class Parameter(Serializable, Comparable, metaclass=ABCMeta):
     Implementations of Parameter may provide a single constant value or
     obtain values by computation (e.g. from measurement results).
     """
-    def __init__(self) -> None:
-        super().__init__(None)
-
-    @abstractmethod
     def get_value(self) -> Real:
         """Compute and return the parameter value."""
+        raise NotImplementedError()
 
-    @abstractproperty
+    @property
     def requires_stop(self) -> bool:
         """Query whether the evaluation of this Parameter instance requires an interruption in
         execution/sequencing, e.g., because it depends on data that is only measured in during the
@@ -48,40 +46,42 @@ class Parameter(Serializable, Comparable, metaclass=ABCMeta):
         Returns:
             True, if evaluating this Parameter instance requires an interruption.
         """
+        raise NotImplementedError()
 
-    @property
-    def compare_key(self) -> Any:
-        return float(self.get_value())
+    def __hash__(self):
+        raise NotImplementedError()
+
+    def __eq__(self, other):
+        return type(self) is type(other) and hash(self) == hash(other)
         
         
 class ConstantParameter(Parameter):
     """A pulse parameter with a constant value."""
     
-    def __init__(self, value: Real) -> None:
+    def __init__(self, value: Union[Real, numpy.ndarray]) -> None:
         """Create a ConstantParameter instance.
 
         Args:
             value (Real): The value of the parameter
         """
         super().__init__()
-        self.__value = value
+        if isinstance(value, Real):
+            self._value = value
+        else:
+            self._value = numpy.array(value).view(HashableNumpyArray)
         
-    def get_value(self) -> Real:
-        return self.__value
-        
+    def get_value(self) -> Union[Real, numpy.ndarray]:
+        return self._value
+
+    def __hash__(self):
+        return hash(self._value)
+
     @property
     def requires_stop(self) -> bool:
         return False
 
     def __repr__(self) -> str:
-        return "<ConstantParameter {0}>".format(self.__value)
-
-    def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
-        return dict(type=serializer.get_type_identifier(self), constant=self.__value)
-
-    @staticmethod
-    def deserialize(serializer: Serializer, constant: Real) -> 'ConstantParameter':
-        return ConstantParameter(constant)
+        return "<ConstantParameter {0}>".format(self._value)
 
 
 class MappedParameter(Parameter):
@@ -108,46 +108,41 @@ class MappedParameter(Parameter):
                 be defined via the dependencies public property. (Optional)
         """
         super().__init__()
-        self.__expression = expression
-        self.dependencies = dependencies
-        if self.dependencies is None:
-            self.dependencies = dict()
+        self._expression = expression
+        self.dependencies = dict() if dependencies is None else dependencies
+        self._cached_value = (None, None)
 
-    def __collect_dependencies(self) -> Iterable[Parameter]:
+    def _collect_dependencies(self) -> Dict[str, float]:
         # filter only real dependencies from the dependencies dictionary
         try:
-            return {dependency_name: self.dependencies[dependency_name]
-                    for dependency_name in self.__expression.variables}
+            return {dependency_name: self.dependencies[dependency_name].get_value()
+                    for dependency_name in self._expression.variables}
         except KeyError as key_error:
             raise ParameterNotProvidedException(str(key_error)) from key_error
 
     def get_value(self) -> Real:
-        if self.requires_stop:
-            raise Exception("Cannot evaluate MappedParameter because at least one dependency "
-                            "cannot be evaluated.")
-        dependencies = self.__collect_dependencies()
-        variables = {k: dependencies[k].get_value() for k in dependencies}
-        return self.__expression.evaluate_numeric(**variables)
+        current_hash = hash(self)
+        if current_hash != self._cached_value[0]:
+            self._cached_value = (current_hash, self._expression.evaluate_numeric(**self._collect_dependencies()))
+        return self._cached_value[1]
+
+    def __hash__(self):
+        return hash(tuple(self.dependencies.items()))
 
     @property
     def requires_stop(self) -> bool:
-        try:
-            return any(p.requires_stop for p in self.__collect_dependencies().values())
-        except:
-            raise
+        return any(self.dependencies[v].requires_stop
+                   for v in self._expression.variables)
 
     def __repr__(self) -> str:
-        return "<MappedParameter {0} depending on {1}>".format(
-            self.__expression, self.dependencies
+        try:
+            value = self.get_value()
+        except:
+            value = 'nothing'
+
+        return "<MappedParameter {0} evaluating to {1}>".format(
+            self._expression, value
         )
-
-    def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
-        return dict(type=serializer.get_type_identifier(self),
-                    expression=serializer.dictify(self.__expression))
-
-    @staticmethod
-    def deserialize(serializer: Serializer, expression: str) -> 'MappedParameter':
-        return MappedParameter(serializer.deserialize(expression))
 
 
 class ParameterConstraint(Comparable, AnonymousSerializable):
