@@ -522,7 +522,7 @@ class InstructionBlock(AbstractInstructionBlock):
     def return_ip(self, value: InstructionPointer) -> None:
         self.__return_ip = value
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.__instruction_list) + 1
 
 
