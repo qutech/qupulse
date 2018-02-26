@@ -2,7 +2,9 @@ import typing
 import abc
 import inspect
 
-__all__ = ["MeasurementWindow", "ChannelID"]
+import numpy
+
+__all__ = ["MeasurementWindow", "ChannelID", "HashableNumpyArray"]
 
 MeasurementWindow = typing.Tuple[str, float, float]
 ChannelID = typing.Union[str, int]
@@ -34,3 +36,14 @@ class DocStringABCMeta(abc.ABCMeta):
                         member.__doc__ = 'Implements {}`~{}`.'.format(member_type, base_member_name)
                         break
         return cls
+
+
+class HashableNumpyArray(numpy.ndarray):
+    """Make numpy arrays hashable.
+
+    Example usage:
+    my_array = np.zeros([1, 2, 3, 4])
+    hashable = my_array.view(HashableNumpyArray)
+    """
+    def __hash__(self):
+        return hash(self.tobytes())
