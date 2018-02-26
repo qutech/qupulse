@@ -48,10 +48,10 @@ class Parameter:
         """
         raise NotImplementedError()
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         raise NotImplementedError()
 
-    def __eq__(self, other):
+    def __eq__(self, other) -> bool:
         return type(self) is type(other) and hash(self) == hash(other)
         
         
@@ -73,7 +73,7 @@ class ConstantParameter(Parameter):
     def get_value(self) -> Union[Real, numpy.ndarray]:
         return self._value
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(self._value)
 
     @property
@@ -120,7 +120,7 @@ class MappedParameter(Parameter):
         except KeyError as key_error:
             raise ParameterNotProvidedException(str(key_error)) from key_error
 
-    def get_value(self) -> Real:
+    def get_value(self) -> Union[Real, numpy.ndarray]:
         current_hash = hash(self)
         if current_hash != self._cached_value[0]:
             self._cached_value = (current_hash, self._expression.evaluate_numeric(**self._collect_dependencies()))
@@ -131,8 +131,11 @@ class MappedParameter(Parameter):
 
     @property
     def requires_stop(self) -> bool:
-        return any(self.dependencies[v].requires_stop
-                   for v in self._expression.variables)
+        try:
+            return any(self.dependencies[v].requires_stop
+                       for v in self._expression.variables)
+        except KeyError as err:
+            raise ParameterNotProvidedException(err.args[0]) from err
 
     def __repr__(self) -> str:
         try:
