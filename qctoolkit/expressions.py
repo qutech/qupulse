@@ -2,7 +2,7 @@
 This module defines the class Expression to represent mathematical expression as well as
 corresponding exception classes.
 """
-from typing import Any, Dict, Union, Sequence, Callable
+from typing import Any, Dict, Union, Sequence, Callable, TypeVar, Type
 from numbers import Number
 import warnings
 import functools
@@ -16,25 +16,28 @@ from qctoolkit.utils.sympy import sympify, substitute_with_eval, to_numpy
 __all__ = ["Expression", "ExpressionVariableMissingException", "ExpressionScalar", "ExpressionVector"]
 
 
-def ceiling(input_value):
-    if isinstance(input_value, numpy.ndarray):
-        return numpy.ceil(input_value).astype(numpy.int64)
-    else:
-        return sympy.ceiling(input_value)
+_ExpressionType = TypeVar('_ExpressionType', bound='Expression')
 
 
 class _ExpressionMeta(type):
     """Metaclass that forwards calls to Expression(...) to Expression.make(...) to make subclass objects"""
-    def __call__(cls, *args, **kwargs):
+    def __call__(cls: Type[_ExpressionType], *args, **kwargs) -> _ExpressionType:
         if cls is Expression:
             return cls.make(*args, **kwargs)
         else:
             return type.__call__(cls, *args, **kwargs)
 
 
+def ceiling(input_value: Any) -> Any:
+    if isinstance(input_value, numpy.ndarray):
+        return numpy.ceil(input_value).astype(numpy.int64)
+    else:
+        return sympy.ceiling(input_value)
+
+
 class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
     """Base class for expressions."""
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         self._expression_lambda = None
 
     def _parse_evaluate_numeric_arguments(self, eval_args: Dict[str, Number]) -> Dict[str, Number]:
@@ -84,7 +87,9 @@ class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
         raise NotImplementedError()
 
     @classmethod
-    def make(cls, expression_or_dict, numpy_evaluation=None) -> 'Expression':
+    def make(cls: Type[_ExpressionType],
+             expression_or_dict,
+             numpy_evaluation=None) -> Union['ExpressionScalar', 'ExpressionVector', _ExpressionType]:
         """Backward compatible expression generation"""
         if numpy_evaluation is not None:
             warnings.warn('numpy_evaluation keyword argument is deprecated and ignored.')
