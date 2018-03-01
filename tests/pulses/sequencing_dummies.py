@@ -29,6 +29,9 @@ class DummyParameter(Parameter):
     def requires_stop(self) -> bool:
         return self.requires_stop_
 
+    def __hash__(self):
+        return hash(self.value)
+
     def get_serialization_data(self, serializer: Serializer) -> None:
             raise NotImplementedError()
 

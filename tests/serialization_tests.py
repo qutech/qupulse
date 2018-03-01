@@ -423,8 +423,7 @@ class SerializerTests(unittest.TestCase):
         self.assertEqual(self.deserialization_data['data'], deserialized.data)
 
     def test_serialization_and_deserialization_combined(self) -> None:
-        table_foo = TablePulseTemplate(identifier='foo', entries={'default': [(Expression('hugo',
-                                                                                          numpy_evaluation=False), 2),
+        table_foo = TablePulseTemplate(identifier='foo', entries={'default': [('hugo', 2),
                                                                               ('albert', 'voltage')]},
                                        parameter_constraints=['albert<9.1'])
         table = TablePulseTemplate({'default': [('t', 0)]})
@@ -448,8 +447,6 @@ class SerializerTests(unittest.TestCase):
 
         self.assertEqual(serialized_foo, storage.stored_items['foo'])
         self.assertEqual(serialized_sequence, storage.stored_items['main'])
-
-        self.assertFalse(deserialized_sequence.subtemplates[0].template.entries['default'][0].t.numpy_evaluation)
 
 
 class TriviallyRepresentableEncoderTest(unittest.TestCase):

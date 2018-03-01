@@ -27,18 +27,6 @@ class ConstantParameterTest(unittest.TestCase):
         constant_parameter = ConstantParameter(0.2)
         self.assertEqual("<ConstantParameter 0.2>", repr(constant_parameter))
 
-    def test_get_serialization_data(self) -> None:
-        constant_parameter = ConstantParameter(-0.2)
-        serializer = DummySerializer()
-        data = constant_parameter.get_serialization_data(serializer)
-        self.assertEqual(dict(type=serializer.get_type_identifier(constant_parameter), constant=-0.2), data)
-
-    def test_deserialize(self) -> None:
-        serializer = DummySerializer()
-        constant_parameter = ConstantParameter.deserialize(serializer, constant=3.1)
-        self.assertEqual(3.1, constant_parameter.get_value())
-        self.assertIsNone(constant_parameter.identifier)
-
 
 class MappedParameterTest(unittest.TestCase):
 
@@ -54,7 +42,7 @@ class MappedParameterTest(unittest.TestCase):
         hugo = DummyParameter(5.2, requires_stop=True)
         ilse = DummyParameter(2356.4, requires_stop=True)
 
-        p.dependencies = {'foo': foo, 'hugo': hugo, 'ilse': ilse}
+        p.dependencies = {'foo': foo, 'bar': bar, 'ilse': ilse}
         with self.assertRaises(ParameterNotProvidedException):
             p.requires_stop
         with self.assertRaises(ParameterNotProvidedException):
@@ -62,8 +50,6 @@ class MappedParameterTest(unittest.TestCase):
 
         p.dependencies = {'foo': foo, 'bar': bar, 'hugo': hugo}
         self.assertTrue(p.requires_stop)
-        with self.assertRaises(Exception):
-            p.get_value()
 
         hugo = DummyParameter(5.2, requires_stop=False)
         p.dependencies = {'foo': foo, 'bar': bar, 'hugo': hugo, 'ilse': ilse}
@@ -73,20 +59,6 @@ class MappedParameterTest(unittest.TestCase):
     def test_repr(self) -> None:
         p = MappedParameter(Expression("foo + bar * hugo"))
         self.assertIsInstance(repr(p), str)
-
-    def test_get_serialization_data(self) -> None:
-        exp = Expression("foo + bar * hugo")
-        p = MappedParameter(exp)
-        serializer = DummySerializer()
-        data = p.get_serialization_data(serializer)
-        self.assertEqual(dict(type=serializer.get_type_identifier(p), expression=str(id(exp))), data)
-
-    def test_deserialize(self) -> None:
-        serializer = DummySerializer()
-        exp = Expression("foo + bar * hugo")
-        serializer.subelements[id(exp)] = exp
-        p = MappedParameter.deserialize(serializer, expression=id(exp))
-        self.assertIsNone(p.identifier)
 
 
 class ParameterConstraintTest(unittest.TestCase):
