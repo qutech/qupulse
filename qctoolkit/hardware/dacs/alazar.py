@@ -104,7 +104,17 @@ class AlazarCard(DAC):
             elif config.totalRecordSize < total_record_size:
                 raise ValueError('specified total record size is smaller than needed {} < {}'.format(config.totalRecordSize,
                                                                                                      total_record_size))
+            
+            old_aimed_buffer_size = config.aimedBufferSize
+            
+            # work around for measurments not working with one buffer
+            if config.totalRecordSize < 5*config.aimedBufferSize:
+                config.aimedBufferSize = config.totalRecordSize // 5
+
             config.apply(self.__card, True)
+
+            # "Hide" work around from the user
+            config.aimedBufferSize = old_aimed_buffer_size
 
             self.update_settings = False
             self.__armed_program = to_arm
@@ -117,8 +127,15 @@ class AlazarCard(DAC):
     def mask_prototypes(self):
         return self._mask_prototypes
 
-    def register_mask_for_channel(self, mask_id, hw_channel, mask_type='auto') -> None:
-        if hw_channel not in range(16):
+    def register_mask_for_channel(self, mask_id: str, hw_channel: int, mask_type='auto') -> None:
+        """
+
+        Args:
+            mask_id: Identifier of the measurement windows
+            hw_channel: Associated hardware channel (0, 1, 2, 3)
+            mask_type: Either 'auto' or 'periodical
+        """
+        if hw_channel not in range(4):
             raise ValueError('{} is not a valid hw channel'.format(hw_channel))
         if mask_type not in ('auto', 'cross_buffer', None):
             raise NotImplementedError('Currently only can do cross buffer mask')
