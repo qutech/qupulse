@@ -1,5 +1,7 @@
 function dict_string_or_struct = load_dict(dict_string_or_struct)
   % Load dict if d is a string. Otherwise leave d untouched.
+	% Important: this does not (re)load a dict if the passed in variable is
+	% already a struct
 	global plsdata
 	delim = '___';
 

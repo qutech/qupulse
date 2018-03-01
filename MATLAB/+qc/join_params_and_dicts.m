@@ -28,10 +28,14 @@ function parameters = join_params_and_dicts(varargin)
 	% Each dictionary also has a field 'dict___name' which specifies
   % the dictionary name
 
-	p = varargin;
-	p = cellfun(@load_dict, p, 'UniformOutput', false);
-	p = cellfun(@apply_globals, p, 'UniformOutput', false);
-	p = cellfun(@dict_to_parameter_struct, p, 'UniformOutput', false);
+	if numel(varargin) == 1 && iscell(varargin{1})
+		p = varargin{1};
+	else
+		p = varargin;
+	end
+	p = cellfun(@qc.load_dict, p, 'UniformOutput', false);
+	p = cellfun(@qc.dict_apply_globals, p, 'UniformOutput', false);
+	p = cellfun(@qc.dict_to_parameter_struct, p, 'UniformOutput', false);
 
 	parameters = struct();
 	for k = 1:numel(p)
@@ -40,59 +44,6 @@ function parameters = join_params_and_dicts(varargin)
 
 end
 
-
-function d = load_dict(d)
-	if is_dict(d) && ischar(d)
-		d = qc.load_dict(d);
-	end	
-end
-
-function bool = is_dict(dp)
-	delim = '___';	
-	bool = ischar(dp) || (isstruct(dp) && isfield(dp, strcat('dict', delim, 'name')));
-end
-
-function d = apply_globals(d)
-	% Replace all parameters by their global values	
-	if is_dict(d) && isfield(d, 'global')
-		delim = '___';
-		globals = fieldnames(d.global);
-		
-		for pulseName = fieldnames(d)'
-			if strcmp(pulseName{1}, 'global') || strcmp(pulseName{1}, strcat('dict', delim, 'name'))
-				continue
-			end
-			for paramName = fieldnames(d.(pulseName{1}))'
-				
-				bool = cellfun(@(x)(strcmp(paramName{1}, x)), globals, 'UniformOutput', true);
-				
-				if any(bool)
-					d.(pulseName{1}).(paramName{1}) = d.global.(globals{bool});
-				end
-			end
-		end
-		d = rmfield(d, 'global');
-	end	
-end
-
-function p = dict_to_parameter_struct(d)
-	% Flatten dict into a parameter struct
-	if is_dict(d)
-		delim = '___';
-		d = rmfield(d, strcat('dict', delim, 'name'));
-		
-		p = {};
-		for pulseName = fieldnames(d)'
-			for paramName = fieldnames(d.(pulseName{1}))'
-				p{end+1} = strcat(pulseName{1}, delim, paramName{1});
-				p{end+1} = d.(pulseName{1}).(paramName{1});
-			end
-		end
-		p = struct(p{:});
-	else
-		p = d;
-	end
-end
 
 function p = join(p1, p2)
 	% Join two parameter structs. This process is additive, fields in p2 take

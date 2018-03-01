@@ -1,14 +1,87 @@
-%% Setup
+%% Init
+savePath = 'Y:\Common\GaAs\Triton 200\Backup\DATA\workspace';
+
+%% Loading
+if util.yes_no_input('Really load smdata?', 'n')
+	load(fullfile(savePath, 'smdata_recent.mat'));
+	fprintf('Loaded smdata\n');
+end
+load(fullfile(savePath, 'tunedata_recent.mat'));
+load(fullfile(savePath, 'plsdata_recent.mat'));
+global tunedata
+global plsdata
+
+%% Add virtual Alazar channel
+% Idea: create a separate qctoolkit instrument
+smdata.inst(sminstlookup('ATS9440Python')).channels(9,:) = 'ATSV';
+smaddchannel(sminstlookup('ATS9440Python'), 9, smdata.inst(sminstlookup('ATS9440Python')).channels(9, :));
+smdata.inst(sminstlookup('ATS9440Python')).data.cache = [];
+
+%%
+smloadinst('dummy');
+smaddchannel(sminstlookup('dummy'), 1, 'count');
+
+%%
+smset('count', 2)
+smget('count')
+
+smset('time', now)
+smget('time')
+
+
+%% Setup plsdata from scratch
 global plsdata
 plsdata = struct( ...
 	'path', 'Y:\Cerfontaine\Code\qc-tookit-pulses', ...
-	'awg', struct('inst', [], 'hardwareSetup', [], 'sampleRate', 2e9), ...
+	'awg', struct('inst', [], 'hardwareSetup', [], 'sampleRate', 2e9, 'currentProgam', '', 'registeredPrograms', struct(), 'defaultChannelMapping', struct(), 'defaultWindowMapping', struct(), 'defaultParametersAndDicts', {{}}, 'defaultAddMarker', {{}}), ...
   'dict', struct('cache', [], 'path', 'Y:\Cerfontaine\Code\qctoolkit-dicts'), ...
 	'qc', struct('figId', 801), ...
-	'daq', struct('inst', []) ...
+	'daq', struct('inst', [], 'defaultOperations', {{}}) ...
 	);
 plsdata.qc.backend = py.qctoolkit.serialization.FilesystemBackend(plsdata.path);
 plsdata.qc.serializer = py.qctoolkit.serialization.Serializer(plsdata.qc.backend);
+
+%% Alazar simulator
+smdata.inst(sminstlookup('ATS9440Python')).data.address = 'simulator';
+plsdata.daq.inst = py.qctoolkit.hardware.dacs.alazar.AlazarCard(...
+	[]...
+	);
+
+%% Alazar
+smopen('ATS9440Python');
+% config = sm_setups.triton_200.AlazarDefaultSettings(); 
+% smdata.inst(sminstlookup('ATS9440Python')).data.config = config;
+dos('activate lab_master & python -i -c "import atsaverage.client; import atsaverage.gui; card = atsaverage.client.getNetworkCard(''ATS9440'', keyfile_or_key=b''ultra_save_default_key''); window = atsaverage.gui.ThreadedStatusWindow(card); window.start();" &', '-echo')
+
+plsdata.daq.inst = py.qctoolkit.hardware.dacs.alazar.AlazarCard(...
+	py.atsaverage.core.getLocalCard(1, 1)...
+	);
+% alazar = py.qctoolkit.hardware.dacs.alazar.AlazarCard(...
+% 	smdata.inst(3).data.py.card ...
+% 	);
+
+
+%% Setup AWG
+qc.setup_tabor_awg('realAWG', false, 'simulateAWG', true, 'taborDriverPath', 'Y:\Cerfontaine\Code\tabor');
+
+%% Alazar
+qc.setup_alazar_measurements('nQubits', 2, 'nMeasPerQubit', 2, 'disp', true);
+
+%%
+% Configure Alazar so the AWG uses the ATS 10MHz reference clock 
+py.atsaverage.alazar.ConfigureAuxIO(plsdata.daq.inst.card.handle,...
+	                                  py.getattr(py.atsaverage.alazar.AUX_IO_Mode, 'out_pacer'),...
+																	  uint64(10));
+																	
+% Set Base Alazar Config
+plsdata.daq.inst.config = py.atsaverage.config.ScanlineConfiguration.parse(sm_setups.triton_200.AlazarDefaultSettings());
+
+%% Load and unload alazar api
+% py.atsaverage.alazar.unload
+% py.atsaverage.alazar.load('atsapi.dll')
+
+%% AWG default settings
+awgctrl('default');
 
 %% Load example pulse (or execute qc-tookit-pulses\matlab\general_charge_scan.m)
 charge_scan = qc.load_pulse('charge_scan');
@@ -72,3 +145,7 @@ qc.save_dict(test_dict);
 parameters2 = struct('x_start', nan, 'x_stop', nan);
 parameters2 = qc.params_add_delim(parameters2, 'charge_scan')
 qc.join_params_and_dicts(parameters2, 'test')
+
+%%
+common_dict = qc.load_dict('common');
+qc.save_dict(common_dict);
