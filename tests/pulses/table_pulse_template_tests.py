@@ -607,7 +607,9 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
 
 
 class TableWaveformTests(unittest.TestCase):
-    def test_validate_input(self):
+
+
+    def test_validate_input_errors(self):
         with self.assertRaises(ValueError):
             TableWaveform._validate_input([TableWaveformEntry(0.0, 0.2, HoldInterpolationStrategy())])
 
@@ -624,6 +626,7 @@ class TableWaveformTests(unittest.TestCase):
                                            TableWaveformEntry(0.2, 0.2, HoldInterpolationStrategy()),
                                            TableWaveformEntry(0.1, 0.2, HoldInterpolationStrategy())])
 
+    def test_validate_input_duplicate_removal(self):
         validated = TableWaveform._validate_input([TableWaveformEntry(0.0, 0.2, HoldInterpolationStrategy()),
                                                    TableWaveformEntry(0.1, 0.2, LinearInterpolationStrategy()),
                                                    TableWaveformEntry(0.1, 0.3, JumpInterpolationStrategy()),
