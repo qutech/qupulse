@@ -26,7 +26,7 @@ class AnnotationTest(unittest.TestCase):
             return bool
         
     def test_annotations(self):
-        whitelist = ["__init__", "__new__", "__str__", "__repr__"]
+        whitelist = ["__init__", "__new__", "__str__", "__repr__", "__hash__"]
         for root, dirs, files in os.walk(srcPath):
             for filename in files:
                 methods = {}
