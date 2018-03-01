@@ -34,6 +34,11 @@ class TableEntryTest(unittest.TestCase):
             self.assertEqual(entry.v, Expression('b'))
             self.assertEqual(entry.interp, strat_val)
 
+    def test_slots(self):
+        entry = TableEntry('a', Expression.make('b'), 'hold')
+
+        self.assertFalse(hasattr(entry, '__dict__'))
+
     def test_unknown_interpolation_strategy(self):
         with self.assertRaises(KeyError):
             TableEntry(0, 0, 'foo')

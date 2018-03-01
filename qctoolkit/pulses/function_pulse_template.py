@@ -150,7 +150,7 @@ class FunctionPulseTemplate(AtomicPulseTemplate, MeasurementDefiner, ParameterCo
 class FunctionWaveform(Waveform):
     """Waveform obtained from instantiating a FunctionPulseTemplate."""
 
-    def __init__(self, expression: Expression,
+    def __init__(self, expression: ExpressionScalar,
                  duration: float,
                  measurement_windows: List[MeasurementWindow],
                  channel: ChannelID) -> None:
