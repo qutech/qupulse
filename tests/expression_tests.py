@@ -31,7 +31,7 @@ class ExpressionTests(unittest.TestCase):
         np.testing.assert_equal((2 * 1.5 - 7) * np.ones(4), e.evaluate_numeric(**params))
 
     def test_evaluate_numeric_without_numpy(self):
-        e = Expression('a * b + c', numpy_evaluation=False)
+        e = Expression('a * b + c')
 
         params = {
             'a': 2,

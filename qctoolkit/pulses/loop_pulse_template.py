@@ -8,7 +8,7 @@ import sympy
 
 from qctoolkit.serialization import Serializer
 
-from qctoolkit.expressions import Expression
+from qctoolkit.expressions import ExpressionScalar
 from qctoolkit.utils import checked_int_cast
 from qctoolkit.pulses.parameters import Parameter, ConstantParameter, InvalidParameterNameException
 from qctoolkit.pulses.pulse_template import PulseTemplate, ChannelID
@@ -71,9 +71,9 @@ class ParametrizedRange:
         else:
             raise TypeError('ParametrizedRange expected 1 to 3 arguments, got {}'.format(len(args)))
 
-        self.start = Expression(start)
-        self.stop = Expression(stop)
-        self.step = Expression(step)
+        self.start = ExpressionScalar.make(start)
+        self.stop = ExpressionScalar.make(stop)
+        self.step = ExpressionScalar.make(step)
 
     def to_tuple(self) -> Tuple[Any, Any, Any]:
         """Return a simple representation of the range which is useful for comparison and serialization"""
@@ -143,7 +143,7 @@ class ForLoopPulseTemplate(LoopPulseTemplate):
         return self._loop_range
 
     @property
-    def duration(self) -> Expression:
+    def duration(self) -> ExpressionScalar:
         step_size = self._loop_range.step.sympified_expression
         loop_index = sympy.symbols(self._loop_index)
         sum_index = sympy.symbols(self._loop_index)
@@ -162,8 +162,7 @@ class ForLoopPulseTemplate(LoopPulseTemplate):
         duration_expression = sympy.Piecewise((0, step_count <= 0),
                                               (finite_duration_expression, True))
 
-        # disable numpy because it breaks sum evaluation
-        return Expression(duration_expression, numpy_evaluation=False)
+        return ExpressionScalar(duration_expression)
 
     @property
     def parameter_names(self) -> Set[str]:
@@ -263,12 +262,8 @@ class WhileLoopPulseTemplate(LoopPulseTemplate):
         return self.body.parameter_names
 
     @property
-    def duration(self) -> Expression:
-        return Expression('nan')
-
-    @property
-    def parameter_declarations(self) -> Set[str]:
-        return self.body.parameter_declarations
+    def duration(self) -> ExpressionScalar:
+        return ExpressionScalar('nan')
 
     def __obtain_condition_object(self, conditions: Dict[str, Condition]) -> Condition:
         try:

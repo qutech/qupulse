@@ -9,7 +9,7 @@ import numpy as np
 from qctoolkit.serialization import Serializer
 
 from qctoolkit.utils.types import MeasurementWindow, ChannelID
-from qctoolkit.expressions import Expression
+from qctoolkit.expressions import ExpressionScalar
 from qctoolkit.utils import checked_int_cast
 from qctoolkit.pulses.pulse_template import PulseTemplate
 from qctoolkit.pulses.loop_pulse_template import LoopPulseTemplate
@@ -78,7 +78,7 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer):
 
     def __init__(self,
                  body: PulseTemplate,
-                 repetition_count: Union[int, str, Expression],
+                 repetition_count: Union[int, str, ExpressionScalar],
                  identifier: Optional[str]=None,
                  parameter_constraints: Optional[List]=None) -> None:
         """Create a new RepetitionPulseTemplate instance.
@@ -92,8 +92,7 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer):
         LoopPulseTemplate.__init__(self, identifier=identifier, body=body)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 
-        if not isinstance(repetition_count, Expression):
-            repetition_count = Expression(repetition_count)
+        repetition_count = ExpressionScalar.make(repetition_count)
 
         if (repetition_count < 0) is True:
             raise ValueError('Repetition count may not be negative')
@@ -101,7 +100,7 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer):
         self._repetition_count = repetition_count
 
     @property
-    def repetition_count(self) -> Expression:
+    def repetition_count(self) -> ExpressionScalar:
         """The amount of repetitions. Either a constant integer or a ParameterDeclaration object."""
         return self._repetition_count
 
@@ -125,7 +124,7 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer):
         return self.body.measurement_names
 
     @property
-    def duration(self) -> Expression:
+    def duration(self) -> ExpressionScalar:
         return self.repetition_count * self.body.duration
 
     def build_sequence(self,
