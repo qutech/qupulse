@@ -449,8 +449,6 @@ class SerializerTests(unittest.TestCase):
         self.assertEqual(serialized_foo, storage.stored_items['foo'])
         self.assertEqual(serialized_sequence, storage.stored_items['main'])
 
-        self.assertFalse(deserialized_sequence.subtemplates[0].template.entries['default'][0].t.numpy_evaluation)
-
 
 class TriviallyRepresentableEncoderTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
