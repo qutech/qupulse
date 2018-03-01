@@ -52,6 +52,10 @@ class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
             return result
         elif isinstance(result, allowed_types):
             return result
+        elif isinstance(result, sympy.Float):
+            return float(result)
+        elif isinstance(result, sympy.Integer):
+            return int(result)
         else:
             raise NonNumericEvaluation(self, result, call_arguments)
 
@@ -173,8 +177,6 @@ class ExpressionScalar(Expression):
 
         Args:
             ex (string): The mathematical expression represented as a string
-            numpy_evaluation: If True the evaluation will be done via sympy.lambdify with the numpy argument
-            indexed_variables: These variables are passed to sympify as locals of type sympify.IndexedBase
         """
         super().__init__()
 
@@ -201,7 +203,7 @@ class ExpressionScalar(Expression):
     def variables(self) -> Sequence[str]:
         return self._variables
 
-    def get_most_simple_representation(self) -> Union[str, int, float, complex, 'Expression']:
+    def get_most_simple_representation(self) -> Union[str, int, float, complex]:
         if self._sympified_expression.free_symbols:
             return str(self._sympified_expression)
         elif self._sympified_expression.is_integer:
