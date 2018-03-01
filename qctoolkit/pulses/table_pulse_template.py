@@ -55,7 +55,7 @@ class TableWaveform(Waveform):
         """
         super().__init__()
 
-        self._table = TableWaveform._validate_input(waveform_table)
+        self._table = self._validate_input(waveform_table)
         self._channel_id = channel
 
     @staticmethod
@@ -71,28 +71,31 @@ class TableWaveform(Waveform):
         if len(input_waveform_table) < 2:
             raise ValueError("Waveform table has less than two entries.")
 
-        times = np.fromiter((t for t, *_ in input_waveform_table), dtype=float, count=len(input_waveform_table))
-        if times[0] != 0:
-            raise ValueError('First time point has to be 0')
-        if times[-1] == 0:
-            raise ValueError('Last time point has to be larger 0')
+        if input_waveform_table[0][0] != 0:
+            raise ValueError('First time entry is not zero.')
 
-        diff_times = np.diff(times)
-        if np.any(diff_times < 0):
-            raise ValueError('Times are not increasing')
+        if input_waveform_table[-1][0] == 0:
+            raise ValueError('Last time entry is zero.')
 
-        # filter 3 subsequent equal times
-        to_keep = np.full_like(times, True, dtype=np.bool_)
-        to_keep[1:-1] = np.logical_or(0 != diff_times[:-1], diff_times[:-1] != diff_times[1:])
+        output_waveform_table = []
 
-        voltages = np.fromiter((v for _, v, _ in input_waveform_table), dtype=float, count=len(input_waveform_table))
-        diff_voltages = np.diff(voltages[to_keep])
+        previous_t = 0
+        previous_v = None
+        for (t, v, interp), (next_t, next_v, _) in itertools.zip_longest(input_waveform_table,
+                                                                         input_waveform_table[1:],
+                                                                         fillvalue=(float('inf'), None, None)):
+            if next_t < t:
+                if next_t < 0:
+                    raise ValueError('Negative time values are not allowed.')
+                else:
+                    raise ValueError('Times are not increasing.')
 
-        # filter 3 subsequent equal voltages
-        to_keep[1:-1][to_keep[1:-1]] = np.logical_or(0 != diff_voltages[:-1], diff_voltages[1:] != 0)
+            if (previous_t != t or t != next_t) and (previous_v != v or v != next_v):
+                previous_t = t
+                previous_v = v
+                output_waveform_table.append(TableWaveformEntry(t, v, interp))
 
-        return tuple(entry if isinstance(entry, TableWaveformEntry) else TableWaveformEntry(*entry)
-                     for entry, keep_entry in zip(input_waveform_table, to_keep) if keep_entry)
+        return tuple(output_waveform_table)
 
     @property
     def compare_key(self) -> Any:
