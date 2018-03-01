@@ -110,7 +110,7 @@ class TableWaveform(Waveform):
                       sample_times: np.ndarray,
                       output_array: Union[np.ndarray, None]=None) -> np.ndarray:
         if output_array is None:
-            output_array = np.empty(len(sample_times))
+            output_array = np.empty_like(sample_times)
 
         for entry1, entry2 in zip(self._table[:-1], self._table[1:]):
             indices = slice(np.searchsorted(sample_times, entry1.t, 'left'),
@@ -316,7 +316,6 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
             return any(
                 parameters[name].requires_stop
                 for name in self.parameter_names
-                if not isinstance(parameters[name], numbers.Number)
             )
         except KeyError as key_error:
             raise ParameterNotProvidedException(str(key_error)) from key_error
