@@ -148,7 +148,7 @@ class HardwareSetup:
                            voltage_transformation=tuple(voltage_trafos))
 
         for dac, dac_windows in affected_dacs.items():
-            dac.register_measurement_windows(name, measurement_windows)
+            dac.register_measurement_windows(name, dac_windows)
 
         self._registered_programs[name] = RegisteredProgram(program=mcp,
                                                             measurement_windows=measurement_windows,
