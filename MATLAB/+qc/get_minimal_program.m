@@ -10,7 +10,7 @@ function reduced_program = get_minimal_program(program)
 	reduced_program.parameters_and_dicts = struct();
 	
 	% Remove all fields in parameters_and_dicts not needed by pulse_template
-	for p = parameters_names'		
+	for p = parameter_names		
 		reduced_program.parameters_and_dicts.(p{1}) = program.parameters_and_dicts.(p{1});		
 	end
 	

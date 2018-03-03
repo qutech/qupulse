@@ -30,7 +30,7 @@ function setup_tabor_awg(varargin)
 	
 	if args.realAWG && ~args.simulateAWG
 		% Only real instrument
-		smdata.inst(sminstlookup(args.taborName)).data.tawg = qctoolkit_tabor.TaborAWGRepresentation(['TCPIP::' a.ip '::5025::SOCKET'], pyargs('reset', py.True));
+		smdata.inst(sminstlookup(args.taborName)).data.tawg = qctoolkit_tabor.TaborAWGRepresentation(['TCPIP::' args.ip '::5025::SOCKET'], pyargs('reset', py.True));
 		smdata.inst(sminstlookup(args.taborName)).data.tawg.paranoia_level = int64(2);
 	elseif args.realAWG && args.simulateAWG
 		% Simulator and real instrument
@@ -41,6 +41,7 @@ function setup_tabor_awg(varargin)
 	end
 	
 	plsdata.awg.inst = smdata.inst(sminstlookup(args.taborName)).data.tawg;
+	awgctrl('off');
 	
 	% Create hardware setup for qctoolkit integration	
 	plsdata.awg.hardwareSetup = py.qctoolkit.hardware.setup.HardwareSetup();

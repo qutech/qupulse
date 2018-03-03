@@ -24,7 +24,7 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 	
 	% --- add ---------------------------------------------------------------
 	if strcmp(ctrl, 'add')
-		[~, bool, msg] = qc.awg_program('fresh', 'program_name', a.program_name, 'verbosity', 10);
+		[~, bool, msg] = qc.awg_program('fresh', qc.change_field(a, 'verbosity', 0));
 		if ~bool || a.force_update
 			a.pulse_template = pulse_to_python(a.pulse_template);
 			[a.pulse_template, a.channel_mapping] = add_marker_if_not_empty(a.pulse_template, a.add_marker, a.channel_mapping);
@@ -55,9 +55,9 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 		
 	% --- arm ---------------------------------------------------------------
 	elseif strcmp(ctrl, 'arm')
-		[~, bool, msg] = qc.awg_program('present', 'program_name', a.program_name, 'verbosity', 0);
+		[~, bool, msg] = qc.awg_program('present', qc.change_field(a, 'verbosity', 0));
 		if bool
-			qc.workaround_alazar_single_buffer_acquisition();
+			% qc.workaround_alazar_single_buffer_acquisition();
 			
 			hws.arm_program(a.program_name);
 			plsdata.awg.currentProgam = a.program_name;
@@ -67,7 +67,7 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 		
 	% --- remove ------------------------------------------------------------
 	elseif strcmp(ctrl, 'remove')
-		[~, bool, msg] = qc.awg_program('present', 'program_name', a.program_name, 'verbosity', 0);
+		[~, bool, msg] = qc.awg_program('present', qc.change_field(a, 'verbosity', 0));
 		
 		if bool
 			if isfield(plsdata.awg.registeredPrograms, a.program_name)
@@ -92,7 +92,7 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 		
 	% --- present -----------------------------------------------------------
 	elseif strcmp(ctrl, 'present') % returns true if program is present
-		bool = py.list(hws.registeredPrograms.keys()).count(a.program_name) ~= 0;
+		bool = py.list(hws.registered_programs.keys()).count(a.program_name) ~= 0;
 		if bool
 			msg = '';
 		else
@@ -102,8 +102,7 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 		
 	% --- fresh -------------------------------------------------------------
 	elseif strcmp(ctrl, 'fresh') % returns true if program is present and has not changed
-		[~, bool, msg] = qc.awg_program('present', 'program_name', a.program_name, 'verbosity', 0);
-		warning('This will say that the program has changed even if parameters that don''t affect this program have changed');
+		[~, bool, msg] = qc.awg_program('present', qc.change_field(a, 'verbosity', 0));
 		
 		if isfield(plsdata.awg.registeredPrograms, a.program_name) && bool
 			a.pulse_template = pulse_to_python(a.pulse_template);
@@ -122,7 +121,7 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 			else
 				msg = 'not ';
 			end
-			msg = sprintf('Program ''%s'' %sfresh', a.program_name, msg);
+			msg = sprintf('Program ''%s'' is %sup to date (fresh)', a.program_name, msg);
 		end
 		% 		if ~bool
 		% 			util.comparedata(newProgram, awgProgram);

@@ -39,7 +39,7 @@ function [mask_prototypes, measurement_map, txt] = setup_alazar_measurements(var
 	
 	defaultArgs = struct( ...
 		'disp', true, ...
-		'nMeasPerQubit', 4, ...
+		'nMeasPerQubit', 2, ...
 		'nQubits', 2 ...
 		);
 	args = util.parse_varargin(varargin, defaultArgs);
@@ -53,15 +53,15 @@ function [mask_prototypes, measurement_map, txt] = setup_alazar_measurements(var
 	
 	for q = 1:nQubits
 		for m = 1:nMeasPerQubit
-			%                 qubitIndex, measIndex, hwChannel, auxFlag
-			add_meas_and_mask(q,          m,         q-1,       false);
+			%                 qubitIndex, measIndex, hwChannel,   auxFlag
+			add_meas_and_mask(q,          m,        q+nQubits-1,  false);
 		end
 	end
 	
 	for a = 1:(nAlazarChannels-nQubits)
 		for m = 1:nMeasPerQubit
 			%                 qubitIndex, measIndex, hwChannel,   auxFlag
-			add_meas_and_mask(a,          m,         a+nQubits-1, true);
+			add_meas_and_mask(a,          m,         a-1,         true);
 		end
 	end
 	
@@ -75,9 +75,9 @@ function [mask_prototypes, measurement_map, txt] = setup_alazar_measurements(var
 	if q == 2
 		for m = 1:nMeasPerQubit
 			%                 qubitIndex, measIndex, hwChannel, auxFlag, secondQubitIndex, secondHwChannel
-			add_meas_and_mask(1,          m,         0,         false,   2,                1);
+			add_meas_and_mask(1,          m,         2,         false,   2,                3);
 			%                 qubitIndex, measIndex, hwChannel, auxFlag, secondQubitIndex, secondHwChannel
-			add_meas_and_mask(1,          m,         2,         true,   2,                 3);
+			add_meas_and_mask(1,          m,         0,         true,    2,                1);
 		end
 	end
 	

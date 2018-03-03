@@ -1,4 +1,4 @@
-function [operations, bool, msg] = daq_operations(ctrl, varargin)
+function [output, bool, msg] = daq_operations(ctrl, varargin)
 	
 	global plsdata smdata
 	hws = plsdata.awg.hardwareSetup;
@@ -15,15 +15,13 @@ function [operations, bool, msg] = daq_operations(ctrl, varargin)
 		'verbosity',            10 ...
 		);
 	a = util.parse_varargin(varargin, default_args);
-	operations = a.operations;
+	output = a.operations;
 	
 	% --- add ---------------------------------------------------------------
-	if strcmp(ctrl, 'add')		
-		
+	if strcmp(ctrl, 'add') % output is operations		 		
+		% qc.daq_operations('remove', qc.change_field(a, 'verbosity', 0));
+
 		smdata.inst(instIndex).data.virtual_channel = struct( ...
-			'data', struct(), ...
-			'extractNextScanline', true, ...
-			'operationsInd', 1, ...
 			'operations', {a.operations} ...
 			);
 		
@@ -34,29 +32,46 @@ function [operations, bool, msg] = daq_operations(ctrl, varargin)
 		msg = sprintf('Operations for program ''%s'' added', a.program_name);
 		bool = true;
 	
+  % --- set length --------------------------------------------------------
+	elseif strcmp(ctrl, 'set length') % output is length
+		% Operations need to have been added beforehand
+		output = qc.daq_operations('get length', a);		
+		smdata.inst(instIndex).cntrlfn([instIndex nan 999], output);
+		
+  % --- get length --------------------------------------------------------
+	elseif strcmp(ctrl, 'get length') % output is length
+		% Operations need to have been added beforehand
+		masks = util.py.py2mat(py.getattr(daq, '_registered_programs'));
+		masks = util.py.py2mat(masks.(a.program_name));
+		masks = util.py.py2mat(masks.masks);
+		output = [];
+		for k = 1:numel(masks)
+			output(k) = util.py.py2mat(size(masks{k}.length));
+		end	
+		if isempty(output)
+			warning('No masks configured');
+		end
+		
+	% --- get ---------------------------------------------------------------
+	elseif strcmp(ctrl, 'get programs') % output is registered programs
+		% Operations need to have been added beforehand
+		% masks = util.py.py2mat(daq.config.masks); % this worked sometimes but sometimes not
+		output = util.py.py2mat(py.getattr(daq, '_registered_programs'));
+	
 	% --- remove ------------------------------------------------------------
-	elseif strcmp(ctrl, 'remove')
-		try
-			smdata.inst(instIndex).data.virtual_channel = struct( ...
-				'data', struct(), ...
-				'extractNextScanline', false, ...
-				'operationsInd', [], ...
-				'operations', {{}} ...
-				);
+	elseif strcmp(ctrl, 'remove') % output is operations		
+		smdata.inst(instIndex).data.virtual_channel = struct( ...
+			'operations', {{}} ...
+			);
+		programs = fieldnames(qc.daq_operations('get programs'));
+		if any(cellfun(@(x)(strcmp(x, a.program_name)), programs))
 			daq.delete_program(a.program_name);
 			msg = sprintf('Operations for program ''%s'' deleted', a.program_name);
 			bool = true;
-		catch err
-			if util.str_contains(err.message, 'KeyError')
-				msg = sprintf('Cannot delete program ''%s'' from Alazar configuration since it was not present in the Alazar configuration.\n', a.program_name);
-				bool = true;
-			else
-				msg = '';
-				warning(err.getReport());
-				bool = false;
-			end			
+		else
+			msg = sprintf('Operations for program ''%s'' were not registered', a.program_name);
+			bool = true;
 		end		
-		
 	end
 	
 	if a.verbosity > 9
