@@ -1,5 +1,6 @@
-from typing import NamedTuple, Set, Callable, Dict, Tuple, Union
+from typing import NamedTuple, Set, Callable, Dict, Tuple, Union, Iterable
 from collections import defaultdict, deque
+import warnings
 
 from qctoolkit.hardware.awgs.base import AWG
 from qctoolkit.hardware.dacs import DAC
@@ -77,7 +78,7 @@ class HardwareSetup:
     extracts the measurement windows(with absolute times) and hands them over to the DACs which will do further
     processing."""
     def __init__(self):
-        self._channel_map = dict()  # type: Dict[ChannelID, Set[SingleChannel]]
+        self._channel_map = dict()  # type: Dict[ChannelID, Set[_SingleChannel]]
 
         self._measurement_map = dict()  # type: Dict[str, Set[MeasurementMask]]
 
@@ -92,28 +93,30 @@ class HardwareSetup:
             raise KeyError('The following channels are unknown to the HardwareSetup: {}'.format(
                 mcp.channels - set(self._channel_map.keys())))
 
-        temp_measurement_windows = defaultdict(deque)
+        temp_measurement_windows = defaultdict(list)
         for program in mcp.programs.values():
             for mw_name, begins_lengths in program.get_measurement_windows().items():
                 temp_measurement_windows[mw_name].append(begins_lengths)
 
+        if set(temp_measurement_windows.keys()) - set(self._measurement_map.keys()):
+            raise KeyError('The following measurements are not registered: {}\nUse set_measurement for that.'.format(
+                set(temp_measurement_windows.keys()) - set(self._measurement_map.keys())
+            ))
+
         measurement_windows = dict()
         while temp_measurement_windows:
             mw_name, begins_lengths_deque = temp_measurement_windows.popitem()
+
+            begins, lengths = zip(*begins_lengths_deque)
             measurement_windows[mw_name] = (
-                np.concatenate(tuple(begins for begins, _ in begins_lengths_deque)),
-                np.concatenate(tuple(lengths for _, lengths in begins_lengths_deque))
+                np.concatenate(begins),
+                np.concatenate(lengths)
             )
 
-        if set(measurement_windows.keys()) - set(self._measurement_map.keys()):
-            raise KeyError('The following measurements are not registered: {}\nUse set_measurement for that.'.format(
-                set(measurement_windows.keys()) - set(self._measurement_map.keys())
-            ))
-
-        affected_dacs = dict()
+        affected_dacs = defaultdict(dict)
         for measurement_name, begins_lengths in measurement_windows.items():
             for dac, mask_name in self._measurement_map[measurement_name]:
-                affected_dacs.setdefault(dac, dict())[mask_name] = begins_lengths
+                affected_dacs[dac][mask_name] = begins_lengths
 
         handled_awgs = set()
         for channels, program in mcp.programs.items():
@@ -148,7 +151,7 @@ class HardwareSetup:
                            voltage_transformation=tuple(voltage_trafos))
 
         for dac, dac_windows in affected_dacs.items():
-            dac.register_measurement_windows(name, measurement_windows)
+            dac.register_measurement_windows(name, dac_windows)
 
         self._registered_programs[name] = RegisteredProgram(program=mcp,
                                                             measurement_windows=measurement_windows,
@@ -156,13 +159,45 @@ class HardwareSetup:
                                                             awgs_to_upload_to=handled_awgs,
                                                             dacs_to_arm=set(affected_dacs.keys()))
 
-    def arm_program(self, name) -> None:
+    def remove_program(self, name: str):
+        if name in self._registered_programs:
+            program_info = self._registered_programs.pop(name)
+            for awg in program_info.awgs_to_upload_to:
+                try:
+                    awg.arm(None)
+                    awg.remove(name)
+                except RuntimeError:
+                    warnings.warn("Could not remove Program({}) from AWG({})".format(name, awg.identifier))
+
+            for dac in program_info.dacs_to_arm:
+                try:
+                    dac.delete_program(name)
+                except RuntimeError:
+                    warnings.warn("Could not remove Program({}) from DAC({})".format(name, dac))
+
+    @property
+    def known_awgs(self) -> Set[AWG]:
+        return {single_channel.awg
+                for single_channel_set in self._channel_map.values()
+                for single_channel in single_channel_set}
+
+    @property
+    def known_dacs(self) -> Set[DAC]:
+        return {dac for dac, _ in self._measurement_map.values()}
+
+    def arm_program(self, name: str) -> None:
         """Assert program is in memory. Hardware will wait for trigger event"""
         if name not in self._registered_programs:
             raise KeyError('{} is not a registered program'.format(name))
-        for awg in self._registered_programs[name].awgs_to_upload_to:
-            awg.arm(name)
-        for dac in self._registered_programs[name].dacs_to_arm:
+
+        *_, awgs_to_upload_to, dacs_to_arm = self._registered_programs[name]
+        for awg in self.known_awgs:
+            if awg in awgs_to_upload_to:
+                awg.arm(name)
+            else:
+                # The other AWGs should ignore the trigger
+                awg.arm(None)
+        for dac in dacs_to_arm:
             dac.arm_program(name)
 
     def run_program(self, name) -> None:
@@ -171,40 +206,66 @@ class HardwareSetup:
         self._registered_programs[name].run_callback()
 
     def set_channel(self, identifier: ChannelID,
-                    single_channel: Union[PlaybackChannel, MarkerChannel],
+                    single_channel: Union[_SingleChannel, Iterable[_SingleChannel]],
                     allow_multiple_registration: bool=False) -> None:
+        if isinstance(single_channel, (PlaybackChannel, MarkerChannel)):
+            if identifier in self._channel_map:
+                warnings.warn(
+                    "You add a single hardware channel to an already existing channel id. This is deprecated and will be removed in a future version. Please add all channels at once.",
+                    DeprecationWarning)
+                single_channel = self._channel_map[identifier] | {single_channel}
+            else:
+                single_channel = {single_channel}
+        else:
+            try:
+                single_channel = set(single_channel)
+            except TypeError:
+                raise TypeError('Channel must be (a list of) either a playback or a marker channel')
+
         if not allow_multiple_registration:
             for ch_id, channel_set in self._channel_map.items():
-                if single_channel in channel_set:
+                if single_channel & channel_set:
                     raise ValueError('Channel already registered as {} for channel {}'.format(
                         type(self._channel_map[ch_id]).__name__, ch_id))
 
-        if isinstance(single_channel, (PlaybackChannel, MarkerChannel)):
-            self._channel_map.setdefault(identifier, set()).add(single_channel)
-        else:
-            raise ValueError('Channel must be either a playback or a marker channel')
+        for s_channel in single_channel:
+            if not isinstance(s_channel, (PlaybackChannel, MarkerChannel)):
+                raise TypeError('Channel must be (a list of) either a playback or a marker channel')
 
-    def set_measurement(self, new_measurement_name: str,
-                        new_measurement_mask: MeasurementMask,
+        self._channel_map[identifier] = single_channel
+
+    def set_measurement(self, measurement_name: str,
+                        measurement_mask: Union[MeasurementMask, Iterable[MeasurementMask]],
                         allow_multiple_registration: bool=False):
-        if not allow_multiple_registration:
-            for measurement_name, mask_set in self._measurement_map.items():
-                if new_measurement_mask in mask_set:
-                    raise ValueError('Measurement mask already registered for measurement "{}"'.format(measurement_name))
-
-        if isinstance(new_measurement_mask, MeasurementMask):
-            self._measurement_map.setdefault(new_measurement_name, set()).add(new_measurement_mask)
+        if isinstance(measurement_mask, MeasurementMask):
+            if measurement_name in self._measurement_map:
+                warnings.warn(
+                    "You add a measurement mask to an already registered measurement name. This is deprecated and will be removed in a future version. Please add all measurement masks at once.",
+                    DeprecationWarning)
+                measurement_mask = self._measurement_map[measurement_name] | {measurement_mask}
+            else:
+                measurement_mask = {measurement_mask}
         else:
-            raise ValueError('Mask must be of type MeasurementMask')
+            try:
+                measurement_mask = set(measurement_mask)
+            except TypeError:
+                raise TypeError('Mask must be (a list) of type MeasurementMask')
+
+        if not allow_multiple_registration:
+            for old_measurement_name, mask_set in self._measurement_map.items():
+                if measurement_mask & mask_set:
+                    raise ValueError('Measurement mask already registered for measurement "{}"'.format(old_measurement_name))
+
+        self._measurement_map[measurement_name] = measurement_mask
 
     def rm_channel(self, identifier: ChannelID) -> None:
         self._channel_map.pop(identifier)
 
-    def registered_channels(self) -> Set[PlaybackChannel]:
-        return self._channel_map.copy()
+    def registered_channels(self) -> Dict[ChannelID, Set[_SingleChannel]]:
+        return self._channel_map
 
     @property
-    def registered_programs(self) -> Dict:
+    def registered_programs(self) -> Dict[str, RegisteredProgram]:
         return self._registered_programs
 
 
