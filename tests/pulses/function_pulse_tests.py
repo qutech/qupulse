@@ -160,6 +160,10 @@ class FunctionPulseSequencingTest(FunctionPulseTest):
         parameters = dict(a=DummyParameter(36.126), z=DummyParameter(247.9543, requires_stop=True))
         self.assertTrue(self.fpt.requires_stop(parameters, dict()))
 
+    def test_build_waveform_none(self):
+        self.assertIsNone(self.fpt.build_waveform(self.valid_par_vals, measurement_mapping={'mw': 'mw',
+                                                                          'drup': 'jupp'}, channel_mapping={'A': None}))
+
 
 class TablePulseTemplateConstraintTest(ParameterConstrainerTest):
     def __init__(self, *args, **kwargs):

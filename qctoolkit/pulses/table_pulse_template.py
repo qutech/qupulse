@@ -351,12 +351,17 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer, MeasurementD
 
     def build_waveform(self,
                        parameters: Dict[str, numbers.Real],
-                       measurement_mapping: Dict[str, str],
-                       channel_mapping: Dict[ChannelID, ChannelID]) -> Optional['Waveform']:
+                       measurement_mapping: Dict[str, Optional[str]],
+                       channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional['Waveform']:
         self.validate_parameter_constraints(parameters)
 
+        if all(channel_mapping[channel] is None
+               for channel in self.defined_channels):
+            return None
+
         instantiated = [(channel_mapping[channel], instantiated_channel)
-                        for channel, instantiated_channel in self.get_entries_instantiated(parameters).items()]
+                        for channel, instantiated_channel in self.get_entries_instantiated(parameters).items()
+                        if channel_mapping[channel] is not None]
 
         if self.duration.evaluate_numeric(**parameters) == 0:
             return None
