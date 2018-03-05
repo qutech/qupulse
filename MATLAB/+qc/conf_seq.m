@@ -46,7 +46,7 @@ function scan = conf_seq(varargin)
 		'fig_id',                2000, ...
 		'disp_ops',      'default', ...  % list of indices of operations to show
 		'disp_dim'       ,       [1 2], ...     % dimension of display
-		'procfn_ops',               {{}}, ...  % 2D cell, columns refer to operations, rows are simply stacked, each cell entry has two element: fn, args and dim
+		'procfn_ops',               {{}}, ...  % one entry for each virtual channel, each cell entry has two element: fn, args and dim
 		'saveloop',             0, ...         % save every nth loop
 		'dnp',                  false, ...     % enable DNP
 		'rf_switches',          true, ...      % turn RF switches on and off automatically using the DecaDAC channels (to be removed)

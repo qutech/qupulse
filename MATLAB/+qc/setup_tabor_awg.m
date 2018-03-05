@@ -46,11 +46,25 @@ function setup_tabor_awg(varargin)
 	% Create hardware setup for qctoolkit integration	
 	plsdata.awg.hardwareSetup = py.qctoolkit.hardware.setup.HardwareSetup();
 	
+	% Create python lambda function in Matlab
+	numpy = py.importlib.import_module('numpy');
+	multiply = py.functools.partial(numpy.multiply, 1);
+	
 	% PlaybackChannels can take more than two values (analog channels)
 	plsdata.awg.hardwareSetup.set_channel('TABOR_A', py.qctoolkit.hardware.setup.PlaybackChannel(plsdata.awg.inst.channel_pair_AB, int64(0)));
 	plsdata.awg.hardwareSetup.set_channel('TABOR_B', py.qctoolkit.hardware.setup.PlaybackChannel(plsdata.awg.inst.channel_pair_AB, int64(1)));	
 	plsdata.awg.hardwareSetup.set_channel('TABOR_C', py.qctoolkit.hardware.setup.PlaybackChannel(plsdata.awg.inst.channel_pair_CD, int64(0)));
 	plsdata.awg.hardwareSetup.set_channel('TABOR_D', py.qctoolkit.hardware.setup.PlaybackChannel(plsdata.awg.inst.channel_pair_CD, int64(1)));
+	
+	plsdata.awg.hardwareSetup.set_channel('TABOR_AB', py.qctoolkit.hardware.setup.PlaybackChannel(plsdata.awg.inst.channel_pair_AB, int64(0)), py.qctoolkit.hardware.setup.PlaybackChannel(plsdata.awg.inst.channel_pair_AB, int64(1)));
+	plsdata.awg.hardwareSetup.set_channel('TABOR_AC', py.qctoolkit.hardware.setup.PlaybackChannel(plsdata.awg.inst.channel_pair_AB, int64(0)), py.qctoolkit.hardware.setup.PlaybackChannel(plsdata.awg.inst.channel_pair_CD, int64(0)));
+	plsdata.awg.hardwareSetup.set_channel('TABOR_AD', py.qctoolkit.hardware.setup.PlaybackChannel(plsdata.awg.inst.channel_pair_AB, int64(0)), py.qctoolkit.hardware.setup.PlaybackChannel(plsdata.awg.inst.channel_pair_CD, int64(1)));
+	
+	plsdata.awg.hardwareSetup.set_channel('TABOR_BC', py.qctoolkit.hardware.setup.PlaybackChannel(plsdata.awg.inst.channel_pair_AB, int64(1)), py.qctoolkit.hardware.setup.PlaybackChannel(plsdata.awg.inst.channel_pair_CD, int64(0)));
+	plsdata.awg.hardwareSetup.set_channel('TABOR_BD', py.qctoolkit.hardware.setup.PlaybackChannel(plsdata.awg.inst.channel_pair_AB, int64(1)), py.qctoolkit.hardware.setup.PlaybackChannel(plsdata.awg.inst.channel_pair_CD, int64(1)));
+	
+	plsdata.awg.hardwareSetup.set_channel('TABOR_CD', py.qctoolkit.hardware.setup.PlaybackChannel(plsdata.awg.inst.channel_pair_CD, int64(0)), py.qctoolkit.hardware.setup.PlaybackChannel(plsdata.awg.inst.channel_pair_CD, int64(1)));
+	
 	
 	% MarkerChannel can only take on two values (digital channels)
 	plsdata.awg.hardwareSetup.set_channel('TABOR_A_MARKER', py.qctoolkit.hardware.setup.MarkerChannel(plsdata.awg.inst.channel_pair_AB, int64(0)));

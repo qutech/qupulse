@@ -72,6 +72,13 @@ function [output, bool, msg] = daq_operations(ctrl, varargin)
 			msg = sprintf('Operations for program ''%s'' were not registered', a.program_name);
 			bool = true;
 		end		
+		
+  % --- clear all ---------------------------------------------------------
+  elseif strcmp(ctrl, 'clear all')
+		py.setattr(daq, '_registered_programs', py.collections.defaultdict);
+		bool = true;
+		msg = 'All programs cleared from DAQ';
+		
 	end
 	
 	if a.verbosity > 9

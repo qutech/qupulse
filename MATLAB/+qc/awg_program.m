@@ -67,6 +67,7 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 		
 	% --- remove ------------------------------------------------------------
 	elseif strcmp(ctrl, 'remove')
+		error('Cannot use this function until hws.delete_program is implemented. Either overwrite the program or use ''clear all''');
 		[~, bool, msg] = qc.awg_program('present', qc.change_field(a, 'verbosity', 0));
 		
 		if bool
@@ -74,7 +75,7 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 				plsdata.awg.registeredPrograms.(a.program_name) = [];
 			end
 			
-			warning('hws.delete_program when it is implemented');			
+			% use 'hws.delete_program' when it is implemented;			
 			
 			qc.daq_operations('remove', 'program_name', a.program_name);
 			
@@ -85,11 +86,17 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 	% --- clear all ---------------------------------------------------------
 	elseif strcmp(ctrl, 'clear all')
 		plsdata.awg.registeredPrograms = struct();
-		warning('hws.delete_all_programs and alazar.delete_all_programs when it is implemented');
+		py.setattr(hws, '_registered_programs', py.dict);
 		bool = true;
-		msg = 'All programs cleared';
+		[~, bool, ~] = qc.daq_operations('clear all', 'verbosity', 0);
 		
+		if bool
+			msg = 'All programs cleared';
+		else
+			msg = 'Error when trying to clear all progams';
+		end
 		
+		warning('Use hws.delete_all_programs and alazar.delete_all_programs when it is implemented');
 	% --- present -----------------------------------------------------------
 	elseif strcmp(ctrl, 'present') % returns true if program is present
 		bool = py.list(hws.registered_programs.keys()).count(a.program_name) ~= 0;
