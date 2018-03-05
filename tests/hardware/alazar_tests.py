@@ -72,7 +72,8 @@ class AlazarTest(unittest.TestCase):
         np.testing.assert_equal(card._registered_programs['otto'].masks[0].begin, expected_begins)
 
         # pi ist genau 3
-        np.testing.assert_equal(card._registered_programs['otto'].masks[0].length.as_ndarray(), 3)
+        length = card._registered_programs['otto'].masks[0].length
+        np.testing.assert_equal(length if isinstance(length, np.ndarray) else length.as_ndarray(), 3)
 
         self.assertEqual(card._registered_programs['otto'].masks[0].channel, 3)
         self.assertEqual(card._registered_programs['otto'].masks[0].identifier, 'A')
