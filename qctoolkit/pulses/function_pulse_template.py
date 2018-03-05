@@ -12,7 +12,7 @@ import numbers
 
 import numpy as np
 
-from qctoolkit.expressions import Expression
+from qctoolkit.expressions import ExpressionScalar
 from qctoolkit.serialization import Serializer
 
 from qctoolkit.utils.types import MeasurementWindow, ChannelID
@@ -39,8 +39,8 @@ class FunctionPulseTemplate(AtomicPulseTemplate, MeasurementDefiner, ParameterCo
     """
 
     def __init__(self,
-                 expression: Union[str, Expression],
-                 duration_expression: Union[str, Expression],
+                 expression: Union[str, ExpressionScalar],
+                 duration_expression: Union[str, ExpressionScalar],
                  channel: ChannelID = 'default',
                  identifier: Optional[str] = None,
                  *,
@@ -65,18 +65,14 @@ class FunctionPulseTemplate(AtomicPulseTemplate, MeasurementDefiner, ParameterCo
         MeasurementDefiner.__init__(self, measurements=measurements)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 
-        self.__expression = expression
-        if not isinstance(self.__expression, Expression):
-            self.__expression = Expression(self.__expression)
-        self.__duration_expression = duration_expression
-        if not isinstance(self.__duration_expression, Expression):
-            self.__duration_expression = Expression(self.__duration_expression)
+        self.__expression = ExpressionScalar.make(expression)
+        self.__duration_expression = ExpressionScalar.make(duration_expression)
         self.__parameter_names = {*self.__duration_expression.variables, *self.__expression.variables} - {'t'}
         self.__channel = channel
         self.__measurement_windows = dict()
 
     @property
-    def expression(self) -> Expression:
+    def expression(self) -> ExpressionScalar:
         return self.__expression
 
     @property
@@ -96,7 +92,7 @@ class FunctionPulseTemplate(AtomicPulseTemplate, MeasurementDefiner, ParameterCo
         return {self.__channel}
 
     @property
-    def duration(self) -> Expression:
+    def duration(self) -> ExpressionScalar:
         return self.__duration_expression
 
     @property
@@ -105,13 +101,22 @@ class FunctionPulseTemplate(AtomicPulseTemplate, MeasurementDefiner, ParameterCo
 
     def build_waveform(self,
                        parameters: Dict[str, numbers.Real],
-                       measurement_mapping: Dict[str, str],
-                       channel_mapping: Dict[ChannelID, ChannelID]) -> 'FunctionWaveform':
+                       measurement_mapping: Dict[str, Optional[str]],
+                       channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional['FunctionWaveform']:
         self.validate_parameter_constraints(parameters=parameters)
-        substitutions = {v: parameters[v] for v in self.__expression.variables if v != 't'}
-        duration_parameters = {v: parameters[v] for v in self.__duration_expression.variables}
-        return FunctionWaveform(expression=self.__expression.evaluate_symbolic(substitutions=substitutions),
-                                duration=self.__duration_expression.evaluate_numeric(**duration_parameters),
+
+        channel = channel_mapping[self.__channel]
+        if channel is None:
+            return None
+
+        if 't' in parameters:
+            parameters = {k: v for k, v in parameters.items() if k != 't'}
+
+        expression = self.__expression.evaluate_symbolic(substitutions=parameters)
+        duration = self.__duration_expression.evaluate_numeric(**parameters)
+
+        return FunctionWaveform(expression=expression,
+                                duration=duration,
                                 measurement_windows=self.get_measurement_windows(parameters=parameters,
                                                                                  measurement_mapping=measurement_mapping),
                                 channel=channel_mapping[self.__channel])
@@ -154,7 +159,7 @@ class FunctionPulseTemplate(AtomicPulseTemplate, MeasurementDefiner, ParameterCo
 class FunctionWaveform(Waveform):
     """Waveform obtained from instantiating a FunctionPulseTemplate."""
 
-    def __init__(self, expression: Expression,
+    def __init__(self, expression: ExpressionScalar,
                  duration: float,
                  measurement_windows: List[MeasurementWindow],
                  channel: ChannelID) -> None:

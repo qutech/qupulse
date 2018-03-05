@@ -292,7 +292,7 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
 
         parameters = dict(a=2.2, b = 1.1, c=3.3)
         channel_mapping = dict()
-        measurement_mapping = dict()
+        measurement_mapping = dict(A='A', B='B')
         with self.assertRaises(ParameterConstraintViolation):
             pt.build_waveform(parameters, channel_mapping=dict(), measurement_mapping=dict())
 
@@ -307,6 +307,34 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
             self.assertIs(measurement_mapping, st.build_waveform_calls[0][1])
             self.assertIs(channel_mapping, st.build_waveform_calls[0][2])
 
+    def test_build_waveform_none(self):
+        wfs = [DummyWaveform(duration=1.1, defined_channels={'A'}), DummyWaveform(duration=1.1, defined_channels={'B'})]
+
+        sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'}, waveform=wfs[0]),
+               DummyPulseTemplate(duration='t1', defined_channels={'B'}, waveform=wfs[1]),
+               DummyPulseTemplate(duration='t1', defined_channels={'C'}, waveform=None)]
+
+        pt = AtomicMultiChannelPulseTemplate(*sts, parameter_constraints=['a < b'])
+
+        parameters = dict(a=2.2, b=1.1, c=3.3)
+        channel_mapping = dict(A=6)
+        measurement_mapping = dict(A='A', B='B', C=None)
+        with self.assertRaises(ParameterConstraintViolation):
+            # parameter constraints are checked before channel mapping is applied
+            pt.build_waveform(parameters, channel_mapping=dict(), measurement_mapping=dict())
+
+        parameters['a'] = 0.5
+        wf = pt.build_waveform(parameters, channel_mapping=channel_mapping, measurement_mapping=measurement_mapping)
+        self.assertIs(wf['A'], wfs[0])
+        self.assertIs(wf['B'], wfs[1])
+
+        sts[1].waveform = None
+        wf = pt.build_waveform(parameters, channel_mapping=channel_mapping, measurement_mapping=measurement_mapping)
+        self.assertIs(wf, wfs[0])
+
+        sts[0].waveform = None
+        wf = pt.build_waveform(parameters, channel_mapping=channel_mapping, measurement_mapping=measurement_mapping)
+        self.assertIsNone(wf)
 
     def test_deserialize(self):
         sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'}, parameter_names={'a', 'b'}),

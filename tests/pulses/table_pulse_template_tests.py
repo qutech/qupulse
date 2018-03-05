@@ -34,6 +34,11 @@ class TableEntryTest(unittest.TestCase):
             self.assertEqual(entry.v, Expression('b'))
             self.assertEqual(entry.interp, strat_val)
 
+    def test_slots(self):
+        entry = TableEntry('a', Expression.make('b'), 'hold')
+
+        self.assertFalse(hasattr(entry, '__dict__'))
+
     def test_unknown_interpolation_strategy(self):
         with self.assertRaises(KeyError):
             TableEntry(0, 0, 'foo')
@@ -571,6 +576,35 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
                                          ('N', 1, 2))))
                 found_measurements = True
         self.assertTrue(found_measurements, 'Measurements not found')
+
+    def test_build_waveform_none(self) -> None:
+        table = TablePulseTemplate({0: [(0, 0),
+                                        ('foo', 'v', 'linear'),
+                                        ('bar', 0, 'jump')],
+                                    3: [(0, 1),
+                                        ('bar+foo', 0, 'linear')]},
+                                   parameter_constraints=['foo>1'],
+                                   measurements=[('M', 'b', 'l'),
+                                                 ('N', 1, 2)])
+
+        parameters = {'v': 2.3, 'foo': 1, 'bar': 4, 'b': 2, 'l': 1}
+        measurement_mapping = {'M': None, 'N': 'K'}
+        channel_mapping = {0: None, 3: None}
+
+        with self.assertRaises(ParameterConstraintViolation):
+            table.build_waveform(parameters=parameters,
+                                 measurement_mapping=measurement_mapping,
+                                 channel_mapping=channel_mapping)
+
+        parameters['foo'] = 1.1
+        self.assertIsNone(table.build_waveform(parameters=parameters,
+                                               measurement_mapping=measurement_mapping,
+                                               channel_mapping=channel_mapping))
+        channel_mapping = {0: 1, 3: None}
+        wf = table.build_waveform(parameters=parameters,
+                                  measurement_mapping=measurement_mapping,
+                                  channel_mapping=channel_mapping)
+        self.assertEqual(wf.defined_channels, {1})
 
     def test_build_waveform_empty(self) -> None:
         table = TablePulseTemplate(dict(a=[('t', 0)]))

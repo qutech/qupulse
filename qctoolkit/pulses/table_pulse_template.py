@@ -7,7 +7,7 @@ Classes:
         declared parameters.
 """
 
-from typing import Union, Dict, List, Set, Optional, Any, Iterable, Tuple, Sequence
+from typing import Union, Dict, List, Set, Optional, Any, Iterable, Tuple, Sequence, NamedTuple
 import numbers
 import itertools
 import warnings
@@ -24,30 +24,19 @@ from qctoolkit.pulses.interpolation import InterpolationStrategy, LinearInterpol
     HoldInterpolationStrategy, JumpInterpolationStrategy
 from qctoolkit.pulses.instructions import Waveform
 from qctoolkit.pulses.conditions import Condition
-from qctoolkit.expressions import Expression
+from qctoolkit.expressions import ExpressionScalar
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 from qctoolkit.pulses.measurement import MeasurementDefiner
 
 __all__ = ["TablePulseTemplate", "TableWaveform", "TableWaveformEntry"]
 
 
-class TableWaveformEntry(tuple):
-    def __new__(cls, t: float, v: float, interp: InterpolationStrategy):
-        if not isinstance(interp, InterpolationStrategy):
-            raise TypeError('{} is no object of type interpolation strategy'.format(interp))
-        return super().__new__(cls, (t, v, interp))
-
-    @property
-    def t(self) -> float:
-        return self[0]
-
-    @property
-    def v(self) -> float:
-        return self[1]
-
-    @property
-    def interp(self) -> InterpolationStrategy:
-        return self[2]
+class TableWaveformEntry(NamedTuple('TableWaveformEntry', [('t', float),
+                                                           ('v', float),
+                                                           ('interp', InterpolationStrategy)])):
+    def __init__(self, t: float, v: float, interp: InterpolationStrategy):
+        if not callable(interp):
+            raise TypeError('{} is neither callable nor of type InterpolationStrategy'.format(interp))
 
 
 class TableWaveform(Waveform):
@@ -136,34 +125,27 @@ class TableWaveform(Waveform):
     def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> 'Waveform':
         return self
 
-ValueInInit = Union[Expression, str, numbers.Real]
+
+ValueInInit = Union[ExpressionScalar, str, numbers.Real]
 EntryInInit = Union['TableEntry',
                     Tuple[ValueInInit, ValueInInit],
                     Tuple[ValueInInit, ValueInInit, Union[str, InterpolationStrategy]]]
 
 
-class TableEntry(tuple):
+class TableEntry(NamedTuple('TableEntry', [('t', ExpressionScalar),
+                                           ('v', ExpressionScalar),
+                                           ('interp', InterpolationStrategy)])):
+    __slots__ = ()
+
     def __new__(cls, t: ValueInInit, v: ValueInInit, interp: Union[str, InterpolationStrategy]='default'):
         if interp in TablePulseTemplate.interpolation_strategies:
             interp = TablePulseTemplate.interpolation_strategies[interp]
         if not isinstance(interp, InterpolationStrategy):
             raise KeyError(interp, 'is not a valid interpolation strategy')
 
-        return super().__new__(cls, (t if isinstance(t, Expression) else Expression(t),
-                                     v if isinstance(v, Expression) else Expression(v),
-                                     interp))
-
-    @property
-    def t(self) -> Expression:
-        return self[0]
-
-    @property
-    def v(self) -> Expression:
-        return self[1]
-
-    @property
-    def interp(self) -> InterpolationStrategy:
-        return self[2]
+        return super().__new__(cls, ExpressionScalar.make(t),
+                                    ExpressionScalar.make(v),
+                                    interp)
 
     def instantiate(self, parameters: Dict[str, numbers.Real]) -> TableWaveformEntry:
         return TableWaveformEntry(self.t.evaluate_numeric(**parameters),
@@ -232,7 +214,7 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer, MeasurementD
 
             # collect all conditions
             inequalities = [eq.sympified_expression for eq in self._parameter_constraints] +\
-                           [sympy.Le(previous_entry.t.compare_key, entry.t.compare_key)
+                           [sympy.Le(previous_entry.t.underlying_expression, entry.t.underlying_expression)
                             for channel_entries in self._entries.values()
                             for previous_entry, entry in zip(channel_entries, channel_entries[1:])]
 
@@ -319,14 +301,13 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer, MeasurementD
         return False
 
     @property
-    def duration(self) -> Expression:
+    def duration(self) -> ExpressionScalar:
         return self._duration
 
-    def calculate_duration(self) -> Expression:
+    def calculate_duration(self) -> ExpressionScalar:
         duration_expressions = [entries[-1].t for entries in self._entries.values()]
         duration_expression = sympy.Max(*(expr.sympified_expression for expr in duration_expressions))
-        return Expression(duration_expression,
-                          numpy_evaluation=all(expr.numpy_evaluation for expr in duration_expressions))
+        return ExpressionScalar(duration_expression)
 
     @property
     def defined_channels(self) -> Set[ChannelID]:
@@ -370,12 +351,17 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer, MeasurementD
 
     def build_waveform(self,
                        parameters: Dict[str, numbers.Real],
-                       measurement_mapping: Dict[str, str],
-                       channel_mapping: Dict[ChannelID, ChannelID]) -> Optional['Waveform']:
+                       measurement_mapping: Dict[str, Optional[str]],
+                       channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional['Waveform']:
         self.validate_parameter_constraints(parameters)
 
+        if all(channel_mapping[channel] is None
+               for channel in self.defined_channels):
+            return None
+
         instantiated = [(channel_mapping[channel], instantiated_channel)
-                        for channel, instantiated_channel in self.get_entries_instantiated(parameters).items()]
+                        for channel, instantiated_channel in self.get_entries_instantiated(parameters).items()
+                        if channel_mapping[channel] is not None]
 
         if self.duration.evaluate_numeric(**parameters) == 0:
             return None
