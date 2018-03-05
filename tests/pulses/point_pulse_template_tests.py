@@ -164,6 +164,23 @@ class PointPulseTemplateTests(unittest.TestCase):
         self.assertEqual(wf._sub_waveforms[1].defined_channels, {'A'})
         self.assertEqual(wf._sub_waveforms[1], expected_A)
 
+    def test_build_waveform_none_channel(self):
+        ppt = PointPulseTemplate([('t1', 'A'),
+                                  ('t2', 0., 'hold'),
+                                  ('t1+t2', 'B+C', 'linear')], [0, 'A', 'C'], measurements=[('M', 'n', 1), ('L', 'n', 1)])
+        parameters = {'t1': 0.1, 't2': 1., 'A': np.ones(3), 'B': np.arange(3), 'C': 19., 'n': 0.2}
+        complete_measurement_mapping = {'M': 'K', 'L': 'L'}
+
+        self.assertIsNone(ppt.build_waveform(parameters, complete_measurement_mapping, {0: None, 'A': None, 'C': None}))
+
+        wf = ppt.build_waveform(parameters, complete_measurement_mapping, {0: 1, 'A': None, 'C': None})
+        self.assertIsInstance(wf, PointWaveform)
+        self.assertEqual(wf.defined_channels, {1})
+
+        wf = ppt.build_waveform(parameters, complete_measurement_mapping, {0: 1, 'A': 2, 'C': None})
+        self.assertIsInstance(wf, MultiChannelWaveform)
+        self.assertEqual(wf.defined_channels, {1, 2})
+
 
 class TablePulseTemplateConstraintTest(ParameterConstrainerTest):
     def __init__(self, *args, **kwargs):

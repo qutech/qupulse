@@ -109,8 +109,8 @@ class AtomicPulseTemplate(PulseTemplate, metaclass=ABCMeta):
                        sequencer: Sequencer,
                        parameters: Dict[str, Parameter],
                        conditions: Dict[str, Condition],
-                       measurement_mapping: Dict[str, str],
-                       channel_mapping: Dict[ChannelID, ChannelID],
+                       measurement_mapping: Dict[str, Optional[str]],
+                       channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                        instruction_block: InstructionBlock) -> None:
         parameters = {parameter_name: parameter_value.get_value()
                       for parameter_name, parameter_value in parameters.items()

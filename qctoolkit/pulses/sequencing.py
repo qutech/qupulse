@@ -40,23 +40,23 @@ class SequencingElement(metaclass=ABCMeta):
                        sequencer: 'Sequencer',
                        parameters: Dict[str, Parameter],
                        conditions: Dict[str, 'conditions.Condition'],
-                       measurement_mapping: Dict[str, str],
-                       channel_mapping: Dict[ChannelID, ChannelID],
+                       measurement_mapping: Dict[str, Optional[str]],
+                       channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                        instruction_block: InstructionBlock) -> None:
         """Translate this SequencingElement into an instruction sequence for the given
         instruction_block using sequencer and the given parameter and condition sets.
 
-        Implementation guide: Use instruction_block methods to add instructions or create new
-        InstructionBlocks. Use sequencer to push child elements to the translation stack.
+        Implementation guide: Use instruction_block methods to add instructions or create new InstructionBlocks. Use
+        sequencer to push child elements to the translation stack.
 
-        Args:
-            Sequencer sequencer: The Sequencer object coordinating the current sequencing process.
-            Dict[str -> Parameter] parameters: A mapping of parameter names to Parameter objects.
-            Dict[str -> Condition] conditions: A mapping of condition identifiers to Condition
-                objects.
-            Dict[str -> str] measurement_mapping: A mapping of measurement window names
-            InstructionBlock instruction_block: The instruction block into which instructions
-                resulting from the translation of this SequencingElement will be placed.
+        :param sequencer: The Sequencer object coordinating the current sequencing process.
+        :param parameters: A mapping of parameter names to Parameter objects.
+        :param conditions: A mapping of condition identifiers to Condition
+        :param measurement_mapping: A mapping of measurement window names. Windows that are mapped to None are omitted.
+        :param channel_mapping: A mapping of channel names. Channels that are mapped to None are omitted.
+        :param instruction_block: The instruction block into which instructions resulting from the translation of this
+        SequencingElement will be placed.
+        :return:
         """
 
     @abstractmethod
@@ -119,8 +119,8 @@ class Sequencer:
              parameters: Optional[Dict[str, Union[Parameter, float]]]=None,
              conditions: Optional[Dict[str, 'conditions.Condition']]=None,
              *,
-             window_mapping: Optional[Dict[str, str]]=None,
-             channel_mapping: Optional[Dict[ChannelID, ChannelID]]=None,
+             window_mapping: Optional[Dict[str, Optional[str]]]=None,
+             channel_mapping: Optional[Dict[ChannelID, Optional[ChannelID]]]=None,
              target_block: Optional[InstructionBlock]=None) -> None:
         """Add an element to the translation stack of the target_block with the given set of
          parameters.

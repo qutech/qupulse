@@ -101,13 +101,22 @@ class FunctionPulseTemplate(AtomicPulseTemplate, MeasurementDefiner, ParameterCo
 
     def build_waveform(self,
                        parameters: Dict[str, numbers.Real],
-                       measurement_mapping: Dict[str, str],
-                       channel_mapping: Dict[ChannelID, ChannelID]) -> 'FunctionWaveform':
+                       measurement_mapping: Dict[str, Optional[str]],
+                       channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional['FunctionWaveform']:
         self.validate_parameter_constraints(parameters=parameters)
-        substitutions = {v: parameters[v] for v in self.__expression.variables if v != 't'}
-        duration_parameters = {v: parameters[v] for v in self.__duration_expression.variables}
-        return FunctionWaveform(expression=self.__expression.evaluate_symbolic(substitutions=substitutions),
-                                duration=self.__duration_expression.evaluate_numeric(**duration_parameters),
+
+        channel = channel_mapping[self.__channel]
+        if channel is None:
+            return None
+
+        if 't' in parameters:
+            parameters = {k: v for k, v in parameters.items() if k != 't'}
+
+        expression = self.__expression.evaluate_symbolic(substitutions=parameters)
+        duration = self.__duration_expression.evaluate_numeric(**parameters)
+
+        return FunctionWaveform(expression=expression,
+                                duration=duration,
                                 measurement_windows=self.get_measurement_windows(parameters=parameters,
                                                                                  measurement_mapping=measurement_mapping),
                                 channel=channel_mapping[self.__channel])
