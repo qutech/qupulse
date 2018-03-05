@@ -50,7 +50,7 @@ function setup_tabor_awg(varargin)
 	
 	% Create python lambda function in Matlab
 	numpy = py.importlib.import_module('numpy');
-	multiply = py.functools.partial(numpy.multiply, 1/(args.sampleVoltPerAwgVolt));
+	multiply = py.functools.partial(numpy.multiply, double(1./(args.sampleVoltPerAwgVolt)));
 	
 	% PlaybackChannels can take more than two values (analog channels)
 	plsdata.awg.hardwareSetup.set_channel('TABOR_A', ... 

@@ -26,6 +26,11 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 	if strcmp(ctrl, 'add')
 		[~, bool, msg] = qc.awg_program('fresh', qc.change_field(a, 'verbosity', 0));
 		if ~bool || a.force_update
+			
+			% Deleting old program should not be necessary. In practice however,
+			% updating an existing program seemed to crash Matlab sometimes.
+			qc.awg_program('remove', qc.change_field(a, 'verbosity', 10));
+			
 			a.pulse_template = pulse_to_python(a.pulse_template);
 			[a.pulse_template, a.channel_mapping] = add_marker_if_not_empty(a.pulse_template, a.add_marker, a.channel_mapping);
 			
@@ -33,13 +38,21 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 			plsdata.awg.registeredPrograms.(a.program_name) = program;
 			
 			if a.verbosity > 9
-				fprintf('Program ''%s'' will now be instantiated\n', a.program_name);
+				fprintf('Program ''%s'' is now being instantiated...', a.program_name);
+				tic;
 			end
 			instantiated_pulse = qc.instantiate_pulse(a.pulse_template, 'parameters', qc.join_params_and_dicts(program.parameters_and_dicts), 'channel_mapping', program.channel_mapping, 'window_mapping', program.window_mapping);
+			
 			if a.verbosity > 9
-				fprintf('Program ''%s'' will now be uploaded\n', a.program_name);
+				fprintf('took %.0fs\n', toc);
+				fprintf('Program ''%s'' is now being uploaded...', a.program_name);
+				tic
 			end
 			hws.register_program(program.program_name, instantiated_pulse, pyargs('update', true));
+			
+			if a.verbosity > 9
+				fprintf('took %.0fs\n', toc);
+			end
 			
 			if bool && a.force_update
 				msg = ' since update forced';
@@ -67,20 +80,21 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 		
 	% --- remove ------------------------------------------------------------
 	elseif strcmp(ctrl, 'remove')
-		error('Cannot use this function until hws.delete_program is implemented. Either overwrite the program or use ''clear all''');
 		[~, bool, msg] = qc.awg_program('present', qc.change_field(a, 'verbosity', 0));
 		
 		if bool
 			if isfield(plsdata.awg.registeredPrograms, a.program_name)
 				plsdata.awg.registeredPrograms.(a.program_name) = [];
 			end
-			
-			% use 'hws.delete_program' when it is implemented;			
-			
+				
+			registered_programs = py.getattr(hws, '_registered_programs');
+			registered_programs.pop(a.program_name);
 			qc.daq_operations('remove', 'program_name', a.program_name);
 			
 			bool = true;
 			msg = sprintf('Program ''%s'' removed', a.program_name);
+			
+			warning('Use hws.delete_program when it is implemented');
 		end
 		
 	% --- clear all ---------------------------------------------------------
@@ -96,7 +110,7 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 			msg = 'Error when trying to clear all progams';
 		end
 		
-		warning('Use hws.delete_all_programs and alazar.delete_all_programs when it is implemented');
+		warning('Use hws.delete_program when it is implemented');
 	% --- present -----------------------------------------------------------
 	elseif strcmp(ctrl, 'present') % returns true if program is present
 		bool = py.list(hws.registered_programs.keys()).count(a.program_name) ~= 0;
