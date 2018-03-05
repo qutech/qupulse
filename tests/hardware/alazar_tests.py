@@ -44,8 +44,8 @@ class AlazarTest(unittest.TestCase):
 
         mask = card._make_mask('M', begins, lengths)
         self.assertEqual(mask.identifier, 'M')
-        self.assertIs(mask.begin, begins)
-        self.assertIs(mask.length, lengths)
+        np.testing.assert_equal(mask.begin, begins)
+        np.testing.assert_equal(mask.length, lengths)
         self.assertEqual(mask.channel, 3)
 
     def test_register_measurement_windows(self):
@@ -69,11 +69,11 @@ class AlazarTest(unittest.TestCase):
         self.assertEqual(card._registered_programs['empty'].masks, [])
 
         expected_begins = np.rint(begins / 10).astype(dtype=np.uint64)
-        self.assertEqual(expected_begins.dtype, card._registered_programs['otto'].masks[0].begin.dtype)
         np.testing.assert_equal(card._registered_programs['otto'].masks[0].begin, expected_begins)
 
         # pi ist genau 3
-        self.assertTrue(np.all(card._registered_programs['otto'].masks[0].length == 3))
+        length = card._registered_programs['otto'].masks[0].length
+        np.testing.assert_equal(length if isinstance(length, np.ndarray) else length.as_ndarray(), 3)
 
         self.assertEqual(card._registered_programs['otto'].masks[0].channel, 3)
         self.assertEqual(card._registered_programs['otto'].masks[0].identifier, 'A')

@@ -30,7 +30,7 @@ class AlazarCard(DAC):
         self.__definitions = dict()
         self.config = config
 
-        self._mask_prototypes = dict()  # type: Dict[str, Tuple[Any, str]]
+        self._mask_prototypes = dict()  # type: Dict
 
         self._registered_programs = defaultdict(AlazarProgram)  # type: Dict[str, AlazarProgram]
 
@@ -124,7 +124,7 @@ class AlazarCard(DAC):
         self._registered_programs.pop(program_name)
 
     @property
-    def mask_prototypes(self):
+    def mask_prototypes(self) -> Dict[str, Tuple[int, str]]:
         return self._mask_prototypes
 
     def register_mask_for_channel(self, mask_id: str, hw_channel: int, mask_type='auto') -> None:

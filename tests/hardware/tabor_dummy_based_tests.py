@@ -102,10 +102,20 @@ class TaborDummyBasedTest(unittest.TestCase):
         self.instrument.main_instrument.visa_inst.answers[':FREQ:RAST'] = '1e9'
         self.instrument.main_instrument.visa_inst.answers[':VOLT:HV'] = '0.7'
 
+    @property
+    def awg_representation(self):
+        return self.instrument
+
+    @property
+    def channel_pair(self):
+        return self.awg_representation.channel_pair_AB
+
     def reset_instrument_logs(self):
         for device in self.instrument.all_devices:
             device.logged_commands = []
             device._send_binary_data_calls = []
+            device._download_adv_seq_table_calls = []
+            device._download_sequencer_table_calls = []
 
     def assertAllCommandLogsEqual(self, expected_log: List):
         for device in self.instrument.all_devices:
@@ -135,20 +145,6 @@ class TaborAWGRepresentationDummyBasedTests(TaborDummyBasedTest):
         self.instrument.paranoia_level = 30
         for device in self.instrument.all_devices:
             self.assertEqual(device.paranoia_level, 30)
-
-    def test_reset(self):
-        self.reset_instrument_logs()
-
-        self.instrument.reset()
-
-        expected_commands = [':RES',
-                             ':INST:SEL 1; :INIT:GATE OFF; :INIT:CONT ON; '
-                             ':INIT:CONT:ENAB ARM; :INIT:CONT:ENAB:SOUR BUS',
-                             ':INST:SEL 3; :INIT:GATE OFF; :INIT:CONT ON; '
-                             ':INIT:CONT:ENAB ARM; :INIT:CONT:ENAB:SOUR BUS']
-        expected_log = [((), dict(cmd_str=cmd, paranoia_level=None))
-                        for cmd in expected_commands]
-        self.assertAllCommandLogsEqual(expected_log)
 
     def test_enable(self):
         self.reset_instrument_logs()
@@ -398,7 +394,8 @@ class TaborChannelPairTests(TaborDummyBasedTest):
         np.testing.assert_equal(channel_pair._segment_lengths, 192 + np.array([0, 16, 16, 32], dtype=np.uint32))
         np.testing.assert_equal(channel_pair._segment_hashes, np.array([1, 2, hash(segment), 4], dtype=np.int64))
 
-        expected_commands = [':TRAC:DEF 3, 208',
+        expected_commands = [':INST:SEL 1', ':INST:SEL 1', ':INST:SEL 1',
+                             ':TRAC:DEF 3, 208',
                              ':TRAC:SEL 3',
                              ':TRAC:MODE COMB']
         expected_log = [((), dict(cmd_str=cmd, paranoia_level=None))
@@ -442,7 +439,8 @@ class TaborChannelPairTests(TaborDummyBasedTest):
         np.testing.assert_equal(channel_pair._segment_lengths, expected_lengths)
         np.testing.assert_equal(channel_pair._segment_hashes, expected_hashes)
 
-        expected_commands = [':TRAC:DEF 5,{}'.format(2 * 192 + 16),
+        expected_commands = [':INST:SEL 1',
+                             ':TRAC:DEF 5,{}'.format(2 * 192 + 16),
                              ':TRAC:SEL 5',
                              ':TRAC:MODE COMB',
                              ':TRAC:DEF 3,208']
@@ -490,7 +488,8 @@ class TaborChannelPairTests(TaborDummyBasedTest):
 
         np.testing.assert_equal(indices, np.array([4, 5], dtype=np.int64))
 
-        expected_commands = [':TRAC:DEF 5,{}'.format(2 * 192 + 16),
+        expected_commands = [':INST:SEL 1',
+                             ':TRAC:DEF 5,{}'.format(2 * 192 + 16),
                              ':TRAC:SEL 5',
                              ':TRAC:MODE COMB',
                              ':TRAC:DEF 5,192',
@@ -565,7 +564,7 @@ class TaborChannelPairTests(TaborDummyBasedTest):
         self.instrument.paranoia_level = 0
         self.instrument.logged_commands = []
         self.instrument.logged_queries = []
-        self.instrument._send_binary_data_calls = []
+        self.reset_instrument_logs()
 
         advanced_sequencer_table = [(2, 1, 0)]
         sequencer_tables = [[(3, 0, 0), (2, 1, 0), (1, 0, 0), (1, 2, 0), (1, 3, 0)]]
@@ -584,7 +583,7 @@ class TaborChannelPairTests(TaborDummyBasedTest):
 
         expected_adv_seq_table_log = [([(1, 1, 1), (2, 2, 0), (1, 1, 0)], ':ASEQ:DATA', None)]
         expected_sequencer_table_log = [((sequencer_table,), dict(pref=':SEQ:DATA', paranoia_level=None))
-                                        for sequencer_table in [idle_sequencer_table, expected_sequencer_table]]
+                                        for sequencer_table in [expected_sequencer_table]]
 
         for device in self.instrument.all_devices:
             self.assertEqual(device._download_adv_seq_table_calls, expected_adv_seq_table_log)
@@ -598,7 +597,7 @@ class TaborChannelPairTests(TaborDummyBasedTest):
         self.instrument.paranoia_level = 0
         self.instrument.logged_commands = []
         self.instrument.logged_queries = []
-        self.instrument._send_binary_data_calls = []
+        self.reset_instrument_logs()
 
         advanced_sequencer_table = [(1, 1, 0)]
         sequencer_tables = [[(10, 0, 0)]]
@@ -617,7 +616,7 @@ class TaborChannelPairTests(TaborDummyBasedTest):
 
         expected_adv_seq_table_log = [([(1, 1, 1), (1, 2, 0), (1, 1, 0)], ':ASEQ:DATA', None)]
         expected_sequencer_table_log = [((sequencer_table,), dict(pref=':SEQ:DATA', paranoia_level=None))
-                                        for sequencer_table in [idle_sequencer_table, expected_sequencer_table]]
+                                        for sequencer_table in [expected_sequencer_table]]
 
         for device in self.instrument.all_devices:
             self.assertEqual(device._download_adv_seq_table_calls, expected_adv_seq_table_log)
@@ -633,14 +632,15 @@ class TaborChannelPairTests(TaborDummyBasedTest):
         self.instrument.logged_queries = []
         self.instrument._send_binary_data_calls = []
 
+        self.reset_instrument_logs()
+
         advanced_sequencer_table = [(2, 1, 0), (3, 2, 0)]
         sequencer_tables = [[(3, 0, 0), (2, 1, 0), (1, 0, 0), (1, 2, 0), (1, 3, 0)],
                             [(4, 1, 0), (2, 1, 0), (1, 0, 0), (1, 2, 0), (1, 3, 0)]]
         wf_idx2seg_idx = np.array([2, 5, 3, 1])
 
         idle_sequencer_table = [(1, 1, 0), (1, 1, 0), (1, 1, 0)]
-        expected_sequencer_tables = [idle_sequencer_table,
-                                     [(3, 3, 0), (2, 6, 0), (1, 3, 0), (1, 4, 0), (1, 2, 0)],
+        expected_sequencer_tables = [[(3, 3, 0), (2, 6, 0), (1, 3, 0), (1, 4, 0), (1, 2, 0)],
                                      [(4, 6, 0), (2, 6, 0), (1, 3, 0), (1, 4, 0), (1, 2, 0)]]
 
         program = DummyTaborProgramClass(advanced_sequencer_table=advanced_sequencer_table,

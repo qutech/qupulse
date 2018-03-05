@@ -18,7 +18,7 @@ class CheckedIntCastTest(unittest.TestCase):
             checked_int_cast(123124.2)
 
         with self.assertRaises(ValueError):
-            checked_int_cast(123124 + 1e-6)
+            checked_int_cast(123124 + 1e-6, epsilon=1e-10)
 
     def test_float_cast(self):
         self.assertEqual(6, checked_int_cast(6+1e-11))

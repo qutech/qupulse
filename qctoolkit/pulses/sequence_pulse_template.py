@@ -54,7 +54,7 @@ class SequenceWaveform(Waveform):
     def unsafe_sample(self,
                       channel: ChannelID,
                       sample_times: np.ndarray,
-                      output_array: Union[np.ndarray, None]=None):
+                      output_array: Union[np.ndarray, None]=None) -> np.ndarray:
         if output_array is None:
             output_array = np.empty(len(sample_times))
         time = 0

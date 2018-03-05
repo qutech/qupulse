@@ -5,7 +5,7 @@ import numpy as np
 __all__ = ['voltage_to_uint16']
 
 
-def voltage_to_uint16(voltage: np.ndarray, output_amplitude: float, output_offset: float, resolution: int):
+def voltage_to_uint16(voltage: np.ndarray, output_amplitude: float, output_offset: float, resolution: int) -> np.ndarray:
     """
 
     :param voltage:

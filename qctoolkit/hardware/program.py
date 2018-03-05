@@ -212,6 +212,7 @@ class ChannelSplit(Exception):
 
 class MultiChannelProgram:
     def __init__(self, instruction_block: AbstractInstructionBlock, channels: Iterable[ChannelID] = None):
+        """Channels with identifier None are ignored."""
         if channels is None:
             def find_defined_channels(instruction_list):
                 for instruction in instruction_list:
@@ -232,6 +233,8 @@ class MultiChannelProgram:
                 raise ValueError('Instruction block has no defined channels')
 
             channels = find_defined_channels(instruction_block.instructions)
+        else:
+            channels = set(channels)
 
         channels = frozenset(channels - {None})
 

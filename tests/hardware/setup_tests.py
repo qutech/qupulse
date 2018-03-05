@@ -70,7 +70,7 @@ class HardwareSetupTests(unittest.TestCase):
 
     def test_set_channel(self):
         awg1 = DummyAWG()
-        awg2 = DummyAWG(num_channels=2)
+        awg2 = DummyAWG(num_channels=4)
 
         setup = HardwareSetup()
 
@@ -82,10 +82,19 @@ class HardwareSetupTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             setup.set_channel('C', PlaybackChannel(awg1, 0))
-        setup.set_channel('A', PlaybackChannel(awg2, 1))
+
+        with self.assertWarns(DeprecationWarning):
+            setup.set_channel('A', PlaybackChannel(awg2, 1), True)
+
         self.assertEqual(setup.registered_channels(),
                          dict(A={PlaybackChannel(awg2, 1), PlaybackChannel(awg1, 0)},
                               B={PlaybackChannel(awg2, 0)}))
+
+        setup.set_channel('A', {PlaybackChannel(awg2, 3), PlaybackChannel(awg2, 2)})
+        self.assertEqual(setup.registered_channels(),
+                         dict(A={PlaybackChannel(awg2, 3), PlaybackChannel(awg2, 2)},
+                              B={PlaybackChannel(awg2, 0)}))
+
 
     def test_rm_channel(self):
         awg1 = DummyAWG()
@@ -104,10 +113,14 @@ class HardwareSetupTests(unittest.TestCase):
                          dict(A={PlaybackChannel(awg1, 0)}))
 
     def test_arm_program(self):
-        wf = DummyWaveform(duration=1.1, defined_channels={'A', 'B'}, measurement_windows=[('m1', 0., 1.)])
+        wf_1 = DummyWaveform(duration=1.1, defined_channels={'A', 'B'}, measurement_windows=[('m1', 0., 1.)])
+        wf_2 = DummyWaveform(duration=1.1, defined_channels={'A', 'C'}, measurement_windows=[('m2', 0., 1.)])
 
-        block = InstructionBlock()
-        block.add_instruction_exec(wf)
+        block_1 = InstructionBlock()
+        block_2 = InstructionBlock()
+
+        block_1.add_instruction_exec(wf_1)
+        block_2.add_instruction_exec(wf_2)
 
         awg1 = DummyAWG()
         awg2 = DummyAWG()
@@ -125,7 +138,7 @@ class HardwareSetupTests(unittest.TestCase):
         setup.set_measurement('m1', MeasurementMask(dac1, 'DAC_1'))
         setup.set_measurement('m2', MeasurementMask(dac2, 'DAC_2'))
 
-        setup.register_program('test', block)
+        setup.register_program('test_1', block_1)
 
         self.assertIsNone(awg1._armed)
         self.assertIsNone(awg2._armed)
@@ -133,13 +146,30 @@ class HardwareSetupTests(unittest.TestCase):
         self.assertIsNone(dac1._armed_program)
         self.assertIsNone(dac2._armed_program)
 
-        setup.arm_program('test')
+        setup.arm_program('test_1')
 
-        self.assertEqual(awg1._armed, 'test')
-        self.assertEqual(awg2._armed, 'test')
+        self.assertEqual(awg1._armed, 'test_1')
+        self.assertEqual(awg2._armed, 'test_1')
         self.assertIsNone(awg3._armed)
-        self.assertEqual(dac1._armed_program, 'test')
+        self.assertEqual(dac1._armed_program, 'test_1')
         self.assertIsNone(dac2._armed_program)
+
+        setup.register_program('test_2', block_2)
+
+        self.assertEqual(awg1._armed, 'test_1')
+        self.assertEqual(awg2._armed, 'test_1')
+        self.assertIsNone(awg3._armed)
+        self.assertEqual(dac1._armed_program, 'test_1')
+        self.assertIsNone(dac2._armed_program)
+
+        setup.arm_program('test_2')
+
+        self.assertEqual(awg1._armed, 'test_2')
+        self.assertIsNone(awg2._armed)
+        self.assertEqual(awg3._armed, 'test_2')
+        # currently not defined
+        # self.assertEqual(dac1._armed_program, 'test_1')
+        self.assertEqual(dac2._armed_program, 'test_2')
 
     def test_register_program(self):
         awg1 = DummyAWG()
@@ -192,8 +222,52 @@ class HardwareSetupTests(unittest.TestCase):
         self.assertEqual(awg1._armed, None)
         self.assertEqual(awg2._armed, None)
 
+        expected_measurement_windows = {'p1':
+                                            {'DAC':
+                                                 (np.array([0.1, 0.1]), np.array([0.2, 0.2]))
+                                             }
+                                        }
         np.testing.assert_equal(dac._measurement_windows,
-                                dict(p1=dict(m1=(np.array([0.1, 0.1]), np.array([0.2, 0.2])))))
+                                expected_measurement_windows)
+
+    def test_remove_program(self):
+        wf_1 = DummyWaveform(duration=1.1, defined_channels={'A', 'B'}, measurement_windows=[('m1', 0., 1.)])
+        wf_2 = DummyWaveform(duration=1.1, defined_channels={'A', 'C'}, measurement_windows=[('m2', 0., 1.)])
+
+        block_1 = InstructionBlock()
+        block_2 = InstructionBlock()
+
+        block_1.add_instruction_exec(wf_1)
+        block_2.add_instruction_exec(wf_2)
+
+        awg1 = DummyAWG()
+        awg2 = DummyAWG()
+        awg3 = DummyAWG()
+
+        dac1 = DummyDAC()
+        dac2 = DummyDAC()
+
+        setup = HardwareSetup()
+
+        setup.set_channel('A', PlaybackChannel(awg1, 0))
+        setup.set_channel('B', MarkerChannel(awg2, 0))
+        setup.set_channel('C', MarkerChannel(awg3, 0))
+
+        setup.set_measurement('m1', MeasurementMask(dac1, 'DAC_1'))
+        setup.set_measurement('m2', MeasurementMask(dac2, 'DAC_2'))
+
+        setup.register_program('test_1', block_1)
+
+        setup.register_program('test_2', block_2)
+
+        setup.arm_program('test_1')
+
+        setup.remove_program('test_1')
+
+        self.assertEqual(setup.registered_programs.keys(), {'test_2'})
+
+        self.assertIsNone(awg1._armed)
+        self.assertIsNone(awg2._armed)
 
     def test_run_program(self):
         wf = DummyWaveform(duration=1.1, defined_channels={'A', 'B'}, measurement_windows=[('m1', 0., 1.)])

@@ -74,8 +74,6 @@ class DummyAWG(AWG):
     def remove(self, name) -> None:
         if name in self.programs:
             self._programs.pop(name)
-            self.program_wfs.pop(name)
-            self.clean()
 
     def arm(self, name: str) -> None:
         self._armed = name
