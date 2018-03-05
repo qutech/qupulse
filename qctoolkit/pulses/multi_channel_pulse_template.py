@@ -217,13 +217,24 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
         return set.union(*(st.measurement_names for st in self._subtemplates))
 
     def build_waveform(self, parameters: Dict[str, numbers.Real],
-                       measurement_mapping: Dict[str, str],
-                       channel_mapping: Dict[ChannelID, ChannelID]) -> Optional['MultiChannelWaveform']:
+                       measurement_mapping: Dict[str, Optional[str]],
+                       channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional['MultiChannelWaveform']:
         self.validate_parameter_constraints(parameters=parameters)
-        return MultiChannelWaveform(
-            [subtemplate.build_waveform(parameters,
-                                        measurement_mapping=measurement_mapping,
-                                        channel_mapping=channel_mapping) for subtemplate in self._subtemplates])
+
+        sub_waveforms = []
+        for subtemplate in self.subtemplates:
+            sub_waveform = subtemplate.build_waveform(parameters,
+                                                      measurement_mapping=measurement_mapping,
+                                                      channel_mapping=channel_mapping)
+            if sub_waveform is not None:
+                sub_waveforms.append(sub_waveform)
+
+        if len(sub_waveforms) == 0:
+            return None
+        if len(sub_waveforms) == 1:
+            return sub_waveforms[0]
+        else:
+            return MultiChannelWaveform(sub_waveforms)
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],
