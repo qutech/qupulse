@@ -61,16 +61,20 @@ class PointPulseTemplate(ParameterConstrainer, MeasurementDefiner, AtomicPulseTe
 
     def build_waveform(self,
                        parameters: Dict[str, Real],
-                       measurement_mapping: Dict[str, str],
-                       channel_mapping: Dict[ChannelID, ChannelID]) -> Optional[Waveform]:
+                       measurement_mapping: Dict[str, Optional[str]],
+                       channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Waveform]:
         self.validate_parameter_constraints(parameters)
+
+        if all(channel_mapping[channel] is None
+               for channel in self.defined_channels):
+            return None
 
         if self.duration.evaluate_numeric(**parameters) == 0:
             return None
 
         mapped_channels = tuple(channel_mapping[c] for c in self._channels)
 
-        waveform_entries = list([] for _ in range(len(mapped_channels)))
+        waveform_entries = list([] for _ in range(len(self._channels)))
         for entry in self._entries:
             instantiated_entries = entry.instantiate(parameters, len(self._channels))
             for ch_entries, wf_entry in zip(waveform_entries, instantiated_entries):
@@ -79,6 +83,12 @@ class PointPulseTemplate(ParameterConstrainer, MeasurementDefiner, AtomicPulseTe
         if waveform_entries[0][0].t > 0:
             for ch_entries in waveform_entries:
                 ch_entries[:0] = [PointWaveformEntry(0, ch_entries[0].v, ch_entries[0].interp)]
+
+        # filter mappings to None
+        channel_entries = [(ch, ch_entries)
+                           for (ch, ch_entries) in zip(mapped_channels, waveform_entries)
+                           if ch is not None]
+        mapped_channels, waveform_entries = zip(*channel_entries)
 
         measurements = self.get_measurement_windows(parameters=parameters, measurement_mapping=measurement_mapping)
         if len(waveform_entries) == 1:

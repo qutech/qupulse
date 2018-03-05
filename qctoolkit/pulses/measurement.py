@@ -24,13 +24,14 @@ class MeasurementDefiner:
 
     def get_measurement_windows(self,
                                 parameters: Dict[str, Real],
-                                measurement_mapping: Dict[str, str]) -> List[MeasurementWindow]:
+                                measurement_mapping: Dict[str, Optional[str]]) -> List[MeasurementWindow]:
         """Calculate measurement windows with the given parameter set and rename them woth the measurement mapping"""
         def get_val(v):
             return v.evaluate_numeric(**parameters)
 
         resulting_windows = [(measurement_mapping[name], get_val(begin), get_val(length))
-                             for name, begin, length in self._measurement_windows]
+                             for name, begin, length in self._measurement_windows
+                             if measurement_mapping[name] is not None]
 
         for _, begin, length in resulting_windows:
             if begin < 0 or length < 0:
