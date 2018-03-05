@@ -53,14 +53,14 @@ function [mask_prototypes, measurement_map, txt] = setup_alazar_measurements(var
 	
 	for q = 1:nQubits
 		for m = 1:nMeasPerQubit
-			%                 qubitIndex, measIndex, hwChannel,   auxFlag
+			%                 qubitIndex, measIndex, hwChannel,   auxFlag1
 			add_meas_and_mask(q,          m,        q+nQubits-1,  false);
 		end
 	end
 	
 	for a = 1:(nAlazarChannels-nQubits)
 		for m = 1:nMeasPerQubit
-			%                 qubitIndex, measIndex, hwChannel,   auxFlag
+			%                 qubitIndex, measIndex, hwChannel,   auxFlag1
 			add_meas_and_mask(a,          m,         a-1,         true);
 		end
 	end
@@ -74,10 +74,20 @@ function [mask_prototypes, measurement_map, txt] = setup_alazar_measurements(var
 	end
 	if q == 2
 		for m = 1:nMeasPerQubit
-			%                 qubitIndex, measIndex, hwChannel, auxFlag, secondQubitIndex, secondHwChannel
-			add_meas_and_mask(1,          m,         2,         false,   2,                3);
-			%                 qubitIndex, measIndex, hwChannel, auxFlag, secondQubitIndex, secondHwChannel
-			add_meas_and_mask(1,          m,         0,         true,    2,                1);
+			% Q1 Q2           qubitIndex, measIndex, hwChannel, auxFlag1, secondQubitIndex, secondHwChannel, auxFlag2
+			add_meas_and_mask(1,          m,         2,         false,    2,                3              , false);
+			% A1 A2           qubitIndex, measIndex, hwChannel, auxFlag1, secondQubitIndex, secondHwChannel, auxFlag2
+			add_meas_and_mask(1,          m,         0,         true,     2,                1              , true);
+			
+			% Q1 A1           qubitIndex, measIndex, hwChannel, auxFlag1, secondQubitIndex, secondHwChannel, auxFlag2
+			add_meas_and_mask(1,          m,         2,         false,    1,                0              , true);
+      % Q1 A2           qubitIndex, measIndex, hwChannel, auxFlag1, secondQubitIndex, secondHwChannel, auxFlag2
+			add_meas_and_mask(1,          m,         2,         false,    2,                1              , true);
+			
+			% Q2 A1           qubitIndex, measIndex, hwChannel, auxFlag1, secondQubitIndex, secondHwChannel, auxFlag2
+			add_meas_and_mask(2,          m,         3,         false,    1,                0              , true);
+      % Q2 A2           qubitIndex, measIndex, hwChannel, auxFlag1, secondQubitIndex, secondHwChannel, auxFlag2
+			add_meas_and_mask(2,          m,         3,         false,    2,                1              , true);
 		end
 	end
 	
@@ -86,23 +96,33 @@ function [mask_prototypes, measurement_map, txt] = setup_alazar_measurements(var
 end
 
 
-function add_meas_and_mask(qubitIndex, measIndex, hwChannel, auxFlag, secondQubitIndex, secondHwChannel)
+function add_meas_and_mask(qubitIndex, measIndex, hwChannel, auxFlag1, secondQubitIndex, secondHwChannel, auxFlag2)
 	global plsdata
 	
 	if nargin < 5
 		secondQubitIndex = [];
 	end
 	
-	if auxFlag
+	if nargin < 7
+		auxFlag2 = false;
+	end
+	
+	if auxFlag1
 		name = 'Aux';
 	else
 		name = 'Qubit';
 	end
 	
+	if auxFlag2
+		name2 = 'Aux';
+	else
+		name2 = 'Qubit';
+	end
+	
 	if ~isempty(secondQubitIndex)
-		measName = sprintf('%s_%i_%i_Meas_%i', name, qubitIndex, secondQubitIndex, measIndex);
-		maskName = sprintf('%s_%i_%i_Meas_%i_Mask_%i', name, qubitIndex, secondQubitIndex, measIndex, 1);
-		maskName2 = sprintf('%s_%i_%i_Meas_%i_Mask_%i', name, qubitIndex, secondQubitIndex, measIndex, 2);
+		measName = sprintf('%s_%i_%s_%i_Meas_%i', name, qubitIndex, name2, secondQubitIndex, measIndex);
+		maskName = sprintf('%s_%i_%s_%i_Meas_%i_Mask_%i', name, qubitIndex, name2, secondQubitIndex, measIndex, 1);
+		maskName2 = sprintf('%s_%i_%s_%i_Meas_%i_Mask_%i', name, qubitIndex, name2, secondQubitIndex, measIndex, 2);
 	else
 		measName = sprintf('%s_%i_Meas_%i', name, qubitIndex, measIndex);
 		maskName = sprintf('%s_%i_Meas_%i_Mask_%i', name, qubitIndex, measIndex, 1);

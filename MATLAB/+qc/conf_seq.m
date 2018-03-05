@@ -43,10 +43,11 @@ function scan = conf_seq(varargin)
 		...
 		... Other
 		'nrep',                 10, ...        % numer of repetition of pulse
-		'fig_id',                2000, ...
-		'disp_ops',      'default', ...  % list of indices of operations to show
-		'disp_dim'       ,       [1 2], ...     % dimension of display
-		'procfn_ops',               {{}}, ...  % one entry for each virtual channel, each cell entry has two element: fn, args and dim
+		'fig_id',               2000, ...
+		'disp_ops',            'default', ...  % list of indices of operations to show
+		'disp_dim',             [1 2], ...     % dimension of display
+		'procfn_ops',           {{}}, ...      % one entry for each virtual channel, each cell entry has two element: fn, args and dim.
+		...                                      If there are more entreis than operations, the nth+1 entry is applied to the 1st operation again.
 		'saveloop',             0, ...         % save every nth loop
 		'dnp',                  false, ...     % enable DNP
 		'rf_switches',          true, ...      % turn RF switches on and off automatically using the DecaDAC channels (to be removed)
@@ -69,7 +70,6 @@ function scan = conf_seq(varargin)
 	scan.loops(1).ramptime = [];
 	scan.loops(1).npoints = a.nrep;
 	scan.loops(1).rng = [];
-	
 	
 	nGetChan = numel(scan.loops(1).getchan);
 	nOperations = numel(a.operations);
@@ -178,10 +178,11 @@ function scan = conf_seq(varargin)
 	% Add user procfns	
 	nProcFn = numel(scan.loops(1).procfn);
 	for opInd = 1:numel(a.procfn_ops) % count through operations		
+		inchan = nGetChan + mod(opInd-1, nOperations)+1;
 		scan.loops(1).procfn(end+1).fn(1) = struct( ...
 			'fn',      a.procfn_ops{opInd}{1}, ...
 			'args',    {a.procfn_ops{opInd}{2}}, ...
-			'inchan',  nGetChan + opInd, ...
+			'inchan',  inchan, ...
 			'outchan', nProcFn + opInd ...
 			);
 		scan.loops(1).procfn(end).dim = a.procfn_ops{opInd}{3};

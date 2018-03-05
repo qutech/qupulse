@@ -75,7 +75,8 @@ function [output, bool, msg] = daq_operations(ctrl, varargin)
 		
   % --- clear all ---------------------------------------------------------
   elseif strcmp(ctrl, 'clear all')
-		py.setattr(daq, '_registered_programs', py.collections.defaultdict);
+		alazarPackage = py.importlib.import_module('qctoolkit.hardware.dacs.alazar');
+		py.setattr(daq, '_registered_programs', py.collections.defaultdict(alazarPackage.AlazarProgram));
 		bool = true;
 		msg = 'All programs cleared from DAQ';
 		
