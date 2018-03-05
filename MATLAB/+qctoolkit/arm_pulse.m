@@ -53,3 +53,8 @@ end
 
 hardware_setup.arm_program(pulse_name);
 
+%% debug
+% alazar = util.py.py2mat(py.getattr(hardware_setup, '_measurement_map')).A{1}.dac
+% prog = util.py.py2mat(py.getattr(alazar, '_registered_programs')).charge_scan
+% 
+

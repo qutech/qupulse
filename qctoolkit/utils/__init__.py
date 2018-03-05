@@ -5,7 +5,7 @@ import numpy
 __all__ = ["checked_int_cast", "is_integer"]
 
 
-def checked_int_cast(x: Union[float, int, numpy.ndarray], epsilon: float=1e-10) -> int:
+def checked_int_cast(x: Union[float, int, numpy.ndarray], epsilon: float=1e-6) -> int:
     if isinstance(x, numpy.ndarray):
         if len(x) != 1:
             raise ValueError('Not a scalar value')
@@ -17,5 +17,5 @@ def checked_int_cast(x: Union[float, int, numpy.ndarray], epsilon: float=1e-10) 
     return int_x
 
 
-def is_integer(x: Union[float, int], epsilon: float=1e-10):
+def is_integer(x: Union[float, int], epsilon: float=1e-6) -> bool:
     return abs(x - int(round(x))) < epsilon

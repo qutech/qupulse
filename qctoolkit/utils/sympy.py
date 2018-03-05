@@ -52,7 +52,7 @@ def to_numpy(sympy_array: sympy.NDimArray) -> numpy.ndarray:
     return numpy.array(sympy_array.tolist())
 
 
-def get_subscripted_symbols(expression: str):
+def get_subscripted_symbols(expression: str) -> set:
     # track all symbols that are subscipted in here
     indexed_base_finder = IndexedBasedFinder()
     sympy.sympify(expression, locals=indexed_base_finder)

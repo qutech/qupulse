@@ -170,21 +170,27 @@ class HardwareSetup:
         self.arm_program(name)
         self._registered_programs[name].run_callback()
 
-    def set_channel(self, identifier: ChannelID, single_channel: Union[PlaybackChannel, MarkerChannel]) -> None:
-        for ch_id, channel_set in self._channel_map.items():
-            if single_channel in channel_set:
-                raise ValueError('Channel already registered as {} for channel {}'.format(
-                    type(self._channel_map[ch_id]).__name__, ch_id))
+    def set_channel(self, identifier: ChannelID,
+                    single_channel: Union[PlaybackChannel, MarkerChannel],
+                    allow_multiple_registration: bool=False) -> None:
+        if not allow_multiple_registration:
+            for ch_id, channel_set in self._channel_map.items():
+                if single_channel in channel_set:
+                    raise ValueError('Channel already registered as {} for channel {}'.format(
+                        type(self._channel_map[ch_id]).__name__, ch_id))
 
         if isinstance(single_channel, (PlaybackChannel, MarkerChannel)):
             self._channel_map.setdefault(identifier, set()).add(single_channel)
         else:
             raise ValueError('Channel must be either a playback or a marker channel')
 
-    def set_measurement(self, new_measurement_name: str, new_measurement_mask: MeasurementMask):
-        for measurement_name, mask_set in self._measurement_map.items():
-            if new_measurement_mask in mask_set:
-                raise ValueError('Measurement mask already registered for measurement "{}"'.format(measurement_name))
+    def set_measurement(self, new_measurement_name: str,
+                        new_measurement_mask: MeasurementMask,
+                        allow_multiple_registration: bool=False):
+        if not allow_multiple_registration:
+            for measurement_name, mask_set in self._measurement_map.items():
+                if new_measurement_mask in mask_set:
+                    raise ValueError('Measurement mask already registered for measurement "{}"'.format(measurement_name))
 
         if isinstance(new_measurement_mask, MeasurementMask):
             self._measurement_map.setdefault(new_measurement_name, set()).add(new_measurement_mask)

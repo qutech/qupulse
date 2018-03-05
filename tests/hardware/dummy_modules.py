@@ -3,6 +3,7 @@ use the dummies"""
 
 import sys
 from typing import Set
+import unittest.mock
 
 class dummy_package:
     pass
@@ -192,6 +193,7 @@ class dummy_atsaverage(dummy_package):
                 self._apply_calls = []
             def apply(self, card, print_debug_output):
                 self._apply_calls.append((card, print_debug_output))
+            aimedBufferSize = unittest.mock.PropertyMock(return_value=2**22)
         ScanlineConfiguration.captureClockConfiguration = CaptureClockConfig()
     class operations(dummy_package):
         class OperationDefinition:
