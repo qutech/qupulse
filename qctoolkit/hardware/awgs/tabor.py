@@ -326,7 +326,7 @@ class TaborAWGRepresentation:
         return self._mirrors
 
     @property
-    def paranoia_level(self):
+    def paranoia_level(self) -> int:
         return self._instr.paranoia_level
 
     @paranoia_level.setter
@@ -335,7 +335,7 @@ class TaborAWGRepresentation:
             instr.paranoia_level = val
 
     @property
-    def dev_properties(self):
+    def dev_properties(self) -> dict:
         return self._instr.dev_properties
 
     @property
@@ -606,7 +606,7 @@ class TaborChannelPair(AWG):
         self.device.send_cmd(':INST:SEL {}'.format(self._channels[0]))
 
     @property
-    def total_capacity(self):
+    def total_capacity(self) -> int:
         return int(self.device.dev_properties['max_arb_mem']) // 2
 
     @property
