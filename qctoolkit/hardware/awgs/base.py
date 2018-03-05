@@ -82,8 +82,9 @@ class AWG(Comparable):
         """
 
     @abstractmethod
-    def arm(self, name: str) -> None:
-        """Load the program 'name' and arm the device for running it."""
+    def arm(self, name: Optional[str]) -> None:
+        """Load the program 'name' and arm the device for running it. If name is None the awg will "dearm" its current
+        program."""
 
     @abstractproperty
     def programs(self) -> Set[str]:
