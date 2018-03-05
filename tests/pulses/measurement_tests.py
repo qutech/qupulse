@@ -54,6 +54,17 @@ class MeasurementDefinerTest(unittest.TestCase):
             pulse.get_measurement_windows(measurement_mapping=measurement_mapping,
                                           parameters=dict(length=10, a=3, d=-1))
 
+    def test_none_mappings(self):
+        pulse = self.to_test_constructor(measurements=[('mw', 'a', 'd'), ('asd', 0, 1.)])
+
+        parameters = dict(length=100, a=4, d=5)
+
+        windows = pulse.get_measurement_windows(parameters, measurement_mapping={'mw': 'mw', 'asd': None})
+        self.assertEqual(windows, [('mw', 4, 5)])
+
+        windows = pulse.get_measurement_windows(dict(length=100), measurement_mapping={'mw': None, 'asd': None})
+        self.assertEqual(windows, [])
+
 
 class ParameterConstrainerTest(unittest.TestCase):
     def __init__(self, *args, to_test_constructor=None, **kwargs):
