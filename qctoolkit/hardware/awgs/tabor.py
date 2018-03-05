@@ -602,7 +602,7 @@ class TaborChannelPair(AWG):
 
         self.clear()
 
-    def select(self):
+    def select(self) -> None:
         self.device.send_cmd(':INST:SEL {}'.format(self._channels[0]))
 
     @property
@@ -619,10 +619,10 @@ class TaborChannelPair(AWG):
         program = self._known_programs.pop(name)
         self._segment_references[program.waveform_to_segment] -= 1
         if self._current_program == name:
-            self._current_program = None
+            self.change_armed_program(None)
         return program
 
-    def _restore_program(self, name: str, program: TaborProgram):
+    def _restore_program(self, name: str, program: TaborProgram) -> None:
         if name in self._known_programs:
             raise ValueError('Program cannot be restored as it is already known.')
         self._segment_references[program.waveform_to_segment] += 1
@@ -751,7 +751,7 @@ class TaborChannelPair(AWG):
 
     @with_configuration_guard
     @with_select
-    def clear(self):
+    def clear(self) -> None:
         """Delete all segments and clear memory"""
         self.device.select_channel(self._channels[0])
         self.device.send_cmd(':TRAC:DEL:ALL')
