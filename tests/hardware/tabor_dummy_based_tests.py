@@ -209,7 +209,7 @@ class TaborChannelPairTests(TaborDummyBasedTest):
     def test_upload_exceptions(self):
 
         wv = self.TableWaveform(1, [(0, 0.1, self.HoldInterpolationStrategy()),
-                               (192, 0.1, self.HoldInterpolationStrategy())], [])
+                                    (192, 0.1, self.HoldInterpolationStrategy())])
 
         channel_pair = self.TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
 

@@ -104,22 +104,6 @@ class MultiChannelWaveformTest(unittest.TestCase):
         self.assertEqual(waveform_a1, waveform_a2)
         self.assertNotEqual(waveform_a1, waveform_a3)
 
-    def test_get_measurement_windows(self):
-        def meas_window(i):
-            return str(int(i)), i, i+1
-
-        dwf_a = DummyWaveform(duration=246.2, defined_channels={'A'},
-                              measurement_windows=[meas_window(1), meas_window(2)])
-        dwf_b = DummyWaveform(duration=246.2, defined_channels={'B'},
-                              measurement_windows=[meas_window(3), meas_window(4), meas_window(5)])
-        dwf_c = DummyWaveform(duration=246.2, defined_channels={'C'})
-
-        mcwf = MultiChannelWaveform((dwf_a, dwf_b, dwf_c))
-        expected_windows = set(meas_window(i) for i in range(1, 6))
-        received_windows = tuple(mcwf.get_measurement_windows())
-        self.assertEqual(len(received_windows), 5)
-        self.assertEqual(set(received_windows), expected_windows)
-
     def test_unsafe_get_subset_for_channels(self):
         dwf_a = DummyWaveform(duration=246.2, defined_channels={'A'})
         dwf_b = DummyWaveform(duration=246.2, defined_channels={'B'})

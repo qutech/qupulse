@@ -132,13 +132,12 @@ class DummyInstructionBlock(InstructionBlock):
 
 class DummyWaveform(Waveform):
 
-    def __init__(self, duration: float=0, sample_output: numpy.ndarray=None, defined_channels={'A'}, measurement_windows=[]) -> None:
+    def __init__(self, duration: float=0, sample_output: numpy.ndarray=None, defined_channels={'A'}) -> None:
         super().__init__()
         self.duration_ = duration
         self.sample_output = sample_output
         self.defined_channels_ = defined_channels
         self.sample_calls = []
-        self.measurement_windows_ = measurement_windows
 
     @property
     def compare_key(self) -> Any:
@@ -178,9 +177,6 @@ class DummyWaveform(Waveform):
     @property
     def defined_channels(self):
         return self.defined_channels_
-
-    def get_measurement_windows(self):
-        return self.measurement_windows_
 
 
 class DummySequencer(Sequencer):

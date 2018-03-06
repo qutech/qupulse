@@ -72,18 +72,6 @@ class SequenceWaveformTest(unittest.TestCase):
         self.assertEqual(sub_wf.compare_key[1].duration, 3.3)
 
 
-
-    def test_get_measurement_windows(self):
-        dwfs = (DummyWaveform(duration=1., measurement_windows=[('M', 0.2, 0.5)]),
-                DummyWaveform(duration=3., measurement_windows=[('N', 0.6, 0.7)]),
-                DummyWaveform(duration=2., measurement_windows=[('M', 0.1, 0.2), ('N', 0.5, 0.6)]))
-        swf = SequenceWaveform(dwfs)
-
-        expected_windows = sorted((('M', 0.2, 0.5), ('N', 1.6, 0.7), ('M', 4.1, 0.2), ('N', 4.5, 0.6)))
-        received_windows = sorted(tuple(swf.get_measurement_windows()))
-        self.assertEqual(received_windows, expected_windows)
-
-
 class SequencePulseTemplateTest(unittest.TestCase):
 
     def __init__(self, *args, **kwargs) -> None:
@@ -143,15 +131,14 @@ class SequencePulseTemplateTest(unittest.TestCase):
 
         spt = SequencePulseTemplate(*pts, parameter_constraints=['a < 3'])
         with self.assertRaises(ParameterConstraintViolation):
-            spt.build_waveform(dict(a=4), dict(), dict())
+            spt.build_waveform(dict(a=4), dict())
 
         parameters = dict(a=2)
         channel_mapping = dict()
-        measurement_mapping = dict()
-        wf = spt.build_waveform(parameters, channel_mapping=channel_mapping, measurement_mapping=measurement_mapping)
+        wf = spt.build_waveform(parameters, channel_mapping=channel_mapping)
 
         for wfi, pt in zip(wfs, pts):
-            self.assertEqual(pt.build_waveform_calls, [(parameters, dict(), dict())])
+            self.assertEqual(pt.build_waveform_calls, [(parameters, dict())])
             self.assertIs(pt.build_waveform_calls[0][0], parameters)
 
         self.assertIsInstance(wf, SequenceWaveform)
