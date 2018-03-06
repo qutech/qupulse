@@ -45,7 +45,8 @@ class MeasurementDefiner:
         parameters = {k: parameters[k].get_value()
                       for k in self.measurement_parameters}
         measurements = self.get_measurement_windows(parameters, measurement_mapping)
-        instruction_block.add_instruction_meas(measurements)
+        if measurements:
+            instruction_block.add_instruction_meas(measurements)
 
     @property
     def measurement_parameters(self) -> Set[str]:
