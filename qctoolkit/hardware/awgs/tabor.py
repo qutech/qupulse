@@ -342,7 +342,7 @@ class TaborAWGRepresentation:
     def all_devices(self) -> Sequence[teawg.TEWXAwg]:
         return (self._instr, ) + self._mirrors
 
-    def send_cmd(self, cmd_str, paranoia_level=None) -> Any:
+    def send_cmd(self, cmd_str, paranoia_level=None):
         for instr in self.all_devices:
             instr.send_cmd(cmd_str=cmd_str, paranoia_level=paranoia_level)
 
