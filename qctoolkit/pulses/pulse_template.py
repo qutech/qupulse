@@ -21,7 +21,13 @@ from qctoolkit.pulses.sequencing import Sequencer, SequencingElement, Instructio
 from qctoolkit.pulses.instructions import Waveform
 from qctoolkit.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
 
-__all__ = ["PulseTemplate", "AtomicPulseTemplate", "DoubleParameterNameException"]
+__all__ = ["PulseTemplate", "AtomicPulseTemplate", "DoubleParameterNameException", "MappingTuple"]
+
+
+MappingTuple = Union[Tuple['PulseTemplate'],
+                     Tuple['PulseTemplate', Dict],
+                     Tuple['PulseTemplate', Dict, Dict],
+                     Tuple['PulseTemplate', Dict, Dict, Dict]]
 
 
 class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta):
@@ -67,20 +73,21 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
         """The number of channels this PulseTemplate defines"""
         return len(self.defined_channels)
 
-    def __matmul__(self, other: 'PulseTemplate') -> 'PulseTemplate':
+    def __matmul__(self, other: Union['PulseTemplate', MappingTuple]) -> 'SequencePulseTemplate':
         """This method enables using the @-operator (intended for matrix multiplication) for
          concatenating pulses. If one of the pulses is a SequencePulseTemplate the other pulse gets merged into it"""
 
         from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
 
-        if self != other:
-            # check if parameter names of the subpulses intersect and raise an exception if so
-            double_parameters = self.parameter_names & other.parameter_names
-            if double_parameters:
-                raise DoubleParameterNameException(self, other, double_parameters)
-
         subtemplates = itertools.chain(self.subtemplates if isinstance(self, SequencePulseTemplate) else [self],
                                        other.subtemplates if isinstance(other, SequencePulseTemplate) else [other])
+        return SequencePulseTemplate(*subtemplates)
+
+    def __rmatmul__(self, other: MappingTuple) -> 'SequencePulseTemplate':
+        from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
+
+        subtemplates = itertools.chain([other],
+                                       self.subtemplates if isinstance(self, SequencePulseTemplate) else [self])
         return SequencePulseTemplate(*subtemplates)
 
 

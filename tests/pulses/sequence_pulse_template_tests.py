@@ -349,7 +349,7 @@ class PulseTemplateConcatenationTest(unittest.TestCase):
         a = DummyPulseTemplate(parameter_names={'foo'}, defined_channels={'A'})
         b = DummyPulseTemplate(parameter_names={'bar'}, defined_channels={'A'})
         c = DummyPulseTemplate(parameter_names={'snu'}, defined_channels={'A'})
-        d = DummyPulseTemplate(parameter_names={'snu'}, defined_channels={'A'})
+        d = (c, {'snu': 'bar'})
 
         seq = a @ a
         self.assertTrue(len(seq.subtemplates) == 2)
@@ -361,16 +361,22 @@ class PulseTemplateConcatenationTest(unittest.TestCase):
         for st, expected in zip(seq.subtemplates,[a, b]):
             self.assertTrue(st, expected)
 
-        with self.assertRaises(DoubleParameterNameException):
-            a @ b @ a
-        with self.assertRaises(DoubleParameterNameException):
-            a @ b @ c @ d
-
         seq = a @ b @ c
         self.assertTrue(len(seq.subtemplates) == 3)
         for st, expected in zip(seq.subtemplates, [a, b, c]):
             self.assertTrue(st, expected)
 
+        seq = a @ d
+        self.assertTrue(len(seq.subtemplates) == 2)
+        self.assertIs(seq.subtemplates[0], a)
+        self.assertIsInstance(seq.subtemplates[1], MappingPulseTemplate)
+        self.assertIs(seq.subtemplates[1].template, c)
+
+        seq = d @ a
+        self.assertTrue(len(seq.subtemplates) == 2)
+        self.assertIs(seq.subtemplates[1], a)
+        self.assertIsInstance(seq.subtemplates[0], MappingPulseTemplate)
+        self.assertIs(seq.subtemplates[0].template, c)
 
     def test_concatenation_sequence_table_pulse(self):
         a = DummyPulseTemplate(parameter_names={'foo'}, defined_channels={'A'})
@@ -395,9 +401,6 @@ class PulseTemplateConcatenationTest(unittest.TestCase):
         self.assertTrue(len(seq.subtemplates) == 4)
         for st, expected in zip(seq.subtemplates, [a, b, c, d]):
             self.assertTrue(st, expected)
-
-        with self.assertRaises(DoubleParameterNameException):
-            seq2 @ c
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

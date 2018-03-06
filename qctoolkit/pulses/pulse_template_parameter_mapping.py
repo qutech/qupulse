@@ -7,7 +7,7 @@ import numbers
 
 from qctoolkit.utils.types import ChannelID
 from qctoolkit.expressions import Expression
-from qctoolkit.pulses.pulse_template import PulseTemplate
+from qctoolkit.pulses.pulse_template import PulseTemplate, MappingTuple
 from qctoolkit.pulses.parameters import Parameter, MappedParameter, ParameterNotProvidedException, ParameterConstrainer
 from qctoolkit.pulses.sequencing import Sequencer
 from qctoolkit.pulses.instructions import InstructionBlock, Waveform
@@ -20,12 +20,6 @@ __all__ = [
     "MissingParameterDeclarationException",
     "UnnecessaryMappingException",
 ]
-
-
-MappingTuple = Union[Tuple[PulseTemplate],
-                     Tuple[PulseTemplate, Dict],
-                     Tuple[PulseTemplate, Dict, Dict],
-                     Tuple[PulseTemplate, Dict, Dict, Dict]]
 
 
 class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
