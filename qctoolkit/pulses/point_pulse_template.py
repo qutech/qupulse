@@ -38,7 +38,7 @@ class PointPulseEntry(TableEntry):
                      for v in vs)
 
 
-class PointPulseTemplate(ParameterConstrainer, MeasurementDefiner, AtomicPulseTemplate):
+class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
     def __init__(self,
                  time_point_tuple_list: List[EntryInInit],
                  channel_names: Sequence[ChannelID],
@@ -47,9 +47,8 @@ class PointPulseTemplate(ParameterConstrainer, MeasurementDefiner, AtomicPulseTe
                  measurements: Optional[List[MeasurementDeclaration]]=None,
                  identifier=None):
 
-        AtomicPulseTemplate.__init__(self, identifier=identifier)
+        AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
-        MeasurementDefiner.__init__(self, measurements=measurements)
 
         self._channels = tuple(channel_names)
         self._entries = [PointPulseEntry(*tpt)
@@ -61,7 +60,6 @@ class PointPulseTemplate(ParameterConstrainer, MeasurementDefiner, AtomicPulseTe
 
     def build_waveform(self,
                        parameters: Dict[str, Real],
-                       measurement_mapping: Dict[str, Optional[str]],
                        channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Waveform]:
         self.validate_parameter_constraints(parameters)
 
@@ -90,15 +88,13 @@ class PointPulseTemplate(ParameterConstrainer, MeasurementDefiner, AtomicPulseTe
                            if ch is not None]
         mapped_channels, waveform_entries = zip(*channel_entries)
 
-        measurements = self.get_measurement_windows(parameters=parameters, measurement_mapping=measurement_mapping)
-        if len(waveform_entries) == 1:
-            return PointWaveform(mapped_channels[0], waveform_entries[0], measurement_windows=measurements)
+        waveforms = [PointWaveform(mapped_channel, ch_entries)
+                     for mapped_channel, ch_entries in zip(mapped_channels, waveform_entries)]
+
+        if len(waveforms) == 1:
+            return waveforms.pop()
         else:
-            return MultiChannelWaveform(
-                [PointWaveform(mapped_channels[0], waveform_entries[0], measurement_windows=measurements)]
-                +
-                [PointWaveform(channel, ch_entries, [])
-                 for channel, ch_entries in zip(mapped_channels[1:], waveform_entries[1:])])
+            return MultiChannelWaveform(waveforms)
 
     @property
     def point_pulse_entries(self) -> Sequence[PointPulseEntry]:

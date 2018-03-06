@@ -133,25 +133,16 @@ class FunctionPulseSerializationTest(FunctionPulseTest):
 class FunctionPulseSequencingTest(FunctionPulseTest):
     def test_build_waveform(self) -> None:
         with self.assertRaises(ParameterConstraintViolation):
-            self.fpt.build_waveform(self.invalid_par_vals, measurement_mapping={'mw': 'mw',
-                                                                                'drup': 'jupp'}, channel_mapping={'A': 'B'})
+            self.fpt.build_waveform(self.invalid_par_vals, channel_mapping={'A': 'B'})
 
-        wf = self.fpt.build_waveform(self.valid_par_vals, measurement_mapping={'mw': 'mw',
-                                                                                'drup': 'jupp'}, channel_mapping={'A': 'B'})
+        wf = self.fpt.build_waveform(self.valid_par_vals, channel_mapping={'A': 'B'})
         self.assertIsNotNone(wf)
         self.assertIsInstance(wf, FunctionWaveform)
 
         expression = Expression(self.s).evaluate_symbolic(self.valid_par_vals)
         duration = Expression(self.s2).evaluate_numeric(c=self.valid_par_vals['c'])
 
-        expected_waveform = FunctionWaveform(expression, duration=duration, channel='B',
-                                             measurement_windows=[('mw', 1, 1),
-                                                                  ('mw',
-                                                                   self.valid_par_vals['x'],
-                                                                   self.valid_par_vals['z']),
-                                                                  ('jupp',
-                                                                   self.valid_par_vals['j'],
-                                                                   self.valid_par_vals['u'])])
+        expected_waveform = FunctionWaveform(expression, duration=duration, channel='B')
         self.assertEqual(expected_waveform, wf)
 
     def test_requires_stop(self) -> None:
@@ -161,8 +152,7 @@ class FunctionPulseSequencingTest(FunctionPulseTest):
         self.assertTrue(self.fpt.requires_stop(parameters, dict()))
 
     def test_build_waveform_none(self):
-        self.assertIsNone(self.fpt.build_waveform(self.valid_par_vals, measurement_mapping={'mw': 'mw',
-                                                                          'drup': 'jupp'}, channel_mapping={'A': None}))
+        self.assertIsNone(self.fpt.build_waveform(self.valid_par_vals, channel_mapping={'A': None}))
 
 
 class TablePulseTemplateConstraintTest(ParameterConstrainerTest):
@@ -190,28 +180,26 @@ class TablePulseTemplateMeasurementTest(MeasurementDefinerTest):
 class FunctionWaveformTest(unittest.TestCase):
 
     def test_equality(self) -> None:
-        wf1a = FunctionWaveform(Expression('2*t'), 3, measurement_windows=[], channel='A')
-        wf1b = FunctionWaveform(Expression('2*t'), 3, measurement_windows=[], channel='A')
-        wf2 = FunctionWaveform(Expression('2*t'), 3, measurement_windows=[('K', 1, 2)], channel='A')
-        wf3 = FunctionWaveform(Expression('2*t+2'), 3, measurement_windows=[], channel='A')
-        wf4 = FunctionWaveform(Expression('2*t'), 4, measurement_windows=[], channel='A')
+        wf1a = FunctionWaveform(Expression('2*t'), 3, channel='A')
+        wf1b = FunctionWaveform(Expression('2*t'), 3, channel='A')
+        wf3 = FunctionWaveform(Expression('2*t+2'), 3, channel='A')
+        wf4 = FunctionWaveform(Expression('2*t'), 4, channel='A')
         self.assertEqual(wf1a, wf1a)
         self.assertEqual(wf1a, wf1b)
-        self.assertNotEqual(wf1a, wf2)
         self.assertNotEqual(wf1a, wf3)
         self.assertNotEqual(wf1a, wf4)
 
     def test_defined_channels(self) -> None:
-        wf = FunctionWaveform(Expression('t'), 4, measurement_windows=[], channel='A')
+        wf = FunctionWaveform(Expression('t'), 4, channel='A')
         self.assertEqual({'A'}, wf.defined_channels)
 
     def test_duration(self) -> None:
-        wf = FunctionWaveform(expression=Expression('2*t'), duration=4/5, measurement_windows=[],
+        wf = FunctionWaveform(expression=Expression('2*t'), duration=4/5,
                               channel='A')
         self.assertEqual(4/5, wf.duration)
 
     def test_unsafe_sample(self):
-        fw = FunctionWaveform(Expression('sin(2*pi*t) + 3'), 5, channel='A', measurement_windows=[])
+        fw = FunctionWaveform(Expression('sin(2*pi*t) + 3'), 5, channel='A')
 
         t = np.linspace(0, 5, dtype=float)
         expected_result = np.sin(2*np.pi*t) + 3
@@ -224,14 +212,8 @@ class FunctionWaveformTest(unittest.TestCase):
         self.assertIs(result, out_array)
 
     def test_unsafe_get_subset_for_channels(self):
-        fw = FunctionWaveform(Expression('sin(2*pi*t) + 3'), 5, channel='A',
-                              measurement_windows=[('asd', 0, 3), ('om', 1, 2)])
+        fw = FunctionWaveform(Expression('sin(2*pi*t) + 3'), 5, channel='A')
         self.assertIs(fw.unsafe_get_subset_for_channels({'A'}), fw)
-
-    def test_get_measurement_windows(self):
-        fw = FunctionWaveform(Expression('sin(2*pi*t) + 3'), 5, channel='A',
-                              measurement_windows=[('asd', 0, 3), ('om', 1, 2)])
-        self.assertEqual(fw.get_measurement_windows(), [('asd', 0, 3), ('om', 1, 2)])
 
 
 class FunctionPulseMeasurementTest(unittest.TestCase):

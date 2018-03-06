@@ -253,12 +253,10 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
 
     def build_waveform(self,
                        parameters: Dict[str, numbers.Real],
-                       measurement_mapping: Dict[str, str],
                        channel_mapping: Dict[ChannelID, ChannelID]) -> Waveform:
         """This gets called if the parent is atomic"""
         return self.template.build_waveform(
             parameters=self.map_parameters(parameters),
-            measurement_mapping=self.get_updated_measurement_mapping(measurement_mapping),
             channel_mapping=self.get_updated_channel_mapping(channel_mapping))
 
     def requires_stop(self,

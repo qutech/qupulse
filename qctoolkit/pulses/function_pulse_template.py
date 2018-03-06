@@ -26,7 +26,7 @@ from qctoolkit.pulses.measurement import MeasurementDefiner
 __all__ = ["FunctionPulseTemplate", "FunctionWaveform"]
 
 
-class FunctionPulseTemplate(AtomicPulseTemplate, MeasurementDefiner, ParameterConstrainer):
+class FunctionPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
     """Defines a pulse via a time-domain expression.
 
     FunctionPulseTemplate stores the expression and its external parameters. The user must provide
@@ -61,15 +61,13 @@ class FunctionPulseTemplate(AtomicPulseTemplate, MeasurementDefiner, ParameterCo
             parameter_constraints: A list of parameter constraints forwarded to the
                 :class:`~`qctoolkit.pulses.measurement.ParameterConstrainer superclass
         """
-        AtomicPulseTemplate.__init__(self, identifier=identifier)
-        MeasurementDefiner.__init__(self, measurements=measurements)
+        AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 
         self.__expression = ExpressionScalar.make(expression)
         self.__duration_expression = ExpressionScalar.make(duration_expression)
         self.__parameter_names = {*self.__duration_expression.variables, *self.__expression.variables} - {'t'}
         self.__channel = channel
-        self.__measurement_windows = dict()
 
     @property
     def expression(self) -> ExpressionScalar:
@@ -95,13 +93,8 @@ class FunctionPulseTemplate(AtomicPulseTemplate, MeasurementDefiner, ParameterCo
     def duration(self) -> ExpressionScalar:
         return self.__duration_expression
 
-    @property
-    def measurement_names(self) -> Set[str]:
-        return {name for name, _, _ in self._measurement_windows}
-
     def build_waveform(self,
                        parameters: Dict[str, numbers.Real],
-                       measurement_mapping: Dict[str, Optional[str]],
                        channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional['FunctionWaveform']:
         self.validate_parameter_constraints(parameters=parameters)
 
@@ -117,8 +110,6 @@ class FunctionPulseTemplate(AtomicPulseTemplate, MeasurementDefiner, ParameterCo
 
         return FunctionWaveform(expression=expression,
                                 duration=duration,
-                                measurement_windows=self.get_measurement_windows(parameters=parameters,
-                                                                                 measurement_mapping=measurement_mapping),
                                 channel=channel_mapping[self.__channel])
 
     def requires_stop(self,
@@ -161,7 +152,6 @@ class FunctionWaveform(Waveform):
 
     def __init__(self, expression: ExpressionScalar,
                  duration: float,
-                 measurement_windows: List[MeasurementWindow],
                  channel: ChannelID) -> None:
         """Creates a new FunctionWaveform instance.
 
@@ -179,18 +169,14 @@ class FunctionWaveform(Waveform):
         self._expression = expression
         self._duration = duration
         self._channel_id = channel
-        self._measurement_windows = measurement_windows
 
     @property
     def defined_channels(self) -> Set[ChannelID]:
         return {self._channel_id}
-
-    def get_measurement_windows(self) -> List[MeasurementWindow]:
-        return self._measurement_windows
     
     @property
     def compare_key(self) -> Any:
-        return self._channel_id, self._expression, self._duration, self._measurement_windows
+        return self._channel_id, self._expression, self._duration
 
     @property
     def duration(self) -> float:

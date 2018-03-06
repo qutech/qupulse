@@ -289,8 +289,9 @@ class DummyPulseTemplate(AtomicPulseTemplate):
                  duration: Any=0,
                  waveform: Waveform=tuple(),
                  measurement_names: Set[str] = set(),
+                 measurements: list=list(),
                  identifier=None) -> None:
-        super().__init__(identifier=identifier)
+        super().__init__(identifier=identifier, measurements=measurements)
         self.requires_stop_ = requires_stop
         self.requires_stop_arguments = []
 
@@ -342,9 +343,8 @@ class DummyPulseTemplate(AtomicPulseTemplate):
 
     def build_waveform(self,
                        parameters: Dict[str, Parameter],
-                       measurement_mapping: Dict[str, str],
                        channel_mapping: Dict[ChannelID, ChannelID]):
-        self.build_waveform_calls.append((parameters, measurement_mapping, channel_mapping))
+        self.build_waveform_calls.append((parameters, channel_mapping))
         if self.waveform or self.waveform is None:
             return self.waveform
         return DummyWaveform(duration=self.duration, defined_channels=self.defined_channels)

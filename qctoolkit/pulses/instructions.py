@@ -236,7 +236,7 @@ class MEASInstruction(Instruction):
         self.measurements = measurements
 
     @property
-    def compare_key(self):
+    def compare_key(self) -> List[MeasurementWindow]:
         return self.measurements
 
     def __str__(self):

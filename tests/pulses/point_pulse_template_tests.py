@@ -89,7 +89,8 @@ class PointPulseTemplateTests(unittest.TestCase):
             self.assertEqual(expected_result, point.requires_stop(parameter_set, condition_set))
 
     def test_build_waveform_empty(self):
-        self.assertIsNone(PointPulseTemplate([('t1', 'A')], [0]).build_waveform(parameters={'t1': 0, 'A': 1}, channel_mapping={0: 1}, measurement_mapping=dict()))
+        self.assertIsNone(PointPulseTemplate([('t1', 'A')], [0]).build_waveform(parameters={'t1': 0, 'A': 1},
+                                                                                channel_mapping={0: 1}))
 
     def test_build_waveform_single_channel(self):
         ppt = PointPulseTemplate([('t1', 'A'),
@@ -98,11 +99,11 @@ class PointPulseTemplateTests(unittest.TestCase):
 
         parameters = {'t1': 0.1, 't2': 1., 'A': 1., 'B': 2., 'C': 19.}
 
-        wf = ppt.build_waveform(parameters=parameters, channel_mapping={0: 1}, measurement_mapping=dict())
+        wf = ppt.build_waveform(parameters=parameters, channel_mapping={0: 1})
         expected = PointWaveform(1, [(0, 1., HoldInterpolationStrategy()),
                                      (0.1, 1., HoldInterpolationStrategy()),
                                      (1., 0., HoldInterpolationStrategy()),
-                                     (1.1, 21., LinearInterpolationStrategy())], [])
+                                     (1.1, 21., LinearInterpolationStrategy())])
         self.assertIsInstance(wf, PointWaveform)
         self.assertEqual(wf, expected)
 
@@ -112,12 +113,11 @@ class PointPulseTemplateTests(unittest.TestCase):
                                   ('t1+t2', 'B+C', 'linear')], [0], measurements=[('M', 'n', 1), ('L', 'n', 1)])
 
         parameters = {'t1': 0.1, 't2': 1., 'A': 1., 'B': 2., 'C': 19., 'n': 0.2}
-        wf = ppt.build_waveform(parameters=parameters, channel_mapping={0: 1}, measurement_mapping={'M': 'K', 'L': 'L'})
+        wf = ppt.build_waveform(parameters=parameters, channel_mapping={0: 1})
         expected = PointWaveform(1, [(0, 1., HoldInterpolationStrategy()),
                                      (0.1, 1., HoldInterpolationStrategy()),
                                      (1., 0., HoldInterpolationStrategy()),
-                                     (1.1, 21., LinearInterpolationStrategy())],
-                                 [('K', 0.2, 1), ('L', 0.2, 1)])
+                                     (1.1, 21., LinearInterpolationStrategy())])
         self.assertEqual(wf, expected)
 
     def test_build_waveform_multi_channel_same(self):
@@ -126,16 +126,15 @@ class PointPulseTemplateTests(unittest.TestCase):
                                   ('t1+t2', 'B+C', 'linear')], [0, 'A'], measurements=[('M', 'n', 1), ('L', 'n', 1)])
 
         parameters = {'t1': 0.1, 't2': 1., 'A': 1., 'B': 2., 'C': 19., 'n': 0.2}
-        wf = ppt.build_waveform(parameters=parameters, channel_mapping={0: 1, 'A': 'A'}, measurement_mapping={'M': 'K', 'L': 'L'})
+        wf = ppt.build_waveform(parameters=parameters, channel_mapping={0: 1, 'A': 'A'})
         expected_1 = PointWaveform(1, [(0, 1., HoldInterpolationStrategy()),
                                      (0.1, 1., HoldInterpolationStrategy()),
                                      (1., 0., HoldInterpolationStrategy()),
-                                     (1.1, 21., LinearInterpolationStrategy())],
-                                 [('K', 0.2, 1), ('L', 0.2, 1)])
+                                     (1.1, 21., LinearInterpolationStrategy())])
         expected_A = PointWaveform('A', [(0, 1., HoldInterpolationStrategy()),
                                      (0.1, 1., HoldInterpolationStrategy()),
                                      (1., 0., HoldInterpolationStrategy()),
-                                     (1.1, 21., LinearInterpolationStrategy())], [])
+                                     (1.1, 21., LinearInterpolationStrategy())])
         self.assertEqual(wf.defined_channels, {1, 'A'})
         self.assertEqual(wf._sub_waveforms[0].defined_channels, {1})
         self.assertEqual(wf._sub_waveforms[0], expected_1)
@@ -148,16 +147,15 @@ class PointPulseTemplateTests(unittest.TestCase):
                                   ('t1+t2', 'B+C', 'linear')], [0, 'A'], measurements=[('M', 'n', 1), ('L', 'n', 1)])
 
         parameters = {'t1': 0.1, 't2': 1., 'A': np.ones(2), 'B': np.arange(2), 'C': 19., 'n': 0.2}
-        wf = ppt.build_waveform(parameters=parameters, channel_mapping={0: 1, 'A': 'A'}, measurement_mapping={'M': 'K', 'L': 'L'})
+        wf = ppt.build_waveform(parameters=parameters, channel_mapping={0: 1, 'A': 'A'})
         expected_1 = PointWaveform(1, [(0, 1., HoldInterpolationStrategy()),
                                        (0.1, 1., HoldInterpolationStrategy()),
                                        (1., 0., HoldInterpolationStrategy()),
-                                       (1.1, 19., LinearInterpolationStrategy())],
-                                 [('K', 0.2, 1), ('L', 0.2, 1)])
+                                       (1.1, 19., LinearInterpolationStrategy())])
         expected_A = PointWaveform('A', [(0, 1., HoldInterpolationStrategy()),
                                      (0.1, 1., HoldInterpolationStrategy()),
                                      (1., 0., HoldInterpolationStrategy()),
-                                     (1.1, 20., LinearInterpolationStrategy())], [])
+                                     (1.1, 20., LinearInterpolationStrategy())])
         self.assertEqual(wf.defined_channels, {1, 'A'})
         self.assertEqual(wf._sub_waveforms[0].defined_channels, {1})
         self.assertEqual(wf._sub_waveforms[0], expected_1)
@@ -169,15 +167,14 @@ class PointPulseTemplateTests(unittest.TestCase):
                                   ('t2', 0., 'hold'),
                                   ('t1+t2', 'B+C', 'linear')], [0, 'A', 'C'], measurements=[('M', 'n', 1), ('L', 'n', 1)])
         parameters = {'t1': 0.1, 't2': 1., 'A': np.ones(3), 'B': np.arange(3), 'C': 19., 'n': 0.2}
-        complete_measurement_mapping = {'M': 'K', 'L': 'L'}
 
-        self.assertIsNone(ppt.build_waveform(parameters, complete_measurement_mapping, {0: None, 'A': None, 'C': None}))
+        self.assertIsNone(ppt.build_waveform(parameters, {0: None, 'A': None, 'C': None}))
 
-        wf = ppt.build_waveform(parameters, complete_measurement_mapping, {0: 1, 'A': None, 'C': None})
+        wf = ppt.build_waveform(parameters, {0: 1, 'A': None, 'C': None})
         self.assertIsInstance(wf, PointWaveform)
         self.assertEqual(wf.defined_channels, {1})
 
-        wf = ppt.build_waveform(parameters, complete_measurement_mapping, {0: 1, 'A': 2, 'C': None})
+        wf = ppt.build_waveform(parameters, {0: 1, 'A': 2, 'C': None})
         self.assertIsInstance(wf, MultiChannelWaveform)
         self.assertEqual(wf.defined_channels, {1, 2})
 
