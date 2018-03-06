@@ -3,10 +3,10 @@ from numbers import Real
 import itertools
 
 from qctoolkit.expressions import Expression
-
+from qctoolkit.utils.types import MeasurementWindow
+from qctoolkit.pulses.parameters import Parameter
 
 MeasurementDeclaration = Tuple[str, Union[Expression, str, Real], Union[Expression, str, Real]]
-MeasurementWindow = Tuple[str, Real, Real]
 
 
 class MeasurementDefiner:
