@@ -132,13 +132,12 @@ class DummyInstructionBlock(InstructionBlock):
 
 class DummyWaveform(Waveform):
 
-    def __init__(self, duration: float=0, sample_output: numpy.ndarray=None, defined_channels={'A'}, measurement_windows=[]) -> None:
+    def __init__(self, duration: float=0, sample_output: numpy.ndarray=None, defined_channels={'A'}) -> None:
         super().__init__()
         self.duration_ = duration
         self.sample_output = sample_output
         self.defined_channels_ = defined_channels
         self.sample_calls = []
-        self.measurement_windows_ = measurement_windows
 
     @property
     def compare_key(self) -> Any:
@@ -178,9 +177,6 @@ class DummyWaveform(Waveform):
     @property
     def defined_channels(self):
         return self.defined_channels_
-
-    def get_measurement_windows(self):
-        return self.measurement_windows_
 
 
 class DummySequencer(Sequencer):
@@ -289,8 +285,9 @@ class DummyPulseTemplate(AtomicPulseTemplate):
                  duration: Any=0,
                  waveform: Waveform=tuple(),
                  measurement_names: Set[str] = set(),
+                 measurements: list=list(),
                  identifier=None) -> None:
-        super().__init__(identifier=identifier)
+        super().__init__(identifier=identifier, measurements=measurements)
         self.requires_stop_ = requires_stop
         self.requires_stop_arguments = []
 
@@ -342,9 +339,8 @@ class DummyPulseTemplate(AtomicPulseTemplate):
 
     def build_waveform(self,
                        parameters: Dict[str, Parameter],
-                       measurement_mapping: Dict[str, str],
                        channel_mapping: Dict[ChannelID, ChannelID]):
-        self.build_waveform_calls.append((parameters, measurement_mapping, channel_mapping))
+        self.build_waveform_calls.append((parameters, channel_mapping))
         if self.waveform or self.waveform is None:
             return self.waveform
         return DummyWaveform(duration=self.duration, defined_channels=self.defined_channels)

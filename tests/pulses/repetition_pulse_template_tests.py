@@ -67,17 +67,6 @@ class RepetitionWaveformTest(unittest.TestCase):
         self.assertIs(output_expected, output_received)
         np.testing.assert_equal(output_received, sample_times)
 
-    def test_get_measurement_windows(self):
-        body_wf = DummyWaveform(duration=7, measurement_windows=[('M', .1, .2), ('N', .5, .7)])
-
-        rwf = RepetitionWaveform(body=body_wf, repetition_count=3)
-
-        expected_windows = [('M', .1, .2), ('N', .5, .7),
-                            ('M', 7.1, .2), ('N', 7.5, .7),
-                            ('M', 14.1, .2), ('N', 14.5, .7)]
-        received_windows = list(rwf.get_measurement_windows())
-        self.assertEqual(received_windows, expected_windows)
-
 
 class RepetitionPulseTemplateTest(unittest.TestCase):
 
@@ -125,7 +114,10 @@ class RepetitionPulseTemplateTest(unittest.TestCase):
         body = DummyPulseTemplate(measurement_names=measurement_names)
         t = RepetitionPulseTemplate(body, 9)
 
-        self.assertIs(measurement_names, t.measurement_names)
+        self.assertEqual(measurement_names, t.measurement_names)
+
+        t = RepetitionPulseTemplate(body, 9, measurements=[('N', 1, 2)])
+        self.assertEqual({'M', 'N'}, t.measurement_names)
 
     def test_duration(self):
         body = DummyPulseTemplate(duration='foo')

@@ -6,7 +6,7 @@ from typing import Optional, Dict, Set, Any, List
 from qctoolkit.utils.types import MeasurementWindow, ChannelID
 from qctoolkit.expressions import Expression
 from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration, PulseTemplate
-from qctoolkit.pulses.instructions import Waveform, EXECInstruction
+from qctoolkit.pulses.instructions import Waveform, EXECInstruction, MEASInstruction
 from qctoolkit.pulses.parameters import Parameter
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 
@@ -85,13 +85,13 @@ class AtomicPulseTemplateStub(AtomicPulseTemplate):
     def is_interruptable(self) -> bool:
         return super().is_interruptable()
 
-    def __init__(self, *, waveform: Waveform=None, duration: Expression=None,
+    def __init__(self, *, waveform: Waveform=None, duration: Expression=None, measurements=None,
                  identifier: Optional[str]=None) -> None:
-        super().__init__(identifier=identifier)
+        super().__init__(identifier=identifier, measurements=measurements)
         self.waveform = waveform
         self._duration = duration
 
-    def build_waveform(self, parameters: Dict[str, Parameter], measurement_mapping, channel_mapping):
+    def build_waveform(self, parameters: Dict[str, Parameter], channel_mapping):
         return self.waveform
 
     def requires_stop(self,
@@ -142,16 +142,19 @@ class AtomicPulseTemplateTests(unittest.TestCase):
 
     def test_build_sequence(self) -> None:
         measurement_windows = [('M', 0, 5)]
-        single_wf = DummyWaveform(duration=6, defined_channels={'A'}, measurement_windows=measurement_windows)
+        single_wf = DummyWaveform(duration=6, defined_channels={'A'})
         wf = MultiChannelWaveform([single_wf])
 
         sequencer = DummySequencer()
         block = DummyInstructionBlock()
 
-        template = AtomicPulseTemplateStub(waveform=wf)
-        template.build_sequence(sequencer, {}, {}, measurement_mapping={}, channel_mapping={}, instruction_block=block)
-        self.assertEqual(len(block.instructions), 1)
-        self.assertIsInstance(block.instructions[0], EXECInstruction)
-        self.assertEqual(block.instructions[0].waveform.defined_channels, {'A'})
-        self.assertEqual(list(block.instructions[0].waveform.get_measurement_windows()), [('M', 0, 5)])
+        template = AtomicPulseTemplateStub(waveform=wf, measurements=measurement_windows)
+        template.build_sequence(sequencer, {}, {}, measurement_mapping={'M': 'N'}, channel_mapping={}, instruction_block=block)
+        self.assertEqual(len(block.instructions), 2)
 
+        meas, exec = block.instructions
+        self.assertIsInstance(meas, MEASInstruction)
+        self.assertEqual(meas.measurements, [('N', 0, 5)])
+
+        self.assertIsInstance(exec, EXECInstruction)
+        self.assertEqual(exec.waveform.defined_channels, {'A'})

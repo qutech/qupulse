@@ -1,12 +1,13 @@
 import typing
 import abc
 import inspect
+import numbers
 
 import numpy
 
 __all__ = ["MeasurementWindow", "ChannelID", "HashableNumpyArray"]
 
-MeasurementWindow = typing.Tuple[str, float, float]
+MeasurementWindow = typing.Tuple[str, numbers.Real, numbers.Real]
 ChannelID = typing.Union[str, int]
 
 
