@@ -128,11 +128,11 @@ function add_meas_and_mask(qubitIndex, measIndex, hwChannel, auxFlag1, secondQub
 		maskName = sprintf('%s_%i_Meas_%i_Mask_%i', name, qubitIndex, measIndex, 1);
 	end
 	
-	plsdata.awg.hardwareSetup.set_measurement(measName, py.qctoolkit.hardware.setup.MeasurementMask(plsdata.daq.inst, maskName));
+	plsdata.awg.hardwareSetup.set_measurement(measName, py.qctoolkit.hardware.setup.MeasurementMask(plsdata.daq.inst, maskName), ~isempty(secondQubitIndex));
 	plsdata.daq.inst.register_mask_for_channel(maskName, uint64(hwChannel));
 	
 	if ~isempty(secondQubitIndex)
-		plsdata.awg.hardwareSetup.set_measurement(measName, py.qctoolkit.hardware.setup.MeasurementMask(plsdata.daq.inst, maskName2));
+		plsdata.awg.hardwareSetup.set_measurement(measName, py.qctoolkit.hardware.setup.MeasurementMask(plsdata.daq.inst, maskName2), true);
 		plsdata.daq.inst.register_mask_for_channel(maskName2, uint64(secondHwChannel));
 	end
 end

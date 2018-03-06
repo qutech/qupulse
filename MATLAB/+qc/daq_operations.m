@@ -59,7 +59,8 @@ function [output, bool, msg] = daq_operations(ctrl, varargin)
 		output = util.py.py2mat(py.getattr(daq, '_registered_programs'));
 	
 	% --- remove ------------------------------------------------------------
-	elseif strcmp(ctrl, 'remove') % output is operations		
+	elseif strcmp(ctrl, 'remove') % output is operations	
+		% Should not call this usually. Call qc.awg_program('remove') instead.
 		smdata.inst(instIndex).data.virtual_channel = struct( ...
 			'operations', {{}} ...
 			);
