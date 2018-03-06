@@ -3,6 +3,7 @@ represents the n-times repetition of another PulseTemplate."""
 
 from typing import Dict, List, Set, Optional, Union, Any, Iterable, Tuple
 from numbers import Real
+from warnings import warn
 
 import numpy as np
 
@@ -17,6 +18,7 @@ from qctoolkit.pulses.sequencing import Sequencer
 from qctoolkit.pulses.instructions import InstructionBlock, InstructionPointer, Waveform
 from qctoolkit.pulses.parameters import Parameter, ParameterConstrainer, ParameterNotProvidedException
 from qctoolkit.pulses.conditions import Condition
+from qctoolkit.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
 
 
 __all__ = ["RepetitionPulseTemplate", "ParameterNotIntegerException"]
@@ -69,7 +71,7 @@ class RepetitionWaveform(Waveform):
                                   repetition_count=self._repetition_count)
 
 
-class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer):
+class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, MeasurementDefiner):
     """Repeat a PulseTemplate a constant number of times.
 
     The equivalent to a simple for-loop in common programming languages in qctoolkit's pulse
@@ -80,7 +82,10 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer):
                  body: PulseTemplate,
                  repetition_count: Union[int, str, ExpressionScalar],
                  identifier: Optional[str]=None,
-                 parameter_constraints: Optional[List]=None) -> None:
+                 *args,
+                 parameter_constraints: Optional[List]=None,
+                 measurements: Optional[List[MeasurementDeclaration]]=None
+                 ) -> None:
         """Create a new RepetitionPulseTemplate instance.
 
         Args:
@@ -89,8 +94,14 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer):
                 constant integer value or as a parameter declaration.
             identifier (str): A unique identifier for use in serialization. (optional)
         """
+        if len(args) == 1 and parameter_constraints is None:
+            warn('You used parameter_constraints as a positional argument. It will be keyword only in a future version.', DeprecationWarning)
+        elif args:
+            TypeError('RepetitionPulseTemplate expects 3 positional arguments, got ' + str(3 + len(args)))
+
         LoopPulseTemplate.__init__(self, identifier=identifier, body=body)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
+        MeasurementDefiner.__init__(self, measurements=measurements)
 
         repetition_count = ExpressionScalar.make(repetition_count)
 
@@ -121,7 +132,7 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer):
 
     @property
     def measurement_names(self) -> Set[str]:
-        return self.body.measurement_names
+        return self.body.measurement_names | MeasurementDefiner.measurement_names.fget(self)
 
     @property
     def duration(self) -> ExpressionScalar:
@@ -131,8 +142,8 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer):
                        sequencer: Sequencer,
                        parameters: Dict[str, Parameter],
                        conditions: Dict[str, Condition],
-                       measurement_mapping: Dict[str, str],
-                       channel_mapping: Dict[ChannelID, ChannelID],
+                       measurement_mapping: Dict[str, Optional[str]],
+                       channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                        instruction_block: InstructionBlock) -> None:
         self.validate_parameter_constraints(parameters=parameters)
 
@@ -143,7 +154,9 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer):
             real_parameters = {v: parameters[v].get_value() for v in self._repetition_count.variables}
         except KeyError:
             raise ParameterNotProvidedException(next(v for v in self.repetition_count.variables if v not in parameters))
-
+        self.insert_measurement_instruction(instruction_block,
+                                            parameters=parameters,
+                                            measurement_mapping=measurement_mapping)
         instruction_block.add_instruction_repj(self.get_repetition_count_value(real_parameters), body_block)
         sequencer.push(self.body, parameters=parameters, conditions=conditions,
                        window_mapping=measurement_mapping, channel_mapping=channel_mapping, target_block=body_block)

@@ -1,8 +1,10 @@
 import unittest
 
 from qctoolkit.pulses.parameters import ParameterConstraint, ParameterConstraintViolation,\
-    ParameterNotProvidedException, ParameterConstrainer
+    ParameterNotProvidedException, ParameterConstrainer, ConstantParameter
 from qctoolkit.pulses.measurement import MeasurementDefiner
+
+from qctoolkit.pulses.instructions import InstructionBlock, MEASInstruction
 
 
 class MeasurementDefinerTest(unittest.TestCase):
@@ -53,6 +55,20 @@ class MeasurementDefinerTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             pulse.get_measurement_windows(measurement_mapping=measurement_mapping,
                                           parameters=dict(length=10, a=3, d=-1))
+
+    def test_insert_measurement_instruction(self):
+        pulse = self.to_test_constructor(measurements=[('mw', 'a', 'd')])
+        parameters = {'a': ConstantParameter(0), 'd': ConstantParameter(0.9)}
+        measurement_mapping = {'mw': 'as'}
+
+        block = InstructionBlock()
+        pulse.insert_measurement_instruction(instruction_block=block,
+                                             parameters=parameters,
+                                             measurement_mapping=measurement_mapping)
+
+        expected_block = [MEASInstruction([('as', 0, 0.9)])]
+        self.assertEqual(block.instructions, expected_block)
+
 
     def test_none_mappings(self):
         pulse = self.to_test_constructor(measurements=[('mw', 'a', 'd'), ('asd', 0, 1.)])

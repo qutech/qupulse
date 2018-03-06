@@ -114,7 +114,10 @@ class RepetitionPulseTemplateTest(unittest.TestCase):
         body = DummyPulseTemplate(measurement_names=measurement_names)
         t = RepetitionPulseTemplate(body, 9)
 
-        self.assertIs(measurement_names, t.measurement_names)
+        self.assertEqual(measurement_names, t.measurement_names)
+
+        t = RepetitionPulseTemplate(body, 9, measurements=[('N', 1, 2)])
+        self.assertEqual({'M', 'N'}, t.measurement_names)
 
     def test_duration(self):
         body = DummyPulseTemplate(duration='foo')

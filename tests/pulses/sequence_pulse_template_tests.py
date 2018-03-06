@@ -9,6 +9,7 @@ from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
 from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate, SequenceWaveform
 from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingException, UnnecessaryMappingException, MissingParameterDeclarationException, MappingPulseTemplate
 from qctoolkit.pulses.parameters import ParameterNotProvidedException, ConstantParameter, ParameterConstraint, ParameterConstraintViolation
+from qctoolkit.pulses.instructions import MEASInstruction
 
 from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyPulseTemplate,\
     DummyNoValueParameter, DummyWaveform
@@ -220,9 +221,16 @@ class SequencePulseTemplateSequencingTests(SequencePulseTemplateTest):
 
         sequencer = DummySequencer()
         block = DummyInstructionBlock()
-        seq = SequencePulseTemplate(sub1, (sub2, {'foo': 'foo'}), external_parameters={'foo'})
-        seq.build_sequence(sequencer, parameters, {}, {}, {}, block)
+        seq = SequencePulseTemplate(sub1, (sub2, {'foo': 'foo'}), external_parameters={'foo'},
+                                    measurements=[('a', 0, 1)])
+        seq.build_sequence(sequencer, parameters,
+                           conditions=dict(),
+                           channel_mapping={'default': 'a'},
+                           measurement_mapping={'a': 'b'},
+                           instruction_block=block)
         self.assertEqual(2, len(sequencer.sequencing_stacks[block]))
+
+        self.assertEqual(block.instructions[0], MEASInstruction([('b', 0, 1)]))
 
         sequencer = DummySequencer()
         block = DummyInstructionBlock()
@@ -324,6 +332,13 @@ class SequencePulseTemplateTestProperties(SequencePulseTemplateTest):
             SequencePulseTemplate(DummyPulseTemplate(is_interruptable=False),
                                   DummyPulseTemplate(is_interruptable=False)).is_interruptable)
 
+    def test_measurement_names(self):
+        d1 = DummyPulseTemplate(measurement_names={'a'})
+        d2 = DummyPulseTemplate(measurement_names={'b'})
+
+        spt = SequencePulseTemplate(d1, d2, measurements=[('c', 0, 1)])
+
+        self.assertEqual(spt.measurement_names, {'a', 'b', 'c'})
 
 
 class PulseTemplateConcatenationTest(unittest.TestCase):
