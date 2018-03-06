@@ -14,5 +14,17 @@ function program = program_to_struct(program_name, pulse_template, parameters_an
 		'channel_mapping',      channel_mapping, ...
 		'window_mapping',       window_mapping ...
 		);
+		
+	for name = fieldnames(program.channel_mapping)'
+		if strcmp(class(program.channel_mapping.(name{1})), 'py.NoneType')
+			program.channel_mapping.(name{1}) = py.None;
+		end
+	end
+	
+	for name = fieldnames(program.window_mapping)'
+		if strcmp(class(program.window_mapping.(name{1})), 'py.NoneType')
+			program.window_mapping.(name{1}) = py.None;
+		end
+	end
 	
 	

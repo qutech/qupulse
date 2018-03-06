@@ -83,34 +83,39 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 		[~, bool, msg] = qc.awg_program('present', qc.change_field(a, 'verbosity', 0));
 		
 		if bool
+			bool = false;				
+			
 			if isfield(plsdata.awg.registeredPrograms, a.program_name)
-				plsdata.awg.registeredPrograms.(a.program_name) = [];
+				plsdata.awg.registeredPrograms = rmfield(plsdata.awg.registeredPrograms, a.program_name);
 			end
-				
-			registered_programs = py.getattr(hws, '_registered_programs');
-			registered_programs.pop(a.program_name);
-			qc.daq_operations('remove', 'program_name', a.program_name);
 			
-			bool = true;
+			try
+				hws.remove_program(a.program_name);
+				bool = true;
+			catch err
+				warning('The following error was encountered when running hardware_setup.remove_program.\nTrying to recover by deleting operations.\n%s', err.getReport());
+				qc.daq_operations('remove', 'program_name', a.program_name, 'verbosity', 10);
+			end
+			
 			msg = sprintf('Program ''%s'' removed', a.program_name);
-			
-			warning('Use hws.delete_program when it is implemented');
 		end
 		
 	% --- clear all ---------------------------------------------------------
 	elseif strcmp(ctrl, 'clear all')
 		plsdata.awg.registeredPrograms = struct();
-		py.setattr(hws, '_registered_programs', py.dict);
+		program_names = fieldnames(util.py.py2mat(py.getattr(hws, '_registered_programs')));
+		
 		bool = true;
-		[~, bool, ~] = qc.daq_operations('clear all', 'verbosity', 0);
+		for program_name = program_names.'
+			[~, boolNew] = qc.awg_program('remove', program_name{1}, 'verbosity', 10);
+			bool = bool & boolNew;
+		end
 		
 		if bool
 			msg = 'All programs cleared';
 		else
 			msg = 'Error when trying to clear all progams';
 		end
-		
-		warning('Use hws.delete_program when it is implemented');
 	% --- present -----------------------------------------------------------
 	elseif strcmp(ctrl, 'present') % returns true if program is present
 		bool = py.list(hws.registered_programs.keys()).count(a.program_name) ~= 0;
