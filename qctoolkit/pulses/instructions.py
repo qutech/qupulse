@@ -22,7 +22,7 @@ from weakref import WeakValueDictionary
 
 import numpy
 
-from qctoolkit.utils.types import ChannelID, MeasurementWindow
+from qctoolkit.utils.types import ChannelID, MeasurementWindow, TimeType
 from qctoolkit.comparable import Comparable
 
 __all__ = ["Waveform", "Trigger",
@@ -38,8 +38,9 @@ class Waveform(Comparable, metaclass=ABCMeta):
 
     __sampled_cache = WeakValueDictionary()
 
-    @abstractproperty
-    def duration(self) -> float:
+    @property
+    @abstractmethod
+    def duration(self) -> TimeType:
         """The duration of the waveform in time units."""
 
     @abstractmethod

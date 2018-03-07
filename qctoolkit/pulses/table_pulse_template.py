@@ -15,7 +15,7 @@ import warnings
 import numpy as np
 import sympy
 
-from qctoolkit.utils.types import MeasurementWindow, ChannelID
+from qctoolkit.utils.types import ChannelID, TimeType, time_from_float
 from qctoolkit.serialization import Serializer
 from qctoolkit.pulses.parameters import Parameter, \
     ParameterNotProvidedException, ParameterConstraint, ParameterConstrainer
@@ -99,8 +99,8 @@ class TableWaveform(Waveform):
         return self._channel_id, self._table
 
     @property
-    def duration(self) -> float:
-        return self._table[-1].t
+    def duration(self) -> TimeType:
+        return time_from_float(self._table[-1].t)
 
     def unsafe_sample(self,
                       channel: ChannelID,

@@ -15,7 +15,7 @@ import numpy as np
 from qctoolkit.expressions import ExpressionScalar
 from qctoolkit.serialization import Serializer
 
-from qctoolkit.utils.types import MeasurementWindow, ChannelID
+from qctoolkit.utils.types import ChannelID, TimeType, time_from_float
 from qctoolkit.pulses.conditions import Condition
 from qctoolkit.pulses.parameters import Parameter, ParameterConstrainer, ParameterConstraint
 from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration
@@ -167,7 +167,7 @@ class FunctionWaveform(Waveform):
             raise ValueError('FunctionWaveforms may not depend on anything but "t"')
 
         self._expression = expression
-        self._duration = duration
+        self._duration = time_from_float(duration)
         self._channel_id = channel
 
     @property
@@ -179,7 +179,7 @@ class FunctionWaveform(Waveform):
         return self._channel_id, self._expression, self._duration
 
     @property
-    def duration(self) -> float:
+    def duration(self) -> TimeType:
         return self._duration
 
     def unsafe_sample(self,

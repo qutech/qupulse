@@ -16,7 +16,7 @@ import numpy
 
 from qctoolkit.serialization import Serializer
 
-from qctoolkit.utils.types import MeasurementWindow, ChannelID
+from qctoolkit.utils.types import ChannelID, TimeType
 from qctoolkit.pulses.instructions import Waveform
 from qctoolkit.pulses.pulse_template import PulseTemplate, AtomicPulseTemplate
 from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingException, MappingPulseTemplate,\
@@ -99,7 +99,7 @@ class MultiChannelWaveform(Waveform):
             self.__defined_channels |= waveform.defined_channels
 
     @property
-    def duration(self) -> float:
+    def duration(self) -> TimeType:
         return self._sub_waveforms[0].duration
 
     def __getitem__(self, key: ChannelID) -> Waveform:
