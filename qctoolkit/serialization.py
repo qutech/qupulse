@@ -222,36 +222,26 @@ class CachingBackend(StorageBackend):
 class DictBackend(StorageBackend):
     """Adds naive memory caching functionality to another StorageBackend.
 
-    CachingBackend relies on another StorageBackend to provide real data IO functionality which
-    it extends by caching already opened files in memory for faster subsequent access.
-
-    Note that it does not flush the cache at any time and may thus not be suitable for long-time
-    usage as it may consume increasing amounts of memory.
+    DictBackend uses a dictionary to store the data for convenience serialization.
     """
 
     def __init__(self) -> None:
-        """Create a new CachingBackend.
-
-        Args:
-            backend (StorageBackend): A StorageBackend that provides data
-                IO functionality.
-        """
-        self.__cache = {}
+        self._cache = {}
 
     def put(self, identifier: str, data: str, overwrite: bool=False) -> None:
-        if identifier in self.__cache and not overwrite:
+        if identifier in self._cache and not overwrite:
             raise FileExistsError(identifier)
-        self.__cache[identifier] = data
+        self._cache[identifier] = data
 
     def get(self, identifier: str) -> str:
-        return self.__cache[identifier]
+        return self._cache[identifier]
 
     def exists(self, identifier: str) -> bool:
-        return identifier in self.__cache
+        return identifier in self._cache
     
     @property
-    def storage(self):
-        return self.__cache
+    def storage(self) -> Dict[str, str]:
+        return self._cache
 
 
 class Serializable(metaclass=ABCMeta):
