@@ -16,7 +16,8 @@ import zipfile
 import tempfile
 import json
 
-__all__ = ["StorageBackend", "FilesystemBackend", "ZipFileBackend", "CachingBackend", "Serializable", "Serializer", "AnonymousSerializable"]
+__all__ = ["StorageBackend", "FilesystemBackend", "ZipFileBackend", "CachingBackend", "Serializable", "Serializer",
+           "AnonymousSerializable", "DictBackend"]
 
 
 class StorageBackend(metaclass=ABCMeta):
