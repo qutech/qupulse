@@ -229,50 +229,55 @@ class RepetitionPulseTemplateSerializationTests(unittest.TestCase):
         self.serializer = DummySerializer(deserialize_callback=lambda x: x['name'])
         self.body = DummyPulseTemplate()
 
-    def test_get_serialization_data_constant(self) -> None:
+    def test_get_serialization_data_minimal(self) -> None:
         repetition_count = 3
         template = RepetitionPulseTemplate(self.body, repetition_count)
         expected_data = dict(
             body=str(id(self.body)),
             repetition_count=repetition_count,
-            parameter_constraints=[]
         )
         data = template.get_serialization_data(self.serializer)
         self.assertEqual(expected_data, data)
 
-    def test_get_serialization_data_declaration(self) -> None:
-        template = RepetitionPulseTemplate(self.body, 'foo', parameter_constraints=['foo<3'])
+    def test_get_serialization_data_all_features(self) -> None:
+        repetition_count = 'foo'
+        measurements = [('a', 0, 1), ('b', 1, 1)]
+        parameter_constraints = ['foo < 3']
+        template = RepetitionPulseTemplate(self.body, repetition_count,
+                                           measurements=measurements,
+                                           parameter_constraints=parameter_constraints)
         expected_data = dict(
             body=str(id(self.body)),
-            repetition_count='foo',
-            parameter_constraints=[ParameterConstraint('foo<3')]
+            repetition_count=repetition_count,
+            measurements=measurements,
+            parameter_constraints=parameter_constraints
         )
         data = template.get_serialization_data(self.serializer)
         self.assertEqual(expected_data, data)
 
-    def test_deserialize_constant(self) -> None:
+    def test_deserialize_minimal(self) -> None:
         repetition_count = 3
         data = dict(
             repetition_count=repetition_count,
             body=dict(name=str(id(self.body))),
-            identifier='foo',
-            parameter_constraints=['bar<3']
+            identifier='foo'
         )
         # prepare dependencies for deserialization
         self.serializer.subelements[str(id(self.body))] = self.body
         # deserialize
         template = RepetitionPulseTemplate.deserialize(self.serializer, **data)
         # compare!
-        self.assertEqual(self.body, template.body)
+        self.assertIs(self.body, template.body)
         self.assertEqual(repetition_count, template.repetition_count)
-        self.assertEqual([str(c) for c in template.parameter_constraints], ['bar < 3'])
+        #self.assertEqual([str(c) for c in template.parameter_constraints], ['bar < 3'])
 
-    def test_deserialize_declaration(self) -> None:
+    def test_deserialize_all_features(self) -> None:
         data = dict(
             repetition_count='foo',
             body=dict(name=str(id(self.body))),
             identifier='foo',
-            parameter_constraints=['foo<3']
+            parameter_constraints=['foo < 3'],
+            measurements=[('a', 0, 1), ('b', 1, 1)]
         )
         # prepare dependencies for deserialization
         self.serializer.subelements[str(id(self.body))] = self.body
@@ -281,9 +286,10 @@ class RepetitionPulseTemplateSerializationTests(unittest.TestCase):
         template = RepetitionPulseTemplate.deserialize(self.serializer, **data)
 
         # compare!
-        self.assertEqual(self.body, template.body)
+        self.assertIs(self.body, template.body)
         self.assertEqual('foo', template.repetition_count)
         self.assertEqual(template.parameter_constraints, [ParameterConstraint('foo < 3')])
+        self.assertEqual(template.measurement_declarations, data['measurements'])
 
 
 class ParameterNotIntegerExceptionTests(unittest.TestCase):

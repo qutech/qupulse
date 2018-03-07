@@ -5,7 +5,8 @@ from sympy import sympify
 from qctoolkit.expressions import Expression
 from qctoolkit.pulses.loop_pulse_template import ForLoopPulseTemplate, WhileLoopPulseTemplate,\
     ConditionMissingException, ParametrizedRange, LoopIndexNotUsedException, LoopPulseTemplate
-from qctoolkit.pulses.parameters import ConstantParameter, InvalidParameterNameException
+from qctoolkit.pulses.parameters import ConstantParameter, InvalidParameterNameException, ParameterConstraintViolation
+from qctoolkit.pulses.instructions import MEASInstruction
 
 from tests.pulses.sequencing_dummies import DummyCondition, DummyPulseTemplate, DummySequencer, DummyInstructionBlock,\
     DummyParameter
@@ -149,14 +150,25 @@ class ForLoopPulseTemplateTest(unittest.TestCase):
 
     def test_build_sequence(self):
         dt = DummyPulseTemplate(parameter_names={'i'})
-        flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=('a', 'b', 'c'))
+        flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=('a', 'b', 'c'),
+                                   measurements=[('A', 0, 1)], parameter_constraints=['c > 1'])
 
         sequencer = DummySequencer()
         block = DummyInstructionBlock()
+        invalid_parameters = {'a': ConstantParameter(1), 'b': ConstantParameter(4), 'c': ConstantParameter(1)}
         parameters = {'a': ConstantParameter(1), 'b': ConstantParameter(4), 'c': ConstantParameter(2)}
         measurement_mapping = dict(A='B')
         channel_mapping = dict(C='D')
+
+        with self.assertRaises(ParameterConstraintViolation):
+            flt.build_sequence(sequencer, invalid_parameters, dict(), measurement_mapping, channel_mapping, block)
+
+        self.assertEqual(block.instructions, [])
+        self.assertNotIn(block, sequencer.sequencing_stacks)
+
         flt.build_sequence(sequencer, parameters, dict(), measurement_mapping, channel_mapping, block)
+
+        self.assertEqual(block.instructions, [MEASInstruction(measurements=[('B', 0, 1)])])
 
         expected_stack = [(dt, {'i': ConstantParameter(3)}, dict(), measurement_mapping, channel_mapping),
                           (dt, {'i': ConstantParameter(1)}, dict(), measurement_mapping, channel_mapping)]
@@ -174,7 +186,7 @@ class ForLoopPulseTemplateTest(unittest.TestCase):
         parameters['A'] = DummyParameter(requires_stop=True)
         self.assertTrue(flt.requires_stop(parameters, dict()))
 
-    def test_get_serialization_data(self):
+    def test_get_serialization_data_minimal(self):
 
         dt = DummyPulseTemplate(parameter_names={'i'})
         flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=('A', 'B'))
@@ -191,7 +203,29 @@ class ForLoopPulseTemplateTest(unittest.TestCase):
                              loop_index='i')
         self.assertEqual(data, expected_data)
 
-    def test_deserialize(self):
+    def test_get_serialization_data_all_features(self):
+        measurements = [('a', 0, 1), ('b', 1, 1)]
+        parameter_constraints = ['foo < 3']
+
+        dt = DummyPulseTemplate(parameter_names={'i'})
+        flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=('A', 'B'),
+                                   measurements=measurements, parameter_constraints=parameter_constraints)
+
+        def check_dt(to_dictify) -> str:
+            self.assertIs(to_dictify, dt)
+            return 'dt'
+
+        serializer = DummySerializer(serialize_callback=check_dt)
+
+        data = flt.get_serialization_data(serializer)
+        expected_data = dict(body='dt',
+                             loop_range=('A', 'B', 1),
+                             loop_index='i',
+                             measurements=measurements,
+                             parameter_constraints=parameter_constraints)
+        self.assertEqual(data, expected_data)
+
+    def test_deserialize_minimal(self):
         body_str = 'dt'
         dt = DummyPulseTemplate(parameter_names={'i'})
 
@@ -212,6 +246,35 @@ class ForLoopPulseTemplateTest(unittest.TestCase):
         self.assertEqual(flt.body, dt)
         self.assertEqual(flt.loop_index, 'i')
         self.assertEqual(flt.loop_range.to_tuple(), ('A', 'B', 1))
+
+    def test_deserialize_all_features(self):
+        body_str = 'dt'
+        dt = DummyPulseTemplate(parameter_names={'i'})
+
+        measurements = [('a', 0, 1), ('b', 1, 1)]
+        parameter_constraints = ['foo < 3']
+
+        def make_dt(ident: str):
+            self.assertEqual(body_str, ident)
+            return ident
+
+        data = dict(body=body_str,
+                    loop_range=('A', 'B', 1),
+                    loop_index='i',
+                    identifier='meh',
+                    measurements=measurements,
+                    parameter_constraints=parameter_constraints)
+
+        serializer = DummySerializer(deserialize_callback=make_dt)
+        serializer.subelements['dt'] = dt
+
+        flt = ForLoopPulseTemplate.deserialize(serializer, **data)
+        self.assertEqual(flt.identifier, 'meh')
+        self.assertIs(flt.body, dt)
+        self.assertEqual(flt.loop_index, 'i')
+        self.assertEqual(flt.loop_range.to_tuple(), ('A', 'B', 1))
+        self.assertEqual(flt.measurement_declarations, measurements)
+        self.assertEqual([str(c) for c in flt.parameter_constraints], parameter_constraints)
 
 
 

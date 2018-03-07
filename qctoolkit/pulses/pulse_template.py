@@ -13,7 +13,7 @@ from numbers import Real
 
 from qctoolkit.utils.types import ChannelID, DocStringABCMeta
 from qctoolkit.serialization import Serializable
-from qctoolkit.expressions import Expression
+from qctoolkit.expressions import ExpressionScalar
 
 from qctoolkit.pulses.conditions import Condition
 from qctoolkit.pulses.parameters import Parameter
@@ -60,7 +60,7 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
 
     @property
     @abstractmethod
-    def duration(self) -> Expression:
+    def duration(self) -> ExpressionScalar:
         """An expression for the duration of this PulseTemplate."""
 
     @property
