@@ -7,7 +7,7 @@ from tempfile import TemporaryDirectory
 from typing import Optional, Dict, Any
 
 from qctoolkit.serialization import FilesystemBackend, Serializer, CachingBackend, Serializable, ExtendedJSONEncoder,\
-    ZipFileBackend, AnonymousSerializable
+    ZipFileBackend, AnonymousSerializable, DictBackend
 from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
 from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
 from qctoolkit.expressions import Expression
@@ -279,6 +279,34 @@ class CachingBackendTests(unittest.TestCase):
         name = 'test_get_not_existing'
         with self.assertRaises(FileNotFoundError):
             self.caching_backend.get(name)
+
+
+class DictBackendTests(unittest.TestCase):
+    def setUp(self):
+        self.backend =DictBackend()
+
+    def test_put(self):
+        self.backend.put('a', 'data')
+
+        self.assertEqual(self.backend.storage, {'a': 'data'})
+
+        with self.assertRaises(FileExistsError):
+            self.backend.put('a', 'data2')
+
+    def test_get(self):
+        self.backend.put('a', 'data')
+        self.backend.put('b', 'data2')
+
+        self.assertEqual(self.backend.get('a'), 'data')
+        self.assertEqual(self.backend.get('b'), 'data2')
+
+    def test_exists(self):
+        self.backend.put('a', 'data')
+        self.backend.put('b', 'data2')
+
+        self.assertTrue(self.backend.exists('a'))
+        self.assertTrue(self.backend.exists('b'))
+        self.assertFalse(self.backend.exists('c'))
 
 
 class SerializerTests(unittest.TestCase):

@@ -1,0 +1,26 @@
+function instantiated_pulse = instantiate_pulse(pulse, varargin)
+	% Plug in parameters
+	
+	if qc.is_instantiated_pulse(pulse)
+		instantiated_pulse = pulse;
+
+	else				
+		default_args = struct(...
+			'parameters', py.None, ...
+			'channel_mapping', py.None, ...
+			'window_mapping' , py.None ...
+			);
+		
+		args = util.parse_varargin(varargin, default_args);
+		
+		sequencer = py.qctoolkit.pulses.Sequencer();
+		
+		kwargs = pyargs( ...
+      'parameters' ,     args.parameters, ...
+			'channel_mapping', args.channel_mapping, ...
+			'window_mapping' , args.window_mapping ...
+			);
+		
+		sequencer.push(pulse, kwargs);
+		instantiated_pulse = sequencer.build();
+	end

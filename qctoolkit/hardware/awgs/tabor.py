@@ -128,7 +128,7 @@ class TaborProgram:
                     voltage_offset[channel],
                     resolution=14)
             else:
-                return np.zeros(len(time), dtype=np.uint16)
+                return np.full_like(time, 8192, dtype=np.uint16)
 
         def get_marker_data(waveform: MultiChannelWaveform, time):
             marker_data = np.zeros(len(time), dtype=np.uint16)

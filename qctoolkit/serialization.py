@@ -16,7 +16,8 @@ import zipfile
 import tempfile
 import json
 
-__all__ = ["StorageBackend", "FilesystemBackend", "ZipFileBackend", "CachingBackend", "Serializable", "Serializer", "AnonymousSerializable"]
+__all__ = ["StorageBackend", "FilesystemBackend", "ZipFileBackend", "CachingBackend", "Serializable", "Serializer",
+           "AnonymousSerializable", "DictBackend"]
 
 
 class StorageBackend(metaclass=ABCMeta):
@@ -217,6 +218,31 @@ class CachingBackend(StorageBackend):
 
     def exists(self, identifier: str) -> bool:
         return self.__backend.exists(identifier)
+
+
+class DictBackend(StorageBackend):
+    """Adds naive memory caching functionality to another StorageBackend.
+
+    DictBackend uses a dictionary to store the data for convenience serialization.
+    """
+
+    def __init__(self) -> None:
+        self._cache = {}
+
+    def put(self, identifier: str, data: str, overwrite: bool=False) -> None:
+        if identifier in self._cache and not overwrite:
+            raise FileExistsError(identifier)
+        self._cache[identifier] = data
+
+    def get(self, identifier: str) -> str:
+        return self._cache[identifier]
+
+    def exists(self, identifier: str) -> bool:
+        return identifier in self._cache
+    
+    @property
+    def storage(self) -> Dict[str, str]:
+        return self._cache
 
 
 class Serializable(metaclass=ABCMeta):
