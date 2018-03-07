@@ -2,7 +2,7 @@
 another PulseTemplate based on a condition."""
 
 
-from typing import Dict, Set, Optional, Any, Union, Tuple, Generator
+from typing import Dict, Set, Optional, Any, Union, Tuple, Generator, Sequence
 
 import sympy
 
@@ -10,12 +10,13 @@ from qctoolkit.serialization import Serializer
 
 from qctoolkit.expressions import ExpressionScalar
 from qctoolkit.utils import checked_int_cast
-from qctoolkit.pulses.parameters import Parameter, ConstantParameter, InvalidParameterNameException
+from qctoolkit.pulses.parameters import Parameter, ConstantParameter, InvalidParameterNameException, ParameterConstrainer
 from qctoolkit.pulses.pulse_template import PulseTemplate, ChannelID
 from qctoolkit.pulses.conditions import Condition, ConditionMissingException
 from qctoolkit.pulses.instructions import InstructionBlock
 from qctoolkit.pulses.sequencing import Sequencer
 from qctoolkit.pulses.sequence_pulse_template import SequenceWaveform as ForLoopWaveform
+from qctoolkit.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
 
 __all__ = ['ForLoopPulseTemplate', 'LoopPulseTemplate', 'LoopIndexNotUsedException']
 
@@ -91,7 +92,7 @@ class ParametrizedRange:
         return set(self.start.variables) | set(self.stop.variables) | set(self.step.variables)
 
 
-class ForLoopPulseTemplate(LoopPulseTemplate):
+class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConstrainer):
     """This pulse template allows looping through an parametrized integer range and provides the loop index as a
     parameter to the body. If you do not need the index in the pulse template, consider using
     :class:`~qctoolkit.pulses.repetition_pulse_template.RepetitionPulseTemplate`"""
@@ -104,7 +105,10 @@ class ForLoopPulseTemplate(LoopPulseTemplate):
                                    Tuple[Any, Any],
                                    Tuple[Any, Any, Any],
                                    ParametrizedRange],
-                 identifier: Optional[str]=None):
+                 identifier: Optional[str]=None,
+                 *,
+                 measurements: Optional[Sequence[MeasurementDeclaration]]=None,
+                 parameter_constraints: Optional[Sequence]=None):
         """
         Args:
             body: The loop body. It is expected to have `loop_index` as an parameter
@@ -112,7 +116,9 @@ class ForLoopPulseTemplate(LoopPulseTemplate):
             loop_range: Range to loop through
             identifier: Used for serialization
         """
-        super().__init__(body=body, identifier=identifier)
+        LoopPulseTemplate.__init__(self, body=body, identifier=identifier)
+        MeasurementDefiner.__init__(self, measurements=measurements)
+        ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 
         if isinstance(loop_range, ParametrizedRange):
             self._loop_range = loop_range
@@ -141,6 +147,10 @@ class ForLoopPulseTemplate(LoopPulseTemplate):
     @property
     def loop_range(self) -> ParametrizedRange:
         return self._loop_range
+
+    @property
+    def measurement_names(self) -> Set[str]:
+        return LoopPulseTemplate.measurement_names.fget(self) | MeasurementDefiner.measurement_names.fget(self)
 
     @property
     def duration(self) -> ExpressionScalar:
@@ -190,6 +200,12 @@ class ForLoopPulseTemplate(LoopPulseTemplate):
                        measurement_mapping: Dict[str, str],
                        channel_mapping: Dict[ChannelID, ChannelID],
                        instruction_block: InstructionBlock) -> None:
+        self.validate_parameter_constraints(parameters=parameters)
+
+        self.insert_measurement_instruction(instruction_block=instruction_block,
+                                            parameters=parameters,
+                                            measurement_mapping=measurement_mapping)
+
         for local_parameters in self._body_parameter_generator(parameters, forward=False):
             sequencer.push(self.body,
                            parameters=local_parameters,

@@ -5,7 +5,8 @@ from sympy import sympify
 from qctoolkit.expressions import Expression
 from qctoolkit.pulses.loop_pulse_template import ForLoopPulseTemplate, WhileLoopPulseTemplate,\
     ConditionMissingException, ParametrizedRange, LoopIndexNotUsedException, LoopPulseTemplate
-from qctoolkit.pulses.parameters import ConstantParameter, InvalidParameterNameException
+from qctoolkit.pulses.parameters import ConstantParameter, InvalidParameterNameException, ParameterConstraintViolation
+from qctoolkit.pulses.instructions import MEASInstruction
 
 from tests.pulses.sequencing_dummies import DummyCondition, DummyPulseTemplate, DummySequencer, DummyInstructionBlock,\
     DummyParameter
@@ -149,14 +150,25 @@ class ForLoopPulseTemplateTest(unittest.TestCase):
 
     def test_build_sequence(self):
         dt = DummyPulseTemplate(parameter_names={'i'})
-        flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=('a', 'b', 'c'))
+        flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=('a', 'b', 'c'),
+                                   measurements=[('A', 0, 1)], parameter_constraints=['c > 1'])
 
         sequencer = DummySequencer()
         block = DummyInstructionBlock()
+        invalid_parameters = {'a': ConstantParameter(1), 'b': ConstantParameter(4), 'c': ConstantParameter(1)}
         parameters = {'a': ConstantParameter(1), 'b': ConstantParameter(4), 'c': ConstantParameter(2)}
         measurement_mapping = dict(A='B')
         channel_mapping = dict(C='D')
+
+        with self.assertRaises(ParameterConstraintViolation):
+            flt.build_sequence(sequencer, invalid_parameters, dict(), measurement_mapping, channel_mapping, block)
+
+        self.assertEqual(block.instructions, [])
+        self.assertNotIn(block, sequencer.sequencing_stacks)
+
         flt.build_sequence(sequencer, parameters, dict(), measurement_mapping, channel_mapping, block)
+
+        self.assertEqual(block.instructions, [MEASInstruction(measurements=[('B', 0, 1)])])
 
         expected_stack = [(dt, {'i': ConstantParameter(3)}, dict(), measurement_mapping, channel_mapping),
                           (dt, {'i': ConstantParameter(1)}, dict(), measurement_mapping, channel_mapping)]
