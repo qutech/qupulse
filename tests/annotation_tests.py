@@ -7,18 +7,63 @@ import unittest
 
 src_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'qctoolkit')
 
-ignored_functions = ["__init__", "__new__", "__str__", "__repr__", "__hash__", "__len__", "__eq__"]
+ignored_functions = ["__init__", "__new__", "__str__", "__repr__", "__hash__", "__len__", "__eq__", "__iter__"]
 
 
 def assert_function_annotations(test_case: unittest.TestCase, func: ast.FunctionDef, name: str):
     if func.name in ignored_functions:
         return
 
+    if any('abstract' in decorator.id for decorator in func.decorator_list if isinstance(decorator, ast.Name)):
+        return
+
     name = name + '.' + func.name
 
-    for statement in func.body:
-        if isinstance(statement, ast.Return):
-            test_case.assertIsNotNone(func.returns, "Missing return annotation in function {}".format(name))
+    def find_return_statement(body):
+        for statement in body:
+            if isinstance(statement, ast.Return):
+                yield statement
+            elif isinstance(statement, ast.If):
+                yield from find_return_statement(statement.body)
+                yield from find_return_statement(statement.orelse)
+            elif isinstance(statement, (ast.For, ast.ExceptHandler, ast.With, ast.While)):
+                yield from find_return_statement(statement.body)
+            elif isinstance(statement, ast.Try):
+                yield from find_return_statement(ast.iter_child_nodes(statement))
+            elif isinstance(statement, ast.Expr) and isinstance(statement.value, (ast.Yield, ast.YieldFrom)):
+                yield statement.value
+
+    def find_uncached_raise(body, catched=list()):
+        for statement in body:
+            if isinstance(statement, ast.If):
+                yield from find_uncached_raise(statement.body, catched)
+                yield from find_uncached_raise(statement.orelse, catched)
+            elif isinstance(statement, (ast.For, ast.ExceptHandler, ast.With, ast.While)):
+                yield from find_uncached_raise(statement.body, catched)
+            elif isinstance(statement, ast.Try):
+                yield find_uncached_raise(statement.body, catched + [handler.type.id for handler in statement.handlers])
+                yield from find_uncached_raise(statement.handlers, catched)
+                yield from find_uncached_raise(statement.orelse, catched)
+                yield from find_uncached_raise(statement.finalbody, catched)
+            elif isinstance(statement, ast.Raise):
+                if isinstance(statement.exc, ast.Call) and statement.exc.func.id in catched:
+                    continue
+                else:
+                    yield statement
+
+    function_returns = any(find_return_statement(func.body))
+
+    if function_returns:
+        test_case.assertIsNotNone(func.returns, "Missing return annotation in function {}".format(name))
+    else:
+        if func.returns is None:
+            return
+        elif isinstance(func.returns, ast.NameConstant):
+            return
+        else:
+            if any(find_uncached_raise(func.body)):
+                return
+            raise AssertionError("Return annotation set but no return statement in function {}".format(name))
 
 
 def assert_class_annotations(test_case: unittest.TestCase, cls: ast.ClassDef, name: str):
