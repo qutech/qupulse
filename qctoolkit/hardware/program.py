@@ -79,7 +79,10 @@ class Loop(Comparable, Node):
     def duration(self) -> TimeType:
         if self._cached_duration is None:
             if self.is_leaf():
-                self._cached_duration = self.repetition_count*self.waveform.duration
+                if self.waveform:
+                    self._cached_duration = self.repetition_count*self.waveform.duration
+                else:
+                    self._cached_duration = 0
             else:
                 self._cached_duration = self.repetition_count*sum(child.duration for child in self)
         return self._cached_duration
