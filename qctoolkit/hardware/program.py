@@ -3,10 +3,11 @@ from typing import Union, Dict, Set, Iterable, FrozenSet, Tuple, cast, List, Opt
 from collections import defaultdict
 from copy import deepcopy
 from enum import Enum
+from fractions import Fraction
 
 import numpy as np
 
-from qctoolkit.utils.types import ChannelID
+from qctoolkit.utils.types import ChannelID, TimeType
 from qctoolkit.pulses.instructions import AbstractInstructionBlock, EXECInstruction, REPJInstruction, GOTOInstruction,\
     STOPInstruction, CHANInstruction, Waveform, MEASInstruction, Instruction
 from qctoolkit.comparable import Comparable
@@ -18,9 +19,6 @@ from qctoolkit.pulses.sequence_pulse_template import SequenceWaveform
 from qctoolkit.pulses.repetition_pulse_template import RepetitionWaveform
 
 __all__ = ['Loop', 'MultiChannelProgram', 'make_compatible']
-
-
-TimeType = float
 
 
 class Loop(Comparable, Node):
@@ -58,7 +56,7 @@ class Loop(Comparable, Node):
         if self.is_leaf():
             measurements = measurements.copy()
         else:
-            body_duration = self.duration
+            body_duration = float(self.duration)
             measurements = [(mw_name, begin+body_duration, length)
                             for mw_name, begin, length in measurements]
         if self._measurements is None:
@@ -82,7 +80,7 @@ class Loop(Comparable, Node):
                 if self.waveform:
                     self._cached_duration = self.repetition_count*self.waveform.duration
                 else:
-                    self._cached_duration = 0
+                    self._cached_duration = TimeType(0)
             else:
                 self._cached_duration = self.repetition_count*sum(child.duration for child in self)
         return self._cached_duration
@@ -158,20 +156,20 @@ class Loop(Comparable, Node):
                 temp_meas_windows[mw_name].append((begin, length))
 
             for mw_name, begin_length_list in temp_meas_windows.items():
-                temp_meas_windows[mw_name] = [np.asarray(begin_length_list)]
+                temp_meas_windows[mw_name] = [np.asarray(begin_length_list, dtype=float)]
 
         # calculate duration together with meas windows in the same iteration
         if self.is_leaf():
-            body_duration = self.waveform.duration
+            body_duration = float(self.waveform.duration)
         else:
             offset = TimeType(0)
             for child in self:
                 for mw_name, begins_length_array in child._get_measurement_windows().items():
-                    begins_length_array[:, 0] += offset
+                    begins_length_array[:, 0] += float(offset)
                     temp_meas_windows[mw_name].append(begins_length_array)
                 offset += child.duration
 
-            body_duration = offset
+            body_duration = float(offset)
 
         # repeat and add repetition based offset
         for mw_name, begin_length_list in temp_meas_windows.items():
@@ -394,18 +392,18 @@ class _CompatibilityLevel(Enum):
     incompatible = 2
 
 
-def _is_compatible(program: Loop, min_len: int, quantum: int, sample_rate: float) -> _CompatibilityLevel:
-    try:
-        program_duration = checked_int_cast(program.duration * sample_rate)
-    except ValueError:
+def _is_compatible(program: Loop, min_len: int, quantum: int, sample_rate: TimeType) -> _CompatibilityLevel:
+    program_duration_in_samples = program.duration * sample_rate
+
+    if program_duration_in_samples.denominator != 1:
         return _CompatibilityLevel.incompatible
 
-    if program_duration < min_len or program_duration % quantum > 0:
+    if program_duration_in_samples < min_len or program_duration_in_samples % quantum > 0:
         return _CompatibilityLevel.incompatible
 
     if program.is_leaf():
-        waveform_duration = program.waveform.duration * sample_rate
-        if not is_integer(waveform_duration / quantum) or waveform_duration < min_len:
+        waveform_duration_in_samples = program.waveform.duration * sample_rate
+        if waveform_duration_in_samples < min_len or (waveform_duration_in_samples / quantum).denominator != 1:
             return _CompatibilityLevel.action_required
         else:
             return _CompatibilityLevel.compatible
@@ -417,7 +415,7 @@ def _is_compatible(program: Loop, min_len: int, quantum: int, sample_rate: float
             return _CompatibilityLevel.action_required
 
 
-def _make_compatible(program: Loop, min_len: int, quantum: int, sample_rate: float) -> None:
+def _make_compatible(program: Loop, min_len: int, quantum: int, sample_rate: Fraction) -> None:
 
     if program.is_leaf():
         program.waveform = to_waveform(program.copy_tree_structure())
@@ -444,7 +442,7 @@ def _make_compatible(program: Loop, min_len: int, quantum: int, sample_rate: flo
                     _make_compatible(sub_program, min_len, quantum, sample_rate)
 
 
-def make_compatible(program: Loop, minimal_waveform_length: int, waveform_quantum: int, sample_rate: float):
+def make_compatible(program: Loop, minimal_waveform_length: int, waveform_quantum: int, sample_rate: Fraction):
     comp_level = _is_compatible(program,
                                 min_len=minimal_waveform_length,
                                 quantum=waveform_quantum,
