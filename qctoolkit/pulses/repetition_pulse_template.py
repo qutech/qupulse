@@ -1,7 +1,7 @@
 """This module defines RepetitionPulseTemplate, a higher-order hierarchical pulse template that
 represents the n-times repetition of another PulseTemplate."""
 
-from typing import Dict, List, Set, Optional, Union, Any, Iterable, Tuple
+from typing import Dict, List, Set, Optional, Union, Any, Iterable, Tuple, cast
 from numbers import Real
 from warnings import warn
 
@@ -57,14 +57,6 @@ class RepetitionWaveform(Waveform):
     @property
     def duration(self) -> float:
         return self._body.duration*self._repetition_count
-
-    def get_measurement_windows(self) -> Iterable[MeasurementWindow]:
-        def get_measurement_window_generator(body: Waveform, repetition_count: int):
-            body_windows = list(body.get_measurement_windows())
-            for i in range(repetition_count):
-                for (name, begin, length) in body_windows:
-                    yield (name, begin+i*body.duration, length)
-        return get_measurement_window_generator(self._body, self._repetition_count)
 
     def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> 'RepetitionWaveform':
         return RepetitionWaveform(body=self._body.unsafe_get_subset_for_channels(channels),
@@ -167,21 +159,28 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
         return any(parameters[v].requires_stop for v in self.repetition_count.variables)
 
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
-        return dict(
+        data = dict(
             body=serializer.dictify(self.body),
-            repetition_count=self.repetition_count.original_expression,
-            parameter_constraints=self.parameter_constraints
+            repetition_count=self.repetition_count.original_expression
         )
+        if self.parameter_constraints:
+            data['parameter_constraints'] = [str(c) for c in self.parameter_constraints]
+        if self.measurement_declarations:
+            data['measurements'] = self.measurement_declarations
+        return data
 
     @staticmethod
     def deserialize(serializer: Serializer,
                     repetition_count: Union[str, int],
                     body: Dict[str, Any],
-                    parameter_constraints: List[str],
-                    identifier: Optional[str]=None) -> 'RepetitionPulseTemplate':
-        body = serializer.deserialize(body)
+                    parameter_constraints: Optional[List[str]]=None,
+                    identifier: Optional[str]=None,
+                    measurements: Optional[List[MeasurementDeclaration]]=None) -> 'RepetitionPulseTemplate':
+        body = cast(PulseTemplate, serializer.deserialize(body))
         return RepetitionPulseTemplate(body, repetition_count,
-                                       identifier=identifier, parameter_constraints=parameter_constraints)
+                                       identifier=identifier,
+                                       parameter_constraints=parameter_constraints,
+                                       measurements=measurements)
 
 
 class ParameterNotIntegerException(Exception):

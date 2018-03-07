@@ -186,7 +186,7 @@ class ForLoopPulseTemplateTest(unittest.TestCase):
         parameters['A'] = DummyParameter(requires_stop=True)
         self.assertTrue(flt.requires_stop(parameters, dict()))
 
-    def test_get_serialization_data(self):
+    def test_get_serialization_data_minimal(self):
 
         dt = DummyPulseTemplate(parameter_names={'i'})
         flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=('A', 'B'))
@@ -203,7 +203,29 @@ class ForLoopPulseTemplateTest(unittest.TestCase):
                              loop_index='i')
         self.assertEqual(data, expected_data)
 
-    def test_deserialize(self):
+    def test_get_serialization_data_all_features(self):
+        measurements = [('a', 0, 1), ('b', 1, 1)]
+        parameter_constraints = ['foo < 3']
+
+        dt = DummyPulseTemplate(parameter_names={'i'})
+        flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=('A', 'B'),
+                                   measurements=measurements, parameter_constraints=parameter_constraints)
+
+        def check_dt(to_dictify) -> str:
+            self.assertIs(to_dictify, dt)
+            return 'dt'
+
+        serializer = DummySerializer(serialize_callback=check_dt)
+
+        data = flt.get_serialization_data(serializer)
+        expected_data = dict(body='dt',
+                             loop_range=('A', 'B', 1),
+                             loop_index='i',
+                             measurements=measurements,
+                             parameter_constraints=parameter_constraints)
+        self.assertEqual(data, expected_data)
+
+    def test_deserialize_minimal(self):
         body_str = 'dt'
         dt = DummyPulseTemplate(parameter_names={'i'})
 
@@ -224,6 +246,35 @@ class ForLoopPulseTemplateTest(unittest.TestCase):
         self.assertEqual(flt.body, dt)
         self.assertEqual(flt.loop_index, 'i')
         self.assertEqual(flt.loop_range.to_tuple(), ('A', 'B', 1))
+
+    def test_deserialize_all_features(self):
+        body_str = 'dt'
+        dt = DummyPulseTemplate(parameter_names={'i'})
+
+        measurements = [('a', 0, 1), ('b', 1, 1)]
+        parameter_constraints = ['foo < 3']
+
+        def make_dt(ident: str):
+            self.assertEqual(body_str, ident)
+            return ident
+
+        data = dict(body=body_str,
+                    loop_range=('A', 'B', 1),
+                    loop_index='i',
+                    identifier='meh',
+                    measurements=measurements,
+                    parameter_constraints=parameter_constraints)
+
+        serializer = DummySerializer(deserialize_callback=make_dt)
+        serializer.subelements['dt'] = dt
+
+        flt = ForLoopPulseTemplate.deserialize(serializer, **data)
+        self.assertEqual(flt.identifier, 'meh')
+        self.assertIs(flt.body, dt)
+        self.assertEqual(flt.loop_index, 'i')
+        self.assertEqual(flt.loop_range.to_tuple(), ('A', 'B', 1))
+        self.assertEqual(flt.measurement_declarations, measurements)
+        self.assertEqual([str(c) for c in flt.parameter_constraints], parameter_constraints)
 
 
 

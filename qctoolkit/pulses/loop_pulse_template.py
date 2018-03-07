@@ -2,7 +2,7 @@
 another PulseTemplate based on a condition."""
 
 
-from typing import Dict, Set, Optional, Any, Union, Tuple, Generator, Sequence
+from typing import Dict, Set, Optional, Any, Union, Tuple, Generator, Sequence, cast
 
 import sympy
 
@@ -227,8 +227,12 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
         data = dict(
             body=serializer.dictify(self.body),
             loop_range=self._loop_range.to_tuple(),
-            loop_index=self._loop_index
+            loop_index=self._loop_index,
         )
+        if self.parameter_constraints:
+            data['parameter_constraints'] = [str(c) for c in self.parameter_constraints]
+        if self.measurement_declarations:
+            data['measurements'] = self.measurement_declarations
         return data
 
     @staticmethod
@@ -236,13 +240,17 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
                     body: Dict[str, Any],
                     loop_range: Tuple,
                     loop_index: str,
-                    identifier: Optional[str]=None) -> 'ForLoopPulseTemplate':
-        body = serializer.deserialize(body)
+                    identifier: Optional[str]=None,
+                    measurements: Optional=None,
+                    parameter_constraints: Optional=None) -> 'ForLoopPulseTemplate':
+        body = cast(PulseTemplate, serializer.deserialize(body))
         return ForLoopPulseTemplate(body=body,
                                     identifier=identifier,
                                     loop_range=loop_range,
-                                    loop_index=loop_index)
-
+                                    loop_index=loop_index,
+                                    measurements=measurements,
+                                    parameter_constraints=parameter_constraints
+                                    )
 
 
 class WhileLoopPulseTemplate(LoopPulseTemplate):
