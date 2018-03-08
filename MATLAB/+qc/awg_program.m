@@ -29,7 +29,7 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 			
 			% Deleting old program should not be necessary. In practice however,
 			% updating an existing program seemed to crash Matlab sometimes.
-			qc.awg_program('remove', qc.change_field(a, 'verbosity', 10));
+			% qc.awg_program('remove', qc.change_field(a, 'verbosity', 10));
 			
 			a.pulse_template = pulse_to_python(a.pulse_template);
 			[a.pulse_template, a.channel_mapping] = add_marker_if_not_empty(a.pulse_template, a.add_marker, a.channel_mapping);
@@ -48,7 +48,7 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 				fprintf('Program ''%s'' is now being uploaded...', a.program_name);
 				tic
 			end
-			hws.register_program(program.program_name, instantiated_pulse, pyargs('update', true));
+			hws.register_program(program.program_name, instantiated_pulse, pyargs('update', py.True));
 			
 			if a.verbosity > 9
 				fprintf('took %.0fs\n', toc);
@@ -78,8 +78,17 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 			msg = sprintf('Program ''%s'' armed', a.program_name);
 		end
 		
+  % --- arm ---------------------------------------------------------------
+	elseif strcmp(ctrl, 'arm global')
+		qc.awg_program('arm', 'program_name', plsdata.awg.armGlobalProgram, 'verbosity', a.verbosity);
+		
 	% --- remove ------------------------------------------------------------
-	elseif strcmp(ctrl, 'remove')
+	elseif strcmp(ctrl, 'remove')		
+		% Arm the idle program so the program to be remove is not active by
+		% any chance (should not be needed - please test more thorougly whether it is needed)
+		plsdata.awg.inst.channel_pair_AB.arm(py.None);
+		plsdata.awg.inst.channel_pair_CD.arm(py.None);
+		
 		[~, bool, msg] = qc.awg_program('present', qc.change_field(a, 'verbosity', 0));
 		
 		if bool
@@ -93,7 +102,7 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 				hws.remove_program(a.program_name);
 				bool = true;
 			catch err
-				warning('The following error was encountered when running hardware_setup.remove_program.\nTrying to recover by deleting operations.\n%s', err.getReport());
+				warning('The following error was encountered when running hardware_setup.remove_program.\nPlease debug AWG commands.\nThis might have to do with removing the current program.\n.Trying to recover by deleting operations.\n%s', err.getReport());
 				qc.daq_operations('remove', 'program_name', a.program_name, 'verbosity', 10);
 			end
 			
@@ -107,7 +116,7 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 		
 		bool = true;
 		for program_name = program_names.'
-			[~, boolNew] = qc.awg_program('remove', program_name{1}, 'verbosity', 10);
+			[~, boolNew] = qc.awg_program('remove', 'program_name', program_name{1}, 'verbosity', 10);
 			bool = bool & boolNew;
 		end
 		

@@ -52,6 +52,9 @@ function scan = conf_seq(varargin)
 		...                                      If there are more entreis than operations, the nth+1 entry is applied to the 1st operation again.
 		'saveloop',             0, ...         % save every nth loop
 		'dnp',                  false, ...     % enable DNP
+		'arm_global',         false, ...     % If true, set the program to be armed via tunedata.global_opts.conf_seq.arm_program_name.
+		...                                    % If you use this, all programs need to be uploaded manually before the scan and need to 
+		...                                    % have the same Alazar configuration.
 		'rf_switches',          true, ...      % turn RF switches on and off automatically using the DecaDAC channels (to be removed)
 		'verbosity',            10 ...         % 0: display nothing, 10: display all except when arming program, 11: display all
 		);
@@ -173,7 +176,11 @@ function scan = conf_seq(varargin)
 	% * Should be the last prefn so no other channels changed when
 	%   measurement starts (really necessary?)
 	scan.loops(1).prefn(end+1).fn = @smaconfigwrap;
-	scan.loops(1).prefn(end).args = {@qc.awg_program, 'arm', qc.change_field(a, 'verbosity', a.verbosity-1)};
+	if ~a.arm_global
+		scan.loops(1).prefn(end).args = {@qc.awg_program, 'arm', qc.change_field(a, 'verbosity', a.verbosity-1)};
+	else
+		scan.loops(1).prefn(end).args = {@qc.awg_program, 'arm global', qc.change_field(a, 'verbosity', a.verbosity-1)};
+	end
 	scan.loops(1).prefn(end+1).fn = @smaconfigwrap;
 	scan.loops(1).prefn(end).args = {@awgctrl, 'run', 1};
 	
