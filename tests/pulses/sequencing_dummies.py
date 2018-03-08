@@ -5,7 +5,7 @@ import copy
 import numpy
 
 """LOCAL IMPORTS"""
-from qctoolkit.utils.types import MeasurementWindow, ChannelID
+from qctoolkit.utils.types import MeasurementWindow, ChannelID, TimeType, time_from_float
 from qctoolkit.serialization import Serializer
 from qctoolkit.pulses.instructions import Waveform, Instruction, CJMPInstruction, GOTOInstruction, REPJInstruction
 from qctoolkit.pulses.sequencing import Sequencer, InstructionBlock, SequencingElement
@@ -134,7 +134,7 @@ class DummyWaveform(Waveform):
 
     def __init__(self, duration: float=0, sample_output: numpy.ndarray=None, defined_channels={'A'}) -> None:
         super().__init__()
-        self.duration_ = duration
+        self.duration_ = time_from_float(duration)
         self.sample_output = sample_output
         self.defined_channels_ = defined_channels
         self.sample_calls = []
@@ -147,7 +147,7 @@ class DummyWaveform(Waveform):
             return id(self)
 
     @property
-    def duration(self) -> float:
+    def duration(self) -> TimeType:
         return self.duration_
 
     @property
