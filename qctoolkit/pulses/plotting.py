@@ -7,7 +7,7 @@ Functions:
     - plot: Plot a pulse using matplotlib.
 """
 
-from typing import Dict, Tuple, Any
+from typing import Dict, Tuple, Any, Generator, Optional
 
 import numpy as np
 
@@ -15,36 +15,45 @@ from qctoolkit.utils.types import ChannelID
 from qctoolkit.pulses.pulse_template import PulseTemplate
 from qctoolkit.pulses.parameters import Parameter
 from qctoolkit.pulses.sequencing import Sequencer
-from qctoolkit.pulses.instructions import EXECInstruction, STOPInstruction, InstructionSequence, \
-    REPJInstruction
+from qctoolkit.pulses.instructions import EXECInstruction, STOPInstruction, AbstractInstructionBlock, \
+    REPJInstruction, MEASInstruction, GOTOInstruction, Waveform, InstructionPointer
 
 
 __all__ = ["render", "plot", "PlottingNotPossibleException"]
 
 
-def render(sequence: InstructionSequence, sample_rate: int=10) -> Tuple[np.ndarray, Dict[ChannelID, np.ndarray]]:
+def iter_waveforms(instruction_block: AbstractInstructionBlock,
+                   expected_return: Optional[InstructionPointer]=None) -> Generator[Waveform, None, None]:
+    for i, instruction in enumerate(instruction_block):
+        if isinstance(instruction, EXECInstruction):
+            yield instruction.waveform
+        elif isinstance(instruction, REPJInstruction):
+            expected_repj_return = InstructionPointer(instruction_block, i+1)
+            repj_instructions = instruction.target.block.instructions[instruction.target.offset:]
+            for _ in range(instruction.count):
+                yield from iter_waveforms(repj_instructions, expected_repj_return)
+        elif isinstance(instruction, MEASInstruction):
+            continue
+        elif isinstance(instruction, GOTOInstruction):
+            if instruction.target != expected_return:
+                raise NotImplementedError("Instruction block contains an unexpected GOTO instruction.")
+            return
+        elif isinstance(instruction, STOPInstruction):
+            raise StopIteration()
+        else:
+            raise NotImplementedError('Rendering cannot handle instructions of type {}.'.format(type(instruction)))
+
+
+def render(sequence: AbstractInstructionBlock, sample_rate: int=10) -> Tuple[np.ndarray, Dict[ChannelID, np.ndarray]]:
     """'Render' an instruction sequence (sample all contained waveforms into an array).
 
     Returns:
         a tuple (times, values) of numpy.ndarrays of similar size. times contains the time value
         of all sample times and values the corresponding sampled value.
     """
-    if not all(isinstance(x, (EXECInstruction, STOPInstruction, REPJInstruction)) for x in sequence):
-        raise NotImplementedError('Can only plot waveforms without branching so far.')
-
-    def get_waveform_generator(instruction_block):
-        for instruction in instruction_block:
-            if isinstance(instruction, EXECInstruction):
-                yield instruction.waveform
-            elif isinstance(instruction, REPJInstruction):
-                for _ in range(instruction.count):
-                    yield from get_waveform_generator(instruction.target.block[instruction.target.offset:])
-            else:
-                return
-
-    waveforms = [wf for wf in get_waveform_generator(sequence)]
+    waveforms = list(iter_waveforms(sequence, ))
     if not waveforms:
-        return [], []
+        return np.empty(0), dict()
 
     total_time = sum(waveform.duration for waveform in waveforms)
 
@@ -52,7 +61,7 @@ def render(sequence: InstructionSequence, sample_rate: int=10) -> Tuple[np.ndarr
 
     # add one sample to see the end of the waveform
     sample_count = total_time * sample_rate + 1
-    times = np.linspace(0, total_time, num=sample_count)
+    times = np.linspace(0, total_time, num=sample_count, dtype=float)
     # move the last sample inside the waveform
     times[-1] = np.nextafter(times[-1], times[-2])
 
