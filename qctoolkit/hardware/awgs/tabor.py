@@ -554,7 +554,7 @@ class PlottableProgram:
                            for waveform in waveforms)))
 
     @classmethod
-    def _reformat_rep_seg_jump(cls, rep_seg_jump_tuple: Tuple[np.ndarray, np.ndarray, np.ndarray]) -> List['PlottableProgram.TableEntry']:
+    def _reformat_rep_seg_jump(cls, rep_seg_jump_tuple: Tuple[np.ndarray, np.ndarray, np.ndarray]) -> List[TableEntry]:
         return list(cls.TableEntry(int(rep), int(seg_no), int(jump))
                     for rep, seg_no, jump in zip(*rep_seg_jump_tuple))
 
@@ -595,7 +595,7 @@ class PlottableProgram:
             for _ in range(repetition):
                 yield from waveform
 
-    def get_as_single_waveform(self, channel: int, max_total_length: int=10**9):
+    def get_as_single_waveform(self, channel: int, max_total_length: int=10**9) -> np.ndarray:
         waveforms = self.get_waveforms(channel)
         repetitions = self.get_repetitions()
         waveform_lengths = np.fromiter((wf.size for wf in waveforms), count=len(waveforms), dtype=np.uint64)
