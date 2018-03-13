@@ -3,20 +3,15 @@ import os
 import json
 import typing
 import importlib.util
-import numpy as np
 import sys
+
+from tests.hardware.tabor_simulator_based_tests import TaborSimulatorManager
+from tests.hardware.dummy_devices import DummyDAC
 
 from qctoolkit.serialization import Serializer, FilesystemBackend
 from qctoolkit.pulses.sequencing import Sequencer
 from qctoolkit.pulses.pulse_template import PulseTemplate
 from qctoolkit.hardware.setup import HardwareSetup, PlaybackChannel, MarkerChannel, MeasurementMask
-try:
-    from qctoolkit.hardware.awgs.tabor import TaborAWGRepresentation, PlottableProgram
-except ImportError:
-    raise unittest.SkipTest('Tabor driver not installed')
-
-from tests.hardware.tabor_simulator_based_tests import TaborSimulatorManager
-from tests.hardware.dummy_devices import DummyDAC
 
 
 def do_not_skip(test_class):
