@@ -10,7 +10,10 @@ from qctoolkit.serialization import Serializer, FilesystemBackend
 from qctoolkit.pulses.sequencing import Sequencer
 from qctoolkit.pulses.pulse_template import PulseTemplate
 from qctoolkit.hardware.setup import HardwareSetup, PlaybackChannel, MarkerChannel, MeasurementMask
-from qctoolkit.hardware.awgs.tabor import TaborChannelPair, TaborAWGRepresentation, PlottableProgram
+try:
+    from qctoolkit.hardware.awgs.tabor import TaborAWGRepresentation, PlottableProgram
+except ImportError:
+    raise unittest.SkipTest('Tabor driver not installed')
 
 from tests.hardware.tabor_simulator_based_tests import TaborSimulatorManager
 from tests.hardware.dummy_devices import DummyDAC
