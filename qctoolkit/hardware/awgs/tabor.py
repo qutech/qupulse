@@ -2,6 +2,7 @@ import fractions
 import sys
 import functools
 import weakref
+import itertools
 from typing import List, Tuple, Set, NamedTuple, Callable, Optional, Any, Sequence, cast, Generator
 from enum import Enum
 from collections import OrderedDict
@@ -519,14 +520,32 @@ class PlottableProgram:
                                            ('element_number', int),
                                            ('jump_flag', int)])
 
-    def __init__(self, waveforms: List[np.ndarray],
-                 sequence_tables: List[Tuple[np.ndarray, np.ndarray, np.ndarray]],
-                 advanced_sequence_table: Tuple[np.ndarray, np.ndarray, np.ndarray]):
+    def __init__(self,
+                 waveforms: Tuple[Tuple[np.ndarray, ...], Tuple[np.ndarray, ...]],
+                 sequence_tables: List[List[Tuple[int, int, int]]],
+                 advanced_sequence_table: List[Tuple[int, int, int]]):
+        waveforms_0, waveforms_1 = waveforms
+        if len(waveforms_0) != len(waveforms_1):
+            raise ValueError('Different number of waveforms on channels')
 
-        self._waveforms = self._reformat_waveforms(waveforms)
-        self._sequence_tables = [PlottableProgram._reformat_rep_seg_jump(sequence_table)
+        for wf_0, wf_1 in zip(waveforms_0, waveforms_1):
+            if len(wf_0) != len(wf_1):
+                raise ValueError('Not all waveforms have the same length')
+
+        self._waveforms = (waveforms_0, waveforms_1)
+        self._sequence_tables = [[self.TableEntry(*sequence_table_entry)
+                                  for sequence_table_entry in sequence_table]
                                  for sequence_table in sequence_tables]
-        self._advanced_sequence_table = PlottableProgram._reformat_rep_seg_jump(advanced_sequence_table)
+        self._advanced_sequence_table = [self.TableEntry(*adv_seq_entry)
+                                         for adv_seq_entry in advanced_sequence_table]
+
+    @classmethod
+    def from_read_data(cls, waveforms: List[np.ndarray],
+                       sequence_tables: List[Tuple[np.ndarray, np.ndarray, np.ndarray]],
+                       advanced_sequence_table: Tuple[np.ndarray, np.ndarray, np.ndarray]) -> 'PlottableProgram':
+        return cls(cls._reformat_waveforms(waveforms),
+                   [cls._reformat_rep_seg_jump(seq_table) for seq_table in sequence_tables],
+                   cls._reformat_rep_seg_jump(advanced_sequence_table))
 
     @staticmethod
     def _reformat_waveforms(waveforms: List[np.ndarray]) -> Tuple[Tuple[np.ndarray], Tuple[np.ndarray]]:
@@ -539,26 +558,61 @@ class PlottableProgram:
         return list(cls.TableEntry(int(rep), int(seg_no), int(jump))
                     for rep, seg_no, jump in zip(*rep_seg_jump_tuple))
 
-    def _get_advanced_sequence_table_without_idle(self) -> List['PlottableProgram.TableEntry']:
-        if self._advanced_sequence_table[0] == (1, 1, 1):
+    def _get_advanced_sequence_table(self, with_first_idle=False, with_last_idles=False) -> List[TableEntry]:
+        if not with_first_idle and self._advanced_sequence_table[0] == (1, 1, 1):
             adv_seq_tab = self._advanced_sequence_table[1:]
         else:
             adv_seq_tab = self._advanced_sequence_table
 
         #  remove idle pulse at end
-        while adv_seq_tab[-1] == (1, 1, 0):
-            adv_seq_tab = adv_seq_tab[:-1]
-        return adv_seq_tab
+        if with_last_idles:
+            return adv_seq_tab
+        else:
+            while adv_seq_tab[-1] == (1, 1, 0):
+                adv_seq_tab = adv_seq_tab[:-1]
+            return adv_seq_tab
 
-    def _iter_segment_table_entry(self) -> Generator[TableEntry, None, None]:
-        for sequence_repeat, sequence_no, _ in self._get_advanced_sequence_table_without_idle():
+    def _iter_segment_table_entry(self,
+                                  with_first_idle=False,
+                                  with_last_idles=False) -> Generator[TableEntry, None, None]:
+        for sequence_repeat, sequence_no, _ in self._get_advanced_sequence_table(with_first_idle, with_last_idles):
             for _ in range(sequence_repeat):
                 yield from self._sequence_tables[sequence_no - 1]
 
-    def __iter__(self) -> Generator[np.ndarray, None, None]:
-        for segment_repeat, segment_no, _ in self._iter_segment_table_entry():
-            for _ in range(segment_repeat):
-                yield self._waveforms[segment_no - 1]
+    def iter_waveforms_and_repetitions(self,
+                                       channel: int,
+                                       with_first_idle=False,
+                                       with_last_idles=False) -> Generator[Tuple[np.ndarray, int], None, None]:
+        ch_waveforms = self._waveforms[channel]
+        for segment_repeat, segment_no, _ in self._iter_segment_table_entry(with_first_idle, with_last_idles):
+            yield ch_waveforms[segment_no - 1], segment_repeat
+
+    def iter_samples(self, channel: int,
+                     with_first_idle=False,
+                     with_last_idles=False) -> Generator[np.uint16, None, None]:
+        for waveform, repetition in self.iter_waveforms_and_repetitions(channel, with_first_idle, with_last_idles):
+            for _ in range(repetition):
+                yield from waveform
+
+    def get_as_single_waveform(self, channel: int, max_total_length: int=10**9):
+        waveforms = self.get_waveforms(channel)
+        repetitions = self.get_repetitions()
+        waveform_lengths = np.fromiter((wf.size for wf in waveforms), count=len(waveforms), dtype=np.uint64)
+
+        total_length = (repetitions*waveform_lengths).sum()
+        if total_length > max_total_length:
+            return None
+
+        result = np.empty(total_length)
+        c_idx = 0
+        for wf, rep in zip(waveforms, repetitions):
+            mem = wf.size*rep
+            target = result[c_idx:c_idx+mem]
+
+            target = target.reshape((rep, wf.size))
+            target[:, :] = wf[np.newaxis, :]
+            c_idx += mem
+        return result
 
     def get_waveforms(self, channel: int) -> List[np.ndarray]:
         return [self._waveforms[channel][segment_no - 1]
@@ -566,7 +620,29 @@ class PlottableProgram:
 
     def get_repetitions(self) -> np.ndarray:
         return np.fromiter((segment_repeat
-                            for segment_repeat, *_ in self._iter_segment_table_entry()), dtype=int)
+                            for segment_repeat, *_ in self._iter_segment_table_entry()), dtype=np.uint32)
+
+    def __eq__(self, other):
+        for ch in (0, 1):
+            for x, y in itertools.zip_longest(self.iter_samples(ch, True, False),
+                                              other.iter_samples(ch, True, False)):
+                if x != y:
+                    return False
+        return True
+
+    def to_builtin(self) -> dict:
+        waveforms = [[wf.tolist() for wf in self._waveforms[0]],
+                     [wf.tolist() for wf in self._waveforms[1]]]
+        return {'waveforms': waveforms,
+                'seq_tables': self._sequence_tables,
+                'adv_seq_table': self._advanced_sequence_table}
+
+    @classmethod
+    def from_builtin(cls, data: dict) -> 'PlottableProgram':
+        waveforms = data['waveforms']
+        waveforms = (tuple(np.array(wf) for wf in waveforms[0]),
+                     tuple(np.array(wf) for wf in waveforms[1]))
+        return cls(waveforms, data['seq_tables'], data['adv_seq_table'])
 
 
 class TaborChannelPair(AWG):
@@ -675,7 +751,9 @@ class TaborChannelPair(AWG):
         return self.device.get_readable_device(simulator=True).read_adv_seq_table()
 
     def read_complete_program(self) -> PlottableProgram:
-        return PlottableProgram(self.read_waveforms(), self.read_sequence_tables(), self.read_advanced_sequencer_table())
+        return PlottableProgram.from_read_data(self.read_waveforms(),
+                                               self.read_sequence_tables(),
+                                               self.read_advanced_sequencer_table())
 
     @with_configuration_guard
     @with_select
