@@ -88,7 +88,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
 
         if isinstance(template, MappingPulseTemplate) and template.identifier is None:
             # avoid nested mappings
-            parameter_mapping = {p: expr.evaluate_symbolic(parameter_mapping)
+            parameter_mapping = {p: Expression(expr.evaluate_symbolic(parameter_mapping))
                                  for p, expr in template.parameter_mapping.items()}
             measurement_mapping = {k: measurement_mapping[v]
                                    for k, v in template.measurement_mapping.items()}
