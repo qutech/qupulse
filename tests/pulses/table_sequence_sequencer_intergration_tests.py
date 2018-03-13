@@ -48,10 +48,11 @@ class TableSequenceSequencerIntegrationTests(unittest.TestCase):
         sequencer.push(seqt, {'foo': foo, 'hugo': bar},
                        window_mapping=dict(bar='my', foo='thy'),
                        channel_mapping={'default': 'A'})
-        instructions = sequencer.build()
+        block = sequencer.build()
+        instructions = block.instructions
         self.assertFalse(sequencer.has_finished())
-        self.assertIsInstance(instructions, AbstractInstructionBlock)
-        self.assertEqual(2, len(instructions.instructions))
+        self.assertIsInstance(block, AbstractInstructionBlock)
+        self.assertEqual(2, len(instructions))
         self.assertEqual(instructions[0], MEASInstruction([('my', 2, 2)]))
         self.assertIsInstance(instructions[1], EXECInstruction)
 
