@@ -9,7 +9,9 @@ class dummy_package:
     pass
 
 class dummy_pytabor(dummy_package):
-    pass
+    @staticmethod
+    def open_session(*args, **kwargs):
+        return None
 
 class dummy_pyvisa(dummy_package):
     class resources(dummy_package):
