@@ -12,6 +12,8 @@ from qctoolkit.serialization import Serializer, FilesystemBackend
 from qctoolkit.pulses.sequencing import Sequencer
 from qctoolkit.pulses.pulse_template import PulseTemplate
 from qctoolkit.hardware.setup import HardwareSetup, PlaybackChannel, MarkerChannel, MeasurementMask
+from qctoolkit.hardware.awgs.tabor import PlottableProgram
+
 
 
 def do_not_skip(test_class):
@@ -192,6 +194,8 @@ class CompleteIntegrationTestHelper(unittest.TestCase):
         self.test_state.read_program()
 
     def test_7_1_verify_program(self):
+        if self.test_state.hardware_setup is None:
+            self.skipTest("No hardware setup")
         if self.test_state.expected_binary_programs is not None:
             self.assertEqual(self.test_state.expected_binary_programs[0], self.test_state.program_AB)
             self.assertEqual(self.test_state.expected_binary_programs[1], self.test_state.program_CD)
