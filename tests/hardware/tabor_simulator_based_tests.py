@@ -2,6 +2,7 @@ import unittest
 import subprocess
 import time
 import platform
+import os
 
 import pytabor
 import numpy as np
@@ -9,57 +10,94 @@ import numpy as np
 from qctoolkit.hardware.awgs.tabor import TaborAWGRepresentation, TaborException, TaborSegment, TaborChannelPair, PlottableProgram
 
 
-@unittest.skipIf(platform.system() != 'Windows', "Simulator currently only available on Windows :(")
-class TaborSimulatorBasedTest(unittest.TestCase):
-    try_connecting_to_existing_simulator = True
-    simulator_executable = 'WX2184C.exe'
+class TaborSimulatorManager:
+    def __init__(self,
+                 simulator_executable='WX2184C.exe',
+                 simulator_path=os.path.realpath(os.path.dirname(__file__))):
+        self.simulator_executable = simulator_executable
+        self.simulator_path = simulator_path
 
-    simulator_process = None
+        self.started_simulator = False
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
+        self.simulator_process = None
         self.instrument = None
 
-    @classmethod
-    def killRunningSimulators(cls):
-        subprocess.run(['Taskkill', '/IM WX2184C.exe'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    def kill_running_simulators(self):
+        command = 'Taskkill', '/IM {simulator_executable}'.format(simulator_executable=self.simulator_executable)
+        try:
+            subprocess.run([command],
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        except FileNotFoundError:
+            pass
 
-    @classmethod
-    def setUpClass(cls):
-        if cls.try_connecting_to_existing_simulator:
+    @property
+    def simulator_full_path(self):
+        return os.path.join(self.simulator_path, self.simulator_executable)
+
+    def start_simulator(self, try_connecting_to_existing_simulator=True, max_wait_time=30):
+        if try_connecting_to_existing_simulator:
             if pytabor.open_session('127.0.0.1') is not None:
                 return
-        cls.killRunningSimulators()
 
-        cls.simulator_process = subprocess.Popen([cls.simulator_executable, '/switch-on', '/gui-in-tray'])
+        if not os.path.isfile(self.simulator_full_path):
+            raise RuntimeError('Cannot locate simulator executable.')
+
+        self.kill_running_simulators()
+
+        self.simulator_process = subprocess.Popen([self.simulator_full_path, '/switch-on', '/gui-in-tray'])
 
         start = time.time()
         while pytabor.open_session('127.0.0.1') is None:
-            if cls.simulator_process.returncode:
-                raise RuntimeError('Simulator exited with return code {}'.format(cls.simulator_process.returncode))
-            if time.time() - start > 20.:
+            if self.simulator_process.returncode:
+                raise RuntimeError('Simulator exited with return code {}'.format(self.simulator_process.returncode))
+            if time.time() - start > max_wait_time:
                 raise RuntimeError('Could not connect to simulator')
             time.sleep(0.1)
 
-    @classmethod
-    def tearDownClass(cls):
-        if cls.simulator_process is not None and not cls.try_connecting_to_existing_simulator:
-            cls.simulator_process.kill()
-
-    def setUp(self):
+    def connect(self):
         self.instrument = TaborAWGRepresentation('127.0.0.1',
                                                  reset=True,
                                                  paranoia_level=2)
 
         if self.instrument.main_instrument.visa_inst is None:
             raise RuntimeError('Could not connect to simulator')
+        return self.instrument
 
-    def tearDown(self):
-        self.instrument.reset()
+    def disconnect(self):
         for device in self.instrument.all_devices:
             device.close()
         self.instrument = None
+
+    def __del__(self):
+        if self.started_simulator and self.simulator_process:
+            self.simulator_process.kill()
+
+
+@unittest.skipIf(platform.system() != 'Windows', "Simulator currently only available on Windows :(")
+class TaborSimulatorBasedTest(unittest.TestCase):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.instrument = None
+
+    @classmethod
+    def setUpClass(cls):
+        cls.simulator_manager = TaborSimulatorManager('WX2184C.exe', os.path.dirname(__file__))
+        try:
+            cls.simulator_manager.start_simulator()
+        except RuntimeError as err:
+            raise unittest.SkipTest(*err.args) from err
+
+    @classmethod
+    def tearDownClass(cls):
+        del cls.simulator_manager
+
+    def setUp(self):
+        self.instrument = self.simulator_manager.connect()
+
+    def tearDown(self):
+        self.instrument.reset()
+        self.simulator_manager.disconnect()
 
 
 class TaborAWGRepresentationTests(TaborSimulatorBasedTest):
