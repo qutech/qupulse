@@ -7,6 +7,7 @@ from qctoolkit.pulses.repetition_pulse_template import RepetitionPulseTemplate,P
 from qctoolkit.pulses.parameters import ParameterNotProvidedException, ParameterConstraintViolation, ConstantParameter, \
     ParameterConstraint
 from qctoolkit.pulses.instructions import REPJInstruction, InstructionPointer
+from qctoolkit.utils.types import time_from_float
 
 from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummySequencer, DummyInstructionBlock, DummyParameter,\
     DummyCondition, DummyWaveform
@@ -32,7 +33,7 @@ class RepetitionWaveformTest(unittest.TestCase):
 
     def test_duration(self):
         wf = RepetitionWaveform(DummyWaveform(duration=2.2), 3)
-        self.assertEqual(wf.duration, 2.2*3)
+        self.assertEqual(wf.duration, time_from_float(2.2)*3)
 
     def test_defined_channels(self):
         body_wf = DummyWaveform(defined_channels={'a'})

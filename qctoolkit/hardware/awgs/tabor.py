@@ -100,7 +100,7 @@ class TaborProgram:
         return self._channels
 
     def sampled_segments(self,
-                         sample_rate: float,
+                         sample_rate: fractions.Fraction,
                          voltage_amplitude: Tuple[float, float],
                          voltage_offset: Tuple[float, float],
                          voltage_transformation: Tuple[Callable, Callable]) -> Tuple[Sequence[TaborSegment],
@@ -698,7 +698,10 @@ class TaborChannelPair(AWG):
 
         # adjust program to fit criteria
         sample_rate = self.device.sample_rate(self._channels[0])
-        make_compatible(program, minimal_waveform_length=192, waveform_quantum=16, sample_rate=sample_rate*1e-9)
+        make_compatible(program,
+                        minimal_waveform_length=192,
+                        waveform_quantum=16,
+                        sample_rate=fractions.Fraction(sample_rate, 10**9))
 
         # helper to restore previous state if upload is impossible
         to_restore = None

@@ -7,7 +7,7 @@ from numbers import Real
 
 from qctoolkit.serialization import Serializer
 
-from qctoolkit.utils.types import MeasurementWindow, ChannelID
+from qctoolkit.utils.types import MeasurementWindow, ChannelID, TimeType
 from qctoolkit.pulses.pulse_template import PulseTemplate
 from qctoolkit.pulses.parameters import Parameter, ParameterConstrainer
 from qctoolkit.pulses.sequencing import InstructionBlock, Sequencer
@@ -74,7 +74,7 @@ class SequenceWaveform(Waveform):
         return self._sequenced_waveforms
 
     @property
-    def duration(self) -> float:
+    def duration(self) -> TimeType:
         return self._duration
 
     def get_measurement_windows(self) -> Iterable[MeasurementWindow]:

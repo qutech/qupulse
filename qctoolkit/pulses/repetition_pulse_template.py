@@ -9,7 +9,7 @@ import numpy as np
 
 from qctoolkit.serialization import Serializer
 
-from qctoolkit.utils.types import MeasurementWindow, ChannelID
+from qctoolkit.utils.types import ChannelID, TimeType
 from qctoolkit.expressions import ExpressionScalar
 from qctoolkit.utils import checked_int_cast
 from qctoolkit.pulses.pulse_template import PulseTemplate
@@ -55,7 +55,7 @@ class RepetitionWaveform(Waveform):
         return self._body.compare_key, self._repetition_count
 
     @property
-    def duration(self) -> float:
+    def duration(self) -> TimeType:
         return self._body.duration*self._repetition_count
 
     def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> 'RepetitionWaveform':

@@ -1,6 +1,7 @@
 import unittest
 import sympy
 
+from qctoolkit.utils.types import TimeType, time_from_float
 from qctoolkit.pulses.function_pulse_template import FunctionPulseTemplate,\
     FunctionWaveform
 from qctoolkit.serialization import Serializer
@@ -196,7 +197,7 @@ class FunctionWaveformTest(unittest.TestCase):
     def test_duration(self) -> None:
         wf = FunctionWaveform(expression=Expression('2*t'), duration=4/5,
                               channel='A')
-        self.assertEqual(4/5, wf.duration)
+        self.assertEqual(time_from_float(4/5), wf.duration)
 
     def test_unsafe_sample(self):
         fw = FunctionWaveform(Expression('sin(2*pi*t) + 3'), 5, channel='A')

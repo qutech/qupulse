@@ -2,6 +2,7 @@ import unittest
 
 import numpy
 
+from qctoolkit.utils.types import time_from_float
 from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingException,\
     MissingParameterDeclarationException
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform, MappingPulseTemplate, ChannelMappingException, AtomicMultiChannelPulseTemplate
@@ -38,7 +39,7 @@ class MultiChannelWaveformTest(unittest.TestCase):
 
         waveform = MultiChannelWaveform([dwf])
         self.assertEqual({'A'}, waveform.defined_channels)
-        self.assertEqual(1.3, waveform.duration)
+        self.assertEqual(time_from_float(1.3), waveform.duration)
 
     def test_init_several_channels(self) -> None:
         dwf_a = DummyWaveform(duration=2.2, defined_channels={'A'})
@@ -47,7 +48,7 @@ class MultiChannelWaveformTest(unittest.TestCase):
 
         waveform = MultiChannelWaveform([dwf_a, dwf_b])
         self.assertEqual({'A', 'B'}, waveform.defined_channels)
-        self.assertEqual(2.2, waveform.duration)
+        self.assertEqual(time_from_float(2.2), waveform.duration)
 
         with self.assertRaises(ValueError):
             MultiChannelWaveform([dwf_a, dwf_c])

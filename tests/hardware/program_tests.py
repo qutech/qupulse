@@ -6,6 +6,7 @@ import numpy as np
 
 from string import Formatter, ascii_uppercase
 
+from qctoolkit.utils.types import TimeType, time_from_float
 from qctoolkit.hardware.program import Loop, MultiChannelProgram, make_compatible, _make_compatible, _is_compatible, _CompatibilityLevel, RepetitionWaveform, SequenceWaveform
 from qctoolkit.pulses.instructions import REPJInstruction, InstructionBlock, ImmutableInstructionBlock
 from tests.pulses.sequencing_dummies import DummyWaveform
@@ -14,7 +15,7 @@ from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 
 class WaveformGenerator:
     def __init__(self, num_channels,
-                 duration_generator=itertools.repeat(None),
+                 duration_generator=itertools.repeat(1),
                  waveform_data_generator=itertools.repeat(None), channel_names=ascii_uppercase):
         self.num_channels = num_channels
         self.duration_generator = duration_generator
@@ -328,7 +329,7 @@ LOOP 1 times:
       ->EXEC {} 11 times"""
 
         def generate_waveform(channel):
-            return DummyWaveform(sample_output=None, duration=None, defined_channels={channel})
+            return DummyWaveform(sample_output=None, duration=1., defined_channels={channel})
 
         def generate_multi_channel_waveform():
             return MultiChannelWaveform([generate_waveform('A'), generate_waveform('B')])
@@ -418,32 +419,32 @@ class ProgramWaveformCompatibilityTest(unittest.TestCase):
     def test_is_compatible_incompatible(self):
         wf = DummyWaveform(duration=1.1)
 
-        self.assertEqual(_is_compatible(Loop(waveform=wf), min_len=1, quantum=1, sample_rate=1.),
+        self.assertEqual(_is_compatible(Loop(waveform=wf), min_len=1, quantum=1, sample_rate=time_from_float(1.)),
                          _CompatibilityLevel.incompatible)
 
-        self.assertEqual(_is_compatible(Loop(waveform=wf, repetition_count=10), min_len=20, quantum=1, sample_rate=1.),
+        self.assertEqual(_is_compatible(Loop(waveform=wf, repetition_count=10), min_len=20, quantum=1, sample_rate=time_from_float(1.)),
                          _CompatibilityLevel.incompatible)
 
-        self.assertEqual(_is_compatible(Loop(waveform=wf, repetition_count=10), min_len=10, quantum=3, sample_rate=1.),
+        self.assertEqual(_is_compatible(Loop(waveform=wf, repetition_count=10), min_len=10, quantum=3, sample_rate=time_from_float(1.)),
                          _CompatibilityLevel.incompatible)
 
     def test_is_compatible_leaf(self):
         self.assertEqual(_is_compatible(Loop(waveform=DummyWaveform(duration=1.1), repetition_count=10),
-                                        min_len=11, quantum=1, sample_rate=1.),
+                                        min_len=11, quantum=1, sample_rate=time_from_float(1.)),
                          _CompatibilityLevel.action_required)
 
         self.assertEqual(_is_compatible(Loop(waveform=DummyWaveform(duration=1.1), repetition_count=10),
-                                        min_len=11, quantum=1, sample_rate=10.),
+                                        min_len=11, quantum=1, sample_rate=time_from_float(10.)),
                          _CompatibilityLevel.compatible)
 
     def test_is_compatible_node(self):
         program = Loop(children=[Loop(waveform=DummyWaveform(duration=1.5), repetition_count=2),
                                  Loop(waveform=DummyWaveform(duration=2.0))])
 
-        self.assertEqual(_is_compatible(program, min_len=1, quantum=1, sample_rate=2.),
+        self.assertEqual(_is_compatible(program, min_len=1, quantum=1, sample_rate=time_from_float(2.)),
                          _CompatibilityLevel.compatible)
 
-        self.assertEqual(_is_compatible(program, min_len=1, quantum=1, sample_rate=1.),
+        self.assertEqual(_is_compatible(program, min_len=1, quantum=1, sample_rate=time_from_float(1.)),
                          _CompatibilityLevel.action_required)
 
     def test_make_compatible(self):
@@ -453,7 +454,7 @@ class ProgramWaveformCompatibilityTest(unittest.TestCase):
         program = Loop(children=[Loop(waveform=wf1, repetition_count=2),
                                  Loop(waveform=wf2)])
 
-        _make_compatible(program, min_len=1, quantum=1, sample_rate=1.)
+        _make_compatible(program, min_len=1, quantum=1, sample_rate=time_from_float(1.))
 
         self.assertIsNone(program.waveform)
         self.assertEqual(len(program), 2)
@@ -464,7 +465,7 @@ class ProgramWaveformCompatibilityTest(unittest.TestCase):
 
         program = Loop(children=[Loop(waveform=wf1, repetition_count=2),
                                  Loop(waveform=wf2)], repetition_count=2)
-        _make_compatible(program, min_len=5, quantum=1, sample_rate=1.)
+        _make_compatible(program, min_len=5, quantum=1, sample_rate=time_from_float(1.))
 
         self.assertIsInstance(program.waveform, SequenceWaveform)
         self.assertEqual(program.children, [])

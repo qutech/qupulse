@@ -3,6 +3,7 @@ import copy
 
 import numpy as np
 
+from qctoolkit.utils.types import time_from_float
 from qctoolkit.pulses.pulse_template import DoubleParameterNameException
 from qctoolkit.expressions import Expression
 from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
@@ -69,8 +70,8 @@ class SequenceWaveformTest(unittest.TestCase):
         self.assertEqual(sub_wf.compare_key[0].defined_channels, subset)
         self.assertEqual(sub_wf.compare_key[1].defined_channels, subset)
 
-        self.assertEqual(sub_wf.compare_key[0].duration, 2.2)
-        self.assertEqual(sub_wf.compare_key[1].duration, 3.3)
+        self.assertEqual(sub_wf.compare_key[0].duration, time_from_float(2.2))
+        self.assertEqual(sub_wf.compare_key[1].duration, time_from_float(3.3))
 
 
 class SequencePulseTemplateTest(unittest.TestCase):
