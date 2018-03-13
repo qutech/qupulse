@@ -7,5 +7,6 @@ __all__ = [
     'pyflakes_syntax_tests',
     'serialization_dummies',
     'serialization_tests',
-    'coverage_tests'
+    'coverage_tests',
+    'backward_compatibility'
 ]
