@@ -591,6 +591,7 @@ class PlottableProgram:
                      with_first_idle=False,
                      with_last_idles=False) -> Generator[np.uint16, None, None]:
         for waveform, repetition in self.iter_waveforms_and_repetitions(channel, with_first_idle, with_last_idles):
+            waveform = list(waveform)
             for _ in range(repetition):
                 yield from waveform
 
