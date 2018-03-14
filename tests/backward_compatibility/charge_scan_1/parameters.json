@@ -1,0 +1,21 @@
+{
+    "charge_scan___N_x": 100.0,
+    "charge_scan___N_y": 100.0,
+    "charge_scan___W_fast": 1.0,
+    "charge_scan___W_slow": 0.0,
+    "charge_scan___X_fast": 0.0,
+    "charge_scan___X_slow": 1.0,
+    "charge_scan___Y_fast": 0.0,
+    "charge_scan___Y_slow": 0.0,
+    "charge_scan___Z_fast": 0.0,
+    "charge_scan___Z_slow": 0.0,
+    "charge_scan___meas_time_multiplier": 10,
+    "charge_scan___rep_count": 3,
+    "charge_scan___sample_rate": 2.0,
+    "charge_scan___t_meas": 192.0,
+    "charge_scan___t_wait": 0.0,
+    "charge_scan___x_start": -0.008,
+    "charge_scan___x_stop": 0.008,
+    "charge_scan___y_start": -0.008,
+    "charge_scan___y_stop": 0.008
+}

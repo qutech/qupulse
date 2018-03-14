@@ -30,6 +30,9 @@ class VoltageToBinaryTests(unittest.TestCase):
 
         self.assertTrue(np.all(expected_data == received_data))
 
+    def test_zero_level_14bit(self):
+        zero_level = voltage_to_uint16(np.zeros(1), 0.5, 0., 14)
+        self.assertEqual(zero_level, 8192)
 
 def validate_result(tabor_segments, result, fill_value=None):
     pos = 0
