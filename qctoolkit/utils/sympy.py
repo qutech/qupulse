@@ -109,3 +109,26 @@ def substitute_with_eval(expression: sympy.Expr,
     string_representation = sympy.srepr(expression)
     return eval(string_representation, sympy.__dict__, {'Symbol': substitutions.__getitem__,
                                                         'Mul': numpy_compatible_mul})
+
+
+def _recursive_substitution(expression: sympy.Expr,
+                           substitutions: Dict[sympy.Symbol, sympy.Expr]) -> sympy.Expr:
+    if not expression.free_symbols:
+        return expression
+    elif expression.func is sympy.Symbol:
+        return substitutions.get(expression, expression)
+
+    elif expression.func is sympy.Mul:
+        func = numpy_compatible_mul
+    else:
+        func = expression.func
+    substitutions = {s: substitutions.get(s, s) for s in expression.free_symbols}
+    return func(*(_recursive_substitution(arg, substitutions) for arg in expression.args))
+
+
+def recursive_substitution(expression: sympy.Expr,
+                           substitutions: Dict[str, Union[sympy.Expr, numpy.ndarray, str]]) -> sympy.Expr:
+    substitutions = {sympy.Symbol(k): sympify(v) for k, v in substitutions.items()}
+    for s in expression.free_symbols:
+        substitutions.setdefault(s, s)
+    return _recursive_substitution(expression, substitutions)
