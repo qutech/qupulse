@@ -33,6 +33,21 @@ class IndexedBasedFinder:
         return True
 
 
+class Len(sympy.Function):
+    nargs = 1
+
+    @classmethod
+    def eval(cls, arg):
+        if hasattr(arg, '__len__'):
+            return sympy.Integer(len(arg))
+
+    is_Integer = True
+
+
+sympify_namespace = {'len': Len,
+                     'Len': Len}
+
+
 def numpy_compatible_mul(*args) -> Union[sympy.Mul, sympy.Array]:
     if any(isinstance(a, sympy.NDimArray) for a in args):
         result = 1
@@ -66,12 +81,14 @@ def sympify(expr: Union[str, Number, sympy.Expr, numpy.str_], **kwargs) -> sympy
         # It seems to ignore the locals argument
         expr = str(expr)
     try:
-        return sympy.sympify(expr, **kwargs)
+        return sympy.sympify(expr, **kwargs, locals=sympify_namespace)
     except TypeError as err:
         if err.args[0] == "'Symbol' object is not subscriptable":
 
             indexed_base = get_subscripted_symbols(expr)
-            return sympy.sympify(expr, **kwargs, locals={k: sympy.IndexedBase(k) for k in indexed_base})
+            return sympy.sympify(expr, **kwargs, locals={**{k: sympy.IndexedBase(k)
+                                                            for k in indexed_base},
+                                                         **sympify_namespace})
 
         else:
             raise
