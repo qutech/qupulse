@@ -11,7 +11,7 @@ import sympy
 import numpy
 
 from qctoolkit.serialization import AnonymousSerializable
-from qctoolkit.utils.sympy import sympify, substitute_with_eval, to_numpy
+from qctoolkit.utils.sympy import sympify, substitute_with_eval, to_numpy, recursive_substitution, evaluate_lambdified
 
 __all__ = ["Expression", "ExpressionVariableMissingException", "ExpressionScalar", "ExpressionVector"]
 
@@ -26,13 +26,6 @@ class _ExpressionMeta(type):
             return cls.make(*args, **kwargs)
         else:
             return type.__call__(cls, *args, **kwargs)
-
-
-def ceiling(input_value: Any) -> Any:
-    if isinstance(input_value, numpy.ndarray):
-        return numpy.ceil(input_value).astype(numpy.int64)
-    else:
-        return sympy.ceiling(input_value)
 
 
 class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
@@ -62,16 +55,12 @@ class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
         else:
             raise NonNumericEvaluation(self, result, call_arguments)
 
-    @property
-    def expression_lambda(self) -> Callable:
-        if self._expression_lambda is None:
-            self._expression_lambda = sympy.lambdify(self.variables, self.underlying_expression,
-                                                     [{'ceiling': ceiling}, 'numpy'])
-        return self._expression_lambda
-
     def evaluate_numeric(self, **kwargs) -> Union[Number, numpy.ndarray]:
         parsed_kwargs = self._parse_evaluate_numeric_arguments(kwargs)
-        result = self.expression_lambda(**parsed_kwargs)
+
+        result, self._expression_lambda = evaluate_lambdified(self.underlying_expression, self.variables,
+                                                              parsed_kwargs, lambdified=self._expression_lambda)
+
         return self._parse_evaluate_numeric_result(result, kwargs)
 
     def evaluate_symbolic(self, substitutions: Dict[Any, Any]) -> 'Expression':
@@ -152,6 +141,17 @@ class ExpressionVector(Expression):
     @property
     def variables(self) -> Sequence[str]:
         return self._variables
+
+    def evaluate_numeric(self, **kwargs) -> Union[numpy.ndarray, Number]:
+        parsed_kwargs = self._parse_evaluate_numeric_arguments(kwargs)
+
+        result, self._expression_lambda = evaluate_lambdified(self.underlying_expression, self.variables,
+                                                              parsed_kwargs, lambdified=self._expression_lambda)
+
+        if isinstance(result, (list, tuple)):
+            result = numpy.array(result)
+
+        return self._parse_evaluate_numeric_result(numpy.array(result), kwargs)
 
     def get_serialization_data(self) -> Sequence[str]:
         return numpy.vectorize(str)(self._expression_vector).tolist()

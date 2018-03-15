@@ -1,5 +1,9 @@
-from typing import Union, Dict, Any
+from typing import Union, Dict, Tuple, Any, Sequence, Optional
 from numbers import Number
+from types import CodeType
+
+import builtins
+import math
 
 import sympy
 import numpy
@@ -57,6 +61,13 @@ def numpy_compatible_mul(*args) -> Union[sympy.Mul, sympy.Array]:
         return sympy.Array(result)
     else:
         return sympy.Mul(*args)
+
+
+def numpy_compatible_ceiling(input_value: Any) -> Any:
+    if isinstance(input_value, numpy.ndarray):
+        return numpy.ceil(input_value).astype(numpy.int64)
+    else:
+        return sympy.ceiling(input_value)
 
 
 def to_numpy(sympy_array: sympy.NDimArray) -> numpy.ndarray:
@@ -133,3 +144,36 @@ def recursive_substitution(expression: sympy.Expr,
     for s in expression.free_symbols:
         substitutions.setdefault(s, s)
     return _recursive_substitution(expression, substitutions)
+
+
+_base_environment = {'builtins': builtins, '__builtins__':  builtins}
+_math_environment = {**_base_environment, **math.__dict__}
+_numpy_environment = {**_base_environment, **numpy.__dict__}
+_sympy_environment = {**_base_environment, **sympy.__dict__}
+
+
+def evaluate_compiled(expression: sympy.Expr,
+             parameters: Dict[str, Union[numpy.ndarray, Number]],
+             compiled: CodeType=None, mode=None) -> Tuple[any, CodeType]:
+    if compiled is None:
+        compiled = compile(sympy.printing.lambdarepr.lambdarepr(expression),
+                           '<string>', 'eval')
+
+    if mode == 'numeric' or mode is None:
+        result = eval(compiled, parameters, _numpy_environment)
+    elif mode == 'exact':
+        result = eval(compiled, parameters, _sympy_environment)
+    else:
+        raise ValueError("Unknown mode: '{}'".format(mode))
+
+    return result, compiled
+
+
+def evaluate_lambdified(expression: Union[sympy.Expr, numpy.ndarray],
+                        variables: Sequence[str],
+                        parameters: Dict[str, Union[numpy.ndarray, Number]],
+                        lambdified) -> Tuple[Any, Any]:
+    lambdified = lambdified or sympy.lambdify(variables, expression,
+                                              [{'ceiling': numpy_compatible_ceiling}, 'numpy'])
+
+    return lambdified(**parameters), lambdified
