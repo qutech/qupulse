@@ -109,9 +109,8 @@ def sympify(expr: Union[str, Number, sympy.Expr, numpy.str_], **kwargs) -> sympy
 def substitute_with_eval(expression: sympy.Expr,
                          substitutions: Dict[str, Union[sympy.Expr, numpy.ndarray, str]]) -> sympy.Expr:
     """Substitutes only sympy.Symbols. Workaround for numpy like array behaviour. ~Factor 3 slower compared to subs"""
-    for k, v in substitutions.items():
-        if not isinstance(v, sympy.Expr):
-            substitutions[k] = sympify(v)
+    substitutions = {k: v if isinstance(v, sympy.Expr) else sympify(v)
+                     for k, v in substitutions.items()}
 
     for symbol in expression.free_symbols:
         symbol_name = str(symbol)
