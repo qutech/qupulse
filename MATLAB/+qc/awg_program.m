@@ -80,7 +80,28 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 		
   % --- arm ---------------------------------------------------------------
 	elseif strcmp(ctrl, 'arm global')
-		qc.awg_program('arm', 'program_name', plsdata.awg.armGlobalProgram, 'verbosity', a.verbosity);
+		if ischar(plsdata.awg.armGlobalProgram)
+			globalProgram = plsdata.awg.armGlobalProgram;
+		elseif iscell(plsdata.awg.armGlobalProgram)
+			globalProgram = plsdata.awg.armGlobalProgram{1};
+			plsdata.awg.armGlobalProgram = circshift(plsdata.awg.armGlobalProgram, -1);
+		else
+			error('plsdata.awg.armGlobalProgram must contain a char or a cell');
+		end		
+		
+% 		This code outputs the wrong pulses and isn't even faster
+% 		registered_programs = util.py.py2mat(py.getattr(hws,'_registered_programs'));
+% 		program = registered_programs.(globalProgram);
+% 		awgs_to_upload_to = program{4};
+% 		dacs_to_arm = program{5};		
+% 		for awgToUploadTo = awgs_to_upload_to
+% 			awgToUploadTo{1}.arm(globalProgram);
+% 		end		
+% 		for dacToArm = dacs_to_arm
+% 			dacToArm{1}.arm_program(plsdata.awg.currentProgam);
+% 		end
+		
+		qc.awg_program('arm', 'program_name', globalProgram, 'verbosity', a.verbosity);
 		
 	% --- remove ------------------------------------------------------------
 	elseif strcmp(ctrl, 'remove')		
