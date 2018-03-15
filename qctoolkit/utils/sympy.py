@@ -159,9 +159,9 @@ def evaluate_compiled(expression: sympy.Expr,
                            '<string>', 'eval')
 
     if mode == 'numeric' or mode is None:
-        result = eval(compiled, parameters, _numpy_environment)
+        result = eval(compiled, parameters.copy(), _numpy_environment)
     elif mode == 'exact':
-        result = eval(compiled, parameters, _sympy_environment)
+        result = eval(compiled, parameters.copy(), _sympy_environment)
     else:
         raise ValueError("Unknown mode: '{}'".format(mode))
 
