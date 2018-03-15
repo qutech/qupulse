@@ -214,7 +214,7 @@ class RecursiveSubstitutionTests(SubstitutionTests):
         return recursive_substitution(expression, substitutions).doit()
 
 
-class EvaluationTests(unittest.TestCase):
+class EvaluationTests(TestCase):
     def evaluate(self, expression: Union[sympy.Expr, np.ndarray], parameters):
         def get_variables(expr: sympy.Expr):
             return {str(s) for s in expr.free_symbols}
