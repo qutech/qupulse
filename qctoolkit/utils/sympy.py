@@ -1,5 +1,9 @@
-from typing import Union, Dict, Any
+from typing import Union, Dict, Tuple, Any, Sequence, Optional
 from numbers import Number
+from types import CodeType
+
+import builtins
+import math
 
 import sympy
 import numpy
@@ -33,6 +37,22 @@ class IndexedBasedFinder:
         return True
 
 
+class Len(sympy.Function):
+    nargs = 1
+
+    @classmethod
+    def eval(cls, arg) -> Optional[sympy.Integer]:
+        if hasattr(arg, '__len__'):
+            return sympy.Integer(len(arg))
+
+    is_Integer = True
+Len.__name__ = 'len'
+
+
+sympify_namespace = {'len': Len,
+                     'Len': Len}
+
+
 def numpy_compatible_mul(*args) -> Union[sympy.Mul, sympy.Array]:
     if any(isinstance(a, sympy.NDimArray) for a in args):
         result = 1
@@ -41,6 +61,13 @@ def numpy_compatible_mul(*args) -> Union[sympy.Mul, sympy.Array]:
         return sympy.Array(result)
     else:
         return sympy.Mul(*args)
+
+
+def numpy_compatible_ceiling(input_value: Any) -> Any:
+    if isinstance(input_value, numpy.ndarray):
+        return numpy.ceil(input_value).astype(numpy.int64)
+    else:
+        return sympy.ceiling(input_value)
 
 
 def to_numpy(sympy_array: sympy.NDimArray) -> numpy.ndarray:
@@ -66,12 +93,14 @@ def sympify(expr: Union[str, Number, sympy.Expr, numpy.str_], **kwargs) -> sympy
         # It seems to ignore the locals argument
         expr = str(expr)
     try:
-        return sympy.sympify(expr, **kwargs)
+        return sympy.sympify(expr, **kwargs, locals=sympify_namespace)
     except TypeError as err:
         if err.args[0] == "'Symbol' object is not subscriptable":
 
             indexed_base = get_subscripted_symbols(expr)
-            return sympy.sympify(expr, **kwargs, locals={k: sympy.IndexedBase(k) for k in indexed_base})
+            return sympy.sympify(expr, **kwargs, locals={**{k: sympy.IndexedBase(k)
+                                                            for k in indexed_base},
+                                                         **sympify_namespace})
 
         else:
             raise
@@ -80,9 +109,8 @@ def sympify(expr: Union[str, Number, sympy.Expr, numpy.str_], **kwargs) -> sympy
 def substitute_with_eval(expression: sympy.Expr,
                          substitutions: Dict[str, Union[sympy.Expr, numpy.ndarray, str]]) -> sympy.Expr:
     """Substitutes only sympy.Symbols. Workaround for numpy like array behaviour. ~Factor 3 slower compared to subs"""
-    for k, v in substitutions.items():
-        if not isinstance(v, sympy.Expr):
-            substitutions[k] = sympify(v)
+    substitutions = {k: v if isinstance(v, sympy.Expr) else sympify(v)
+                     for k, v in substitutions.items()}
 
     for symbol in expression.free_symbols:
         symbol_name = str(symbol)
@@ -92,3 +120,59 @@ def substitute_with_eval(expression: sympy.Expr,
     string_representation = sympy.srepr(expression)
     return eval(string_representation, sympy.__dict__, {'Symbol': substitutions.__getitem__,
                                                         'Mul': numpy_compatible_mul})
+
+
+def _recursive_substitution(expression: sympy.Expr,
+                           substitutions: Dict[sympy.Symbol, sympy.Expr]) -> sympy.Expr:
+    if not expression.free_symbols:
+        return expression
+    elif expression.func is sympy.Symbol:
+        return substitutions.get(expression, expression)
+
+    elif expression.func is sympy.Mul:
+        func = numpy_compatible_mul
+    else:
+        func = expression.func
+    substitutions = {s: substitutions.get(s, s) for s in expression.free_symbols}
+    return func(*(_recursive_substitution(arg, substitutions) for arg in expression.args))
+
+
+def recursive_substitution(expression: sympy.Expr,
+                           substitutions: Dict[str, Union[sympy.Expr, numpy.ndarray, str]]) -> sympy.Expr:
+    substitutions = {sympy.Symbol(k): sympify(v) for k, v in substitutions.items()}
+    for s in expression.free_symbols:
+        substitutions.setdefault(s, s)
+    return _recursive_substitution(expression, substitutions)
+
+
+_base_environment = {'builtins': builtins, '__builtins__':  builtins}
+_math_environment = {**_base_environment, **math.__dict__}
+_numpy_environment = {**_base_environment, **numpy.__dict__}
+_sympy_environment = {**_base_environment, **sympy.__dict__}
+
+
+def evaluate_compiled(expression: sympy.Expr,
+             parameters: Dict[str, Union[numpy.ndarray, Number]],
+             compiled: CodeType=None, mode=None) -> Tuple[any, CodeType]:
+    if compiled is None:
+        compiled = compile(sympy.printing.lambdarepr.lambdarepr(expression),
+                           '<string>', 'eval')
+
+    if mode == 'numeric' or mode is None:
+        result = eval(compiled, parameters.copy(), _numpy_environment)
+    elif mode == 'exact':
+        result = eval(compiled, parameters.copy(), _sympy_environment)
+    else:
+        raise ValueError("Unknown mode: '{}'".format(mode))
+
+    return result, compiled
+
+
+def evaluate_lambdified(expression: Union[sympy.Expr, numpy.ndarray],
+                        variables: Sequence[str],
+                        parameters: Dict[str, Union[numpy.ndarray, Number]],
+                        lambdified) -> Tuple[Any, Any]:
+    lambdified = lambdified or sympy.lambdify(variables, expression,
+                                              [{'ceiling': numpy_compatible_ceiling}, 'numpy'])
+
+    return lambdified(**parameters), lambdified
