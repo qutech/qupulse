@@ -41,7 +41,7 @@ class Len(sympy.Function):
     nargs = 1
 
     @classmethod
-    def eval(cls, arg):
+    def eval(cls, arg) -> Optional[sympy.Integer]:
         if hasattr(arg, '__len__'):
             return sympy.Integer(len(arg))
 
