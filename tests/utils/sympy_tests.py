@@ -1,5 +1,8 @@
 import unittest
 import contextlib
+import math
+
+from typing import Union
 
 import sympy
 import numpy as np
@@ -10,8 +13,10 @@ from sympy import sin, Sum, IndexedBase
 a_ = IndexedBase(a)
 b_ = IndexedBase(b)
 
-from qctoolkit.utils.sympy import sympify as qc_sympify, substitute_with_eval, recursive_substitution, Len
+from qctoolkit.utils.sympy import sympify as qc_sympify, substitute_with_eval, recursive_substitution, Len, evaluate_lambdified, evaluate_compiled
 
+
+################################################### SUBSTITUTION #######################################################
 simple_substitution_cases = [
     (a*b, {'a': c}, b*c),
     (a*b, {'a': b, 'b': a}, a*b),
@@ -42,6 +47,7 @@ full_featured_cases = [
 ]
 
 
+##################################################### SYMPIFY ##########################################################
 simple_sympify = [
     ('a*b', a*b),
     ('a*6', a*6),
@@ -62,7 +68,45 @@ index_sympify = [
 ]
 
 
-class SympifyTests(unittest.TestCase):
+#################################################### EVALUATION ########################################################
+eval_simple = [
+    (a*b, {'a': 2, 'b': 3}, 6),
+    (a*b, {'a': 2, 'b': np.float32(3.5)}, 2*np.float32(3.5)),
+    (a+b, {'a': 3.4, 'b': 76.7}, 3.4+76.7)
+]
+
+eval_many_arguments = [
+    (sum(sympy.symbols(list('a_' + str(i) for i in range(300)))), {'a_' + str(i): 1 for i in range(300)}, 300)
+]
+
+eval_simple_functions = [
+    (a*sin(b), {'a': 3.5, 'b': 1.2}, 3.5*math.sin(1.2))
+]
+
+eval_array_values = [
+    (a*b, {'a': 2, 'b': np.array([3])}, np.array([6])),
+    (a*b, {'a': 2, 'b': np.array([3, 4, 5])}, np.array([6, 8, 10])),
+    (a*b, {'a': np.array([2, 3]), 'b': np.array([100, 200])}, np.array([200, 600]))
+]
+
+eval_sum = [
+    (Sum(a_[i], (i, 0, Len(a) - 1)), {'a': np.array([1, 2, 3])}, 6),
+]
+
+eval_array_expression = [
+    (np.array([a*c, b*c]), {'a': 2, 'b': 3, 'c': 4}, np.array([8, 12]))
+]
+
+
+class TestCase(unittest.TestCase):
+    def assertRaises(self, expected_exception, *args, **kwargs):
+        if expected_exception is None:
+            return contextlib.suppress()
+        else:
+            return super().assertRaises(expected_exception, *args, **kwargs)
+
+
+class SympifyTests(TestCase):
     def sympify(self, expression):
         return sympy.sympify(expression)
 
@@ -81,25 +125,14 @@ class SympifyTests(unittest.TestCase):
             result = self.sympify(s)
             self.assertEqual(result, expected)
 
-    def test_len_sympify(self):
-        if type(self) is SympifyTests:
-            expected_exception = self.assertRaises(AssertionError, msg="sympy.sympify does not know len")
-        else:
-            expected_exception = contextlib.suppress()
-
-        with expected_exception:
+    def test_len_sympify(self, expected_exception=AssertionError, msg="sympy.sympify does not know len"):
+        with self.assertRaises(expected_exception=expected_exception, msg=msg):
             for s, expected in len_sympify:
                 result = self.sympify(s)
                 self.assertEqual(result, expected)
 
-    def test_index_sympify(self):
-        if type(self) is SympifyTests:
-            # This should fail if sympy start supporting
-            expected_exception = self.assertRaises(TypeError, msg="sympy.sympify does not support indexing")
-        else:
-            expected_exception = contextlib.suppress()
-
-        with expected_exception:
+    def test_index_sympify(self, expected_exception=TypeError):
+        with self.assertRaises(expected_exception=expected_exception):
             for s, expected in index_sympify:
                 result = self.sympify(s)
                 self.assertEqual(result, expected)
@@ -109,8 +142,14 @@ class SympifyWrapperTests(SympifyTests):
     def sympify(self, expression):
         return qc_sympify(expression)
 
+    def test_len_sympify(self):
+        super().test_len_sympify(None)
 
-class SubstitutionTests(unittest.TestCase):
+    def test_index_sympify(self):
+        super().test_index_sympify(None)
+
+
+class SubstitutionTests(TestCase):
     def substitute(self, expression: sympy.Expr, substitutions: dict):
         for key, value in substitutions.items():
             if not isinstance(value, sympy.Expr):
@@ -173,3 +212,61 @@ class SubstituteWithEvalTests(SubstitutionTests):
 class RecursiveSubstitutionTests(SubstitutionTests):
     def substitute(self, expression: sympy.Expr, substitutions: dict):
         return recursive_substitution(expression, substitutions).doit()
+
+
+class EvaluationTests(unittest.TestCase):
+    def evaluate(self, expression: Union[sympy.Expr, np.ndarray], parameters):
+        def get_variables(expr: sympy.Expr):
+            return {str(s) for s in expr.free_symbols}
+        if isinstance(expression, np.ndarray):
+            get_variables = lambda expr: set.union(*np.vectorize(get_variables)(expr))
+
+        variables = get_variables(expression)
+        return evaluate_lambdified(expression, variables=list(variables), parameters=parameters, lambdified=None)[0]
+
+    def test_eval_simple(self):
+        for expr, parameters, expected in eval_simple:
+            result = self.evaluate(expr, parameters)
+            self.assertEqual(result, expected)
+
+    def test_eval_many_arguments(self, expected_exception=SyntaxError):
+        with self.assertRaises(expected_exception):
+            for expr, parameters, expected in eval_many_arguments:
+                result = self.evaluate(expr, parameters)
+                self.assertEqual(result, expected)
+
+    def test_eval_simple_functions(self):
+        for expr, parameters, expected in eval_simple_functions:
+            result = self.evaluate(expr, parameters)
+            self.assertEqual(result, expected)
+
+    def test_eval_array_values(self):
+        for expr, parameters, expected in eval_array_values:
+            result = self.evaluate(expr, parameters)
+            np.testing.assert_equal(result, expected)
+
+    def test_eval_sum(self):
+        for expr, parameters, expected in eval_sum:
+            result = self.evaluate(expr, parameters)
+            self.assertEqual(result, expected)
+
+    def test_eval_array_expression(self):
+        for expr, parameters, expected in eval_array_expression:
+            result = self.evaluate(expr, parameters)
+            np.testing.assert_equal(result, expected)
+
+
+class CompiledEvaluationTest(EvaluationTests):
+    def evaluate(self, expression: Union[sympy.Expr, np.ndarray], parameters):
+        if isinstance(expression, np.ndarray):
+            return self.evaluate(sympy.Array(expression), parameters)
+
+        result, _ = evaluate_compiled(expression, parameters, compiled=None)
+
+        if isinstance(result, (list, tuple)):
+            return np.array(result)
+        else:
+            return result
+
+    def test_eval_many_arguments(self):
+        super().test_eval_many_arguments(None)
