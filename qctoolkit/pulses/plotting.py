@@ -137,6 +137,9 @@ def plot(pulse: PulseTemplate,
         axes = figure.add_subplot(111)
     for ch_name, voltage in voltages.items():
         if plot_channels is None or ch_name in plot_channels:
+            if times.size>10e6:
+                warnings.warn('plotting waveform of size %d, skipping' % times.size)
+                continue
             axes.step(times, voltage, where='post', label='channel {}'.format(ch_name))
 
     axes.legend()
