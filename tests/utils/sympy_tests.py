@@ -219,7 +219,8 @@ class EvaluationTests(TestCase):
         def get_variables(expr: sympy.Expr):
             return {str(s) for s in expr.free_symbols}
         if isinstance(expression, np.ndarray):
-            get_variables = lambda expr: set.union(*np.vectorize(get_variables)(expr))
+            vectorized = np.vectorize(get_variables)
+            get_variables = lambda expr: set.union(*vectorized(expr))
 
         variables = get_variables(expression)
         return evaluate_lambdified(expression, variables=list(variables), parameters=parameters, lambdified=None)[0]
