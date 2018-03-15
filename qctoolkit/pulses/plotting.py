@@ -10,6 +10,7 @@ Functions:
 from typing import Dict, Tuple, Any, Generator, Optional
 
 import numpy as np
+import warnings
 
 from qctoolkit.utils.types import ChannelID
 from qctoolkit.pulses.pulse_template import PulseTemplate
@@ -44,7 +45,7 @@ def iter_waveforms(instruction_block: AbstractInstructionBlock,
             raise NotImplementedError('Rendering cannot handle instructions of type {}.'.format(type(instruction)))
 
 
-def render(sequence: AbstractInstructionBlock, sample_rate: float=10) -> Tuple[np.ndarray, Dict[ChannelID, np.ndarray]]:
+def render(sequence: AbstractInstructionBlock, sample_rate: float=10.0) -> Tuple[np.ndarray, Dict[ChannelID, np.ndarray]]:
     """'Render' an instruction sequence (sample all contained waveforms into an array).
 
     Args:
@@ -66,6 +67,8 @@ def render(sequence: AbstractInstructionBlock, sample_rate: float=10) -> Tuple[n
 
     # add one sample to see the end of the waveform
     sample_count = total_time * sample_rate + 1
+    if not float(sample_count).is_integer():
+        warnings.warn('Sample count not whole number. Casted to integer.')
     times = np.linspace(0, total_time, num=sample_count, dtype=float)
     # move the last sample inside the waveform
     times[-1] = np.nextafter(times[-1], times[-2])
