@@ -10,6 +10,7 @@ Functions:
 from typing import Dict, Tuple, Any, Generator, Optional
 
 import numpy as np
+import warnings
 
 from qctoolkit.utils.types import ChannelID
 from qctoolkit.pulses.pulse_template import PulseTemplate
@@ -129,6 +130,9 @@ def plot(pulse: PulseTemplate,
         axes = figure.add_subplot(111)
     for ch_name, voltage in voltages.items():
         if plot_channels is None or ch_name in plot_channels:
+            if times.size>10e6:
+                warnings.warn('plotting waveform of size %d, skipping' % times.size)
+                continue
             axes.step(times, voltage, where='post', label='channel {}'.format(ch_name))
 
     axes.legend()
