@@ -42,6 +42,7 @@ class Len(sympy.Function):
             return sympy.Integer(len(arg))
 
     is_Integer = True
+Len.__name__ = 'len'
 
 
 sympify_namespace = {'len': Len,
