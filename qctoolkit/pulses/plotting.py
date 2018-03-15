@@ -44,8 +44,13 @@ def iter_waveforms(instruction_block: AbstractInstructionBlock,
             raise NotImplementedError('Rendering cannot handle instructions of type {}.'.format(type(instruction)))
 
 
-def render(sequence: AbstractInstructionBlock, sample_rate: int=10) -> Tuple[np.ndarray, Dict[ChannelID, np.ndarray]]:
+def render(sequence: AbstractInstructionBlock, sample_rate: float=10) -> Tuple[np.ndarray, Dict[ChannelID, np.ndarray]]:
     """'Render' an instruction sequence (sample all contained waveforms into an array).
+
+    Args:
+        sequence (AbstractInstructionBlock): block of instructions representing a (sub)sequence
+            in the control flow of a pulse template instantiation.
+        sample_rate (float): The sample rate in GHz.
 
     Returns:
         a tuple (times, values) of numpy.ndarrays of similar size. times contains the time value
