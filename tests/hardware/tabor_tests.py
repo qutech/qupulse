@@ -5,7 +5,7 @@ import numpy as np
 from teawg import model_properties_dict
 
 from qctoolkit.hardware.awgs.tabor import TaborException, TaborProgram, \
-    TaborSegment, TaborSequencing, with_configuration_guard
+    TaborSegment, TaborSequencing, with_configuration_guard, PlottableProgram
 from qctoolkit.hardware.program import MultiChannelProgram, Loop
 from qctoolkit.pulses.instructions import InstructionBlock
 from qctoolkit.hardware.util import voltage_to_uint16
@@ -282,3 +282,134 @@ class ConfigurationGuardTest(unittest.TestCase):
             channel_pair.guarded_method(1, True)
 
         self.assertFalse(channel_pair.is_in_config_mode)
+
+
+class PlottableProgramTests(unittest.TestCase):
+    def setUp(self):
+        def make_read_waveform(data):
+            assert len(data) % 16 == 0
+
+            ch_0 = []
+            ch_1 = []
+            for i, x in enumerate(data):
+                ch_0.append(x+1000)
+                ch_1.append(x)
+
+            #ch_0.extend(ch_0[-1:]*16)
+            #ch_1.extend(ch_1[-1:]*16)
+
+            ch_0 = np.array(ch_0, dtype=np.uint16)
+            ch_1 = np.array(ch_1, dtype=np.uint16)
+            return np.concatenate((ch_0.reshape((-1, 16)), ch_1.reshape((-1, 16))), 1).ravel()
+
+        self.read_waveforms = [make_read_waveform(np.arange(32)), make_read_waveform(np.arange(32, 48))]
+        self.read_sequencer_tables = [(np.array([1, 1]),
+                                       np.array([1, 2]),
+                                       np.array([0, 0])),
+
+                                      (np.array([1, 2, 1]),
+                                       np.array([1, 2, 1]),
+                                       np.array([0, 0, 0]))]
+        self.read_adv_sequencer_table = (np.array([1, 1, 2]),
+                                         np.array([1, 2, 1]),
+                                         np.array([0, 0, 0]))
+
+        self.waveforms = ((np.arange(32, dtype=np.uint16), np.arange(32, 48, dtype=np.uint16)),
+                          (1000+np.arange(32, dtype=np.uint16), 1000+np.arange(32, 48, dtype=np.uint16)))
+        self.sequencer_tables = [[(1, 1, 0), (1, 2, 0)],
+                                 [(1, 1, 0), (2, 2, 0), (1, 1, 0)]]
+        self.adv_sequencer_table = [(1, 1, 0), (1, 2, 0), (2, 1, 0)]
+
+    def test_init(self):
+        wrong_waveforms = self.waveforms[0], self.waveforms[1][:-1]
+        with self.assertRaises(ValueError):
+            PlottableProgram(wrong_waveforms, self.sequencer_tables, self.adv_sequencer_table)
+
+        wrong_waveforms = self.waveforms[0], (self.waveforms[1][0][1:], self.waveforms[1][1])
+        with self.assertRaises(ValueError):
+            PlottableProgram(wrong_waveforms, self.sequencer_tables, self.adv_sequencer_table)
+
+        prog = PlottableProgram(self.waveforms, self.sequencer_tables, self.adv_sequencer_table)
+        np.testing.assert_equal(self.waveforms, prog._waveforms)
+        self.assertEqual(self.sequencer_tables, prog._sequence_tables)
+        self.assertEqual(self.adv_sequencer_table, prog._advanced_sequence_table)
+
+    def test_reformat_waveforms(self):
+        np.testing.assert_equal(self.waveforms, PlottableProgram._reformat_waveforms(self.read_waveforms))
+
+    def test_from_read_data(self):
+        prog = PlottableProgram.from_read_data(self.read_waveforms,
+                                               self.read_sequencer_tables,
+                                               self.read_adv_sequencer_table)
+        np.testing.assert_equal(self.waveforms, prog._waveforms)
+        self.assertEqual(self.sequencer_tables, prog._sequence_tables)
+        self.assertEqual(self.adv_sequencer_table, prog._advanced_sequence_table)
+
+    def test_iter(self):
+        prog = PlottableProgram(self.waveforms, self.sequencer_tables, self.adv_sequencer_table)
+
+        ch = itertools.chain(range(32), range(32, 48),
+                             range(32), range(32, 48), range(32, 48), range(32),
+                             range(32), range(32, 48), range(32), range(32, 48))
+        ch_0 = np.fromiter(ch, dtype=np.uint16)
+        ch_1 = ch_0 + 1000
+
+        for expected, found in zip(ch_0, prog.iter_samples(0, True, True)):
+            self.assertEqual(expected, found)
+
+        for expected, found in zip(ch_1, prog.iter_samples(1, True, True)):
+            self.assertEqual(expected, found)
+
+    def test_get_advanced_sequence_table(self):
+        adv_seq = [(1, 1, 1)] + self.adv_sequencer_table + [(1, 1, 0)]
+        prog = PlottableProgram(self.waveforms, self.sequencer_tables, adv_seq)
+
+        self.assertEqual(prog._get_advanced_sequence_table(), self.adv_sequencer_table)
+        self.assertEqual(prog._get_advanced_sequence_table(with_first_idle=True),
+                         [(1, 1, 1)] + self.adv_sequencer_table)
+
+        self.assertEqual(prog._get_advanced_sequence_table(with_first_idle=True, with_last_idles=True),
+                         adv_seq)
+
+    def test_builtint_conversion(self):
+        prog = PlottableProgram(self.waveforms, self.sequencer_tables, self.adv_sequencer_table)
+
+        prog = PlottableProgram.from_builtin(prog.to_builtin())
+
+        np.testing.assert_equal(self.waveforms, prog._waveforms)
+        self.assertEqual(self.sequencer_tables, prog._sequence_tables)
+        self.assertEqual(self.adv_sequencer_table, prog._advanced_sequence_table)
+
+    def test_eq(self):
+        prog1 = PlottableProgram(self.waveforms, self.sequencer_tables, self.adv_sequencer_table)
+
+        prog2 = PlottableProgram(self.waveforms, self.sequencer_tables, self.adv_sequencer_table)
+
+        self.assertEqual(prog1, prog2)
+
+    def test_get_waveforms(self):
+        prog = PlottableProgram(self.waveforms, self.sequencer_tables, self.adv_sequencer_table)
+
+        expected_waveforms_0 = [np.arange(32), np.arange(32, 48), np.arange(32),
+                                np.arange(32, 48), np.arange(32), np.arange(32),
+                                np.arange(32, 48), np.arange(32), np.arange(32, 48)]
+
+        np.testing.assert_equal(expected_waveforms_0, prog.get_waveforms(0))
+
+        expected_waveforms_1 = [wf + 1000 for wf in expected_waveforms_0]
+        np.testing.assert_equal(expected_waveforms_1, prog.get_waveforms(1))
+
+    def test_get_repetitions(self):
+        prog = PlottableProgram(self.waveforms, self.sequencer_tables, self.adv_sequencer_table)
+
+        expected_repetitions = [1, 1, 1, 2, 1, 1, 1, 1, 1]
+        np.testing.assert_equal(expected_repetitions, prog.get_repetitions())
+
+    def test_get_as_single_waveform(self):
+        prog = PlottableProgram(self.waveforms, self.sequencer_tables, self.adv_sequencer_table)
+
+        expected_single_waveform_0 = np.fromiter(prog.iter_samples(0), dtype=np.uint16)
+        expected_single_waveform_1 = np.fromiter(prog.iter_samples(1), dtype=np.uint16)
+
+        np.testing.assert_equal(prog.get_as_single_waveform(0), expected_single_waveform_0)
+        np.testing.assert_equal(prog.get_as_single_waveform(1), expected_single_waveform_1)

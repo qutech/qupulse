@@ -3,7 +3,7 @@ import itertools
 
 import numpy as np
 
-from qctoolkit.pulses.instructions import InstructionBlock, EXECInstruction
+from qctoolkit.pulses.instructions import InstructionBlock, EXECInstruction, MEASInstruction
 from qctoolkit.hardware.setup import HardwareSetup, ChannelID, PlaybackChannel, _SingleChannel, MarkerChannel, MeasurementMask
 
 from tests.pulses.sequencing_dummies import DummyWaveform
@@ -113,13 +113,16 @@ class HardwareSetupTests(unittest.TestCase):
                          dict(A={PlaybackChannel(awg1, 0)}))
 
     def test_arm_program(self):
-        wf_1 = DummyWaveform(duration=1.1, defined_channels={'A', 'B'}, measurement_windows=[('m1', 0., 1.)])
-        wf_2 = DummyWaveform(duration=1.1, defined_channels={'A', 'C'}, measurement_windows=[('m2', 0., 1.)])
+        wf_1 = DummyWaveform(duration=1.1, defined_channels={'A', 'B'})
+        wf_2 = DummyWaveform(duration=1.1, defined_channels={'A', 'C'})
 
         block_1 = InstructionBlock()
         block_2 = InstructionBlock()
 
+        block_1.add_instruction_meas([('m1', 0., 1.)])
         block_1.add_instruction_exec(wf_1)
+
+        block_2.add_instruction_meas([('m2', 0., 1.)])
         block_2.add_instruction_exec(wf_2)
 
         awg1 = DummyAWG()
@@ -181,8 +184,7 @@ class HardwareSetupTests(unittest.TestCase):
 
         wfg = WaveformGenerator(num_channels=2, duration_generator=itertools.repeat(1))
         block = get_two_chan_test_block(wfg)
-
-        block.instructions[0].waveform._sub_waveforms[0].measurement_windows_ = [('m1', 0.1, 0.2)]
+        block._InstructionBlock__instruction_list[:0] = (MEASInstruction([('m1', 0.1, 0.2)]),)
 
         class ProgStart:
             def __init__(self):
@@ -231,13 +233,16 @@ class HardwareSetupTests(unittest.TestCase):
                                 expected_measurement_windows)
 
     def test_remove_program(self):
-        wf_1 = DummyWaveform(duration=1.1, defined_channels={'A', 'B'}, measurement_windows=[('m1', 0., 1.)])
-        wf_2 = DummyWaveform(duration=1.1, defined_channels={'A', 'C'}, measurement_windows=[('m2', 0., 1.)])
+        wf_1 = DummyWaveform(duration=1.1, defined_channels={'A', 'B'})
+        wf_2 = DummyWaveform(duration=1.1, defined_channels={'A', 'C'})
 
         block_1 = InstructionBlock()
         block_2 = InstructionBlock()
 
+        block_1.add_instruction_meas([('m1', 0., 1.)])
         block_1.add_instruction_exec(wf_1)
+
+        block_2.add_instruction_meas([('m2', 0., 1.)])
         block_2.add_instruction_exec(wf_2)
 
         awg1 = DummyAWG()
@@ -270,9 +275,10 @@ class HardwareSetupTests(unittest.TestCase):
         self.assertIsNone(awg2._armed)
 
     def test_run_program(self):
-        wf = DummyWaveform(duration=1.1, defined_channels={'A', 'B'}, measurement_windows=[('m1', 0., 1.)])
+        wf = DummyWaveform(duration=1.1, defined_channels={'A', 'B'})
 
         block = InstructionBlock()
+        block.add_instruction_meas([('m1', 0., 1.)])
         block.add_instruction_exec(wf)
 
         awg1 = DummyAWG()

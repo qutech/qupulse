@@ -1,4 +1,4 @@
-from typing import Iterable, Union, List, Generator, Tuple
+from typing import Iterable, Union, List, Generator, Tuple, TypeVar, Optional
 from collections import deque, namedtuple
 from copy import copy as shallow_copy
 import weakref
@@ -11,18 +11,23 @@ def make_empty_weak_reference() -> weakref.ref:
     return weakref.ref(lambda: None)
 
 
+_NodeType = TypeVar('_NodeType', bound='Node')
+
+
 class Node:
     debug = False
 
-    def __init__(self, parent: Union['Node', None]=None, children: Iterable=list()):
+    def __init__(self: _NodeType,
+                 parent: Union[_NodeType, None]=None,
+                 children: Optional[Iterable]=None):
         self.__parent = make_empty_weak_reference() if parent is None else weakref.ref(parent)
-        self.__children = [self.parse_child(child) for child in children]
+        self.__children = [] if children is None else [self.parse_child(child) for child in children]
         self.__parent_index = None
 
         for i, child in enumerate(self.__children):
             self.__children[i].__parent_index = i
 
-    def parse_child(self, child) -> 'Node':
+    def parse_child(self: _NodeType, child) -> _NodeType:
         if isinstance(child, dict):
             return type(self)(parent=self, **child)
         elif type(child) is type(self):
@@ -42,10 +47,10 @@ class Node:
             return True
         return all((e.depth() == self.__children[0].depth() and e.is_balanced()) for e in self.__children)
 
-    def __iter__(self) -> Iterable['Node']:
-        return iter(self.children)
+    def __iter__(self: _NodeType) -> Iterable[_NodeType]:
+        return iter(self.__children)
 
-    def __setitem__(self, idx: Union[int, slice], value: Union['Node', Iterable['Node']]):
+    def __setitem__(self: _NodeType, idx: Union[int, slice], value: Union[_NodeType, Iterable[_NodeType]]):
         if isinstance(idx, slice):
             if isinstance(value, Node):
                 raise TypeError('can only assign an iterable (Loop does not count)')
@@ -66,13 +71,13 @@ class Node:
             value.__parent_index = idx
             self.__children.__setitem__(idx, value)
 
-    def __getitem__(self, *args, **kwargs) ->Union['Node', List['Node']]:
+    def __getitem__(self: _NodeType, *args, **kwargs) ->Union[_NodeType, List[_NodeType]]:
         return self.__children.__getitem__(*args, **kwargs)
 
     def __len__(self) -> int:
         return len(self.__children)
 
-    def get_depth_first_iterator(self) -> Generator['Node', None, None]:
+    def get_depth_first_iterator(self: _NodeType) -> Generator[_NodeType, None, None]:
         stack = [(self, self.__children)]
 
         while stack:
@@ -84,7 +89,7 @@ class Node:
             else:
                 yield node
 
-    def get_breadth_first_iterator(self) -> Generator['Node', None, None]:
+    def get_breadth_first_iterator(self: _NodeType) -> Generator[_NodeType, None, None]:
         queue = deque([self])
         while queue:
             elem = queue.popleft()
@@ -107,17 +112,17 @@ class Node:
                         raise AssertionError('Parent is missing child reference')
 
     @property
-    def children(self) -> List['Node']:
+    def children(self: _NodeType) -> List[_NodeType]:
         """
         :return: shallow copy of children
         """
         return shallow_copy(self.__children)
 
     @property
-    def parent(self) -> Union[None, 'Node']:
+    def parent(self: _NodeType) -> Union[None, _NodeType]:
         return self.__parent()
 
-    def get_root(self) -> 'Node':
+    def get_root(self: _NodeType) -> _NodeType:
         if self.parent:
             return self.parent.get_root()
         else:
@@ -130,7 +135,7 @@ class Node:
         else:
             return tuple()
 
-    def locate(self, location: Tuple[int, ...]):
+    def locate(self: _NodeType, location: Tuple[int, ...]) -> _NodeType:
         if location:
             return self.__children[location[0]].locate(location[1:])
         else:

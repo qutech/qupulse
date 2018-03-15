@@ -7,25 +7,27 @@ Classes:
         directly translated into a waveform.
 """
 from abc import ABCMeta, abstractmethod, abstractproperty
-from typing import Dict, Tuple, Set, Optional, Union
+from typing import Dict, Tuple, Set, Optional, Union, List
 import itertools
 from numbers import Real
 
 from qctoolkit.utils.types import ChannelID, DocStringABCMeta
 from qctoolkit.serialization import Serializable
-from qctoolkit.expressions import Expression
+from qctoolkit.expressions import ExpressionScalar
 
 from qctoolkit.pulses.conditions import Condition
 from qctoolkit.pulses.parameters import Parameter
 from qctoolkit.pulses.sequencing import Sequencer, SequencingElement, InstructionBlock
 from qctoolkit.pulses.instructions import Waveform
+from qctoolkit.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
 
-__all__ = ["PulseTemplate", "AtomicPulseTemplate", "DoubleParameterNameException"]
+__all__ = ["PulseTemplate", "AtomicPulseTemplate", "DoubleParameterNameException", "MappingTuple"]
 
 
-MeasurementDeclaration = Tuple[str,
-                               Union[Real, str, Expression],
-                               Union[Real, str, Expression]]
+MappingTuple = Union[Tuple['PulseTemplate'],
+                     Tuple['PulseTemplate', Dict],
+                     Tuple['PulseTemplate', Dict, Dict],
+                     Tuple['PulseTemplate', Dict, Dict, Dict]]
 
 
 class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta):
@@ -58,7 +60,7 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
 
     @property
     @abstractmethod
-    def duration(self) -> Expression:
+    def duration(self) -> ExpressionScalar:
         """An expression for the duration of this PulseTemplate."""
 
     @property
@@ -71,32 +73,35 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
         """The number of channels this PulseTemplate defines"""
         return len(self.defined_channels)
 
-    def __matmul__(self, other: 'PulseTemplate') -> 'PulseTemplate':
+    def __matmul__(self, other: Union['PulseTemplate', MappingTuple]) -> 'SequencePulseTemplate':
         """This method enables using the @-operator (intended for matrix multiplication) for
          concatenating pulses. If one of the pulses is a SequencePulseTemplate the other pulse gets merged into it"""
 
         from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
 
-        if self != other:
-            # check if parameter names of the subpulses intersect and raise an exception if so
-            double_parameters = self.parameter_names & other.parameter_names
-            if double_parameters:
-                raise DoubleParameterNameException(self, other, double_parameters)
-
         subtemplates = itertools.chain(self.subtemplates if isinstance(self, SequencePulseTemplate) else [self],
                                        other.subtemplates if isinstance(other, SequencePulseTemplate) else [other])
         return SequencePulseTemplate(*subtemplates)
 
+    def __rmatmul__(self, other: MappingTuple) -> 'SequencePulseTemplate':
+        from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
 
-class AtomicPulseTemplate(PulseTemplate, metaclass=ABCMeta):
+        subtemplates = itertools.chain([other],
+                                       self.subtemplates if isinstance(self, SequencePulseTemplate) else [self])
+        return SequencePulseTemplate(*subtemplates)
+
+
+class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
     """A PulseTemplate that does not imply any control flow disruptions and can be directly
     translated into a waveform.
 
     Implies that no AtomicPulseTemplate object is interruptable.
     """
     def __init__(self, *,
-                 identifier: Optional[str]):
-        super().__init__(identifier=identifier)
+                 identifier: Optional[str],
+                 measurements: Optional[List[MeasurementDeclaration]]):
+        PulseTemplate.__init__(self, identifier=identifier)
+        MeasurementDefiner.__init__(self, measurements=measurements)
 
     def is_interruptable(self) -> bool:
         return False
@@ -104,6 +109,8 @@ class AtomicPulseTemplate(PulseTemplate, metaclass=ABCMeta):
     @property
     def atomicity(self) -> bool:
         return True
+
+    measurement_names = MeasurementDefiner.measurement_names
 
     def build_sequence(self,
                        sequencer: Sequencer,
@@ -116,21 +123,20 @@ class AtomicPulseTemplate(PulseTemplate, metaclass=ABCMeta):
                       for parameter_name, parameter_value in parameters.items()
                       if parameter_name in self.parameter_names}
         waveform = self.build_waveform(parameters,
-                                       measurement_mapping=measurement_mapping,
                                        channel_mapping=channel_mapping)
         if waveform:
+            measurements = self.get_measurement_windows(parameters=parameters, measurement_mapping=measurement_mapping)
+            instruction_block.add_instruction_meas(measurements)
             instruction_block.add_instruction_exec(waveform)
 
     @abstractmethod
     def build_waveform(self,
                        parameters: Dict[str, Real],
-                       measurement_mapping: Dict[str, str],
-                       channel_mapping: Dict[ChannelID, ChannelID]) -> Optional[Waveform]:
+                       channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Waveform]:
         """Translate this PulseTemplate into a waveform according to the given parameters.
 
         Args:
             parameters (Dict(str -> Parameter)): A mapping of parameter names to real numbers.
-            measurement_mapping (Dict(str -> str)): A mapping of measurement names
             channel_mapping (Dict(ChannelID -> ChannelID): A mapping of Channel IDs
         Returns:
             Waveform object represented by this PulseTemplate object or None, if this object

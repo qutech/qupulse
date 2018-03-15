@@ -3,10 +3,10 @@ from numbers import Real
 import itertools
 
 from qctoolkit.expressions import Expression
-
+from qctoolkit.utils.types import MeasurementWindow
+from qctoolkit.pulses.parameters import Parameter
 
 MeasurementDeclaration = Tuple[str, Union[Expression, str, Real], Union[Expression, str, Real]]
-MeasurementWindow = Tuple[str, Real, Real]
 
 
 class MeasurementDefiner:
@@ -37,6 +37,16 @@ class MeasurementDefiner:
             if begin < 0 or length < 0:
                 raise ValueError('Measurement window with negative begin or length: {}, {}'.format(begin, length))
         return resulting_windows
+
+    def insert_measurement_instruction(self,
+                                       instruction_block,
+                                       parameters: Dict[str, Parameter],
+                                       measurement_mapping: Dict[str, Optional[str]]):
+        parameters = {k: parameters[k].get_value()
+                      for k in self.measurement_parameters}
+        measurements = self.get_measurement_windows(parameters, measurement_mapping)
+        if measurements:
+            instruction_block.add_instruction_meas(measurements)
 
     @property
     def measurement_parameters(self) -> Set[str]:

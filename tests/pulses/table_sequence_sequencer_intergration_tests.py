@@ -5,7 +5,7 @@ from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
 from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
 from qctoolkit.pulses.parameters import ParameterNotProvidedException
 from qctoolkit.pulses.sequencing import Sequencer
-from qctoolkit.pulses.instructions import EXECInstruction, AbstractInstructionBlock
+from qctoolkit.pulses.instructions import EXECInstruction, AbstractInstructionBlock, MEASInstruction
 
 from tests.pulses.sequencing_dummies import DummyParameter, DummyNoValueParameter
 
@@ -41,17 +41,22 @@ class TableSequenceSequencerIntegrationTests(unittest.TestCase):
         self.assertFalse(sequencer.has_finished())
         self.assertEqual(1, len(instructions))
 
+        # stop after first TablePT
         foo = DummyParameter(value=1.1)
         bar = DummyNoValueParameter()
         sequencer = Sequencer()
         sequencer.push(seqt, {'foo': foo, 'hugo': bar},
                        window_mapping=dict(bar='my', foo='thy'),
                        channel_mapping={'default': 'A'})
-        instructions = sequencer.build()
+        block = sequencer.build()
+        instructions = block.instructions
         self.assertFalse(sequencer.has_finished())
-        self.assertIsInstance(instructions, AbstractInstructionBlock)
+        self.assertIsInstance(block, AbstractInstructionBlock)
         self.assertEqual(2, len(instructions))
+        self.assertEqual(instructions[0], MEASInstruction([('my', 2, 2)]))
+        self.assertIsInstance(instructions[1], EXECInstruction)
 
+        # stop before first TablePT
         foo = DummyParameter(value=1.1)
         bar = DummyNoValueParameter()
         sequencer = Sequencer()
@@ -70,8 +75,9 @@ class TableSequenceSequencerIntegrationTests(unittest.TestCase):
                        channel_mapping={'default': 'A'})
         instructions = sequencer.build()
         self.assertTrue(sequencer.has_finished())
-        self.assertEqual(3, len(instructions))
+        self.assertEqual(4, len(instructions.instructions))
 
-        for instruction in instructions:
-            if isinstance(instruction, EXECInstruction):
-                self.assertIn(instruction.waveform.get_measurement_windows()[0], [('my', 2, 2), ('thy', 4, 1)])
+        self.assertEqual(instructions[0], MEASInstruction([('my', 2, 2)]))
+        self.assertIsInstance(instructions[1], EXECInstruction)
+        self.assertEqual(instructions[2], MEASInstruction([('thy', 4, 1)]))
+        self.assertIsInstance(instructions[3], EXECInstruction)

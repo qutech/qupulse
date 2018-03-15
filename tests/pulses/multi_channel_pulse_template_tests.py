@@ -2,6 +2,7 @@ import unittest
 
 import numpy
 
+from qctoolkit.utils.types import time_from_float
 from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingException,\
     MissingParameterDeclarationException
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform, MappingPulseTemplate, ChannelMappingException, AtomicMultiChannelPulseTemplate
@@ -38,7 +39,7 @@ class MultiChannelWaveformTest(unittest.TestCase):
 
         waveform = MultiChannelWaveform([dwf])
         self.assertEqual({'A'}, waveform.defined_channels)
-        self.assertEqual(1.3, waveform.duration)
+        self.assertEqual(time_from_float(1.3), waveform.duration)
 
     def test_init_several_channels(self) -> None:
         dwf_a = DummyWaveform(duration=2.2, defined_channels={'A'})
@@ -47,7 +48,7 @@ class MultiChannelWaveformTest(unittest.TestCase):
 
         waveform = MultiChannelWaveform([dwf_a, dwf_b])
         self.assertEqual({'A', 'B'}, waveform.defined_channels)
-        self.assertEqual(2.2, waveform.duration)
+        self.assertEqual(time_from_float(2.2), waveform.duration)
 
         with self.assertRaises(ValueError):
             MultiChannelWaveform([dwf_a, dwf_c])
@@ -103,22 +104,6 @@ class MultiChannelWaveformTest(unittest.TestCase):
         self.assertEqual(waveform_a1, waveform_a1)
         self.assertEqual(waveform_a1, waveform_a2)
         self.assertNotEqual(waveform_a1, waveform_a3)
-
-    def test_get_measurement_windows(self):
-        def meas_window(i):
-            return str(int(i)), i, i+1
-
-        dwf_a = DummyWaveform(duration=246.2, defined_channels={'A'},
-                              measurement_windows=[meas_window(1), meas_window(2)])
-        dwf_b = DummyWaveform(duration=246.2, defined_channels={'B'},
-                              measurement_windows=[meas_window(3), meas_window(4), meas_window(5)])
-        dwf_c = DummyWaveform(duration=246.2, defined_channels={'C'})
-
-        mcwf = MultiChannelWaveform((dwf_a, dwf_b, dwf_c))
-        expected_windows = set(meas_window(i) for i in range(1, 6))
-        received_windows = tuple(mcwf.get_measurement_windows())
-        self.assertEqual(len(received_windows), 5)
-        self.assertEqual(set(received_windows), expected_windows)
 
     def test_unsafe_get_subset_for_channels(self):
         dwf_a = DummyWaveform(duration=246.2, defined_channels={'A'})
@@ -292,20 +277,18 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
 
         parameters = dict(a=2.2, b = 1.1, c=3.3)
         channel_mapping = dict()
-        measurement_mapping = dict(A='A', B='B')
         with self.assertRaises(ParameterConstraintViolation):
-            pt.build_waveform(parameters, channel_mapping=dict(), measurement_mapping=dict())
+            pt.build_waveform(parameters, channel_mapping=dict())
 
         parameters['a'] = 0.5
-        wf = pt.build_waveform(parameters, channel_mapping=channel_mapping, measurement_mapping=measurement_mapping)
+        wf = pt.build_waveform(parameters, channel_mapping=channel_mapping)
         self.assertEqual(wf['A'], wfs[0])
         self.assertEqual(wf['B'], wfs[1])
 
         for st in sts:
-            self.assertEqual(st.build_waveform_calls, [(parameters, measurement_mapping, channel_mapping)])
+            self.assertEqual(st.build_waveform_calls, [(parameters, channel_mapping)])
             self.assertIs(parameters, st.build_waveform_calls[0][0])
-            self.assertIs(measurement_mapping, st.build_waveform_calls[0][1])
-            self.assertIs(channel_mapping, st.build_waveform_calls[0][2])
+            self.assertIs(channel_mapping, st.build_waveform_calls[0][1])
 
     def test_build_waveform_none(self):
         wfs = [DummyWaveform(duration=1.1, defined_channels={'A'}), DummyWaveform(duration=1.1, defined_channels={'B'})]
@@ -318,22 +301,21 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
 
         parameters = dict(a=2.2, b=1.1, c=3.3)
         channel_mapping = dict(A=6)
-        measurement_mapping = dict(A='A', B='B', C=None)
         with self.assertRaises(ParameterConstraintViolation):
             # parameter constraints are checked before channel mapping is applied
-            pt.build_waveform(parameters, channel_mapping=dict(), measurement_mapping=dict())
+            pt.build_waveform(parameters, channel_mapping=dict())
 
         parameters['a'] = 0.5
-        wf = pt.build_waveform(parameters, channel_mapping=channel_mapping, measurement_mapping=measurement_mapping)
+        wf = pt.build_waveform(parameters, channel_mapping=channel_mapping)
         self.assertIs(wf['A'], wfs[0])
         self.assertIs(wf['B'], wfs[1])
 
         sts[1].waveform = None
-        wf = pt.build_waveform(parameters, channel_mapping=channel_mapping, measurement_mapping=measurement_mapping)
+        wf = pt.build_waveform(parameters, channel_mapping=channel_mapping)
         self.assertIs(wf, wfs[0])
 
         sts[0].waveform = None
-        wf = pt.build_waveform(parameters, channel_mapping=channel_mapping, measurement_mapping=measurement_mapping)
+        wf = pt.build_waveform(parameters, channel_mapping=channel_mapping)
         self.assertIsNone(wf)
 
     def test_deserialize(self):

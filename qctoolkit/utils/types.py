@@ -1,13 +1,20 @@
 import typing
 import abc
 import inspect
+import numbers
+import fractions
 
 import numpy
 
-__all__ = ["MeasurementWindow", "ChannelID", "HashableNumpyArray"]
+__all__ = ["MeasurementWindow", "ChannelID", "HashableNumpyArray", "TimeType", "time_from_float"]
 
-MeasurementWindow = typing.Tuple[str, float, float]
+MeasurementWindow = typing.Tuple[str, numbers.Real, numbers.Real]
 ChannelID = typing.Union[str, int]
+TimeType = fractions.Fraction
+
+
+def time_from_float(time: float, absolute_error: float=1e-12) -> TimeType:
+    return fractions.Fraction(time).limit_denominator(int(1/absolute_error))
 
 
 class DocStringABCMeta(abc.ABCMeta):

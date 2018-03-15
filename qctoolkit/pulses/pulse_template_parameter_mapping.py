@@ -7,7 +7,7 @@ import numbers
 
 from qctoolkit.utils.types import ChannelID
 from qctoolkit.expressions import Expression
-from qctoolkit.pulses.pulse_template import PulseTemplate
+from qctoolkit.pulses.pulse_template import PulseTemplate, MappingTuple
 from qctoolkit.pulses.parameters import Parameter, MappedParameter, ParameterNotProvidedException, ParameterConstrainer
 from qctoolkit.pulses.sequencing import Sequencer
 from qctoolkit.pulses.instructions import InstructionBlock, Waveform
@@ -20,12 +20,6 @@ __all__ = [
     "MissingParameterDeclarationException",
     "UnnecessaryMappingException",
 ]
-
-
-MappingTuple = Union[Tuple[PulseTemplate],
-                     Tuple[PulseTemplate, Dict],
-                     Tuple[PulseTemplate, Dict, Dict],
-                     Tuple[PulseTemplate, Dict, Dict, Dict]]
 
 
 class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
@@ -94,7 +88,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
 
         if isinstance(template, MappingPulseTemplate) and template.identifier is None:
             # avoid nested mappings
-            parameter_mapping = {p: expr.evaluate_symbolic(parameter_mapping)
+            parameter_mapping = {p: Expression(expr.evaluate_symbolic(parameter_mapping))
                                  for p, expr in template.parameter_mapping.items()}
             measurement_mapping = {k: measurement_mapping[v]
                                    for k, v in template.measurement_mapping.items()}
@@ -253,12 +247,10 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
 
     def build_waveform(self,
                        parameters: Dict[str, numbers.Real],
-                       measurement_mapping: Dict[str, str],
                        channel_mapping: Dict[ChannelID, ChannelID]) -> Waveform:
         """This gets called if the parent is atomic"""
         return self.template.build_waveform(
             parameters=self.map_parameters(parameters),
-            measurement_mapping=self.get_updated_measurement_mapping(measurement_mapping),
             channel_mapping=self.get_updated_channel_mapping(channel_mapping))
 
     def requires_stop(self,

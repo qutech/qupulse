@@ -22,7 +22,7 @@ from weakref import WeakValueDictionary
 
 import numpy
 
-from qctoolkit.utils.types import ChannelID, MeasurementWindow
+from qctoolkit.utils.types import ChannelID, MeasurementWindow, TimeType
 from qctoolkit.comparable import Comparable
 
 __all__ = ["Waveform", "Trigger",
@@ -38,8 +38,9 @@ class Waveform(Comparable, metaclass=ABCMeta):
 
     __sampled_cache = WeakValueDictionary()
 
-    @abstractproperty
-    def duration(self) -> float:
+    @property
+    @abstractmethod
+    def duration(self) -> TimeType:
         """The duration of the waveform in time units."""
 
     @abstractmethod
@@ -111,11 +112,6 @@ class Waveform(Comparable, metaclass=ABCMeta):
     def defined_channels(self) -> Set[ChannelID]:
         """The channels this waveform should played on. Use
             :func:`~qctoolkit.pulses.instructions.get_measurement_windows` to get a waveform for a subset of these."""
-
-    @abstractmethod
-    def get_measurement_windows(self) -> Iterable[MeasurementWindow]:
-        """This function will in most cases return a generator to fill the measurement windows in a more efficient
-        data structure like a dict."""
 
     @abstractmethod
     def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> 'Waveform':
@@ -229,6 +225,23 @@ class CJMPInstruction(Instruction):
         
     def __str__(self) -> str:
         return "cjmp to {} on {}".format(self.target, self.trigger)
+
+
+class MEASInstruction(Instruction):
+    """A measurement instruction.
+
+    Cause a measurement to be executed. The instruction itself takes no time."""
+    def __init__(self, measurements: List[MeasurementWindow]):
+        super().__init__()
+
+        self.measurements = measurements
+
+    @property
+    def compare_key(self) -> List[MeasurementWindow]:
+        return self.measurements
+
+    def __str__(self):
+        return "meas [" + " ,".join(set(name for name, *_ in self.measurements)) + ']'
 
 
 class REPJInstruction(Instruction):
@@ -509,6 +522,13 @@ class InstructionBlock(AbstractInstructionBlock):
     def add_instruction_chan(self, channel_to_instruction: Dict[ChannelID, 'InstructionBlock']) -> None:
         """Create and append a new CHANInstruction at the end of this instruction block."""
         self.add_instruction(CHANInstruction({ch: InstructionPointer(block) for ch, block in channel_to_instruction.items()}))
+
+    def add_instruction_meas(self, measurements: List['MeasurementWindow']):
+        """Create and append a MEASInstruction at the end of the instruction block.
+
+        :param measurements: The measurement windows this instruction causes
+        """
+        self.add_instruction(MEASInstruction(measurements=measurements))
 
     @property
     def instructions(self) -> InstructionSequence:

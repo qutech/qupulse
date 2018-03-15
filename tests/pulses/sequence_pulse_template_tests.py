@@ -3,12 +3,14 @@ import copy
 
 import numpy as np
 
+from qctoolkit.utils.types import time_from_float
 from qctoolkit.pulses.pulse_template import DoubleParameterNameException
 from qctoolkit.expressions import Expression
 from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
 from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate, SequenceWaveform
 from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingException, UnnecessaryMappingException, MissingParameterDeclarationException, MappingPulseTemplate
 from qctoolkit.pulses.parameters import ParameterNotProvidedException, ConstantParameter, ParameterConstraint, ParameterConstraintViolation
+from qctoolkit.pulses.instructions import MEASInstruction
 
 from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyPulseTemplate,\
     DummyNoValueParameter, DummyWaveform
@@ -68,20 +70,8 @@ class SequenceWaveformTest(unittest.TestCase):
         self.assertEqual(sub_wf.compare_key[0].defined_channels, subset)
         self.assertEqual(sub_wf.compare_key[1].defined_channels, subset)
 
-        self.assertEqual(sub_wf.compare_key[0].duration, 2.2)
-        self.assertEqual(sub_wf.compare_key[1].duration, 3.3)
-
-
-
-    def test_get_measurement_windows(self):
-        dwfs = (DummyWaveform(duration=1., measurement_windows=[('M', 0.2, 0.5)]),
-                DummyWaveform(duration=3., measurement_windows=[('N', 0.6, 0.7)]),
-                DummyWaveform(duration=2., measurement_windows=[('M', 0.1, 0.2), ('N', 0.5, 0.6)]))
-        swf = SequenceWaveform(dwfs)
-
-        expected_windows = sorted((('M', 0.2, 0.5), ('N', 1.6, 0.7), ('M', 4.1, 0.2), ('N', 4.5, 0.6)))
-        received_windows = sorted(tuple(swf.get_measurement_windows()))
-        self.assertEqual(received_windows, expected_windows)
+        self.assertEqual(sub_wf.compare_key[0].duration, time_from_float(2.2))
+        self.assertEqual(sub_wf.compare_key[1].duration, time_from_float(3.3))
 
 
 class SequencePulseTemplateTest(unittest.TestCase):
@@ -143,15 +133,14 @@ class SequencePulseTemplateTest(unittest.TestCase):
 
         spt = SequencePulseTemplate(*pts, parameter_constraints=['a < 3'])
         with self.assertRaises(ParameterConstraintViolation):
-            spt.build_waveform(dict(a=4), dict(), dict())
+            spt.build_waveform(dict(a=4), dict())
 
         parameters = dict(a=2)
         channel_mapping = dict()
-        measurement_mapping = dict()
-        wf = spt.build_waveform(parameters, channel_mapping=channel_mapping, measurement_mapping=measurement_mapping)
+        wf = spt.build_waveform(parameters, channel_mapping=channel_mapping)
 
         for wfi, pt in zip(wfs, pts):
-            self.assertEqual(pt.build_waveform_calls, [(parameters, dict(), dict())])
+            self.assertEqual(pt.build_waveform_calls, [(parameters, dict())])
             self.assertIs(pt.build_waveform_calls[0][0], parameters)
 
         self.assertIsInstance(wf, SequenceWaveform)
@@ -233,9 +222,16 @@ class SequencePulseTemplateSequencingTests(SequencePulseTemplateTest):
 
         sequencer = DummySequencer()
         block = DummyInstructionBlock()
-        seq = SequencePulseTemplate(sub1, (sub2, {'foo': 'foo'}), external_parameters={'foo'})
-        seq.build_sequence(sequencer, parameters, {}, {}, {}, block)
+        seq = SequencePulseTemplate(sub1, (sub2, {'foo': 'foo'}), external_parameters={'foo'},
+                                    measurements=[('a', 0, 1)])
+        seq.build_sequence(sequencer, parameters,
+                           conditions=dict(),
+                           channel_mapping={'default': 'a'},
+                           measurement_mapping={'a': 'b'},
+                           instruction_block=block)
         self.assertEqual(2, len(sequencer.sequencing_stacks[block]))
+
+        self.assertEqual(block.instructions[0], MEASInstruction([('b', 0, 1)]))
 
         sequencer = DummySequencer()
         block = DummyInstructionBlock()
@@ -337,6 +333,13 @@ class SequencePulseTemplateTestProperties(SequencePulseTemplateTest):
             SequencePulseTemplate(DummyPulseTemplate(is_interruptable=False),
                                   DummyPulseTemplate(is_interruptable=False)).is_interruptable)
 
+    def test_measurement_names(self):
+        d1 = DummyPulseTemplate(measurement_names={'a'})
+        d2 = DummyPulseTemplate(measurement_names={'b'})
+
+        spt = SequencePulseTemplate(d1, d2, measurements=[('c', 0, 1)])
+
+        self.assertEqual(spt.measurement_names, {'a', 'b', 'c'})
 
 
 class PulseTemplateConcatenationTest(unittest.TestCase):
@@ -347,7 +350,7 @@ class PulseTemplateConcatenationTest(unittest.TestCase):
         a = DummyPulseTemplate(parameter_names={'foo'}, defined_channels={'A'})
         b = DummyPulseTemplate(parameter_names={'bar'}, defined_channels={'A'})
         c = DummyPulseTemplate(parameter_names={'snu'}, defined_channels={'A'})
-        d = DummyPulseTemplate(parameter_names={'snu'}, defined_channels={'A'})
+        d = (c, {'snu': 'bar'})
 
         seq = a @ a
         self.assertTrue(len(seq.subtemplates) == 2)
@@ -359,16 +362,22 @@ class PulseTemplateConcatenationTest(unittest.TestCase):
         for st, expected in zip(seq.subtemplates,[a, b]):
             self.assertTrue(st, expected)
 
-        with self.assertRaises(DoubleParameterNameException):
-            a @ b @ a
-        with self.assertRaises(DoubleParameterNameException):
-            a @ b @ c @ d
-
         seq = a @ b @ c
         self.assertTrue(len(seq.subtemplates) == 3)
         for st, expected in zip(seq.subtemplates, [a, b, c]):
             self.assertTrue(st, expected)
 
+        seq = a @ d
+        self.assertTrue(len(seq.subtemplates) == 2)
+        self.assertIs(seq.subtemplates[0], a)
+        self.assertIsInstance(seq.subtemplates[1], MappingPulseTemplate)
+        self.assertIs(seq.subtemplates[1].template, c)
+
+        seq = d @ a
+        self.assertTrue(len(seq.subtemplates) == 2)
+        self.assertIs(seq.subtemplates[1], a)
+        self.assertIsInstance(seq.subtemplates[0], MappingPulseTemplate)
+        self.assertIs(seq.subtemplates[0].template, c)
 
     def test_concatenation_sequence_table_pulse(self):
         a = DummyPulseTemplate(parameter_names={'foo'}, defined_channels={'A'})
@@ -393,9 +402,6 @@ class PulseTemplateConcatenationTest(unittest.TestCase):
         self.assertTrue(len(seq.subtemplates) == 4)
         for st, expected in zip(seq.subtemplates, [a, b, c, d]):
             self.assertTrue(st, expected)
-
-        with self.assertRaises(DoubleParameterNameException):
-            seq2 @ c
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

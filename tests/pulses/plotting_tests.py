@@ -1,7 +1,7 @@
 import unittest
 import numpy
 
-from qctoolkit.pulses.plotting import PlottingNotPossibleException, render
+from qctoolkit.pulses.plotting import PlottingNotPossibleException, render, iter_waveforms
 from qctoolkit.pulses.instructions import InstructionBlock
 from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
 from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
@@ -20,7 +20,26 @@ class PlotterTests(unittest.TestCase):
             render(block)
 
     def test_render_no_waveforms(self) -> None:
-        self.assertEqual(([], []), render(InstructionBlock()))
+        time, channel_data = render(InstructionBlock())
+        self.assertEqual(channel_data, dict())
+        numpy.testing.assert_equal(time, numpy.empty(0))
+
+    def test_iter_waveforms(self):
+        wf1 = DummyWaveform(duration=7)
+        wf2 = DummyWaveform(duration=5)
+        wf3 = DummyWaveform(duration=3)
+
+        repeated_block = InstructionBlock()
+        repeated_block.add_instruction_meas([('m', 1, 2)])
+        repeated_block.add_instruction_exec(wf2)
+
+        main_block = InstructionBlock()
+        main_block.add_instruction_exec(wf1)
+        main_block.add_instruction_repj(2, repeated_block)
+        main_block.add_instruction_exec(wf3)
+
+        for idx, (expected, received) in enumerate(zip([wf1, wf2, wf2, wf3], iter_waveforms(main_block))):
+            self.assertIs(expected, received, msg="Waveform {} is wrong".format(idx))
 
     def test_render(self) -> None:
         wf1 = DummyWaveform(duration=19)
@@ -28,6 +47,7 @@ class PlotterTests(unittest.TestCase):
 
         block = InstructionBlock()
         block.add_instruction_exec(wf1)
+        block.add_instruction_meas([('asd', 0, 1)])
         block.add_instruction_exec(wf2)
 
         wf1_expected = ('A', [0, 2, 4, 6, 8, 10, 12, 14, 16, 18])

@@ -16,13 +16,14 @@ import numpy
 
 from qctoolkit.serialization import Serializer
 
-from qctoolkit.utils.types import MeasurementWindow, ChannelID
+from qctoolkit.utils.types import ChannelID, TimeType
 from qctoolkit.pulses.instructions import Waveform
 from qctoolkit.pulses.pulse_template import PulseTemplate, AtomicPulseTemplate
 from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingException, MappingPulseTemplate,\
     MissingParameterDeclarationException, MappingTuple
 from qctoolkit.pulses.parameters import Parameter, ParameterConstrainer
 from qctoolkit.pulses.conditions import Condition
+from qctoolkit.pulses.measurement import MeasurementDeclaration
 from qctoolkit.expressions import Expression
 
 __all__ = ["MultiChannelWaveform", "AtomicMultiChannelPulseTemplate"]
@@ -98,7 +99,7 @@ class MultiChannelWaveform(Waveform):
             self.__defined_channels |= waveform.defined_channels
 
     @property
-    def duration(self) -> float:
+    def duration(self) -> TimeType:
         return self._sub_waveforms[0].duration
 
     def __getitem__(self, key: ChannelID) -> Waveform:
@@ -122,10 +123,6 @@ class MultiChannelWaveform(Waveform):
                       output_array: Union[numpy.ndarray, None]=None) -> numpy.ndarray:
         return self[channel].unsafe_sample(channel, sample_times, output_array)
 
-    def get_measurement_windows(self) -> Iterable[MeasurementWindow]:
-        return itertools.chain.from_iterable(sub_waveform.get_measurement_windows()
-                                             for sub_waveform in self._sub_waveforms)
-
     def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> 'Waveform':
         relevant_sub_waveforms = tuple(swf for swf in self._sub_waveforms if swf.defined_channels & channels)
         if len(relevant_sub_waveforms) == 1:
@@ -143,8 +140,9 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
                  *subtemplates: Union[AtomicPulseTemplate, MappingTuple, MappingPulseTemplate],
                  external_parameters: Optional[Set[str]]=None,
                  identifier: Optional[str]=None,
-                 parameter_constraints: Optional[List]=None) -> None:
-        AtomicPulseTemplate.__init__(self, identifier=identifier)
+                 parameter_constraints: Optional[List]=None,
+                 measurements: Optional[List[MeasurementDeclaration]]=None) -> None:
+        AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 
         self._subtemplates = [st if isinstance(st, PulseTemplate) else MappingPulseTemplate.from_tuple(st) for st in
@@ -217,14 +215,12 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
         return set.union(*(st.measurement_names for st in self._subtemplates))
 
     def build_waveform(self, parameters: Dict[str, numbers.Real],
-                       measurement_mapping: Dict[str, Optional[str]],
                        channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional['MultiChannelWaveform']:
         self.validate_parameter_constraints(parameters=parameters)
 
         sub_waveforms = []
         for subtemplate in self.subtemplates:
             sub_waveform = subtemplate.build_waveform(parameters,
-                                                      measurement_mapping=measurement_mapping,
                                                       channel_mapping=channel_mapping)
             if sub_waveform is not None:
                 sub_waveforms.append(sub_waveform)
@@ -242,19 +238,25 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
         return any(st.requires_stop(parameters, conditions) for st in self._subtemplates)
 
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
-        data = dict(subtemplates=[serializer.dictify(subtemplate) for subtemplate in self.subtemplates],
-                    parameter_constraints=[str(constraint) for constraint in self.parameter_constraints])
+        data = dict(subtemplates=[serializer.dictify(subtemplate) for subtemplate in self.subtemplates])
+
+        if self.parameter_constraints:
+            data['parameter_constraints'] = [str(constraint) for constraint in self.parameter_constraints]
+
+        if self.measurement_declarations:
+            data['measurements'] = self.measurement_declarations
         return data
 
     @staticmethod
     def deserialize(serializer: Serializer,
                     subtemplates: Iterable[Dict[str, Any]],
-                    parameter_constraints: Any,
-                    identifier: Optional[str] = None) -> 'AtomicMultiChannelPulseTemplate':
+                    parameter_constraints: Optional[Any]=None,
+                    identifier: Optional[str]=None,
+                    measurements: Optional[List[MeasurementDeclaration]]=None) -> 'AtomicMultiChannelPulseTemplate':
         subtemplates = [serializer.deserialize(st) for st in subtemplates]
         return AtomicMultiChannelPulseTemplate(*subtemplates,
                                                parameter_constraints=parameter_constraints,
-                                               identifier=identifier)
+                                               identifier=identifier, measurements=measurements)
 
 
 class ChannelMappingException(Exception):

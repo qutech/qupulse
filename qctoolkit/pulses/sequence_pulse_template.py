@@ -2,12 +2,12 @@
 combines several other PulseTemplate objects for sequential execution."""
 
 import numpy as np
-from typing import Dict, List, Tuple, Set, Optional, Any, Iterable, Union
+from typing import Dict, List, Tuple, Set, Optional, Any, Iterable, Union, cast
 from numbers import Real
 
 from qctoolkit.serialization import Serializer
 
-from qctoolkit.utils.types import MeasurementWindow, ChannelID
+from qctoolkit.utils.types import MeasurementWindow, ChannelID, TimeType
 from qctoolkit.pulses.pulse_template import PulseTemplate
 from qctoolkit.pulses.parameters import Parameter, ParameterConstrainer
 from qctoolkit.pulses.sequencing import InstructionBlock, Sequencer
@@ -15,6 +15,7 @@ from qctoolkit.pulses.conditions import Condition
 from qctoolkit.pulses.pulse_template_parameter_mapping import \
     MissingMappingException, MappingPulseTemplate, MissingParameterDeclarationException, MappingTuple
 from qctoolkit.pulses.instructions import Waveform
+from qctoolkit.pulses.measurement import MeasurementDeclaration, MeasurementDefiner
 from qctoolkit.expressions import Expression
 
 __all__ = ["SequencePulseTemplate"]
@@ -73,7 +74,7 @@ class SequenceWaveform(Waveform):
         return self._sequenced_waveforms
 
     @property
-    def duration(self) -> float:
+    def duration(self) -> TimeType:
         return self._duration
 
     def get_measurement_windows(self) -> Iterable[MeasurementWindow]:
@@ -91,7 +92,7 @@ class SequenceWaveform(Waveform):
             for sub_waveform in self._sequenced_waveforms if sub_waveform.defined_channels & channels)
 
 
-class SequencePulseTemplate(PulseTemplate, ParameterConstrainer):
+class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefiner):
     """A sequence of different PulseTemplates.
     
     SequencePulseTemplate allows to group several
@@ -108,7 +109,8 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer):
                  *subtemplates: Union[PulseTemplate, MappingTuple],
                  external_parameters: Optional[Union[Iterable[str], Set[str]]]=None,
                  identifier: Optional[str]=None,
-                 parameter_constraints: Optional[List[Union[str, Expression]]]=None) -> None:
+                 parameter_constraints: Optional[List[Union[str, Expression]]]=None,
+                 measurements: Optional[List[MeasurementDeclaration]]=None) -> None:
         """Create a new SequencePulseTemplate instance.
 
         Requires a (correctly ordered) list of subtemplates in the form
@@ -137,6 +139,7 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer):
         """
         PulseTemplate.__init__(self, identifier=identifier)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
+        MeasurementDefiner.__init__(self, measurements=measurements)
 
         self.__subtemplates = [MappingPulseTemplate.from_tuple(st) if isinstance(st, tuple) else st
                                for st in subtemplates]
@@ -184,7 +187,8 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer):
 
     @property
     def measurement_names(self) -> Set[str]:
-        return set.union(*(st.measurement_names for st in self.subtemplates))
+        return set.union(MeasurementDefiner.measurement_names.fget(self),
+                         *(st.measurement_names for st in self.subtemplates))
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],
@@ -195,11 +199,9 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer):
 
     def build_waveform(self,
                        parameters: Dict[str, Real],
-                       measurement_mapping: Dict[str, str],
                        channel_mapping: Dict[ChannelID, ChannelID]) -> SequenceWaveform:
         self.validate_parameter_constraints(parameters=parameters)
         return SequenceWaveform([sub_template.build_waveform(parameters,
-                                                             measurement_mapping=measurement_mapping,
                                                              channel_mapping=channel_mapping)
                                  for sub_template in self.__subtemplates])
 
@@ -211,6 +213,9 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer):
                        channel_mapping: Dict['ChannelID', 'ChannelID'],
                        instruction_block: InstructionBlock) -> None:
         self.validate_parameter_constraints(parameters=parameters)
+        self.insert_measurement_instruction(instruction_block=instruction_block,
+                                            parameters=parameters,
+                                            measurement_mapping=measurement_mapping)
         for subtemplate in reversed(self.subtemplates):
             sequencer.push(subtemplate,
                            parameters=parameters,

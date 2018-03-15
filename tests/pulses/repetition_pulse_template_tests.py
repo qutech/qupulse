@@ -7,6 +7,7 @@ from qctoolkit.pulses.repetition_pulse_template import RepetitionPulseTemplate,P
 from qctoolkit.pulses.parameters import ParameterNotProvidedException, ParameterConstraintViolation, ConstantParameter, \
     ParameterConstraint
 from qctoolkit.pulses.instructions import REPJInstruction, InstructionPointer
+from qctoolkit.utils.types import time_from_float
 
 from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummySequencer, DummyInstructionBlock, DummyParameter,\
     DummyCondition, DummyWaveform
@@ -32,7 +33,7 @@ class RepetitionWaveformTest(unittest.TestCase):
 
     def test_duration(self):
         wf = RepetitionWaveform(DummyWaveform(duration=2.2), 3)
-        self.assertEqual(wf.duration, 2.2*3)
+        self.assertEqual(wf.duration, time_from_float(2.2)*3)
 
     def test_defined_channels(self):
         body_wf = DummyWaveform(defined_channels={'a'})
@@ -66,17 +67,6 @@ class RepetitionWaveformTest(unittest.TestCase):
         output_received = rwf.unsafe_sample(channel='A', sample_times=sample_times, output_array=output_expected)
         self.assertIs(output_expected, output_received)
         np.testing.assert_equal(output_received, sample_times)
-
-    def test_get_measurement_windows(self):
-        body_wf = DummyWaveform(duration=7, measurement_windows=[('M', .1, .2), ('N', .5, .7)])
-
-        rwf = RepetitionWaveform(body=body_wf, repetition_count=3)
-
-        expected_windows = [('M', .1, .2), ('N', .5, .7),
-                            ('M', 7.1, .2), ('N', 7.5, .7),
-                            ('M', 14.1, .2), ('N', 14.5, .7)]
-        received_windows = list(rwf.get_measurement_windows())
-        self.assertEqual(received_windows, expected_windows)
 
 
 class RepetitionPulseTemplateTest(unittest.TestCase):
@@ -125,7 +115,10 @@ class RepetitionPulseTemplateTest(unittest.TestCase):
         body = DummyPulseTemplate(measurement_names=measurement_names)
         t = RepetitionPulseTemplate(body, 9)
 
-        self.assertIs(measurement_names, t.measurement_names)
+        self.assertEqual(measurement_names, t.measurement_names)
+
+        t = RepetitionPulseTemplate(body, 9, measurements=[('N', 1, 2)])
+        self.assertEqual({'M', 'N'}, t.measurement_names)
 
     def test_duration(self):
         body = DummyPulseTemplate(duration='foo')
@@ -237,50 +230,55 @@ class RepetitionPulseTemplateSerializationTests(unittest.TestCase):
         self.serializer = DummySerializer(deserialize_callback=lambda x: x['name'])
         self.body = DummyPulseTemplate()
 
-    def test_get_serialization_data_constant(self) -> None:
+    def test_get_serialization_data_minimal(self) -> None:
         repetition_count = 3
         template = RepetitionPulseTemplate(self.body, repetition_count)
         expected_data = dict(
             body=str(id(self.body)),
             repetition_count=repetition_count,
-            parameter_constraints=[]
         )
         data = template.get_serialization_data(self.serializer)
         self.assertEqual(expected_data, data)
 
-    def test_get_serialization_data_declaration(self) -> None:
-        template = RepetitionPulseTemplate(self.body, 'foo', parameter_constraints=['foo<3'])
+    def test_get_serialization_data_all_features(self) -> None:
+        repetition_count = 'foo'
+        measurements = [('a', 0, 1), ('b', 1, 1)]
+        parameter_constraints = ['foo < 3']
+        template = RepetitionPulseTemplate(self.body, repetition_count,
+                                           measurements=measurements,
+                                           parameter_constraints=parameter_constraints)
         expected_data = dict(
             body=str(id(self.body)),
-            repetition_count='foo',
-            parameter_constraints=[ParameterConstraint('foo<3')]
+            repetition_count=repetition_count,
+            measurements=measurements,
+            parameter_constraints=parameter_constraints
         )
         data = template.get_serialization_data(self.serializer)
         self.assertEqual(expected_data, data)
 
-    def test_deserialize_constant(self) -> None:
+    def test_deserialize_minimal(self) -> None:
         repetition_count = 3
         data = dict(
             repetition_count=repetition_count,
             body=dict(name=str(id(self.body))),
-            identifier='foo',
-            parameter_constraints=['bar<3']
+            identifier='foo'
         )
         # prepare dependencies for deserialization
         self.serializer.subelements[str(id(self.body))] = self.body
         # deserialize
         template = RepetitionPulseTemplate.deserialize(self.serializer, **data)
         # compare!
-        self.assertEqual(self.body, template.body)
+        self.assertIs(self.body, template.body)
         self.assertEqual(repetition_count, template.repetition_count)
-        self.assertEqual([str(c) for c in template.parameter_constraints], ['bar < 3'])
+        #self.assertEqual([str(c) for c in template.parameter_constraints], ['bar < 3'])
 
-    def test_deserialize_declaration(self) -> None:
+    def test_deserialize_all_features(self) -> None:
         data = dict(
             repetition_count='foo',
             body=dict(name=str(id(self.body))),
             identifier='foo',
-            parameter_constraints=['foo<3']
+            parameter_constraints=['foo < 3'],
+            measurements=[('a', 0, 1), ('b', 1, 1)]
         )
         # prepare dependencies for deserialization
         self.serializer.subelements[str(id(self.body))] = self.body
@@ -289,9 +287,10 @@ class RepetitionPulseTemplateSerializationTests(unittest.TestCase):
         template = RepetitionPulseTemplate.deserialize(self.serializer, **data)
 
         # compare!
-        self.assertEqual(self.body, template.body)
+        self.assertIs(self.body, template.body)
         self.assertEqual('foo', template.repetition_count)
         self.assertEqual(template.parameter_constraints, [ParameterConstraint('foo < 3')])
+        self.assertEqual(template.measurement_declarations, data['measurements'])
 
 
 class ParameterNotIntegerExceptionTests(unittest.TestCase):

@@ -1,15 +1,18 @@
 import itertools
-from typing import Union, Dict, Set, Iterable, FrozenSet, Tuple, cast
-from collections import deque, defaultdict
+from typing import Union, Dict, Set, Iterable, FrozenSet, Tuple, cast, List, Optional, DefaultDict
+from collections import defaultdict
 from copy import deepcopy
 from enum import Enum
+from fractions import Fraction
 
 import numpy as np
 
-from qctoolkit.utils.types import ChannelID
-from qctoolkit.pulses.instructions import AbstractInstructionBlock, EXECInstruction, REPJInstruction, GOTOInstruction, STOPInstruction, InstructionPointer, CHANInstruction, Waveform
+from qctoolkit.utils.types import ChannelID, TimeType
+from qctoolkit.pulses.instructions import AbstractInstructionBlock, EXECInstruction, REPJInstruction, GOTOInstruction,\
+    STOPInstruction, CHANInstruction, Waveform, MEASInstruction, Instruction
 from qctoolkit.comparable import Comparable
 from qctoolkit.utils.tree import Node, is_tree_circular
+from qctoolkit.utils.types import MeasurementWindow
 from qctoolkit.utils import checked_int_cast, is_integer
 
 from qctoolkit.pulses.sequence_pulse_template import SequenceWaveform
@@ -23,12 +26,15 @@ class Loop(Comparable, Node):
     def __init__(self,
                  parent: Union['Loop', None]=None,
                  children: Iterable['Loop']=list(),
-                 waveform: Union[Waveform]=None,
+                 waveform: Optional[Waveform]=None,
+                 measurements: Optional[List[MeasurementWindow]]=None,
                  repetition_count=1):
         super().__init__(parent=parent, children=children)
 
         self._waveform = waveform
+        self._measurements = measurements
         self._repetition_count = int(repetition_count)
+        self._cached_duration = None
 
         if abs(self._repetition_count - repetition_count) > 1e-10:
             raise ValueError('Repetition count was not an integer')
@@ -41,7 +47,22 @@ class Loop(Comparable, Node):
         return self._waveform, self.repetition_count, tuple(c.compare_key for c in self)
 
     def append_child(self, **kwargs) -> None:
-        self[len(self):len(self)] = (kwargs, )
+        # do not invalidate but update cached duration
+        super().__setitem__(slice(len(self), len(self)), (kwargs, ))
+        if self._cached_duration:
+            self._cached_duration += self[-1].duration
+
+    def add_measurements(self, measurements: List[MeasurementWindow]):
+        if self.is_leaf():
+            measurements = measurements.copy()
+        else:
+            body_duration = float(self.duration)
+            measurements = [(mw_name, begin+body_duration, length)
+                            for mw_name, begin, length in measurements]
+        if self._measurements is None:
+            self._measurements = measurements
+        else:
+            self._measurements.extend(measurements)
 
     @property
     def waveform(self) -> Waveform:
@@ -50,13 +71,19 @@ class Loop(Comparable, Node):
     @waveform.setter
     def waveform(self, val) -> None:
         self._waveform = val
+        self._cached_duration = None
 
     @property
-    def duration(self):
-        if self.is_leaf():
-            return self.repetition_count*self.waveform.duration
-        else:
-            return self.repetition_count*sum(child.duration for child in self)
+    def duration(self) -> TimeType:
+        if self._cached_duration is None:
+            if self.is_leaf():
+                if self.waveform:
+                    self._cached_duration = self.repetition_count*self.waveform.duration
+                else:
+                    self._cached_duration = TimeType(0)
+            else:
+                self._cached_duration = self.repetition_count*sum(child.duration for child in self)
+        return self._cached_duration
 
     @property
     def repetition_count(self) -> int:
@@ -67,6 +94,7 @@ class Loop(Comparable, Node):
         self._repetition_count = int(val)
         if abs(self._repetition_count - val) > 1e-10:
             raise ValueError('Repetition count was not an integer')
+        self._cached_duration = None
 
     def unroll(self) -> None:
         for i, e in enumerate(self.parent):
@@ -77,6 +105,10 @@ class Loop(Comparable, Node):
                 self.parent.assert_tree_integrity()
                 return
         raise Exception('self not found in parent')
+
+    def __setitem__(self, idx, value):
+        super().__setitem__(idx, value)
+        self._cached_duration = None
 
     def unroll_children(self) -> None:
         old_children = self.children
@@ -92,6 +124,7 @@ class Loop(Comparable, Node):
                         waveform=self._waveform)]
         self.repetition_count = 1
         self._waveform = None
+        self._measurements = None
         self.assert_tree_integrity()
 
     def __repr__(self) -> str:
@@ -113,45 +146,48 @@ class Loop(Comparable, Node):
         return type(self)(parent=self.parent if new_parent is False else new_parent,
                           waveform=self._waveform,
                           repetition_count=self.repetition_count,
+                          measurements=self._measurements,
                           children=(child.copy_tree_structure() for child in self))
 
-    def get_measurement_windows(self) -> Dict[str, Tuple[np.ndarray, np.ndarray]]:
-        if self.is_leaf():
-            body_duration = self.waveform.duration
-            temp_meas_windows = defaultdict(deque)
-            for (mw_name, begin, length) in self.waveform.get_measurement_windows():
+    def _get_measurement_windows(self) -> DefaultDict[str, np.ndarray]:
+        temp_meas_windows = defaultdict(list)
+        if self._measurements:
+            for (mw_name, begin, length) in self._measurements:
                 temp_meas_windows[mw_name].append((begin, length))
 
-            body_meas_windows = dict()
-            while temp_meas_windows:
-                mw_name, begin_lengths = temp_meas_windows.popitem()
-                begin_lengths = np.asarray(begin_lengths)
-                body_meas_windows[mw_name] = (begin_lengths[:, 0], begin_lengths[:, 1])
+            for mw_name, begin_length_list in temp_meas_windows.items():
+                temp_meas_windows[mw_name] = [np.asarray(begin_length_list, dtype=float)]
+
+        # calculate duration together with meas windows in the same iteration
+        if self.is_leaf():
+            body_duration = float(self.waveform.duration)
         else:
-            offset = 0
-            temp_meas_windows = defaultdict(deque)
+            offset = TimeType(0)
             for child in self:
-                for mw_name, (begins, lengths) in child.get_measurement_windows().items():
-                    temp_meas_windows[mw_name].append((begins+offset, lengths))
+                for mw_name, begins_length_array in child._get_measurement_windows().items():
+                    begins_length_array[:, 0] += float(offset)
+                    temp_meas_windows[mw_name].append(begins_length_array)
                 offset += child.duration
 
-            body_meas_windows = dict()
-            while temp_meas_windows:
-                mw_name, begin_length_deque = temp_meas_windows.popitem()
-                begin_length_deque = np.asarray(begin_length_deque)
+            body_duration = float(offset)
 
-                body_meas_windows[mw_name] = (np.concatenate(tuple(begin for begin, _ in begin_length_deque)),
-                                              np.concatenate(tuple(length for _, length in begin_length_deque)))
-            body_duration = offset
-        result = dict()
-        while body_meas_windows:
-            mw_name, (body_begins, body_lengths) = body_meas_windows.popitem()
-            result[mw_name] = (
-                np.tile(body_begins, self.repetition_count) + np.repeat(range(self.repetition_count),
-                                                                        len(body_begins)) * body_duration,
-                np.tile(body_lengths, self.repetition_count)
-            )
-        return result
+        # repeat and add repetition based offset
+        for mw_name, begin_length_list in temp_meas_windows.items():
+            temp_begin_length_array = np.concatenate(begin_length_list)
+
+            begin_length_array = np.tile(temp_begin_length_array, (self.repetition_count, 1))
+
+            shaped_begin_length_array = np.reshape(begin_length_array, (self.repetition_count, -1, 2))
+
+            shaped_begin_length_array[:, :, 0] += (np.arange(self.repetition_count) * body_duration)[:, np.newaxis]
+
+            temp_meas_windows[mw_name] = begin_length_array
+
+        return temp_meas_windows
+
+    def get_measurement_windows(self) -> Dict[str, Tuple[np.ndarray, np.ndarray]]:
+        return {mw_name: (begin_length_list[:, 0], begin_length_list[:, 1])
+                for mw_name, begin_length_list in self._get_measurement_windows().items()}
 
     def split_one_child(self, child_index=None) -> None:
         """Take the last child that has a repetition count larger one, decrease it's repetition count and insert a copy
@@ -228,6 +264,8 @@ class MultiChannelProgram:
                         return itertools.chain(*instruction.channel_to_instruction_block.keys())
                     elif isinstance(instruction, STOPInstruction):
                         break
+                    elif isinstance(instruction, MEASInstruction):
+                        pass
                     else:
                         raise TypeError('Unhandled instruction type', type(instruction))
                 raise ValueError('Instruction block has no defined channels')
@@ -239,13 +277,13 @@ class MultiChannelProgram:
         channels = frozenset(channels - {None})
 
         root = Loop()
-        stacks = {channels: (root, [([], list(instruction_block.instructions))])}
-        self.__programs = dict()
+        stacks = {channels: (root, [((), list(instruction_block.instructions))])}
+        self._programs = dict()
 
         while len(stacks) > 0:
             chans, (root_loop, stack) = stacks.popitem()
             try:
-                self.__programs[chans] = MultiChannelProgram.__split_channels(chans, root_loop, stack)
+                self._programs[chans] = MultiChannelProgram.__split_channels(chans, root_loop, stack)
             except ChannelSplit as split:
                 for new_channel_set in split.channel_sets:
                     assert (new_channel_set not in stacks)
@@ -253,7 +291,7 @@ class MultiChannelProgram:
 
                     stacks[new_channel_set] = (root_loop.copy_tree_structure(), deepcopy(stack))
 
-        for channels, program in self.__programs.items():
+        for channels, program in self._programs.items():
             iterable = program.get_breadth_first_iterator()
             try:
                 while True:
@@ -269,14 +307,17 @@ class MultiChannelProgram:
 
     @property
     def programs(self) -> Dict[FrozenSet[ChannelID], Loop]:
-        return self.__programs
+        return self._programs
 
     @property
     def channels(self) -> Set[ChannelID]:
-        return set(itertools.chain(*self.__programs.keys()))
+        return set(itertools.chain(*self._programs.keys()))
 
     @staticmethod
-    def __split_channels(channels, root_loop, block_stack) -> Loop:
+    def __split_channels(channels: FrozenSet[ChannelID],
+                         root_loop: Loop,
+                         block_stack: List[Tuple[Tuple[int, ...],
+                                                 List[Instruction]]]) -> Loop:
         while block_stack:
             current_loop_location, current_instruction_block = block_stack.pop()
             current_loop = root_loop.locate(current_loop_location)
@@ -308,6 +349,9 @@ class MultiChannelProgram:
 
                         raise ChannelSplit(instruction.channel_to_instruction_block.keys())
 
+                elif isinstance(instruction, MEASInstruction):
+                    current_loop.add_measurements(instruction.measurements)
+
                 else:
                     raise Exception('Encountered unhandled instruction {} on channel(s) {}'.format(instruction, channels))
         return root_loop
@@ -318,7 +362,7 @@ class MultiChannelProgram:
         elif isinstance(item, set):
             item = frozenset(item)
 
-        for channels, program in self.__programs.items():
+        for channels, program in self._programs.items():
             if item.issubset(channels):
                 return program
         raise KeyError(item)
@@ -348,18 +392,18 @@ class _CompatibilityLevel(Enum):
     incompatible = 2
 
 
-def _is_compatible(program: Loop, min_len: int, quantum: int, sample_rate: float) -> _CompatibilityLevel:
-    try:
-        program_duration = checked_int_cast(program.duration * sample_rate)
-    except ValueError:
+def _is_compatible(program: Loop, min_len: int, quantum: int, sample_rate: TimeType) -> _CompatibilityLevel:
+    program_duration_in_samples = program.duration * sample_rate
+
+    if program_duration_in_samples.denominator != 1:
         return _CompatibilityLevel.incompatible
 
-    if program_duration < min_len or program_duration % quantum > 0:
+    if program_duration_in_samples < min_len or program_duration_in_samples % quantum > 0:
         return _CompatibilityLevel.incompatible
 
     if program.is_leaf():
-        waveform_duration = program.waveform.duration * sample_rate
-        if not is_integer(waveform_duration / quantum) or waveform_duration < min_len:
+        waveform_duration_in_samples = program.waveform.duration * sample_rate
+        if waveform_duration_in_samples < min_len or (waveform_duration_in_samples / quantum).denominator != 1:
             return _CompatibilityLevel.action_required
         else:
             return _CompatibilityLevel.compatible
@@ -371,7 +415,7 @@ def _is_compatible(program: Loop, min_len: int, quantum: int, sample_rate: float
             return _CompatibilityLevel.action_required
 
 
-def _make_compatible(program: Loop, min_len: int, quantum: int, sample_rate: float) -> None:
+def _make_compatible(program: Loop, min_len: int, quantum: int, sample_rate: Fraction) -> None:
 
     if program.is_leaf():
         program.waveform = to_waveform(program.copy_tree_structure())
@@ -398,7 +442,7 @@ def _make_compatible(program: Loop, min_len: int, quantum: int, sample_rate: flo
                     _make_compatible(sub_program, min_len, quantum, sample_rate)
 
 
-def make_compatible(program: Loop, minimal_waveform_length: int, waveform_quantum: int, sample_rate: float):
+def make_compatible(program: Loop, minimal_waveform_length: int, waveform_quantum: int, sample_rate: Fraction):
     comp_level = _is_compatible(program,
                                 min_len=minimal_waveform_length,
                                 quantum=waveform_quantum,
