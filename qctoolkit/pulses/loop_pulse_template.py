@@ -241,8 +241,8 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
                     loop_range: Tuple,
                     loop_index: str,
                     identifier: Optional[str]=None,
-                    measurements: Optional=None,
-                    parameter_constraints: Optional=None) -> 'ForLoopPulseTemplate':
+                    measurements: Optional[Sequence[str]]=None,
+                    parameter_constraints: Optional[Sequence[str]]=None) -> 'ForLoopPulseTemplate':
         body = cast(PulseTemplate, serializer.deserialize(body))
         return ForLoopPulseTemplate(body=body,
                                     identifier=identifier,
