@@ -4,6 +4,7 @@ function plot_pulse(pulse, varargin)
 
 	defaultArgs = struct(...
     'sample_rate',     plsdata.awg.sampleRate, ... % in 1/s, converted to 1/ns below
+		'channel_names',   {{}}, ... % names of channels to plot, all if empty
     'parameters',     [], ...
 		'channel_mapping', py.None, ...
 		'window_mapping' , py.None, ...
@@ -35,9 +36,13 @@ function plot_pulse(pulse, varargin)
 	end
 	hold on
 	
+	legendEntries = {};
 	for chan_name = fieldnames(data{2})'
-		plot(t, data{2}.(chan_name{1}), '.-');
+		if isempty(args.channel_names) || any(cellfun(@(x)(strcmp(x, chan_name{1})), args.channel_names))
+			plot(t, data{2}.(chan_name{1}), '.-');
+			legendEntries{end+1} = chan_name{1};
+		end
 	end
 	
   xlabel('t(s)');
-	legend(fieldnames(data{2})');
+	legend(legendEntries);
