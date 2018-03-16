@@ -57,7 +57,7 @@ class PlotterTests(unittest.TestCase):
         main_block.add_instruction_repj(2, repeated_block)
         main_block.add_instruction_exec(wf3)
 
-        waveforms, measurements, total_time = iter_instruction_block(main_block)
+        waveforms, measurements, total_time = iter_instruction_block(main_block, True)
 
         for idx, (expected, received) in enumerate(zip([wf1, wf2, wf1, wf2, wf1, wf3], waveforms)):
             self.assertIs(expected, received, msg="Waveform {} is wrong".format(idx))
@@ -81,7 +81,7 @@ class PlotterTests(unittest.TestCase):
         repeated_block.add_instruction_goto(main_block)
 
         with self.assertRaises(NotImplementedError):
-            iter_instruction_block(main_block)
+            iter_instruction_block(main_block, False)
 
         repeated_block = InstructionBlock()
         repeated_block.add_instruction_meas([('m', 1, 2)])
@@ -94,7 +94,7 @@ class PlotterTests(unittest.TestCase):
         main_block.add_instruction_exec(wf3)
 
         with self.assertRaises(NotImplementedError):
-            iter_instruction_block(main_block)
+            iter_instruction_block(main_block, False)
 
     def test_render(self) -> None:
         wf1 = DummyWaveform(duration=19)
