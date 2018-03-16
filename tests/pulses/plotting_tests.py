@@ -42,6 +42,35 @@ class PlotterTests(unittest.TestCase):
         for idx, (expected, received) in enumerate(zip([wf1, wf2, wf1, wf2, wf1, wf3], iter_waveforms(main_block))):
             self.assertIs(expected, received, msg="Waveform {} is wrong".format(idx))
 
+    def test_iter_waveform_exceptions(self):
+        wf1 = DummyWaveform(duration=7)
+        wf2 = DummyWaveform(duration=5)
+        wf3 = DummyWaveform(duration=3)
+
+        repeated_block = InstructionBlock()
+        repeated_block.add_instruction_meas([('m', 1, 2)])
+        repeated_block.add_instruction_exec(wf2)
+        repeated_block.add_instruction_exec(wf1)
+
+        main_block = InstructionBlock()
+        main_block.add_instruction_exec(wf1)
+        main_block.add_instruction_repj(2, repeated_block)
+        main_block.add_instruction_exec(wf3)
+        main_block.add_instruction_goto(repeated_block)
+
+        with self.assertRaises(NotImplementedError):
+            list(iter_waveforms(main_block))
+
+        repeated_block.add_instruction(DummyInstruction())
+        with self.assertRaises(NotImplementedError):
+            list(iter_waveforms(main_block))
+
+        main_block = InstructionBlock()
+        main_block.add_instruction_stop()
+
+        with self.assertRaises(StopIteration):
+            next(iter_waveforms(main_block))
+
     def test_iter_instruction_block(self):
         wf1 = DummyWaveform(duration=7)
         wf2 = DummyWaveform(duration=5)
@@ -135,6 +164,27 @@ class PlotterTests(unittest.TestCase):
         numpy.testing.assert_almost_equal(expected_times, times)
         numpy.testing.assert_almost_equal(expected_result, voltages['A'])
         self.assertEqual(expected_result.shape, voltages['A'].shape)
+
+        times, voltages, measurements = render(block, sample_rate=0.5, render_measurements=True)
+        self.assertEqual(voltages.keys(), dict(A=0).keys())
+
+        numpy.testing.assert_almost_equal(expected_times, times)
+        numpy.testing.assert_almost_equal(expected_result, voltages['A'])
+        self.assertEqual(expected_result.shape, voltages['A'].shape)
+
+        self.assertEqual(measurements, [('asd', 19, 1)])
+
+    def test_render_warning(self):
+        wf1 = DummyWaveform(duration=19)
+        wf2 = DummyWaveform(duration=21)
+
+        block = InstructionBlock()
+        block.add_instruction_exec(wf1)
+        block.add_instruction_meas([('asd', 0, 1)])
+        block.add_instruction_exec(wf2)
+
+        with self.assertWarns(UserWarning):
+            render(block, sample_rate=0.51314323423)
 
     def integrated_test_with_sequencer_and_pulse_templates(self) -> None:
         # Setup test data
