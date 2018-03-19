@@ -1,6 +1,6 @@
 import itertools
-from typing import Union, Dict, Set, Iterable, FrozenSet, Tuple, cast, List, Optional, DefaultDict
-from collections import defaultdict
+from typing import Union, Dict, Set, Iterable, FrozenSet, Tuple, cast, List, Optional, DefaultDict, Deque
+from collections import defaultdict, deque
 from copy import deepcopy
 from enum import Enum
 from fractions import Fraction
@@ -34,7 +34,7 @@ class Loop(Comparable, Node):
         self._waveform = waveform
         self._measurements = measurements
         self._repetition_count = int(repetition_count)
-        self._cached_duration = None
+        self._cached_body_duration = None
 
         if abs(self._repetition_count - repetition_count) > 1e-10:
             raise ValueError('Repetition count was not an integer')
@@ -49,18 +49,29 @@ class Loop(Comparable, Node):
     def append_child(self, **kwargs) -> None:
         # do not invalidate but update cached duration
         super().__setitem__(slice(len(self), len(self)), (kwargs, ))
-        if self._cached_duration:
-            self._cached_duration += self[-1].duration
+        self._invalidate_duration(body_duration_increment=self[-1].duration)
+
+    def _invalidate_duration(self, body_duration_increment=None):
+        if self._cached_body_duration is not None:
+            if body_duration_increment is not None:
+                self._cached_body_duration += body_duration_increment
+            else:
+                self._cached_body_duration = None
+        if self.parent:
+            if body_duration_increment is not None:
+                self.parent._invalidate_duration(body_duration_increment=body_duration_increment*self.repetition_count)
+            else:
+                self.parent._invalidate_duration()
 
     def add_measurements(self, measurements: List[MeasurementWindow]):
-        if self.is_leaf():
-            measurements = measurements.copy()
+        body_duration = float(self.body_duration)
+        if body_duration == 0:
+            measurements = measurements
         else:
-            body_duration = float(self.duration)
-            measurements = [(mw_name, begin+body_duration, length)
-                            for mw_name, begin, length in measurements]
+            measurements = ((mw_name, begin+body_duration, length) for mw_name, begin, length in measurements)
+
         if self._measurements is None:
-            self._measurements = measurements
+            self._measurements = list(measurements)
         else:
             self._measurements.extend(measurements)
 
@@ -71,19 +82,23 @@ class Loop(Comparable, Node):
     @waveform.setter
     def waveform(self, val) -> None:
         self._waveform = val
-        self._cached_duration = None
+        self._invalidate_duration()
+
+    @property
+    def body_duration(self) -> TimeType:
+        if self._cached_body_duration is None:
+            if self.is_leaf():
+                if self.waveform:
+                    self._cached_body_duration = self.waveform.duration
+                else:
+                    self._cached_body_duration = TimeType(0)
+            else:
+                self._cached_body_duration = sum(child.duration for child in self)
+        return self._cached_body_duration
 
     @property
     def duration(self) -> TimeType:
-        if self._cached_duration is None:
-            if self.is_leaf():
-                if self.waveform:
-                    self._cached_duration = self.repetition_count*self.waveform.duration
-                else:
-                    self._cached_duration = TimeType(0)
-            else:
-                self._cached_duration = self.repetition_count*sum(child.duration for child in self)
-        return self._cached_duration
+        return self.repetition_count*self.body_duration
 
     @property
     def repetition_count(self) -> int:
@@ -91,10 +106,10 @@ class Loop(Comparable, Node):
 
     @repetition_count.setter
     def repetition_count(self, val) -> None:
-        self._repetition_count = int(val)
-        if abs(self._repetition_count - val) > 1e-10:
+        new_repetition = int(val)
+        if abs(new_repetition - val) > 1e-10:
             raise ValueError('Repetition count was not an integer')
-        self._cached_duration = None
+        self._repetition_count = new_repetition
 
     def unroll(self) -> None:
         for i, e in enumerate(self.parent):
@@ -108,7 +123,7 @@ class Loop(Comparable, Node):
 
     def __setitem__(self, idx, value):
         super().__setitem__(idx, value)
-        self._cached_duration = None
+        self._invalidate_duration()
 
     def unroll_children(self) -> None:
         old_children = self.children
@@ -119,9 +134,10 @@ class Loop(Comparable, Node):
         self.assert_tree_integrity()
 
     def encapsulate(self) -> None:
-        self[:] = [Loop(children=self.children,
+        self[:] = [Loop(children=self,
                         repetition_count=self.repetition_count,
-                        waveform=self._waveform)]
+                        waveform=self._waveform,
+                        measurements=self._measurements)]
         self.repetition_count = 1
         self._waveform = None
         self._measurements = None
@@ -277,7 +293,7 @@ class MultiChannelProgram:
         channels = frozenset(channels - {None})
 
         root = Loop()
-        stacks = {channels: (root, [((), list(instruction_block.instructions))])}
+        stacks = {channels: (root, [((), deque(instruction_block.instructions))])}
         self._programs = dict()
 
         while len(stacks) > 0:
@@ -291,6 +307,12 @@ class MultiChannelProgram:
 
                     stacks[new_channel_set] = (root_loop.copy_tree_structure(), deepcopy(stack))
 
+        def repeat_measurements(child_loop):
+            duration_float = float(child_loop.duration)
+            if child_loop._measurements:
+                for r in range(child_loop.repetition_count):
+                    for name, begin, length in child_loop._measurements:
+                        yield (name, begin+r*duration_float, length)
         for channels, program in self._programs.items():
             iterable = program.get_breadth_first_iterator()
             try:
@@ -299,6 +321,9 @@ class MultiChannelProgram:
                     if len(loop) == 1:
                         loop.waveform = loop[0].waveform
                         loop.repetition_count = loop.repetition_count * loop[0].repetition_count
+                        if loop._measurements is None:
+                            loop._measurements = []
+                        loop._measurements.extend(repeat_measurements(loop[0]))
                         loop[:] = loop[0][:]
                         if len(loop):
                             iterable = itertools.chain((loop,), iterable)
@@ -317,13 +342,13 @@ class MultiChannelProgram:
     def __split_channels(channels: FrozenSet[ChannelID],
                          root_loop: Loop,
                          block_stack: List[Tuple[Tuple[int, ...],
-                                                 List[Instruction]]]) -> Loop:
+                                                 Deque[Instruction]]]) -> Loop:
         while block_stack:
             current_loop_location, current_instruction_block = block_stack.pop()
             current_loop = root_loop.locate(current_loop_location)
 
             while current_instruction_block:
-                instruction = current_instruction_block.pop(0)
+                instruction = current_instruction_block.popleft()
 
                 if isinstance(instruction, EXECInstruction):
                     if not instruction.waveform.defined_channels.issuperset(channels):
@@ -331,21 +356,25 @@ class MultiChannelProgram:
                     current_loop.append_child(waveform=instruction.waveform)
 
                 elif isinstance(instruction, REPJInstruction):
+                    if current_instruction_block:
+                        block_stack.append((current_loop_location, current_instruction_block))
+
                     current_loop.append_child(repetition_count=instruction.count)
                     block_stack.append(
                         (current_loop[-1].get_location(),
-                         [*instruction.target.block[instruction.target.offset:-1]])
+                         deque(instruction.target.block[instruction.target.offset:-1]))
                     )
+                    break
 
                 elif isinstance(instruction, CHANInstruction):
                     if channels in instruction.channel_to_instruction_block.keys():
                         # push to front
                         new_instruction_ptr = instruction.channel_to_instruction_block[channels]
                         new_instruction_list = [*new_instruction_ptr.block[new_instruction_ptr.offset:-1]]
-                        current_instruction_block[0:0] = new_instruction_list
+                        current_instruction_block.extendleft(new_instruction_list)
 
                     else:
-                        block_stack.append((current_loop_location, [instruction] + current_instruction_block))
+                        block_stack.append((current_loop_location, deque([instruction]) + current_instruction_block))
 
                         raise ChannelSplit(instruction.channel_to_instruction_block.keys())
 
