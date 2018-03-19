@@ -24,7 +24,7 @@ from qctoolkit.pulses.interpolation import InterpolationStrategy, LinearInterpol
     HoldInterpolationStrategy, JumpInterpolationStrategy
 from qctoolkit.pulses.instructions import Waveform
 from qctoolkit.pulses.conditions import Condition
-from qctoolkit.expressions import ExpressionScalar
+from qctoolkit.expressions import ExpressionScalar, Expression
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 from qctoolkit.pulses.measurement import MeasurementDefiner
 
@@ -134,7 +134,7 @@ EntryInInit = Union['TableEntry',
 
 
 class TableEntry(NamedTuple('TableEntry', [('t', ExpressionScalar),
-                                           ('v', ExpressionScalar),
+                                           ('v', Expression),
                                            ('interp', InterpolationStrategy)])):
     __slots__ = ()
 
@@ -145,7 +145,7 @@ class TableEntry(NamedTuple('TableEntry', [('t', ExpressionScalar),
             raise KeyError(interp, 'is not a valid interpolation strategy')
 
         return super().__new__(cls, ExpressionScalar.make(t),
-                                    ExpressionScalar.make(v),
+                                    Expression.make(v),
                                     interp)
 
     def instantiate(self, parameters: Dict[str, numbers.Real]) -> TableWaveformEntry:
