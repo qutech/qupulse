@@ -25,7 +25,9 @@ class IndexedBasedFinder:
             def __getitem__(s, k):
                 self.indexed_base.add(str(s))
                 self.indices.add(k)
-                return sympy.IndexedBase(str(s))[sympy.sympify(k)]
+                if isinstance(k, SubscriptionChecker):
+                    k = sympy.Symbol(str(k))
+                return sympy.IndexedBase(str(s))[k]
 
         self.SubscriptionChecker = SubscriptionChecker
 
