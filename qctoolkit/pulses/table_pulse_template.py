@@ -321,10 +321,16 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
             raise ParameterNotProvidedException(str(key_error)) from key_error
 
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
+        def serialize(expr):
+            if isinstance(expr, ExpressionScalar):
+                return expr.get_most_simple_representation()
+            else:
+                return expr.get_serialization_data()
+
         return dict(
             entries=dict(
-                (channel, [(entry.t.get_most_simple_representation(),
-                            entry.v.get_most_simple_representation(),
+                (channel, [(serialize(entry.t),
+                            serialize(entry.v),
                             str(entry.interp)) for entry in channel_entries])
                 for channel, channel_entries in self._entries.items()
             ),
