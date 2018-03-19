@@ -5,6 +5,9 @@ function program = program_to_struct(program_name, pulse_template, parameters_an
 	end
 	
 	% Make sure all dictionaries are loaded so not just saving strings
+	if ~iscell(parameters_and_dicts)
+		parameters_and_dicts = {parameters_and_dicts};
+	end	
 	parameters_and_dicts = cellfun(@qc.load_dict, parameters_and_dicts, 'UniformOutput', false);
 	
 	program = struct( ...
