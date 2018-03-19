@@ -6,6 +6,7 @@ from typing import Any, Dict, Union, Sequence, Callable, TypeVar, Type
 from numbers import Number
 import warnings
 import functools
+import array
 
 import sympy
 import numpy
@@ -43,7 +44,8 @@ class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
                                        result: Union[Number, numpy.ndarray],
                                        call_arguments: Any) -> Union[Number, numpy.ndarray]:
         allowed_types = (float, numpy.number, int, complex, bool, numpy.bool_)
-
+        if isinstance(result, tuple):
+            result = numpy.array(result)
         if isinstance(result, numpy.ndarray) and issubclass(result.dtype.type, allowed_types):
             return result
         elif isinstance(result, allowed_types):
@@ -91,7 +93,7 @@ class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
             expression = expression_or_dict
 
         if cls is Expression:
-            if isinstance(expression, (list, tuple, numpy.ndarray, sympy.NDimArray)):
+            if isinstance(expression, (list, tuple, numpy.ndarray, sympy.NDimArray, array.array)):
                 return ExpressionVector(expression)
             else:
                 return ExpressionScalar(expression)
