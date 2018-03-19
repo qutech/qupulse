@@ -65,7 +65,7 @@ function plot_pulse(pulse, varargin)
 	legendHandles = [];
 	
 	for meas_name = fieldnames(measurements)'
-		h = plot(measurements.(meas_name{1}).', measurements.(meas_name{1}).'*0, 'lineWidth', 4, 'displayName', ['Meas: ' meas_name{1}]);
+		h = plot(measurements.(meas_name{1}).', measurements.(meas_name{1}).'*0, 'lineWidth', 8, 'displayName', ['Meas: ' meas_name{1}]);
 		legendHandles(end+1) = h(1);
 		legendEntries{end+1} = ['Meas: ' meas_name{1}];
 	end
@@ -108,8 +108,17 @@ function plot_pulse(pulse, varargin)
 			
 			set(gca, 'UserData', struct('leadsPlotted', true));
 		end
+		x = channels.(args.charge_diagram{1});
+		y = channels.(args.charge_diagram{2});
+		plot(x, y, '.-', 'MarkerSize', 16);
 		
-		 plot(channels.(args.charge_diagram{1}), channels.(args.charge_diagram{2}), '.-', 'MarkerSize', 16);
+		dx = diff(x);
+		dy = diff(y);		
+		tolDiff = 1e-6;
+		tolN = 1e2;
+		bool = abs(dx)>tolDiff & abs(dy)>tolDiff;		
+		
+		quiver(x(bool), y(bool), dx(bool), dy(bool))
 				
 	end
 	
