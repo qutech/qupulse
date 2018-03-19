@@ -3,8 +3,8 @@ function instantiated_pulse = instantiate_pulse(pulse, varargin)
 	
 	if qc.is_instantiated_pulse(pulse)
 		instantiated_pulse = pulse;
-
-	else				
+		
+	else
 		default_args = struct(...
 			'parameters', py.None, ...
 			'channel_mapping', py.None, ...
@@ -15,8 +15,11 @@ function instantiated_pulse = instantiate_pulse(pulse, varargin)
 		
 		sequencer = py.qctoolkit.pulses.Sequencer();
 		
+		args.channel_mapping = replace_empty_with_pynone(args.channel_mapping);
+		args.window_mapping = replace_empty_with_pynone(args.window_mapping);
+		
 		kwargs = pyargs( ...
-      'parameters' ,     args.parameters, ...
+			'parameters' ,     args.parameters, ...
 			'channel_mapping', args.channel_mapping, ...
 			'window_mapping' , args.window_mapping ...
 			);
@@ -24,3 +27,16 @@ function instantiated_pulse = instantiate_pulse(pulse, varargin)
 		sequencer.push(pulse, kwargs);
 		instantiated_pulse = sequencer.build();
 	end
+end
+
+
+function mappingStruct = replace_empty_with_pynone(mappingStruct)
+	
+	for fn = fieldnames(mappingStruct)'
+		if isempty(mappingStruct.(fn{1}))
+			mappingStruct.(fn{1}) = py.None;
+		end
+	end
+	
+end
+
