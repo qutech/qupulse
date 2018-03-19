@@ -25,7 +25,7 @@ class IndexedBasedFinder:
             def __getitem__(s, k):
                 self.indexed_base.add(str(s))
                 self.indices.add(k)
-                return sympy.IndexedBase(str(s))[sympy.Symbol(str(k))]
+                return sympy.IndexedBase(str(s))[sympy.sympify(k)]
 
         self.SubscriptionChecker = SubscriptionChecker
 
@@ -95,7 +95,7 @@ def sympify(expr: Union[str, Number, sympy.Expr, numpy.str_], **kwargs) -> sympy
     try:
         return sympy.sympify(expr, **kwargs, locals=sympify_namespace)
     except TypeError as err:
-        if err.args[0] == "'Symbol' object is not subscriptable":
+        if True:#err.args[0] == "'Symbol' object is not subscriptable":
 
             indexed_base = get_subscripted_symbols(expr)
             return sympy.sympify(expr, **kwargs, locals={**{k: sympy.IndexedBase(k)
