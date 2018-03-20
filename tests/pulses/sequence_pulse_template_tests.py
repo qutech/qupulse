@@ -41,14 +41,14 @@ class SequenceWaveformTest(unittest.TestCase):
         self.assertEqual(len(swf2.compare_key), 3)
 
     def test_unsafe_sample(self):
-        dwfs = (DummyWaveform(duration=1., sample_output=np.linspace(5, 6, num=10)),
-                DummyWaveform(duration=3., sample_output=np.linspace(1, 2, num=30)),
-                DummyWaveform(duration=2., sample_output=np.linspace(8, 9, num=20)))
+        dwfs = (DummyWaveform(duration=1.),
+                DummyWaveform(duration=3.),
+                DummyWaveform(duration=2.))
 
         swf = SequenceWaveform(dwfs)
 
         sample_times = np.arange(0, 60)*0.1
-        expected_output = np.concatenate(tuple(dwf.sample_output for dwf in dwfs))
+        expected_output = np.concatenate((sample_times[:10], sample_times[10:40]-1, sample_times[40:]-4))
 
         output = swf.unsafe_sample('A', sample_times=sample_times)
         np.testing.assert_equal(expected_output, output)
