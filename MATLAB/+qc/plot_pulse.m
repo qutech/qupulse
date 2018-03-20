@@ -52,11 +52,13 @@ function plot_pulse(pulse, varargin)
 		measurements.(m{1}{1})(end+1, 1:2) = [m{1}{2} m{1}{2}+m{1}{3}] * 1e-9;
 	end
 	
+	plotChargeDiagram = ~isempty(args.charge_diagram) && all(cellfun(@(x)(isfield(channels, x)), args.charge_diagram));
+	
 	figure(args.fig_id);
 	if args.clear_fig
 		clf
 	end
-	if ~isempty(args.charge_diagram)
+	if plotChargeDiagram
 		subplot(121);
 	end	
 	hold on
@@ -65,7 +67,11 @@ function plot_pulse(pulse, varargin)
 	legendHandles = [];
 	
 	for meas_name = fieldnames(measurements)'
-		h = plot(measurements.(meas_name{1}).', measurements.(meas_name{1}).'*0, 'lineWidth', 8, 'displayName', ['Meas: ' meas_name{1}]);
+		hLines = plot(measurements.(meas_name{1}).', measurements.(meas_name{1}).'*0, 'lineWidth', 100, 'displayName', ['Meas: ' meas_name{1}]);
+		for h = hLines(:)'
+			color = rgb2hsv(h.Color);
+			h.Color = hsv2rgb([color(1) 0.1 1]);
+		end
 		legendHandles(end+1) = h(1);
 		legendEntries{end+1} = ['Meas: ' meas_name{1}];
 	end
@@ -82,14 +88,19 @@ function plot_pulse(pulse, varargin)
 		title(['Plot range: ' sprintf('%g ', args.plotRange)]);
 	end
 	xlabel('t(s)');
-	legend(legendHandles, legendEntries);	
+	[~, hObj] = legend(legendHandles, legendEntries);	
+	hObj = findobj(hObj, 'type', 'line');
+	set(hObj, 'lineWidth', 2);	
 	
-	
-	if ~isempty(args.charge_diagram)
+	if plotChargeDiagram
 		subplot(122);
 		hold on
-		userData = get(gca, 'UserData');
-		
+		ax = gca;
+		userData = get(ax, 'userData');
+		if ~isempty(args.plotRange)
+			title(['Plot range: ' sprintf('%g ', args.plotRange)]);
+		end
+	
 		if isempty(userData) || ~isstruct(userData) || ~isfield(userData, 'leadsPlotted') || ~userData.leadsPlotted			
 			color = [1 1 1]*0.7;
 			lineWidth = 3;
@@ -108,18 +119,25 @@ function plot_pulse(pulse, varargin)
 			
 			set(gca, 'UserData', struct('leadsPlotted', true));
 		end
+		
 		x = channels.(args.charge_diagram{1});
 		y = channels.(args.charge_diagram{2});
-		plot(x, y, '.-', 'MarkerSize', 16);
-		
+			
+		ax.ColorOrderIndex = 1;
+		lineWidth = 1;
+		h = plot(x, y, '.-', 'markerSize', 8, 'lineWidth', lineWidth);		
+		plot(x(1), y(1), 's', 'markerSize', 12, 'color', h.Color, 'lineWidth', lineWidth);
+				
 		dx = diff(x);
 		dy = diff(y);		
-		tolDiff = 1e-6;
-		tolN = 1e2;
-		bool = abs(dx)>tolDiff & abs(dy)>tolDiff;		
+		r = sqrt(dx.^2 + dy.^2);
 		
-		quiver(x(bool), y(bool), dx(bool), dy(bool))
-				
+		nArrows = min(numel(r), floor(sum(r)/0.5e-3));
+		[~, ind] = sort(r);
+		ind = ind(end-nArrows+1:end);
+		ind = sort(ind);
+		
+		quiver(x(ind), y(ind), dx(ind), dy(ind), 0, 'color', h.Color, 'lineWidth', lineWidth);
 	end
 	
 end
