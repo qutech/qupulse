@@ -307,10 +307,10 @@ class MultiChannelProgram:
 
                     stacks[new_channel_set] = (root_loop.copy_tree_structure(), deepcopy(stack))
 
-        def repeat_measurements(child_loop):
+        def repeat_measurements(child_loop, rep_count):
             duration_float = float(child_loop.duration)
             if child_loop._measurements:
-                for r in range(child_loop.repetition_count):
+                for r in range(rep_count):
                     for name, begin, length in child_loop._measurements:
                         yield (name, begin+r*duration_float, length)
         for channels, program in self._programs.items():
@@ -318,12 +318,10 @@ class MultiChannelProgram:
             try:
                 while True:
                     loop = next(iterable)
-                    if len(loop) == 1:
+                    if len(loop) == 1 and not loop._measurements:
+                        loop._measurements = loop[0]._measurements
                         loop.waveform = loop[0].waveform
                         loop.repetition_count = loop.repetition_count * loop[0].repetition_count
-                        if loop._measurements is None:
-                            loop._measurements = []
-                        loop._measurements.extend(repeat_measurements(loop[0]))
                         loop[:] = loop[0][:]
                         if len(loop):
                             iterable = itertools.chain((loop,), iterable)
