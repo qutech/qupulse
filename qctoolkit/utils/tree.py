@@ -93,7 +93,7 @@ class Node:
         queue = deque([self])
         while queue:
             elem = queue.popleft()
-            queue.extend(elem.children)
+            queue.extend(elem)
             yield elem
 
     def assert_tree_integrity(self) -> None:
