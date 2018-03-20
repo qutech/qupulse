@@ -43,10 +43,21 @@ function [output, bool, msg] = daq_operations(ctrl, varargin)
 		% Operations need to have been added beforehand
 		masks = util.py.py2mat(py.getattr(daq, '_registered_programs'));
 		masks = util.py.py2mat(masks.(a.program_name));
+		operations = masks.operations;
 		masks = util.py.py2mat(masks.masks);
 		output = [];
 		for k = 1:numel(masks)
-			output(k) = util.py.py2mat(size(masks{k}.length));
+			if isa(operations{k}, 'py.atsaverage._atsaverage_release.ComputeDownsampleDefinition')
+				output(k) = util.py.py2mat(size(masks{k}.length));
+			elseif isa(operations{k}, 'py.atsaverage._atsaverage_release.ComputeRepAverageDefinition')
+			  n = util.py.py2mat(masks{k}.length.to_ndarray);
+				if any(n ~= n(1))
+					error('daq_operations assumes that all masks should have the same length if using ComputeRepAverageDefinition.');
+				end
+				output(k) = n(1);
+			else
+				error('Operation ''%s'' not yet implemented', class(operations{k}));
+			end
 		end	
 		if isempty(output)
 			warning('No masks configured');
