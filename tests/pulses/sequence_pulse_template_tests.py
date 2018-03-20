@@ -187,12 +187,13 @@ class SequencePulseTemplateSerializationTests(unittest.TestCase):
         dummy1 = DummyPulseTemplate()
         dummy2 = DummyPulseTemplate()
 
-        sequence = SequencePulseTemplate(dummy1, dummy2, parameter_constraints=['a<b'])
+        sequence = SequencePulseTemplate(dummy1, dummy2, parameter_constraints=['a<b'], measurements=[('m', 0, 1)])
         serializer = DummySerializer(serialize_callback=lambda x: str(x))
 
         expected_data = dict(
             subtemplates=[str(dummy1), str(dummy2)],
-            parameter_constraints=[ParameterConstraint('a<b')]
+            parameter_constraints=['a < b'],
+            measurements=[('m', 0, 1)]
         )
         data = sequence.get_serialization_data(serializer)
         self.assertEqual(expected_data, data)
@@ -206,12 +207,14 @@ class SequencePulseTemplateSerializationTests(unittest.TestCase):
         data = dict(
             subtemplates=[serializer.dictify(dummy1), serializer.dictify(dummy2)],
             identifier='foo',
-            parameter_constraints=['a<b']
+            parameter_constraints=['a < b'],
+            measurements=[('m', 0, 1)]
         )
 
         template = SequencePulseTemplate.deserialize(serializer, **data)
         self.assertEqual(template.subtemplates, [dummy1, dummy2])
         self.assertEqual(template.parameter_constraints, [ParameterConstraint('a<b')])
+        self.assertEqual(template.measurement_declarations, [('m', 0, 1)])
 
 
 class SequencePulseTemplateSequencingTests(SequencePulseTemplateTest):

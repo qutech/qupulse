@@ -227,18 +227,22 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                            target_block=instruction_block)
 
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
-        data = dict(subtemplates=[serializer.dictify(subtemplate) for subtemplate in self.subtemplates],
-                    parameter_constraints=self.parameter_constraints)
-
+        data = dict(subtemplates=[serializer.dictify(subtemplate) for subtemplate in self.subtemplates])
+        if self.parameter_constraints:
+            data['parameter_constraints'] = [str(c) for c in self.parameter_constraints]
+        if self.measurement_declarations:
+            data['measurements'] = self.measurement_declarations
         return data
 
     @staticmethod
     def deserialize(serializer: Serializer,
                     subtemplates: Iterable[Dict[str, Any]],
-                    parameter_constraints: List[str],
-                    identifier: Optional[str]=None) -> 'SequencePulseTemplate':
+                    parameter_constraints: Optional[List[str]]=None,
+                    identifier: Optional[str]=None,
+                    measurements: Optional[List[MeasurementDeclaration]]=None) -> 'SequencePulseTemplate':
         subtemplates = [serializer.deserialize(st) for st in subtemplates]
         seq_template = SequencePulseTemplate(*subtemplates,
                                              parameter_constraints=parameter_constraints,
-                                             identifier=identifier)
+                                             identifier=identifier,
+                                             measurements=measurements)
         return seq_template
