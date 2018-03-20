@@ -57,16 +57,18 @@ class SequenceWaveform(Waveform):
                       sample_times: np.ndarray,
                       output_array: Union[np.ndarray, None]=None) -> np.ndarray:
         if output_array is None:
-            output_array = np.empty(len(sample_times))
+            output_array = np.empty_like(sample_times)
         time = 0
         for subwaveform in self._sequenced_waveforms:
             # before you change anything here, make sure to understand the difference between basic and advanced
             # indexing in numpy and their copy/reference behaviour
-            indices = slice(*np.searchsorted(sample_times, (time, time+subwaveform.duration), 'left'))
+            end = time + subwaveform.duration
+
+            indices = slice(*np.searchsorted(sample_times, (float(time), float(end)), 'left'))
             subwaveform.unsafe_sample(channel=channel,
-                                      sample_times=sample_times[indices],
+                                      sample_times=sample_times[indices]-time,
                                       output_array=output_array[indices])
-            time += subwaveform.duration
+            time = end
         return output_array
 
     @property
