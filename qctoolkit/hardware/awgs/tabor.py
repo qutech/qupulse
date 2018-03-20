@@ -784,10 +784,14 @@ class TaborChannelPair(AWG):
 
         # helper to restore previous state if upload is impossible
         to_restore = None
+        to_restore_was_armed = False
         if name in self._known_programs:
             if force:
+                if self._current_program == name:
+                    to_restore_was_armed = True
+
                 # save old program to restore in on error
-                to_restore = (self.free_program(name), self._current_program)
+                to_restore = name, self.free_program(name)
             else:
                 raise ValueError('{} is already known on {}'.format(name, self.identifier))
 
@@ -813,8 +817,9 @@ class TaborChannelPair(AWG):
                                                                                                segment_lengths)
         except:
             if to_restore:
-                self._restore_program(name, to_restore[1])
-                self._current_program = to_restore[0]
+                self._restore_program(*to_restore)
+                if to_restore_was_armed:
+                    self.change_armed_program(name)
             raise
 
         self._segment_references[waveform_to_segment[waveform_to_segment >= 0]] += 1
