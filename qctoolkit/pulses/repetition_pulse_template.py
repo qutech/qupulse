@@ -41,13 +41,16 @@ class RepetitionWaveform(Waveform):
                       sample_times: np.ndarray,
                       output_array: Union[np.ndarray, None]=None) -> np.ndarray:
         if output_array is None:
-            output_array = np.empty(len(sample_times))
+            output_array = np.empty_like(sample_times)
         body_duration = self._body.duration
-        for i in range(self._repetition_count):
-            indices = slice(*np.searchsorted(sample_times, (i*body_duration, (i+1)*body_duration)))
+        time = 0
+        for _ in range(self._repetition_count):
+            end = time + body_duration
+            indices = slice(*np.searchsorted(sample_times, (float(time), float(end)), 'left'))
             self._body.unsafe_sample(channel=channel,
-                                     sample_times=sample_times[indices],
+                                     sample_times=sample_times[indices] - time,
                                      output_array=output_array[indices])
+            time = end
         return output_array
 
     @property

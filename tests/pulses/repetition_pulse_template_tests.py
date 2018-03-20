@@ -61,12 +61,15 @@ class RepetitionWaveformTest(unittest.TestCase):
         rwf = RepetitionWaveform(body=body_wf, repetition_count=10)
 
         sample_times = np.arange(80) * 70./80.
-        np.testing.assert_equal(rwf.unsafe_sample(channel='A', sample_times=sample_times), sample_times)
+        inner_sample_times = (sample_times.reshape((10, -1)) - (7 * np.arange(10))[:, np.newaxis]).ravel()
+
+        result = rwf.unsafe_sample(channel='A', sample_times=sample_times)
+        np.testing.assert_equal(result, inner_sample_times)
 
         output_expected = np.empty_like(sample_times)
         output_received = rwf.unsafe_sample(channel='A', sample_times=sample_times, output_array=output_expected)
         self.assertIs(output_expected, output_received)
-        np.testing.assert_equal(output_received, sample_times)
+        np.testing.assert_equal(output_received, inner_sample_times)
 
 
 class RepetitionPulseTemplateTest(unittest.TestCase):
