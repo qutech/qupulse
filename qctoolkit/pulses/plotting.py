@@ -139,7 +139,8 @@ def plot(pulse: PulseTemplate,
          axes: Any=None,
          show: bool=True,
          plot_channels: Optional[Set[ChannelID]]=None,
-         plot_measurements: Optional[Set[str]]=None) -> Any:  # pragma: no cover
+         plot_measurements: Optional[Set[str]]=None,
+         maximum_points: int=10**6) -> Any:  # pragma: no cover
     """Plot a pulse using matplotlib.
 
     The given pulse will first be sequenced using the Sequencer class. The resulting
@@ -156,6 +157,7 @@ def plot(pulse: PulseTemplate,
         show: If true, the figure will be shown
         plot_channels: If specified only channels from this set will be plotted. If omitted all channels will be.
         plot_measurements: If specified measurements in this set will be plotted. If omitted no measurements will be.
+        maximum_points: If the sampled waveform is bigger, it is not plotted
     Returns:
         matplotlib.pyplot.Figure instance in which the pulse is rendered
     Raises:
@@ -182,6 +184,11 @@ def plot(pulse: PulseTemplate,
         times, voltages, measurements = render(sequence, sample_rate, render_measurements=True)
     else:
         times, voltages = render(sequence, sample_rate)
+
+    if times.size > maximum_points:
+        warnings.warn("Sampled pulse of size {wf_len} is lager than {max_points}".format(wf_len=times.size,
+                                                                                         max_points=maximum_points))
+        return None
 
     legend_handles = []
     if axes is None:
