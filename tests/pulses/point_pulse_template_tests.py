@@ -204,7 +204,7 @@ class TablePulseTemplateMeasurementTest(MeasurementDefinerTest):
 class PointPulseTemplateSerializationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.serializer = DummySerializer(lambda x: dict(name=x.name), lambda x: x.name, lambda x: x['name'])
-        self.entries = [('foo', 2, 'hold'), ('hugo', 'A + B', 'linear')]
+        self.entries = [('foo', 2, 'hold'), ('hugo', 'A + B', 'linear'), ('sudo', [1, 'a'], 'jump')]
         self.measurements = [('m', 1, 1), ('foo', 'z', 'o')]
         self.template = PointPulseTemplate(time_point_tuple_list=self.entries, channel_names=[0, 'A'],
                                            measurements=self.measurements,

@@ -78,9 +78,9 @@ class ParametrizedRange:
 
     def to_tuple(self) -> Tuple[Any, Any, Any]:
         """Return a simple representation of the range which is useful for comparison and serialization"""
-        return (self.start.get_most_simple_representation(),
-                self.stop.get_most_simple_representation(),
-                self.step.get_most_simple_representation())
+        return (self.start.get_serialization_data(),
+                self.stop.get_serialization_data(),
+                self.step.get_serialization_data())
 
     def to_range(self, parameters: Dict[str, Any]) -> range:
         return range(checked_int_cast(self.start.evaluate_numeric(**parameters)),

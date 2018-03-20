@@ -13,7 +13,7 @@ from sympy import sin, Sum, IndexedBase
 a_ = IndexedBase(a)
 b_ = IndexedBase(b)
 
-from qctoolkit.utils.sympy import sympify as qc_sympify, substitute_with_eval, recursive_substitution, Len, evaluate_lambdified, evaluate_compiled
+from qctoolkit.utils.sympy import sympify as qc_sympify, substitute_with_eval, recursive_substitution, Len, evaluate_lambdified, evaluate_compiled, get_most_simple_representation
 
 
 ################################################### SUBSTITUTION #######################################################
@@ -271,3 +271,22 @@ class CompiledEvaluationTest(EvaluationTests):
 
     def test_eval_many_arguments(self):
         super().test_eval_many_arguments(None)
+
+
+class RepresentationTest(unittest.TestCase):
+    def test_get_most_simple_representation(self):
+        cpl = get_most_simple_representation(qc_sympify('1 + 1j'))
+        self.assertIsInstance(cpl, str)
+        self.assertTrue(bool(sympy.Eq(sympy.sympify(cpl), 1 + 1j)))
+
+        integer = get_most_simple_representation(qc_sympify('3'))
+        self.assertIsInstance(integer, int)
+        self.assertEqual(integer, 3)
+
+        flt = get_most_simple_representation(qc_sympify('3.1'))
+        self.assertIsInstance(flt, float)
+        self.assertEqual(flt, 3.1)
+
+        st = get_most_simple_representation(qc_sympify('a + b'))
+        self.assertIsInstance(st, str)
+        self.assertEqual(st, 'a + b')

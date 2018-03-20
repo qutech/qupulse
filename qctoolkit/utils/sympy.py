@@ -108,6 +108,17 @@ def sympify(expr: Union[str, Number, sympy.Expr, numpy.str_], **kwargs) -> sympy
             raise
 
 
+def get_most_simple_representation(expression: sympy.Expr) -> Union[str, int, float]:
+    if expression.free_symbols:
+        return str(expression)
+    elif expression.is_Integer:
+        return int(expression)
+    elif expression.is_Float:
+        return float(expression)
+    else:
+        return str(expression)
+
+
 def substitute_with_eval(expression: sympy.Expr,
                          substitutions: Dict[str, Union[sympy.Expr, numpy.ndarray, str]]) -> sympy.Expr:
     """Substitutes only sympy.Symbols. Workaround for numpy like array behaviour. ~Factor 3 slower compared to subs"""
