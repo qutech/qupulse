@@ -12,7 +12,8 @@ import sympy
 import numpy
 
 from qctoolkit.serialization import AnonymousSerializable
-from qctoolkit.utils.sympy import sympify, substitute_with_eval, to_numpy, recursive_substitution, evaluate_lambdified
+from qctoolkit.utils.sympy import sympify, to_numpy, recursive_substitution, evaluate_lambdified,\
+    get_most_simple_representation
 
 __all__ = ["Expression", "ExpressionVariableMissingException", "ExpressionScalar", "ExpressionVector"]
 
@@ -163,7 +164,13 @@ class ExpressionVector(Expression):
         return self._parse_evaluate_numeric_result(numpy.array(result), kwargs)
 
     def get_serialization_data(self) -> Sequence[str]:
-        return numpy.vectorize(str)(self._expression_vector).tolist()
+        def nested_get_most_simple_representation(list_or_expression):
+            if isinstance(list_or_expression, list):
+                return [nested_get_most_simple_representation(entry)
+                        for entry in list_or_expression]
+            else:
+                return get_most_simple_representation(list_or_expression)
+        return nested_get_most_simple_representation(self._expression_vector.tolist())
 
     def __str__(self):
         return str(self.get_serialization_data())
@@ -216,18 +223,6 @@ class ExpressionScalar(Expression):
     @property
     def variables(self) -> Sequence[str]:
         return self._variables
-
-    def get_most_simple_representation(self) -> Union[str, int, float, complex]:
-        if self._sympified_expression.free_symbols:
-            return str(self._sympified_expression)
-        elif self._sympified_expression.is_integer:
-            return int(self._sympified_expression)
-        elif self._sympified_expression.is_real:
-            return float(self._sympified_expression)
-        elif self._sympified_expression.is_complex:
-            return complex(self._sympified_expression)
-        else:
-            return self._original_expression  # pragma: no cover
 
     @classmethod
     def _sympify(cls, other: Union['ExpressionScalar', Number, sympy.Expr]) -> sympy.Expr:
@@ -288,8 +283,12 @@ class ExpressionScalar(Expression):
     def sympified_expression(self) -> sympy.Expr:
         return self._sympified_expression
 
-    def get_serialization_data(self) -> Union[str, Dict]:
-        return self.original_expression
+    def get_serialization_data(self) -> Union[str, float, int]:
+        serialized = get_most_simple_representation(self._sympified_expression)
+        if isinstance(serialized, str):
+            return self.original_expression
+        else:
+            return serialized
 
     def is_nan(self) -> bool:
         return sympy.sympify('nan') == self._sympified_expression

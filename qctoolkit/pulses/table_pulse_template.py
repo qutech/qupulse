@@ -154,13 +154,7 @@ class TableEntry(NamedTuple('TableEntry', [('t', ExpressionScalar),
                                   self.interp)
 
     def get_serialization_data(self) -> tuple:
-        def serialize(expr):
-            if isinstance(expr, ExpressionScalar):
-                return expr.get_most_simple_representation()
-            else:
-                return expr.get_serialization_data()
-
-        return serialize(self.t), serialize(self.v),  str(self.interp)
+        return self.t.get_serialization_data(), self.v.get_serialization_data(), str(self.interp)
 
 
 class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
