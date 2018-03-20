@@ -65,6 +65,13 @@ class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
 
         return self._parse_evaluate_numeric_result(result, kwargs)
 
+    def __float__(self):
+        if self.variables:
+            return NotImplemented
+        else:
+            e = self.evaluate_numeric()
+            return float(e)
+    
     def evaluate_symbolic(self, substitutions: Dict[Any, Any]) -> 'Expression':
         return Expression.make(recursive_substitution(sympify(self.underlying_expression), substitutions))
 
