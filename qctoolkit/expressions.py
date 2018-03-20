@@ -178,6 +178,15 @@ class ExpressionVector(Expression):
     def __repr__(self):
         return 'ExpressionVector({})'.format(repr(self.get_serialization_data()))
 
+    def __eq__(self, other):
+        if not isinstance(other, Expression):
+            other = Expression.make(other)
+        if isinstance(other, ExpressionScalar):
+            return self._expression_vector.size == 1 and self._expression_vector[0] == other.underlying_expression
+        if isinstance(other, ExpressionVector) and self._expression_vector.shape != other._expression_vector.shape:
+            return False
+        return numpy.all(self._expression_vector == other.underlying_expression)
+
     @property
     def underlying_expression(self) -> numpy.ndarray:
         return self._expression_vector
