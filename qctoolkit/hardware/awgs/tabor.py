@@ -3,7 +3,7 @@ import sys
 import functools
 import weakref
 import itertools
-from typing import List, Tuple, Set, NamedTuple, Callable, Optional, Any, Sequence, cast, Generator
+from typing import List, Tuple, Set, NamedTuple, Callable, Optional, Any, Sequence, cast, Generator, Union
 from enum import Enum
 from collections import OrderedDict
 
@@ -784,10 +784,14 @@ class TaborChannelPair(AWG):
 
         # helper to restore previous state if upload is impossible
         to_restore = None
+        to_restore_was_armed = False
         if name in self._known_programs:
             if force:
+                if self._current_program == name:
+                    to_restore_was_armed = True
+
                 # save old program to restore in on error
-                to_restore = (self.free_program(name), self._current_program)
+                to_restore = name, self.free_program(name)
             else:
                 raise ValueError('{} is already known on {}'.format(name, self.identifier))
 
@@ -813,8 +817,9 @@ class TaborChannelPair(AWG):
                                                                                                segment_lengths)
         except:
             if to_restore:
-                self._restore_program(name, to_restore[1])
-                self._current_program = to_restore[0]
+                self._restore_program(*to_restore)
+                if to_restore_was_armed:
+                    self.change_armed_program(name)
             raise
 
         self._segment_references[waveform_to_segment[waveform_to_segment >= 0]] += 1
@@ -1012,8 +1017,14 @@ class TaborChannelPair(AWG):
         self._segment_hashes = self._segment_hashes[:new_end]
         self._segment_references = self._segment_references[:new_end]
 
-        delete_cmd = ';'.join('TRAC:DEL {}'.format(i+1) for i in range(new_end, old_end))
-        self.device.send_cmd(delete_cmd)
+        try:
+            #  send max 10 commands at once
+            chunk_size = 10
+            for chunk_start in range(new_end, old_end, chunk_size):
+                self.device.send_cmd('; '.join('TRAC:DEL {}'.format(i+1)
+                                               for i in range(chunk_start, min(chunk_start+chunk_size, old_end))))
+        except Exception as e:
+            raise TaborUndefinedState('Error during cleanup. Device is in undefined state.', device=self) from e
 
     def remove(self, name: str) -> None:
         """Remove a program from the AWG.
@@ -1164,3 +1175,17 @@ class TaborChannelPair(AWG):
 
 class TaborException(Exception):
     pass
+
+class TaborUndefinedState(TaborException):
+    """If this exception is raised the attached tabor device is in an undefined state.
+    It is highly recommended to call reset it."""
+
+    def __init__(self, *args, device: Union[TaborAWGRepresentation, TaborChannelPair]):
+        super().__init__(*args)
+        self.device = device
+
+    def reset_device(self):
+        if  isinstance(self.device, TaborAWGRepresentation):
+            self.device.reset()
+        elif isinstance(self.device, TaborChannelPair):
+            self.device.clear()
