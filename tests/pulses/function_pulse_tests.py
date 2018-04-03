@@ -11,7 +11,8 @@ import numpy as np
 
 from tests.serialization_dummies import DummySerializer, DummyStorageBackend
 from tests.pulses.sequencing_dummies import DummyParameter
-from tests.pulses.measurement_tests import MeasurementDefinerTest, ParameterConstrainerTest
+from tests.pulses.measurement_tests import MeasurementDefinerTest
+from tests.pulses.parameters_tests import ParameterConstrainerTest
 
 
 class FunctionPulseTest(unittest.TestCase):
@@ -22,7 +23,7 @@ class FunctionPulseTest(unittest.TestCase):
 
         self.meas_list = [('mw', 1, 1), ('mw', 'x', 'z'), ('drup', 'j', 'u')]
 
-        self.constraints = ['a < b', 'c > 1', 'd > c']
+        self.constraints = {'a < b', 'c > 1', 'd > c'}
 
         self.valid_par_vals = dict(a=1,
                              b=2,
@@ -89,8 +90,9 @@ class FunctionPulseSerializationTest(FunctionPulseTest):
                              channel='A',
                              measurement_declarations=self.meas_list,
                              parameter_constraints=self.constraints)
-        self.assertEqual(expected_data, self.fpt.get_serialization_data(
-            DummySerializer(serialize_callback=lambda x: x.original_expression)))
+        data = self.fpt.get_serialization_data(
+            DummySerializer(serialize_callback=lambda x: x.original_expression))
+        self.assertEqual(expected_data, data)
 
     def test_deserialize(self) -> None:
         basic_data = dict(duration_expression=str(self.s2),

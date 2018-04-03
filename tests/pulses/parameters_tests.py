@@ -3,7 +3,7 @@ from typing import Union
 
 from qctoolkit.expressions import Expression
 from qctoolkit.pulses.parameters import ConstantParameter, MappedParameter, ParameterNotProvidedException,\
-    ParameterConstraint, ParameterConstraintViolation, InvalidParameterNameException
+    ParameterConstraint, ParameterConstraintViolation, InvalidParameterNameException, ParameterConstrainer
 
 from tests.serialization_dummies import DummySerializer
 from tests.pulses.sequencing_dummies import DummyParameter
@@ -108,6 +108,74 @@ class InvalidParameterNameExceptionTests(unittest.TestCase):
 
         self.assertEqual(exception.parameter_name, 'asd')
         self.assertEqual(str(exception), 'asd is an invalid parameter name')
+
+
+class ParameterConstrainerTest(unittest.TestCase):
+    def __init__(self, *args, to_test_constructor=None, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if to_test_constructor is None:
+            self.to_test_constructor = lambda parameter_constraints=None:\
+                ParameterConstrainer(parameter_constraints=parameter_constraints)
+        else:
+            self.to_test_constructor = to_test_constructor
+
+    def test_parameter_constraints(self):
+        to_test = self.to_test_constructor()
+        self.assertEqual(to_test.parameter_constraints, {})
+
+        to_test = self.to_test_constructor(['a < b'])
+        self.assertEqual(to_test.parameter_constraints, {ParameterConstraint('a < b')})
+
+        to_test = self.to_test_constructor(['a < b', 'c < 1'])
+        self.assertEqual(to_test.parameter_constraints, {ParameterConstraint('a < b'), ParameterConstraint('c < 1')})
+
+    def test_validate_parameter_constraints(self):
+        to_test = self.to_test_constructor()
+        to_test.validate_parameter_constraints(dict())
+        to_test.validate_parameter_constraints(dict(a=1))
+
+        to_test = self.to_test_constructor(['a < b'])
+        with self.assertRaises(ParameterNotProvidedException):
+            to_test.validate_parameter_constraints(dict())
+        with self.assertRaises(ParameterConstraintViolation):
+            to_test.validate_parameter_constraints(dict(a=1, b=0.8))
+        to_test.validate_parameter_constraints(dict(a=1, b=2))
+
+        to_test = self.to_test_constructor(['a < b', 'c < 1'])
+        with self.assertRaises(ParameterNotProvidedException):
+            to_test.validate_parameter_constraints(dict(a=1, b=2))
+        with self.assertRaises(ParameterNotProvidedException):
+            to_test.validate_parameter_constraints(dict(c=0.5))
+
+        with self.assertRaises(ParameterConstraintViolation):
+            to_test.validate_parameter_constraints(dict(a=1, b=0.8, c=0.5))
+        with self.assertRaises(ParameterConstraintViolation):
+            to_test.validate_parameter_constraints(dict(a=0.5, b=0.8, c=1))
+        to_test.validate_parameter_constraints(dict(a=0.5, b=0.8, c=0.1))
+
+    def test_constrained_parameters(self):
+        to_test = self.to_test_constructor()
+        self.assertEqual(to_test.constrained_parameters, set())
+
+        to_test = self.to_test_constructor(['a < b'])
+        self.assertEqual(to_test.constrained_parameters, {'a', 'b'})
+
+        to_test = self.to_test_constructor(['a < b', 'c < 1'])
+        self.assertEqual(to_test.constrained_parameters, {'a', 'b', 'c'})
+
+    def test_constraint_order_invariance(self) -> None:
+        c1 = ParameterConstrainer(parameter_constraints=['bla > blub', 'foo == bar'])
+        c2 = ParameterConstrainer(parameter_constraints=['bla > blub', 'foo == bar'])
+        c3 = ParameterConstrainer(parameter_constraints=['foo == bar', 'bla > blub'])
+
+        self.assertEqual(c1.parameter_constraints, c2.parameter_constraints)
+        self.assertEqual(c2.parameter_constraints, c3.parameter_constraints)
+        self.assertEqual(c3.parameter_constraints, c1.parameter_constraints)
+
+        self.assertEqual(c1.constrained_parameters, c2.constrained_parameters)
+        self.assertEqual(c2.constrained_parameters, c3.constrained_parameters)
+        self.assertEqual(c3.constrained_parameters, c1.constrained_parameters)
 
         
 if __name__ == "__main__":

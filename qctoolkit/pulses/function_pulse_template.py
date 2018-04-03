@@ -126,7 +126,7 @@ class FunctionPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
             expression=self.__expression,
             channel=self.__channel,
             measurement_declarations=self.measurement_declarations,
-            parameter_constraints=[str(c) for c in self.parameter_constraints]
+            parameter_constraints={str(c) for c in self.parameter_constraints}
         )
 
     @staticmethod

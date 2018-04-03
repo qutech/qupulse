@@ -292,7 +292,7 @@ class RepetitionPulseTemplateSerializationTests(unittest.TestCase):
         # compare!
         self.assertIs(self.body, template.body)
         self.assertEqual('foo', template.repetition_count)
-        self.assertEqual(template.parameter_constraints, [ParameterConstraint('foo < 3')])
+        self.assertEqual(template.parameter_constraints, {ParameterConstraint('foo < 3')})
         self.assertEqual(template.measurement_declarations, data['measurements'])
 
 

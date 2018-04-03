@@ -213,7 +213,7 @@ class SequencePulseTemplateSerializationTests(unittest.TestCase):
 
         template = SequencePulseTemplate.deserialize(serializer, **data)
         self.assertEqual(template.subtemplates, [dummy1, dummy2])
-        self.assertEqual(template.parameter_constraints, [ParameterConstraint('a<b')])
+        self.assertEqual(template.parameter_constraints, {ParameterConstraint('a<b')})
         self.assertEqual(template.measurement_declarations, [('m', 0, 1)])
 
 

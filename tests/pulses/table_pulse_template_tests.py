@@ -13,7 +13,8 @@ from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 
 from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyInterpolationStrategy, DummyParameter, DummyCondition
 from tests.serialization_dummies import DummySerializer, DummyStorageBackend
-from tests.pulses.measurement_tests import ParameterConstrainerTest, MeasurementDefinerTest
+from tests.pulses.measurement_tests import MeasurementDefinerTest
+from tests.pulses.parameters_tests import ParameterConstrainerTest
 
 
 class WaveformEntryTest(unittest.TestCase):

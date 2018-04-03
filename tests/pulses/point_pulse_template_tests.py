@@ -5,7 +5,8 @@ import numpy as np
 from qctoolkit.pulses.parameters import ParameterNotProvidedException
 
 from qctoolkit.pulses.point_pulse_template import PointPulseTemplate, PointWaveform, InvalidPointDimension, PointPulseEntry, PointWaveformEntry
-from tests.pulses.measurement_tests import ParameterConstrainerTest, MeasurementDefinerTest
+from tests.pulses.measurement_tests import MeasurementDefinerTest
+from tests.pulses.parameters_tests import ParameterConstrainerTest
 from tests.pulses.sequencing_dummies import DummyParameter, DummyCondition
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 from qctoolkit.pulses.interpolation import HoldInterpolationStrategy, JumpInterpolationStrategy, LinearInterpolationStrategy
@@ -216,7 +217,7 @@ class PointPulseTemplateSerializationTests(unittest.TestCase):
         expected_data = dict(measurements=self.measurements,
                              time_point_tuple_list=self.entries,
                              channel_names=(0, 'A'),
-                             parameter_constraints=[str(Expression('ilse>2')), str(Expression('k>foo'))])
+                             parameter_constraints={str(Expression('ilse>2')), str(Expression('k>foo'))})
 
         data = self.template.get_serialization_data(self.serializer)
         self.assertEqual(expected_data, data)

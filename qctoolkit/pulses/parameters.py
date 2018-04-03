@@ -187,6 +187,9 @@ class ParameterConstraint(AnonymousSerializable):
         else:
             return str(self._expression.sympified_expression)
 
+    def __hash__(self) -> int:
+        return hash(self._expression.underlying_expression)
+
     def get_serialization_data(self) -> str:
         return str(self)
 
@@ -196,14 +199,14 @@ class ParameterConstrainer:
     def __init__(self, *,
                  parameter_constraints: Optional[Iterable[Union[str, ParameterConstraint]]]) -> None:
         if parameter_constraints is None:
-            self._parameter_constraints = []
+            self._parameter_constraints = {}
         else:
-            self._parameter_constraints = [constraint if isinstance(constraint, ParameterConstraint)
+            self._parameter_constraints = set([constraint if isinstance(constraint, ParameterConstraint)
                                            else ParameterConstraint(constraint)
-                                           for constraint in parameter_constraints]
+                                           for constraint in parameter_constraints])
 
     @property
-    def parameter_constraints(self) -> List[ParameterConstraint]:
+    def parameter_constraints(self) -> Set[ParameterConstraint]:
         return self._parameter_constraints
 
     def validate_parameter_constraints(self, parameters: [str, Union[Parameter, Real]]) -> None:

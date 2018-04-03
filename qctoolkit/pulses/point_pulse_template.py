@@ -105,7 +105,7 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
                                           for entry in self._entries],
                 'channel_names':       self._channels}
         if self.parameter_constraints:
-            data['parameter_constraints'] = [str(c) for c in self.parameter_constraints]
+            data['parameter_constraints'] = {str(c) for c in self.parameter_constraints}
         if self.measurement_declarations:
             data['measurements'] = self.measurement_declarations
         return data
