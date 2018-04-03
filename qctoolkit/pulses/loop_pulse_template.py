@@ -3,6 +3,7 @@ another PulseTemplate based on a condition."""
 
 
 from typing import Dict, Set, Optional, Any, Union, Tuple, Generator, Sequence, cast
+from numbers import Real
 
 import sympy
 
@@ -10,7 +11,7 @@ from qctoolkit.serialization import Serializer
 
 from qctoolkit.expressions import ExpressionScalar
 from qctoolkit.utils import checked_int_cast
-from qctoolkit.pulses.parameters import Parameter, ConstantParameter, InvalidParameterNameException, ParameterConstrainer
+from qctoolkit.pulses.parameters import Parameter, ConstantParameter, MappedParameter, InvalidParameterNameException, ParameterConstrainer, ParameterNotProvidedException
 from qctoolkit.pulses.pulse_template import PulseTemplate, ChannelID
 from qctoolkit.pulses.conditions import Condition, ConditionMissingException
 from qctoolkit.pulses.instructions import InstructionBlock
@@ -251,6 +252,148 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
                                     measurements=measurements,
                                     parameter_constraints=parameter_constraints
                                     )
+
+
+class RangeSweepPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConstrainer):
+    """This pulse template allows sweeping over an arbitrary parametrized range of numbers and provides the loop index as a
+    parameter to the body. If you do not need the index in the pulse template, consider using
+    :class:`~qctoolkit.pulses.repetition_pulse_template.RepetitionPulseTemplate`. If you want to sweep over an integer range
+    with a constant step-size, consider using :class:`~qctoolkit.pulses.loop_pulse_template.ForLoopPulseTemplate`."""
+    def __init__(self,
+                 body: PulseTemplate,
+                 sweep_variable: str,
+                 sweep_sequence: Sequence[Union[Real, str, ExpressionScalar]],
+                 identifier: Optional[str]=None,
+                 measurements: Optional[Sequence[MeasurementDeclaration]]=None,
+                 parameter_constraints: Optional[Sequence]=None):
+        """
+        Args:
+            body: The loop body. It is expected to have `loop_index` as an parameter
+            sweep_variable: Loop index of the for loop
+            sweep_sequence: Range to sweep over
+            identifier: Used for serialization
+        """
+        LoopPulseTemplate.__init__(self, body=body, identifier=identifier)
+        MeasurementDefiner.__init__(self, measurements=measurements)
+        ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
+
+        self._sweep_sequence = sweep_sequence.copy()
+        for i, c in enumerate(self._sweep_sequence):
+            if isinstance(c, str):
+                self._sweep_sequence[i] = ExpressionScalar(c)
+
+        if not sweep_variable.isidentifier():
+            raise InvalidParameterNameException(sweep_variable)
+        body_parameters = self.body.parameter_names
+        if sweep_variable not in body_parameters:
+            raise LoopIndexNotUsedException(sweep_variable, body_parameters)
+        self._sweep_variable = sweep_variable
+
+    @property
+    def sweep_variable(self) -> str:
+        return self._sweep_variable
+
+    @property
+    def swep_sequence(self) -> Sequence[Union[int, str, ExpressionScalar]]:
+        return self._sweep_sequence.copy()
+
+    @property
+    def measurement_names(self) -> Set[str]:
+        return LoopPulseTemplate.measurement_names.fget(self) | MeasurementDefiner.measurement_names.fget(self)
+
+    @property
+    def duration(self) -> ExpressionScalar:
+
+        duration_expression = 0
+        loop_index = sympy.symbols(self._sweep_variable)
+
+        for c in self._sweep_sequence:
+            if isinstance(c, ExpressionScalar):
+                c = c.underlying_expression
+            duration_expression = duration_expression + self.body.duration.sympified_expression.subs({loop_index: c})
+
+        return ExpressionScalar(duration_expression)
+
+    @property
+    def parameter_names(self) -> Set[str]:
+        parameter_names = self.body.parameter_names.copy()
+        parameter_names.remove(self._sweep_variable)
+
+        for c in self._sweep_sequence:
+            if isinstance(c, ExpressionScalar):
+                parameter_names = parameter_names.union(c.variables)
+
+        return parameter_names
+
+    def _body_parameter_generator(self, parameters: Dict[str, Parameter], forward=True) -> Generator:
+        sweep_sequence = self._sweep_sequence if forward else reversed(self._sweep_sequence)
+        for c in sweep_sequence:
+            local_parameters = parameters.copy()
+            if isinstance(c, Real):
+                local_parameters[self._sweep_variable] = ConstantParameter(c)
+            elif isinstance(c, ExpressionScalar):
+                local_parameters[self._sweep_variable] = MappedParameter(c, parameters)
+            yield local_parameters
+
+    def build_sequence(self,
+                       sequencer: Sequencer,
+                       parameters: Dict[str, Parameter],
+                       conditions: Dict[str, Condition],
+                       measurement_mapping: Dict[str, str],
+                       channel_mapping: Dict[ChannelID, ChannelID],
+                       instruction_block: InstructionBlock) -> None:
+
+        self.insert_measurement_instruction(instruction_block=instruction_block,
+                                            parameters=parameters,
+                                            measurement_mapping=measurement_mapping)
+
+        for local_parameters in self._body_parameter_generator(parameters, forward=False):
+            self.validate_parameter_constraints(parameters=local_parameters)
+            sequencer.push(self.body,
+                           parameters=local_parameters,
+                           conditions=conditions,
+                           window_mapping=measurement_mapping,
+                           channel_mapping=channel_mapping,
+                           target_block=instruction_block)
+
+    def requires_stop(self,
+                      parameters: Dict[str, Parameter],
+                      conditions: Dict[str, 'Condition']) -> bool:
+        try:
+            return any(parameters[parameter_name].requires_stop for c in self._sweep_sequence if isinstance(c, ExpressionScalar) for parameter_name in set(c.variables))
+        except KeyError as key_error:
+            raise ParameterNotProvidedException(key_error.args[0])
+
+    def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
+        data = dict(
+            body=serializer.dictify(self.body),
+            loop_range=self._sweep_sequence,
+            loop_index=self._sweep_variable,
+            parameter_constraints={str(c) for c in self.parameter_constraints},
+            measurements=self.measurement_declarations
+        )
+        return data
+
+    @staticmethod
+    def deserialize(serializer: Serializer,
+                    body: Dict[str, Any],
+                    loop_range: Sequence[Union[int, str]],
+                    loop_index: str,
+                    identifier: Optional[str]=None,
+                    measurements: Optional[Sequence[str]]=None,
+                    parameter_constraints: Optional[Sequence[str]]=None) -> 'RangeSweepPulseTemplate':
+        body = cast(PulseTemplate, serializer.deserialize(body))
+        return RangeSweepPulseTemplate(body=body,
+                                       identifier=identifier,
+                                       sweep_sequence=loop_range,
+                                       sweep_variable=loop_index,
+                                       measurements=measurements,
+                                       parameter_constraints=parameter_constraints
+                                       )
+
+    @property
+    def is_interruptable(self) -> bool:
+        return True
 
 
 class WhileLoopPulseTemplate(LoopPulseTemplate):

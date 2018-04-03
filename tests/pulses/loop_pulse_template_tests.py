@@ -1,11 +1,12 @@
 import unittest
 
-from sympy import sympify
+import sympy
 
-from qctoolkit.expressions import Expression
-from qctoolkit.pulses.loop_pulse_template import ForLoopPulseTemplate, WhileLoopPulseTemplate,\
+from qctoolkit.expressions import Expression, ExpressionScalar
+from qctoolkit.pulses.loop_pulse_template import ForLoopPulseTemplate, RangeSweepPulseTemplate, WhileLoopPulseTemplate,\
     ConditionMissingException, ParametrizedRange, LoopIndexNotUsedException, LoopPulseTemplate
-from qctoolkit.pulses.parameters import ConstantParameter, InvalidParameterNameException, ParameterConstraintViolation
+from qctoolkit.pulses.parameters import ConstantParameter, InvalidParameterNameException, ParameterConstraintViolation,\
+    ParameterConstraint, MappedParameter, ParameterNotProvidedException
 from qctoolkit.pulses.instructions import MEASInstruction
 
 from tests.pulses.sequencing_dummies import DummyCondition, DummyPulseTemplate, DummySequencer, DummyInstructionBlock,\
@@ -277,6 +278,163 @@ class ForLoopPulseTemplateTest(unittest.TestCase):
         self.assertEqual([str(c) for c in flt.parameter_constraints], parameter_constraints)
 
 
+class RangeSweepPulseTemplateTest(unittest.TestCase):
+
+    def test_init(self) -> None:
+        body = DummyPulseTemplate(parameter_names={'foo', 'bar'})
+        loop_index = 'foo'
+        loop_range = [-1.6, 32.1, 'bar', 'zsar', 2e-4]
+        identifier = 'hugo'
+        measurements = [('a', 0.3, 'bar')]
+        parameter_constraints = ['bar > foo']
+        template = RangeSweepPulseTemplate(body, loop_index, loop_range,
+                                           identifier=identifier,
+                                           measurements=measurements,
+                                           parameter_constraints=parameter_constraints)
+        expected_constraints = [ParameterConstraint(const_str) for const_str in parameter_constraints]
+        self.assertEqual(loop_index, template.sweep_variable)
+        self.assertEqual(loop_range, template.swep_sequence)
+        self.assertEqual(identifier, template.identifier)
+        self.assertTrue(template.is_interruptable) #TODO: correct?
+        self.assertEqual({'a'}, template.measurement_names)
+        self.assertEqual(expected_constraints, template.parameter_constraints)
+        self.assertEqual({'zsar', 'bar'}, template.parameter_names)
+
+    def test_init_loop_index_invalid(self) -> None:
+        body = DummyPulseTemplate(parameter_names={'foo', 'bar'})
+        self.assertRaises(LoopIndexNotUsedException, RangeSweepPulseTemplate, body, 'ofo', [-1.6, 32.1])
+        self.assertRaises(InvalidParameterNameException, RangeSweepPulseTemplate, body, '352', [-1.6, 32.1])
+
+    def test_duration(self) -> None:
+        body = DummyPulseTemplate(parameter_names={'idx', 'd'}, duration='d+idx*2')
+        loop_index = 'idx'
+        loop_range = [-1.6, 32.1, 'bar', 'zsar', 2e-4]
+        template = RangeSweepPulseTemplate(body, loop_index, loop_range)
+        duration = template.duration
+        self.assertEqual(duration.evaluate_numeric(d=100, bar=0, zsar=-5.2), 5*100 + 2 * (-1.6 + 32.1 + 0 - 5.2 + 2e-4))
+        self.assertEqual(duration, ExpressionScalar.make('d + -1.6*2 + d + 32.1*2 + d + bar*2 + d + zsar*2 + d + 2e-4*2'))
+
+    def test_build_sequence(self) -> None:
+        body = DummyPulseTemplate(parameter_names={'idx'})
+        loop_index = 'idx'
+        loop_range = [-1.6, 0.321, 'bar', 'zsar', 2e-4]
+        measurements = [('A', 0.3, 'bar')]
+        parameter_constraints = {'bar >= idx'}
+        template = RangeSweepPulseTemplate(body, loop_index, loop_range,
+                                           measurements=measurements,
+                                           parameter_constraints=parameter_constraints)
+        sequencer = DummySequencer()
+        block = DummyInstructionBlock()
+        parameters = dict(bar=ConstantParameter(3.1667), zsar=ConstantParameter(-5.2))
+        measurement_mapping = dict(A='B')
+        channel_mapping = dict(C='D')
+        template.build_sequence(sequencer, parameters, dict(), measurement_mapping, channel_mapping, block)
+        self.assertEqual([MEASInstruction([('B', 0.3, 3.1667)])], block.instructions)
+
+        expected_stack = [
+            (body, dict(bar=ConstantParameter(3.1667), zsar=ConstantParameter(-5.2), idx=ConstantParameter(2e-4)), {}, measurement_mapping, channel_mapping),
+            (body, dict(bar=ConstantParameter(3.1667), zsar=ConstantParameter(-5.2), idx=MappedParameter(Expression('zsar'), parameters)), {}, measurement_mapping, channel_mapping),
+            (body, dict(bar=ConstantParameter(3.1667), zsar=ConstantParameter(-5.2), idx=MappedParameter(Expression('bar'), parameters)), {}, measurement_mapping, channel_mapping),
+            (body, dict(bar=ConstantParameter(3.1667), zsar=ConstantParameter(-5.2), idx=ConstantParameter(0.321)), {}, measurement_mapping, channel_mapping),
+            (body, dict(bar=ConstantParameter(3.1667), zsar=ConstantParameter(-5.2), idx=ConstantParameter(-1.6)), {}, measurement_mapping, channel_mapping)
+        ]
+        self.assertEqual(expected_stack, sequencer.sequencing_stacks[block])
+
+    def test_build_sequence_parameter_failures(self) -> None:
+        body = DummyPulseTemplate(parameter_names={'idx'})
+        loop_index = 'idx'
+        loop_range = [-1.6, 0.321, 'bar', 'zsar', 2e-4]
+        measurements = [('A', 0.3, 'bar')]
+        parameter_constraints = {'bar < idx'}
+        template = RangeSweepPulseTemplate(body, loop_index, loop_range,
+                                           measurements=measurements,
+                                           parameter_constraints=parameter_constraints)
+        sequencer = DummySequencer()
+        block = DummyInstructionBlock()
+        parameters = dict(bar=ConstantParameter(3.1667), zsar=ConstantParameter(-5.2))
+        measurement_mapping = dict(A='B')
+        channel_mapping = dict(C='D')
+
+        incomplete_parameters = dict(zsar=ConstantParameter(-5.2))
+        self.assertRaises(ParameterNotProvidedException, template.build_sequence, sequencer, incomplete_parameters, dict(), measurement_mapping, channel_mapping, block)
+
+        self.assertRaises(ParameterConstraintViolation, template.build_sequence, sequencer, parameters, dict(), measurement_mapping, channel_mapping, block)
+
+    def test_requires_stop(self) -> None:
+        body = DummyPulseTemplate(parameter_names={'idx', 'bar'})
+        loop_index = 'idx'
+        loop_range = [-1.6, 0.321, 'bar', 'zsar', 2e-4]
+        template = RangeSweepPulseTemplate(body, loop_index, loop_range)
+
+        parameters = dict(idx=DummyParameter(requires_stop=False),
+                          bar=DummyParameter(requires_stop=False),
+                          zsar=DummyParameter(requires_stop=False))
+        self.assertFalse(template.requires_stop(parameters, dict()))
+
+        parameters = dict(idx=DummyParameter(requires_stop=True),
+                          bar=DummyParameter(requires_stop=False),
+                          zsar=DummyParameter(requires_stop=False))
+        self.assertFalse(template.requires_stop(parameters, dict()))
+
+        parameters = dict(bar=DummyParameter(requires_stop=True),
+                          zsar=DummyParameter(requires_stop=False))
+        self.assertTrue(template.requires_stop(parameters, dict()))
+
+        parameters = dict(zsar=DummyParameter(requires_stop=False))
+        self.assertRaises(ParameterNotProvidedException, template.requires_stop, parameters, dict())
+
+    def test_get_serialization_data_minimal(self) -> None:
+        body = DummyPulseTemplate(parameter_names={'idx', 'bar'})
+        loop_index = 'idx'
+        loop_range = [-1.6, 0.321, 'bar', 'zsar', 2e-4]
+        measurements = [('A', 0.3, 'bar')]
+        parameter_constraints = {'bar >= idx'}
+        template = RangeSweepPulseTemplate(body, loop_index, loop_range,
+                                           measurements=measurements,
+                                           parameter_constraints=parameter_constraints)
+
+        def serialize_body(x):
+            self.assertIs(body, x)
+            return 'body'
+
+        serializer = DummySerializer(serialize_callback=serialize_body)
+        data = template.get_serialization_data(serializer)
+
+        expected_data = dict(body='body',
+                             loop_index='idx',
+                             loop_range=[-1.6, 0.321, ExpressionScalar('bar'), ExpressionScalar('zsar'), 2e-4],
+                             measurements=measurements,
+                             parameter_constraints=parameter_constraints)
+        self.assertEqual(expected_data, data)
+
+    def test_deserialize(self) -> None:
+        body = DummyPulseTemplate(parameter_names={'idx', 'bar'})
+        loop_index = 'idx'
+        loop_range = [-1.6, 0.321, 'bar', 'zsar', 2e-4]
+        measurements = [('A', 0.3, 'bar')]
+        parameter_constraints = {'bar >= idx'}
+
+        data = dict(body='body',
+                    loop_index='idx',
+                    loop_range=[-1.6, 0.321, ExpressionScalar('bar'), ExpressionScalar('zsar'), 2e-4],
+                    measurements=measurements,
+                    parameter_constraints=parameter_constraints,
+                    identifier=None)
+
+        def deserialize_body(x):
+            self.assertEqual('body', x)
+            return x
+
+        serializer = DummySerializer(deserialize_callback=deserialize_body)
+        serializer.subelements['body'] = body
+
+        template = RangeSweepPulseTemplate.deserialize(serializer, **data)
+        self.assertEqual(body, template.body)
+        self.assertEqual(loop_index, template.sweep_variable)
+        self.assertEqual(loop_range, template.swep_sequence)
+        self.assertEqual({'A'}, template.measurement_names)
+        self.assertEqual([ParameterConstraint('bar >= idx')], template.parameter_constraints)
+        self.assertEqual({'bar', 'zsar'}, template.parameter_names)
 
 
 class WhileLoopPulseTemplateTest(unittest.TestCase):

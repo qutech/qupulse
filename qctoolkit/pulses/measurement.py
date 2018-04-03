@@ -4,7 +4,7 @@ import itertools
 
 from qctoolkit.expressions import Expression
 from qctoolkit.utils.types import MeasurementWindow
-from qctoolkit.pulses.parameters import Parameter
+from qctoolkit.pulses.parameters import Parameter, ParameterNotProvidedException
 
 MeasurementDeclaration = Tuple[str, Union[Expression, str, Real], Union[Expression, str, Real]]
 
@@ -42,8 +42,11 @@ class MeasurementDefiner:
                                        instruction_block,
                                        parameters: Dict[str, Parameter],
                                        measurement_mapping: Dict[str, Optional[str]]):
-        parameters = {k: parameters[k].get_value()
-                      for k in self.measurement_parameters}
+        try:
+            parameters = {k: parameters[k].get_value()
+                          for k in self.measurement_parameters}
+        except KeyError as key_error:
+            raise ParameterNotProvidedException(key_error.args[0])
         measurements = self.get_measurement_windows(parameters, measurement_mapping)
         if measurements:
             instruction_block.add_instruction_meas(measurements)
