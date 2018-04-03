@@ -1,4 +1,4 @@
-function plot_pulse(pulse, varargin)
+function [t, channels, measurements] = plot_pulse(pulse, varargin)
 	
 	global plsdata
 	
@@ -13,7 +13,8 @@ function plot_pulse(pulse, varargin)
 		'charge_diagram',    {{'X', 'Y'}}, ...
 		'lead_points',       1e-3*[-4 -1; -1 -2; 0 -4; 4 0; 2 1; 1 4], ...
 		'special_points',    struct('M', [0 0], 'R1', [-2.5e-3 -3.75e-3], 'R2', [-2e-3 1e-3], 'S', [-2e-3 -1e-3], 'Tp', [1.75e-3 0], 'STp', [1e-3 -1e-3]), ...
-		'plotRange',         [-8e-3 8e-3], ...
+		'plot_range',         [-8e-3 8e-3], ...
+		'dont_plot',          false, ...
 		'max_n_points',      1e5 ...
 		);
 	
@@ -39,9 +40,9 @@ function plot_pulse(pulse, varargin)
 	t = data{1}*1e-9;
 	
 	channels = data{2};
-	if ~isempty(args.plotRange)
+	if ~isempty(args.plot_range)
 		for chan_name = fieldnames(channels)'
-			channels.(chan_name{1}) = util.clamp(channels.(chan_name{1}), args.plotRange);
+			channels.(chan_name{1}) = util.clamp(channels.(chan_name{1}), args.plot_range);
 		end
 	end
 	measurements = struct();
@@ -50,6 +51,10 @@ function plot_pulse(pulse, varargin)
 			measurements.(m{1}{1}) = [];
 		end
 		measurements.(m{1}{1})(end+1, 1:2) = [m{1}{2} m{1}{2}+m{1}{3}] * 1e-9;
+	end
+	
+	if args.dont_plot
+		return;
 	end
 	
 	plotChargeDiagram = ~isempty(args.charge_diagram) && all(cellfun(@(x)(isfield(channels, x)), args.charge_diagram));
@@ -84,8 +89,8 @@ function plot_pulse(pulse, varargin)
 		end
 	end		
 	
-	if ~isempty(args.plotRange)
-		title(['Plot range: ' sprintf('%g ', args.plotRange)]);
+	if ~isempty(args.plot_range)
+		title(['Plot range: ' sprintf('%g ', args.plot_range)]);
 	end
 	xlabel('t(s)');
 	[~, hObj] = legend(legendHandles, legendEntries);	
@@ -97,8 +102,8 @@ function plot_pulse(pulse, varargin)
 		hold on
 		ax = gca;
 		userData = get(ax, 'userData');
-		if ~isempty(args.plotRange)
-			title(['Plot range: ' sprintf('%g ', args.plotRange)]);
+		if ~isempty(args.plot_range)
+			title(['Plot range: ' sprintf('%g ', args.plot_range)]);
 		end
 	
 		if isempty(userData) || ~isstruct(userData) || ~isfield(userData, 'leadsPlotted') || ~userData.leadsPlotted			
