@@ -59,7 +59,13 @@ function [t, channels, measurements] = plot_pulse(pulse, varargin)
 	
 	plotChargeDiagram = ~isempty(args.charge_diagram) && all(cellfun(@(x)(isfield(channels, x)), args.charge_diagram));
 	
-	figure(args.fig_id);
+	hFig = figure(args.fig_id);
+	if ~qc.is_instantiated_pulse(pulse)
+		pulseName = sprintf('Pulse: %s', char(pulse.identifier));
+	else
+		pulseName = 'Pulse';
+	end
+	set(hFig, 'Name', pulseName);
 	if args.clear_fig
 		clf
 	end
