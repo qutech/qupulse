@@ -5,7 +5,8 @@ from sympy import sympify
 from qctoolkit.expressions import Expression
 from qctoolkit.pulses.loop_pulse_template import ForLoopPulseTemplate, WhileLoopPulseTemplate,\
     ConditionMissingException, ParametrizedRange, LoopIndexNotUsedException, LoopPulseTemplate
-from qctoolkit.pulses.parameters import ConstantParameter, InvalidParameterNameException, ParameterConstraintViolation
+from qctoolkit.pulses.parameters import ConstantParameter, InvalidParameterNameException, ParameterConstraintViolation,\
+    ParameterNotProvidedException
 from qctoolkit.pulses.instructions import MEASInstruction
 
 from tests.pulses.sequencing_dummies import DummyCondition, DummyPulseTemplate, DummySequencer, DummyInstructionBlock,\
@@ -147,6 +148,24 @@ class ForLoopPulseTemplateTest(unittest.TestCase):
         flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=('a', 'b', 'c'))
 
         self.assertEqual(flt.parameter_names, {'k', 'a', 'b', 'c'})
+
+    def test_build_sequence_constraint_on_loop_var_exception(self):
+        """This test is to assure the status-quo behavior of ForLoopPT handling parameter constraints affecting the loop index
+        variable. Please see https://github.com/qutech/qc-toolkit/issues/232 . If the issue is resolved, this test will
+        be replaced by one that ensure the desired behavior."""
+        flt = ForLoopPulseTemplate(body=DummyPulseTemplate(parameter_names={'k', 'i'}), loop_index='i',
+                                   loop_range=('a', 'b', 'c',), parameter_constraints=['k>i', 'k<=f'])
+
+        # loop index not showing up in parameter_names
+        self.assertEqual(flt.parameter_names, {'k', 'a', 'b', 'c'})
+
+        parameters = {'k': ConstantParameter(1), 'a': ConstantParameter(0), 'b': ConstantParameter(2),
+                      'c': ConstantParameter(1), 'f': ConstantParameter(0)}
+        sequencer = DummySequencer()
+        block = DummyInstructionBlock()
+
+        # loop index not accessible in current build_sequence -> Exception
+        self.assertRaises(ParameterNotProvidedException, flt.build_sequence, sequencer, parameters, dict(), dict(), dict(), block)
 
     def test_build_sequence(self):
         dt = DummyPulseTemplate(parameter_names={'i'})
