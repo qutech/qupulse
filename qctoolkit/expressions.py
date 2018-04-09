@@ -187,6 +187,9 @@ class ExpressionVector(Expression):
             return False
         return numpy.all(self._expression_vector == other.underlying_expression)
 
+    def __getitem__(self, item):
+        return self._expression_vector[item]
+
     @property
     def underlying_expression(self) -> numpy.ndarray:
         return self._expression_vector
