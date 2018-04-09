@@ -12,6 +12,8 @@ from abc import ABCMeta, abstractmethod
 from typing import Any, Tuple
 import numpy as np
 
+from qctoolkit.expressions import ExpressionScalar
+
 
 __all__ = ["InterpolationStrategy", "HoldInterpolationStrategy",
            "JumpInterpolationStrategy", "LinearInterpolationStrategy"]
@@ -36,6 +38,19 @@ class InterpolationStrategy(metaclass=ABCMeta):
         Returns:
             A numpy.ndarray containing the interpolated values.
         """
+
+    @property
+    @abstractmethod
+    def integral(self) -> ExpressionScalar:
+        """Returns the symbolic integral of this interpolation strategy using (v0,t0) and (v1,t1)
+        to represent start and end point."""
+
+    @property
+    @abstractmethod
+    def expression(self) -> ExpressionScalar:
+        """Returns a symbolic expression of the interpolation strategy using (v0,t0) and (v1, t1)
+        to represent start and end point and t as free variable. Note that the expression is only valid for values of t
+        between t0 and t1."""
 
     @abstractmethod
     def __repr__(self) -> str:
@@ -62,6 +77,14 @@ class LinearInterpolationStrategy(InterpolationStrategy):
         m = (end[1] - start[1])/(end[0] - start[0])
         return m * (times - start[0]) + start[1]
 
+    @property
+    def integral(self) -> ExpressionScalar:
+        return ExpressionScalar('0.5 * (t1-t0) * (v0 + v1)')
+
+    @property
+    def expression(self) -> ExpressionScalar:
+        return ExpressionScalar('v0 + (v1-v0) * (t-t0)/(t1-t0)')
+
     def __str__(self) -> str:
         return 'linear'
 
@@ -85,6 +108,14 @@ class HoldInterpolationStrategy(InterpolationStrategy):
             )
         return np.full_like(times, fill_value=start[1], dtype=float)
 
+    @property
+    def integral(self) -> ExpressionScalar:
+        return ExpressionScalar('v0*(t1-t0)')
+
+    @property
+    def expression(self) -> ExpressionScalar:
+        return ExpressionScalar('v0')
+
     def __str__(self) -> str:
         return 'hold'
 
@@ -107,6 +138,14 @@ class JumpInterpolationStrategy(InterpolationStrategy):
                 )
             )
         return np.full_like(times, fill_value=end[1], dtype=float)
+
+    @property
+    def integral(self) -> ExpressionScalar:
+        return ExpressionScalar('v1*(t1-t0)')
+
+    @property
+    def expression(self) -> ExpressionScalar:
+        return ExpressionScalar('v1')
 
     def __str__(self) -> str:
         return 'jump'
