@@ -204,7 +204,6 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
             template.build_sequence(self.sequencer, parameters, conditions, measurement_mapping, channel_mapping,
                                      self.block)
 
-
     def test_build_sequence_declaration_exceeds_bounds(self) -> None:
         parameters = dict(foo=ConstantParameter(9))
         conditions = dict(foo=DummyCondition(requires_stop=True))
@@ -225,6 +224,10 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
         with self.assertRaises(ParameterNotIntegerException):
             self.template.build_sequence(self.sequencer, parameters, conditions, {}, {}, self.block)
         self.assertFalse(self.sequencer.sequencing_stacks)
+
+    def test_parameter_names_param_only_in_constraint(self) -> None:
+        pt = RepetitionPulseTemplate(DummyPulseTemplate(parameter_names={'a'}), 'n', parameter_constraints=['a<c'])
+        self.assertEqual(pt.parameter_names, {'a','c', 'n'})
 
 
 class RepetitionPulseTemplateSerializationTests(unittest.TestCase):

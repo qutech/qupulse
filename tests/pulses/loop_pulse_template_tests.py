@@ -148,6 +148,11 @@ class ForLoopPulseTemplateTest(unittest.TestCase):
 
         self.assertEqual(flt.parameter_names, {'k', 'a', 'b', 'c'})
 
+    def test_parameter_names_param_only_in_constraint(self) -> None:
+        flt = ForLoopPulseTemplate(body=DummyPulseTemplate(parameter_names={'k', 'i'}), loop_index='i',
+                                   loop_range=('a', 'b', 'c',), parameter_constraints=['k<=f'])
+        self.assertEqual(flt.parameter_names, {'k', 'a', 'b', 'c', 'f'})
+
     def test_build_sequence(self):
         dt = DummyPulseTemplate(parameter_names={'i'})
         flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=('a', 'b', 'c'),
