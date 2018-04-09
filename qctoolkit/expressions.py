@@ -187,7 +187,7 @@ class ExpressionVector(Expression):
             return False
         return numpy.all(self._expression_vector == other.underlying_expression)
 
-    def __getitem__(self, item):
+    def __getitem__(self, item) -> Expression:
         return self._expression_vector[item]
 
     @property
