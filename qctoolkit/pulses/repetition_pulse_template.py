@@ -185,6 +185,12 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
                                        parameter_constraints=parameter_constraints,
                                        measurements=measurements)
 
+    @property
+    def integral(self) -> Dict[ChannelID, ExpressionScalar]:
+        # not implemented until the fate of RepetitionPulseTemplate is clarified
+        # (cf. https://github.com/qutech/qc-toolkit/issues/234 )
+        raise NotImplementedError()
+
 
 class ParameterNotIntegerException(Exception):
     """Indicates that the value of the parameter given as repetition count was not an integer."""
