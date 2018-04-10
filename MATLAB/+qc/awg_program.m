@@ -68,11 +68,13 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 		
 	% --- arm ---------------------------------------------------------------
 	elseif strcmp(ctrl, 'arm')
+		% Call directly before trigger comes, otherwise you might encounter a
+		% trigger timeout. Also, call after daq_operations('add')!
 		[~, bool, msg] = qc.awg_program('present', qc.change_field(a, 'verbosity', 0));
 		if bool
 			% qc.workaround_alazar_single_buffer_acquisition();
 			
-			hws.arm_program(a.program_name);
+			hws.arm_program(a.program_name);			
 			plsdata.awg.currentProgam = a.program_name;
 			bool = true;
 			msg = sprintf('Program ''%s'' armed', a.program_name);

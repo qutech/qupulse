@@ -18,8 +18,8 @@ function [output, bool, msg] = daq_operations(ctrl, varargin)
 	output = a.operations;
 	
 	% --- add ---------------------------------------------------------------
-	if strcmp(ctrl, 'add') % output is operations		 		
-		% qc.daq_operations('remove', qc.change_field(a, 'verbosity', 0));
+	if strcmp(ctrl, 'add') % output is operations		 
+		% Call before qc.awg_program('arm')!
 
 		smdata.inst(instIndex).data.virtual_channel = struct( ...
 			'operations', {a.operations} ...
@@ -27,9 +27,17 @@ function [output, bool, msg] = daq_operations(ctrl, varargin)
 		
 		% alazar.update_settings = py.True is automatically set if
 		% register_operations is executed. This results in reconfiguration
-		% of the Alazar which takes a long time.		
-		daq.register_operations(a.program_name, qc.operations_to_python(a.operations));
-		msg = sprintf('Operations for program ''%s'' added', a.program_name);
+		% of the Alazar which takes a long time. Thus, we avoid registering
+		% operations if the last armed program is the same as the currently
+		% armed program. We know plsdata.awg.currentProgam contains the last
+		% armed program since qc.daq_operations should be called before 
+		% qc.awg_program('arm'). 
+		if strcmp(plsdata.awg.currentProgam, a.program_name)
+			msg = sprintf('Operations from last armed program ''%s'' reused', plsdata.awg.currentProgam);
+		else
+			daq.register_operations(a.program_name, qc.operations_to_python(a.operations));
+			msg = sprintf('Operations for program ''%s'' added', a.program_name);
+		end
 		bool = true;
 	
   % --- set length --------------------------------------------------------
