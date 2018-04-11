@@ -3,7 +3,7 @@ function [output, bool, msg] = daq_operations(ctrl, varargin)
 	global plsdata smdata
 	hws = plsdata.awg.hardwareSetup;
 	daq = plsdata.daq.inst;
-	instIndex = sminstlookup('ATS9440Python');
+	instIndex = sminstlookup(plsdata.daq.instSmName);
 	
 	program = struct();
 	msg = '';
@@ -61,7 +61,7 @@ function [output, bool, msg] = daq_operations(ctrl, varargin)
 			  n = util.py.py2mat(masks{k}.length.to_ndarray);
 				if any(n ~= n(1))
 					error('daq_operations assumes that all masks should have the same length if using ComputeRepAverageDefinition.');
-				end
+				end				
 				output(k) = n(1);
 			else
 				error('Operation ''%s'' not yet implemented', class(operations{k}));

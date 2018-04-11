@@ -7,6 +7,7 @@ plsdata = struct( ...
 	'qc', struct('figId', 801), ...
 	'daq', struct('inst', [], 'defaultOperations', {{}}) ...
 	);
+plsdata.daq.instSmName = 'ATS9440Python';
 plsdata.qc.backend = py.qctoolkit.serialization.FilesystemBackend(plsdata.path);
 plsdata.qc.serializer = py.qctoolkit.serialization.Serializer(plsdata.qc.backend);
 % -------------------------------------------------------------------------
@@ -29,7 +30,7 @@ global tunedata
 global plsdata
 
 % Alazar dummy instrument (simulator not implemented yet)
-smdata.inst(sminstlookup('ATS9440Python')).data.address = 'simulator';
+smdata.inst(sminstlookup(plsdata.daq.instSmName)).data.address = 'simulator';
 plsdata.daq.inst = py.qctoolkit.hardware.dacs.alazar.AlazarCard([]);
 
 % Setup AWG

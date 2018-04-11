@@ -24,7 +24,7 @@ function scan = conf_seq(varargin)
 	
 	global plsdata
 	
-	alazarName = 'ATS9440Python';
+	alazarName = plsdata.daq.instSmName;
 	
 	% None of the arguments except pulse_template should contain any python
 	% objects to avoid erroneous saving when the scan is executed.
@@ -106,7 +106,7 @@ function scan = conf_seq(varargin)
 	%   in reconfiguration of the Alazar which takes a long time. Thus this
 	%   should only be done before a scan is started (i.e. in a configfn).
 	% * qc.dac_operations('add', a) also resets the virtual channel in
-	%   smdata.inst(sminstlookup('ATS9440Python')).data.virtual_channel.
+	%   smdata.inst(sminstlookup(alazarName)).data.virtual_channel.
 	scan.configfn(end+1).fn = @smaconfigwrap_save_data;
 	scan.configfn(end).args = {'daq_operations', @qc.daq_operations, 'add', a};	
 	
