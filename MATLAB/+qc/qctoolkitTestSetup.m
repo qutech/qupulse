@@ -22,10 +22,17 @@ savePath = 'Y:\Common\GaAs\Triton 200\Backup\DATA\workspace';
 % Loading
 if util.yes_no_input('Really load smdata?', 'n')
 	load(fullfile(savePath, 'smdata_recent.mat'));
-	fprintf('Loaded smdata\n');
+	info = dir(fullfile(savePath, 'smdata_recent.mat'));
+	fprintf('Loaded smdata from %s', datestr(info.datenum));
 end
 load(fullfile(savePath, 'tunedata_recent.mat'));
+info = dir(fullfile(savePath, 'tunedata_recent.mat'));
+fprintf('Loaded tunedata from %s', datestr(info.datenum));
+
 load(fullfile(savePath, 'plsdata_recent.mat'));
+info = dir(fullfile(savePath, 'plsdata_recent.mat'));
+fprintf('Loaded plsdata from %s', datestr(info.datenum));
+
 global tunedata
 global plsdata
 
@@ -38,7 +45,7 @@ plsdata.daq.inst = py.qctoolkit.hardware.dacs.alazar.AlazarCard([]);
 % Initializes hardware setup
 % Can also be used for deleting all programs/resetting but then also need to setup Alazar again, i.e. the cell above and the three cells below )
 plsdata.awg.hardwareSetup = [];
-qc.setup_tabor_awg('realAWG', false, 'simulateAWG', true, 'taborDriverPath', 'Y:\Cerfontaine\Code\tabor');
+qc.setup_tabor_awg('realAWG', false, 'simulateAWG', false, 'taborDriverPath', 'Y:\Cerfontaine\Code\tabor');
 
 % AWG default settings
 awgctrl('default');
