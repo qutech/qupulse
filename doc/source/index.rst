@@ -10,8 +10,9 @@ Contents:
 
 .. toctree::
    :maxdepth: 3
-   :numbered:
-
+   :numbered: 2
+   :titlesonly:
+   
    concepts/concepts
    examples/examples
    qctoolkit API Documentation <qctoolkit>
