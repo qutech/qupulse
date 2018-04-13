@@ -26,6 +26,7 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 	if strcmp(ctrl, 'add')
 		[~, bool, msg] = qc.awg_program('fresh', qc.change_field(a, 'verbosity', 0));
 		if ~bool || a.force_update
+			plsdata.awg.currentProgam = '';
 			
 			% Deleting old program should not be necessary. In practice however,
 			% updating an existing program seemed to crash Matlab sometimes.
