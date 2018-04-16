@@ -1,4 +1,5 @@
 import unittest
+import warnings
 
 from sympy import sympify
 
@@ -156,10 +157,15 @@ class ForLoopPulseTemplateTest(unittest.TestCase):
 
     def test_build_sequence_constraint_on_loop_var_exception(self):
         """This test is to assure the status-quo behavior of ForLoopPT handling parameter constraints affecting the loop index
-        variable. Please see https://github.com/qutech/qc-toolkit/issues/232 . If the issue is resolved, this test will
-        be replaced by one that ensure the desired behavior."""
-        flt = ForLoopPulseTemplate(body=DummyPulseTemplate(parameter_names={'k', 'i'}), loop_index='i',
-                                   loop_range=('a', 'b', 'c',), parameter_constraints=['k>i', 'k<=f'])
+        variable. Please see https://github.com/qutech/qc-toolkit/issues/232 ."""
+
+        with warnings.catch_warnings(record=True) as w:
+            flt = ForLoopPulseTemplate(body=DummyPulseTemplate(parameter_names={'k', 'i'}), loop_index='i',
+                                       loop_range=('a', 'b', 'c',), parameter_constraints=['k>i', 'k<=f'])
+            self.assertEqual(1, len(w),
+                             msg="ForLoopPT did not issue a warning when constraining the loop index")
+            self.assertTrue("constraint on a variable shadowing the loop index" in str(w[-1].message),
+                            msg="ForLoopPT did not issue a warning when constraining the loop index")
 
         # loop index showing up in parameter_names because it appears in consraints
         self.assertEqual(flt.parameter_names, {'f', 'k', 'a', 'b', 'c', 'i'})

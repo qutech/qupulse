@@ -3,6 +3,7 @@ another PulseTemplate based on a condition."""
 
 
 from typing import Dict, Set, Optional, Any, Union, Tuple, Generator, Sequence, cast
+import warnings
 
 import sympy
 
@@ -139,6 +140,14 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
         if loop_index not in body_parameters:
             raise LoopIndexNotUsedException(loop_index, body_parameters)
         self._loop_index = loop_index
+
+        if self.loop_index in self.constrained_parameters:
+            constraints = [str(constraint) for constraint in self.parameter_constraints
+                           if self._loop_index in constraint.affected_parameters]
+            warnings.warn("ForLoopPulseTemplate was created with a constraint on a variable shadowing the loop index.\n" \
+                          "This will not constrain the actual loop index but introduce a new parameter.\n" \
+                          "To constrain the loop index, put the constraint in the body subtemplate.\n" \
+                          "Loop index is {} and offending constraints are: {}".format(self._loop_index, constraints))
 
     @property
     def loop_index(self) -> str:
