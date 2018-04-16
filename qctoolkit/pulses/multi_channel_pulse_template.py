@@ -20,8 +20,7 @@ from qctoolkit.serialization import Serializer
 from qctoolkit.utils.types import ChannelID, TimeType
 from qctoolkit.pulses.instructions import Waveform
 from qctoolkit.pulses.pulse_template import PulseTemplate, AtomicPulseTemplate
-from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingException, MappingPulseTemplate,\
-    MissingParameterDeclarationException, MappingTuple
+from qctoolkit.pulses.pulse_template_parameter_mapping import MappingPulseTemplate, MappingTuple
 from qctoolkit.pulses.parameters import Parameter, ParameterConstrainer
 from qctoolkit.pulses.conditions import Condition
 from qctoolkit.pulses.measurement import MeasurementDeclaration

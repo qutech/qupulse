@@ -3,8 +3,6 @@ import unittest
 import numpy
 
 from qctoolkit.utils.types import time_from_float
-from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingException,\
-    MissingParameterDeclarationException
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform, MappingPulseTemplate, ChannelMappingException, AtomicMultiChannelPulseTemplate
 from qctoolkit.pulses.parameters import ParameterConstraint, ParameterConstraintViolation
 
