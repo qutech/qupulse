@@ -127,6 +127,10 @@ class SequencePulseTemplateTest(unittest.TestCase):
                                    DummyPulseTemplate(duration='b'))
         self.assertEqual(pt.duration, Expression('a+a+b'))
 
+    def test_parameter_names_param_only_in_constraint(self) -> None:
+        pt = SequencePulseTemplate(DummyPulseTemplate(parameter_names={'a'}), DummyPulseTemplate(parameter_names={'b'}), parameter_constraints=['a==b', 'a<c'])
+        self.assertEqual(pt.parameter_names, {'a','b','c'})
+
     def test_build_waveform(self):
         wfs = [DummyWaveform(), DummyWaveform()]
         pts = [DummyPulseTemplate(waveform=wf) for wf in wfs]

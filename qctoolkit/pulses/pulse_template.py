@@ -6,7 +6,7 @@ Classes:
     - AtomicPulseTemplate: PulseTemplate that does imply any control flow disruptions and can be
         directly translated into a waveform.
 """
-from abc import ABCMeta, abstractmethod, abstractproperty
+from abc import abstractmethod
 from typing import Dict, Tuple, Set, Optional, Union, List
 import itertools
 from numbers import Real
@@ -45,15 +45,18 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
                  identifier: Optional[str]) -> None:
         super().__init__(identifier)
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def parameter_names(self) -> Set[str]:
         """The set of names of parameters required to instantiate this PulseTemplate."""
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def measurement_names(self) -> Set[str]:
         """The set of measurement identifiers in this pulse template."""
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def is_interruptable(self) -> bool:
         """Return true, if this PulseTemplate contains points at which it can halt if interrupted.
         """

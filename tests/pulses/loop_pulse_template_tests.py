@@ -149,6 +149,11 @@ class ForLoopPulseTemplateTest(unittest.TestCase):
 
         self.assertEqual(flt.parameter_names, {'k', 'a', 'b', 'c'})
 
+    def test_parameter_names_param_only_in_constraint(self) -> None:
+        flt = ForLoopPulseTemplate(body=DummyPulseTemplate(parameter_names={'k', 'i'}), loop_index='i',
+                                   loop_range=('a', 'b', 'c',), parameter_constraints=['k<=f'])
+        self.assertEqual(flt.parameter_names, {'k', 'a', 'b', 'c', 'f'})
+
     def test_build_sequence_constraint_on_loop_var_exception(self):
         """This test is to assure the status-quo behavior of ForLoopPT handling parameter constraints affecting the loop index
         variable. Please see https://github.com/qutech/qc-toolkit/issues/232 . If the issue is resolved, this test will
@@ -156,8 +161,8 @@ class ForLoopPulseTemplateTest(unittest.TestCase):
         flt = ForLoopPulseTemplate(body=DummyPulseTemplate(parameter_names={'k', 'i'}), loop_index='i',
                                    loop_range=('a', 'b', 'c',), parameter_constraints=['k>i', 'k<=f'])
 
-        # loop index not showing up in parameter_names
-        self.assertEqual(flt.parameter_names, {'k', 'a', 'b', 'c'})
+        # loop index showing up in parameter_names because it appears in consraints
+        self.assertEqual(flt.parameter_names, {'f', 'k', 'a', 'b', 'c', 'i'})
 
         parameters = {'k': ConstantParameter(1), 'a': ConstantParameter(0), 'b': ConstantParameter(2),
                       'c': ConstantParameter(1), 'f': ConstantParameter(0)}
