@@ -4,16 +4,15 @@ import copy
 import numpy as np
 
 from qctoolkit.utils.types import time_from_float
-from qctoolkit.pulses.pulse_template import DoubleParameterNameException
 from qctoolkit.expressions import Expression
 from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
 from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate, SequenceWaveform
-from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingException, UnnecessaryMappingException, MissingParameterDeclarationException, MappingPulseTemplate
+from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingException, MissingParameterDeclarationException, MappingPulseTemplate
 from qctoolkit.pulses.parameters import ParameterNotProvidedException, ConstantParameter, ParameterConstraint, ParameterConstraintViolation
 from qctoolkit.pulses.instructions import MEASInstruction
 
 from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyPulseTemplate,\
-    DummyNoValueParameter, DummyWaveform
+    DummyNoValueParameter, DummyWaveform, DummyParameter
 from tests.serialization_dummies import DummySerializer
 
 
@@ -246,15 +245,11 @@ class SequencePulseTemplateSequencingTests(SequencePulseTemplateTest):
         seq.build_sequence(sequencer, parameters, {}, {}, {}, block)
         self.assertEqual(2, len(sequencer.sequencing_stacks[block]))
 
-    @unittest.skip("Was this test faulty before? Why should the three last cases return false?")
     def test_requires_stop(self) -> None:
         sub1 = (DummyPulseTemplate(requires_stop=False), {}, {})
         sub2 = (DummyPulseTemplate(requires_stop=True, parameter_names={'foo'}), {'foo': 'foo'}, {})
-        parameters = {'foo': DummyNoValueParameter()}
 
-        seq = SequencePulseTemplate(sub1)
-        self.assertFalse(seq.requires_stop(parameters, {}))
-
+        parameters = {'foo': DummyParameter(requires_stop=False)}
         seq = SequencePulseTemplate(sub2, external_parameters={'foo'})
         self.assertFalse(seq.requires_stop(parameters, {}))
 
@@ -263,6 +258,19 @@ class SequencePulseTemplateSequencingTests(SequencePulseTemplateTest):
 
         seq = SequencePulseTemplate(sub2, sub1, external_parameters={'foo'})
         self.assertFalse(seq.requires_stop(parameters, {}))
+
+        parameters = {'foo': DummyParameter(requires_stop=False)}
+        seq = SequencePulseTemplate(sub1, sub2, parameter_constraints={'foo < bar'}, external_parameters={'foo', 'bar'})
+        self.assertRaises(ParameterNotProvidedException, seq.requires_stop, parameters, {})
+
+        parameters = {'foo': DummyParameter(requires_stop=False), 'bar': DummyParameter(requires_stop=False)}
+        seq = SequencePulseTemplate(sub1, sub2, parameter_constraints={'foo < bar'}, external_parameters={'foo', 'bar'})
+        self.assertFalse(seq.requires_stop(parameters, {}))
+
+        parameters = {'foo': DummyParameter(requires_stop=False), 'bar': DummyParameter(requires_stop=True)}
+        seq = SequencePulseTemplate(sub1, sub2, parameter_constraints={'foo < bar'}, external_parameters={'foo', 'bar'})
+        self.assertTrue(seq.requires_stop(parameters, {}))
+
 
     def test_missing_parameter_declaration_exception(self):
         mapping = copy.deepcopy(self.mapping1)
