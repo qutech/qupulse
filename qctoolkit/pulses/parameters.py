@@ -8,23 +8,22 @@ Classes:
     - ParameterValueIllegalException.
 """
 
-from abc import ABCMeta, abstractmethod, abstractproperty
+from abc import abstractmethod
 from typing import Optional, Union, Dict, Any, Iterable, Set, List
 from numbers import Real
 
 import sympy
 import numpy
 
-from qctoolkit.serialization import Serializable, Serializer, AnonymousSerializable
+from qctoolkit.serialization import AnonymousSerializable
 from qctoolkit.expressions import Expression
-from qctoolkit.comparable import Comparable
-from qctoolkit.utils.types import HashableNumpyArray
+from qctoolkit.utils.types import HashableNumpyArray, DocStringABCMeta
 
 __all__ = ["Parameter", "ConstantParameter",
            "ParameterNotProvidedException", "ParameterConstraintViolation"]
 
 
-class Parameter:
+class Parameter(metaclass=DocStringABCMeta):
     """A parameter for pulses.
     
     Parameter specifies a concrete value which is inserted instead
@@ -33,11 +32,12 @@ class Parameter:
     Implementations of Parameter may provide a single constant value or
     obtain values by computation (e.g. from measurement results).
     """
+    @abstractmethod
     def get_value(self) -> Real:
         """Compute and return the parameter value."""
-        raise NotImplementedError()
 
     @property
+    @abstractmethod
     def requires_stop(self) -> bool:
         """Query whether the evaluation of this Parameter instance requires an interruption in
         execution/sequencing, e.g., because it depends on data that is only measured in during the
@@ -46,10 +46,10 @@ class Parameter:
         Returns:
             True, if evaluating this Parameter instance requires an interruption.
         """
-        raise NotImplementedError()
 
+    @abstractmethod
     def __hash__(self) -> int:
-        raise NotImplementedError()
+        pass
 
     def __eq__(self, other) -> bool:
         return type(self) is type(other) and hash(self) == hash(other)
