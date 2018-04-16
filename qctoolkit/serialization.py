@@ -301,7 +301,8 @@ class Serializable(metaclass=ABCMeta):
                 storing and later reconstruction as a Python object.
         """
 
-    @abstractstaticmethod
+    @staticmethod
+    @abstractmethod
     def deserialize(serializer: 'Serializer', **kwargs) -> 'Serializable':
         """Reconstruct the Serializable object from a dictionary.
 
