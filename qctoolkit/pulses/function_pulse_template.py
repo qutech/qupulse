@@ -16,11 +16,9 @@ from qctoolkit.expressions import ExpressionScalar
 from qctoolkit.serialization import Serializer
 
 from qctoolkit.utils.types import ChannelID, TimeType, time_from_float
-from qctoolkit.pulses.conditions import Condition
 from qctoolkit.pulses.parameters import Parameter, ParameterConstrainer, ParameterConstraint
 from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration
 from qctoolkit.pulses.instructions import Waveform
-from qctoolkit.pulses.measurement import MeasurementDefiner
 
 
 __all__ = ["FunctionPulseTemplate", "FunctionWaveform"]
@@ -114,7 +112,7 @@ class FunctionPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],
-                      conditions: Dict[str, Condition]) -> bool:
+                      conditions: Dict[str, 'Condition']) -> bool:
         return any(
             parameters[name].requires_stop
             for name in parameters.keys() if (name in self.parameter_names)

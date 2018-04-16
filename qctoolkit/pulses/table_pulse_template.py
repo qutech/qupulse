@@ -7,7 +7,7 @@ Classes:
         declared parameters.
 """
 
-from typing import Union, Dict, List, Set, Optional, Any, Iterable, Tuple, Sequence, NamedTuple
+from typing import Union, Dict, List, Set, Optional, Any, Tuple, Sequence, NamedTuple
 import numbers
 import itertools
 import warnings
@@ -23,10 +23,8 @@ from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementDecl
 from qctoolkit.pulses.interpolation import InterpolationStrategy, LinearInterpolationStrategy, \
     HoldInterpolationStrategy, JumpInterpolationStrategy
 from qctoolkit.pulses.instructions import Waveform
-from qctoolkit.pulses.conditions import Condition
 from qctoolkit.expressions import ExpressionScalar, Expression
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
-from qctoolkit.pulses.measurement import MeasurementDefiner
 
 __all__ = ["TablePulseTemplate", "TableWaveform", "TableWaveformEntry"]
 

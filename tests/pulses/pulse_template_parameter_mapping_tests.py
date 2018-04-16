@@ -4,7 +4,6 @@ import itertools
 from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingException,\
     UnnecessaryMappingException, MissingParameterDeclarationException, MappingPulseTemplate,\
     AmbiguousMappingException, MappingCollisionException
-from qctoolkit.expressions import Expression
 from qctoolkit.pulses.parameters import ParameterNotProvidedException
 from qctoolkit.pulses.parameters import ConstantParameter, ParameterConstraintViolation
 

@@ -4,12 +4,11 @@ import copy
 import numpy as np
 
 from qctoolkit.utils.types import time_from_float
-from qctoolkit.pulses.pulse_template import DoubleParameterNameException
 from qctoolkit.expressions import Expression
 from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
 from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate, SequenceWaveform
-from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingException, UnnecessaryMappingException, MissingParameterDeclarationException, MappingPulseTemplate
-from qctoolkit.pulses.parameters import ParameterNotProvidedException, ConstantParameter, ParameterConstraint, ParameterConstraintViolation
+from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingException, MissingParameterDeclarationException, MappingPulseTemplate
+from qctoolkit.pulses.parameters import ConstantParameter, ParameterConstraint, ParameterConstraintViolation
 from qctoolkit.pulses.instructions import MEASInstruction
 
 from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyPulseTemplate,\
@@ -263,14 +262,6 @@ class SequencePulseTemplateSequencingTests(SequencePulseTemplateTest):
 
         seq = SequencePulseTemplate(sub2, sub1, external_parameters={'foo'})
         self.assertFalse(seq.requires_stop(parameters, {}))
-
-    def test_missing_parameter_declaration_exception(self):
-        mapping = copy.deepcopy(self.mapping1)
-        mapping['up'] = "foo"
-
-        subtemplates = [(self.square, mapping,{})]
-        with self.assertRaises(MissingParameterDeclarationException):
-            SequencePulseTemplate(*subtemplates, external_parameters=self.outer_parameters)
 
     def test_crash(self) -> None:
         table = TablePulseTemplate({'default': [('ta', 'va', 'hold'),

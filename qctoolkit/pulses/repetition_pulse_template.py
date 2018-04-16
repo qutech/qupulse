@@ -1,7 +1,7 @@
 """This module defines RepetitionPulseTemplate, a higher-order hierarchical pulse template that
 represents the n-times repetition of another PulseTemplate."""
 
-from typing import Dict, List, Set, Optional, Union, Any, Iterable, Tuple, cast
+from typing import Dict, List, Set, Optional, Union, Any, Tuple, cast
 from numbers import Real
 from warnings import warn
 

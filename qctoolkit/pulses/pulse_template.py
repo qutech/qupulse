@@ -6,7 +6,7 @@ Classes:
     - AtomicPulseTemplate: PulseTemplate that does imply any control flow disruptions and can be
         directly translated into a waveform.
 """
-from abc import ABCMeta, abstractmethod, abstractproperty
+from abc import abstractmethod, abstractproperty
 from typing import Dict, Tuple, Set, Optional, Union, List
 import itertools
 from numbers import Real

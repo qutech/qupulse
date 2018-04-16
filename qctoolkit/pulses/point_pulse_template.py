@@ -13,7 +13,6 @@ from qctoolkit.pulses.parameters import Parameter, ParameterNotProvidedException
     ParameterConstrainer
 from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration
 from qctoolkit.pulses.table_pulse_template import TableEntry, EntryInInit, TableWaveform, TableWaveformEntry
-from qctoolkit.pulses.measurement import MeasurementDefiner
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 
 

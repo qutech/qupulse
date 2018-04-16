@@ -1,11 +1,10 @@
 import unittest
 
-import copy
-from typing import Optional, Dict, Set, Any, List
+from typing import Optional, Dict, Set, Any
 
-from qctoolkit.utils.types import MeasurementWindow, ChannelID
+from qctoolkit.utils.types import ChannelID
 from qctoolkit.expressions import Expression
-from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration, PulseTemplate
+from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, PulseTemplate
 from qctoolkit.pulses.instructions import Waveform, EXECInstruction, MEASInstruction
 from qctoolkit.pulses.parameters import Parameter
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
@@ -27,7 +26,7 @@ class PulseTemplateStub(PulseTemplate):
         self._measurement_names = set() if measurement_names is None else measurement_names
 
     @property
-    def defined_channels(self) -> Set['ChannelID']:
+    def defined_channels(self) -> Set[ChannelID]:
         if self._defined_channels:
             return self._defined_channels
         else:
@@ -51,13 +50,6 @@ class PulseTemplateStub(PulseTemplate):
         if self._duration is None:
             raise NotImplementedError()
         return self._duration
-
-    def get_serialization_data(self, serializer: 'Serializer') -> Dict[str, Any]:
-        raise NotImplementedError()
-
-    @staticmethod
-    def deserialize(serializer: 'Serializer', **kwargs) -> 'AtomicPulseTemplateStub':
-        raise NotImplementedError()
 
     def build_sequence(self,
                        sequencer: "Sequencer",

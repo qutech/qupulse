@@ -1,7 +1,5 @@
 import unittest
 
-from sympy import sympify
-
 from qctoolkit.expressions import Expression
 from qctoolkit.pulses.loop_pulse_template import ForLoopPulseTemplate, WhileLoopPulseTemplate,\
     ConditionMissingException, ParametrizedRange, LoopIndexNotUsedException, LoopPulseTemplate

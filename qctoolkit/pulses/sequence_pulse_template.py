@@ -2,7 +2,7 @@
 combines several other PulseTemplate objects for sequential execution."""
 
 import numpy as np
-from typing import Dict, List, Tuple, Set, Optional, Any, Iterable, Union, cast
+from typing import Dict, List, Tuple, Set, Optional, Any, Iterable, Union
 from numbers import Real
 
 from qctoolkit.serialization import Serializer

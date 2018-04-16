@@ -8,7 +8,7 @@ from qctoolkit.pulses.point_pulse_template import PointPulseTemplate, PointWavef
 from tests.pulses.measurement_tests import ParameterConstrainerTest, MeasurementDefinerTest
 from tests.pulses.sequencing_dummies import DummyParameter, DummyCondition
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
-from qctoolkit.pulses.interpolation import HoldInterpolationStrategy, JumpInterpolationStrategy, LinearInterpolationStrategy
+from qctoolkit.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy
 from tests.serialization_dummies import DummySerializer, DummyStorageBackend
 from qctoolkit.expressions import Expression
 from qctoolkit.serialization import Serializer

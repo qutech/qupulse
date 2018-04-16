@@ -8,7 +8,7 @@ from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingExce
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform, MappingPulseTemplate, ChannelMappingException, AtomicMultiChannelPulseTemplate
 from qctoolkit.pulses.parameters import ParameterConstraint, ParameterConstraintViolation
 
-from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyPulseTemplate, DummyWaveform
+from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummyWaveform
 from tests.serialization_dummies import DummySerializer
 from tests.pulses.pulse_template_tests import PulseTemplateStub
 

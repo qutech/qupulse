@@ -1,6 +1,5 @@
 import unittest
 import warnings
-import functools
 
 import numpy
 
@@ -11,7 +10,7 @@ from qctoolkit.pulses.parameters import ParameterNotProvidedException, Parameter
 from qctoolkit.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy, JumpInterpolationStrategy
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 
-from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyInterpolationStrategy, DummyParameter, DummyCondition
+from tests.pulses.sequencing_dummies import DummyInterpolationStrategy, DummyParameter, DummyCondition
 from tests.serialization_dummies import DummySerializer, DummyStorageBackend
 from tests.pulses.measurement_tests import ParameterConstrainerTest, MeasurementDefinerTest
 
@@ -493,7 +492,6 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
                                                  ('N', 1, 2)])
 
         parameters = {'v': 2.3, 'foo': 1, 'bar': 4, 'b': 2, 'l': 1}
-        measurement_mapping = {'M': 'P', 'N': 'N'}
         channel_mapping = {0: 'ch'}
 
         with self.assertRaises(ParameterConstraintViolation):
