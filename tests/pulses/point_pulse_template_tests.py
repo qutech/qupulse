@@ -217,7 +217,7 @@ class PointPulseTemplateSerializationTests(unittest.TestCase):
         expected_data = dict(measurements=self.measurements,
                              time_point_tuple_list=self.entries,
                              channel_names=(0, 'A'),
-                             parameter_constraints={str(Expression('ilse>2')), str(Expression('k>foo'))})
+                             parameter_constraints=[str(Expression('ilse>2')), str(Expression('k>foo'))])
 
         data = self.template.get_serialization_data(self.serializer)
         self.assertEqual(expected_data, data)

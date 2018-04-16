@@ -229,7 +229,7 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
     def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
         data = dict(subtemplates=[serializer.dictify(subtemplate) for subtemplate in self.subtemplates])
         if self.parameter_constraints:
-            data['parameter_constraints'] = [str(c) for c in self.parameter_constraints]
+            data['parameter_constraints'] = sorted(str(c) for c in self.parameter_constraints)
         if self.measurement_declarations:
             data['measurements'] = self.measurement_declarations
         return data

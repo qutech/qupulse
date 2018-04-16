@@ -230,7 +230,7 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
             loop_index=self._loop_index,
         )
         if self.parameter_constraints:
-            data['parameter_constraints'] = [str(c) for c in self.parameter_constraints]
+            data['parameter_constraints'] = sorted(str(c) for c in self.parameter_constraints)
         if self.measurement_declarations:
             data['measurements'] = self.measurement_declarations
         return data

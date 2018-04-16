@@ -241,7 +241,7 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
         data = dict(subtemplates=[serializer.dictify(subtemplate) for subtemplate in self.subtemplates])
 
         if self.parameter_constraints:
-            data['parameter_constraints'] = [str(constraint) for constraint in self.parameter_constraints]
+            data['parameter_constraints'] = sorted(str(constraint) for constraint in self.parameter_constraints)
 
         if self.measurement_declarations:
             data['measurements'] = self.measurement_declarations

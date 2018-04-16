@@ -89,7 +89,7 @@ class FunctionPulseSerializationTest(FunctionPulseTest):
                              expression=str(self.s),
                              channel='A',
                              measurement_declarations=self.meas_list,
-                             parameter_constraints=self.constraints)
+                             parameter_constraints=sorted(self.constraints))
         data = self.fpt.get_serialization_data(
             DummySerializer(serialize_callback=lambda x: x.original_expression))
         self.assertEqual(expected_data, data)
@@ -100,7 +100,7 @@ class FunctionPulseSerializationTest(FunctionPulseTest):
                           channel='A',
                           identifier='hugo',
                           measurement_declarations=self.meas_list,
-                          parameter_constraints=self.constraints)
+                          parameter_constraints=sorted(self.constraints))
         serializer = DummySerializer(serialize_callback=lambda x: x.original_expression)
         serializer.subelements[self.s2] = Expression(self.s2)
         serializer.subelements[self.s] = Expression(self.s)

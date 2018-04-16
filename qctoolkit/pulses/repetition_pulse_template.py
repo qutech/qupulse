@@ -167,7 +167,7 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
             repetition_count=self.repetition_count.original_expression
         )
         if self.parameter_constraints:
-            data['parameter_constraints'] = [str(c) for c in self.parameter_constraints]
+            data['parameter_constraints'] = sorted(str(c) for c in self.parameter_constraints)
         if self.measurement_declarations:
             data['measurements'] = self.measurement_declarations
         return data

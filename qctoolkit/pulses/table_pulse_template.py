@@ -330,7 +330,7 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
                            for entry in channel_entries])
                 for channel, channel_entries in self.entries.items()
             ),
-            parameter_constraints=[str(c) for c in self.parameter_constraints],
+            parameter_constraints=sorted(str(c) for c in self.parameter_constraints),
             measurements=self.measurement_declarations
         )
 
