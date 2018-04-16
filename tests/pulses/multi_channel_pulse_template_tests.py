@@ -319,8 +319,8 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
         self.assertIsNone(wf)
 
     def test_deserialize(self):
-        sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'}, parameter_names=['a', 'b']),
-               DummyPulseTemplate(duration='t1', defined_channels={'B'}, parameter_names=['a', 'c'])]
+        sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'}, parameter_names={'a', 'b'}),
+               DummyPulseTemplate(duration='t1', defined_channels={'B'}, parameter_names={'a', 'c'})]
 
         def deserialization_callback(ident: str):
             self.assertIn(ident, ('0', '1'))
