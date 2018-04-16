@@ -123,7 +123,7 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
 
     @property
     def parameter_names(self) -> Set[str]:
-        return self.body.parameter_names | set(self.repetition_count.variables)
+        return self.body.parameter_names | set(self.repetition_count.variables) | self.constrained_parameters
 
     @property
     def measurement_names(self) -> Set[str]:
