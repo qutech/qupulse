@@ -38,11 +38,13 @@ class AWG(Comparable):
     def identifier(self) -> str:
         return self._identifier
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def num_channels(self):
         """Number of channels"""
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def num_markers(self):
         """Number of marker channels"""
 
@@ -86,11 +88,13 @@ class AWG(Comparable):
         """Load the program 'name' and arm the device for running it. If name is None the awg will "dearm" its current
         program."""
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def programs(self) -> Set[str]:
         """The set of program names that can currently be executed on the hardware AWG."""
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def sample_rate(self) -> float:
         """The sample rate of the AWG."""
 

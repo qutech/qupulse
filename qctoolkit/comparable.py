@@ -1,5 +1,5 @@
 """This module defines the abstract Comparable class."""
-from abc import abstractproperty
+from abc import abstractmethod
 from typing import Any
 
 from qctoolkit.utils.types import DocStringABCMeta
@@ -17,7 +17,8 @@ class Comparable(metaclass=DocStringABCMeta):
     operators based on comparison of this key.
     """
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def compare_key(self) -> Any:
         """Return a unique key used in comparison and hashing operations.
 
