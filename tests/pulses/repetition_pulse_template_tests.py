@@ -295,6 +295,17 @@ class RepetitionPulseTemplateSerializationTests(unittest.TestCase):
         self.assertEqual(template.parameter_constraints, [ParameterConstraint('foo < 3')])
         self.assertEqual(template.measurement_declarations, data['measurements'])
 
+    def test_integral(self) -> None:
+        dummy = DummyPulseTemplate(integrals=['foo+2', 'k*3+x**2'])
+        template = RepetitionPulseTemplate(dummy, 7)
+        self.assertEqual([Expression('7*(foo+2)'), Expression('7*(k*3+x**2)')], template.integral)
+
+        template = RepetitionPulseTemplate(dummy, '2+m')
+        self.assertEqual([Expression('(2+m)*(foo+2)'), Expression('(2+m)*(k*3+x**2)')], template.integral)
+
+        template = RepetitionPulseTemplate(dummy, Expression('2+m'))
+        self.assertEqual([Expression('(2+m)*(foo+2)'), Expression('(2+m)*(k*3+x**2)')], template.integral)
+
 
 class ParameterNotIntegerExceptionTests(unittest.TestCase):
 

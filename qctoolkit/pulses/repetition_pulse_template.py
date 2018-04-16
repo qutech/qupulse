@@ -187,9 +187,8 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
 
     @property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
-        # not implemented until the fate of RepetitionPulseTemplate is clarified
-        # (cf. https://github.com/qutech/qc-toolkit/issues/234 )
-        raise NotImplementedError()
+        body_integral = self.body.integral
+        return [self.repetition_count * c for c in body_integral]
 
 
 class ParameterNotIntegerException(Exception):
