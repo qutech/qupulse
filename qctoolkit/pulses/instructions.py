@@ -16,7 +16,7 @@ Classes:
     - InstructionPointer: References an instruction's location in a sequence.
 """
 
-from abc import ABCMeta, abstractmethod, abstractproperty
+from abc import ABCMeta, abstractmethod
 from typing import List, Any, Dict, Iterable, Optional, Sequence, Union, Set, Tuple
 from weakref import WeakValueDictionary
 
@@ -108,7 +108,8 @@ class Waveform(Comparable, metaclass=ABCMeta):
                                       sample_times=sample_times,
                                       output_array=output_array)
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def defined_channels(self) -> Set[ChannelID]:
         """The channels this waveform should played on. Use
             :func:`~qctoolkit.pulses.instructions.get_measurement_windows` to get a waveform for a subset of these."""
@@ -390,11 +391,13 @@ class AbstractInstructionBlock(Comparable, metaclass=ABCMeta):
         """Create a new AbstractInstructionBlock instance."""
         super().__init__()
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def instructions(self) -> Sequence[Instruction]:
         """The instructions contained in this block (excluding a final stop or return goto)."""
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def return_ip(self) -> Optional[InstructionPointer]:
         """The return instruction pointer indicating the instruction to which the control flow
         shall return after exection of this instruction block has finished."""
