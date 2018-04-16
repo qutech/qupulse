@@ -4,6 +4,7 @@ combines several other PulseTemplate objects for sequential execution."""
 import numpy as np
 from typing import Dict, List, Tuple, Set, Optional, Any, Iterable, Union, cast
 from numbers import Real
+import warnings
 
 from qctoolkit.serialization import Serializer
 
@@ -131,13 +132,8 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
             subtemplates (List(Subtemplate)): The list of subtemplates of this
                 SequencePulseTemplate as tuples of the form (PulseTemplate, Dict(str -> str)).
             external_parameters (List(str)): A set of names for external parameters of this
-                SequencePulseTemplate.
+                SequencePulseTemplate. Deprecated.
             identifier (str): A unique identifier for use in serialization. (optional)
-        Raises:
-            MissingMappingException, if a parameter of a subtemplate is not mapped to the external
-                parameters of this SequencePulseTemplate.
-            MissingParameterDeclarationException, if a parameter mapping requires a parameter
-                that was not declared in the external parameters of this SequencePulseTemplate.
         """
         PulseTemplate.__init__(self, identifier=identifier)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
@@ -153,19 +149,8 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                 raise ValueError('The subtemplates are defined for different channels')
 
         if external_parameters:
-            external_parameters = set(external_parameters)
-            remaining = external_parameters.copy()
-            for subtemplate in self.__subtemplates:
-                missing = subtemplate.parameter_names - external_parameters
-                if missing:
-                    raise MissingParameterDeclarationException(subtemplate, missing.pop())
-                remaining -= subtemplate.parameter_names
-            if not external_parameters >= self.constrained_parameters:
-                raise MissingParameterDeclarationException(self,
-                                                           (self.constrained_parameters-external_parameters).pop())
-            remaining -= self.constrained_parameters
-            if remaining:
-                raise MissingMappingException(self, remaining.pop())
+            warnings.warn("external_parameters is an obsolete argument and will be removed in the future.",
+                          category=DeprecationWarning)
 
     @property
     def parameter_names(self) -> Set[str]:

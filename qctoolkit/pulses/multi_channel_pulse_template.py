@@ -10,6 +10,7 @@ Classes:
 from typing import Dict, List, Optional, Any, Iterable, Union, Set, Sequence
 import itertools
 import numbers
+import warnings
 
 import numpy
 
@@ -173,18 +174,8 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
                                                   (channels_i | channels_j).pop())
 
         if external_parameters is not None:
-            remaining = external_parameters.copy()
-            for subtemplate in self._subtemplates:
-                missing = subtemplate.parameter_names - external_parameters
-                if missing:
-                    raise MissingParameterDeclarationException(subtemplate, missing.pop())
-                remaining -= subtemplate.parameter_names
-            missing = self.constrained_parameters - external_parameters
-            if missing:
-                raise MissingParameterDeclarationException(self, missing.pop())
-            remaining -= self.constrained_parameters
-            if remaining:
-                raise MissingMappingException(self, remaining.pop())
+            warnings.warn("external_parameters is an obsolete argument and will be removed in the future.",
+                          category=DeprecationWarning)
 
         duration = self._subtemplates[0].duration
         for subtemplate in self._subtemplates[1:]:
