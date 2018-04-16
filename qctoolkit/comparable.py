@@ -1,12 +1,14 @@
 """This module defines the abstract Comparable class."""
-from abc import ABCMeta, abstractproperty
+from abc import abstractproperty
 from typing import Any
+
+from qctoolkit.utils.types import DocStringABCMeta
 
 
 __all__ = ["Comparable"]
 
 
-class Comparable(metaclass=ABCMeta):
+class Comparable(metaclass=DocStringABCMeta):
     """An object that can be queried for equality with other Comparable objects.
 
     Subclasses must override the abstract property _compare_key which shall provide some object
