@@ -185,6 +185,11 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
                                        parameter_constraints=parameter_constraints,
                                        measurements=measurements)
 
+    @property
+    def integral(self) -> Dict[ChannelID, ExpressionScalar]:
+        body_integral = self.body.integral
+        return [self.repetition_count * c for c in body_integral]
+
 
 class ParameterNotIntegerException(Exception):
     """Indicates that the value of the parameter given as repetition count was not an integer."""

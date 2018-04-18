@@ -1,8 +1,8 @@
 import unittest
 
-from sympy import sympify
+from sympy import sympify, Sum
 
-from qctoolkit.expressions import Expression
+from qctoolkit.expressions import Expression, ExpressionScalar
 from qctoolkit.pulses.loop_pulse_template import ForLoopPulseTemplate, WhileLoopPulseTemplate,\
     ConditionMissingException, ParametrizedRange, LoopIndexNotUsedException, LoopPulseTemplate
 from qctoolkit.pulses.parameters import ConstantParameter, InvalidParameterNameException, ParameterConstraintViolation
@@ -281,7 +281,16 @@ class ForLoopPulseTemplateTest(unittest.TestCase):
         self.assertEqual(flt.measurement_declarations, measurements)
         self.assertEqual([str(c) for c in flt.parameter_constraints], parameter_constraints)
 
+    def test_integral(self) -> None:
+        dummy = DummyPulseTemplate(defined_channels={'A', 'B'},
+                                   parameter_names={'t1', 'i'},
+                                   integrals={'A': ExpressionScalar('t1-i*3.1'), 'B': ExpressionScalar('i')})
 
+        pulse = ForLoopPulseTemplate(dummy, 'i', (1, 8, 2))
+
+        expected = {'A': ExpressionScalar('Sum(t1-3.1*(1+2*i), (i, 0, 3))'),
+                    'B': ExpressionScalar('Sum((1+2*i), (i, 0, 3))') }
+        self.assertEqual(expected, pulse.integral)
 
 
 class WhileLoopPulseTemplateTest(unittest.TestCase):
@@ -310,6 +319,13 @@ class WhileLoopPulseTemplateTest(unittest.TestCase):
         body = DummyPulseTemplate()
         t = WhileLoopPulseTemplate(condition, body)
         self.assertIsInstance(str(t), str)
+
+    def test_integral(self) -> None:
+        condition = DummyCondition()
+        body = DummyPulseTemplate(defined_channels={'A', 'B'})
+        pulse = WhileLoopPulseTemplate(condition, body)
+        self.assertEqual({'A': ExpressionScalar('nan'), 'B': ExpressionScalar('nan')},
+                         pulse.integral)
 
 
 class LoopPulseTemplateSequencingTests(unittest.TestCase):
