@@ -134,7 +134,7 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 		end
 		
 	% --- clear all ---------------------------------------------------------
-	elseif strcmp(ctrl, 'clear all')
+	elseif strcmp(ctrl, 'clear all') % might take a long time
 		plsdata.awg.registeredPrograms = struct();
 		program_names = fieldnames(util.py.py2mat(py.getattr(hws, '_registered_programs')));
 		
@@ -149,6 +149,12 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 		else
 			msg = 'Error when trying to clear all progams';
 		end
+		
+	% --- clear all fast ----------------------------------------------------	
+	elseif strcmp(ctrl, 'clear all fast') % fast but need to clear awg manually
+		hws.registered_programs.clear();
+		py.getattr(daq, '_registered_programs').clear();
+
 	% --- present -----------------------------------------------------------
 	elseif strcmp(ctrl, 'present') % returns true if program is present
 		bool = py.list(hws.registered_programs.keys()).count(a.program_name) ~= 0;

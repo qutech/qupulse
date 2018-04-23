@@ -7,12 +7,20 @@ function setup_tabor_awg(varargin)
 		'realAWG', true, ...
 		'sampleVoltPerAwgVolt', util.db('dB2F',-48)*2, ... % 10^(-dB/20)*ImpedanceMismatch
 		'simulateAWG', true, ...
+		'smChannels', {{'RFA', 'RFB', 'RFC', 'RFD'}}, ...
 		'taborName', 'TaborAWG2184C', ...
 		'ip', '169.254.40.2', ...
 		'taborDriverPath', 'C:\Users\lablocal\Documents\PYTHON\TaborDriver\' ...
 		);	
 	args = util.parse_varargin(varargin, defaultArgs);
 	plsdata.awg.sampleVoltPerAwgVolt = args.sampleVoltPerAwgVolt;
+	
+	for smChannels = args.smChannels		
+		if ~(smdata.channels(smchanlookup(smChannels{1})).instchan(1) == sminstlookup(args.taborName))
+			error('Channel %s does not belong to %s\n', smChannels{1}, args.taborName);
+		end
+		smdata.channels(smchanlookup(smChannels{1})).rangeramp(end) = 1/args.sampleVoltPerAwgVolt;
+	end
 	
 	% Reload qctoolkit tabor AWG integration
 	qctoolkit_tabor = py.importlib.reload(py.importlib.import_module('qctoolkit.hardware.awgs.tabor'));
