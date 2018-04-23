@@ -9,6 +9,7 @@ from qctoolkit.pulses.parameters import ParameterConstraint, ParameterConstraint
 from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyPulseTemplate, DummyWaveform
 from tests.serialization_dummies import DummySerializer
 from tests.pulses.pulse_template_tests import PulseTemplateStub
+from qctoolkit.expressions import ExpressionScalar
 
 
 class MultiChannelWaveformTest(unittest.TestCase):
@@ -329,3 +330,15 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
         data = template.get_serialization_data(serializer=serializer)
 
         self.assertEqual(expected_data, data)
+
+    def test_integral(self) -> None:
+        sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'},
+                                  integrals={'A': ExpressionScalar('2+k')}),
+               DummyPulseTemplate(duration='t1', defined_channels={'B', 'C'},
+                                  integrals={'B': ExpressionScalar('t1-t0*3.1'), 'C': ExpressionScalar('l')})]
+        pulse = AtomicMultiChannelPulseTemplate(*sts)
+        self.assertEqual({'A': ExpressionScalar('2+k'),
+                          'B': ExpressionScalar('t1-t0*3.1'),
+                          'C': ExpressionScalar('l')},
+                         pulse.integral)
+

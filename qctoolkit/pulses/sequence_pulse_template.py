@@ -4,6 +4,7 @@ combines several other PulseTemplate objects for sequential execution."""
 import numpy as np
 from typing import Dict, List, Tuple, Set, Optional, Any, Iterable, Union, cast
 from numbers import Real
+import functools
 import warnings
 
 from qctoolkit.serialization import Serializer
@@ -16,7 +17,7 @@ from qctoolkit.pulses.conditions import Condition
 from qctoolkit.pulses.pulse_template_parameter_mapping import MappingPulseTemplate, MappingTuple
 from qctoolkit.pulses.instructions import Waveform
 from qctoolkit.pulses.measurement import MeasurementDeclaration, MeasurementDefiner
-from qctoolkit.expressions import Expression
+from qctoolkit.expressions import Expression, ExpressionScalar
 
 __all__ = ["SequencePulseTemplate"]
 
@@ -230,3 +231,16 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                                              identifier=identifier,
                                              measurements=measurements)
         return seq_template
+
+    @property
+    def defined_channels(self) -> Set[ChannelID]:
+        return self.__subtemplates[0].defined_channels
+
+    @property
+    def integral(self) -> Dict[ChannelID, ExpressionScalar]:
+        expressions = {channel: 0 for channel in self.defined_channels}
+
+        def add_dicts(x, y):
+            return {k: x[k] + y[k] for k in x}
+
+        return functools.reduce(add_dicts, [sub.integral for sub in self.__subtemplates], expressions)
