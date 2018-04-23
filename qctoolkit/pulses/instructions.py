@@ -436,6 +436,21 @@ class AbstractInstructionBlock(Comparable, metaclass=ABCMeta):
     def __len__(self) -> int:
         return len(self.instructions) + 1
 
+    @property
+    def defined_channels(self) -> Set[ChannelID]:
+        if not self.instructions:
+            return {}
+        instr = self.instructions[0]
+        if isinstance(instr, EXECInstruction):
+            return instr.waveform.defined_channels
+        elif isinstance(instr, REPJInstruction) or isinstance(instr, GOTOInstruction):
+            return instr.target.block.defined_channels
+        elif isinstance(instr, STOPInstruction):
+            return {}
+        else:
+            raise NotImplementedError("InstructionBlock.defined_channels not implemented for a block starting with this instruction type.")
+
+
 
 class InstructionBlock(AbstractInstructionBlock):
     """A block of instructions representing a (sub)sequence in the control
