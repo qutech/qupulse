@@ -10,7 +10,7 @@ from tests.pulses.sequencing_dummies import DummyParameter, DummyCondition
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 from qctoolkit.pulses.interpolation import HoldInterpolationStrategy, JumpInterpolationStrategy, LinearInterpolationStrategy
 from tests.serialization_dummies import DummySerializer, DummyStorageBackend
-from qctoolkit.expressions import Expression
+from qctoolkit.expressions import Expression, ExpressionScalar
 from qctoolkit.serialization import Serializer
 
 class PointPulseEntryTest(unittest.TestCase):
@@ -177,6 +177,23 @@ class PointPulseTemplateTests(unittest.TestCase):
         wf = ppt.build_waveform(parameters, {0: 1, 'A': 2, 'C': None})
         self.assertIsInstance(wf, MultiChannelWaveform)
         self.assertEqual(wf.defined_channels, {1, 2})
+
+    def test_integral(self) -> None:
+        pulse = PointPulseTemplate(
+            [(1, (2, 'b'), 'linear'), (3, (0, 0), 'jump'), (4, (2, 'c'), 'hold'), (5, (8, 'd'), 'hold')],
+            [0, 'other_channel']
+        )
+        self.assertEqual({0: ExpressionScalar(6),
+                          'other_channel': ExpressionScalar('1.0*b + 2.0*c')},
+                         pulse.integral)
+
+        pulse = PointPulseTemplate(
+            [(1, ('2', 'b'), 'linear'), ('t0', (0, 0), 'jump'), (4, (2, 'c'), 'hold'), ('g', (8, 'd'), 'hold')],
+            ['symbolic', 1]
+        )
+        self.assertEqual({'symbolic': ExpressionScalar('2.0*g - t0 - 1.0'),
+                          1: ExpressionScalar('b*(0.5*t0 - 0.5) + c*(g - 4.0) + c*(-t0 + 4.0)')},
+                         pulse.integral)
 
 
 class TablePulseTemplateConstraintTest(ParameterConstrainerTest):

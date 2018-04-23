@@ -4,7 +4,7 @@ import copy
 from typing import Optional, Dict, Set, Any, List
 
 from qctoolkit.utils.types import MeasurementWindow, ChannelID
-from qctoolkit.expressions import Expression
+from qctoolkit.expressions import Expression, ExpressionScalar
 from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration, PulseTemplate
 from qctoolkit.pulses.instructions import Waveform, EXECInstruction, MEASInstruction
 from qctoolkit.pulses.parameters import Parameter
@@ -80,6 +80,10 @@ class PulseTemplateStub(PulseTemplate):
                       conditions: Dict[str, 'Condition']):
         raise NotImplementedError()
 
+    @property
+    def integral(self) -> Dict[ChannelID, ExpressionScalar]:
+        raise NotImplementedError()
+
 
 class AtomicPulseTemplateStub(AtomicPulseTemplate):
     def is_interruptable(self) -> bool:
@@ -121,6 +125,10 @@ class AtomicPulseTemplateStub(AtomicPulseTemplate):
     @property
     def duration(self) -> Expression:
         return self._duration
+
+    @property
+    def integral(self) -> Dict[ChannelID, ExpressionScalar]:
+        raise NotImplementedError()
 
 
 class AtomicPulseTemplateTests(unittest.TestCase):

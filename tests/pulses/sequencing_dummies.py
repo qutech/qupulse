@@ -13,7 +13,7 @@ from qctoolkit.pulses.parameters import Parameter
 from qctoolkit.pulses.pulse_template import AtomicPulseTemplate
 from qctoolkit.pulses.interpolation import InterpolationStrategy
 from qctoolkit.pulses.conditions import Condition
-from qctoolkit.expressions import Expression
+from qctoolkit.expressions import Expression, ExpressionScalar
 
 class DummyParameter(Parameter):
 
@@ -220,6 +220,14 @@ class DummyInterpolationStrategy(InterpolationStrategy):
     def __repr__(self) -> str:
         return "DummyInterpolationStrategy {}".format(id(self))
 
+    @property
+    def integral(self) -> ExpressionScalar:
+        raise NotImplementedError()
+
+    @property
+    def expression(self) -> ExpressionScalar:
+        raise NotImplementedError()
+
 
 class DummyCondition(Condition):
 
@@ -286,6 +294,7 @@ class DummyPulseTemplate(AtomicPulseTemplate):
                  waveform: Waveform=tuple(),
                  measurement_names: Set[str] = set(),
                  measurements: list=list(),
+                 integrals: Dict[ChannelID, ExpressionScalar]={'default': ExpressionScalar(0)},
                  identifier=None) -> None:
         super().__init__(identifier=identifier, measurements=measurements)
         self.requires_stop_ = requires_stop
@@ -299,6 +308,7 @@ class DummyPulseTemplate(AtomicPulseTemplate):
         self.waveform = waveform
         self.build_waveform_calls = []
         self.measurement_names_ = measurement_names
+        self._integrals = integrals
 
     @property
     def duration(self):
@@ -358,3 +368,7 @@ class DummyPulseTemplate(AtomicPulseTemplate):
                     body: Dict[str, Any],
                     identifier: Optional[str]=None):
         raise NotImplementedError()
+
+    @property
+    def integral(self) -> Dict[ChannelID, ExpressionScalar]:
+        return self._integrals

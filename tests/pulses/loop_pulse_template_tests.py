@@ -1,11 +1,13 @@
 import unittest
+import warnings
 
-from sympy import sympify
+from sympy import sympify, Sum
 
-from qctoolkit.expressions import Expression
+from qctoolkit.expressions import Expression, ExpressionScalar
 from qctoolkit.pulses.loop_pulse_template import ForLoopPulseTemplate, WhileLoopPulseTemplate,\
     ConditionMissingException, ParametrizedRange, LoopIndexNotUsedException, LoopPulseTemplate
-from qctoolkit.pulses.parameters import ConstantParameter, InvalidParameterNameException, ParameterConstraintViolation
+from qctoolkit.pulses.parameters import ConstantParameter, InvalidParameterNameException, ParameterConstraintViolation,\
+    ParameterNotProvidedException
 from qctoolkit.pulses.instructions import MEASInstruction
 
 from tests.pulses.sequencing_dummies import DummyCondition, DummyPulseTemplate, DummySequencer, DummyInstructionBlock,\
@@ -153,6 +155,29 @@ class ForLoopPulseTemplateTest(unittest.TestCase):
                                    loop_range=('a', 'b', 'c',), parameter_constraints=['k<=f'])
         self.assertEqual(flt.parameter_names, {'k', 'a', 'b', 'c', 'f'})
 
+    def test_build_sequence_constraint_on_loop_var_exception(self):
+        """This test is to assure the status-quo behavior of ForLoopPT handling parameter constraints affecting the loop index
+        variable. Please see https://github.com/qutech/qc-toolkit/issues/232 ."""
+
+        with warnings.catch_warnings(record=True) as w:
+            flt = ForLoopPulseTemplate(body=DummyPulseTemplate(parameter_names={'k', 'i'}), loop_index='i',
+                                       loop_range=('a', 'b', 'c',), parameter_constraints=['k>i', 'k<=f'])
+            self.assertEqual(1, len(w),
+                             msg="ForLoopPT did not issue a warning when constraining the loop index")
+            self.assertTrue("constraint on a variable shadowing the loop index" in str(w[-1].message),
+                            msg="ForLoopPT did not issue a warning when constraining the loop index")
+
+        # loop index showing up in parameter_names because it appears in consraints
+        self.assertEqual(flt.parameter_names, {'f', 'k', 'a', 'b', 'c', 'i'})
+
+        parameters = {'k': ConstantParameter(1), 'a': ConstantParameter(0), 'b': ConstantParameter(2),
+                      'c': ConstantParameter(1), 'f': ConstantParameter(0)}
+        sequencer = DummySequencer()
+        block = DummyInstructionBlock()
+
+        # loop index not accessible in current build_sequence -> Exception
+        self.assertRaises(ParameterNotProvidedException, flt.build_sequence, sequencer, parameters, dict(), dict(), dict(), block)
+
     def test_build_sequence(self):
         dt = DummyPulseTemplate(parameter_names={'i'})
         flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=('a', 'b', 'c'),
@@ -281,7 +306,16 @@ class ForLoopPulseTemplateTest(unittest.TestCase):
         self.assertEqual(flt.measurement_declarations, measurements)
         self.assertEqual([str(c) for c in flt.parameter_constraints], parameter_constraints)
 
+    def test_integral(self) -> None:
+        dummy = DummyPulseTemplate(defined_channels={'A', 'B'},
+                                   parameter_names={'t1', 'i'},
+                                   integrals={'A': ExpressionScalar('t1-i*3.1'), 'B': ExpressionScalar('i')})
 
+        pulse = ForLoopPulseTemplate(dummy, 'i', (1, 8, 2))
+
+        expected = {'A': ExpressionScalar('Sum(t1-3.1*(1+2*i), (i, 0, 3))'),
+                    'B': ExpressionScalar('Sum((1+2*i), (i, 0, 3))') }
+        self.assertEqual(expected, pulse.integral)
 
 
 class WhileLoopPulseTemplateTest(unittest.TestCase):
@@ -310,6 +344,13 @@ class WhileLoopPulseTemplateTest(unittest.TestCase):
         body = DummyPulseTemplate()
         t = WhileLoopPulseTemplate(condition, body)
         self.assertIsInstance(str(t), str)
+
+    def test_integral(self) -> None:
+        condition = DummyCondition()
+        body = DummyPulseTemplate(defined_channels={'A', 'B'})
+        pulse = WhileLoopPulseTemplate(condition, body)
+        self.assertEqual({'A': ExpressionScalar('nan'), 'B': ExpressionScalar('nan')},
+                         pulse.integral)
 
 
 class LoopPulseTemplateSequencingTests(unittest.TestCase):

@@ -4,7 +4,7 @@ import copy
 import numpy as np
 
 from qctoolkit.utils.types import time_from_float
-from qctoolkit.expressions import Expression
+from qctoolkit.expressions import Expression, ExpressionScalar
 from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
 from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate, SequenceWaveform
 from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingException, MissingParameterDeclarationException, MappingPulseTemplate
@@ -170,6 +170,15 @@ class SequencePulseTemplateTest(unittest.TestCase):
             SequencePulseTemplate(
                 DummyPulseTemplate(defined_channels={'A'}), DummyPulseTemplate(defined_channels={'A', 'B'})
                 , external_parameters=set())
+
+    def test_integral(self) -> None:
+        dummy1 = DummyPulseTemplate(defined_channels={'A', 'B'},
+                                    integrals={'A': ExpressionScalar('k+2*b'), 'B': ExpressionScalar('3')})
+        dummy2 = DummyPulseTemplate(defined_channels={'A', 'B'},
+                                    integrals={'A': ExpressionScalar('7*(b-f)'), 'B': ExpressionScalar('0.24*f-3.0')})
+        pulse = SequencePulseTemplate(dummy1, dummy2)
+
+        self.assertEqual({'A': ExpressionScalar('k+2*b+7*(b-f)'), 'B': ExpressionScalar('0.24*f')}, pulse.integral)
 
 
 class SequencePulseTemplateSerializationTests(unittest.TestCase):

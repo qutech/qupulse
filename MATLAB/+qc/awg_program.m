@@ -26,6 +26,7 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 	if strcmp(ctrl, 'add')
 		[~, bool, msg] = qc.awg_program('fresh', qc.change_field(a, 'verbosity', 0));
 		if ~bool || a.force_update
+			plsdata.awg.currentProgam = '';
 			
 			% Deleting old program should not be necessary. In practice however,
 			% updating an existing program seemed to crash Matlab sometimes.
@@ -68,11 +69,13 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 		
 	% --- arm ---------------------------------------------------------------
 	elseif strcmp(ctrl, 'arm')
+		% Call directly before trigger comes, otherwise you might encounter a
+		% trigger timeout. Also, call after daq_operations('add')!
 		[~, bool, msg] = qc.awg_program('present', qc.change_field(a, 'verbosity', 0));
 		if bool
 			% qc.workaround_alazar_single_buffer_acquisition();
 			
-			hws.arm_program(a.program_name);
+			hws.arm_program(a.program_name);			
 			plsdata.awg.currentProgam = a.program_name;
 			bool = true;
 			msg = sprintf('Program ''%s'' armed', a.program_name);

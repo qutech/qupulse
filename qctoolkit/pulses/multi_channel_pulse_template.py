@@ -24,7 +24,7 @@ from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingExce
 from qctoolkit.pulses.parameters import Parameter, ParameterConstrainer
 from qctoolkit.pulses.conditions import Condition
 from qctoolkit.pulses.measurement import MeasurementDeclaration
-from qctoolkit.expressions import Expression
+from qctoolkit.expressions import Expression, ExpressionScalar
 
 __all__ = ["MultiChannelWaveform", "AtomicMultiChannelPulseTemplate"]
 
@@ -257,6 +257,13 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
         return AtomicMultiChannelPulseTemplate(*subtemplates,
                                                parameter_constraints=parameter_constraints,
                                                identifier=identifier, measurements=measurements)
+
+    @property
+    def integral(self) -> Dict[ChannelID, ExpressionScalar]:
+        expressions = dict()
+        for subtemplate in self._subtemplates:
+            expressions.update(subtemplate.integral)
+        return expressions
 
 
 class ChannelMappingException(Exception):
