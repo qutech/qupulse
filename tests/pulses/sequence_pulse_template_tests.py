@@ -1,4 +1,5 @@
 import unittest
+import warnings
 
 import numpy as np
 
@@ -103,6 +104,14 @@ class SequencePulseTemplateTest(unittest.TestCase):
         self.sequence = SequencePulseTemplate(MappingPulseTemplate(self.square,
                                                                    parameter_mapping=self.mapping1,
                                                                    measurement_mapping=self.window_name_mapping))
+
+    def test_external_parameters_warning(self):
+        with warnings.catch_warnings(record=True) as w:
+            dummy = DummyPulseTemplate()
+            SequencePulseTemplate(dummy, external_parameters={'a'})
+            self.assertEqual(1, len(w), msg="SequencePT did not issue a warning for argument external_parameters")
+            self.assertTrue("external_parameters" in str(w[-1].message),
+                            msg="SequencePT did not issue a warning for argument external_parameters")
 
     def test_duration(self):
         pt = SequencePulseTemplate(DummyPulseTemplate(duration='a'),
