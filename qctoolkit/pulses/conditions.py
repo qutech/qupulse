@@ -13,7 +13,7 @@ from typing import Dict, Optional, Callable
 
 from qctoolkit.utils.types import ChannelID
 from qctoolkit.pulses.parameters import Parameter
-from . import sequencing
+from qctoolkit.pulses.sequencing import SequencingElement, Sequencer
 from qctoolkit.pulses.instructions import InstructionBlock, InstructionPointer, Trigger
 
 __all__ = ["Condition", "ConditionEvaluationException", "ConditionMissingException",
@@ -42,9 +42,9 @@ class Condition(metaclass=ABCMeta):
         
     @abstractmethod
     def build_sequence_loop(self, 
-                            delegator: sequencing.SequencingElement,
-                            body: sequencing.SequencingElement,
-                            sequencer: sequencing.Sequencer,
+                            delegator: SequencingElement,
+                            body: SequencingElement,
+                            sequencer: Sequencer,
                             parameters: Dict[str, Parameter],
                             conditions: Dict[str, 'Condition'],
                             measurement_mapping: Dict[str, str],
@@ -70,10 +70,10 @@ class Condition(metaclass=ABCMeta):
     
     @abstractmethod
     def build_sequence_branch(self,
-                              delegator: sequencing.SequencingElement,
-                              if_branch: sequencing.SequencingElement,
-                              else_branch: sequencing.SequencingElement,
-                              sequencer: sequencing.Sequencer,
+                              delegator: SequencingElement,
+                              if_branch: SequencingElement,
+                              else_branch: SequencingElement,
+                              sequencer: Sequencer,
                               parameters: Dict[str, Parameter],
                               conditions: Dict[str, 'Condition'],
                               measurement_mapping: Dict[str, str],
@@ -123,9 +123,9 @@ class HardwareCondition(Condition):
         return False
 
     def build_sequence_loop(self, 
-                            delegator: sequencing.SequencingElement,
-                            body: sequencing.SequencingElement,
-                            sequencer: sequencing.Sequencer,
+                            delegator: SequencingElement,
+                            body: SequencingElement,
+                            sequencer: Sequencer,
                             parameters: Dict[str, Parameter],
                             conditions: Dict[str, Condition],
                             measurement_mapping: Dict[str, str],
@@ -141,10 +141,10 @@ class HardwareCondition(Condition):
                        target_block=body_block)
         
     def build_sequence_branch(self,
-                              delegator: sequencing.SequencingElement,
-                              if_branch: sequencing.SequencingElement,
-                              else_branch: sequencing.SequencingElement,
-                              sequencer: sequencing.Sequencer,
+                              delegator: SequencingElement,
+                              if_branch: SequencingElement,
+                              else_branch: SequencingElement,
+                              sequencer: Sequencer,
                               parameters: Dict[str, Parameter],
                               conditions: Dict[str, Condition],
                               measurement_mapping: Dict[str, str],
@@ -203,9 +203,9 @@ class SoftwareCondition(Condition):
         return evaluation_result is None
 
     def build_sequence_loop(self, 
-                            delegator: sequencing.SequencingElement,
-                            body: sequencing.SequencingElement,
-                            sequencer: sequencing.Sequencer,
+                            delegator: SequencingElement,
+                            body: SequencingElement,
+                            sequencer: Sequencer,
                             parameters: Dict[str, Parameter],
                             conditions: Dict[str, Condition],
                             measurement_mapping: Dict[str, str],
@@ -225,10 +225,10 @@ class SoftwareCondition(Condition):
             self.__loop_iteration += 1 # next time, evaluate for next iteration
 
     def build_sequence_branch(self,
-                              delegator: sequencing.SequencingElement,
-                              if_branch: sequencing.SequencingElement,
-                              else_branch: sequencing.SequencingElement,
-                              sequencer: sequencing.Sequencer,
+                              delegator: SequencingElement,
+                              if_branch: SequencingElement,
+                              else_branch: SequencingElement,
+                              sequencer: Sequencer,
                               parameters: Dict[str, Parameter],
                               conditions: Dict[str, Condition],
                               measurement_mapping: Dict[str, str],

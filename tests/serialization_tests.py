@@ -10,7 +10,6 @@ from qctoolkit.serialization import FilesystemBackend, Serializer, CachingBacken
     ZipFileBackend, AnonymousSerializable, DictBackend
 from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
 from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
-from qctoolkit.expressions import Expression
 
 from tests.serialization_dummies import DummyStorageBackend
 

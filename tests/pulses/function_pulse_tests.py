@@ -1,7 +1,7 @@
 import unittest
 import sympy
 
-from qctoolkit.utils.types import TimeType, time_from_float
+from qctoolkit.utils.types import time_from_float
 from qctoolkit.pulses.function_pulse_template import FunctionPulseTemplate,\
     FunctionWaveform
 from qctoolkit.serialization import Serializer
