@@ -145,7 +145,7 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
         self.validate_parameter_constraints(parameters=parameters)
 
         body_block = InstructionBlock()
-        body_block.return_ip = InstructionPointer(instruction_block, len(instruction_block))
+        body_block.return_ip = InstructionPointer(instruction_block, len(instruction_block) - 1)
 
         try:
             real_parameters = {v: parameters[v].get_value() for v in self._repetition_count.variables}
