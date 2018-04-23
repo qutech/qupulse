@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Set, Optional, Union
 import numbers
 
 import numpy as np
+import sympy
 
 from qctoolkit.expressions import ExpressionScalar
 from qctoolkit.serialization import Serializer
@@ -143,6 +144,12 @@ class FunctionPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
             measurements=measurement_declarations,
             parameter_constraints=parameter_constraints
         )
+
+    @property
+    def integral(self) -> Dict[ChannelID, ExpressionScalar]:
+        return {self.__channel: ExpressionScalar(
+            sympy.integrate(self.__expression.sympified_expression, ('t', 0, self.duration.sympified_expression))
+        )}
 
 
 class FunctionWaveform(Waveform):

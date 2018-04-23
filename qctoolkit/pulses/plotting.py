@@ -116,17 +116,17 @@ def render(sequence: AbstractInstructionBlock,
     times[-1] = np.nextafter(times[-1], times[-2])
 
     voltages = dict((ch, np.empty(len(times))) for ch in channels)
-    offsets = {ch: 0 for ch in channels}
+    offset = 0
     for waveform in waveforms:
+        wf_end = offset + waveform.duration
+        indices = slice(*np.searchsorted(times, (offset, wf_end)))
+        sample_times = times[indices] - float(offset)
         for channel in channels:
-            offset = offsets[channel]
-            indices = slice(*np.searchsorted(times, (offset, offset+waveform.duration)))
-            sample_times = times[indices] - offset
             output_array = voltages[channel][indices]
             waveform.get_sampled(channel=channel,
                                  sample_times=sample_times,
                                  output_array=output_array)
-            offsets[channel] += waveform.duration
+        offset = wf_end
     if render_measurements:
         return times, voltages, measurements
     else:

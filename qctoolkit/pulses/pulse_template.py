@@ -93,6 +93,11 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
                                        self.subtemplates if isinstance(self, SequencePulseTemplate) else [self])
         return SequencePulseTemplate(*subtemplates)
 
+    @property
+    @abstractmethod
+    def integral(self) -> Dict[ChannelID, ExpressionScalar]:
+        """Returns an expression giving the integral over the pulse."""
+
 
 class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
     """A PulseTemplate that does not imply any control flow disruptions and can be directly

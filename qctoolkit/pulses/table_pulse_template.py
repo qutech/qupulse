@@ -451,6 +451,21 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
 
         return TablePulseTemplate(parsed, **kwargs)
 
+    @property
+    def integral(self) -> Dict[ChannelID, ExpressionScalar]:
+        expressions = dict()
+        for channel, channel_entries in self._entries.items():
+
+            expr = 0
+            for first_entry, second_entry in zip(channel_entries[:-1], channel_entries[1:]):
+                substitutions = {'t0': ExpressionScalar(first_entry.t).sympified_expression, 'v0': ExpressionScalar(first_entry.v).sympified_expression,
+                                 't1': ExpressionScalar(second_entry.t).sympified_expression, 'v1': ExpressionScalar(second_entry.v).sympified_expression}
+
+                expr += first_entry.interp.integral.sympified_expression.subs(substitutions)
+            expressions[channel] = ExpressionScalar(expr)
+
+        return expressions
+
 
 class ZeroDurationTablePulseTemplate(UserWarning):
     pass
