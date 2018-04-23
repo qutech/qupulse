@@ -1,7 +1,7 @@
 import unittest
 import warnings
 
-from sympy import sympify, Sum
+from sympy import Sum
 
 from qctoolkit.expressions import Expression, ExpressionScalar
 from qctoolkit.pulses.loop_pulse_template import ForLoopPulseTemplate, WhileLoopPulseTemplate,\

@@ -1,11 +1,9 @@
 import unittest
-from typing import Union
 
 from qctoolkit.expressions import Expression
 from qctoolkit.pulses.parameters import ConstantParameter, MappedParameter, ParameterNotProvidedException,\
-    ParameterConstraint, ParameterConstraintViolation, InvalidParameterNameException
+    ParameterConstraint, InvalidParameterNameException
 
-from tests.serialization_dummies import DummySerializer
 from tests.pulses.sequencing_dummies import DummyParameter
 
 

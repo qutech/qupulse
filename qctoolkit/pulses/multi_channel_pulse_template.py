@@ -8,7 +8,6 @@ Classes:
 """
 
 from typing import Dict, List, Optional, Any, Iterable, Union, Set, Sequence
-import itertools
 import numbers
 
 import numpy
@@ -22,7 +21,6 @@ from qctoolkit.pulses.pulse_template import PulseTemplate, AtomicPulseTemplate
 from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingException, MappingPulseTemplate,\
     MissingParameterDeclarationException, MappingTuple
 from qctoolkit.pulses.parameters import Parameter, ParameterConstrainer
-from qctoolkit.pulses.conditions import Condition
 from qctoolkit.pulses.measurement import MeasurementDeclaration
 from qctoolkit.expressions import Expression, ExpressionScalar
 
