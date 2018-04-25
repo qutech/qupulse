@@ -2,7 +2,7 @@ import unittest
 import itertools
 
 from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingException,\
-    UnnecessaryMappingException, MissingParameterDeclarationException, MappingPulseTemplate,\
+    UnnecessaryMappingException, MappingPulseTemplate,\
     AmbiguousMappingException, MappingCollisionException
 from qctoolkit.pulses.parameters import ParameterNotProvidedException
 from qctoolkit.pulses.parameters import ConstantParameter, ParameterConstraintViolation
@@ -216,11 +216,6 @@ class MappingTemplateTests(unittest.TestCase):
 
 
 class PulseTemplateParameterMappingExceptionsTests(unittest.TestCase):
-
-    def test_missing_parameter_declaration_exception_str(self) -> None:
-        dummy = DummyPulseTemplate()
-        exception = MissingParameterDeclarationException(dummy, 'foo')
-        self.assertIsInstance(str(exception), str)
 
     def test_missing_mapping_exception_str(self) -> None:
         dummy = DummyPulseTemplate()

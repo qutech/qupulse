@@ -458,8 +458,8 @@ class SerializerTests(unittest.TestCase):
         foo_mappings = dict(hugo='ilse', albert='albert', voltage='voltage')
         sequence = SequencePulseTemplate((table_foo, foo_mappings, dict()),
                                          (table, dict(t=0), dict()),
-                                         external_parameters=['ilse', 'albert', 'voltage'],
                                          identifier=None)
+        self.assertEqual({'ilse', 'albert', 'voltage'}, sequence.parameter_names)
 
         storage = DummyStorageBackend()
         serializer = Serializer(storage)

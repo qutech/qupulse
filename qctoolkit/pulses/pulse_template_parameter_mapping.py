@@ -15,7 +15,6 @@ from qctoolkit.serialization import Serializer
 __all__ = [
     "MappingPulseTemplate",
     "MissingMappingException",
-    "MissingParameterDeclarationException",
     "UnnecessaryMappingException",
 ]
 
@@ -282,23 +281,6 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
             expressions[channel_out] = expr
 
         return expressions
-
-
-class MissingParameterDeclarationException(Exception):
-    """Indicates that a parameter declaration mapping in a SequencePulseTemplate maps to an external
-    parameter declaration that was not declared."""
-
-    def __init__(self, template: PulseTemplate, missing_declaration: str) -> None:
-        super().__init__()
-        self.template = template
-        self.missing_declaration = missing_declaration
-
-    def __str__(self) -> str:
-        return \
-            "A mapping for template {} requires a parameter '{}' which has not been declared as" \
-            " an external parameter of the SequencePulseTemplate.".format(
-                self.template, self.missing_declaration
-            )
 
 
 class MissingMappingException(Exception):
