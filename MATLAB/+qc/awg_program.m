@@ -89,7 +89,8 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 			globalProgram = plsdata.awg.armGlobalProgram{1};
 			plsdata.awg.armGlobalProgram = circshift(plsdata.awg.armGlobalProgram, -1);
 		else
-			error('plsdata.awg.armGlobalProgram must contain a char or a cell');
+		  globalProgram = a.program_name;
+			warning('Not using global program since plsdata.awg.armGlobalProgram must contain a char or a cell.');
 		end		
 		
 % 		This code outputs the wrong pulses and isn't even faster
