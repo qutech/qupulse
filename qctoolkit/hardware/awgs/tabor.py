@@ -26,27 +26,87 @@ assert(sys.byteorder == 'little')
 __all__ = ['TaborAWGRepresentation', 'TaborChannelPair']
 
 
-class TaborSegment(tuple):
+class TaborSegment:
     """Represents one segment of two channels on the device. Convenience class."""
-    def __new__(cls, ch_a: Optional[np.ndarray], ch_b: Optional[np.ndarray]):
-        return tuple.__new__(cls, (ch_a, ch_b))
 
-    def __init__(self, ch_a, ch_b):
+    __slots__ = ('ch_a', 'ch_b', 'marker_a', 'marker_b')
+
+    def __init__(self,
+                 ch_a: Optional[np.ndarray],
+                 ch_b: Optional[np.ndarray],
+                 marker_a: Optional[np.ndarray],
+                 marker_b: Optional[np.ndarray]):
         if ch_a is None and ch_b is None:
             raise TaborException('Empty TaborSegments are not allowed')
         if ch_a is not None and ch_b is not None and len(ch_a) != len(ch_b):
             raise TaborException('Channel entries to have to have the same length')
 
+        self.ch_a = ch_a
+        self.ch_b = ch_b
+
+        self.marker_a = None if marker_a is None else np.asarray(marker_a, dtype=bool)
+        self.marker_b = None if marker_b is None else np.asarray(marker_b, dtype=bool)
+
+        if marker_a is not None and len(marker_a)*2 != self.num_points:
+            raise TaborException('Marker A has to have half of the channels length')
+        if marker_b is not None and len(marker_b)*2 != self.num_points:
+            raise TaborException('Marker A has to have half of the channels length')
+
     def __hash__(self) -> int:
-        return hash((bytes(self[0]) if self[0] is not None else 0,
-                     bytes(self[1]) if self[1] is not None else 0))
+        return hash(tuple(0 if data is None else bytes(data)
+                          for data in (self.ch_a, self.ch_b, self.marker_a, self.marker_b)))
+
+    @property
+    def data_a(self):
+        """channel_data and marker data"""
+        if self.marker_a is None and self.marker_b is None:
+            return self.ch_a
+
+        if self.ch_a is None:
+            raise NotImplementedError('What data should be used in a?')
+
+        # copy channel information
+        data = np.array(self.ch_a)
+
+        if self.marker_a is not None:
+            #data.reshape(-1, 8)[::2, :].flat |= (1 << 14) * self.marker_a.astype(np.uint16)
+            data.reshape(-1, 8)[1::2, :].flat |= (1 << 14) * self.marker_a.astype(np.uint16)
+
+        if self.marker_b is not None:
+            #data.reshape(-1, 8)[::2, :].flat |= (1 << 15) * self.marker_b.astype(np.uint16)
+            data.reshape(-1, 8)[1::2, :].flat |= (1 << 15) * self.marker_b.astype(np.uint16)
+
+        return data
+
+    @property
+    def data_b(self):
+        """channel_data and marker data"""
+        if self.marker_a is None and self.marker_b is None:
+            return self.ch_b
+
+        if self.ch_b is None:
+            raise NotImplementedError('What data should be used in B?')
+
+        # copy channel information
+        data = np.array(self.ch_b)
+
+        """
+        if self.marker_a is not None:
+            data.reshape(-1, 8)[::2, :].flat |= (1 << 14) * self.marker_a.astype(np.uint16)
+            data.reshape(-1, 8)[1::2, :].flat |= (1 << 14) * self.marker_a.astype(np.uint16)
+
+        if self.marker_b is not None:
+            data.reshape(-1, 8)[::2, :].flat |= (1 << 15) * self.marker_b.astype(np.uint16)
+            data.reshape(-1, 8)[1::2, :].flat |= (1 << 15) * self.marker_b.astype(np.uint16)
+        """
+        return data
 
     @property
     def num_points(self) -> int:
-        return len(self[0]) if self[1] is None else len(self[1])
+        return len(self.ch_b) if self.ch_a is None else len(self.ch_a)
 
     def get_as_binary(self) -> np.ndarray:
-        assert not (self[0] is None or self[1] is None)
+        assert not (self.ch_a is None or self.ch_b is None)
         return make_combined_wave([self])
 
 
@@ -131,24 +191,27 @@ class TaborProgram:
             else:
                 return np.full_like(time, 8192, dtype=np.uint16)
 
-        def get_marker_data(waveform: MultiChannelWaveform, time):
-            marker_data = np.zeros(len(time), dtype=np.uint16)
-            for marker_index, markerID in enumerate(self._markers):
-                if markerID is not None:
-                    marker_data |= (waveform.get_sampled(channel=markerID, sample_times=time) != 0).\
-                                       astype(dtype=np.uint16) << marker_index+14
-            return marker_data
+        def get_marker_data(waveform: MultiChannelWaveform, time, marker):
+            if self._markers[marker]:
+                markerID = self._markers[marker]
+                return waveform.get_sampled(channel=markerID, sample_times=time) != 0
+            else:
+                return np.full_like(time, False, dtype=bool)
 
         segments = np.empty_like(self._waveforms, dtype=TaborSegment)
         for i, waveform in enumerate(self._waveforms):
             t = time_array[:int(waveform.duration*sample_rate)]
+            marker_time = t[::2]
             segment_a = voltage_to_data(waveform, t, 0)
             segment_b = voltage_to_data(waveform, t, 1)
             assert (len(segment_a) == len(t))
             assert (len(segment_b) == len(t))
-            seg_data = get_marker_data(waveform, t)
-            segment_a |= seg_data
-            segments[i] = TaborSegment(segment_a, segment_b)
+            marker_a = get_marker_data(waveform, marker_time, 0)
+            marker_b = get_marker_data(waveform, marker_time, 1)
+            segments[i] = TaborSegment(ch_a=segment_a,
+                                       ch_b=segment_b,
+                                       marker_a=marker_a,
+                                       marker_b=marker_b)
         return segments, segment_lengths
 
     def setup_single_sequence_mode(self) -> None:
@@ -663,7 +726,7 @@ class TaborChannelPair(AWG):
                                                     output_offset=0., resolution=14),
                                     voltage_to_uint16(voltage=np.zeros(192),
                                                     output_amplitude=0.5,
-                                                    output_offset=0., resolution=14))
+                                                    output_offset=0., resolution=14), None, None)
         self._idle_sequence_table = [(1, 1, 0), (1, 1, 0), (1, 1, 0)]
 
         self._known_programs = dict()  # type: Dict[str, TaborProgramMemory]
