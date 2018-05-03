@@ -160,11 +160,11 @@ class TaborMemoryReadTests(TaborSimulatorBasedTest):
         zero = np.ones(192, dtype=np.uint16) * 2**13
         sine = ((np.sin(np.linspace(0, 2*np.pi, 192+64)) + 1) / 2 * (2**14 - 1)).astype(np.uint16)
 
-        self.segments = [TaborSegment(ramp_up, ramp_up),
-                         TaborSegment(ramp_down, zero),
-                         TaborSegment(sine, sine)]
+        self.segments = [TaborSegment(ramp_up, ramp_up, None, None),
+                         TaborSegment(ramp_down, zero, None, None),
+                         TaborSegment(sine, sine, None, None)]
 
-        self.zero_segment = TaborSegment(zero, zero)
+        self.zero_segment = TaborSegment(zero, zero, None, None)
 
         # program 1
         self.sequence_tables = [[(10, 0, 0), (10, 1, 0), (10, 0, 0), (10, 1, 0)],
