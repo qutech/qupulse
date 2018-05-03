@@ -3,7 +3,7 @@ import sys
 import functools
 import weakref
 import itertools
-from typing import List, Tuple, Set, NamedTuple, Callable, Optional, Any, Sequence, cast, Generator, Union
+from typing import List, Tuple, Set, NamedTuple, Callable, Optional, Any, Sequence, cast, Generator, Union, Dict
 from enum import Enum
 from collections import OrderedDict
 
@@ -452,6 +452,46 @@ class TaborAWGRepresentation:
                     raise RuntimeError('Cannot execute command: {}\n{}: {}'.format(cmd_str, error_code, error_msg))
 
             assert len(answers) == 0
+
+    def get_status_table(self) -> Dict[str, Union[str, float, int]]:
+        """Send a lot of queries to the AWG about its settings. A good way to visualize is using pandas.DataFrame
+
+        Returns:
+            An ordered dictionary with the results
+        """
+        name_query_type_list = [('channel', ':INST:SEL?', int),
+                                ('coupling', ':OUTP:COUP?', str),
+                                ('volt_dc', ':SOUR:VOLT:LEV:AMPL:DC?', float),
+                                ('volt_hv', ':VOLT:HV?', float),
+                                ('offset', ':VOLT:OFFS?', float),
+                                ('outp', ':OUTP?', str),
+                                ('mode', ':SOUR:FUNC:MODE?', str),
+                                ('shape', ':SOUR:FUNC:SHAPE?', str),
+                                ('dc_offset', ':SOUR:DC?', float),
+                                ('freq_rast', ':FREQ:RAST?', float),
+
+                                ('gated', ':INIT:GATE?', str),
+                                ('continuous', ':INIT:CONT?', str),
+                                ('continuous_enable', ':INIT:CONT:ENAB?', str),
+                                ('continuous_source', ':INIT:CONT:ENAB:SOUR?', str),
+                                ('marker_source', ':SOUR:MARK:SOUR?', str),
+                                ('seq_jump_event', ':SOUR:SEQ:JUMP:EVEN?', str),
+                                ('seq_adv_mode', ':SOUR:SEQ:ADV?', str),
+                                ('aseq_adv_mode', ':SOUR:ASEQ:ADV?', str),
+
+                                ('marker', ':SOUR:MARK:SEL?', int),
+                                ('marker_high', ':MARK:VOLT:HIGH?', str),
+                                ('marker_low', ':MARK:VOLT:LOW?', str),
+                                ('marker_width', ':MARK:WIDT?', int),
+                                ('marker_state', ':MARK:STAT?', str)]
+
+        data = OrderedDict((name, []) for name, *_ in name_query_type_list)
+        for ch in (1, 2, 3, 4):
+            self.select_channel(ch)
+            self.select_marker((ch-1) % 2 + 1)
+            for name, query, dtype in name_query_type_list:
+                data[name].append(dtype(self.send_query(query)))
+        return data
 
     @property
     def is_open(self) -> bool:
