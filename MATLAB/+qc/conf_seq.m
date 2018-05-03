@@ -55,7 +55,7 @@ function scan = conf_seq(varargin)
 		'arm_global',           false, ...     % If true, set the program to be armed via tunedata.global_opts.conf_seq.arm_program_name.
 		...                                    % If you use this, all programs need to be uploaded manually before the scan and need to 
 		...                                    % have the same Alazar configuration.
-		'rf_switches',          true, ...      % turn RF switches on and off automatically using the DecaDAC channels (to be removed)
+		'rf_sources',          true, ...       % turn RF sources on and off automatically
 		'verbosity',            10 ...         % 0: display nothing, 10: display all except when arming program, 11: display all
 		);
 	a = util.parse_varargin(varargin, defaultArgs);
@@ -82,6 +82,12 @@ function scan = conf_seq(varargin)
 	% Turn AWG outputs off if scan stops (even if due to error)
 	scan.configfn(end+1).fn = @qc.cleanupfn_awg;
 	scan.configfn(end).args = {};	
+	
+	% Turn RF sources off if scan stops (even if due to error)
+	if a.rf_sources
+		scan.configfn(end+1).fn = @qc.cleanupfn_rf_sources;
+		scan.configfn(end).args = {};
+	end
 	
 	% Alazar workaround (can be removed once bug is fixed)
 	scan.configfn(end+1).fn = @smaconfigwrap;
@@ -137,20 +143,17 @@ function scan = conf_seq(varargin)
 	scan.configfn(end+1).fn = @qc.conf_seq_procfn;
 	scan.configfn(end).args = {};		
 	
-	if a.rf_switches
+	if a.rf_sources
 		% Turn RF switches on
 		scan.configfn(end+1).fn = @smaconfigwrap;
-		scan.configfn(end).args = {@smset, 'Switch1', 4};
+		scan.configfn(end).args = {@smset, 'RF1_on', 1};
 		scan.configfn(end+1).fn = @smaconfigwrap;
-		scan.configfn(end).args = {@smset, 'Switch2', 4};
+		scan.configfn(end).args = {@smset, 'RF2_on', 1};
 		scan.configfn(end+1).fn = @smaconfigwrap;
-		scan.configfn(end).args = {@pause, 0.1}; % So switches definitely on
+		scan.configfn(end).args = {@pause, 0.05}; % So RF sources definitely on
 		
 		% Turn RF switches off
-		scan.cleanupfn(end+1).fn = @smaconfigwrap;
-		scan.cleanupfn(end).args = {@smset, 'Switch1', 0};
-		scan.cleanupfn(end+1).fn = @smaconfigwrap;
-		scan.cleanupfn(end).args = {@smset, 'Switch2', 0};
+		% -> already done by qc.cleanupfn_rf_sources called above
 	end
 	
 	% Delete unnecessary data

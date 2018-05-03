@@ -118,7 +118,7 @@ function [t, channels, measurements] = plot_pulse(pulse, varargin)
 		end			
 	
 		if isempty(userData) || ~isstruct(userData) || ~isfield(userData, 'leadsPlotted') || ~userData.leadsPlotted			
-			color = [1 1 1]*0.7;
+			color = [0 0 0 0.1];
 			lineWidth = 3;
 			
 			plot(args.lead_points(1:3,1), args.lead_points(1:3,2), '-', 'lineWidth', lineWidth, 'color', color);

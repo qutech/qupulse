@@ -4,7 +4,6 @@ function scan = cleanupfn_awg(scan)
 		scan = [];
 	end
 	
-	evalin('caller', 'cleanupFn1 = onCleanup(@()(fprintf(''Executing cleanup function:\n'')));');
-	evalin('caller', 'cleanupFn2 = onCleanup(@()(awgctrl(''off'')));');
+	evalin('caller', 'cleanupFnAwg = onCleanup(@()({awgctrl(''off''), fprintf(''Executing cleanup function: Turned AWG outputs off\n'')}));');
 	
 end
