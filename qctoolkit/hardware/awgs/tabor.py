@@ -1100,11 +1100,13 @@ class TaborChannelPair(AWG):
         self.free_program(name)
         self.cleanup()
 
-    def set_marker_state(self, active) -> None:
-        """Sets the marker state of this channel pair. According to the manual one connot turn them off/on seperatly."""
-        command_string = ':INST:SEL {}; :SOUR:MARK:SEL 1; :SOUR:MARK:SOUR USER; :SOUR:MARK:STAT {}'.format(
-            self._channels[0],
-            'ON' if active else 'OFF')
+    def set_marker_state(self, marker: int, active: bool) -> None:
+        """Sets the marker state of this channel pair. According to the manual one cannot turn them off/on separately."""
+        command_string = ':INST:SEL {channel}; :SOUR:MARK:SEL {marker}; :SOUR:MARK:SOUR USER; :SOUR:MARK:STAT {active}'
+        command_string = command_string.format(
+            channel=self._channels[0],
+            marker=(1, 2)[marker],
+            active='ON' if active else 'OFF')
         self.device.send_cmd(command_string)
 
     def set_channel_state(self, channel, active) -> None:
@@ -1205,7 +1207,8 @@ class TaborChannelPair(AWG):
             else:
                 self.device.send_cmd(':INST:SEL {}; :OUTP OFF; :INST:SEL {}; :OUTP OFF'.format(*self._channels))
                 
-            self.set_marker_state(False)
+            self.set_marker_state(0, False)
+            self.set_marker_state(1, False)
             self.device.send_cmd(':SOUR:FUNC:MODE FIX')
 
             self._is_in_config_mode = True
@@ -1232,7 +1235,8 @@ class TaborChannelPair(AWG):
 
             self.device.send_cmd(':INST:SEL {}; :OUTP ON; :INST:SEL {}; :OUTP ON'.format(*self._channels))
 
-        self.set_marker_state(True)
+        self.set_marker_state(0, True)
+        self.set_marker_state(1, True)
         self._is_in_config_mode = False
 
 
