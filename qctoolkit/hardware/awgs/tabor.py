@@ -79,16 +79,7 @@ class TaborSegment:
     @property
     def data_b(self) -> np.ndarray:
         """channel_data and marker data"""
-        if self.marker_a is None and self.marker_b is None:
-            return self.ch_b
-
-        if self.ch_b is None:
-            raise NotImplementedError('What data should be used in B?')
-
-        # copy channel information
-        data = np.array(self.ch_b)
-
-        return data
+        return self.ch_b
 
     @property
     def num_points(self) -> int:
