@@ -57,7 +57,7 @@ class TaborSegment:
                           for data in (self.ch_a, self.ch_b, self.marker_a, self.marker_b)))
 
     @property
-    def data_a(self):
+    def data_a(self) -> np.ndarray:
         """channel_data and marker data"""
         if self.marker_a is None and self.marker_b is None:
             return self.ch_a
@@ -77,7 +77,7 @@ class TaborSegment:
         return data
 
     @property
-    def data_b(self):
+    def data_b(self) -> np.ndarray:
         """channel_data and marker data"""
         if self.marker_a is None and self.marker_b is None:
             return self.ch_b
