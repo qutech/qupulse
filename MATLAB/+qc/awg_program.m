@@ -89,7 +89,8 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 			globalProgram = plsdata.awg.armGlobalProgram{1};
 			plsdata.awg.armGlobalProgram = circshift(plsdata.awg.armGlobalProgram, -1);
 		else
-			error('plsdata.awg.armGlobalProgram must contain a char or a cell');
+		  globalProgram = a.program_name;
+			warning('Not using global program since plsdata.awg.armGlobalProgram must contain a char or a cell.');
 		end		
 		
 % 		This code outputs the wrong pulses and isn't even faster
@@ -134,7 +135,7 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 		end
 		
 	% --- clear all ---------------------------------------------------------
-	elseif strcmp(ctrl, 'clear all')
+	elseif strcmp(ctrl, 'clear all') % might take a long time
 		plsdata.awg.registeredPrograms = struct();
 		program_names = fieldnames(util.py.py2mat(py.getattr(hws, '_registered_programs')));
 		
@@ -149,6 +150,12 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 		else
 			msg = 'Error when trying to clear all progams';
 		end
+		
+	% --- clear all fast ----------------------------------------------------	
+	elseif strcmp(ctrl, 'clear all fast') % fast but need to clear awg manually
+		hws.registered_programs.clear();
+		py.getattr(daq, '_registered_programs').clear();
+
 	% --- present -----------------------------------------------------------
 	elseif strcmp(ctrl, 'present') % returns true if program is present
 		bool = py.list(hws.registered_programs.keys()).count(a.program_name) ~= 0;
