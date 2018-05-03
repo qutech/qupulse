@@ -69,11 +69,9 @@ class TaborSegment:
         data = np.array(self.ch_a)
 
         if self.marker_a is not None:
-            #data.reshape(-1, 8)[::2, :].flat |= (1 << 14) * self.marker_a.astype(np.uint16)
             data.reshape(-1, 8)[1::2, :].flat |= (1 << 14) * self.marker_a.astype(np.uint16)
 
         if self.marker_b is not None:
-            #data.reshape(-1, 8)[::2, :].flat |= (1 << 15) * self.marker_b.astype(np.uint16)
             data.reshape(-1, 8)[1::2, :].flat |= (1 << 15) * self.marker_b.astype(np.uint16)
 
         return data
@@ -90,15 +88,6 @@ class TaborSegment:
         # copy channel information
         data = np.array(self.ch_b)
 
-        """
-        if self.marker_a is not None:
-            data.reshape(-1, 8)[::2, :].flat |= (1 << 14) * self.marker_a.astype(np.uint16)
-            data.reshape(-1, 8)[1::2, :].flat |= (1 << 14) * self.marker_a.astype(np.uint16)
-
-        if self.marker_b is not None:
-            data.reshape(-1, 8)[::2, :].flat |= (1 << 15) * self.marker_b.astype(np.uint16)
-            data.reshape(-1, 8)[1::2, :].flat |= (1 << 15) * self.marker_b.astype(np.uint16)
-        """
         return data
 
     @property
