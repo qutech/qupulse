@@ -18,8 +18,8 @@ plsdata.qc.serializer = py.qctoolkit.serialization.Serializer(plsdata.qc.backend
 
 % Path for Triton 200 backups
 loadPath = 'Y:\Common\GaAs\Triton 200\Backup\DATA\workspace';
-pulsePath = 'Y:\Cerfontaine\Code\qc-toolkit-pulses';
-dictPath = 'Y:\Cerfontaine\Code\qc-toolkit-dicts';
+pulsePath = plsdata.path;
+dictPath = plsdata.dict.path;
 tunePath = 'Y:\Cerfontaine\Code\dev\+tune\data';
 
 % Loading
