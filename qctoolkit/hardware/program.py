@@ -456,9 +456,9 @@ def _make_compatible(program: Loop, min_len: int, quantum: int, sample_rate: Fra
             single_run = program.duration * sample_rate / program.repetition_count
             if is_integer(single_run / quantum) and single_run >= min_len:
                 new_repetition_count = program.repetition_count
-            else:
+                program.repetition_count = 1
+            else:t
                 new_repetition_count = 1
-            program.repetition_count = 1
             program.waveform = to_waveform(program.copy_tree_structure())
             program.repetition_count = new_repetition_count
             program[:] = []
