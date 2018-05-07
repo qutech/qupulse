@@ -199,7 +199,8 @@ class TaborMemoryReadTests(TaborSimulatorBasedTest):
         reformated = PlottableProgram._reformat_waveforms(waveforms)
 
         expected = [self.zero_segment, *self.segments]
-        for (ex1, ex2), r1, r2 in zip(expected, *reformated):
+        for ex, r1, r2 in zip(expected, *reformated):
+            ex1, ex2 = ex.data_a, ex.data_b
             np.testing.assert_equal(ex1, r1)
             np.testing.assert_equal(ex2, r2)
 
