@@ -687,7 +687,7 @@ class PlottableProgram:
         if total_length > max_total_length:
             return None
 
-        result = np.empty(total_length)
+        result = np.empty(total_length, dtype=np.uint16)
         c_idx = 0
         for wf, rep in zip(waveforms, repetitions):
             mem = wf.size*rep
@@ -724,8 +724,8 @@ class PlottableProgram:
     @classmethod
     def from_builtin(cls, data: dict) -> 'PlottableProgram':
         waveforms = data['waveforms']
-        waveforms = (tuple(np.array(wf) for wf in waveforms[0]),
-                     tuple(np.array(wf) for wf in waveforms[1]))
+        waveforms = (tuple(np.array(wf, dtype=np.uint16) for wf in waveforms[0]),
+                     tuple(np.array(wf, dtype=np.uint16) for wf in waveforms[1]))
         return cls(waveforms, data['seq_tables'], data['adv_seq_table'])
 
 
