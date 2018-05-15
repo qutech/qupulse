@@ -36,9 +36,12 @@ class StorageBackend(metaclass=ABCMeta):
             overwrite (bool): Set to True, if already existing data shall be overwritten.
                 (default: False)
         Raises:
-            DataExistsException if overwrite is False and there already exists data which
+            FileExistsError if overwrite is False and there already exists data which
                 is associated with the given identifier.
         """
+
+    def __setitem__(self, identifier: str, data: str):
+        self.put(identifier, data)
 
     @abstractmethod
     def get(self, identifier: str) -> str:
@@ -49,8 +52,11 @@ class StorageBackend(metaclass=ABCMeta):
         Returns:
             A serialized string of the data associated with the given identifier, if present.
         Raises:
-            DataMissingException if no data is associated with the given identifier.
+            KeyError if no data is associated with the given identifier.
         """
+
+    def __getitem__(self, identifier: str) -> str:
+        return self.get(identifier)
 
     @abstractmethod
     def exists(self, identifier: str) -> bool:
@@ -61,6 +67,23 @@ class StorageBackend(metaclass=ABCMeta):
         Returns:
             True, if stored data is associated with the given identifier.
         """
+
+    def __contains__(self, identifier: str):
+        return self.exists(identifier)
+
+    @abstractmethod
+    def delete(self, identifier: str):
+        """Delete a data of the given identifier.
+
+        Args:
+            identifier: identifier of the data to be deleted
+
+        Raises:
+            KeyError if there is no data associated with the identifier
+        """
+
+    def __delitem__(self, identifier: str):
+        self.delete(identifier)
 
 
 class FilesystemBackend(StorageBackend):
