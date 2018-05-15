@@ -162,16 +162,16 @@ class ZipFileBackend(StorageBackend):
         if not os.path.isfile(root):
             z = zipfile.ZipFile(root, "w")
             z.close()
-        self.__root = root
+        self._root = root
 
     def _path(self, identifier) -> str:
         return os.path.join(identifier + '.json')
 
     def put(self, identifier: str, data: str, overwrite: bool=False) -> None:
         if not self.exists(identifier):
-            with zipfile.ZipFile(self.__root, mode='a', compression=zipfile.ZIP_DEFLATED) as myzip:
+            with zipfile.ZipFile(self._root, mode='a', compression=zipfile.ZIP_DEFLATED) as myzip:
                 path = self._path(identifier)
-                myzip.writestr(path,data)
+                myzip.writestr(path, data)
         else:
             if overwrite:
                 self._update(self._path(identifier), data)
@@ -181,24 +181,29 @@ class ZipFileBackend(StorageBackend):
     def get(self, identifier: str) -> str:
         path = self._path(identifier)
         try:
-            with zipfile.ZipFile(self.__root) as myzip:
+            with zipfile.ZipFile(self._root) as myzip:
                 with myzip.open(path) as file:
                     return file.read().decode()
         except FileNotFoundError as fnf:
-            raise FileNotFoundError(identifier) from fnf
+            raise KeyError(identifier) from fnf
 
     def exists(self, identifier: str) -> bool:
         path = self._path(identifier)
-        with zipfile.ZipFile(self.__root, 'r') as myzip:
+        with zipfile.ZipFile(self._root, 'r') as myzip:
             return path in myzip.namelist()
+
+    def delete(self, identifier: str):
+        if not self.exists(identifier):
+            raise KeyError(identifier)
+        self._update(self._path(identifier), None)
 
     def _update(self, filename, data) -> None:
         # generate a temp file
-        tmpfd, tmpname = tempfile.mkstemp(dir=os.path.dirname(self.__root))
+        tmpfd, tmpname = tempfile.mkstemp(dir=os.path.dirname(self._root))
         os.close(tmpfd)
 
         # create a temp copy of the archive without filename            
-        with zipfile.ZipFile(self.__root, 'r') as zin:
+        with zipfile.ZipFile(self._root, 'r') as zin:
             with zipfile.ZipFile(tmpname, 'w') as zout:
                 zout.comment = zin.comment # preserve the comment
                 for item in zin.infolist():
@@ -206,12 +211,13 @@ class ZipFileBackend(StorageBackend):
                         zout.writestr(item, zin.read(item.filename))
 
         # replace with the temp archive
-        os.remove(self.__root)
-        os.rename(tmpname, self.__root)
+        os.remove(self._root)
+        os.rename(tmpname, self._root)
 
         # now add filename with its new data
-        with zipfile.ZipFile(self.__root, mode='a', compression=zipfile.ZIP_DEFLATED) as zf:
-            zf.writestr(filename, data)
+        if data:
+            with zipfile.ZipFile(self._root, mode='a', compression=zipfile.ZIP_DEFLATED) as zf:
+                zf.writestr(filename, data)
 
 
 class CachingBackend(StorageBackend):
