@@ -105,10 +105,10 @@ class FilesystemBackend(StorageBackend):
         """
         if not os.path.isdir(root):
             raise NotADirectoryError()
-        self.__root = os.path.abspath(root)
+        self._root = os.path.abspath(root)
 
     def _path(self, identifier) -> str:
-        return os.path.join(self.__root, identifier + '.json')
+        return os.path.join(self._root, identifier + '.json')
 
     def put(self, identifier: str, data: str, overwrite: bool=False) -> None:
         if self.exists(identifier) and not overwrite:
@@ -123,11 +123,17 @@ class FilesystemBackend(StorageBackend):
             with open(path) as file:
                 return file.read()
         except FileNotFoundError as fnf:
-            raise FileNotFoundError(identifier) from fnf
+            raise KeyError(identifier) from fnf
 
     def exists(self, identifier: str) -> bool:
         path = self._path(identifier)
         return os.path.isfile(path)
+
+    def delete(self, identifier):
+        try:
+            os.remove(self._path(identifier))
+        except FileNotFoundError as fnf:
+            raise KeyError(identifier) from fnf
 
 
 class ZipFileBackend(StorageBackend):
