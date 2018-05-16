@@ -118,14 +118,18 @@ function [t, channels, measurements] = plot_pulse(pulse, varargin)
 		end			
 	
 		if isempty(userData) || ~isstruct(userData) || ~isfield(userData, 'leadsPlotted') || ~userData.leadsPlotted			
-			color = [1 1 1]*0.7;
+			color = [0 0 0 0.1];
 			lineWidth = 3;
 			
-			plot(args.lead_points(1:3,1), args.lead_points(1:3,2), '-', 'lineWidth', lineWidth, 'color', color);
-			plot(args.lead_points(4:6,1), args.lead_points(4:6,2), '-', 'lineWidth', lineWidth, 'color', color);
-			plot(args.lead_points([2 5],1), args.lead_points([2 5],2), '--', 'lineWidth', lineWidth, 'color', color);
-			
-			offset = abs(max(args.lead_points(:))-min(args.lead_points(:)))*0.05;
+			if ~isempty(args.lead_points)
+				plot(args.lead_points(1:3,1), args.lead_points(1:3,2), '-', 'lineWidth', lineWidth, 'color', color);
+				plot(args.lead_points(4:6,1), args.lead_points(4:6,2), '-', 'lineWidth', lineWidth, 'color', color);
+				plot(args.lead_points([2 5],1), args.lead_points([2 5],2), '--', 'lineWidth', lineWidth, 'color', color);
+				
+				offset = abs(max(args.lead_points(:))-min(args.lead_points(:)))*0.05;
+			else
+				offset = 4e-4;
+			end
 			
 			for name = fieldnames(args.special_points)'
 				xy = args.special_points.(name{1});
