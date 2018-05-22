@@ -5,6 +5,9 @@ function scan = conf_seq(varargin)
 	% different program in each loop iteration using prefns but this is not
 	% implemented at the moment).
 	%
+	% Please only add aditional configfns directly before turning the AWG on
+	% since some other programs fetch information using configfn indices.
+	%
 	% This function gets only underscore arguments to be more consistend with
 	% qctoolkit. Other variables in this function are camel case.
 	%
