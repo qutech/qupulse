@@ -20,7 +20,7 @@ import weakref
 from qctoolkit.utils.types import DocStringABCMeta
 
 __all__ = ["StorageBackend", "FilesystemBackend", "ZipFileBackend", "CachingBackend", "Serializable", "Serializer",
-           "AnonymousSerializable", "DictBackend"]
+           "AnonymousSerializable", "DictBackend", "ExtendedJSONEncoder", "ExtendedJSONDecoder", "PulseStorage"]
 
 
 class StorageBackend(metaclass=ABCMeta):
@@ -575,16 +575,115 @@ class Serializer(object):
         return class_.deserialize(self, **repr_)
 
 
-class ExtendedJSONEncoder(json.JSONEncoder):
-    """Encodes AnonymousSerializable and sets as lists."""
+class PulseStorage:
+    StorageEntry = NamedTuple('StorageEntry', [('serialization', str), ('serializable', Serializable)])
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self,
+                 storage_backend: StorageBackend):
+        self._storage_backend = storage_backend
+
+        self._temporary_storage = dict()
+
+    def _deserialize(self, identifier):
+        serialized = self._storage_backend[identifier]
+        decoder = ExtendedJSONDecoder(storage=self)
+        return decoder.decode(serialized)
+
+    @property
+    def temporary_storage(self) -> Dict[str, StorageEntry]:
+        return self._temporary_storage
+
+    def __contains__(self, identifier):
+        return identifier in self._temporary_storage or identifier in self._storage_backend
+
+    def __getitem__(self, identifier: str) -> Serializable:
+        if identifier not in self._temporary_storage:
+            self._temporary_storage[identifier] = self._deserialize(identifier)
+        return self._temporary_storage[identifier]
+
+    def __setitem__(self, identifier: str, serializable: Serializable):
+        if identifier in self._temporary_storage:
+            if self.temporary_storage[identifier].serializable is serializable:
+                return
+            else:
+                raise RuntimeError('Identifier assigned twice with different objects', identifier)
+        self.overwrite(identifier, serializable)
+
+    def overwrite(self, identifier: str, serializable: Serializable):
+        """Use this method actively change a pulse"""
+
+        encoder = ExtendedJSONEncoder(self)
+
+        serialization_data = serializable.get_serialization_data()
+        serialized = encoder.encode(serialization_data)
+
+        self._temporary_storage[identifier] = self.StorageEntry(serialized, serializable)
+
+    def flush(self, to_ignore: Sequence[str]=None):
+        to_ignore = set(to_ignore) if to_ignore else set()
+        for identifier, (serialized, _) in self._temporary_storage.items():
+            if identifier not in to_ignore and serialized:
+                self._storage_backend.put(identifier, serialized, True)
+
+    def clear(self):
+        self._temporary_storage.clear()
+
+
+class ExtendedJSONDecoder(json.JSONDecoder):
+    type_identifier_name = '#type'
+    identifier_name = '#identifier'
+
+    def __init__(self, storage, *args, **kwargs):
+        super().__init__(*args, object_hook=self.filter_serializables, **kwargs)
+
+        self.storage = storage
+
+    def filter_serializables(self, obj_dict) -> Any:
+        if self.type_identifier_name in obj_dict:
+            type_identifier = obj_dict.pop(self.type_identifier_name)
+
+            if self.identifier_name in obj_dict:
+                obj_identifier = obj_dict.pop(self.identifier_name)
+            else:
+                obj_identifier = None
+
+            if type_identifier == 'reference':
+                if not obj_identifier:
+                    raise RuntimeError('Reference without identifier')
+                return self.storage[obj_identifier]
+
+            else:
+                deserialization_callback = SerializableMeta.deserialization_callbacks[type_identifier]
+                return deserialization_callback(identifier=obj_identifier, **obj_dict)
+        return obj_dict
+
+
+class ExtendedJSONEncoder(json.JSONEncoder):
+    """"""
+    type_identifier_name = '#type'
+    identifier_name = '#identifier'
+
+    def __init__(self, storage, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        self.storage = storage
+
     def default(self, o: Any) -> Any:
-        if isinstance(o, AnonymousSerializable):
+        if isinstance(o, Serializable):
+            if o.identifier:
+                if o.identifier not in self.storage:
+                    self.storage[o.identifier] = o
+
+                return {self.type_identifier_name: 'reference',
+                        self.identifier_name: o.identifier}
+            else:
+                return o.get_serialization_data()
+
+        elif isinstance(o, AnonymousSerializable):
             return o.get_serialization_data()
+
         elif type(o) is set:
             return list(o)
+
         else:
             return super().default(o)
