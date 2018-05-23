@@ -9,12 +9,15 @@ Classes:
     - Serializer: Converts Serializables to a serial representation as a string and vice-versa.
 """
 
-from abc import ABCMeta, abstractmethod, abstractstaticmethod
-from typing import Dict, Any, Optional, NamedTuple, Union
-import os.path
+from abc import ABCMeta, abstractmethod
+from typing import Dict, Any, Optional, NamedTuple, Union, Sequence
+import os
 import zipfile
 import tempfile
 import json
+import weakref
+
+from qctoolkit.utils.types import DocStringABCMeta
 
 __all__ = ["StorageBackend", "FilesystemBackend", "ZipFileBackend", "CachingBackend", "Serializable", "Serializer",
            "AnonymousSerializable", "DictBackend"]
@@ -283,7 +286,39 @@ class DictBackend(StorageBackend):
     def delete(self, identifier: str):
         del self._cache[identifier]
 
-class Serializable(metaclass=ABCMeta):
+
+def get_type_identifier(obj: Any) -> str:
+    """Return a unique type identifier for any object.
+
+    Args:
+        obj: The object for which to obtain a type identifier.
+    Returns:
+        The type identifier as a string.
+    """
+    return "{}.{}".format(obj.__module__, obj.__class__.__name__)
+
+
+class SerializableMeta(DocStringABCMeta):
+    deserialization_callbacks = dict()
+
+    def __new__(mcs, name, bases, dct):
+        cls = super().__new__(mcs, name, bases, dct)
+
+        type_identifier = getattr(cls, 'get_type_identifier')()
+
+        try:
+            deserialization_function = getattr(cls, 'deserialize')
+        except AttributeError:
+            deserialization_function = cls
+        mcs.deserialization_callbacks[type_identifier] = deserialization_function
+
+        return cls
+
+
+default_pulse_registration = weakref.WeakValueDictionary()
+
+
+class Serializable(metaclass=SerializableMeta):
     """Any object that can be converted into a serialized representation for storage and back.
 
     Serializable is the interface used by Serializer to obtain representations of objects that
@@ -299,8 +334,7 @@ class Serializable(metaclass=ABCMeta):
     See also:
         Serializer
     """
-
-    def __init__(self, identifier: Optional[str]=None) -> None:
+    def __init__(self, identifier: Optional[str]=None, registration: weakref.WeakValueDictionary=None) -> None:
         """Initialize a Serializable.
 
         Args:
@@ -311,17 +345,26 @@ class Serializable(metaclass=ABCMeta):
             ValueError: If identifier is the empty string
         """
         super().__init__()
+
+        if registration is None:
+            registration = default_pulse_registration
+
         if identifier == '':
             raise ValueError("Identifier must not be empty.")
         self.__identifier = identifier
+
+        if identifier and registration:
+            if identifier in registration:
+                raise RuntimeError('Pulse with name already exists', identifier)
+            else:
+                registration[identifier] = self
 
     @property
     def identifier(self) -> Optional[str]:
         """The (optional) identifier of this Serializable. Either a non-empty string or None."""
         return self.__identifier
 
-    @abstractmethod
-    def get_serialization_data(self, serializer: 'Serializer') -> Dict[str, Any]:
+    def get_serialization_data(self) -> Dict[str, Any]:
         """Return all data relevant for serialization as a dictionary containing only base types.
 
         Implementation hint:
@@ -338,10 +381,17 @@ class Serializable(metaclass=ABCMeta):
                 etc..) which fully represent the relevant properties of this Serializable for
                 storing and later reconstruction as a Python object.
         """
+        if self.identifier:
+            return {'#type': self.get_type_identifier(), '#identifier': self.identifier}
+        else:
+            return {'#type': self.get_type_identifier()}
 
-    @staticmethod
-    @abstractmethod
-    def deserialize(serializer: 'Serializer', **kwargs) -> 'Serializable':
+    @classmethod
+    def get_type_identifier(cls) -> str:
+        return "{}.{}".format(cls.__module__, cls.__name__)
+
+    @classmethod
+    def deserialize(cls, **kwargs) -> 'Serializable':
         """Reconstruct the Serializable object from a dictionary.
 
         Implementation hint:
@@ -358,6 +408,7 @@ class Serializable(metaclass=ABCMeta):
                 (key,value) pair returned by get_serialization_data, the same pair is given as
                 keyword argument as input to this method.
          """
+        return cls(**kwargs)
 
 
 class AnonymousSerializable:
