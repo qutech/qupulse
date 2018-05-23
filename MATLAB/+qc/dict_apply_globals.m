@@ -22,5 +22,6 @@ function d = dict_apply_globals(d)
 			d.(pulseName{1}) = qc.join_structs(d.(pulseName{1}), d.global);
 		
 		end
+		d = rmfield(d, 'global');
 	end	
 end

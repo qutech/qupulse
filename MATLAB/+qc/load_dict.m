@@ -33,7 +33,7 @@ function dict_string_or_struct = load_dict(dict_string_or_struct)
 		
 		if ~strcmp(suffix, '')
 			for fn = fieldnames(dict_string_or_struct)'		
-				if ~strcmp(fn{1}, 'global') && ~strcmp(fn{1}, strcat('dict', delim, 'name'))
+				if ~strcmp(fn{1}, strcat('dict', delim, 'name')) && ~strcmp(fn{1}, 'global')
 					dict_string_or_struct.([fn{1} suffix]) = dict_string_or_struct.(fn{1});
 					dict_string_or_struct = rmfield(dict_string_or_struct, fn{1});
 				end
