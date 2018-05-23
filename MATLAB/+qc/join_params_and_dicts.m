@@ -23,7 +23,8 @@ function parameters = join_params_and_dicts(varargin)
 	% 'waiting_time' in the dictionary where the global is defined.
 	%
 	% Globals do not take precedence over parameters passed in more to the
-	% right.
+	% right. Globals are also saved in a field 'global___parameter_name' when
+	% the dictionary is flattened to a parameter struct.
 	%
 	% Each dictionary also has a field 'dict___name' which specifies
   % the dictionary name

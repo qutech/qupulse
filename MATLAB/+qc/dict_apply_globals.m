@@ -5,7 +5,7 @@ function d = dict_apply_globals(d)
 		globals = fieldnames(d.global);
 		
 		for pulseName = fieldnames(d)'
-			if strcmp(pulseName{1}, 'global') || strcmp(pulseName{1}, strcat('dict', delim, 'name'))
+			if strcmp(pulseName{1}, strcat('dict', delim, 'name'))
 				continue
 			end
 			for paramName = fieldnames(d.(pulseName{1}))'
@@ -17,6 +17,5 @@ function d = dict_apply_globals(d)
 				end
 			end
 		end
-		d = rmfield(d, 'global');
 	end	
 end
