@@ -276,7 +276,7 @@ class CachingBackendTests(unittest.TestCase):
 
     def test_get_not_existing(self) -> None:
         name = 'test_get_not_existing'
-        with self.assertRaises(FileNotFoundError):
+        with self.assertRaises(KeyError):
             self.caching_backend.get(name)
 
 

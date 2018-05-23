@@ -14,7 +14,7 @@ class DummyStorageBackend(StorageBackend):
     def get(self, identifier: str) -> str:
         self.times_get_called += 1
         if identifier not in self.stored_items:
-            raise FileNotFoundError()
+            raise KeyError(identifier)
         return self.stored_items[identifier]
 
     def put(self, identifier: str, data: str, overwrite: bool=False) -> None:
@@ -26,6 +26,9 @@ class DummyStorageBackend(StorageBackend):
     def exists(self, identifier: str) -> bool:
         self.times_exists_called += 1
         return identifier in self.stored_items
+
+    def delete(self, identifier: str):
+        del self.stored_items[identifier]
 
 
 class DummySerializer(Serializer):

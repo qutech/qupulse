@@ -237,30 +237,31 @@ class CachingBackend(StorageBackend):
             backend (StorageBackend): A StorageBackend that provides data
                 IO functionality.
         """
-        self.__backend = backend
-        self.__cache = {}
+        self._backend = backend
+        self._cache = {}
 
     def put(self, identifier: str, data: str, overwrite: bool=False) -> None:
-        if identifier in self.__cache and not overwrite:
+        if identifier in self._cache and not overwrite:
             raise FileExistsError(identifier)
-        self.__backend.put(identifier, data, overwrite)
-        self.__cache[identifier] = data
+        self._backend.put(identifier, data, overwrite)
+        self._cache[identifier] = data
 
     def get(self, identifier: str) -> str:
-        if identifier not in self.__cache:
-            self.__cache[identifier] = self.__backend.get(identifier)
-        return self.__cache[identifier]
+        if identifier not in self._cache:
+            self._cache[identifier] = self._backend.get(identifier)
+        return self._cache[identifier]
 
     def exists(self, identifier: str) -> bool:
-        return self.__backend.exists(identifier)
+        return self._backend.exists(identifier)
+
+    def delete(self, identifier: str):
+        self._backend.delete(identifier)
+        if identifier in self._cache:
+            del self._cache[identifier]
 
 
 class DictBackend(StorageBackend):
-    """Adds naive memory caching functionality to another StorageBackend.
-
-    DictBackend uses a dictionary to store the data for convenience serialization.
-    """
-
+    """DictBackend uses a dictionary to store the data for convenience serialization."""
     def __init__(self) -> None:
         self._cache = {}
 
@@ -279,6 +280,8 @@ class DictBackend(StorageBackend):
     def storage(self) -> Dict[str, str]:
         return self._cache
 
+    def delete(self, identifier: str):
+        del self._cache[identifier]
 
 class Serializable(metaclass=ABCMeta):
     """Any object that can be converted into a serialized representation for storage and back.
