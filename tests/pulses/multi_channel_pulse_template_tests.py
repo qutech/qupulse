@@ -178,12 +178,9 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
             AtomicMultiChannelPulseTemplate((non_atomic_pt, {'A': 'C'}), atomic_pt)
 
     def test_external_parameters_warning(self):
-        with warnings.catch_warnings(record=True) as w:
-            dummy = DummyPulseTemplate()
-            AtomicMultiChannelPulseTemplate(dummy, external_parameters={'a'})
-            self.assertEqual(1, len(w), msg="AtomicMultiChannelPulseTemplate did not issue a warning for argument external_parameters")
-            self.assertTrue("external_parameters" in str(w[-1].message),
-                            msg="AtomicMultiChannelPulseTemplate did not issue a warning for argument external_parameters")
+        with self.assertWarnsRegex(DeprecationWarning, "external_parameters",
+                                   msg="AtomicMultiChannelPulseTemplate did not issue a warning for argument external_parameters"):
+            AtomicMultiChannelPulseTemplate(DummyPulseTemplate(), external_parameters={'a'})
 
     def test_duration(self):
         sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'}),

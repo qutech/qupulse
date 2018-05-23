@@ -23,9 +23,9 @@ function instantiated_pulse = instantiate_pulse(pulse, varargin)
 			'channel_mapping', args.channel_mapping, ...
 			'window_mapping' , args.window_mapping ...
 			);
-		
-		sequencer.push(pulse, kwargs);
-		instantiated_pulse = sequencer.build();
+				
+		sequencer.push(pulse, kwargs);	
+		instantiated_pulse = util.py.call_with_interrupt_check(py.getattr(sequencer, 'build'));
 	end
 end
 

@@ -44,6 +44,7 @@ function parameters = join_params_and_dicts(varargin)
 	end
 	
 	parameters = qc.array2row(parameters);
+	parameters = orderfields(parameters);
 
 end
 

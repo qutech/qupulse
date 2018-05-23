@@ -28,7 +28,7 @@ function dict_string_or_struct = load_dict(dict_string_or_struct)
 			dict_string_or_struct = jsondecode(text);
 			dict_string_or_struct = qc.array2row(dict_string_or_struct);
 		else
-			dict_string_or_struct = struct(strcat('dict', delim, 'name'), dict_string_or_struct);
+			dict_string_or_struct = struct(strcat('dict', delim, 'name'), dict_string_or_struct, 'global', struct());
 		end
 		
 		if ~strcmp(suffix, '')

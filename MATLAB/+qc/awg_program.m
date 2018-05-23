@@ -49,7 +49,7 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 				fprintf('Program ''%s'' is now being uploaded...', a.program_name);
 				tic
 			end
-			hws.register_program(program.program_name, instantiated_pulse, pyargs('update', py.True));
+			util.py.call_with_interrupt_check(py.getattr(hws, 'register_program'), program.program_name, instantiated_pulse, pyargs('update', py.True));			
 			
 			if a.verbosity > 9
 				fprintf('took %.0fs\n', toc);

@@ -56,7 +56,7 @@ function setup_tabor_awg(varargin)
 	end
 	
 	% Create hardware setup for qctoolkit integration	
-	plsdata.awg.hardwareSetup = py.qctoolkit.hardware.setup.HardwareSetup();
+	plsdata.awg.hardwareSetup = py.qctoolkit.hardware.setup.HardwareSetup();	
 	
 	% Create python lambda function in Matlab
 	numpy = py.importlib.import_module('numpy');
