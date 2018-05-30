@@ -41,7 +41,7 @@ def iter_waveforms(instruction_block: AbstractInstructionBlock,
                 raise NotImplementedError("Instruction block contains an unexpected GOTO instruction.")
             return
         elif isinstance(instruction, STOPInstruction):
-            raise StopIteration()
+            return
         else:
             raise NotImplementedError('Rendering cannot handle instructions of type {}.'.format(type(instruction)))
 
