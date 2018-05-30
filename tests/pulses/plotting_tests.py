@@ -227,7 +227,7 @@ class PlotterTests(unittest.TestCase):
         self.assertEqual(expected_times, times)
         self.assertEqual(expected_voltages, voltages)
 
-    def test_empty_pulse(self) -> None:
+    def test_plot_empty_pulse(self) -> None:
         pt = DummyPulseTemplate()
         with warnings.catch_warnings(record=True) as w:
             plot(pt, dict(), show=False)
