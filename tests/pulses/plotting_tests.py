@@ -228,6 +228,9 @@ class PlotterTests(unittest.TestCase):
         self.assertEqual(expected_voltages, voltages)
 
     def test_plot_empty_pulse(self) -> None:
+        import matplotlib
+        matplotlib.use('svg') # use non-interactive backend so that test does not fail on travis
+
         pt = DummyPulseTemplate()
         with warnings.catch_warnings(record=True) as w:
             plot(pt, dict(), show=False)
