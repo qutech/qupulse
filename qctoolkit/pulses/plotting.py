@@ -111,7 +111,7 @@ def render(sequence: AbstractInstructionBlock,
     sample_count = total_time * sample_rate + 1
     if not float(sample_count).is_integer():
         warnings.warn('Sample count not whole number. Casted to integer.')
-    times = np.linspace(0, total_time, num=sample_count, dtype=float)
+    times = np.linspace(0, total_time, num=int(sample_count), dtype=float)
     # move the last sample inside the waveform
     times[-1] = np.nextafter(times[-1], times[-2])
 
