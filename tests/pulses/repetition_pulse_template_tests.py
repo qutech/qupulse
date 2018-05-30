@@ -1,4 +1,5 @@
 import unittest
+import warnings
 
 import numpy as np
 
@@ -88,6 +89,11 @@ class RepetitionPulseTemplateTest(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             RepetitionPulseTemplate(body, Expression(-1))
+
+        with warnings.catch_warnings(record=True) as w:
+            RepetitionPulseTemplate(body, 0)
+            self.assertEqual(1, len(w), msg='RepetitionPulseTemplate did not raise a warning for 0 repetitions on consruction.')
+            self.assertTrue('0 repetitions' in str(w[-1].message), msg='RepetitionPulseTemplate did not raise a warning for 0 repetitions on consruction.')
 
     def test_parameter_names_and_declarations(self) -> None:
         body = DummyPulseTemplate()
@@ -228,6 +234,42 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
     def test_parameter_names_param_only_in_constraint(self) -> None:
         pt = RepetitionPulseTemplate(DummyPulseTemplate(parameter_names={'a'}), 'n', parameter_constraints=['a<c'])
         self.assertEqual(pt.parameter_names, {'a','c', 'n'})
+
+    def test_rep_count_zero_constant(self) -> None:
+        repetitions = 0
+        parameters = {}
+        measurement_mapping = {}
+        conditions = {}
+        channel_mapping = {}
+
+        with warnings.catch_warnings(record=True):
+            t = RepetitionPulseTemplate(self.body, repetitions)
+            t.build_sequence(self.sequencer, parameters, conditions, measurement_mapping, channel_mapping, self.block)
+
+            self.assertFalse(self.block.embedded_blocks) # no new blocks created
+            self.assertFalse(self.block.instructions) # no instructions added to block
+
+    def test_rep_count_zero_declaration(self) -> None:
+        t = self.template
+        parameters = dict(foo=ConstantParameter(0))
+        measurement_mapping = {}
+        conditions = {}
+        channel_mapping = {}
+        t.build_sequence(self.sequencer, parameters, conditions, measurement_mapping, channel_mapping, self.block)
+
+        self.assertFalse(self.block.embedded_blocks) # no new blocks created
+        self.assertFalse(self.block.instructions) # no instructions added to block
+
+    def test_rep_count_neg_declaration(self) -> None:
+        t = self.template
+        parameters = dict(foo=ConstantParameter(-1))
+        measurement_mapping = {}
+        conditions = {}
+        channel_mapping = {}
+        t.build_sequence(self.sequencer, parameters, conditions, measurement_mapping, channel_mapping, self.block)
+
+        self.assertFalse(self.block.embedded_blocks)  # no new blocks created
+        self.assertFalse(self.block.instructions)  # no instructions added to block
 
 
 class RepetitionPulseTemplateSerializationTests(unittest.TestCase):
