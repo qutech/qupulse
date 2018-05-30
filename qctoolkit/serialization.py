@@ -20,7 +20,7 @@ import weakref
 from qctoolkit.utils.types import DocStringABCMeta
 
 __all__ = ["StorageBackend", "FilesystemBackend", "ZipFileBackend", "CachingBackend", "Serializable", "Serializer",
-           "AnonymousSerializable", "DictBackend", "ExtendedJSONEncoder", "ExtendedJSONDecoder", "PulseStorage"]
+           "AnonymousSerializable", "DictBackend", "JSONSerializableEncoder", "JSONSerializableDecoder", "PulseStorage"]
 
 
 class StorageBackend(metaclass=ABCMeta):
@@ -586,7 +586,7 @@ class PulseStorage:
 
     def _deserialize(self, identifier) -> Serializable:
         serialized = self._storage_backend[identifier]
-        decoder = ExtendedJSONDecoder(storage=self)
+        decoder = JSONSerializableDecoder(storage=self)
         return decoder.decode(serialized)
 
     @property
@@ -612,7 +612,7 @@ class PulseStorage:
     def overwrite(self, identifier: str, serializable: Serializable) -> None:
         """Use this method actively change a pulse"""
 
-        encoder = ExtendedJSONEncoder(self)
+        encoder = JSONSerializableEncoder(self)
 
         serialization_data = serializable.get_serialization_data()
         serialized = encoder.encode(serialization_data)
@@ -629,7 +629,7 @@ class PulseStorage:
         self._temporary_storage.clear()
 
 
-class ExtendedJSONDecoder(json.JSONDecoder):
+class JSONSerializableDecoder(json.JSONDecoder):
     type_identifier_name = '#type'
     identifier_name = '#identifier'
 
@@ -658,7 +658,7 @@ class ExtendedJSONDecoder(json.JSONDecoder):
         return obj_dict
 
 
-class ExtendedJSONEncoder(json.JSONEncoder):
+class JSONSerializableEncoder(json.JSONEncoder):
     """"""
     type_identifier_name = '#type'
     identifier_name = '#identifier'
@@ -685,5 +685,22 @@ class ExtendedJSONEncoder(json.JSONEncoder):
         elif type(o) is set:
             return list(o)
 
+        else:
+            return super().default(o)
+
+
+class ExtendedJSONEncoder(json.JSONEncoder):
+    """Encodes AnonymousSerializable and sets as lists.
+
+    Deprecated as of May 2018. To be replaced by JSONSerializableEncoder."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def default(self, o: Any) -> Any:
+        if isinstance(o, AnonymousSerializable):
+            return o.get_serialization_data()
+        elif type(o) is set:
+            return list(o)
         else:
             return super().default(o)

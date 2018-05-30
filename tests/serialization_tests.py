@@ -10,8 +10,8 @@ from unittest import mock
 from tempfile import TemporaryDirectory
 from typing import Optional, Any
 
-from qctoolkit.serialization import FilesystemBackend, CachingBackend, Serializable, ExtendedJSONEncoder,\
-    ZipFileBackend, AnonymousSerializable, DictBackend, PulseStorage, ExtendedJSONDecoder
+from qctoolkit.serialization import FilesystemBackend, CachingBackend, Serializable, JSONSerializableEncoder,\
+    ZipFileBackend, AnonymousSerializable, DictBackend, PulseStorage, JSONSerializableDecoder
 
 from tests.serialization_dummies import DummyStorageBackend
 
@@ -422,7 +422,7 @@ class PulseStorageTests(unittest.TestCase):
 
         instance = DummySerializable(identifier='my_id')
 
-        with mock.patch.object(ExtendedJSONEncoder, 'encode', new=encode_mock):
+        with mock.patch.object(JSONSerializableEncoder, 'encode', new=encode_mock):
             self.storage.overwrite('my_id', instance)
 
         self.assertEqual(encode_mock.call_count, 1)
@@ -483,30 +483,11 @@ class PulseStorageTests(unittest.TestCase):
         self.assertFalse(self.storage.temporary_storage)
 
 
-class ExtendedJSONEncoderTests(unittest.TestCase):
-    def test_default(self):
-
-        storage = dict()
-        encoder = ExtendedJSONEncoder(storage)
-
-        self.assertEqual(encoder.default({1, 2, 3, 4}), list({1, 2, 3, 4}))
-
-        self.assertFalse(storage)
-
-        s = DummySerializable(identifier='ident')
-        expected = {encoder.type_identifier_name: 'reference', encoder.identifier_name: 'ident'}
-
-        result = encoder.default(s)
-        self.assertEqual(result, expected)
-
-        self.assertIs(storage['ident'], s)
-
-
-class ExtendedJSONDecoderTests(unittest.TestCase):
+class JSONSerializableDecoderTests(unittest.TestCase):
     def test_filter_serializables(self):
         storage = dict(asd='asd_value')
 
-        decoder = ExtendedJSONDecoder(storage)
+        decoder = JSONSerializableDecoder(storage)
 
         no_type_dict = dict(bla=9)
         self.assertIs(decoder.filter_serializables(no_type_dict), no_type_dict)
@@ -533,7 +514,7 @@ class ExtendedJSONDecoderTests(unittest.TestCase):
 
         storage = dict(referenced=referenced)
 
-        decoder = ExtendedJSONDecoder(storage)
+        decoder = JSONSerializableDecoder(storage)
 
         decoded = decoder.decode(encoded)
 
@@ -541,7 +522,7 @@ class ExtendedJSONDecoderTests(unittest.TestCase):
         self.assertIs(decoded.data, referenced)
 
 
-class ExtendedJSONEncoderTest(unittest.TestCase):
+class JSONSerializableEncoderTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -549,16 +530,18 @@ class ExtendedJSONEncoderTest(unittest.TestCase):
         existing_serializable = DummySerializable(identifier='existing_id')
         storage = {'existing_id': existing_serializable}
 
-        encoder = ExtendedJSONEncoder(storage)
+        encoder = JSONSerializableEncoder(storage)
 
         test_set = {1, 2, 3, 4}
         self.assertEqual(test_set, set(encoder.default(test_set)))
+        self.assertEqual(1, len(storage))
 
         class A(AnonymousSerializable):
             anonymous_serialization_data = [1, 2, 3]
 
             def get_serialization_data(self):
                 return self.anonymous_serialization_data
+
         self.assertIs(encoder.default(A()), A.anonymous_serialization_data)
 
         expected_conversion = {'#type': 'reference',
@@ -597,7 +580,7 @@ class ExtendedJSONEncoderTest(unittest.TestCase):
 
         inner_known_storage = [567]
         storage = dict(known=inner_known_storage)
-        encoder = ExtendedJSONEncoder(storage)
+        encoder = JSONSerializableEncoder(storage)
 
         encoded = encoder.encode(outer)
 
