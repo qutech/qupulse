@@ -43,7 +43,7 @@ class StorageBackend(metaclass=ABCMeta):
                 is associated with the given identifier.
         """
 
-    def __setitem__(self, identifier: str, data: str):
+    def __setitem__(self, identifier: str, data: str) -> None:
         self.put(identifier, data)
 
     @abstractmethod
@@ -71,11 +71,11 @@ class StorageBackend(metaclass=ABCMeta):
             True, if stored data is associated with the given identifier.
         """
 
-    def __contains__(self, identifier: str):
+    def __contains__(self, identifier: str) -> bool:
         return self.exists(identifier)
 
     @abstractmethod
-    def delete(self, identifier: str):
+    def delete(self, identifier: str) -> None:
         """Delete a data of the given identifier.
 
         Args:
@@ -85,7 +85,7 @@ class StorageBackend(metaclass=ABCMeta):
             KeyError if there is no data associated with the identifier
         """
 
-    def __delitem__(self, identifier: str):
+    def __delitem__(self, identifier: str) -> None:
         self.delete(identifier)
 
 
@@ -195,7 +195,7 @@ class ZipFileBackend(StorageBackend):
         with zipfile.ZipFile(self._root, 'r') as myzip:
             return path in myzip.namelist()
 
-    def delete(self, identifier: str):
+    def delete(self, identifier: str) -> None:
         if not self.exists(identifier):
             raise KeyError(identifier)
         self._update(self._path(identifier), None)
@@ -257,7 +257,7 @@ class CachingBackend(StorageBackend):
     def exists(self, identifier: str) -> bool:
         return self._backend.exists(identifier)
 
-    def delete(self, identifier: str):
+    def delete(self, identifier: str) -> None:
         self._backend.delete(identifier)
         if identifier in self._cache:
             del self._cache[identifier]
@@ -283,7 +283,7 @@ class DictBackend(StorageBackend):
     def storage(self) -> Dict[str, str]:
         return self._cache
 
-    def delete(self, identifier: str):
+    def delete(self, identifier: str) -> None:
         del self._cache[identifier]
 
 
@@ -579,12 +579,12 @@ class PulseStorage:
     StorageEntry = NamedTuple('StorageEntry', [('serialization', str), ('serializable', Serializable)])
 
     def __init__(self,
-                 storage_backend: StorageBackend):
+                 storage_backend: StorageBackend) -> None:
         self._storage_backend = storage_backend
 
         self._temporary_storage = dict()
 
-    def _deserialize(self, identifier):
+    def _deserialize(self, identifier) -> Serializable:
         serialized = self._storage_backend[identifier]
         decoder = ExtendedJSONDecoder(storage=self)
         return decoder.decode(serialized)
@@ -593,7 +593,7 @@ class PulseStorage:
     def temporary_storage(self) -> Dict[str, StorageEntry]:
         return self._temporary_storage
 
-    def __contains__(self, identifier):
+    def __contains__(self, identifier) -> bool:
         return identifier in self._temporary_storage or identifier in self._storage_backend
 
     def __getitem__(self, identifier: str) -> Serializable:
@@ -601,7 +601,7 @@ class PulseStorage:
             self._temporary_storage[identifier] = self._deserialize(identifier)
         return self._temporary_storage[identifier]
 
-    def __setitem__(self, identifier: str, serializable: Serializable):
+    def __setitem__(self, identifier: str, serializable: Serializable) -> None:
         if identifier in self._temporary_storage:
             if self.temporary_storage[identifier].serializable is serializable:
                 return
@@ -609,7 +609,7 @@ class PulseStorage:
                 raise RuntimeError('Identifier assigned twice with different objects', identifier)
         self.overwrite(identifier, serializable)
 
-    def overwrite(self, identifier: str, serializable: Serializable):
+    def overwrite(self, identifier: str, serializable: Serializable) -> None:
         """Use this method actively change a pulse"""
 
         encoder = ExtendedJSONEncoder(self)
@@ -619,13 +619,13 @@ class PulseStorage:
 
         self._temporary_storage[identifier] = self.StorageEntry(serialized, serializable)
 
-    def flush(self, to_ignore: Sequence[str]=None):
+    def flush(self, to_ignore: Sequence[str]=None) -> None:
         to_ignore = set(to_ignore) if to_ignore else set()
         for identifier, (serialized, _) in self._temporary_storage.items():
             if identifier not in to_ignore and serialized:
                 self._storage_backend.put(identifier, serialized, True)
 
-    def clear(self):
+    def clear(self) -> None:
         self._temporary_storage.clear()
 
 
@@ -633,7 +633,7 @@ class ExtendedJSONDecoder(json.JSONDecoder):
     type_identifier_name = '#type'
     identifier_name = '#identifier'
 
-    def __init__(self, storage, *args, **kwargs):
+    def __init__(self, storage, *args, **kwargs) -> None:
         super().__init__(*args, object_hook=self.filter_serializables, **kwargs)
 
         self.storage = storage
@@ -663,7 +663,7 @@ class ExtendedJSONEncoder(json.JSONEncoder):
     type_identifier_name = '#type'
     identifier_name = '#identifier'
 
-    def __init__(self, storage, *args, **kwargs):
+    def __init__(self, storage, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
         self.storage = storage
