@@ -211,26 +211,28 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                            channel_mapping=channel_mapping,
                            target_block=instruction_block)
 
-    def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
-        data = dict(subtemplates=[serializer.dictify(subtemplate) for subtemplate in self.subtemplates])
+    def get_serialization_data(self, serializer: Serializer=None) -> Dict[str, Any]:
+        data = dict(subtemplates=self.subtemplates)
         if self.parameter_constraints:
             data['parameter_constraints'] = [str(c) for c in self.parameter_constraints]
         if self.measurement_declarations:
             data['measurements'] = self.measurement_declarations
+
+        if serializer: # compatibility to old serialization routines, deprecated
+            data['subtemplates'] = [serializer.dictify(subtemplate) for subtemplate in self.subtemplates]
         return data
 
-    @staticmethod
-    def deserialize(serializer: Serializer,
-                    subtemplates: Iterable[Dict[str, Any]],
-                    parameter_constraints: Optional[List[str]]=None,
-                    identifier: Optional[str]=None,
-                    measurements: Optional[List[MeasurementDeclaration]]=None) -> 'SequencePulseTemplate':
-        subtemplates = [serializer.deserialize(st) for st in subtemplates]
-        seq_template = SequencePulseTemplate(*subtemplates,
-                                             parameter_constraints=parameter_constraints,
-                                             identifier=identifier,
-                                             measurements=measurements)
-        return seq_template
+    @classmethod
+    def deserialize(cls,
+                    serializer: Serializer=None,  # compatibility to old serialization routines, deprecated
+                    **kwargs) -> 'SequencePulseTemplate':
+        subtemplates = kwargs['subtemplates']
+        del kwargs['subtemplates']
+
+        if serializer: # compatibility to old serialization routines, deprecated
+            subtemplates = [serializer.deserialize(st) for st in subtemplates]
+
+        return cls(*subtemplates, **kwargs)
 
     @property
     def defined_channels(self) -> Set[ChannelID]:
