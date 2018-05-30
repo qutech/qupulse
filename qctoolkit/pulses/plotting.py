@@ -126,6 +126,7 @@ def render(sequence: AbstractInstructionBlock,
             waveform.get_sampled(channel=channel,
                                  sample_times=sample_times,
                                  output_array=output_array)
+        assert(output_array.shape == sample_times.shape)
         offset = wf_end
     if render_measurements:
         return times, voltages, measurements
@@ -185,10 +186,16 @@ def plot(pulse: PulseTemplate,
     else:
         times, voltages = render(sequence, sample_rate)
 
-    if times.size > maximum_points:
+    duration = 0
+    if times.size == 0:
+        warnings.warn("Pulse to be plotted is empty!")
+    elif times.size > maximum_points:
+        # todo [2018-05-30]: since it results in an empty return value this should arguably be an exception, not just a warning
         warnings.warn("Sampled pulse of size {wf_len} is lager than {max_points}".format(wf_len=times.size,
                                                                                          max_points=maximum_points))
         return None
+    else:
+        duration = times[-1]
 
     legend_handles = []
     if axes is None:
@@ -216,12 +223,12 @@ def plot(pulse: PulseTemplate,
 
     axes.legend(handles=legend_handles)
 
-    max_voltage = max(max(channel) for channel in voltages.values())
-    min_voltage = min(min(channel) for channel in voltages.values())
+    max_voltage = max((max(channel, default=0) for channel in voltages.values()), default=0)
+    min_voltage = min((min(channel, default=0) for channel in voltages.values()), default=0)
 
     # add some margins in the presentation
     plt.plot()
-    plt.xlim(-0.5, times[-1] + 0.5)
+    plt.xlim(-0.5, duration + 0.5)
     plt.ylim(min_voltage - 0.5, max_voltage + 0.5)
     plt.xlabel('Time in ns')
     plt.ylabel('Voltage')
