@@ -16,6 +16,7 @@ import zipfile
 import tempfile
 import json
 import weakref
+import warnings
 
 from qctoolkit.utils.types import DocStringABCMeta
 
@@ -364,23 +365,33 @@ class Serializable(metaclass=SerializableMeta):
         """The (optional) identifier of this Serializable. Either a non-empty string or None."""
         return self.__identifier
 
-    def get_serialization_data(self) -> Dict[str, Any]:
+    def get_serialization_data(self, serializer: 'Serializer'=None) -> Dict[str, Any]:
         """Return all data relevant for serialization as a dictionary containing only base types.
 
         Implementation hint:
-        If the Serializer contains complex objects which are itself Serializables, a serialized
-        representation for these MUST be obtained by calling the dictify() method of
-        serializer. The reason is that serializer may decide to either return a dictionary to embed
-        or only a reference to the Serializable subelement.
+        In the old serialization routines, if the Serializer contains complex objects which are itself
+        Serializables, a serialized representation for these MUST be obtained by calling the dictify()
+        method of serializer. The reason is that serializer may decide to either return a dictionary
+        to embed or only a reference to the Serializable subelement. This is DEPRECATED behavior as of May 2018.
+        In the new routines, this will happen automatically and every Serializable is only responsible for
+        returning it's own data and leave nested Serializables in object form.
+
+        For the transition time where both implementations are
+        available, implementations of this method should support the old and new routines, using
+        the presence of the serializer argument to differentiate between both. Don't make use of
+        the implementation in this base class when implementing this method for the old routines.
 
         Args:
-            serializer (Serializer): A Serializer instance used to serialize complex subelements of
-                this Serializable.
+            serializer (Serializer): DEPRECATED (May 2018).A Serializer instance used to serialize
+                complex subelements of this Serializable.
         Returns:
             A dictionary of Python base types (strings, integers, lists/tuples containing these,
                 etc..) which fully represent the relevant properties of this Serializable for
                 storing and later reconstruction as a Python object.
         """
+        if serializer:
+            warnings.warn("{c}.get_serialization_data(*) was called with a serializer argument, indicating deprecated behavior. Please switch to the new serialization routines.".format(c=self.__class__.__name__), DeprecationWarning)
+
         if self.identifier:
             return {'#type': self.get_type_identifier(), '#identifier': self.identifier}
         else:
@@ -391,7 +402,7 @@ class Serializable(metaclass=SerializableMeta):
         return "{}.{}".format(cls.__module__, cls.__name__)
 
     @classmethod
-    def deserialize(cls, **kwargs) -> 'Serializable':
+    def deserialize(cls, serializer: 'Serializer'=None, **kwargs) -> 'Serializable':
         """Reconstruct the Serializable object from a dictionary.
 
         Implementation hint:
@@ -400,14 +411,24 @@ class Serializable(metaclass=SerializableMeta):
             arguments required, i.e., those returned by get_serialization_data.
             If this Serializable contains complex objects which are itself of type Serializable, their
             dictionary representations MUST be converted into objects using serializers deserialize()
-            method.
+            method when using the old serialization routines. This is DEPRECATED behavior.
+            Using the new routines a serializable is only responsible to decode it's own dictionary,
+            not those of nested objects (i.e., all incoming arguments are already processed by the
+            serialization routines). For the transition time where both implementations are
+            available, implementations of this method should support the old and new routines, using
+            the presence of the serializer argument to differentiate between both. For the new routines,
+            just call this base class function.
+            After the transition period, subclasses likely need not implement deserialize separately anymore at all.
 
          Args:
-             serializer: A serializer instance used when deserializing subelements.
+             serializer: DEPRECATED (May 2018). A serializer instance used when deserializing subelements.
              <property_name>: All relevant properties of the object as keyword arguments. For every
                 (key,value) pair returned by get_serialization_data, the same pair is given as
                 keyword argument as input to this method.
          """
+        if serializer:
+            warnings.warn("{c}.deserialize(*) was called with a serializer argument, indicating deprecated behavior. Please switch to the new serialization routines.".format(c=cls.__name__), DeprecationWarning)
+
         return cls(**kwargs)
 
 
@@ -420,6 +441,7 @@ class AnonymousSerializable:
     See also:
         Serializable
 
+    # todo (lumip, 2018-05-30): this does not really have a purpose, especially in the new serialization ecosystem.. we should deprecate and remove it
     """
 
     def get_serialization_data(self) -> Any:
@@ -433,6 +455,9 @@ class AnonymousSerializable:
 
 class Serializer(object):
     """Serializes Serializable objects and stores them persistently.
+
+    DEPRECATED as of May 2018. Serializer will be superseeded by the new serialization routines and
+    PulseStorage class.
 
     Serializer provides methods to enable the conversion of Serializable objects (including nested
     Serializables) into (nested) dictionaries and serialized JSON-encodings of these and vice-versa.
@@ -453,6 +478,8 @@ class Serializer(object):
         """
         self.__subpulses = dict() # type: Dict[str, Serializer.__FileEntry]
         self.__storage_backend = storage_backend
+
+        warnings.warn("Serializer is deprecated. Please switch to the new serialization routines.", DeprecationWarning)
 
     def dictify(self, serializable: Serializable) -> Union[str, Dict[str, Any]]:
         """Convert a Serializable into a dictionary representation.
@@ -475,7 +502,7 @@ class Serializer(object):
         See also:
             Serializable.get_serialization_data
         """
-        repr_ = serializable.get_serialization_data(self)
+        repr_ = serializable.get_serialization_data(serializer=self)
         repr_['type'] = self.get_type_identifier(serializable)
         identifier = serializable.identifier
         if identifier is None:
@@ -541,6 +568,7 @@ class Serializer(object):
         Args:
             serializable (Serializable): The Serializable to serialize and store
         """
+        warnings.warn("Serializer is deprecated. Please switch to the new serialization routines.", DeprecationWarning)
         repr_ = self.__collect_dictionaries(serializable)
         for identifier in repr_:
             storage_identifier = identifier
@@ -561,6 +589,7 @@ class Serializer(object):
         See also:
             Serializable.deserialize
         """
+        warnings.warn("Serializer is deprecated. Please switch to the new serialization routines.", DeprecationWarning)
         if isinstance(representation, str):
             repr_ = json.loads(self.__storage_backend.get(representation))
             repr_['identifier'] = representation
@@ -603,6 +632,7 @@ class PulseStorage:
 
     def __setitem__(self, identifier: str, serializable: Serializable) -> None:
         if identifier in self._temporary_storage:
+            # todo (lumip, 2018-05-30): only checking against the temporary storage is not sufficient to check for duplicates
             if self.temporary_storage[identifier].serializable is serializable:
                 return
             else:
