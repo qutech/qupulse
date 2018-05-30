@@ -17,19 +17,76 @@ from tests.hardware.program_tests import LoopTests, WaveformGenerator, MultiChan
 class TaborSegmentTests(unittest.TestCase):
     def test_init(self):
         with self.assertRaises(TaborException):
-            TaborSegment(None, None)
+            TaborSegment(None, None, None, None)
         with self.assertRaises(TaborException):
-            TaborSegment(np.zeros(5), np.zeros(4))
+            TaborSegment(np.zeros(5), np.zeros(4), None, None)
+        with self.assertRaises(TaborException):
+            TaborSegment(np.zeros(4), np.zeros(4), np.zeros(4), None)
+        with self.assertRaises(TaborException):
+            TaborSegment(np.zeros(4), np.zeros(4), None, np.zeros(4))
 
-        ch_a = np.zeros(5)
-        ch_b = np.ones(5)
+        ch_a = np.asarray(100 + np.arange(6), dtype=np.uint16)
+        ch_b = np.asarray(1000 + np.arange(6), dtype=np.uint16)
 
-        ts = TaborSegment(ch_a=ch_a, ch_b=ch_b)
-        self.assertIs(ts[0], ch_a)
-        self.assertIs(ts[1], ch_b)
+        marker_a = np.ones(3, dtype=bool)
+        marker_b = np.arange(3, dtype=np.uint16)
+
+        ts = TaborSegment(ch_a=ch_a, ch_b=ch_b, marker_a=marker_a, marker_b=marker_b)
+        self.assertIs(ts.ch_a, ch_a)
+        self.assertIs(ts.ch_b, ch_b)
+        self.assertIs(ts.marker_a, marker_a)
+        self.assertIsNot(ts.marker_b, marker_b)
+        np.testing.assert_equal(ts.marker_b, marker_b != 0)
 
     def test_num_points(self):
-        self.assertEqual(TaborSegment(np.zeros(5), np.zeros(5)).num_points, 5)
+        self.assertEqual(TaborSegment(np.zeros(6), np.zeros(6), None, None).num_points, 6)
+
+    def test_data_a(self):
+        ch_a = np.asarray(100 + np.arange(32), dtype=np.uint16)
+        ch_b = np.asarray(1000 + np.arange(32), dtype=np.uint16)
+
+        marker_a = np.ones(16, dtype=bool)
+        marker_b = np.asarray(list(range(5)) + list(range(6)) + list(range(5)), dtype=np.uint16)
+
+        on = 1 << 14
+        off = 0
+        marker_a_data = np.asarray([0]*8 + [on]*8 +
+                                   [0]*8 + [on]*8, dtype=np.uint16)
+
+        on = 1 << 15
+        off = 0
+        marker_b_data = np.asarray([0]*8 + [off] + [on]*4 + [off] + [on]*2 +
+                                   [0]*8 + [on]*3 + [off] + [on]*4)
+
+        ts = TaborSegment(ch_a=ch_a, ch_b=ch_b, marker_a=None, marker_b=None)
+        self.assertIs(ts.data_a, ch_a)
+
+        ts = TaborSegment(ch_a=ch_a, ch_b=ch_b, marker_a=marker_a, marker_b=None)
+        expected_data = ch_a + marker_a_data
+        np.testing.assert_equal(ts.data_a, expected_data)
+
+        ts = TaborSegment(ch_a=ch_a, ch_b=ch_b, marker_a=None, marker_b=marker_b)
+        expected_data = ch_a + marker_b_data
+        np.testing.assert_equal(ts.data_a, expected_data)
+
+        ts = TaborSegment(ch_a=ch_a, ch_b=ch_b, marker_a=marker_a, marker_b=marker_b)
+        expected_data = ch_a + marker_b_data + marker_a_data
+        np.testing.assert_equal(ts.data_a, expected_data)
+
+        with self.assertRaises(NotImplementedError):
+            TaborSegment(ch_a=None, ch_b=ch_b, marker_a=marker_a, marker_b=marker_b).data_a
+
+
+    def test_data_b(self):
+        ch_a = np.asarray(100 + np.arange(6), dtype=np.uint16)
+        ch_b = np.asarray(1000 + np.arange(6), dtype=np.uint16)
+
+        marker_a = np.ones(3, dtype=bool)
+        marker_b = np.arange(3, dtype=np.uint16)
+
+        ts = TaborSegment(ch_a=ch_a, ch_b=ch_b, marker_a=marker_a, marker_b=marker_b)
+
+        self.assertIs(ts.data_b, ch_b)
 
 
 class TaborProgramTests(unittest.TestCase):
@@ -194,8 +251,8 @@ class TaborProgramTests(unittest.TestCase):
             while True:
                 for _ in range(2):
                     yield next(chan_gen)
-                yield next(alternating_on_off)
-                yield np.zeros(192)
+                yield next(alternating_on_off)[::2]
+                yield np.zeros(192)[::2]
 
         sample_rate = 10**9
         with self.assertRaises(TaborException):
@@ -236,14 +293,13 @@ class TaborProgramTests(unittest.TestCase):
             data = [next(iteroe) for _ in range(4)]
             data = (voltage_to_uint16(data[0], 1., 0., 14), voltage_to_uint16(data[1], 1., 0., 14), data[2], data[3])
             if i % 2 == 0:
-                self.assertTrue(np.all(sampled_seg[0] >> 14 == np.ones(192, dtype=np.uint16)))
+                np.testing.assert_equal(sampled_seg.marker_a, np.ones(192, dtype=np.uint16)[::2])
             else:
-                self.assertTrue(np.all(sampled_seg[0] >> 14 == np.zeros(192, dtype=np.uint16)))
-            self.assertTrue(np.all(sampled_seg[0] >> 15 == np.zeros(192, dtype=np.uint16)))
-            self.assertTrue(np.all(sampled_seg[1] >> 15 == np.zeros(192, dtype=np.uint16)))
+                np.testing.assert_equal(sampled_seg.marker_a, np.zeros(192, dtype=np.uint16)[::2])
+            np.testing.assert_equal(sampled_seg.marker_b, np.zeros(192, dtype=np.uint16)[::2])
 
-            self.assertTrue(np.all(sampled_seg[0] << 2 == data[0] << 2))
-            self.assertTrue(np.all(sampled_seg[1] << 2 == data[1] << 2))
+            np.testing.assert_equal(sampled_seg.ch_a, data[0])
+            np.testing.assert_equal(sampled_seg.ch_b, data[1])
 
 
 class ConfigurationGuardTest(unittest.TestCase):

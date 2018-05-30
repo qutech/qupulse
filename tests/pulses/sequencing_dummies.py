@@ -58,6 +58,9 @@ class DummyNoValueParameter(Parameter):
     def deserialize(serializer: Serializer) -> 'DummyParameter':
         raise NotImplementedError()
 
+    def __hash__(self):
+        return 0
+
 class DummySequencingElement(SequencingElement):
 
     def __init__(self, requires_stop: bool = False, push_elements: Tuple[InstructionBlock, List[SequencingElement]] = None) -> None:

@@ -1,7 +1,6 @@
 import ast
 import os
 import pathlib
-import functools
 import unittest
 
 
