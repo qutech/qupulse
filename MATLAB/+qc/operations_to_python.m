@@ -22,7 +22,7 @@ function pyOperations = operations_to_python(operations)
 			case 'RepeatedDownsample'
 				pyOp = py.atsaverage.operations.RepeatedDownsample(args{:});
 			otherwise
-					error('Operation %s not recognized', operations{k}{1});
+			  error('Operation %s not recognized', operations{k}{1});
 		end		
 		pyOperations{end+1} = pyOp;	
 		

@@ -8,8 +8,8 @@ Classes:
 """
 
 from typing import Dict, List, Optional, Any, Iterable, Union, Set, Sequence
-import itertools
 import numbers
+import warnings
 
 import numpy
 
@@ -19,12 +19,10 @@ from qctoolkit.serialization import Serializer
 from qctoolkit.utils.types import ChannelID, TimeType
 from qctoolkit.pulses.instructions import Waveform
 from qctoolkit.pulses.pulse_template import PulseTemplate, AtomicPulseTemplate
-from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingException, MappingPulseTemplate,\
-    MissingParameterDeclarationException, MappingTuple
+from qctoolkit.pulses.pulse_template_parameter_mapping import MappingPulseTemplate, MappingTuple
 from qctoolkit.pulses.parameters import Parameter, ParameterConstrainer
-from qctoolkit.pulses.conditions import Condition
 from qctoolkit.pulses.measurement import MeasurementDeclaration
-from qctoolkit.expressions import Expression
+from qctoolkit.expressions import Expression, ExpressionScalar
 
 __all__ = ["MultiChannelWaveform", "AtomicMultiChannelPulseTemplate"]
 
@@ -173,18 +171,8 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
                                                   (channels_i | channels_j).pop())
 
         if external_parameters is not None:
-            remaining = external_parameters.copy()
-            for subtemplate in self._subtemplates:
-                missing = subtemplate.parameter_names - external_parameters
-                if missing:
-                    raise MissingParameterDeclarationException(subtemplate, missing.pop())
-                remaining -= subtemplate.parameter_names
-            missing = self.constrained_parameters - external_parameters
-            if missing:
-                raise MissingParameterDeclarationException(self, missing.pop())
-            remaining -= self.constrained_parameters
-            if remaining:
-                raise MissingMappingException(self, remaining.pop())
+            warnings.warn("external_parameters is an obsolete argument and will be removed in the future.",
+                          category=DeprecationWarning)
 
         duration = self._subtemplates[0].duration
         for subtemplate in self._subtemplates[1:]:
@@ -257,6 +245,13 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
         return AtomicMultiChannelPulseTemplate(*subtemplates,
                                                parameter_constraints=parameter_constraints,
                                                identifier=identifier, measurements=measurements)
+
+    @property
+    def integral(self) -> Dict[ChannelID, ExpressionScalar]:
+        expressions = dict()
+        for subtemplate in self._subtemplates:
+            expressions.update(subtemplate.integral)
+        return expressions
 
 
 class ChannelMappingException(Exception):

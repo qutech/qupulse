@@ -26,6 +26,7 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 	if strcmp(ctrl, 'add')
 		[~, bool, msg] = qc.awg_program('fresh', qc.change_field(a, 'verbosity', 0));
 		if ~bool || a.force_update
+			plsdata.awg.currentProgam = '';
 			
 			% Deleting old program should not be necessary. In practice however,
 			% updating an existing program seemed to crash Matlab sometimes.
@@ -48,7 +49,7 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 				fprintf('Program ''%s'' is now being uploaded...', a.program_name);
 				tic
 			end
-			hws.register_program(program.program_name, instantiated_pulse, pyargs('update', py.True));
+			util.py.call_with_interrupt_check(py.getattr(hws, 'register_program'), program.program_name, instantiated_pulse, pyargs('update', py.True));			
 			
 			if a.verbosity > 9
 				fprintf('took %.0fs\n', toc);
@@ -68,11 +69,13 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 		
 	% --- arm ---------------------------------------------------------------
 	elseif strcmp(ctrl, 'arm')
+		% Call directly before trigger comes, otherwise you might encounter a
+		% trigger timeout. Also, call after daq_operations('add')!
 		[~, bool, msg] = qc.awg_program('present', qc.change_field(a, 'verbosity', 0));
 		if bool
 			% qc.workaround_alazar_single_buffer_acquisition();
 			
-			hws.arm_program(a.program_name);
+			hws.arm_program(a.program_name);			
 			plsdata.awg.currentProgam = a.program_name;
 			bool = true;
 			msg = sprintf('Program ''%s'' armed', a.program_name);
@@ -86,7 +89,8 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 			globalProgram = plsdata.awg.armGlobalProgram{1};
 			plsdata.awg.armGlobalProgram = circshift(plsdata.awg.armGlobalProgram, -1);
 		else
-			error('plsdata.awg.armGlobalProgram must contain a char or a cell');
+		  globalProgram = a.program_name;
+			warning('Not using global program since plsdata.awg.armGlobalProgram must contain a char or a cell.');
 		end		
 		
 % 		This code outputs the wrong pulses and isn't even faster
@@ -131,7 +135,7 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 		end
 		
 	% --- clear all ---------------------------------------------------------
-	elseif strcmp(ctrl, 'clear all')
+	elseif strcmp(ctrl, 'clear all') % might take a long time
 		plsdata.awg.registeredPrograms = struct();
 		program_names = fieldnames(util.py.py2mat(py.getattr(hws, '_registered_programs')));
 		
@@ -146,6 +150,12 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 		else
 			msg = 'Error when trying to clear all progams';
 		end
+		
+	% --- clear all fast ----------------------------------------------------	
+	elseif strcmp(ctrl, 'clear all fast') % fast but need to clear awg manually
+		hws.registered_programs.clear();
+		py.getattr(daq, '_registered_programs').clear();
+
 	% --- present -----------------------------------------------------------
 	elseif strcmp(ctrl, 'present') % returns true if program is present
 		bool = py.list(hws.registered_programs.keys()).count(a.program_name) ~= 0;

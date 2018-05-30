@@ -1,7 +1,7 @@
 """This module defines RepetitionPulseTemplate, a higher-order hierarchical pulse template that
 represents the n-times repetition of another PulseTemplate."""
 
-from typing import Dict, List, Set, Optional, Union, Any, Iterable, Tuple, cast
+from typing import Dict, List, Set, Optional, Union, Any, Tuple, cast
 from numbers import Real
 from warnings import warn
 
@@ -67,10 +67,12 @@ class RepetitionWaveform(Waveform):
 
 
 class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, MeasurementDefiner):
-    """Repeat a PulseTemplate a constant number of times.
+    """Repeats a PulseTemplate a constant number of times (possibly determined by a parameter value).
 
-    The equivalent to a simple for-loop in common programming languages in qctoolkit's pulse
-    modelling.
+    RepetitionPulseTemplate simply repeats the given body PulseTemplate with the same parameter set for the
+    specified number of times. It does not provide a loop index to the subtemplate. If you need to loop over an integer
+    range and provide an index to the repeated template (at the cost of sequencing performance), use
+    :class:`~qctoolkit.pulses.loop_pulse_template.ForLoopPulseTemplate`.
     """
 
     def __init__(self,
@@ -126,7 +128,7 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
 
     @property
     def parameter_names(self) -> Set[str]:
-        return self.body.parameter_names | set(self.repetition_count.variables)
+        return self.body.parameter_names | set(self.repetition_count.variables) | self.constrained_parameters
 
     @property
     def measurement_names(self) -> Set[str]:
@@ -190,6 +192,11 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
                                        identifier=identifier,
                                        parameter_constraints=parameter_constraints,
                                        measurements=measurements)
+
+    @property
+    def integral(self) -> Dict[ChannelID, ExpressionScalar]:
+        body_integral = self.body.integral
+        return [self.repetition_count * c for c in body_integral]
 
 
 class ParameterNotIntegerException(Exception):

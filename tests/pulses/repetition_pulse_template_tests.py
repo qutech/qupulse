@@ -210,7 +210,6 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
             template.build_sequence(self.sequencer, parameters, conditions, measurement_mapping, channel_mapping,
                                      self.block)
 
-
     def test_build_sequence_declaration_exceeds_bounds(self) -> None:
         parameters = dict(foo=ConstantParameter(9))
         conditions = dict(foo=DummyCondition(requires_stop=True))
@@ -231,6 +230,10 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
         with self.assertRaises(ParameterNotIntegerException):
             self.template.build_sequence(self.sequencer, parameters, conditions, {}, {}, self.block)
         self.assertFalse(self.sequencer.sequencing_stacks)
+
+    def test_parameter_names_param_only_in_constraint(self) -> None:
+        pt = RepetitionPulseTemplate(DummyPulseTemplate(parameter_names={'a'}), 'n', parameter_constraints=['a<c'])
+        self.assertEqual(pt.parameter_names, {'a','c', 'n'})
 
     def test_rep_count_zero_constant(self) -> None:
         repetitions = 0
@@ -336,6 +339,17 @@ class RepetitionPulseTemplateSerializationTests(unittest.TestCase):
         self.assertEqual('foo', template.repetition_count)
         self.assertEqual(template.parameter_constraints, [ParameterConstraint('foo < 3')])
         self.assertEqual(template.measurement_declarations, data['measurements'])
+
+    def test_integral(self) -> None:
+        dummy = DummyPulseTemplate(integrals=['foo+2', 'k*3+x**2'])
+        template = RepetitionPulseTemplate(dummy, 7)
+        self.assertEqual([Expression('7*(foo+2)'), Expression('7*(k*3+x**2)')], template.integral)
+
+        template = RepetitionPulseTemplate(dummy, '2+m')
+        self.assertEqual([Expression('(2+m)*(foo+2)'), Expression('(2+m)*(k*3+x**2)')], template.integral)
+
+        template = RepetitionPulseTemplate(dummy, Expression('2+m'))
+        self.assertEqual([Expression('(2+m)*(foo+2)'), Expression('(2+m)*(k*3+x**2)')], template.integral)
 
 
 class ParameterNotIntegerExceptionTests(unittest.TestCase):

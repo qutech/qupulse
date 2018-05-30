@@ -7,7 +7,7 @@ Classes:
         declared parameters.
 """
 
-from typing import Union, Dict, List, Set, Optional, Any, Iterable, Tuple, Sequence, NamedTuple
+from typing import Union, Dict, List, Set, Optional, Any, Tuple, Sequence, NamedTuple
 import numbers
 import itertools
 import warnings
@@ -23,10 +23,8 @@ from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementDecl
 from qctoolkit.pulses.interpolation import InterpolationStrategy, LinearInterpolationStrategy, \
     HoldInterpolationStrategy, JumpInterpolationStrategy
 from qctoolkit.pulses.instructions import Waveform
-from qctoolkit.pulses.conditions import Condition
 from qctoolkit.expressions import ExpressionScalar, Expression
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
-from qctoolkit.pulses.measurement import MeasurementDefiner
 
 __all__ = ["TablePulseTemplate", "TableWaveform", "TableWaveformEntry"]
 
@@ -452,6 +450,21 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
                 parsed[channel_name].append((time, volt, interp))
 
         return TablePulseTemplate(parsed, **kwargs)
+
+    @property
+    def integral(self) -> Dict[ChannelID, ExpressionScalar]:
+        expressions = dict()
+        for channel, channel_entries in self._entries.items():
+
+            expr = 0
+            for first_entry, second_entry in zip(channel_entries[:-1], channel_entries[1:]):
+                substitutions = {'t0': ExpressionScalar(first_entry.t).sympified_expression, 'v0': ExpressionScalar(first_entry.v).sympified_expression,
+                                 't1': ExpressionScalar(second_entry.t).sympified_expression, 'v1': ExpressionScalar(second_entry.v).sympified_expression}
+
+                expr += first_entry.interp.integral.sympified_expression.subs(substitutions)
+            expressions[channel] = ExpressionScalar(expr)
+
+        return expressions
 
 
 class ZeroDurationTablePulseTemplate(UserWarning):

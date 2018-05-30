@@ -3,7 +3,7 @@ import sys
 import functools
 import weakref
 import itertools
-from typing import List, Tuple, Set, NamedTuple, Callable, Optional, Any, Sequence, cast, Generator, Union
+from typing import List, Tuple, Set, NamedTuple, Callable, Optional, Any, Sequence, cast, Generator, Union, Dict
 from enum import Enum
 from collections import OrderedDict
 
@@ -26,27 +26,67 @@ assert(sys.byteorder == 'little')
 __all__ = ['TaborAWGRepresentation', 'TaborChannelPair']
 
 
-class TaborSegment(tuple):
+class TaborSegment:
     """Represents one segment of two channels on the device. Convenience class."""
-    def __new__(cls, ch_a: Optional[np.ndarray], ch_b: Optional[np.ndarray]):
-        return tuple.__new__(cls, (ch_a, ch_b))
 
-    def __init__(self, ch_a, ch_b):
+    __slots__ = ('ch_a', 'ch_b', 'marker_a', 'marker_b')
+
+    def __init__(self,
+                 ch_a: Optional[np.ndarray],
+                 ch_b: Optional[np.ndarray],
+                 marker_a: Optional[np.ndarray],
+                 marker_b: Optional[np.ndarray]):
         if ch_a is None and ch_b is None:
             raise TaborException('Empty TaborSegments are not allowed')
         if ch_a is not None and ch_b is not None and len(ch_a) != len(ch_b):
             raise TaborException('Channel entries to have to have the same length')
 
+        self.ch_a = ch_a
+        self.ch_b = ch_b
+
+        self.marker_a = None if marker_a is None else np.asarray(marker_a, dtype=bool)
+        self.marker_b = None if marker_b is None else np.asarray(marker_b, dtype=bool)
+
+        if marker_a is not None and len(marker_a)*2 != self.num_points:
+            raise TaborException('Marker A has to have half of the channels length')
+        if marker_b is not None and len(marker_b)*2 != self.num_points:
+            raise TaborException('Marker A has to have half of the channels length')
+
     def __hash__(self) -> int:
-        return hash((bytes(self[0]) if self[0] is not None else 0,
-                     bytes(self[1]) if self[1] is not None else 0))
+        return hash(tuple(0 if data is None else bytes(data)
+                          for data in (self.ch_a, self.ch_b, self.marker_a, self.marker_b)))
+
+    @property
+    def data_a(self) -> np.ndarray:
+        """channel_data and marker data"""
+        if self.marker_a is None and self.marker_b is None:
+            return self.ch_a
+
+        if self.ch_a is None:
+            raise NotImplementedError('What data should be used in a?')
+
+        # copy channel information
+        data = np.array(self.ch_a)
+
+        if self.marker_a is not None:
+            data.reshape(-1, 8)[1::2, :].flat |= (1 << 14) * self.marker_a.astype(np.uint16)
+
+        if self.marker_b is not None:
+            data.reshape(-1, 8)[1::2, :].flat |= (1 << 15) * self.marker_b.astype(np.uint16)
+
+        return data
+
+    @property
+    def data_b(self) -> np.ndarray:
+        """channel_data and marker data"""
+        return self.ch_b
 
     @property
     def num_points(self) -> int:
-        return len(self[0]) if self[1] is None else len(self[1])
+        return len(self.ch_b) if self.ch_a is None else len(self.ch_a)
 
     def get_as_binary(self) -> np.ndarray:
-        assert not (self[0] is None or self[1] is None)
+        assert not (self.ch_a is None or self.ch_b is None)
         return make_combined_wave([self])
 
 
@@ -131,24 +171,27 @@ class TaborProgram:
             else:
                 return np.full_like(time, 8192, dtype=np.uint16)
 
-        def get_marker_data(waveform: MultiChannelWaveform, time):
-            marker_data = np.zeros(len(time), dtype=np.uint16)
-            for marker_index, markerID in enumerate(self._markers):
-                if markerID is not None:
-                    marker_data |= (waveform.get_sampled(channel=markerID, sample_times=time) != 0).\
-                                       astype(dtype=np.uint16) << marker_index+14
-            return marker_data
+        def get_marker_data(waveform: MultiChannelWaveform, time, marker):
+            if self._markers[marker]:
+                markerID = self._markers[marker]
+                return waveform.get_sampled(channel=markerID, sample_times=time) != 0
+            else:
+                return np.full_like(time, False, dtype=bool)
 
         segments = np.empty_like(self._waveforms, dtype=TaborSegment)
         for i, waveform in enumerate(self._waveforms):
             t = time_array[:int(waveform.duration*sample_rate)]
+            marker_time = t[::2]
             segment_a = voltage_to_data(waveform, t, 0)
             segment_b = voltage_to_data(waveform, t, 1)
             assert (len(segment_a) == len(t))
             assert (len(segment_b) == len(t))
-            seg_data = get_marker_data(waveform, t)
-            segment_a |= seg_data
-            segments[i] = TaborSegment(segment_a, segment_b)
+            marker_a = get_marker_data(waveform, marker_time, 0)
+            marker_b = get_marker_data(waveform, marker_time, 1)
+            segments[i] = TaborSegment(ch_a=segment_a,
+                                       ch_b=segment_b,
+                                       marker_a=marker_a,
+                                       marker_b=marker_b)
         return segments, segment_lengths
 
     def setup_single_sequence_mode(self) -> None:
@@ -401,6 +444,46 @@ class TaborAWGRepresentation:
 
             assert len(answers) == 0
 
+    def get_status_table(self) -> Dict[str, Union[str, float, int]]:
+        """Send a lot of queries to the AWG about its settings. A good way to visualize is using pandas.DataFrame
+
+        Returns:
+            An ordered dictionary with the results
+        """
+        name_query_type_list = [('channel', ':INST:SEL?', int),
+                                ('coupling', ':OUTP:COUP?', str),
+                                ('volt_dc', ':SOUR:VOLT:LEV:AMPL:DC?', float),
+                                ('volt_hv', ':VOLT:HV?', float),
+                                ('offset', ':VOLT:OFFS?', float),
+                                ('outp', ':OUTP?', str),
+                                ('mode', ':SOUR:FUNC:MODE?', str),
+                                ('shape', ':SOUR:FUNC:SHAPE?', str),
+                                ('dc_offset', ':SOUR:DC?', float),
+                                ('freq_rast', ':FREQ:RAST?', float),
+
+                                ('gated', ':INIT:GATE?', str),
+                                ('continuous', ':INIT:CONT?', str),
+                                ('continuous_enable', ':INIT:CONT:ENAB?', str),
+                                ('continuous_source', ':INIT:CONT:ENAB:SOUR?', str),
+                                ('marker_source', ':SOUR:MARK:SOUR?', str),
+                                ('seq_jump_event', ':SOUR:SEQ:JUMP:EVEN?', str),
+                                ('seq_adv_mode', ':SOUR:SEQ:ADV?', str),
+                                ('aseq_adv_mode', ':SOUR:ASEQ:ADV?', str),
+
+                                ('marker', ':SOUR:MARK:SEL?', int),
+                                ('marker_high', ':MARK:VOLT:HIGH?', str),
+                                ('marker_low', ':MARK:VOLT:LOW?', str),
+                                ('marker_width', ':MARK:WIDT?', int),
+                                ('marker_state', ':MARK:STAT?', str)]
+
+        data = OrderedDict((name, []) for name, *_ in name_query_type_list)
+        for ch in (1, 2, 3, 4):
+            self.select_channel(ch)
+            self.select_marker((ch-1) % 2 + 1)
+            for name, query, dtype in name_query_type_list:
+                data[name].append(dtype(self.send_query(query)))
+        return data
+
     @property
     def is_open(self) -> bool:
         return self._instr.visa_inst is not None  # pragma: no cover
@@ -604,7 +687,7 @@ class PlottableProgram:
         if total_length > max_total_length:
             return None
 
-        result = np.empty(total_length)
+        result = np.empty(total_length, dtype=np.uint16)
         c_idx = 0
         for wf, rep in zip(waveforms, repetitions):
             mem = wf.size*rep
@@ -641,8 +724,8 @@ class PlottableProgram:
     @classmethod
     def from_builtin(cls, data: dict) -> 'PlottableProgram':
         waveforms = data['waveforms']
-        waveforms = (tuple(np.array(wf) for wf in waveforms[0]),
-                     tuple(np.array(wf) for wf in waveforms[1]))
+        waveforms = (tuple(np.array(wf, dtype=np.uint16) for wf in waveforms[0]),
+                     tuple(np.array(wf, dtype=np.uint16) for wf in waveforms[1]))
         return cls(waveforms, data['seq_tables'], data['adv_seq_table'])
 
 
@@ -663,7 +746,7 @@ class TaborChannelPair(AWG):
                                                     output_offset=0., resolution=14),
                                     voltage_to_uint16(voltage=np.zeros(192),
                                                     output_amplitude=0.5,
-                                                    output_offset=0., resolution=14))
+                                                    output_offset=0., resolution=14), None, None)
         self._idle_sequence_table = [(1, 1, 0), (1, 1, 0), (1, 1, 0)]
 
         self._known_programs = dict()  # type: Dict[str, TaborProgramMemory]
@@ -1037,11 +1120,13 @@ class TaborChannelPair(AWG):
         self.free_program(name)
         self.cleanup()
 
-    def set_marker_state(self, active) -> None:
-        """Sets the marker state of this channel pair. According to the manual one connot turn them off/on seperatly."""
-        command_string = ':INST:SEL {}; :SOUR:MARK:SEL 1; :SOUR:MARK:SOUR USER; :SOUR:MARK:STAT {}'.format(
-            self._channels[0],
-            'ON' if active else 'OFF')
+    def set_marker_state(self, marker: int, active: bool) -> None:
+        """Sets the marker state of this channel pair. According to the manual one cannot turn them off/on separately."""
+        command_string = ':INST:SEL {channel}; :SOUR:MARK:SEL {marker}; :SOUR:MARK:SOUR USER; :SOUR:MARK:STAT {active}'
+        command_string = command_string.format(
+            channel=self._channels[0],
+            marker=(1, 2)[marker],
+            active='ON' if active else 'OFF')
         self.device.send_cmd(command_string)
 
     def set_channel_state(self, channel, active) -> None:
@@ -1142,7 +1227,8 @@ class TaborChannelPair(AWG):
             else:
                 self.device.send_cmd(':INST:SEL {}; :OUTP OFF; :INST:SEL {}; :OUTP OFF'.format(*self._channels))
                 
-            self.set_marker_state(False)
+            self.set_marker_state(0, False)
+            self.set_marker_state(1, False)
             self.device.send_cmd(':SOUR:FUNC:MODE FIX')
 
             self._is_in_config_mode = True
@@ -1169,7 +1255,8 @@ class TaborChannelPair(AWG):
 
             self.device.send_cmd(':INST:SEL {}; :OUTP ON; :INST:SEL {}; :OUTP ON'.format(*self._channels))
 
-        self.set_marker_state(True)
+        self.set_marker_state(0, True)
+        self.set_marker_state(1, True)
         self._is_in_config_mode = False
 
 

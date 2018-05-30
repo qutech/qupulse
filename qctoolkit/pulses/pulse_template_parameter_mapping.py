@@ -1,12 +1,10 @@
-"""This module defines PulseTemplateParameterMapping, a helper class for pulse templates that
-offer mapping of parameters of subtemplates."""
 
 from typing import Optional, Set, Dict, Union, List, Any, Tuple
 import itertools
 import numbers
 
 from qctoolkit.utils.types import ChannelID
-from qctoolkit.expressions import Expression
+from qctoolkit.expressions import Expression, ExpressionScalar
 from qctoolkit.pulses.pulse_template import PulseTemplate, MappingTuple
 from qctoolkit.pulses.parameters import Parameter, MappedParameter, ParameterNotProvidedException, ParameterConstrainer
 from qctoolkit.pulses.sequencing import Sequencer
@@ -17,7 +15,6 @@ from qctoolkit.serialization import Serializer
 __all__ = [
     "MappingPulseTemplate",
     "MissingMappingException",
-    "MissingParameterDeclarationException",
     "UnnecessaryMappingException",
 ]
 
@@ -261,22 +258,29 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
             conditions
         )
 
+    @property
+    def integral(self) -> Dict[ChannelID, ExpressionScalar]:
+        internal_integral = self.__template.integral
+        expressions = dict()
 
-class MissingParameterDeclarationException(Exception):
-    """Indicates that a parameter declaration mapping in a SequencePulseTemplate maps to an external
-    parameter declaration that was not declared."""
+        # sympy.subs() does not work if one of the mappings in the provided dict is an Expression object
+        # the following is an ugly workaround
+        # todo: make Expressions compatible with sympy.subs()
+        parameter_mapping = self.__parameter_mapping.copy()
+        for i in parameter_mapping:
+            if isinstance(parameter_mapping[i], ExpressionScalar):
+                parameter_mapping[i] = parameter_mapping[i].sympified_expression
 
-    def __init__(self, template: PulseTemplate, missing_declaration: str) -> None:
-        super().__init__()
-        self.template = template
-        self.missing_declaration = missing_declaration
-
-    def __str__(self) -> str:
-        return \
-            "A mapping for template {} requires a parameter '{}' which has not been declared as" \
-            " an external parameter of the SequencePulseTemplate.".format(
-                self.template, self.missing_declaration
+        for channel in internal_integral:
+            expr = ExpressionScalar(
+                internal_integral[channel].sympified_expression.subs(parameter_mapping)
             )
+            channel_out = channel
+            if channel in self.__channel_mapping:
+                channel_out = self.__channel_mapping[channel]
+            expressions[channel_out] = expr
+
+        return expressions
 
 
 class MissingMappingException(Exception):

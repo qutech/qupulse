@@ -1,16 +1,16 @@
 import unittest
+import warnings
 
 import numpy
 
 from qctoolkit.utils.types import time_from_float
-from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingException,\
-    MissingParameterDeclarationException
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform, MappingPulseTemplate, ChannelMappingException, AtomicMultiChannelPulseTemplate
 from qctoolkit.pulses.parameters import ParameterConstraint, ParameterConstraintViolation
 
-from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyPulseTemplate, DummyWaveform
+from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummyWaveform
 from tests.serialization_dummies import DummySerializer
 from tests.pulses.pulse_template_tests import PulseTemplateStub
+from qctoolkit.expressions import ExpressionScalar
 
 
 class MultiChannelWaveformTest(unittest.TestCase):
@@ -152,13 +152,13 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
             AtomicMultiChannelPulseTemplate(identifier='foo')
 
         with self.assertRaises(ValueError):
-            AtomicMultiChannelPulseTemplate(external_parameters=set())
+            AtomicMultiChannelPulseTemplate()
 
         with self.assertRaises(ValueError):
-            AtomicMultiChannelPulseTemplate(identifier='foo', external_parameters=set())
+            AtomicMultiChannelPulseTemplate(identifier='foo')
 
         with self.assertRaises(ValueError):
-            AtomicMultiChannelPulseTemplate(identifier='foo', external_parameters=set(), parameter_constraints=[])
+            AtomicMultiChannelPulseTemplate(identifier='foo', parameter_constraints=[])
 
     def test_non_atomic_subtemplates(self):
         non_atomic_pt = PulseTemplateStub(duration='t1', defined_channels={'A'}, parameter_names=set())
@@ -177,6 +177,11 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
         with self.assertRaises(TypeError):
             AtomicMultiChannelPulseTemplate((non_atomic_pt, {'A': 'C'}), atomic_pt)
 
+    def test_external_parameters_warning(self):
+        with self.assertWarnsRegex(DeprecationWarning, "external_parameters",
+                                   msg="AtomicMultiChannelPulseTemplate did not issue a warning for argument external_parameters"):
+            AtomicMultiChannelPulseTemplate(DummyPulseTemplate(), external_parameters={'a'})
+
     def test_duration(self):
         sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'}),
                DummyPulseTemplate(duration='t1', defined_channels={'B'}),
@@ -189,34 +194,6 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
         template = AtomicMultiChannelPulseTemplate(*sts[:1])
 
         self.assertEqual(template.duration, 't1')
-
-    def test_external_parameters(self):
-        sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'}, parameter_names={'a', 'b'}),
-               DummyPulseTemplate(duration='t1', defined_channels={'B'}, parameter_names={'a', 'c'})]
-        constraints = ['a < d']
-        template = AtomicMultiChannelPulseTemplate(*sts,
-                                                   parameter_constraints=constraints,
-                                                   external_parameters={'a', 'b', 'c', 'd'})
-
-        with self.assertRaises(MissingParameterDeclarationException):
-            AtomicMultiChannelPulseTemplate(*sts,
-                                            external_parameters={'a', 'c', 'd'},
-                                            parameter_constraints=constraints)
-        with self.assertRaises(MissingParameterDeclarationException):
-            AtomicMultiChannelPulseTemplate(*sts, external_parameters={'a', 'b', 'd'},
-                                            parameter_constraints=constraints)
-        with self.assertRaises(MissingParameterDeclarationException):
-            AtomicMultiChannelPulseTemplate(*sts, external_parameters={'b', 'c', 'd'},
-                                            parameter_constraints=constraints)
-        with self.assertRaises(MissingParameterDeclarationException):
-            AtomicMultiChannelPulseTemplate(*sts, external_parameters={'a', 'c', 'b'},
-                                            parameter_constraints=constraints)
-
-        with self.assertRaises(MissingMappingException):
-            AtomicMultiChannelPulseTemplate(*sts, external_parameters={'a', 'b', 'c', 'd', 'e'},
-                                            parameter_constraints=constraints)
-
-        self.assertEqual(template.parameter_names, {'a', 'b', 'c', 'd'})
 
     def test_mapping_template_pure_conversion(self):
         template = AtomicMultiChannelPulseTemplate(*zip(self.subtemplates, self.param_maps, self.chan_maps))
@@ -359,3 +336,15 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
         data = template.get_serialization_data(serializer=serializer)
 
         self.assertEqual(expected_data, data)
+
+    def test_integral(self) -> None:
+        sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'},
+                                  integrals={'A': ExpressionScalar('2+k')}),
+               DummyPulseTemplate(duration='t1', defined_channels={'B', 'C'},
+                                  integrals={'B': ExpressionScalar('t1-t0*3.1'), 'C': ExpressionScalar('l')})]
+        pulse = AtomicMultiChannelPulseTemplate(*sts)
+        self.assertEqual({'A': ExpressionScalar('2+k'),
+                          'B': ExpressionScalar('t1-t0*3.1'),
+                          'C': ExpressionScalar('l')},
+                         pulse.integral)
+

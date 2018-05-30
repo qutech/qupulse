@@ -1,6 +1,15 @@
 import numpy as np
 
 
+def set_ignored_marker_data_to_zero(wf):
+    # np, ch, byte, data
+    wf = wf.reshape(-1, 2, 8)
+
+    channel_mask = np.uint16(2**14 - 1)
+
+    wf[:, 0, :] = np.bitwise_and(wf[:, 0, :], channel_mask)
+
+
 def validate_programs(program_AB, program_CD, loaded_data: dict, parameters):
     for_A = loaded_data['for_A']
     for_B = loaded_data['for_B']
@@ -11,6 +20,7 @@ def validate_programs(program_AB, program_CD, loaded_data: dict, parameters):
     rep_count = parameters['charge_scan___rep_count'].get_value()
 
     expected_samples_A = np.tile(for_A, (meas_time_multiplier * 192, 1, rep_count)).T.ravel()
+    set_ignored_marker_data_to_zero(expected_samples_A)
     samples_A = program_AB.get_as_single_waveform(0, expected_samples_A.size)
     np.testing.assert_equal(samples_A, expected_samples_A)
 

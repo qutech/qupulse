@@ -1,4 +1,5 @@
 from typing import List, Sequence
+import itertools
 
 import numpy as np
 
@@ -46,24 +47,29 @@ def make_combined_wave(segments: List['TaborSegment'], destination_array=None, f
     if fill_value:
         destination_array[:] = fill_value
 
-    segment_quanta = 2 * segment_lengths[0] // quantum
-    if segments[0][1] is not None:
-        destination_array[0:segment_quanta:2].flat = segments[0][1]
-    if segments[0][0] is not None:
-        destination_array[1:segment_quanta:2].flat = segments[0][0]
+    # extract data that already includes the markers
+    data, next_data = itertools.tee(((segment.data_a, segment.data_b) for segment in segments), 2)
+    next(next_data, None)
 
-    current_quantum = segment_quanta
-    for (chan_a, chan_b), segment_length in zip(segments[1:], segment_lengths[1:]):
-        segment_quanta = 2 * (segment_length // quantum + 1)
+    current_quantum = 0
+    for (data_a, data_b), next_segment, segment_length in itertools.zip_longest(data, next_data, segment_lengths):
+        segment_quanta = 2 * (segment_length // quantum)
         segment_destination = destination_array[current_quantum:current_quantum+segment_quanta, :]
 
-        if chan_b is not None:
-            segment_destination[0, :] = chan_b[0]
-            segment_destination[2::2, :].flat = chan_b
-        if chan_a is not None:
-            segment_destination[1, :] = chan_a[0]
-            segment_destination[3::2, :].flat = chan_a
+        if data_b is not None:
+            segment_destination[::2, :].flat = data_b
+        if data_a is not None:
+            segment_destination[1::2, :].flat = data_a
         current_quantum += segment_quanta
+
+        if next_segment:
+            # fill one quantum with first data point from next segment
+            next_data_a, next_data_b = next_segment
+            if next_data_b is not None:
+                destination_array[current_quantum, :] = next_data_b[0]
+            if next_data_a is not None:
+                destination_array[current_quantum+1, :] = next_data_a[0]
+            current_quantum += 2
     return destination_array.ravel()
 
 

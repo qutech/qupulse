@@ -1,4 +1,4 @@
-from typing import NamedTuple, Set, Callable, Dict, Tuple, Union, Iterable
+from typing import NamedTuple, Set, Callable, Dict, Tuple, Union, Iterable, Any
 from collections import defaultdict, deque
 import warnings
 
@@ -33,11 +33,16 @@ class _SingleChannel:
         self.channel_on_awg = channel_on_awg
         """The channel's index(starting with 0) on the AWG."""
 
+    @property
+    def compare_key(self) -> Tuple[Any]:
+        return (id(self.awg), self.channel_on_awg, type(self))
+
     def __hash__(self):
-        return hash((id(self.awg), self.channel_on_awg, type(self)))
+        return hash(self.compare_key)
 
     def __eq__(self, other):
-        return hash(self) == hash(other)
+        if not isinstance(other, _SingleChannel): return False
+        return self.compare_key == other.compare_key
 
 
 class PlaybackChannel(_SingleChannel):

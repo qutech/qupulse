@@ -710,14 +710,12 @@ class ImmutableInstructionBlockTests(unittest.TestCase):
 
         block = InstructionBlock()
         trigger = Trigger()
-        ip = InstructionPointer(block)
         main_block.add_instruction_cjmp(trigger, block)
         block.return_ip = InstructionPointer(main_block, len(main_block))
         blocks.append(block)
 
         block = InstructionBlock()
         trigger = Trigger()
-        ip = InstructionPointer(block)
         main_block.add_instruction_cjmp(trigger, block)
         block.return_ip = InstructionPointer(main_block, len(main_block))
         blocks.append(block)
@@ -731,7 +729,6 @@ class ImmutableInstructionBlockTests(unittest.TestCase):
                 block.add_instruction_exec(waveform)
 
         block = InstructionBlock()
-        ip = InstructionPointer(block)
         blocks[0].add_instruction_cjmp(trigger, block)
         block.return_ip = InstructionPointer(blocks[0], len(blocks[0]))
         blocks.append(block)
