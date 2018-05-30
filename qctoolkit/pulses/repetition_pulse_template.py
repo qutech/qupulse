@@ -100,8 +100,11 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
 
         repetition_count = ExpressionScalar.make(repetition_count)
 
-        if (repetition_count < 0) is True:
+        if repetition_count < 0:
             raise ValueError('Repetition count may not be negative')
+
+        if repetition_count == 0:
+            warn("Repetition pulse template with 0 repetitions on construction.")
 
         self._repetition_count = repetition_count
 
