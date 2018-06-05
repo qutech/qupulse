@@ -51,6 +51,12 @@ function [t, channels, measurements] = plot_pulse(pulse, varargin)
 		if ~isfield(measurements, m{1}{1})
 			measurements.(m{1}{1}) = [];
 		end
+		if strcmp(class(m{1}{2}), 'py.fractions.Fraction')
+			m{1}{2} = m{1}{2}.numerator/m{1}{2}.denominator;
+		end
+		if strcmp(class(m{1}{3}), 'py.fractions.Fraction')
+			m{1}{3} = m{1}{3}.numerator/m{1}{3}.denominator;
+		end
 		measurements.(m{1}{1})(end+1, 1:2) = [m{1}{2} m{1}{2}+m{1}{3}] * 1e-9;
 	end
 	
