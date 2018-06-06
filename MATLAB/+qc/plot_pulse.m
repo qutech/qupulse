@@ -9,6 +9,7 @@ function [t, channels, measurements] = plot_pulse(pulse, varargin)
 		'channel_mapping',     py.None, ...
 		'window_mapping' ,     py.None, ...
 		'fig_id',              plsdata.qc.figId, ...
+		'subplots',            [121 122], ...
 		'charge_diagram_data', {{}}, ... % inputs to imagesc 
 		'clear_fig',           true, ...
 		'charge_diagram',      {{'X', 'Y'}}, ...
@@ -77,7 +78,7 @@ function [t, channels, measurements] = plot_pulse(pulse, varargin)
 		clf
 	end
 	if plotChargeDiagram
-		subplot(121);
+		subplot(args.subplots(1));
 	end	
 	hold on
 	
@@ -111,7 +112,7 @@ function [t, channels, measurements] = plot_pulse(pulse, varargin)
 	set(hObj, 'lineWidth', 2);	
 	
 	if plotChargeDiagram
-		subplot(122);
+		subplot(args.subplots(2));
 		hold on
 		ax = gca;
 		userData = get(ax, 'userData');
