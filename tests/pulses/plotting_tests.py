@@ -1,6 +1,5 @@
 import unittest
 import numpy
-import warnings
 
 from qctoolkit.pulses.plotting import PlottingNotPossibleException, render, iter_waveforms, iter_instruction_block, plot
 from qctoolkit.pulses.instructions import InstructionBlock
@@ -232,10 +231,8 @@ class PlotterTests(unittest.TestCase):
         matplotlib.use('svg') # use non-interactive backend so that test does not fail on travis
 
         pt = DummyPulseTemplate()
-        with warnings.catch_warnings(record=True) as w:
+        with self.assertWarnsRegex(UserWarning, "empty", msg="plot() did not issue a warning for an empty pulse"):
             plot(pt, dict(), show=False)
-            self.assertEqual(1, len(w), msg="plot() did not issue a warning for an empty pulse.")
-            self.assertTrue("empty" in str(w[-1].message), msg="plot() did not issue a warning for an empty pulse.")
 
 
 class PlottingNotPossibleExceptionTests(unittest.TestCase):

@@ -90,10 +90,9 @@ class RepetitionPulseTemplateTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             RepetitionPulseTemplate(body, Expression(-1))
 
-        with warnings.catch_warnings(record=True) as w:
+        with self.assertWarnsRegex(UserWarning, '0 repetitions',
+                                   msg='RepetitionPulseTemplate did not raise a warning for 0 repetitions on consruction.'):
             RepetitionPulseTemplate(body, 0)
-            self.assertEqual(1, len(w), msg='RepetitionPulseTemplate did not raise a warning for 0 repetitions on consruction.')
-            self.assertTrue('0 repetitions' in str(w[-1].message), msg='RepetitionPulseTemplate did not raise a warning for 0 repetitions on consruction.')
 
     def test_parameter_names_and_declarations(self) -> None:
         body = DummyPulseTemplate()
@@ -242,6 +241,7 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
         conditions = {}
         channel_mapping = {}
 
+        # suppress warning about 0 repetitions on construction here, we are only interested in correct behavior during sequencing (i.e., do nothing)
         with warnings.catch_warnings(record=True):
             t = RepetitionPulseTemplate(self.body, repetitions)
             t.build_sequence(self.sequencer, parameters, conditions, measurement_mapping, channel_mapping, self.block)
