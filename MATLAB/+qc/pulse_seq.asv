@@ -69,8 +69,8 @@ if ~isempty(args.fill_param)
 
 		fill_time =																																												...
 			py.sympy.ceiling(																																								... If duration > minDuration, get the next higher 
-			  ( py.sympy.Max(duration.sympified_expression-minDuration, durationQuantum) )/durationQuantum  ... integer number of durationQuantum above minDuration
-			)*durationQuantum																																								... but with minimum of one durationQuantum so pulse length not 0
+			  ( py.sympy.Max(duration.sympified_expression-minDuration, durationQuantum) )/durationQuantum  ... integer number of duration quanta above minDuration
+			)*durationQuantum																																								... but with minimum 
 			+ minDuration																																										... Enforce that duration always longer than minDuration
 			- duration.sympified_expression;
 	
