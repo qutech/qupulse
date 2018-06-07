@@ -744,3 +744,11 @@ class ExtendedJSONEncoder(json.JSONEncoder):
             return list(o)
         else:
             return super().default(o)
+
+
+def convert_stored_pulse_in_storage(identifier: str, source_storage: StorageBackend, dest_storage: StorageBackend) -> None:
+    with warnings.simplefilter('ignore', DeprecationWarning):
+        serializer = Serializer(source_storage)
+        pulse_storage = PulseStorage(dest_storage)
+        serializable = serializer.deserialize(identifier)
+        pulse_storage[identifier] = serializable
