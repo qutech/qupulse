@@ -1,4 +1,4 @@
-function [t, channels, measurements] = plot_pulse_4chan(pulse, varargin)
+function [t, channels, measurements, instantiatedPulse] = plot_pulse_4chan(pulse, varargin)
 % PLOT_PULSE_4CHAN Wrapper for plot_pulse specific for plotting pulses for
 % two qubits with two control channels each
 %
@@ -41,7 +41,7 @@ args = util.parse_varargin(varargin, defaultArgs);
 		args.subplots = [220+k 220+k+1];
 		args.clear_fig = k==1;
 		
-		[t, channels, measurements] = qc.plot_pulse(pulse, args);			
+		[t, channels, measurements, instantiatedPulse] = qc.plot_pulse(pulse, args);			
 		xlabel(args.channels(k));
 		ylabel(args.channels(k+1));
 		

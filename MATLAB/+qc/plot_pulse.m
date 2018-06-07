@@ -1,4 +1,4 @@
-function [t, channels, measurements] = plot_pulse(pulse, varargin)
+function [t, channels, measurements, instantiatedPulse] = plot_pulse(pulse, varargin)
 	
 	global plsdata
 	
