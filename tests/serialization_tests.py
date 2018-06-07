@@ -358,8 +358,8 @@ class PulseStorageTests(unittest.TestCase):
 
     def test_deserialize(self):
         obj = {'my_obj': 'tröt', 'wurst': [12, 3, 4]}
-        self.backend['asd'] = json.dumps(obj)
-        deserialized = self.storage._deserialize('asd')
+        serialized = json.dumps(obj)
+        deserialized = self.storage._deserialize(serialized)
         self.assertEqual(deserialized, obj)
 
     def test_contains(self):
@@ -379,7 +379,7 @@ class PulseStorageTests(unittest.TestCase):
     def test_getitem(self):
         instance = DummySerializable(identifier='my_id')
 
-        self.storage.temporary_storage['asd'] = instance
+        self.storage.temporary_storage['asd'] = PulseStorage.StorageEntry(serialization='foobar', serializable=instance)
 
         self.assertIs(self.storage['asd'], instance)
         with self.assertRaises(KeyError):

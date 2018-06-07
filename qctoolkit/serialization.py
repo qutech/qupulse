@@ -615,12 +615,19 @@ class PulseStorage:
                  storage_backend: StorageBackend) -> None:
         self._storage_backend = storage_backend
 
-        self._temporary_storage = dict()
+        self._temporary_storage = dict() # type: Dict[str, StorageEntry]
 
-    def _deserialize(self, identifier) -> Serializable:
-        serialized = self._storage_backend[identifier]
+    def _deserialize(self, serialization: str) -> Serializable:
         decoder = JSONSerializableDecoder(storage=self)
-        return decoder.decode(serialized)
+        serializable = decoder.decode(serialization)
+        return serializable
+
+    def _load_and_deserialize(self, identifier: str) -> StorageEntry:
+        serialization = self._storage_backend[identifier]
+        serializable = self._deserialize(serialization)
+        self._temporary_storage[identifier] = PulseStorage.StorageEntry(serialization=serialization,
+                                                                         serializable=serializable)
+        return self._temporary_storage[identifier]
 
     @property
     def temporary_storage(self) -> Dict[str, StorageEntry]:
@@ -631,8 +638,8 @@ class PulseStorage:
 
     def __getitem__(self, identifier: str) -> Serializable:
         if identifier not in self._temporary_storage:
-            self._temporary_storage[identifier] = self._deserialize(identifier)
-        return self._temporary_storage[identifier]
+            self._load_and_deserialize(identifier)
+        return self._temporary_storage[identifier].serializable
 
     def __setitem__(self, identifier: str, serializable: Serializable) -> None:
         if identifier in self._temporary_storage:
