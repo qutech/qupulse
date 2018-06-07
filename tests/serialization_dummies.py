@@ -1,4 +1,4 @@
-from typing import Union, Dict, Any, Callable
+from typing import Union, Dict, Any, Callable, Sequence
 
 from qctoolkit.serialization import Serializer, Serializable, StorageBackend
 
@@ -27,8 +27,11 @@ class DummyStorageBackend(StorageBackend):
         self.times_exists_called += 1
         return identifier in self.stored_items
 
-    def delete(self, identifier: str):
+    def delete(self, identifier: str) -> None:
         del self.stored_items[identifier]
+
+    def list_contents(self) -> Sequence[str]:
+        return self.stored_items.keys()
 
 
 class DummySerializer(Serializer):

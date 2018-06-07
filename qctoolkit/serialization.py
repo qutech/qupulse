@@ -89,6 +89,14 @@ class StorageBackend(metaclass=ABCMeta):
     def __delitem__(self, identifier: str) -> None:
         self.delete(identifier)
 
+    @abstractmethod
+    def list_contents(self) -> Sequence[str]:
+        """Return a listing of all available identifiers.
+
+        Returns:
+            List of all available identifiers.
+        """
+
 
 class FilesystemBackend(StorageBackend):
     """A StorageBackend implementation based on a regular filesystem.
@@ -138,6 +146,12 @@ class FilesystemBackend(StorageBackend):
             os.remove(self._path(identifier))
         except FileNotFoundError as fnf:
             raise KeyError(identifier) from fnf
+
+    def list_contents(self) -> Sequence[str]:
+        contents = []
+        for root, dirs, files in os.walk(self.root):
+            contents = contents + [os.path.join(root, filename) for filename, ext in os.path.splitext(file) for file in files if ext == '.json']
+        return contents
 
 
 class ZipFileBackend(StorageBackend):
@@ -223,6 +237,10 @@ class ZipFileBackend(StorageBackend):
             with zipfile.ZipFile(self._root, mode='a', compression=zipfile.ZIP_DEFLATED) as zf:
                 zf.writestr(filename, data)
 
+    def list_contents(self) -> Sequence[str]:
+        with zipfile.ZipFile(self._root, 'r') as myzip:
+            return myzip.namelist()
+
 
 class CachingBackend(StorageBackend):
     """Adds naive memory caching functionality to another StorageBackend.
@@ -263,6 +281,9 @@ class CachingBackend(StorageBackend):
         if identifier in self._cache:
             del self._cache[identifier]
 
+    def list_contents(self) -> Sequence[str]:
+        return self._backend.list_contents()
+
 
 class DictBackend(StorageBackend):
     """DictBackend uses a dictionary to store the data for convenience serialization."""
@@ -286,6 +307,9 @@ class DictBackend(StorageBackend):
 
     def delete(self, identifier: str) -> None:
         del self._cache[identifier]
+
+    def list_contents(self) -> Sequence[str]:
+        return self._cache.keys()
 
 
 def get_type_identifier(obj: Any) -> str:
