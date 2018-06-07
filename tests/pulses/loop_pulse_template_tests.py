@@ -9,6 +9,7 @@ from qctoolkit.pulses.loop_pulse_template import ForLoopPulseTemplate, WhileLoop
 from qctoolkit.pulses.parameters import ConstantParameter, InvalidParameterNameException, ParameterConstraintViolation,\
     ParameterNotProvidedException
 from qctoolkit.pulses.instructions import MEASInstruction
+from qctoolkit.serialization import Serializable
 
 from tests.pulses.sequencing_dummies import DummyCondition, DummyPulseTemplate, DummySequencer, DummyInstructionBlock,\
     DummyParameter
@@ -216,15 +217,46 @@ class ForLoopPulseTemplateTest(unittest.TestCase):
         parameters['A'] = DummyParameter(requires_stop=True)
         self.assertTrue(flt.requires_stop(parameters, dict()))
 
-    def test_get_serialization_data_minimal(self) -> None:
+    def test_integral(self) -> None:
+        dummy = DummyPulseTemplate(defined_channels={'A', 'B'},
+                                   parameter_names={'t1', 'i'},
+                                   integrals={'A': ExpressionScalar('t1-i*3.1'), 'B': ExpressionScalar('i')})
+
+        pulse = ForLoopPulseTemplate(dummy, 'i', (1, 8, 2))
+
+        expected = {'A': ExpressionScalar('Sum(t1-3.1*(1+2*i), (i, 0, 3))'),
+                    'B': ExpressionScalar('Sum((1+2*i), (i, 0, 3))') }
+        self.assertEqual(expected, pulse.integral)
+
+
+class ForLoopPulseTemplateSerializationTests(unittest.TestCase):
+
+    def test_get_serialization_data_minimal_with_identifier(self) -> None:
+        dt = DummyPulseTemplate(parameter_names={'i'})
+        flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=('A', 'B'), identifier='hugo')
+
+        data = flt.get_serialization_data()
+        expected_data = {
+            'body': dt,
+             'loop_range': ('A', 'B', 1),
+             'loop_index': 'i',
+            Serializable.type_identifier_name: ForLoopPulseTemplate.get_type_identifier(),
+            Serializable.identifier_name: 'hugo'
+        }
+        self.assertEqual(expected_data, data)
+
+    def test_get_serialization_data_minimal_without_identifier(self) -> None:
         dt = DummyPulseTemplate(parameter_names={'i'})
         flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=('A', 'B'))
 
         data = flt.get_serialization_data()
-        expected_data = dict(body=dt,
-                             loop_range=('A', 'B', 1),
-                             loop_index='i')
-        self.assertEqual(data, expected_data)
+        expected_data = {
+            'body': dt,
+             'loop_range': ('A', 'B', 1),
+             'loop_index': 'i',
+            Serializable.type_identifier_name: ForLoopPulseTemplate.get_type_identifier()
+        }
+        self.assertEqual(expected_data, data)
 
     def test_get_serialization_data_all_features(self) -> None:
         measurements = [('a', 0, 1), ('b', 1, 1)]
@@ -235,11 +267,14 @@ class ForLoopPulseTemplateTest(unittest.TestCase):
                                    measurements=measurements, parameter_constraints=parameter_constraints)
 
         data = flt.get_serialization_data()
-        expected_data = dict(body=dt,
-                             loop_range=('A', 'B', 1),
-                             loop_index='i',
-                             measurements=measurements,
-                             parameter_constraints=parameter_constraints)
+        expected_data = {
+            'body': dt,
+            'loop_range': ('A', 'B', 1),
+            'loop_index': 'i',
+            'measurements': measurements,
+            'parameter_constraints': parameter_constraints,
+            Serializable.type_identifier_name: ForLoopPulseTemplate.get_type_identifier()
+        }
         self.assertEqual(data, expected_data)
 
     def test_deserialize_minimal(self) -> None:
@@ -265,17 +300,18 @@ class ForLoopPulseTemplateTest(unittest.TestCase):
         data = dict(body=dt,
                     loop_range=('A', 'B', 1),
                     loop_index='i',
-                    identifier='meh',
                     measurements=measurements,
                     parameter_constraints=parameter_constraints)
 
         flt = ForLoopPulseTemplate.deserialize(**data)
-        self.assertEqual(flt.identifier, 'meh')
         self.assertIs(flt.body, dt)
         self.assertEqual(flt.loop_index, 'i')
         self.assertEqual(flt.loop_range.to_tuple(), ('A', 'B', 1))
         self.assertEqual(flt.measurement_declarations, measurements)
         self.assertEqual([str(c) for c in flt.parameter_constraints], parameter_constraints)
+
+
+class ForLoopPulseTemplateOldSerializationTests(unittest.TestCase):
 
     def test_get_serialization_data_minimal_old(self) -> None:
         # test for deprecated version during transition period, remove after final switch
@@ -378,17 +414,6 @@ class ForLoopPulseTemplateTest(unittest.TestCase):
             self.assertEqual(flt.measurement_declarations, measurements)
             self.assertEqual([str(c) for c in flt.parameter_constraints], parameter_constraints)
 
-    def test_integral(self) -> None:
-        dummy = DummyPulseTemplate(defined_channels={'A', 'B'},
-                                   parameter_names={'t1', 'i'},
-                                   integrals={'A': ExpressionScalar('t1-i*3.1'), 'B': ExpressionScalar('i')})
-
-        pulse = ForLoopPulseTemplate(dummy, 'i', (1, 8, 2))
-
-        expected = {'A': ExpressionScalar('Sum(t1-3.1*(1+2*i), (i, 0, 3))'),
-                    'B': ExpressionScalar('Sum((1+2*i), (i, 0, 3))') }
-        self.assertEqual(expected, pulse.integral)
-
 
 class WhileLoopPulseTemplateTest(unittest.TestCase):
 
@@ -425,7 +450,7 @@ class WhileLoopPulseTemplateTest(unittest.TestCase):
                          pulse.integral)
 
 
-class LoopPulseTemplateSequencingTests(unittest.TestCase):
+class WhileLoopPulseTemplateSequencingTests(unittest.TestCase):
 
     def test_requires_stop(self) -> None:
         condition = DummyCondition(requires_stop=False)
@@ -476,16 +501,34 @@ class LoopPulseTemplateSequencingTests(unittest.TestCase):
             t.build_sequence(sequencer, {}, {}, {}, block)
 
 
-class LoopPulseTemplateSerializationTests(unittest.TestCase):
+class WhileLoopPulseTemplateSerializationTests(unittest.TestCase):
 
-    def test_get_serialization_data(self) -> None:
+    def test_get_serialization_data_with_identifier(self) -> None:
         body = DummyPulseTemplate()
         condition_name = 'foo_cond'
         identifier = 'foo_loop'
         t = WhileLoopPulseTemplate(condition_name, body, identifier=identifier)
 
-        expected_data = dict(body=body,
-                             condition=condition_name)
+        expected_data = {
+            'body': body,
+            'condition': condition_name,
+            Serializable.type_identifier_name: WhileLoopPulseTemplate.get_type_identifier(),
+            Serializable.identifier_name: identifier
+        }
+
+        data = t.get_serialization_data()
+        self.assertEqual(expected_data, data)
+
+    def test_get_serialization_data_without_identifier(self) -> None:
+        body = DummyPulseTemplate()
+        condition_name = 'foo_cond'
+        t = WhileLoopPulseTemplate(condition_name, body)
+
+        expected_data = {
+            'body': body,
+            'condition': condition_name,
+            Serializable.type_identifier_name: WhileLoopPulseTemplate.get_type_identifier()
+        }
 
         data = t.get_serialization_data()
         self.assertEqual(expected_data, data)
@@ -505,6 +548,9 @@ class LoopPulseTemplateSerializationTests(unittest.TestCase):
         self.assertIs(body, result.body)
         self.assertEqual(data['condition'], result.condition)
         self.assertEqual(data['identifier'], result.identifier)
+
+
+class WhileLoopPulseTemplateOldSerializationTests(unittest.TestCase):
 
     def test_get_serialization_data_old(self) -> None:
         # test for deprecated version during transition period, remove after final switch

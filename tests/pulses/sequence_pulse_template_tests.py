@@ -1,5 +1,4 @@
 import unittest
-import warnings
 
 import numpy as np
 
@@ -10,6 +9,7 @@ from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate, Sequ
 from qctoolkit.pulses.pulse_template_parameter_mapping import MappingPulseTemplate
 from qctoolkit.pulses.parameters import ConstantParameter, ParameterConstraint, ParameterConstraintViolation
 from qctoolkit.pulses.instructions import MEASInstruction
+from qctoolkit.serialization import Serializable
 
 from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyPulseTemplate,\
     DummyNoValueParameter, DummyWaveform
@@ -185,17 +185,33 @@ class SequencePulseTemplateSerializationTests(unittest.TestCase):
         self.foo_param_mappings = dict(hugo='ilse', albert='albert', voltage='voltage')
         self.foo_meas_mappings = dict(mw_foo='mw_bar')
 
-    def test_get_serialization_data(self) -> None:
+    def test_get_serialization_data_with_identifier(self) -> None:
+        dummy1 = DummyPulseTemplate()
+        dummy2 = DummyPulseTemplate()
+
+        sequence = SequencePulseTemplate(dummy1, dummy2, parameter_constraints=['a<b'], measurements=[('m', 0, 1)], identifier='sequeeeence')
+
+        expected_data = {
+            'subtemplates': [dummy1, dummy2],
+            'parameter_constraints': ['a < b'],
+            'measurements': [('m', 0, 1)],
+            Serializable.type_identifier_name: SequencePulseTemplate.get_type_identifier(),
+            Serializable.identifier_name: sequence.identifier
+        }
+        data = sequence.get_serialization_data()
+        self.assertEqual(expected_data, data)
+
+    def test_get_serialization_data_without_identifier(self) -> None:
         dummy1 = DummyPulseTemplate()
         dummy2 = DummyPulseTemplate()
 
         sequence = SequencePulseTemplate(dummy1, dummy2, parameter_constraints=['a<b'], measurements=[('m', 0, 1)])
-
-        expected_data = dict(
-            subtemplates=[dummy1, dummy2],
-            parameter_constraints=['a < b'],
-            measurements=[('m', 0, 1)]
-        )
+        expected_data = {
+            'subtemplates': [dummy1, dummy2],
+            'parameter_constraints': ['a < b'],
+            'measurements': [('m', 0, 1)],
+            Serializable.type_identifier_name: SequencePulseTemplate.get_type_identifier(),
+        }
         data = sequence.get_serialization_data()
         self.assertEqual(expected_data, data)
 
@@ -214,6 +230,19 @@ class SequencePulseTemplateSerializationTests(unittest.TestCase):
         self.assertEqual(template.subtemplates, [dummy1, dummy2])
         self.assertEqual(template.parameter_constraints, [ParameterConstraint('a<b')])
         self.assertEqual(template.measurement_declarations, [('m', 0, 1)])
+
+
+class SequencePulseTemplateOldSerializationTests(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.table_foo = TablePulseTemplate({'default': [('hugo', 2),
+                                                         ('albert', 'voltage')]},
+                                            parameter_constraints=['albert<9.1'],
+                                            measurements=[('mw_foo','hugo','albert')],
+                                            identifier='foo')
+
+        self.foo_param_mappings = dict(hugo='ilse', albert='albert', voltage='voltage')
+        self.foo_meas_mappings = dict(mw_foo='mw_bar')
 
     def test_get_serialization_data_old(self) -> None:
         # test for deprecated version during transition period, remove after final switch

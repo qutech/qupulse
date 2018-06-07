@@ -335,6 +335,10 @@ class Serializable(metaclass=SerializableMeta):
     See also:
         Serializer
     """
+
+    type_identifier_name = '#type'
+    identifier_name = '#identifier'
+
     def __init__(self, identifier: Optional[str]=None, registration: weakref.WeakValueDictionary=None) -> None:
         """Initialize a Serializable.
 
@@ -393,9 +397,9 @@ class Serializable(metaclass=SerializableMeta):
             warnings.warn("{c}.get_serialization_data(*) was called with a serializer argument, indicating deprecated behavior. Please switch to the new serialization routines.".format(c=self.__class__.__name__), DeprecationWarning)
 
         if self.identifier:
-            return {'#type': self.get_type_identifier(), '#identifier': self.identifier}
+            return {self.type_identifier_name: self.get_type_identifier(), self.identifier_name: self.identifier}
         else:
-            return {'#type': self.get_type_identifier()}
+            return {self.type_identifier_name: self.get_type_identifier()}
 
     @classmethod
     def get_type_identifier(cls) -> str:
@@ -660,8 +664,6 @@ class PulseStorage:
 
 
 class JSONSerializableDecoder(json.JSONDecoder):
-    type_identifier_name = '#type'
-    identifier_name = '#identifier'
 
     def __init__(self, storage, *args, **kwargs) -> None:
         super().__init__(*args, object_hook=self.filter_serializables, **kwargs)
@@ -669,11 +671,11 @@ class JSONSerializableDecoder(json.JSONDecoder):
         self.storage = storage
 
     def filter_serializables(self, obj_dict) -> Any:
-        if self.type_identifier_name in obj_dict:
-            type_identifier = obj_dict.pop(self.type_identifier_name)
+        if Serializable.type_identifier_name in obj_dict:
+            type_identifier = obj_dict.pop(Serializable.type_identifier_name)
 
-            if self.identifier_name in obj_dict:
-                obj_identifier = obj_dict.pop(self.identifier_name)
+            if Serializable.identifier_name in obj_dict:
+                obj_identifier = obj_dict.pop(Serializable.identifier_name)
             else:
                 obj_identifier = None
 
@@ -690,8 +692,6 @@ class JSONSerializableDecoder(json.JSONDecoder):
 
 class JSONSerializableEncoder(json.JSONEncoder):
     """"""
-    type_identifier_name = '#type'
-    identifier_name = '#identifier'
 
     def __init__(self, storage, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -704,8 +704,8 @@ class JSONSerializableEncoder(json.JSONEncoder):
                 if o.identifier not in self.storage:
                     self.storage[o.identifier] = o
 
-                return {self.type_identifier_name: 'reference',
-                        self.identifier_name: o.identifier}
+                return {Serializable.type_identifier_name: 'reference',
+                        Serializable.identifier_name: o.identifier}
             else:
                 return o.get_serialization_data()
 

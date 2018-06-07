@@ -233,29 +233,26 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
         return any(parameters[parameter_name].requires_stop for parameter_name in self._loop_range.parameter_names)
 
     def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
-        data = dict(
-            body=self.body,
-            loop_range=self._loop_range.to_tuple(),
-            loop_index=self._loop_index,
-        )
+        data = super().get_serialization_data(serializer)
+
+        data['body'] = self.body
+
+        if serializer: # compatibility to old serialization routines, deprecated
+            data = dict()
+            data['body'] = serializer.dictify(self.body)
+
+        data['loop_range'] = self._loop_range.to_tuple()
+        data['loop_index'] = self._loop_index
+
         if self.parameter_constraints:
             data['parameter_constraints'] = [str(c) for c in self.parameter_constraints]
         if self.measurement_declarations:
             data['measurements'] = self.measurement_declarations
 
-        if serializer: # compatibility to old serialization routines, deprecated
-            data['body'] = serializer.dictify(data['body'])
-
         return data
 
     @classmethod
     def deserialize(cls, serializer: Optional[Serializer]=None, **kwargs) -> 'ForLoopTemplate':
-                    # body: Dict[str, Any],
-                    # loop_range: Tuple,
-                    # loop_index: str,
-                    # identifier: Optional[str]=None,
-                    # measurements: Optional[Sequence[str]]=None,
-                    # parameter_constraints: Optional[Sequence[str]]=None) -> 'ForLoopPulseTemplate':
         if serializer: # compatibility to old serialization routines, deprecated
             kwargs['body'] = cast(PulseTemplate, serializer.deserialize(kwargs['body']))
         return super().deserialize(None, **kwargs)
@@ -285,7 +282,6 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
             body_integrals[c] = ExpressionScalar(channel_integral_expr)
 
         return body_integrals
-
 
 
 class WhileLoopPulseTemplate(LoopPulseTemplate):
@@ -352,13 +348,14 @@ class WhileLoopPulseTemplate(LoopPulseTemplate):
         return self.__obtain_condition_object(conditions).requires_stop()
 
     def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
-        data = dict(
-            condition=self._condition,
-            body=self.body
-        )
+        data = super().get_serialization_data(serializer)
+        data['body'] = self.body
 
         if serializer: # compatibility to old serialization routines, deprecated
-            data['body'] = serializer.dictify(data['body'])
+            data = dict()
+            data['body'] = serializer.dictify(self.body)
+
+        data['condition'] = self._condition
 
         return data
 

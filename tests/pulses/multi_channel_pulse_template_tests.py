@@ -6,6 +6,7 @@ import numpy
 from qctoolkit.utils.types import time_from_float
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform, MappingPulseTemplate, ChannelMappingException, AtomicMultiChannelPulseTemplate
 from qctoolkit.pulses.parameters import ParameterConstraint, ParameterConstraintViolation
+from qctoolkit.serialization import Serializable
 
 from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummyWaveform
 from tests.serialization_dummies import DummySerializer
@@ -295,30 +296,69 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
         wf = pt.build_waveform(parameters, channel_mapping=channel_mapping)
         self.assertIsNone(wf)
 
-    def test_deserialize(self) -> None:
+    def test_integral(self) -> None:
+        sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'},
+                                  integrals={'A': ExpressionScalar('2+k')}),
+               DummyPulseTemplate(duration='t1', defined_channels={'B', 'C'},
+                                  integrals={'B': ExpressionScalar('t1-t0*3.1'), 'C': ExpressionScalar('l')})]
+        pulse = AtomicMultiChannelPulseTemplate(*sts)
+        self.assertEqual({'A': ExpressionScalar('2+k'),
+                          'B': ExpressionScalar('t1-t0*3.1'),
+                          'C': ExpressionScalar('l')},
+                         pulse.integral)
+
+
+class AtomicMultiChannelPulseTemplateSerializationTests(unittest.TestCase):
+
+    def test_get_serialization_data_with_identifier(self) -> None:
         sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'}, parameter_names={'a', 'b'}),
                DummyPulseTemplate(duration='t1', defined_channels={'B'}, parameter_names={'a', 'c'})]
+        constraints = ['a < d']
+        template = AtomicMultiChannelPulseTemplate(*sts,
+                                                   parameter_constraints=constraints,
+                                                   identifier='foo')
 
-        data = dict(subtemplates=sts, parameter_constraints=['a < d'])
+        expected_data = {
+            'subtemplates': sts,
+            'parameter_constraints': ['a < d'],
+            Serializable.type_identifier_name: AtomicMultiChannelPulseTemplate.get_type_identifier(),
+            Serializable.identifier_name: 'foo'
+        }
 
-        template = AtomicMultiChannelPulseTemplate.deserialize(**data)
+        data = template.get_serialization_data()
+        self.assertEqual(expected_data, data)
 
-        self.assertIs(template.subtemplates[0], sts[0])
-        self.assertIs(template.subtemplates[1], sts[1])
-        self.assertEqual(template.parameter_constraints, [ParameterConstraint('a < d')])
-
-    def test_serialize(self) -> None:
+    def test_get_serialization_data_without_identifier(self) -> None:
         sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'}, parameter_names={'a', 'b'}),
                DummyPulseTemplate(duration='t1', defined_channels={'B'}, parameter_names={'a', 'c'})]
         constraints = ['a < d']
         template = AtomicMultiChannelPulseTemplate(*sts,
                                                    parameter_constraints=constraints)
 
-        expected_data = dict(subtemplates=sts, parameter_constraints=['a < d'])
+        expected_data = {
+            'subtemplates': sts,
+            'parameter_constraints': ['a < d'],
+            Serializable.type_identifier_name: AtomicMultiChannelPulseTemplate.get_type_identifier()
+        }
 
         data = template.get_serialization_data()
-
         self.assertEqual(expected_data, data)
+
+    def test_deserialize(self) -> None:
+        sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'}, parameter_names={'a', 'b'}),
+               DummyPulseTemplate(duration='t1', defined_channels={'B'}, parameter_names={'a', 'c'})]
+
+        data = dict(subtemplates=sts, parameter_constraints=['a < d'], identifier='hugo')
+
+        template = AtomicMultiChannelPulseTemplate.deserialize(**data)
+
+        self.assertIs(template.subtemplates[0], sts[0])
+        self.assertIs(template.subtemplates[1], sts[1])
+        self.assertEqual(template.parameter_constraints, [ParameterConstraint('a < d')])
+        self.assertEqual('hugo', template.identifier)
+
+
+class AtomicMultiChannelPulseTemplateOldSerializationTests(unittest.TestCase):
 
     def test_deserialize_old(self) -> None:
         # test for deprecated version during transition period, remove after final switch
@@ -362,20 +402,9 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
                 self.assertIn(obj, sts)
                 return str(sts.index(obj))
 
-            serializer = DummySerializer(serialize_callback=serialize_callback, identifier_callback=serialize_callback)
+            serializer = DummySerializer(serialize_callback=serialize_callback,
+                                         identifier_callback=serialize_callback)
 
             data = template.get_serialization_data(serializer=serializer)
 
             self.assertEqual(expected_data, data)
-
-    def test_integral(self) -> None:
-        sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'},
-                                  integrals={'A': ExpressionScalar('2+k')}),
-               DummyPulseTemplate(duration='t1', defined_channels={'B', 'C'},
-                                  integrals={'B': ExpressionScalar('t1-t0*3.1'), 'C': ExpressionScalar('l')})]
-        pulse = AtomicMultiChannelPulseTemplate(*sts)
-        self.assertEqual({'A': ExpressionScalar('2+k'),
-                          'B': ExpressionScalar('t1-t0*3.1'),
-                          'C': ExpressionScalar('l')},
-                         pulse.integral)
-

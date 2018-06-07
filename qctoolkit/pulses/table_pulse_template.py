@@ -322,7 +322,12 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
             raise ParameterNotProvidedException(str(key_error)) from key_error
 
     def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
-        return dict(
+        data = super().get_serialization_data(serializer)
+
+        if serializer: # compatibility to old serialization routines, deprecated
+            data = dict()
+
+        local_data = dict(
             entries=dict(
                 (channel, [entry.get_serialization_data()
                            for entry in channel_entries])
@@ -331,18 +336,8 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
             parameter_constraints=[str(c) for c in self.parameter_constraints],
             measurements=self.measurement_declarations
         )
-    #
-    # @classmethod
-    # def deserialize(serializer: Serializer,
-    #                 entries: Dict[ChannelID, List[EntryInInit]],
-    #                 parameter_constraints: List[str],
-    #                 measurements: List[MeasurementDeclaration],
-    #                 identifier: Optional[str]=None) -> 'TablePulseTemplate':
-    #     return TablePulseTemplate(entries=entries,
-    #                               identifier=identifier,
-    #                               parameter_constraints=parameter_constraints,
-    #                               measurements=measurements,
-    #                               consistency_check=False)
+        data.update(**local_data)
+        return data
 
     def build_waveform(self,
                        parameters: Dict[str, numbers.Real],

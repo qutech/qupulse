@@ -8,6 +8,7 @@ from qctoolkit.pulses.parameters import ParameterNotProvidedException, Parameter
     ParameterConstraint
 from qctoolkit.pulses.instructions import REPJInstruction, InstructionPointer
 from qctoolkit.utils.types import time_from_float
+from qctoolkit.serialization import Serializable
 
 from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummySequencer, DummyInstructionBlock, DummyParameter,\
     DummyCondition, DummyWaveform
@@ -129,6 +130,17 @@ class RepetitionPulseTemplateTest(unittest.TestCase):
 
         self.assertEqual(t.duration, Expression('foo*bar'))
 
+    def test_integral(self) -> None:
+        dummy = DummyPulseTemplate(integrals=['foo+2', 'k*3+x**2'])
+        template = RepetitionPulseTemplate(dummy, 7)
+        self.assertEqual([Expression('7*(foo+2)'), Expression('7*(k*3+x**2)')], template.integral)
+
+        template = RepetitionPulseTemplate(dummy, '2+m')
+        self.assertEqual([Expression('(2+m)*(foo+2)'), Expression('(2+m)*(k*3+x**2)')], template.integral)
+
+        template = RepetitionPulseTemplate(dummy, Expression('2+m'))
+        self.assertEqual([Expression('(2+m)*(foo+2)'), Expression('(2+m)*(k*3+x**2)')], template.integral)
+
 
 class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
 
@@ -232,14 +244,28 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
 
 class RepetitionPulseTemplateSerializationTests(unittest.TestCase):
 
-    def test_get_serialization_data_minimal(self) -> None:
+    def test_get_serialization_data_minimal_with_identifier(self) -> None:
+        body = DummyPulseTemplate()
+        repetition_count = 3
+        template = RepetitionPulseTemplate(body, repetition_count, identifier='foo')
+        expected_data = {
+            'body': body,
+            'repetition_count': repetition_count,
+            Serializable.type_identifier_name: RepetitionPulseTemplate.get_type_identifier(),
+            Serializable.identifier_name: template.identifier
+        }
+        data = template.get_serialization_data()
+        self.assertEqual(expected_data, data)
+
+    def test_get_serialization_data_minimal_without_identifier(self) -> None:
         body = DummyPulseTemplate()
         repetition_count = 3
         template = RepetitionPulseTemplate(body, repetition_count)
-        expected_data = dict(
-            body=body,
-            repetition_count=repetition_count,
-        )
+        expected_data = {
+            'body': body,
+            'repetition_count': repetition_count,
+            Serializable.type_identifier_name: RepetitionPulseTemplate.get_type_identifier()
+        }
         data = template.get_serialization_data()
         self.assertEqual(expected_data, data)
 
@@ -251,12 +277,13 @@ class RepetitionPulseTemplateSerializationTests(unittest.TestCase):
         template = RepetitionPulseTemplate(body, repetition_count,
                                            measurements=measurements,
                                            parameter_constraints=parameter_constraints)
-        expected_data = dict(
-            body=body,
-            repetition_count=repetition_count,
-            measurements=measurements,
-            parameter_constraints=parameter_constraints
-        )
+        expected_data = {
+            'body': body,
+            'repetition_count': repetition_count,
+            'measurements': measurements,
+            'parameter_constraints': parameter_constraints,
+            Serializable.type_identifier_name: RepetitionPulseTemplate.get_type_identifier()
+        }
         data = template.get_serialization_data()
         self.assertEqual(expected_data, data)
 
@@ -271,6 +298,7 @@ class RepetitionPulseTemplateSerializationTests(unittest.TestCase):
         # deserialize
         template = RepetitionPulseTemplate.deserialize(**data)
         # compare!
+        self.assertEqual('foo', template.identifier)
         self.assertIs(body, template.body)
         self.assertEqual(repetition_count, template.repetition_count)
 
@@ -289,9 +317,13 @@ class RepetitionPulseTemplateSerializationTests(unittest.TestCase):
 
         # compare!
         self.assertIs(body, template.body)
+        self.assertEqual('foo', template.identifier)
         self.assertEqual('foo', template.repetition_count)
         self.assertEqual(template.parameter_constraints, [ParameterConstraint('foo < 3')])
         self.assertEqual(template.measurement_declarations, data['measurements'])
+
+
+class RepetitionPulseTemplateOldSerializationTests(unittest.TestCase):
 
     def test_get_serialization_data_minimal_old(self) -> None:
         # test for deprecated version during transition period, remove after final switch
@@ -374,17 +406,6 @@ class RepetitionPulseTemplateSerializationTests(unittest.TestCase):
             self.assertEqual('foo', template.repetition_count)
             self.assertEqual(template.parameter_constraints, [ParameterConstraint('foo < 3')])
             self.assertEqual(template.measurement_declarations, data['measurements'])
-
-    def test_integral(self) -> None:
-        dummy = DummyPulseTemplate(integrals=['foo+2', 'k*3+x**2'])
-        template = RepetitionPulseTemplate(dummy, 7)
-        self.assertEqual([Expression('7*(foo+2)'), Expression('7*(k*3+x**2)')], template.integral)
-
-        template = RepetitionPulseTemplate(dummy, '2+m')
-        self.assertEqual([Expression('(2+m)*(foo+2)'), Expression('(2+m)*(k*3+x**2)')], template.integral)
-
-        template = RepetitionPulseTemplate(dummy, Expression('2+m'))
-        self.assertEqual([Expression('(2+m)*(foo+2)'), Expression('(2+m)*(k*3+x**2)')], template.integral)
 
 
 class ParameterNotIntegerExceptionTests(unittest.TestCase):

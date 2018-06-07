@@ -120,6 +120,8 @@ class FunctionPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
         )
 
     def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
+        data = super().get_serialization_data(serializer)
+
         if serializer: # compatibility to old serialization routines, deprecated
             return dict(
                 duration_expression=self.__duration_expression,
@@ -128,13 +130,17 @@ class FunctionPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
                 measurement_declarations=self.measurement_declarations,
                 parameter_constraints=[str(c) for c in self.parameter_constraints]
             )
-        return dict(
+
+        local_data = dict(
             duration_expression=self.__duration_expression,
             expression=self.__expression,
             channel=self.__channel,
             measurements=self.measurement_declarations,
             parameter_constraints=[str(c) for c in self.parameter_constraints]
         )
+
+        data.update(**local_data)
+        return data
 
     @classmethod
     def deserialize(cls,

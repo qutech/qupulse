@@ -4,7 +4,7 @@ import warnings
 import numpy
 
 from qctoolkit.expressions import Expression
-from qctoolkit.serialization import Serializer
+from qctoolkit.serialization import Serializer, Serializable
 from qctoolkit.pulses.table_pulse_template import TablePulseTemplate, TableWaveform, TableEntry, TableWaveformEntry, ZeroDurationTablePulseTemplate, AmbiguousTablePulseEntry
 from qctoolkit.pulses.parameters import ParameterNotProvidedException, ParameterConstraintViolation
 from qctoolkit.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy, JumpInterpolationStrategy
@@ -443,28 +443,54 @@ class TablePulseTemplateSerializationTests(unittest.TestCase):
         self.entries = dict(A=[('foo', 2, 'hold'), ('hugo', 'ilse', 'linear')],
                             B=[(0, 5, 'hold'), (1, 7, 'jump'), ('k', 't', 'hold')])
         self.measurements = [('m', 1, 1), ('foo', 'z', 'o')]
+        self.parameter_constraints = ['ilse>2', 'k>foo']
         self.template = TablePulseTemplate(entries=self.entries,
                                            measurements=self.measurements,
                                            identifier='foo', parameter_constraints=['ilse>2', 'k>foo'])
         self.maxDiff = None
 
-    def test_get_serialization_data(self) -> None:
-        expected_data = dict(measurements=self.measurements,
-                             entries=self.entries,
-                             parameter_constraints=[str(Expression('ilse>2')), str(Expression('k>foo'))])
+    def test_get_serialization_data_with_identifier(self) -> None:
+        template = TablePulseTemplate(entries=self.entries,
+                                      measurements=self.measurements,
+                                      parameter_constraints=self.parameter_constraints,
+                                      identifier='foo')
+        expected_data = {
+            'measurements': self.measurements,
+            'entries': self.entries,
+            'parameter_constraints': [str(Expression('ilse>2')), str(Expression('k>foo'))],
+            Serializable.type_identifier_name: TablePulseTemplate.get_type_identifier(),
+            Serializable.identifier_name: self.template.identifier
+        }
 
-        data = self.template.get_serialization_data()
+        data = template.get_serialization_data()
+        self.assertEqual(expected_data, data)
+
+    def test_get_serialization_data_without_identifier(self) -> None:
+        template = TablePulseTemplate(entries=self.entries,
+                                      measurements=self.measurements,
+                                      parameter_constraints=self.parameter_constraints,)
+        expected_data = {
+            'measurements': self.measurements,
+            'entries': self.entries,
+            'parameter_constraints': [str(Expression('ilse>2')), str(Expression('k>foo'))],
+            Serializable.type_identifier_name: TablePulseTemplate.get_type_identifier()
+        }
+
+        data = template.get_serialization_data()
         self.assertEqual(expected_data, data)
 
     def test_deserialize(self) -> None:
-        data = dict(measurements=self.measurements,
-                    entries=self.entries,
-                    parameter_constraints=['ilse>2', 'k>foo'],
-                    identifier='foo')
+        data = {
+            'measurements': self.measurements,
+            'entries': self.entries,
+            'parameter_constraints': self.parameter_constraints,
+            'identifier': self.template.identifier
+        }
 
         # deserialize
         template = TablePulseTemplate.deserialize(**data)
 
+        self.assertEqual(template.identifier, self.template.identifier)
         self.assertEqual(template.entries, self.template.entries)
         self.assertEqual(template.measurement_declarations, self.template.measurement_declarations)
         self.assertEqual(template.parameter_constraints, self.template.parameter_constraints)
@@ -488,17 +514,18 @@ class TablePulseTemplateOldSerializationTests(unittest.TestCase):
             self.expected_data = dict(type=self.serializer.get_type_identifier(self.template))
             self.maxDiff = None
 
-    def test_get_serialization_data(self) -> None:
+    def test_get_serialization_data_old(self) -> None:
         # test for deprecated version during transition period, remove after final switch
-        # not catching warning as get_serialization_data is not expected to issue (warning implied in instantiation of Serializer)
-        expected_data = dict(measurements=self.measurements,
-                             entries=self.entries,
-                             parameter_constraints=[str(Expression('ilse>2')), str(Expression('k>foo'))])
+        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
+                                   msg="TablePT does not issue warning for old serialization routines."):
+            expected_data = dict(measurements=self.measurements,
+                                 entries=self.entries,
+                                 parameter_constraints=[str(Expression('ilse>2')), str(Expression('k>foo'))])
 
-        data = self.template.get_serialization_data(self.serializer)
-        self.assertEqual(expected_data, data)
+            data = self.template.get_serialization_data(self.serializer)
+            self.assertEqual(expected_data, data)
 
-    def test_deserialize(self) -> None:
+    def test_deserialize_old(self) -> None:
         # test for deprecated version during transition period, remove after final switch
         with self.assertWarnsRegex(DeprecationWarning, "deprecated",
                                    msg="TablePT does not issue warning for old serialization routines."):
@@ -514,7 +541,7 @@ class TablePulseTemplateOldSerializationTests(unittest.TestCase):
             self.assertEqual(template.measurement_declarations, self.template.measurement_declarations)
             self.assertEqual(template.parameter_constraints, self.template.parameter_constraints)
 
-    def test_serializer_integration(self):
+    def test_serializer_integration_old(self):
         # test for deprecated version during transition period, remove after final switch
         with self.assertWarnsRegex(DeprecationWarning, "deprecated",
                                    msg="TablePT does not issue warning for old serialization routines."):

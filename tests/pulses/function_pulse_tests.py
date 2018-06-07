@@ -1,13 +1,13 @@
 import unittest
 import sympy
+import numpy as np
 
 from qctoolkit.utils.types import time_from_float
 from qctoolkit.pulses.function_pulse_template import FunctionPulseTemplate,\
     FunctionWaveform
-from qctoolkit.serialization import Serializer
+from qctoolkit.serialization import Serializer, Serializable
 from qctoolkit.expressions import Expression
 from qctoolkit.pulses.parameters import ParameterConstraintViolation
-import numpy as np
 
 from tests.serialization_dummies import DummySerializer, DummyStorageBackend
 from tests.pulses.sequencing_dummies import DummyParameter
@@ -84,13 +84,37 @@ class FunctionPulsePropertyTest(FunctionPulseTest):
 
 class FunctionPulseSerializationTest(FunctionPulseTest):
 
-    def test_get_serialization_data(self) -> None:
-        expected_data = dict(duration_expression=str(self.s2),
-                             expression=str(self.s),
-                             channel='A',
-                             measurements=self.meas_list,
-                             parameter_constraints=self.constraints)
-        self.assertEqual(expected_data, self.fpt.get_serialization_data())
+    def test_get_serialization_data_with_identifier(self) -> None:
+        template = FunctionPulseTemplate(self.s, self.s2, channel='A',
+                                         measurements=self.meas_list,
+                                         parameter_constraints=self.constraints,
+                                         identifier='hugo')
+
+        expected_data = {
+             'duration_expression': str(self.s2),
+             'expression': str(self.s),
+             'channel': 'A',
+             'measurements': self.meas_list,
+             'parameter_constraints': self.constraints,
+            Serializable.type_identifier_name: FunctionPulseTemplate.get_type_identifier(),
+            Serializable.identifier_name: 'hugo'
+        }
+        self.assertEqual(expected_data, template.get_serialization_data())
+
+    def test_get_serialization_data_without_identifier(self) -> None:
+        template = FunctionPulseTemplate(self.s, self.s2, channel='A',
+                                         measurements=self.meas_list,
+                                         parameter_constraints=self.constraints)
+
+        expected_data = {
+             'duration_expression': str(self.s2),
+             'expression': str(self.s),
+             'channel': 'A',
+             'measurements': self.meas_list,
+             'parameter_constraints': self.constraints,
+            Serializable.type_identifier_name: FunctionPulseTemplate.get_type_identifier()
+        }
+        self.assertEqual(expected_data, template.get_serialization_data())
 
     def test_deserialize(self) -> None:
         basic_data = dict(duration_expression=Expression(self.s2),
@@ -104,9 +128,11 @@ class FunctionPulseSerializationTest(FunctionPulseTest):
         self.assertEqual({'a', 'b', 'c', 'x', 'z', 'j', 'u', 'd'}, template.parameter_names)
         self.assertEqual(template.measurement_declarations,
                          self.meas_list)
-        serialized_data = template.get_serialization_data()
-        del basic_data['identifier']
-        self.assertEqual(basic_data, serialized_data)
+        self.assertEqual(basic_data['duration_expression'], template.duration)
+        self.assertEqual(basic_data['expression'], template.expression)
+
+
+class FunctionPulseOldSerializationTests(FunctionPulseTest):
 
     def test_get_serialization_data_old(self) -> None:
         # test for deprecated version during transition period, remove after final switch
