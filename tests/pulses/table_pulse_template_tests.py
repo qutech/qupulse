@@ -440,14 +440,12 @@ class TablePulseTemplateMeasurementTest(MeasurementDefinerTest):
 class TablePulseTemplateSerializationTests(unittest.TestCase):
 
     def setUp(self) -> None:
-        self.serializer = DummySerializer(lambda x: dict(name=x.name), lambda x: x.name, lambda x: x['name'])
         self.entries = dict(A=[('foo', 2, 'hold'), ('hugo', 'ilse', 'linear')],
                             B=[(0, 5, 'hold'), (1, 7, 'jump'), ('k', 't', 'hold')])
         self.measurements = [('m', 1, 1), ('foo', 'z', 'o')]
         self.template = TablePulseTemplate(entries=self.entries,
                                            measurements=self.measurements,
                                            identifier='foo', parameter_constraints=['ilse>2', 'k>foo'])
-        self.expected_data = dict(type=self.serializer.get_type_identifier(self.template))
         self.maxDiff = None
 
     def test_get_serialization_data(self) -> None:
@@ -455,7 +453,7 @@ class TablePulseTemplateSerializationTests(unittest.TestCase):
                              entries=self.entries,
                              parameter_constraints=[str(Expression('ilse>2')), str(Expression('k>foo'))])
 
-        data = self.template.get_serialization_data(self.serializer)
+        data = self.template.get_serialization_data()
         self.assertEqual(expected_data, data)
 
     def test_deserialize(self) -> None:
@@ -465,21 +463,69 @@ class TablePulseTemplateSerializationTests(unittest.TestCase):
                     identifier='foo')
 
         # deserialize
-        template = TablePulseTemplate.deserialize(self.serializer, **data)
+        template = TablePulseTemplate.deserialize(**data)
 
         self.assertEqual(template.entries, self.template.entries)
         self.assertEqual(template.measurement_declarations, self.template.measurement_declarations)
         self.assertEqual(template.parameter_constraints, self.template.parameter_constraints)
+
+    #todo: add full serialize-deserialize integration test for new serialization routines
+
+
+class TablePulseTemplateOldSerializationTests(unittest.TestCase):
+
+    def setUp(self) -> None:
+        # test for deprecated version during transition period, remove after final switch
+        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
+                                   msg="TablePT does not issue warning for old serialization routines."):
+            self.serializer = DummySerializer(lambda x: dict(name=x.name), lambda x: x.name, lambda x: x['name'])
+            self.entries = dict(A=[('foo', 2, 'hold'), ('hugo', 'ilse', 'linear')],
+                                B=[(0, 5, 'hold'), (1, 7, 'jump'), ('k', 't', 'hold')])
+            self.measurements = [('m', 1, 1), ('foo', 'z', 'o')]
+            self.template = TablePulseTemplate(entries=self.entries,
+                                               measurements=self.measurements,
+                                               identifier='foo', parameter_constraints=['ilse>2', 'k>foo'])
+            self.expected_data = dict(type=self.serializer.get_type_identifier(self.template))
+            self.maxDiff = None
+
+    def test_get_serialization_data(self) -> None:
+        # test for deprecated version during transition period, remove after final switch
+        # not catching warning as get_serialization_data is not expected to issue (warning implied in instantiation of Serializer)
+        expected_data = dict(measurements=self.measurements,
+                             entries=self.entries,
+                             parameter_constraints=[str(Expression('ilse>2')), str(Expression('k>foo'))])
+
+        data = self.template.get_serialization_data(self.serializer)
+        self.assertEqual(expected_data, data)
+
+    def test_deserialize(self) -> None:
+        # test for deprecated version during transition period, remove after final switch
+        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
+                                   msg="TablePT does not issue warning for old serialization routines."):
+            data = dict(measurements=self.measurements,
+                        entries=self.entries,
+                        parameter_constraints=['ilse>2', 'k>foo'],
+                        identifier='foo')
+
+            # deserialize
+            template = TablePulseTemplate.deserialize(self.serializer, **data)
+
+            self.assertEqual(template.entries, self.template.entries)
+            self.assertEqual(template.measurement_declarations, self.template.measurement_declarations)
+            self.assertEqual(template.parameter_constraints, self.template.parameter_constraints)
 
     def test_serializer_integration(self):
-        serializer = Serializer(DummyStorageBackend())
-        serializer.serialize(self.template)
-        template = serializer.deserialize('foo')
+        # test for deprecated version during transition period, remove after final switch
+        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
+                                   msg="TablePT does not issue warning for old serialization routines."):
+            serializer = Serializer(DummyStorageBackend())
+            serializer.serialize(self.template)
+            template = serializer.deserialize('foo')
 
-        self.assertIsInstance(template, TablePulseTemplate)
-        self.assertEqual(template.entries, self.template.entries)
-        self.assertEqual(template.measurement_declarations, self.template.measurement_declarations)
-        self.assertEqual(template.parameter_constraints, self.template.parameter_constraints)
+            self.assertIsInstance(template, TablePulseTemplate)
+            self.assertEqual(template.entries, self.template.entries)
+            self.assertEqual(template.measurement_declarations, self.template.measurement_declarations)
+            self.assertEqual(template.parameter_constraints, self.template.parameter_constraints)
 
 
 class TablePulseTemplateSequencingTests(unittest.TestCase):

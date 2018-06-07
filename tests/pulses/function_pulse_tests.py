@@ -83,52 +83,88 @@ class FunctionPulsePropertyTest(FunctionPulseTest):
 
 
 class FunctionPulseSerializationTest(FunctionPulseTest):
+
     def test_get_serialization_data(self) -> None:
         expected_data = dict(duration_expression=str(self.s2),
                              expression=str(self.s),
                              channel='A',
-                             measurement_declarations=self.meas_list,
+                             measurements=self.meas_list,
                              parameter_constraints=self.constraints)
-        self.assertEqual(expected_data, self.fpt.get_serialization_data(
-            DummySerializer(serialize_callback=lambda x: x.original_expression)))
+        self.assertEqual(expected_data, self.fpt.get_serialization_data())
 
     def test_deserialize(self) -> None:
-        basic_data = dict(duration_expression=str(self.s2),
-                          expression=self.s,
+        basic_data = dict(duration_expression=Expression(self.s2),
+                          expression=Expression(self.s),
                           channel='A',
                           identifier='hugo',
-                          measurement_declarations=self.meas_list,
+                          measurements=self.meas_list,
                           parameter_constraints=self.constraints)
-        serializer = DummySerializer(serialize_callback=lambda x: x.original_expression)
-        serializer.subelements[self.s2] = Expression(self.s2)
-        serializer.subelements[self.s] = Expression(self.s)
-        template = FunctionPulseTemplate.deserialize(serializer, **basic_data)
+        template = FunctionPulseTemplate.deserialize(**basic_data)
         self.assertEqual('hugo', template.identifier)
         self.assertEqual({'a', 'b', 'c', 'x', 'z', 'j', 'u', 'd'}, template.parameter_names)
         self.assertEqual(template.measurement_declarations,
                          self.meas_list)
-        serialized_data = template.get_serialization_data(serializer)
+        serialized_data = template.get_serialization_data()
         del basic_data['identifier']
         self.assertEqual(basic_data, serialized_data)
 
-    def test_serializer_integration(self):
-        before = FunctionPulseTemplate(expression=self.s,
-                                       duration_expression=self.s2,
-                                       channel='A',
-                                       measurements=self.meas_list,
-                                       parameter_constraints=self.constraints,
-                                       identifier='my_tpt')
-        serializer = Serializer(DummyStorageBackend())
-        serializer.serialize(before)
-        after = serializer.deserialize('my_tpt')
+    def test_get_serialization_data_old(self) -> None:
+        # test for deprecated version during transition period, remove after final switch
+        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
+                                   msg="FunctionPT does not issue warning for old serialization routines."):
+            expected_data = dict(duration_expression=str(self.s2),
+                                 expression=str(self.s),
+                                 channel='A',
+                                 measurement_declarations=self.meas_list,
+                                 parameter_constraints=self.constraints)
+            self.assertEqual(expected_data, self.fpt.get_serialization_data(
+                DummySerializer(serialize_callback=lambda x: x.original_expression)))
 
-        self.assertIsInstance(after, FunctionPulseTemplate)
-        self.assertEqual(before.expression, after.expression)
-        self.assertEqual(before.duration, after.duration)
-        self.assertEqual(before.defined_channels, after.defined_channels)
+    def test_deserialize_old(self) -> None:
+        # test for deprecated version during transition period, remove after final switch
+        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
+                                   msg="FunctionPT does not issue warning for old serialization routines."):
+            basic_data = dict(duration_expression=str(self.s2),
+                              expression=self.s,
+                              channel='A',
+                              identifier='hugo',
+                              measurement_declarations=self.meas_list,
+                              parameter_constraints=self.constraints)
+            serializer = DummySerializer(serialize_callback=lambda x: x.original_expression)
+            serializer.subelements[self.s2] = Expression(self.s2)
+            serializer.subelements[self.s] = Expression(self.s)
+            template = FunctionPulseTemplate.deserialize(serializer, **basic_data)
+            self.assertEqual('hugo', template.identifier)
+            self.assertEqual({'a', 'b', 'c', 'x', 'z', 'j', 'u', 'd'}, template.parameter_names)
+            self.assertEqual(template.measurement_declarations,
+                             self.meas_list)
+            serialized_data = template.get_serialization_data(serializer)
+            del basic_data['identifier']
+            self.assertEqual(basic_data, serialized_data)
 
-        self.assertEqual(before.measurement_declarations, after.measurement_declarations)
-        self.assertEqual(before.parameter_constraints, after.parameter_constraints)
+    def test_serializer_integration_old(self):
+        # test for deprecated version during transition period, remove after final switch
+        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
+                                   msg="FunctionPT does not issue warning for old serialization routines."):
+            before = FunctionPulseTemplate(expression=self.s,
+                                           duration_expression=self.s2,
+                                           channel='A',
+                                           measurements=self.meas_list,
+                                           parameter_constraints=self.constraints,
+                                           identifier='my_tpt')
+            serializer = Serializer(DummyStorageBackend())
+            serializer.serialize(before)
+            after = serializer.deserialize('my_tpt')
+
+            self.assertIsInstance(after, FunctionPulseTemplate)
+            self.assertEqual(before.expression, after.expression)
+            self.assertEqual(before.duration, after.duration)
+            self.assertEqual(before.defined_channels, after.defined_channels)
+
+            self.assertEqual(before.measurement_declarations, after.measurement_declarations)
+            self.assertEqual(before.parameter_constraints, after.parameter_constraints)
+
+    # todo: replicate above test for new serialization routines
 
 
 class FunctionPulseSequencingTest(FunctionPulseTest):

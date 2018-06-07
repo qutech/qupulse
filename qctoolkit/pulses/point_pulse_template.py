@@ -1,4 +1,4 @@
-from typing import Optional, List, Union, Set, Dict, Sequence
+from typing import Optional, List, Union, Set, Dict, Sequence, Any
 from numbers import Real
 import itertools
 import numbers
@@ -14,6 +14,7 @@ from qctoolkit.pulses.parameters import Parameter, ParameterNotProvidedException
 from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration
 from qctoolkit.pulses.table_pulse_template import TableEntry, EntryInInit, TableWaveform, TableWaveformEntry
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
+from qctoolkit.serialization import Serializer
 
 
 __all__ = ["PointWaveform", "PointPulseTemplate", "PointPulseEntry", "PointWaveformEntry", "InvalidPointDimension"]
@@ -99,7 +100,7 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
     def point_pulse_entries(self) -> Sequence[PointPulseEntry]:
         return self._entries
 
-    def get_serialization_data(self, serializer) -> Dict:
+    def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
         data = {'time_point_tuple_list': [entry.get_serialization_data()
                                           for entry in self._entries],
                 'channel_names':       self._channels}
@@ -108,10 +109,6 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
         if self.measurement_declarations:
             data['measurements'] = self.measurement_declarations
         return data
-
-    @staticmethod
-    def deserialize(serializer, **kwargs) -> 'PointPulseTemplate':
-        return PointPulseTemplate(**kwargs)
 
     @property
     def duration(self) -> Expression:

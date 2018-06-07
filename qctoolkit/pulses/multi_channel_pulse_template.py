@@ -225,8 +225,11 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
                       conditions: Dict[str, 'Condition']) -> bool:
         return any(st.requires_stop(parameters, conditions) for st in self._subtemplates)
 
-    def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
-        data = dict(subtemplates=[serializer.dictify(subtemplate) for subtemplate in self.subtemplates])
+    def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
+        data = dict(subtemplates=self.subtemplates)
+
+        if serializer: # compatibility to old serialization routines, deprecated
+            data['subtemplates'] = [serializer.dictify(subtemplate) for subtemplate in self.subtemplates]
 
         if self.parameter_constraints:
             data['parameter_constraints'] = [str(constraint) for constraint in self.parameter_constraints]
@@ -235,16 +238,15 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
             data['measurements'] = self.measurement_declarations
         return data
 
-    @staticmethod
-    def deserialize(serializer: Serializer,
-                    subtemplates: Iterable[Dict[str, Any]],
-                    parameter_constraints: Optional[Any]=None,
-                    identifier: Optional[str]=None,
-                    measurements: Optional[List[MeasurementDeclaration]]=None) -> 'AtomicMultiChannelPulseTemplate':
-        subtemplates = [serializer.deserialize(st) for st in subtemplates]
-        return AtomicMultiChannelPulseTemplate(*subtemplates,
-                                               parameter_constraints=parameter_constraints,
-                                               identifier=identifier, measurements=measurements)
+    @classmethod
+    def deserialize(cls, serializer: Optional[Serializer]=None, **kwargs) -> 'AtomicMultiChannelPulseTemplate':
+        subtemplates = kwargs['subtemplates']
+        del kwargs['subtemplates']
+
+        if serializer: # compatibility to old serialization routines, deprecated
+            subtemplates = [serializer.deserialize(st) for st in subtemplates]
+
+        return cls(*subtemplates, **kwargs)
 
     @property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:

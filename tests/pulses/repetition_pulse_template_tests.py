@@ -232,71 +232,148 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
 
 class RepetitionPulseTemplateSerializationTests(unittest.TestCase):
 
-    def setUp(self) -> None:
-        self.serializer = DummySerializer(deserialize_callback=lambda x: x['name'])
-        self.body = DummyPulseTemplate()
-
     def test_get_serialization_data_minimal(self) -> None:
+        body = DummyPulseTemplate()
         repetition_count = 3
-        template = RepetitionPulseTemplate(self.body, repetition_count)
+        template = RepetitionPulseTemplate(body, repetition_count)
         expected_data = dict(
-            body=str(id(self.body)),
+            body=body,
             repetition_count=repetition_count,
         )
-        data = template.get_serialization_data(self.serializer)
+        data = template.get_serialization_data()
         self.assertEqual(expected_data, data)
 
     def test_get_serialization_data_all_features(self) -> None:
+        body = DummyPulseTemplate()
         repetition_count = 'foo'
         measurements = [('a', 0, 1), ('b', 1, 1)]
         parameter_constraints = ['foo < 3']
-        template = RepetitionPulseTemplate(self.body, repetition_count,
+        template = RepetitionPulseTemplate(body, repetition_count,
                                            measurements=measurements,
                                            parameter_constraints=parameter_constraints)
         expected_data = dict(
-            body=str(id(self.body)),
+            body=body,
             repetition_count=repetition_count,
             measurements=measurements,
             parameter_constraints=parameter_constraints
         )
-        data = template.get_serialization_data(self.serializer)
+        data = template.get_serialization_data()
         self.assertEqual(expected_data, data)
 
     def test_deserialize_minimal(self) -> None:
+        body = DummyPulseTemplate()
         repetition_count = 3
         data = dict(
             repetition_count=repetition_count,
-            body=dict(name=str(id(self.body))),
+            body=body,
             identifier='foo'
         )
-        # prepare dependencies for deserialization
-        self.serializer.subelements[str(id(self.body))] = self.body
         # deserialize
-        template = RepetitionPulseTemplate.deserialize(self.serializer, **data)
+        template = RepetitionPulseTemplate.deserialize(**data)
         # compare!
-        self.assertIs(self.body, template.body)
+        self.assertIs(body, template.body)
         self.assertEqual(repetition_count, template.repetition_count)
-        #self.assertEqual([str(c) for c in template.parameter_constraints], ['bar < 3'])
 
     def test_deserialize_all_features(self) -> None:
+        body = DummyPulseTemplate()
         data = dict(
             repetition_count='foo',
-            body=dict(name=str(id(self.body))),
+            body=body,
             identifier='foo',
             parameter_constraints=['foo < 3'],
             measurements=[('a', 0, 1), ('b', 1, 1)]
         )
-        # prepare dependencies for deserialization
-        self.serializer.subelements[str(id(self.body))] = self.body
 
         # deserialize
-        template = RepetitionPulseTemplate.deserialize(self.serializer, **data)
+        template = RepetitionPulseTemplate.deserialize(**data)
 
         # compare!
-        self.assertIs(self.body, template.body)
+        self.assertIs(body, template.body)
         self.assertEqual('foo', template.repetition_count)
         self.assertEqual(template.parameter_constraints, [ParameterConstraint('foo < 3')])
         self.assertEqual(template.measurement_declarations, data['measurements'])
+
+    def test_get_serialization_data_minimal_old(self) -> None:
+        # test for deprecated version during transition period, remove after final switch
+        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
+                                   msg="RepetitionPT does not issue warning for old serialization routines."):
+            serializer = DummySerializer(deserialize_callback=lambda x: x['name'])
+            body = DummyPulseTemplate()
+            repetition_count = 3
+            template = RepetitionPulseTemplate(body, repetition_count)
+            expected_data = dict(
+                body=str(id(body)),
+                repetition_count=repetition_count,
+            )
+            data = template.get_serialization_data(serializer)
+            self.assertEqual(expected_data, data)
+
+    def test_get_serialization_data_all_features_old(self) -> None:
+        # test for deprecated version during transition period, remove after final switch
+        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
+                                   msg="RepetitionPT does not issue warning for old serialization routines."):
+            serializer = DummySerializer(deserialize_callback=lambda x: x['name'])
+            body = DummyPulseTemplate()
+            repetition_count = 'foo'
+            measurements = [('a', 0, 1), ('b', 1, 1)]
+            parameter_constraints = ['foo < 3']
+            template = RepetitionPulseTemplate(body, repetition_count,
+                                               measurements=measurements,
+                                               parameter_constraints=parameter_constraints)
+            expected_data = dict(
+                body=str(id(body)),
+                repetition_count=repetition_count,
+                measurements=measurements,
+                parameter_constraints=parameter_constraints
+            )
+            data = template.get_serialization_data(serializer)
+            self.assertEqual(expected_data, data)
+
+    def test_deserialize_minimal_old(self) -> None:
+        # test for deprecated version during transition period, remove after final switch
+        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
+                                   msg="RepetitionPT does not issue warning for old serialization routines."):
+            serializer = DummySerializer(deserialize_callback=lambda x: x['name'])
+            body = DummyPulseTemplate()
+            repetition_count = 3
+            data = dict(
+                repetition_count=repetition_count,
+                body=dict(name=str(id(body))),
+                identifier='foo'
+            )
+            # prepare dependencies for deserialization
+            serializer.subelements[str(id(body))] = body
+            # deserialize
+            template = RepetitionPulseTemplate.deserialize(serializer, **data)
+            # compare!
+            self.assertIs(body, template.body)
+            self.assertEqual(repetition_count, template.repetition_count)
+            #self.assertEqual([str(c) for c in template.parameter_constraints], ['bar < 3'])
+
+    def test_deserialize_all_features_old(self) -> None:
+        # test for deprecated version during transition period, remove after final switch
+        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
+                                   msg="RepetitionPT does not issue warning for old serialization routines."):
+            serializer = DummySerializer(deserialize_callback=lambda x: x['name'])
+            body = DummyPulseTemplate()
+            data = dict(
+                repetition_count='foo',
+                body=dict(name=str(id(body))),
+                identifier='foo',
+                parameter_constraints=['foo < 3'],
+                measurements=[('a', 0, 1), ('b', 1, 1)]
+            )
+            # prepare dependencies for deserialization
+            serializer.subelements[str(id(body))] = body
+
+            # deserialize
+            template = RepetitionPulseTemplate.deserialize(serializer, **data)
+
+            # compare!
+            self.assertIs(body, template.body)
+            self.assertEqual('foo', template.repetition_count)
+            self.assertEqual(template.parameter_constraints, [ParameterConstraint('foo < 3')])
+            self.assertEqual(template.measurement_declarations, data['measurements'])
 
     def test_integral(self) -> None:
         dummy = DummyPulseTemplate(integrals=['foo+2', 'k*3+x**2'])
