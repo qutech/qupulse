@@ -42,6 +42,7 @@ function scan = conf_seq(varargin)
 		'force_update',         false, ...
 		'add_custom_pulse',     false, ...							 % Automatically add a custom pulse in sequence
 		'add_custom_pulse_fn',  @tune.add_dbz_fid, ...   % Can specify a custom function here which modifies the variable a below
+		'save_custom_var_fn',   @tune.get_global_opts,...% Can specify a function which returns data to be saved in the scan
 		...
 		... Measurements
 		'operations',           {plsdata.daq.defaultOperations}, ...
@@ -65,7 +66,7 @@ function scan = conf_seq(varargin)
 		);
 	a = util.parse_varargin(varargin, defaultArgs);
 	
-	if args.add_dbz_fid
+	if a.add_custom_pulse
 		try
 			a = feval(a.add_custom_pulse_fn, a); % Add any proprietary function here
 		catch err
@@ -173,6 +174,10 @@ function scan = conf_seq(varargin)
 		% Turn RF switches off
 		% -> already done by qc.cleanupfn_rf_sources called above
 	end
+	
+	% Add custom variables for documentation purposes
+	scan.configfn(end+1).fn = @smaconfigwrap_save_data;
+	scan.configfn(end).args = {'custom_var', a.save_custom_var_fn};	
 	
 	% Delete unnecessary data
 	scan.cleanupfn(end+1).fn = @qc.cleanupfn_delete_getchans;
