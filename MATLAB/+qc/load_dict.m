@@ -1,4 +1,4 @@
-function dict_string_or_struct = load_dict(dict_string_or_struct)
+function dict_string_or_struct = load_dict(dict_string_or_struct, create_dict)
 	% Load dict if d is a string. Otherwise leave d untouched.
 	%
 	% Important: this does not (re)load a dict if the passed in variable is
@@ -11,6 +11,10 @@ function dict_string_or_struct = load_dict(dict_string_or_struct)
 	
 	global plsdata
 	delim = '___';
+	
+	if nargin < 2 || isempty(create_dict)
+		create_dict = false;
+	end
 	
 	if ischar(dict_string_or_struct)
 		dict_string_or_struct = strsplit(dict_string_or_struct, ' ');	
@@ -27,8 +31,14 @@ function dict_string_or_struct = load_dict(dict_string_or_struct)
 			text = fileread(file_name);
 			dict_string_or_struct = jsondecode(text);
 			dict_string_or_struct = qc.array2row(dict_string_or_struct);
+		elseif create_dict
+			if strcmp(suffix, '')
+				dict_string_or_struct = struct(strcat('dict', delim, 'name'), dict_string_or_struct, 'global', struct());			
+			else
+				error('Cannot create dictionary ''%s %s'' since it contains a space', dict_string_or_struct, suffix(2:end));
+			end
 		else
-			dict_string_or_struct = struct(strcat('dict', delim, 'name'), dict_string_or_struct, 'global', struct());
+			error('Dictionary ''%s'' does not exist', dict_string_or_struct);
 		end
 		
 		if ~strcmp(suffix, '')
