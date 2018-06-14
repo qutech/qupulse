@@ -857,3 +857,33 @@ class TriviallyRepresentableEncoderTest(unittest.TestCase):
             encoder.default(B())
 
         self.assertEqual(encoder.default({'a', 1}), list({'a', 1}))
+        
+
+# the following are tests for the routines that convert pulses from old to new serialization formats
+# can be removed after transition period
+# todo (218-06-14): remove ConversionTests after finalizing transition period from old to new serialization routines
+from qctoolkit.serialization import convert_stored_pulse_in_storage
+
+
+class ConversionTests(unittest.TestCase):
+
+    def test_convert_stored_pulse_in_storage(self) -> None:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', DeprecationWarning)
+
+            source_backend = DummyStorageBackend()
+            serializer = Serializer(source_backend)
+
+            hugoSerializable = DummySerializable(foo='bar',
+                                                 identifier='hugo')
+
+            serializable = NestedDummySerializable(hugoSerializable, identifier='hugosDad')
+            serializer.serialize(serializable)
+
+            destination_backend = DummyStorageBackend()
+            convert_stored_pulse_in_storage('hugosDad', source_backend, destination_backend)
+
+
+            pulse_storage = PulseStorage(destination_backend)
+            deserialized = pulse_storage['hugosDad']
+            self.assertEqual(serializable, deserialized)
