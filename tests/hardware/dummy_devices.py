@@ -56,15 +56,17 @@ class DummyAWG(AWG):
         super().__init__(identifier="DummyAWG{0}".format(id(self)))
 
         self._programs = {} # contains program names and programs
-        self._waveform_memory = [None for i in range(memory)]
-        self._waveform_indices = {} # dict that maps from waveform hash to memory index
-        self._program_wfs = {} # contains program names and necessary waveforms indices
         self._sample_rate = sample_rate
         self._output_range = output_range
         self._num_channels = num_channels
         self._num_markers = num_markers
         self._channels = ('default',)
         self._armed = None
+
+        # todo [2018-06-14]: The following attributes (and thus the memory argument) are never used. Remove?
+        self._waveform_memory = [None for i in range(memory)]
+        self._waveform_indices = {}  # dict that maps from waveform hash to memory index
+        self._program_wfs = {}  # contains program names and necessary waveforms indices
 
     def upload(self, name, program, channels, markers, voltage_transformation, force=False) -> None:
         if name in self.programs:
