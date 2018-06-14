@@ -11,20 +11,34 @@ from tempfile import TemporaryDirectory
 from typing import Optional, Any
 
 from qctoolkit.serialization import FilesystemBackend, CachingBackend, Serializable, JSONSerializableEncoder,\
-    ZipFileBackend, AnonymousSerializable, DictBackend, PulseStorage, JSONSerializableDecoder
+    ZipFileBackend, AnonymousSerializable, DictBackend, PulseStorage, JSONSerializableDecoder, Serializer
 
 from tests.serialization_dummies import DummyStorageBackend
 
 
 class DummySerializable(Serializable):
-    def __init__(self, data: Any='foo', identifier: Optional[str]=None) -> None:
-        super().__init__(identifier)
-        self.data = data
 
-    def get_serialization_data(self):
-        data = super().get_serialization_data()
-        data['data'] = self.data
-        return data
+    def __init__(self, identifier: Optional[str]=None, **kwargs) -> None:
+        super().__init__(identifier)
+        for name in kwargs:
+            setattr(self, name, kwargs[name])
+
+    def get_serialization_data(self, serializer: Optional[Serializer]=None):
+        local_data = dict(**self.__dict__)
+        del local_data['_Serializable__identifier']
+        if not serializer: # deprecated version for compatability with old serialization routine tests
+            data = super().get_serialization_data()
+            data.update(**local_data)
+            return data
+        else:
+            local_data['identifier'] = self.identifier
+
+            return local_data
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, DummySerializable): return False
+        return self.__dict__ == other.__dict__
+
 
 class SerializableTests(unittest.TestCase):
     @property
@@ -613,29 +627,31 @@ from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
 from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
 
 
-class DummySerializable(Serializable):
-    def __init__(self, data: Any='foo', identifier: Optional[str]=None) -> None:
-        super().__init__(identifier)
-        self.data = data
-
-    def get_serialization_data(self, serializer=None):
-        data = super().get_serialization_data()
-        data['data'] = self.data
-        return data
-
-
 class NestedDummySerializable(Serializable):
 
     def __init__(self, data: Serializable, identifier: Optional[str]=None) -> None:
         super().__init__(identifier)
         self.data = data
 
-    @staticmethod
-    def deserialize(serializer: Serializer=None, **kwargs) -> None:
-        raise NotImplemented()
+    @classmethod
+    def deserialize(cls, serializer: Optional[Serializer]=None, **kwargs) -> None:
+        if serializer:
+            data = serializer.deserialize(kwargs['data'])
+        else:
+            data = kwargs['data']
+        return NestedDummySerializable(data, identifier=kwargs['identifier'])
 
-    def get_serialization_data(self, serializer: Serializer=None) -> Dict[str, Any]:
-        return dict(data=serializer.dictify(self.data))
+    def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
+        if not serializer:
+            data = super().get_serialization_data()
+            data['data'] = self.data
+        else:
+            data = dict()
+            data['data'] = serializer.dictify(self.data)
+        return data
+
+    def __eq__(self, other) -> None:
+        return self.data, self.identifier == other.data, other.identifier
 
 
 class SerializerTests(unittest.TestCase):
