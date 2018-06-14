@@ -6,7 +6,7 @@ import numpy as np
 from atsaverage.config import ScanlineConfiguration
 from atsaverage.masks import CrossBufferMask, Mask
 
-from qctoolkit.hardware.dacs import DAC
+from qctoolkit.hardware.dacs.dac_base import DAC
 
 
 class AlazarProgram:
