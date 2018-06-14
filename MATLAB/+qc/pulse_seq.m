@@ -63,20 +63,20 @@ if ~isempty(args.fill_param)
 	else
 		fill_pulse = qc.load_pulse(args.fill_pulse);
 	end
+	
+	minDuration = args.minSamples/args.sampleRate;
+	durationQuantum = args.sampleQuantum/args.sampleRate;
 	if strcmp(args.fill_param, 'auto')
-		minDuration = args.minSamples/args.sampleRate;
-		durationQuantum = args.sampleQuantum/args.sampleRate;
-
 		fill_time =																																												...
 			py.sympy.ceiling(																																								... If duration > minDuration, get the next higher 
 			  ( py.sympy.Max(duration.sympified_expression-minDuration, durationQuantum) )/durationQuantum  ... integer number of durationQuantum above minDuration
 			)*durationQuantum																																								... but with minimum of one durationQuantum so pulse length not 0
 			+ minDuration																																										... Enforce that duration always longer than minDuration
-			- duration.sympified_expression;
-	
+			- duration.sympified_expression;	
 	else
 		fill_time = args.fill_param - duration;
 	end
+	fill_time = py.sympy.Max(fill_time, minDuration);
 	
 	fill_pulse = py.qctoolkit.pulses.MappingPT( ...
 			pyargs( ...
