@@ -6,6 +6,7 @@ import typing
 import json
 
 from unittest import mock
+from abc import ABCMeta, abstractmethod
 
 from tempfile import TemporaryDirectory
 from typing import Optional, Any
@@ -40,21 +41,20 @@ class DummySerializable(Serializable):
         return self.__dict__ == other.__dict__
 
 
-class SerializableTests(unittest.TestCase):
+class SerializableTests(metaclass=ABCMeta):
+
     @property
+    @abstractmethod
     def class_to_test(self):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def make_kwargs(self):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def assert_equal_instance(self, lhs, rhs):
-        raise NotImplementedError()
-
-    @classmethod
-    def setUpClass(cls):
-        if cls is SerializableTests:
-            raise unittest.SkipTest
+        pass
 
     def make_instance(self, identifier=None):
         return self.class_to_test(identifier=identifier, **self.make_kwargs())
@@ -97,13 +97,13 @@ class SerializableTests(unittest.TestCase):
         self.assert_equal_instance(instance, other_instance)
 
 
-class DummySerializableTests(SerializableTests):
+class DummySerializableTests(SerializableTests, unittest.TestCase):
     @property
     def class_to_test(self):
         return DummySerializable
 
     def make_kwargs(self):
-        return {'data': 'blubber'}
+        return {'data': 'blubber', 'test_dict': {'foo': 'bar', 'no': 17.3}}
 
     def assert_equal_instance(self, lhs, rhs):
         self.assertEqual(lhs.identifier, rhs.identifier)
