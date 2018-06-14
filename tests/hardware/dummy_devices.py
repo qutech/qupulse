@@ -30,6 +30,11 @@ class DummyDAC(DAC):
         if program_name in self._measurement_windows:
             self._measurement_windows.pop(program_name)
 
+    def clear(self) -> None:
+        self._measurement_windows = dict()
+        self._operations = dict()
+        self._armed_program = None
+
 
 class DummyAWG(AWG):
     """Dummy AWG for debugging purposes."""
@@ -74,6 +79,9 @@ class DummyAWG(AWG):
     def remove(self, name) -> None:
         if name in self.programs:
             self._programs.pop(name)
+
+    def clear(self) -> None:
+        self._programs = {}
 
     def arm(self, name: str) -> None:
         self._armed = name

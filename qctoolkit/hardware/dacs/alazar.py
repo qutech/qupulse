@@ -122,6 +122,11 @@ class AlazarCard(DAC):
 
     def delete_program(self, program_name: str) -> None:
         self._registered_programs.pop(program_name)
+        # todo [2018-06-14]: what if program to delete is currently armed?
+
+    def clear(self) -> None:
+        self._registered_programs = dict()
+        self.__armed_program = None
 
     @property
     def mask_prototypes(self) -> Dict[str, Tuple[int, str]]:

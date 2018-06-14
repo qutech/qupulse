@@ -180,6 +180,16 @@ class HardwareSetup:
                 except RuntimeError:
                     warnings.warn("Could not remove Program({}) from DAC({})".format(name, dac))
 
+    def clear_programs(self) -> None:
+        """Clears all programs from all known AWG and DAC devices.
+
+        Does not affect channel configurations or measurement masks set by set_channel or set_measurement."""
+        for awg in self.known_awgs:
+            awg.clear()
+        for dac in self.known_dacs:
+            dac.clear()
+        self._registered_programs = dict()
+
     @property
     def known_awgs(self) -> Set[AWG]:
         return {single_channel.awg
