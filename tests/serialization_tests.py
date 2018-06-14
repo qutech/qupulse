@@ -495,6 +495,17 @@ class PulseStorageTests(unittest.TestCase):
 
         self.assertFalse(self.storage.temporary_storage)
 
+    def test_flush_on_destroy_object(self) -> None:
+        instance_1 = DummySerializable(identifier='my_id_1')
+        backend = DummyStorageBackend()
+
+        storage = PulseStorage(backend)
+        storage['my_id_1'] = instance_1
+        self.assertNotIn('my_id_1', backend.stored_items)
+        del storage
+
+        self.assertIn('my_id_1', backend.stored_items)
+
 
 class JSONSerializableDecoderTests(unittest.TestCase):
     def test_filter_serializables(self):

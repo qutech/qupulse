@@ -669,6 +669,9 @@ class PulseStorage:
     def clear(self) -> None:
         self._temporary_storage.clear()
 
+    def __del__(self) -> None:
+        self.flush()
+
 
 class JSONSerializableDecoder(json.JSONDecoder):
 
