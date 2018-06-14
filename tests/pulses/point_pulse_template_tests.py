@@ -11,7 +11,7 @@ from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 from qctoolkit.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy
 from tests.serialization_dummies import DummySerializer, DummyStorageBackend
 from qctoolkit.expressions import Expression, ExpressionScalar
-from qctoolkit.serialization import Serializer, Serializable
+from qctoolkit.serialization import Serializer, Serializable, PulseStorage
 
 
 class PointPulseEntryTest(unittest.TestCase):
@@ -278,7 +278,26 @@ class PointPulseTemplateSerializationTests(unittest.TestCase):
         self.assertEqual(ref_template.parameter_constraints, template.parameter_constraints)
         self.assertEqual(ref_template.defined_channels, template.defined_channels)
 
-    # todo: implement full serialization-deserialization test for new routines
+    def test_serializer_integration(self):
+        ref_template = PointPulseTemplate(time_point_tuple_list=self.entries, channel_names=[0, 'A'],
+                                          measurements=self.measurements,
+                                          parameter_constraints=self.parameter_constraints,
+                                          identifier='foo')
+
+        storage_backend = DummyStorageBackend()
+        pulse_storage = PulseStorage(storage_backend)
+        pulse_storage[ref_template.identifier] = ref_template
+        pulse_storage.flush()
+
+        pulse_storage = PulseStorage(storage_backend) #recreate object to clear temporary storage
+        template = pulse_storage[ref_template.identifier]
+
+        self.assertIsInstance(template, PointPulseTemplate)
+        self.assertEqual('foo', template.identifier)
+        self.assertEqual(ref_template.point_pulse_entries, template.point_pulse_entries)
+        self.assertEqual(ref_template.measurement_declarations, template.measurement_declarations)
+        self.assertEqual(ref_template.parameter_constraints, template.parameter_constraints)
+        self.assertEqual(ref_template.defined_channels, template.defined_channels)
 
 
 class PointPulseTemplateOldSerializationTests(unittest.TestCase):

@@ -4,7 +4,7 @@ import warnings
 import numpy
 
 from qctoolkit.expressions import Expression
-from qctoolkit.serialization import Serializer, Serializable
+from qctoolkit.serialization import Serializer, Serializable, PulseStorage
 from qctoolkit.pulses.table_pulse_template import TablePulseTemplate, TableWaveform, TableEntry, TableWaveformEntry, ZeroDurationTablePulseTemplate, AmbiguousTablePulseEntry
 from qctoolkit.pulses.parameters import ParameterNotProvidedException, ParameterConstraintViolation
 from qctoolkit.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy, JumpInterpolationStrategy
@@ -495,7 +495,20 @@ class TablePulseTemplateSerializationTests(unittest.TestCase):
         self.assertEqual(template.measurement_declarations, self.template.measurement_declarations)
         self.assertEqual(template.parameter_constraints, self.template.parameter_constraints)
 
-    #todo: add full serialize-deserialize integration test for new serialization routines
+    def test_serializer_integration(self):
+        storage_backend = DummyStorageBackend()
+        pulse_storage = PulseStorage(storage_backend)
+        pulse_storage[self.template.identifier] = self.template
+        pulse_storage.flush()
+
+        pulse_storage = PulseStorage(storage_backend) #recreate object to clear temporary storage
+        template = pulse_storage[self.template.identifier]
+
+        self.assertIsInstance(template, TablePulseTemplate)
+        self.assertEqual('foo', template.identifier)
+        self.assertEqual(self.template.entries, template.entries)
+        self.assertEqual(self.template.measurement_declarations, template.measurement_declarations)
+        self.assertEqual(self.template.parameter_constraints, template.parameter_constraints)
 
 
 class TablePulseTemplateOldSerializationTests(unittest.TestCase):

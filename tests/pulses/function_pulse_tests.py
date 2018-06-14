@@ -5,7 +5,7 @@ import numpy as np
 from qctoolkit.utils.types import time_from_float
 from qctoolkit.pulses.function_pulse_template import FunctionPulseTemplate,\
     FunctionWaveform
-from qctoolkit.serialization import Serializer, Serializable
+from qctoolkit.serialization import Serializer, Serializable, PulseStorage
 from qctoolkit.expressions import Expression
 from qctoolkit.pulses.parameters import ParameterConstraintViolation
 
@@ -131,6 +131,28 @@ class FunctionPulseSerializationTest(FunctionPulseTest):
         self.assertEqual(basic_data['duration_expression'], template.duration)
         self.assertEqual(basic_data['expression'], template.expression)
 
+    def test_serializer_integration(self):
+        ref_template = FunctionPulseTemplate(self.s, self.s2, channel='A',
+                                             measurements=self.meas_list,
+                                             parameter_constraints=self.constraints,
+                                             identifier='foo')
+
+        storage_backend = DummyStorageBackend()
+        pulse_storage = PulseStorage(storage_backend)
+        pulse_storage[ref_template.identifier] = ref_template
+        pulse_storage.flush()
+
+        pulse_storage = PulseStorage(storage_backend) #recreate object to clear temporary storage
+        template = pulse_storage[ref_template.identifier]
+
+        self.assertIsInstance(template, FunctionPulseTemplate)
+        self.assertEqual('foo', template.identifier)
+        self.assertEqual(ref_template.parameter_names, template.parameter_names)
+        self.assertEqual(ref_template.measurement_declarations, template.measurement_declarations)
+        self.assertEqual(ref_template.parameter_constraints, template.parameter_constraints)
+        self.assertEqual(ref_template.duration, template.duration)
+        self.assertEqual(ref_template.expression, template.expression)
+
 
 class FunctionPulseOldSerializationTests(FunctionPulseTest):
 
@@ -189,8 +211,6 @@ class FunctionPulseOldSerializationTests(FunctionPulseTest):
 
             self.assertEqual(before.measurement_declarations, after.measurement_declarations)
             self.assertEqual(before.parameter_constraints, after.parameter_constraints)
-
-    # todo: replicate above test for new serialization routines
 
 
 class FunctionPulseSequencingTest(FunctionPulseTest):
