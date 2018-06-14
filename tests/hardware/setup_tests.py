@@ -343,3 +343,22 @@ class HardwareSetupTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             setup.register_program('p1', block, lambda: None)
 
+    def test_known_dacs(self) -> None:
+        setup = HardwareSetup()
+        dac1 = DummyDAC()
+        dac2 = DummyDAC()
+        setup.set_measurement('m1', MeasurementMask(dac1, 'mask_1'))
+        setup.set_measurement('m2', MeasurementMask(dac2, 'mask_2'))
+        expected = {dac1, dac2}
+        self.assertEqual(expected, setup.known_dacs)
+
+    def test_known_awgs(self) -> None:
+        setup = HardwareSetup()
+        awg1 = DummyAWG(num_channels=2, num_markers=0)
+        awg2 = DummyAWG(num_channels=0, num_markers=1)
+        setup.set_channel('A', PlaybackChannel(awg1, 0))
+        setup.set_channel('B', PlaybackChannel(awg1, 1))
+        setup.set_channel('M1', MarkerChannel(awg2, 0))
+        expected = {awg1, awg2}
+        self.assertEqual(expected, setup.known_awgs)
+

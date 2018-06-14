@@ -188,7 +188,9 @@ class HardwareSetup:
 
     @property
     def known_dacs(self) -> Set[DAC]:
-        return {dac for dac, _ in self._measurement_map.values()}
+        masks = set.union(*self._measurement_map.values())
+        dacs = {mask.dac for mask in masks}
+        return dacs
 
     def arm_program(self, name: str) -> None:
         """Assert program is in memory. Hardware will wait for trigger event"""
