@@ -24,20 +24,38 @@ tunePath = 'C:\Users\Pascal\Janeway\Cerfontaine\Code\dev\+tune\data';
 
 % Loading
 if util.yes_no_input('Really load smdata?', 'n')
-	load(fullfile(loadPath, 'smdata_recent.mat'));
+	try
+		copyfile(fullfile(loadPath, 'smdata_recent.mat'), fullfile(tunePath, 'smdata_recent.mat'));
+	catch err
+		warning(err.getReport());
+	end
+	load(fullfile(tunePath, 'smdata_recent.mat'));
 	info = dir(fullfile(loadPath, 'smdata_recent.mat'));
 	fprintf('Loaded smdata from %s', datestr(info.datenum));
 end
-load(fullfile(loadPath, 'tunedata_recent.mat'));
+try
+	copyfile(fullfile(loadPath, 'tunedata_recent.mat'), fullfile(tunePath, 'tunedata_recent.mat'));
+catch err
+	warning(err.getReport());
+end
+load(fullfile(tunePath, 'tunedata_recent.mat'));
 info = dir(fullfile(loadPath, 'tunedata_recent.mat'));
 fprintf('Loaded tunedata from %s', datestr(info.datenum));
 
-load(fullfile(loadPath, 'plsdata_recent.mat'));
+try
+	copyfile(fullfile(loadPath, 'plsdata_recent.mat'), fullfile(tunePath, 'plsdata_recent.mat'));
+catch err
+	warning(err.getReport());
+end
+load(fullfile(tunePath, 'plsdata_recent.mat'));
 info = dir(fullfile(loadPath, 'plsdata_recent.mat'));
 fprintf('Loaded plsdata from %s', datestr(info.datenum));
 
 global tunedata
 global plsdata
+tunedata.run{tunedata.runIndex}.opts.loadFile = 'C:\Users\Pascal\Janeway\Common\GaAs\Triton 200\Backup\DATA\tune';
+import tune.tune
+
 plsdata.path = pulsePath;
 
 % Alazar dummy instrument (simulator not implemented yet)
