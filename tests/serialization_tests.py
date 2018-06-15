@@ -163,6 +163,14 @@ class FileSystemBackendTest(unittest.TestCase):
         with self.assertRaisesRegex(KeyError, name):
             self.backend.get(name)
 
+    def test_get_contents(self) -> None:
+        expected = {'foo', 'bar', 'hugo.test'}
+        for name in expected:
+            self.backend.put(name, self.testdata)
+        contents = self.backend.list_contents()
+
+        self.assertEqual(expected, contents)
+
 
 class ZipFileBackendTests(unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -260,6 +268,17 @@ class ZipFileBackendTests(unittest.TestCase):
             self.assertEqual(be.get('foo'), 'foo_bar_data')
             self.assertEqual(be.get('bar'), 'bar_data')
 
+    def test_get_contents(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            root = os.path.join(tmp_dir, 'root.zip')
+            backend = ZipFileBackend(root)
+            expected = {'foo', 'bar', 'hugo.test'}
+            for name in expected:
+                backend.put(name, 'foo_data')
+            contents = backend.list_contents()
+
+            self.assertEqual(expected, contents)
+
 
 class CachingBackendTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -336,10 +355,18 @@ class CachingBackendTests(unittest.TestCase):
         with self.assertRaises(KeyError):
             self.caching_backend.get(name)
 
+    def test_get_contents(self) -> None:
+        expected = {'foo', 'bar', 'hugo.test'}
+        for name in expected:
+            self.caching_backend.put(name, self.testdata)
+        contents = self.caching_backend.list_contents()
+
+        self.assertEqual(expected, contents)
+
 
 class DictBackendTests(unittest.TestCase):
     def setUp(self):
-        self.backend =DictBackend()
+        self.backend = DictBackend()
 
     def test_put(self):
         self.backend.put('a', 'data')
@@ -363,6 +390,14 @@ class DictBackendTests(unittest.TestCase):
         self.assertTrue(self.backend.exists('a'))
         self.assertTrue(self.backend.exists('b'))
         self.assertFalse(self.backend.exists('c'))
+
+    def test_get_contents(self) -> None:
+        expected = {'foo', 'bar', 'hugo.test'}
+        for name in expected:
+            self.backend.put(name, 'foo_data')
+        contents = self.backend.list_contents()
+
+        self.assertEqual(expected, contents)
 
 
 class PulseStorageTests(unittest.TestCase):

@@ -148,9 +148,18 @@ class FilesystemBackend(StorageBackend):
             raise KeyError(identifier) from fnf
 
     def list_contents(self) -> Sequence[str]:
-        contents = []
-        for root, dirs, files in os.walk(self.root):
-            contents = contents + [os.path.join(root, filename) for filename, ext in os.path.splitext(file) for file in files if ext == '.json']
+        contents = set()
+        for dirpath, dirs, files in os.walk(self._root):
+            contents = contents | {filename
+                                   for filename, ext in (os.path.splitext(file) for file in files)
+                                   if ext == '.json'}
+            break # abort after first iteration; FileSystemBackend doesn't allow for subdirectories anyway right now, so this is a safeguard
+
+            # pref = os.path.commonprefix((dirpath, self._root))
+            # dir_rel_path = dirpath[len(pref):]
+            # contents = contents | {os.path.join(dir_rel_path, filename)
+            #                        for filename, ext in (os.path.splitext(file) for file in files)
+            #                        if ext == '.json'}
         return contents
 
 
@@ -239,7 +248,9 @@ class ZipFileBackend(StorageBackend):
 
     def list_contents(self) -> Sequence[str]:
         with zipfile.ZipFile(self._root, 'r') as myzip:
-            return myzip.namelist()
+            return set(filename
+                       for filename, ext in (os.path.splitext(file) for file in myzip.namelist())
+                       if ext == '.json')
 
 
 class CachingBackend(StorageBackend):
