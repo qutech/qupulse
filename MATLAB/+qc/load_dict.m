@@ -15,6 +15,7 @@ function dict_string_or_struct = load_dict(dict_string_or_struct, create_dict)
 	if nargin < 2 || isempty(create_dict)
 		create_dict = false;
 	end
+	create_dict = create_dict || isempty(dict_string_or_struct);
 	
 	if ischar(dict_string_or_struct)
 		dict_string_or_struct = strsplit(dict_string_or_struct, ' ');	
