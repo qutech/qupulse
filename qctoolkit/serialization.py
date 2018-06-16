@@ -10,7 +10,7 @@ Classes:
 """
 
 from abc import ABCMeta, abstractmethod
-from typing import Dict, Any, Optional, NamedTuple, Union, Sequence
+from typing import Dict, Any, Optional, NamedTuple, Union, Sequence, Set
 import os
 import zipfile
 import tempfile
@@ -90,7 +90,7 @@ class StorageBackend(metaclass=ABCMeta):
         self.delete(identifier)
 
     @abstractmethod
-    def list_contents(self) -> Sequence[str]:
+    def list_contents(self) -> Set[str]:
         """Return a listing of all available identifiers.
 
         Returns:
@@ -147,7 +147,7 @@ class FilesystemBackend(StorageBackend):
         except FileNotFoundError as fnf:
             raise KeyError(identifier) from fnf
 
-    def list_contents(self) -> Sequence[str]:
+    def list_contents(self) -> Set[str]:
         contents = set()
         for dirpath, dirs, files in os.walk(self._root):
             contents = contents | {filename
@@ -246,7 +246,7 @@ class ZipFileBackend(StorageBackend):
             with zipfile.ZipFile(self._root, mode='a', compression=zipfile.ZIP_DEFLATED) as zf:
                 zf.writestr(filename, data)
 
-    def list_contents(self) -> Sequence[str]:
+    def list_contents(self) -> Set[str]:
         with zipfile.ZipFile(self._root, 'r') as myzip:
             return set(filename
                        for filename, ext in (os.path.splitext(file) for file in myzip.namelist())
@@ -292,7 +292,7 @@ class CachingBackend(StorageBackend):
         if identifier in self._cache:
             del self._cache[identifier]
 
-    def list_contents(self) -> Sequence[str]:
+    def list_contents(self) -> Set[str]:
         return self._backend.list_contents()
 
 
@@ -319,8 +319,8 @@ class DictBackend(StorageBackend):
     def delete(self, identifier: str) -> None:
         del self._cache[identifier]
 
-    def list_contents(self) -> Sequence[str]:
-        return self._cache.keys()
+    def list_contents(self) -> Set[str]:
+        return set(self._cache.keys())
 
 
 def get_type_identifier(obj: Any) -> str:
