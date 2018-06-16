@@ -782,10 +782,48 @@ class ExtendedJSONEncoder(json.JSONEncoder):
 
 
 def convert_stored_pulse_in_storage(identifier: str, source_storage: StorageBackend, dest_storage: StorageBackend) -> None:
+    """Converts a pulse from the old to the new serialization format.
+
+    The pulse with the given identifier is completely (including subpulses) converted from the old serialization format
+    read from a given source storage to the new serialization format and written to a given destination storage.
+
+    Args:
+        identifier (str): The identifier of the pulse to convert.
+        source_storage (StorageBackend): A StorageBackend containing the pulse identified by the identifier argument in the old serialization format.
+        dest_storage (StorageBackend): A StorageBackend the converted pulse will be written to in the new serialization format.
+    Raises:
+        ValueError: if the dest_storage StorageBackend contains identifiers also assigned in source_storage.
+    """
+    if dest_storage.list_contents().intersection(source_storage.list_contents()):
+        raise ValueError("dest_storage already contains pulses with the same ids. Aborting to prevent inconsistencies for duplicate keys.")
     with warnings.catch_warnings():
         warnings.simplefilter('ignore', DeprecationWarning)
         serializer = Serializer(source_storage)
         pulse_storage = PulseStorage(dest_storage)
         serializable = serializer.deserialize(identifier)
-        pulse_storage[identifier] = serializable
+        pulse_storage.overwrite(identifier, serializable)
+        pulse_storage.flush()
+
+
+def convert_pulses_in_storage(source_storage: StorageBackend, dest_storage: StorageBackend) -> None:
+    """Converts all pulses from the old to the new serialization format.
+
+        All pulses in a given source storage are completely (including subpulses) converted from the old serialization format
+        to the new serialization format and written to a given destination storage.
+
+        Args:
+            source_storage (StorageBackend): A StorageBackend containing pulses in the old serialization format.
+            dest_storage (StorageBackend): A StorageBackend the converted pulses will be written to in the new serialization format.
+        Raises:
+            ValueError: if the dest_storage StorageBackend contains identifiers also assigned in source_storage.
+        """
+    if dest_storage.list_contents().intersection(source_storage.list_contents()):
+        raise ValueError("dest_storage already contains pulses with the same ids. Aborting to prevent inconsistencies for duplicate keys.")
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', DeprecationWarning)
+        serializer = Serializer(source_storage)
+        pulse_storage = PulseStorage(dest_storage)
+        for identifier in source_storage.list_contents():
+            serializable = serializer.deserialize(identifier)
+            pulse_storage.overwrite(identifier, serializable)
         pulse_storage.flush()

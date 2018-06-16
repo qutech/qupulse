@@ -897,7 +897,7 @@ class TriviallyRepresentableEncoderTest(unittest.TestCase):
 # the following are tests for the routines that convert pulses from old to new serialization formats
 # can be removed after transition period
 # todo (218-06-14): remove ConversionTests after finalizing transition period from old to new serialization routines
-from qctoolkit.serialization import convert_stored_pulse_in_storage
+from qctoolkit.serialization import convert_stored_pulse_in_storage, convert_pulses_in_storage
 
 
 class ConversionTests(unittest.TestCase):
@@ -909,16 +909,140 @@ class ConversionTests(unittest.TestCase):
             source_backend = DummyStorageBackend()
             serializer = Serializer(source_backend)
 
-            hugoSerializable = DummySerializable(foo='bar',
-                                                 identifier='hugo')
+            hugo_serializable = DummySerializable(foo='bar',
+                                                  identifier='hugo')
 
-            serializable = NestedDummySerializable(hugoSerializable, identifier='hugosDad')
+            serializable = NestedDummySerializable(hugo_serializable, identifier='hugos_parent')
             serializer.serialize(serializable)
 
             destination_backend = DummyStorageBackend()
-            convert_stored_pulse_in_storage('hugosDad', source_backend, destination_backend)
-
+            convert_stored_pulse_in_storage('hugos_parent', source_backend, destination_backend)
 
             pulse_storage = PulseStorage(destination_backend)
-            deserialized = pulse_storage['hugosDad']
+            deserialized = pulse_storage['hugos_parent']
             self.assertEqual(serializable, deserialized)
+
+    def test_convert_stored_pulse_in_storage_dest_not_empty_id_overlap(self) -> None:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', DeprecationWarning)
+
+            source_backend = DummyStorageBackend()
+            serializer = Serializer(source_backend)
+
+            hugo_serializable = DummySerializable(foo='bar',
+                                                  identifier='hugo')
+
+            serializable = NestedDummySerializable(hugo_serializable, identifier='hugos_parent')
+            serializer.serialize(serializable)
+
+            destination_backend = DummyStorageBackend()
+            destination_backend.put('hugo', 'already_existing_data')
+            with self.assertRaises(ValueError):
+                convert_stored_pulse_in_storage('hugos_parent', source_backend, destination_backend)
+
+            self.assertEquals('already_existing_data', destination_backend['hugo'])
+            self.assertEquals(1, len(destination_backend.stored_items))
+
+    def test_convert_stored_pulse_in_storage_dest_not_empty_no_id_overlap(self) -> None:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', DeprecationWarning)
+
+            source_backend = DummyStorageBackend()
+            serializer = Serializer(source_backend)
+
+            hugo_serializable = DummySerializable(foo='bar',
+                                                  identifier='hugo')
+
+            serializable = NestedDummySerializable(hugo_serializable, identifier='hugos_parent')
+            serializer.serialize(serializable)
+
+            destination_backend = DummyStorageBackend()
+            destination_backend.put('ilse', 'already_existing_data')
+            convert_stored_pulse_in_storage('hugos_parent', source_backend, destination_backend)
+
+            self.assertEquals('already_existing_data', destination_backend['ilse'])
+            pulse_storage = PulseStorage(destination_backend)
+            deserialized = pulse_storage['hugos_parent']
+            self.assertEqual(serializable, deserialized)
+
+    def test_convert_stored_pulses(self) -> None:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', DeprecationWarning)
+
+            source_backend = DummyStorageBackend()
+            serializer = Serializer(source_backend)
+
+            hugo_serializable = DummySerializable(foo='bar',
+                                                 identifier='hugo')
+
+            serializable_a = NestedDummySerializable(hugo_serializable, identifier='hugos_parent')
+            serializable_b = DummySerializable(identifier='ilse',
+                                               foo=dict(abc=123, data='adf8g23'),
+                                               number=7.3)
+
+            serializer.serialize(serializable_a)
+            serializer.serialize(serializable_b)
+
+            destination_backend = DummyStorageBackend()
+            convert_pulses_in_storage(source_backend, destination_backend)
+
+            pulse_storage = PulseStorage(destination_backend)
+            deserialized_a = pulse_storage['hugos_parent']
+            deserialized_b = pulse_storage['ilse']
+            self.assertEqual(serializable_a, deserialized_a)
+            self.assertEqual(serializable_b, deserialized_b)
+
+    def test_convert_stored_pulses_dest_not_empty_id_overlap(self) -> None:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', DeprecationWarning)
+
+            source_backend = DummyStorageBackend()
+            serializer = Serializer(source_backend)
+
+            hugo_serializable = DummySerializable(foo='bar',
+                                                 identifier='hugo')
+
+            serializable_a = NestedDummySerializable(hugo_serializable, identifier='hugos_parent')
+            serializable_b = DummySerializable(identifier='ilse',
+                                               foo=dict(abc=123, data='adf8g23'),
+                                               number=7.3)
+
+            serializer.serialize(serializable_a)
+            serializer.serialize(serializable_b)
+
+            destination_backend = DummyStorageBackend()
+            destination_backend.put('hugo', 'already_existing_data')
+            with self.assertRaises(ValueError):
+                convert_pulses_in_storage(source_backend, destination_backend)
+
+            self.assertEquals('already_existing_data', destination_backend['hugo'])
+            self.assertEquals(1, len(destination_backend.stored_items))
+
+    def test_convert_stored_pulses_dest_not_empty_no_id_overlap(self) -> None:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', DeprecationWarning)
+
+            source_backend = DummyStorageBackend()
+            serializer = Serializer(source_backend)
+
+            hugo_serializable = DummySerializable(foo='bar',
+                                                 identifier='hugo')
+
+            serializable_a = NestedDummySerializable(hugo_serializable, identifier='hugos_parent')
+            serializable_b = DummySerializable(identifier='ilse',
+                                               foo=dict(abc=123, data='adf8g23'),
+                                               number=7.3)
+
+            serializer.serialize(serializable_a)
+            serializer.serialize(serializable_b)
+
+            destination_backend = DummyStorageBackend()
+            destination_backend.put('peter', 'already_existing_data')
+            convert_pulses_in_storage(source_backend, destination_backend)
+
+            self.assertEqual('already_existing_data', destination_backend['peter'])
+            pulse_storage = PulseStorage(destination_backend)
+            deserialized_a = pulse_storage['hugos_parent']
+            deserialized_b = pulse_storage['ilse']
+            self.assertEqual(serializable_a, deserialized_a)
+            self.assertEqual(serializable_b, deserialized_b)
