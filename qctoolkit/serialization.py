@@ -21,7 +21,8 @@ import warnings
 from qctoolkit.utils.types import DocStringABCMeta
 
 __all__ = ["StorageBackend", "FilesystemBackend", "ZipFileBackend", "CachingBackend", "Serializable", "Serializer",
-           "AnonymousSerializable", "DictBackend", "JSONSerializableEncoder", "JSONSerializableDecoder", "PulseStorage"]
+           "AnonymousSerializable", "DictBackend", "JSONSerializableEncoder", "JSONSerializableDecoder", "PulseStorage",
+           "convert_pulses_in_storage", "convert_stored_pulse_in_storage"]
 
 
 class StorageBackend(metaclass=ABCMeta):
