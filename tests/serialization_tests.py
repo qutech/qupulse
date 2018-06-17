@@ -12,7 +12,8 @@ from tempfile import TemporaryDirectory
 from typing import Optional, Any
 
 from qctoolkit.serialization import FilesystemBackend, CachingBackend, Serializable, JSONSerializableEncoder,\
-    ZipFileBackend, AnonymousSerializable, DictBackend, PulseStorage, JSONSerializableDecoder, Serializer
+    ZipFileBackend, AnonymousSerializable, DictBackend, PulseStorage, JSONSerializableDecoder, Serializer, get_default_pulse_registration
+
 
 from tests.serialization_dummies import DummyStorageBackend
 
@@ -505,6 +506,18 @@ class PulseStorageTests(unittest.TestCase):
         del storage
 
         self.assertIn('my_id_1', backend.stored_items)
+
+    def test_as_default_registry(self) -> None:
+        prev_reg = get_default_pulse_registration()
+        pulse_storage = PulseStorage(DummyStorageBackend())
+        with pulse_storage.as_default_registry():
+            self.assertIs(get_default_pulse_registration(), pulse_storage)
+        self.assertIs(get_default_pulse_registration(), prev_reg)
+
+    def test_set_to_default_registry(self) -> None:
+        pulse_storage = PulseStorage(DummyStorageBackend())
+        pulse_storage.set_to_default_registry()
+        self.assertIs(get_default_pulse_registration(), pulse_storage)
 
 
 class JSONSerializableDecoderTests(unittest.TestCase):
