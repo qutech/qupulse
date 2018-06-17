@@ -358,7 +358,7 @@ class Serializable(metaclass=SerializableMeta):
             raise ValueError("Identifier must not be empty.")
         self.__identifier = identifier
 
-        if identifier and registration:
+        if identifier and registration is not None:
             if identifier in registration:
                 raise RuntimeError('Pulse with name already exists', identifier)
             else:
