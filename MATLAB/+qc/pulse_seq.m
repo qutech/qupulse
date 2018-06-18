@@ -18,7 +18,7 @@ global plsdata
 defaultArgs = struct( ...
 	'repetitions',		 {num2cell(ones(1, numel(pulses)))},  ... % Repetition for each pulse, set to NaN to avoid using a RepetitionPT. Using a RepetitionPT however can lead to a more efficient upload.
 	'outerRepetition',             1,                       ... % Repetition for entire pulse, set to NaN to use a RepetitionPT with on repetition.   
-	'fill_time_min',               nan,                     ... % If not NaN, add fill_time = py.sympy.Max(fill_time, args.fill_time_min). Might create rounding problems?
+	'fill_time_min',               NaN,                     ... % If not NaN, add fill_time = py.sympy.Max(fill_time, args.fill_time_min). Might create rounding problems?
 	'fill_param',                  '',		  								... % Not empty: Automatically add fill_pulse to achieve total time given by this parameter.
 	                                                        ... % 'auto': Determine fill time automatically for efficient upload on Tabor AWG
 	'fill_pulse_param',            'wait___t',              ... % Name of pulse parameter to use for total fill time
@@ -52,9 +52,9 @@ end
 
 % Sequence pulses
 if ~isempty(args.measurements)
-	pulse = py.qctoolkit.pulses.SequencePT(pulses{:}, pyargs('measurements', args.measurements));
+	pulse = py.qctoolkit.pulses.RepetitionPT(py.qctoolkit.pulses.SequencePT(pulses{:}, pyargs('measurements', args.measurements)), 1);
 else
-	pulse = py.qctoolkit.pulses.SequencePT(pulses{:});
+	pulse = py.qctoolkit.pulses.RepetitionPT(py.qctoolkit.pulses.SequencePT(pulses{:}), 1);
 end
 
 % Add fill if fill_param not empty
@@ -71,7 +71,7 @@ if ~isempty(args.fill_param)
 	if strcmp(args.fill_param, 'auto')
 		fill_time =																																												...
 			py.sympy.ceiling(																																								... If duration > minDuration, get the next higher 
-			  ( py.sympy.Max(duration.sympified_expression-minDuration, durationQuantum) )/durationQuantum  ... integer number of durationQuantum above minDuration
+			  ( py.sympy.Max(duration.sympified_expression-minDuration, 0) )/durationQuantum                ... integer number of durationQuantum above minDuration
 			)*durationQuantum																																								... but with minimum of one durationQuantum so pulse length not 0
 			+ minDuration																																										... Enforce that duration always longer than minDuration
 			- duration.sympified_expression;	
