@@ -16,7 +16,9 @@ function [pulse, args] = pulse_seq(pulses, varargin)
 global plsdata
 
 defaultArgs = struct( ...
-	'repetitions',                  ones(1, numel(pulses)), ... % Repetition for each pulse
+	'repetitions',		 {num2cell(ones(1, numel(pulses)))},  ... % Repetition for each pulse, set to NaN to avoid using a RepetitionPT. Using a RepetitionPT however can lead to a more efficient upload.
+	'outerRepetition',             1,                       ... % Repetition for entire pulse, set to NaN to use a RepetitionPT with on repetition.   
+	'fill_time_min',               NaN,                     ... % If not NaN, add fill_time = py.sympy.Max(fill_time, args.fill_time_min). Might create rounding problems?
 	'fill_param',                  '',		  								... % Not empty: Automatically add fill_pulse to achieve total time given by this parameter.
 	                                                        ... % 'auto': Determine fill time automatically for efficient upload on Tabor AWG
 	'fill_pulse_param',            'wait___t',              ... % Name of pulse parameter to use for total fill time
@@ -26,7 +28,7 @@ defaultArgs = struct( ...
 	'prefix',                      '' ,											... % Prefix to add to each pulse parameters
 	'identifier',                  ''	, 										... % Empty:     Do not add an identifier
                                                           ... % Otherwise: Name of the final pulse
-  'sampleRate',          uint64(plsdata.awg.sampleRate),  ... % In SI units (Sa/s), should be uint
+  'sampleRate',       uint64(plsdata.awg.sampleRate),     ... % In SI units (Sa/s), should be uint
 	'minSamples',                 uint64(192),              ... % Minimum number of samples for fill pulse, should be uint
   'sampleQuantum',              uint64(16)                ... % Sample increments for fill pulse, should be uint
 	);
@@ -43,16 +45,16 @@ for k = 1:numel(pulses)
 		pulses{k} = qc.load_pulse(pulses{k});
 	end
 	
-  if args.repetitions(k) > 1
-    pulses{k} = py.qctoolkit.pulses.RepetitionPT(pulses{k}, args.repetitions(k));
+  if ~any(isnan(args.repetitions{k}))
+    pulses{k} = py.qctoolkit.pulses.RepetitionPT(pulses{k}, args.repetitions{k});
 	end  
 end
 
 % Sequence pulses
 if ~isempty(args.measurements)
-	pulse = py.qctoolkit.pulses.SequencePT(pulses{:}, pyargs('measurements', args.measurements));
+	pulse = py.qctoolkit.pulses.RepetitionPT(py.qctoolkit.pulses.SequencePT(pulses{:}, pyargs('measurements', args.measurements)), 1);
 else
-	pulse = py.qctoolkit.pulses.SequencePT(pulses{:});
+	pulse = py.qctoolkit.pulses.RepetitionPT(py.qctoolkit.pulses.SequencePT(pulses{:}), 1);
 end
 
 % Add fill if fill_param not empty
@@ -63,19 +65,22 @@ if ~isempty(args.fill_param)
 	else
 		fill_pulse = qc.load_pulse(args.fill_pulse);
 	end
+	
+	minDuration = args.minSamples/args.sampleRate;
+	durationQuantum = args.sampleQuantum/args.sampleRate;
 	if strcmp(args.fill_param, 'auto')
-		minDuration = args.minSamples/args.sampleRate;
-		durationQuantum = args.sampleQuantum/args.sampleRate;
-
 		fill_time =																																												...
 			py.sympy.ceiling(																																								... If duration > minDuration, get the next higher 
-			  ( py.sympy.Max(duration.sympified_expression-minDuration, durationQuantum) )/durationQuantum  ... integer number of durationQuantum above minDuration
+			  ( py.sympy.Max(duration.sympified_expression-minDuration, 0) )/durationQuantum                ... integer number of durationQuantum above minDuration
 			)*durationQuantum																																								... but with minimum of one durationQuantum so pulse length not 0
 			+ minDuration																																										... Enforce that duration always longer than minDuration
-			- duration.sympified_expression;
-	
+			- duration.sympified_expression;	
 	else
 		fill_time = args.fill_param - duration;
+	end
+	
+	if ~any(isnan(args.fill_time_min))
+		fill_time = py.sympy.Max(fill_time, args.fill_time_min);
 	end
 	
 	fill_pulse = py.qctoolkit.pulses.MappingPT( ...
@@ -106,11 +111,20 @@ if ~isempty(args.prefix)
 		);
 end
 
-% Add pulse identifier of identifier not empty
-if ~isempty(args.identifier)	
-	pulse = py.qctoolkit.pulses.SequencePT( ...
-		pulse, ...
+if any(isnan(args.outerRepetition))
+	outerRepetition = 1;
+else
+	outerRepetition = args.outerRepetition;
+end
+
+% Add pulse identifier if identifier not empty
+if ~isempty(args.identifier)		
+	pulse = py.qctoolkit.pulses.RepetitionPT( ...
+		pulse, outerRepetition, ...
 		pyargs('identifier', args.identifier) ...
-		);
+		);	
+else
+	pulse = py.qctoolkit.pulses.RepetitionPT( ...
+		pulse, args.outerRepetition);
 end
 
