@@ -112,6 +112,8 @@ class Loop(Comparable, Node):
         self._repetition_count = new_repetition
 
     def unroll(self) -> None:
+        if self.is_leaf():
+            raise RuntimeError('Leaves cannot be unrolled')
         for i, e in enumerate(self.parent):
             if id(e) == id(self):
                 self.parent[i:i+1] = (child.copy_tree_structure(new_parent=self.parent)
@@ -253,9 +255,11 @@ class Loop(Comparable, Node):
                 sub_program[:] = sub_sub_program[:]
                 sub_program.waveform = sub_sub_program.waveform
 
-            else:
+            elif not sub_program.is_leaf():
                 sub_program.unroll()
 
+            else:
+                i += 1
 
 class ChannelSplit(Exception):
     def __init__(self, channel_sets):
