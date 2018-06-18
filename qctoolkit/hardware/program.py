@@ -176,7 +176,7 @@ class Loop(Comparable, Node):
 
         # calculate duration together with meas windows in the same iteration
         if self.is_leaf():
-            body_duration = float(self.waveform.duration)
+            body_duration = float(self.body_duration)
         else:
             offset = TimeType(0)
             for child in self:
@@ -430,7 +430,7 @@ def _is_compatible(program: Loop, min_len: int, quantum: int, sample_rate: TimeT
         return _CompatibilityLevel.incompatible
 
     if program.is_leaf():
-        waveform_duration_in_samples = program.waveform.duration * sample_rate
+        waveform_duration_in_samples = program.body_duration * sample_rate
         if waveform_duration_in_samples < min_len or (waveform_duration_in_samples / quantum).denominator != 1:
             return _CompatibilityLevel.action_required
         else:
