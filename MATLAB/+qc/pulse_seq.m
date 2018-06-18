@@ -69,11 +69,8 @@ if ~isempty(args.fill_param)
 	minDuration = args.minSamples/args.sampleRate;
 	durationQuantum = args.sampleQuantum/args.sampleRate;
 	if strcmp(args.fill_param, 'auto')
-		fill_time =																																												...
-			py.sympy.ceiling(																																								... If duration > minDuration, get the next higher 
-			  ( py.sympy.Max(duration.sympified_expression-minDuration, 0) )/durationQuantum                ... integer number of durationQuantum above minDuration
-			)*durationQuantum																																								... but with minimum of one durationQuantum so pulse length not 0
-			+ minDuration																																										... Enforce that duration always longer than minDuration
+		fill_time =	...
+			py.sympy.Max( py.sympy.ceiling(duration.sympified_expression/durationQuantum)*durationQuantum, minDuration ) ...
 			- duration.sympified_expression;	
 	else
 		fill_time = args.fill_param - duration;
