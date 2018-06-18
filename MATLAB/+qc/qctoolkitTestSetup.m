@@ -30,7 +30,7 @@ if util.yes_no_input('Really load smdata?', 'n')
 		warning(err.getReport());
 	end
 	load(fullfile(tunePath, 'smdata_recent.mat'));
-	info = dir(fullfile(loadPath, 'smdata_recent.mat'));
+	info = dir(fullfile(tunePath, 'smdata_recent.mat'));
 	fprintf('Loaded smdata from %s', datestr(info.datenum));
 end
 try
@@ -39,7 +39,7 @@ catch err
 	warning(err.getReport());
 end
 load(fullfile(tunePath, 'tunedata_recent.mat'));
-info = dir(fullfile(loadPath, 'tunedata_recent.mat'));
+info = dir(fullfile(tunePath, 'tunedata_recent.mat'));
 fprintf('Loaded tunedata from %s', datestr(info.datenum));
 
 try
@@ -48,7 +48,7 @@ catch err
 	warning(err.getReport());
 end
 load(fullfile(tunePath, 'plsdata_recent.mat'));
-info = dir(fullfile(loadPath, 'plsdata_recent.mat'));
+info = dir(fullfile(tunePath, 'plsdata_recent.mat'));
 fprintf('Loaded plsdata from %s', datestr(info.datenum));
 
 global tunedata
