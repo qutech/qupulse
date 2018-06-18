@@ -28,9 +28,9 @@ defaultArgs = struct( ...
 	'prefix',                      '' ,											... % Prefix to add to each pulse parameters
 	'identifier',                  ''	, 										... % Empty:     Do not add an identifier
                                                           ... % Otherwise: Name of the final pulse
-  'sampleRate',       uint64(plsdata.awg.sampleRate),     ... % In SI units (Sa/s), should be uint
-	'minSamples',                 uint64(192),              ... % Minimum number of samples for fill pulse, should be uint
-  'sampleQuantum',              uint64(16)                ... % Sample increments for fill pulse, should be uint
+  'sampleRate',               plsdata.awg.sampleRate,     ... % In SI units (Sa/s),
+	'minSamples',               plsdata.awg.minSamples,     ... % Minimum number of samples for fill pulse
+  'sampleQuantum',            plsdata.awg.sampleQuantum   ... % Sample increments for fill pulse
 	);
 args = util.parse_varargin(varargin, defaultArgs);
 args.pulses = pulses;
@@ -66,14 +66,14 @@ if ~isempty(args.fill_param)
 		fill_pulse = qc.load_pulse(args.fill_pulse);
 	end
 	
-	minDuration = args.minSamples/args.sampleRate;
-	durationQuantum = args.sampleQuantum/args.sampleRate;
+	minDuration = py.sympy.sympify(args.minSamples/args.sampleRate, pyargs('rational', py.True));
+	durationQuantum = py.sympy.sympify(args.sampleQuantum/args.sampleRate, pyargs('rational', py.True));
 	if strcmp(args.fill_param, 'auto')
 		fill_time =	...
 			py.sympy.Max( py.sympy.ceiling(duration.sympified_expression/durationQuantum)*durationQuantum, minDuration ) ...
 			- duration.sympified_expression;	
 	else
-		fill_time = args.fill_param - duration;
+		fill_time = py.sympy.Add(py.sympy.sympify(args.fill_param), -duration.sympified_expression);
 	end
 	
 	if ~any(isnan(args.fill_time_min))
