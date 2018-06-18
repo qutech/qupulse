@@ -4,6 +4,7 @@ from collections import defaultdict, deque
 from copy import deepcopy
 from enum import Enum
 from fractions import Fraction
+import warnings
 
 import numpy as np
 
@@ -261,6 +262,21 @@ class Loop(Comparable, Node):
             else:
                 i += 1
 
+    def remove_empty_loops(self):
+        new_children = []
+        for child in self:
+            if child.is_leaf():
+                if child.waveform is None:
+                    if child._measurements:
+                        warnings.warn("Dropping measurement since there is no waveform attached")
+                else:
+                    new_children.append(child)
+            else:
+                child.remove_empty_loops()
+                new_children.append(child)
+        self[:] = new_children
+
+
 class ChannelSplit(Exception):
     def __init__(self, channel_sets):
         self.channel_sets = channel_sets
@@ -332,6 +348,8 @@ class MultiChannelProgram:
                             iterable = itertools.chain((loop,), iterable)
             except StopIteration:
                 pass
+        for program in self.programs.values():
+            program.remove_empty_loops()
 
     @property
     def programs(self) -> Dict[FrozenSet[ChannelID], Loop]:
