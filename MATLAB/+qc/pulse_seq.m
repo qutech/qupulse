@@ -1,7 +1,10 @@
-function [pulse, args] = pulse_seq(pulses, varargin)
-	
+function [pulse, args] = pulse_seq(pulses, varargin)	
 % PULSE_SEQ Summary
 %   Dynamically sequence qctoolkit pulses
+%
+% Note: All SequencePTs in this function are wrapped in a RepetitionPT
+% since this might lead to a more efficient upload on the Tabor AWG
+% according to Simon Humpohl.
 %
 % --- Outputs -------------------------------------------------------------
 % pulse         : Sequenced pulse template
@@ -16,9 +19,9 @@ function [pulse, args] = pulse_seq(pulses, varargin)
 global plsdata
 
 defaultArgs = struct( ...
-	'repetitions',		 {num2cell(ones(1, numel(pulses)))},  ... % Repetition for each pulse, set to NaN to avoid using a RepetitionPT. Using a RepetitionPT however can lead to a more efficient upload.
+	'repetitions',		 {num2cell(ones(1, numel(pulses)))},  ... % Repetition for each pulse, set to NaN to avoid using a RepetitionPT.
 	'outerRepetition',             1,                       ... % Repetition for entire pulse, set to NaN to use a RepetitionPT with on repetition.   
-	'fill_time_min',               NaN,                     ... % If not NaN, add fill_time = py.sympy.Max(fill_time, args.fill_time_min). Might create rounding problems?
+	'fill_time_min',               NaN,                     ... % If not NaN, add fill_time = py.sympy.Max(fill_time, args.fill_time_min).
 	'fill_param',                  '',		  								... % Not empty: Automatically add fill_pulse to achieve total time given by this parameter.
 	                                                        ... % 'auto': Determine fill time automatically for efficient upload on Tabor AWG
 	'fill_pulse_param',            'wait___t',              ... % Name of pulse parameter to use for total fill time
@@ -87,7 +90,7 @@ if ~isempty(args.fill_param)
 				'allow_partial_parameter_mapping', true ...
 				) ...
 			);
-	pulse = py.qctoolkit.pulses.SequencePT(fill_pulse, pulse);
+	pulse = py.qctoolkit.pulses.RepetitionPT(py.qctoolkit.pulses.SequencePT(fill_pulse, pulse), 1);
 end
 
 % Add prefix to all pulse parameters (if not empty)
@@ -120,7 +123,7 @@ if ~isempty(args.identifier)
 		pulse, outerRepetition, ...
 		pyargs('identifier', args.identifier) ...
 		);	
-else
+elseif args.outerRepetition > 1
 	pulse = py.qctoolkit.pulses.RepetitionPT( ...
 		pulse, args.outerRepetition);
 end
