@@ -221,13 +221,8 @@ function scan = conf_seq(varargin)
 	
 	% Add user procfns	
 	nProcFn = numel(scan.loops(1).procfn);
-	for opInd = 1:numel(a.procfn_ops) % count through operations		
-		if isempty(a.procfn_ops{opInd})
-			warning('Using empty procfns has not been tested yet. It might work or it might not!');
-			a.disp_ops(a.disp_ops(opInd) >= opInd) = a.disp_ops(a.disp_ops(opInd) >= opInd) - 1;
-			continue;
-		end
-		inchan = nGetChan + mod(opInd-1, nOperations)+1;
+	for opInd = 1:numel(a.procfn_ops) % count through operations				
+		inchan = nGetChan + a.procfn_ops{opInd}{4};
 		scan.loops(1).procfn(end+1).fn(1) = struct( ...
 			'fn',      a.procfn_ops{opInd}{1}, ...
 			'args',    {a.procfn_ops{opInd}{2}}, ...
