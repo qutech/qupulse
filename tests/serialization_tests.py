@@ -13,8 +13,10 @@ from typing import Optional, Any
 
 from qctoolkit.serialization import FilesystemBackend, CachingBackend, Serializable, JSONSerializableEncoder,\
     ZipFileBackend, AnonymousSerializable, DictBackend, PulseStorage, JSONSerializableDecoder, Serializer
+from qctoolkit.expressions import ExpressionScalar
 
 from tests.serialization_dummies import DummyStorageBackend
+from tests.pulses.sequencing_dummies import DummyPulseTemplate
 
 
 class DummySerializable(Serializable):
@@ -60,9 +62,9 @@ class SerializableTests(metaclass=ABCMeta):
         return self.class_to_test(identifier=identifier, **self.make_kwargs())
 
     def make_serialization_data(self, identifier=None):
-        data = {'#type': self.class_to_test.get_type_identifier(), **self.make_kwargs()}
+        data = {Serializable.type_identifier_name: self.class_to_test.get_type_identifier(), **self.make_kwargs()}
         if identifier:
-            data['#identifier'] = identifier
+            data[Serializable.identifier_name] = identifier
         return data
 
     def test_identifier(self) -> None:
@@ -82,6 +84,19 @@ class SerializableTests(metaclass=ABCMeta):
             expected = self.make_serialization_data(identifier=identifier)
 
             self.assertEqual(serialization_data, expected)
+
+    def test_deserialiation(self) -> None:
+        for identifier in [None, 'some']:
+            serialization_data = self.make_serialization_data(identifier=identifier)
+            del serialization_data[Serializable.type_identifier_name]
+            if identifier:
+                serialization_data['identifier'] = serialization_data[Serializable.identifier_name]
+                del serialization_data[Serializable.identifier_name]
+            instance = self.class_to_test.deserialize(**serialization_data)
+            expected = self.make_instance(identifier=identifier)
+
+            self.assert_equal_instance(expected, instance)
+
 
     def test_serialization_and_deserialization(self):
         instance = self.make_instance('blub')
@@ -108,6 +123,27 @@ class DummySerializableTests(SerializableTests, unittest.TestCase):
     def assert_equal_instance(self, lhs, rhs):
         self.assertEqual(lhs.identifier, rhs.identifier)
         self.assertEqual(lhs.data, rhs.data)
+
+
+class DummyPulseTemplateSerializationtests(SerializableTests, unittest.TestCase):
+    @property
+    def class_to_test(self):
+        return DummyPulseTemplate
+
+    def make_kwargs(self):
+        return {
+            'requires_stop': True,
+            'is_interruptable': True,
+            'parameter_names': {'foo', 'bar'},
+            'defined_channels': {'default', 'not_default'},
+            'duration': ExpressionScalar('17.3*foo+bar'),
+            'measurement_names': {'hugo'},
+            'integrals': {'default': ExpressionScalar(19.231)}
+        }
+
+    def assert_equal_instance(self, lhs, rhs):
+        self.assertEqual(lhs.compare_key, rhs.compare_key)
+        self.assertEqual(lhs.identifier, rhs.identifier)
 
 
 class FileSystemBackendTest(unittest.TestCase):

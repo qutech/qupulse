@@ -4,15 +4,16 @@ import warnings
 import numpy
 
 from qctoolkit.expressions import Expression
-from qctoolkit.serialization import Serializer, Serializable, PulseStorage
+from qctoolkit.serialization import Serializer
 from qctoolkit.pulses.table_pulse_template import TablePulseTemplate, TableWaveform, TableEntry, TableWaveformEntry, ZeroDurationTablePulseTemplate, AmbiguousTablePulseEntry
-from qctoolkit.pulses.parameters import ParameterNotProvidedException, ParameterConstraintViolation
+from qctoolkit.pulses.parameters import ParameterNotProvidedException, ParameterConstraintViolation, ParameterConstraint
 from qctoolkit.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy, JumpInterpolationStrategy
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 
 from tests.pulses.sequencing_dummies import DummyInterpolationStrategy, DummyParameter, DummyCondition
 from tests.serialization_dummies import DummySerializer, DummyStorageBackend
 from tests.pulses.measurement_tests import ParameterConstrainerTest, MeasurementDefinerTest
+from tests.serialization_tests import SerializableTests
 
 
 class WaveformEntryTest(unittest.TestCase):
@@ -437,78 +438,27 @@ class TablePulseTemplateMeasurementTest(MeasurementDefinerTest):
                          to_test_constructor=tpt_constructor, **kwargs)
 
 
-class TablePulseTemplateSerializationTests(unittest.TestCase):
+class TablePulseTemplateSerializationTests(SerializableTests, unittest.TestCase):
 
-    def setUp(self) -> None:
-        self.entries = dict(A=[('foo', 2, 'hold'), ('hugo', 'ilse', 'linear')],
-                            B=[(0, 5, 'hold'), (1, 7, 'jump'), ('k', 't', 'hold')])
-        self.measurements = [('m', 1, 1), ('foo', 'z', 'o')]
-        self.parameter_constraints = ['ilse>2', 'k>foo']
-        self.template = TablePulseTemplate(entries=self.entries,
-                                           measurements=self.measurements,
-                                           identifier='foo', parameter_constraints=['ilse>2', 'k>foo'])
-        self.maxDiff = None
+    @property
+    def class_to_test(self):
+        return TablePulseTemplate
 
-    def test_get_serialization_data_with_identifier(self) -> None:
-        template = TablePulseTemplate(entries=self.entries,
-                                      measurements=self.measurements,
-                                      parameter_constraints=self.parameter_constraints,
-                                      identifier='foo')
-        expected_data = {
-            'measurements': self.measurements,
-            'entries': self.entries,
-            'parameter_constraints': [str(Expression('ilse>2')), str(Expression('k>foo'))],
-            Serializable.type_identifier_name: TablePulseTemplate.get_type_identifier(),
-            Serializable.identifier_name: self.template.identifier
+    def make_kwargs(self):
+        return {
+            'entries': dict(A=[('foo', 2, 'hold'), ('hugo', 'ilse', 'linear')],
+                            B=[(0, 5, 'hold'), (1, 7, 'jump'), ('k', 't', 'hold')]),
+            'measurements': [('m', 1, 1), ('foo', 'z', 'o')],
+            'parameter_constraints': [str(ParameterConstraint('ilse>2')), str(ParameterConstraint('k>foo'))]
         }
 
-        data = template.get_serialization_data()
-        self.assertEqual(expected_data, data)
-
-    def test_get_serialization_data_without_identifier(self) -> None:
-        template = TablePulseTemplate(entries=self.entries,
-                                      measurements=self.measurements,
-                                      parameter_constraints=self.parameter_constraints,)
-        expected_data = {
-            'measurements': self.measurements,
-            'entries': self.entries,
-            'parameter_constraints': [str(Expression('ilse>2')), str(Expression('k>foo'))],
-            Serializable.type_identifier_name: TablePulseTemplate.get_type_identifier()
-        }
-
-        data = template.get_serialization_data()
-        self.assertEqual(expected_data, data)
-
-    def test_deserialize(self) -> None:
-        data = {
-            'measurements': self.measurements,
-            'entries': self.entries,
-            'parameter_constraints': self.parameter_constraints,
-            'identifier': self.template.identifier
-        }
-
-        # deserialize
-        template = TablePulseTemplate.deserialize(**data)
-
-        self.assertEqual(template.identifier, self.template.identifier)
-        self.assertEqual(template.entries, self.template.entries)
-        self.assertEqual(template.measurement_declarations, self.template.measurement_declarations)
-        self.assertEqual(template.parameter_constraints, self.template.parameter_constraints)
-
-    def test_serializer_integration(self):
-        storage_backend = DummyStorageBackend()
-        pulse_storage = PulseStorage(storage_backend)
-        pulse_storage[self.template.identifier] = self.template
-        pulse_storage.flush()
-
-        pulse_storage = PulseStorage(storage_backend) #recreate object to clear temporary storage
-        template = pulse_storage[self.template.identifier]
-
-        self.assertIsInstance(template, TablePulseTemplate)
-        self.assertEqual('foo', template.identifier)
-        self.assertEqual(self.template.entries, template.entries)
-        self.assertEqual(self.template.measurement_declarations, template.measurement_declarations)
-        self.assertEqual(self.template.parameter_constraints, template.parameter_constraints)
+    def assert_equal_instance(self, lhs: TablePulseTemplate, rhs: TablePulseTemplate):
+        self.assertIsInstance(lhs, TablePulseTemplate)
+        self.assertIsInstance(rhs, TablePulseTemplate)
+        self.assertEqual(lhs.identifier, rhs.identifier)
+        self.assertEqual(lhs.entries, rhs.entries)
+        self.assertEqual(lhs.measurement_declarations, rhs.measurement_declarations)
+        self.assertEqual(lhs.parameter_constraints, rhs.parameter_constraints)
 
 
 class TablePulseTemplateOldSerializationTests(unittest.TestCase):

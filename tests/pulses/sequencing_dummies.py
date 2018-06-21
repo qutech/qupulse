@@ -310,7 +310,7 @@ class DummyPulseTemplate(AtomicPulseTemplate):
         self._duration = Expression(duration)
         self.waveform = waveform
         self.build_waveform_calls = []
-        self.measurement_names_ = measurement_names
+        self.measurement_names_ = set(measurement_names)
         self._integrals = integrals
 
     @property
@@ -335,7 +335,7 @@ class DummyPulseTemplate(AtomicPulseTemplate):
 
     @property
     def defined_channels(self) -> Set[ChannelID]:
-        return self.defined_channels_
+        return set(self.defined_channels_)
 
     @property
     def measurement_names(self) -> Set[str]:
@@ -362,16 +362,27 @@ class DummyPulseTemplate(AtomicPulseTemplate):
         self.requires_stop_arguments.append((parameters,conditions))
         return self.requires_stop_
 
-    def get_serialization_data(self, serializer: Serializer):
-        raise NotImplementedError()
-
-    @staticmethod
-    def deserialize(serializer: Serializer,
-                    condition: Dict[str, Any],
-                    body: Dict[str, Any],
-                    identifier: Optional[str]=None):
-        raise NotImplementedError()
+    def get_serialization_data(self, serializer: 'Serializer'=None) -> Dict[str, Any]:
+        data = super().get_serialization_data(serializer=serializer)
+        data['requires_stop'] = self.requires_stop_
+        data['is_interruptable'] = self.is_interruptable
+        data['parameter_names'] = self.parameter_names
+        data['defined_channels'] = self.defined_channels
+        data['duration'] = self.duration
+        data['measurement_names'] = self.measurement_names
+        data['integrals'] = self.integral
+        return data
 
     @property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
         return self._integrals
+
+    @property
+    def compare_key(self) -> Tuple[Any]:
+        return (self.requires_stop_, self.is_interruptable, self.parameter_names,
+                self.defined_channels, self.duration, self.waveform, self.measurement_names, self.integral)
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, DummyPulseTemplate):
+            return False
+        return self.compare_key == other.compare_key

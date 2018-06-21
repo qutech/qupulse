@@ -9,9 +9,12 @@ from tests.pulses.measurement_tests import ParameterConstrainerTest, Measurement
 from tests.pulses.sequencing_dummies import DummyParameter, DummyCondition
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 from qctoolkit.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy
-from tests.serialization_dummies import DummySerializer, DummyStorageBackend
 from qctoolkit.expressions import Expression, ExpressionScalar
-from qctoolkit.serialization import Serializer, Serializable, PulseStorage
+from qctoolkit.serialization import Serializer
+from qctoolkit.pulses.parameters import ParameterConstraint
+
+from tests.serialization_dummies import DummySerializer, DummyStorageBackend
+from tests.serialization_tests import SerializableTests
 
 
 class PointPulseEntryTest(unittest.TestCase):
@@ -219,85 +222,27 @@ class TablePulseTemplateMeasurementTest(MeasurementDefinerTest):
                          to_test_constructor=tpt_constructor, **kwargs)
 
 
-class PointPulseTemplateSerializationTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.entries = [('foo', 2, 'hold'), ('hugo', 'A + B', 'linear'), ('sudo', [1, 'a'], 'jump')]
-        self.measurements = [('m', 1, 1), ('foo', 'z', 'o')]
-        self.parameter_constraints = ['ilse>2', 'k>foo']
-        self.maxDiff = None
+class PointPulseTemplateSerializationTests(SerializableTests, unittest.TestCase):
 
-    def test_get_serialization_data_with_identifier(self) -> None:
-        template = PointPulseTemplate(time_point_tuple_list=self.entries, channel_names=[0, 'A'],
-                                      measurements=self.measurements,
-                                      parameter_constraints=self.parameter_constraints,
-                                      identifier='foo')
-        expected_data = {
-            'measurements': self.measurements,
-             'time_point_tuple_list': self.entries,
-             'channel_names': (0, 'A'),
-             'parameter_constraints': [str(Expression('ilse>2')), str(Expression('k>foo'))],
-             Serializable.type_identifier_name: PointPulseTemplate.get_type_identifier(),
-             Serializable.identifier_name: 'foo'
-        }
+    @property
+    def class_to_test(self):
+        return PointPulseTemplate
 
-        data = template.get_serialization_data()
-        self.assertEqual(expected_data, data)
-
-    def test_get_serialization_data_without_identifier(self) -> None:
-        template = PointPulseTemplate(time_point_tuple_list=self.entries, channel_names=[0, 'A'],
-                                      measurements=self.measurements,
-                                      parameter_constraints=self.parameter_constraints)
-        expected_data = {
-            'measurements': self.measurements,
-            'time_point_tuple_list': self.entries,
+    def make_kwargs(self):
+        return {
+            'time_point_tuple_list': [('foo', 2, 'hold'), ('hugo', 'A + B', 'linear'), ('sudo', [1, 'a'], 'jump')],
             'channel_names': (0, 'A'),
-            'parameter_constraints': [str(Expression('ilse>2')), str(Expression('k>foo'))],
-            Serializable.type_identifier_name: PointPulseTemplate.get_type_identifier()
+            'measurements': [('m', 1, 1), ('foo', 'z', 'o')],
+            'parameter_constraints': [str(ParameterConstraint('ilse>2')), str(ParameterConstraint('k>foo'))]
         }
 
-        data = template.get_serialization_data()
-        self.assertEqual(expected_data, data)
-
-    def test_deserialize(self) -> None:
-        ref_template = PointPulseTemplate(time_point_tuple_list=self.entries, channel_names=[0, 'A'],
-                                          measurements=self.measurements,
-                                          parameter_constraints=self.parameter_constraints)
-
-        data = dict(measurements=self.measurements,
-                    time_point_tuple_list=self.entries,
-                    channel_names=(0, 'A'),
-                    parameter_constraints=self.parameter_constraints,
-                    identifier='foo')
-
-        # deserialize
-        template = PointPulseTemplate.deserialize(**data)
-
-        self.assertEqual('foo', template.identifier)
-        self.assertEqual(ref_template.point_pulse_entries, template.point_pulse_entries)
-        self.assertEqual(ref_template.measurement_declarations, template.measurement_declarations)
-        self.assertEqual(ref_template.parameter_constraints, template.parameter_constraints)
-        self.assertEqual(ref_template.defined_channels, template.defined_channels)
-
-    def test_serializer_integration(self):
-        ref_template = PointPulseTemplate(time_point_tuple_list=self.entries, channel_names=[0, 'A'],
-                                          measurements=self.measurements,
-                                          parameter_constraints=self.parameter_constraints,
-                                          identifier='foo')
-
-        storage_backend = DummyStorageBackend()
-        pulse_storage = PulseStorage(storage_backend)
-        pulse_storage[ref_template.identifier] = ref_template
-        pulse_storage.flush()
-
-        pulse_storage = PulseStorage(storage_backend) #recreate object to clear temporary storage
-        template = pulse_storage[ref_template.identifier]
-
-        self.assertIsInstance(template, PointPulseTemplate)
-        self.assertEqual('foo', template.identifier)
-        self.assertEqual(ref_template.point_pulse_entries, template.point_pulse_entries)
-        self.assertEqual(ref_template.measurement_declarations, template.measurement_declarations)
-        self.assertEqual(ref_template.parameter_constraints, template.parameter_constraints)
-        self.assertEqual(ref_template.defined_channels, template.defined_channels)
+    def assert_equal_instance(self, lhs: PointPulseTemplate, rhs: PointPulseTemplate):
+        self.assertIsInstance(lhs, PointPulseTemplate)
+        self.assertIsInstance(rhs, PointPulseTemplate)
+        self.assertEqual(lhs.point_pulse_entries, rhs.point_pulse_entries)
+        self.assertEqual(lhs.measurement_declarations, rhs.measurement_declarations)
+        self.assertEqual(lhs.parameter_constraints, rhs.parameter_constraints)
+        self.assertEqual(lhs.defined_channels, rhs.defined_channels)
 
 
 class PointPulseTemplateOldSerializationTests(unittest.TestCase):
