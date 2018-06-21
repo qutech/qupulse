@@ -653,7 +653,7 @@ class PulseStorage:
     def overwrite(self, identifier: str, serializable: Serializable) -> None:
         """Use this method actively change a pulse"""
 
-        encoder = JSONSerializableEncoder(self)
+        encoder = JSONSerializableEncoder(self, sort_keys=True, indent=4)
 
         serialization_data = serializable.get_serialization_data()
         serialized = encoder.encode(serialization_data)

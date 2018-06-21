@@ -542,6 +542,24 @@ class PulseStorageTests(unittest.TestCase):
 
         self.assertIn('my_id_1', backend.stored_items)
 
+    def test_beautified_json(self) -> None:
+        data = {'e': 89, 'b': 151, 'c': 123515, 'a': 123, 'h': 2415}
+        template = DummySerializable(data=data)
+        pulse_storage = PulseStorage(DummyStorageBackend())
+        pulse_storage['foo'] = template
+        pulse_storage.flush()
+        expected = """{
+    \"#type\": \"""" + DummySerializable.get_type_identifier() + """\",
+    \"data\": {
+        \"a\": 123,
+        \"b\": 151,
+        \"c\": 123515,
+        \"e\": 89,
+        \"h\": 2415
+    }
+}"""
+        self.assertEqual(expected, pulse_storage._storage_backend['foo'])
+
 
 class JSONSerializableDecoderTests(unittest.TestCase):
     def test_filter_serializables(self):
