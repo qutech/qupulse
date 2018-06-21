@@ -1,11 +1,11 @@
 import unittest
 
-from qctoolkit.infrastructure import ParameterDictComposer, ParameterDict
+from qctoolkit.infrastructure import ParameterLibrary, ParameterDict
 
 from tests.pulses.sequencing_dummies import DummyPulseTemplate
 
 
-class ParameterDictComposerTests(unittest.TestCase):
+class ParameterLibraryTests(unittest.TestCase):
 
     def setUp(self) -> None:
         high_level_params = {
@@ -30,7 +30,7 @@ class ParameterDictComposerTests(unittest.TestCase):
             'ilse': -1.2365
         }
 
-        composer = ParameterDictComposer(self.param_sources)
+        composer = ParameterLibrary(self.param_sources)
         params = composer.get_parameters(pt)
 
         self.assertEqual(expected_params, params)
@@ -43,7 +43,25 @@ class ParameterDictComposerTests(unittest.TestCase):
             'ilse': 0
         }
 
-        composer = ParameterDictComposer(self.param_sources)
+        composer = ParameterLibrary(self.param_sources)
         params = composer.get_parameters(pt)
+
+        self.assertEqual(expected_params, params)
+
+    def test_get_parameters_with_local_subst(self) -> None:
+        pt = DummyPulseTemplate(parameter_names={'foo', 'hugo', 'ilse'}, identifier='tast_pulse')
+        local_param_subst = {
+            'hugo': 7.25,
+            'ilse': -12.5
+        }
+
+        expected_params = {
+            'foo': 0.12,
+            'hugo': 7.25,
+            'ilse': -12.5
+        }
+
+        composer = ParameterLibrary(self.param_sources)
+        params = composer.get_parameters(pt, local_param_subst)
 
         self.assertEqual(expected_params, params)
