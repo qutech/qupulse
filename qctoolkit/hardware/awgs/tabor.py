@@ -1140,6 +1140,12 @@ class TaborChannelPair(AWG):
         else:
             self.change_armed_program(name)
 
+    def set_program_advanced_sequence_table(self, name, new_advanced_sequence_table):
+        self._known_programs[name][1]._advanced_sequencer_table = new_advanced_sequence_table
+
+    def set_program_sequence_table(self, name, new_sequence_table):
+        self._known_programs[name][1]._sequencer_tables = new_sequence_table
+
     @with_select
     @with_configuration_guard
     def change_armed_program(self, name: Optional[str]) -> None:
