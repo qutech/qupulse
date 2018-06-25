@@ -277,4 +277,8 @@ function str = prepare_title(str)
 	str = strrep(str, '_', ' ');
 	str = str(1:end-2);
 	
+	str = strrep(str, 'RepAverage', 'RSA');
+	str = strrep(str, 'Downsample', 'DS');
+	str = strrep(str, 'Qubit', 'Q');
+	
 end
