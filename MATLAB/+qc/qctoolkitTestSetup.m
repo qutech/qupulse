@@ -31,7 +31,7 @@ if util.yes_no_input('Really load smdata?', 'n')
 	end
 	load(fullfile(tunePath, 'smdata_recent.mat'));
 	info = dir(fullfile(tunePath, 'smdata_recent.mat'));
-	fprintf('Loaded smdata from %s', datestr(info.datenum));
+	fprintf('Loaded smdata from %s\n', datestr(info.datenum));
 end
 try
 	copyfile(fullfile(loadPath, 'tunedata_recent.mat'), fullfile(tunePath, 'tunedata_recent.mat'));
@@ -40,7 +40,7 @@ catch err
 end
 load(fullfile(tunePath, 'tunedata_recent.mat'));
 info = dir(fullfile(tunePath, 'tunedata_recent.mat'));
-fprintf('Loaded tunedata from %s', datestr(info.datenum));
+fprintf('Loaded tunedata from %s\n', datestr(info.datenum));
 
 try
 	copyfile(fullfile(loadPath, 'plsdata_recent.mat'), fullfile(tunePath, 'plsdata_recent.mat'));
@@ -49,7 +49,7 @@ catch err
 end
 load(fullfile(tunePath, 'plsdata_recent.mat'));
 info = dir(fullfile(tunePath, 'plsdata_recent.mat'));
-fprintf('Loaded plsdata from %s', datestr(info.datenum));
+fprintf('Loaded plsdata from %s\n', datestr(info.datenum));
 
 global tunedata
 global plsdata
