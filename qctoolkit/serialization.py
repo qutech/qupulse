@@ -659,18 +659,10 @@ class PulseStorage:
         serialized = encoder.encode(serialization_data)
 
         self._temporary_storage[identifier] = self.StorageEntry(serialized, serializable)
-
-    def flush(self, to_ignore: Sequence[str]=None) -> None:
-        to_ignore = set(to_ignore) if to_ignore else set()
-        for identifier, (serialized, _) in self._temporary_storage.items():
-            if identifier not in to_ignore and serialized:
-                self._storage_backend.put(identifier, serialized, True)
+        self._storage_backend.put(identifier, serialized, True)
 
     def clear(self) -> None:
         self._temporary_storage.clear()
-
-    def __del__(self) -> None:
-        self.flush()
 
 
 class JSONSerializableDecoder(json.JSONDecoder):

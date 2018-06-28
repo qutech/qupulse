@@ -85,7 +85,7 @@ class SerializableTests(metaclass=ABCMeta):
 
             self.assertEqual(serialization_data, expected)
 
-    def test_deserialiation(self) -> None:
+    def test_deserialization(self) -> None:
         for identifier in [None, 'some']:
             serialization_data = self.make_serialization_data(identifier=identifier)
             del serialization_data[Serializable.type_identifier_name]
@@ -97,7 +97,6 @@ class SerializableTests(metaclass=ABCMeta):
 
             self.assert_equal_instance(expected, instance)
 
-
     def test_serialization_and_deserialization(self):
         instance = self.make_instance('blub')
         backend = DummyStorageBackend()
@@ -105,7 +104,6 @@ class SerializableTests(metaclass=ABCMeta):
 
         storage['blub'] = instance
 
-        storage.flush()
         storage.clear()
 
         other_instance = typing.cast(self.class_to_test, storage['blub'])
@@ -479,42 +477,17 @@ class PulseStorageTests(unittest.TestCase):
 
         self.assertEqual(self.storage._temporary_storage, {'my_id': self.storage.StorageEntry('asd', instance)})
 
-    def test_flush(self):
+    def test_write_through(self):
         instance_1 = DummySerializable(identifier='my_id_1')
-        instance_2 = DummySerializable(identifier='my_id_2')
+        inner_instance = DummySerializable(identifier='my_id_2')
+        outer_instance = NestedDummySerializable(inner_instance, identifier='my_id_3')
 
         def get_expected():
             return {identifier: serialized
                     for identifier, (serialized, _) in self.storage.temporary_storage.items()}
 
         self.storage['my_id_1'] = instance_1
-        self.storage['my_id_2'] = instance_2
-
-        self.assertFalse(self.backend.stored_items)
-
-        self.storage.flush()
-
-        self.assertEqual(get_expected(), self.backend.stored_items)
-
-    def test_flush_with_ignore(self):
-        instance_1 = DummySerializable(identifier='my_id_1')
-        instance_2 = DummySerializable(identifier='my_id_2')
-        instance_3 = DummySerializable(identifier='my_id_3')
-
-        ignore = ['my_id_1', 'my_id_3']
-
-        def get_expected():
-            return {identifier: serialized
-                    for identifier, (serialized, _) in self.storage.temporary_storage.items()
-                    if identifier not in ignore}
-
-        self.storage['my_id_1'] = instance_1
-        self.storage['my_id_2'] = instance_2
-        self.storage['my_id_3'] = instance_3
-
-        self.assertFalse(self.backend.stored_items)
-
-        self.storage.flush(to_ignore=ignore)
+        self.storage['my_id_3'] = outer_instance
 
         self.assertEqual(get_expected(), self.backend.stored_items)
 
@@ -530,17 +503,6 @@ class PulseStorageTests(unittest.TestCase):
         self.storage.clear()
 
         self.assertFalse(self.storage.temporary_storage)
-
-    def test_flush_on_destroy_object(self) -> None:
-        instance_1 = DummySerializable(identifier='my_id_1')
-        backend = DummyStorageBackend()
-
-        storage = PulseStorage(backend)
-        storage['my_id_1'] = instance_1
-        self.assertNotIn('my_id_1', backend.stored_items)
-        del storage
-
-        self.assertIn('my_id_1', backend.stored_items)
 
 
 class JSONSerializableDecoderTests(unittest.TestCase):
