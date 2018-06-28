@@ -10,7 +10,7 @@ Classes:
 """
 
 from abc import ABCMeta, abstractmethod
-from typing import Dict, Any, Optional, NamedTuple, Union, Sequence
+from typing import Dict, Any, Optional, NamedTuple, Union
 import os
 import zipfile
 import tempfile
@@ -616,6 +616,7 @@ class PulseStorage:
         self._storage_backend = storage_backend
 
         self._temporary_storage = dict() # type: Dict[str, StorageEntry]
+        self._transaction_storage = None
 
     def _deserialize(self, serialization: str) -> Serializable:
         decoder = JSONSerializableDecoder(storage=self)
@@ -653,13 +654,25 @@ class PulseStorage:
     def overwrite(self, identifier: str, serializable: Serializable) -> None:
         """Use this method actively change a pulse"""
 
-        encoder = JSONSerializableEncoder(self)
+        is_transaction_begin = (self._transaction_storage is None)
+        try:
+            if is_transaction_begin:
+                self._transaction_storage = dict()
 
-        serialization_data = serializable.get_serialization_data()
-        serialized = encoder.encode(serialization_data)
+            encoder = JSONSerializableEncoder(self)
 
-        self._temporary_storage[identifier] = self.StorageEntry(serialized, serializable)
-        self._storage_backend.put(identifier, serialized, True)
+            serialization_data = serializable.get_serialization_data()
+            serialized = encoder.encode(serialization_data)
+            self._transaction_storage[identifier] = self.StorageEntry(serialized, serializable)
+
+            if is_transaction_begin:
+                for id in self._transaction_storage:
+                    self._storage_backend.put(id, self._transaction_storage[id].serialization, overwrite=True)
+                self._temporary_storage.update(**self._transaction_storage)
+
+        finally:
+            if is_transaction_begin:
+                self._transaction_storage = None
 
     def clear(self) -> None:
         self._temporary_storage.clear()
@@ -705,6 +718,9 @@ class JSONSerializableEncoder(json.JSONEncoder):
             if o.identifier:
                 if o.identifier not in self.storage:
                     self.storage[o.identifier] = o
+                elif o is not self.storage[o.identifier]:
+                    raise RuntimeError('Trying to store a subpulse with an identifier that is already taken.')
+
 
                 return {Serializable.type_identifier_name: 'reference',
                         Serializable.identifier_name: o.identifier}

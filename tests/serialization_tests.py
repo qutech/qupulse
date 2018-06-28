@@ -491,6 +491,37 @@ class PulseStorageTests(unittest.TestCase):
 
         self.assertEqual(get_expected(), self.backend.stored_items)
 
+    def test_write_through_does_not_overwrite_subpulses(self) -> None:
+        previous_inner = DummySerializable(identifier='my_id_1', data='hey')
+        inner_instance = DummySerializable(identifier='my_id_1', data='ho')
+        outer_instance = NestedDummySerializable(inner_instance, identifier='my_id_2')
+
+        self.storage['my_id_1'] = previous_inner
+        with self.assertRaises(RuntimeError):
+            self.storage['my_id_2'] = outer_instance
+        self.assertNotIn('my_id_2', self.storage)
+        self.assertNotIn('my_id_2', self.backend)
+        self.assertIs(previous_inner, self.storage['my_id_1'])
+
+        enc = JSONSerializableEncoder(None)
+        expected = enc.encode(previous_inner.get_serialization_data())
+        self.assertEqual(expected, self.backend['my_id_1'])
+
+    def test_failed_overwrite_does_not_leave_subpulses(self) -> None:
+        inner_named = DummySerializable(data='bar', identifier='inner')
+        inner_known = DummySerializable(data='bar', identifier='known')
+        outer = DummySerializable(data=[inner_named, inner_known], identifier='outer')
+        inner_known_previous = DummySerializable(data='b38azodhg', identifier='known')
+
+        self.storage['known'] = inner_known_previous
+
+        self.assertIn('known', self.storage)
+        with self.assertRaises(RuntimeError):
+            self.storage['outer'] = outer
+
+        self.assertNotIn('outer', self.storage)
+        self.assertNotIn('inner', self.storage)
+
     def test_clear(self):
         instance_1 = DummySerializable(identifier='my_id_1')
         instance_2 = DummySerializable(identifier='my_id_2')
@@ -600,8 +631,7 @@ class JSONSerializableEncoderTest(unittest.TestCase):
 
         outer = DummySerializable(data=[inner_named, inner_anon, inner_known])
 
-        inner_known_storage = [567]
-        storage = dict(known=inner_known_storage)
+        storage = dict(known=inner_known)
         encoder = JSONSerializableEncoder(storage)
 
         encoded = encoder.encode(outer)
@@ -621,9 +651,24 @@ class JSONSerializableEncoderTest(unittest.TestCase):
 
         self.assertEqual(set(storage.keys()), {'inner', 'known'})
         self.assertIs(storage['inner'], inner_named)
-        self.assertIs(storage['known'], inner_known_storage)
+        self.assertIs(storage['known'], inner_known)
 
+    def test_encoding_duplicated_id(self):
+        inner_named = DummySerializable(data='bar', identifier='inner')
+        inner_known = DummySerializable(data='bar', identifier='known')
+        inner_known_previous = DummySerializable(data='abh3h8ga', identifier='known')
 
+        outer = DummySerializable(data=[inner_named, inner_known])
+
+        storage = dict(known=inner_known_previous)
+        encoder = JSONSerializableEncoder(storage)
+
+        with self.assertRaises(RuntimeError):
+            encoder.encode(outer)
+
+        self.assertEqual(set(storage.keys()), {'inner', 'known'})
+        self.assertIs(storage['inner'], inner_named)
+        self.assertIs(storage['known'], inner_known_previous)
 
 ########################################################################################################################
 ################################ tests for old architecture, now deprecated ############################################
