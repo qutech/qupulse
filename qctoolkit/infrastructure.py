@@ -1,10 +1,35 @@
-from typing import Dict, Optional, Sequence, Collection, Any
+from typing import Dict, Optional, Sequence, Collection, Any, TypeVar, Iterator, Generic
+from collections import ChainMap
+from collections.abc import Mapping
 
 from qctoolkit.pulses.pulse_template import PulseTemplate
 from qctoolkit.pulses.parameters import Parameter
 
 ParameterDict = Dict[str, Parameter]
 ParameterEncyclopedia = Dict[str, ParameterDict]
+
+KT, VT = TypeVar('KT'), TypeVar('VT')
+
+
+class ReadOnlyChainMap(Mapping, Generic[KT, VT]):
+
+    def __init__(self, chain_map: ChainMap) -> None:
+        self._chain_map = chain_map
+
+    def __getitem__(self, item: KT) -> VT:
+        return self._chain_map[item]
+
+    def __len__(self) -> int:
+        return len(self._chain_map)
+
+    def __iter__(self) -> Iterator:
+         return iter(self._chain_map)
+
+    def __str__(self) -> str:
+        return "ReadOnly{}".format(str(self._chain_map))
+
+    def __repr__(self) -> str:
+        return "ReadOnly{}".format(repr(self._chain_map))
 
 
 class ParameterLibrary:
@@ -45,16 +70,6 @@ class ParameterLibrary:
         """
         self._parameter_sources = parameter_source_dicts
 
-    @staticmethod
-    def _filter_dict(dictionary: Dict[str, Any], filter: Collection[str]) -> Dict[str, Any]:
-        return {k: dictionary[k] for k in dictionary if k in filter}
-
-    @staticmethod
-    def _update_params_dict(params: Dict[str, Any],
-                            new_params_source: Dict[str, Any],
-                            pulse_parameter_names: Collection[str]):
-        params.update(ParameterLibrary._filter_dict(new_params_source, pulse_parameter_names))
-
     def get_parameters(self, pulse: PulseTemplate, subst_params: Optional[ParameterDict]=None) -> ParameterDict:
         """Returns a dictionary with parameters from the library for a given pulse template.
 
@@ -70,14 +85,16 @@ class ParameterLibrary:
             pulse (PulseTemplate): The PulseTemplate to fetch parameters for.
             subst_params (Dict(str -> Parameter)): An optional additional parameter specialization dictionary to be applied
                 after processing the parameter library.
+        Returns:
+            a mapping giving the most specialized parameter values for the given pulse template. also contains all
+            globally specified parameters, even if they are not required by the pulse template.
         """
-        params = dict()
-        parameter_names = set(pulse.parameter_names) # paranoid. pulse.parameter_names is not currently guaranteed to be a set......
-        for param_level_dict in self._parameter_sources:
-            if 'global' in param_level_dict:
-                self._update_params_dict(params, param_level_dict['global'], parameter_names)
-            if pulse.identifier and pulse.identifier in param_level_dict:
-                self._update_params_dict(params, param_level_dict[pulse.identifier], parameter_names)
+        maps = []
         if subst_params:
-            self._update_params_dict(params, subst_params, parameter_names)
-        return params
+            maps.append(subst_params)
+        for param_encl in reversed(self._parameter_sources):
+            if pulse.identifier and pulse.identifier in param_encl:
+                maps.append(param_encl[pulse.identifier])
+            if 'global' in param_encl:
+                maps.append(param_encl['global'])
+        return ReadOnlyChainMap(ChainMap(*maps))
