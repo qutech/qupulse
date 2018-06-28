@@ -69,6 +69,29 @@ class ParameterLibrary:
             parameter_source_dicts (Sequence(Dict(str -> Dict(str -> Parameter)))): A sequence of parameter source dictionaries.
         """
         self._parameter_sources = parameter_source_dicts
+        self._dict_chains = []
+        self._create_pulse_dict_chains()
+
+    def _create_pulse_dict_chains(self) -> None:
+        all_known_pulses = set.union(*(set(parameter_encl.keys()) for parameter_encl in self._parameter_sources))
+        pulse_dict_chains = dict()
+        for pulse in all_known_pulses:
+            dict_chain = []
+            for parameter_encl in reversed(self._parameter_sources):
+                if pulse != 'global':
+                    if pulse in parameter_encl:
+                        dict_chain.append(parameter_encl[pulse])
+                if 'global' in parameter_encl:
+                    dict_chain.append(parameter_encl['global'])
+            pulse_dict_chains[pulse] = dict_chain
+        self._dict_chains = pulse_dict_chains
+
+    @property
+    def parameter_sources(self) -> Sequence[ParameterEncyclopedia]:
+        return self._parameter_sources
+
+    def update_internals(self) -> None:
+        self._create_pulse_dict_chains()
 
     def get_parameters(self, pulse: PulseTemplate, subst_params: Optional[ParameterDict]=None) -> ParameterDict:
         """Returns a dictionary with parameters from the library for a given pulse template.
@@ -92,9 +115,9 @@ class ParameterLibrary:
         maps = []
         if subst_params:
             maps.append(subst_params)
-        for param_encl in reversed(self._parameter_sources):
-            if pulse.identifier and pulse.identifier in param_encl:
-                maps.append(param_encl[pulse.identifier])
-            if 'global' in param_encl:
-                maps.append(param_encl['global'])
+        if pulse.identifier and pulse.identifier in self._dict_chains:
+            maps.extend(self._dict_chains[pulse.identifier])
+        elif 'global' in self._dict_chains: # if no pulse specific chain is known, supply chain of global parameters if existent
+            maps.extend(self._dict_chains['global'])
+
         return ReadOnlyChainMap(ChainMap(*maps))
