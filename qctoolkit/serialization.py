@@ -473,6 +473,10 @@ class Serializer(object):
             Serializable.deserialize
         """
         if isinstance(representation, str):
+            if representation in self.__subpulses:
+                return self.__subpulses[representation].serializable
+        
+        if isinstance(representation, str):
             repr_ = json.loads(self.__storage_backend.get(representation))
             repr_['identifier'] = representation
         else:
@@ -481,9 +485,16 @@ class Serializer(object):
         module_name, class_name = repr_['type'].rsplit('.', 1)
         module = __import__(module_name, fromlist=[class_name])
         class_ = getattr(module, class_name)
-
+        
+        repr_to_store = repr_.copy()
         repr_.pop('type')
-        return class_.deserialize(self, **repr_)
+        
+        serializable = class_.deserialize(self, **repr_)
+        
+        if 'identifier' in repr_:
+            identifier = repr_['identifier']
+            self.__subpulses[identifier] = self.__FileEntry(repr_, serializable)
+        return serializable
 
 
 class ExtendedJSONEncoder(json.JSONEncoder):

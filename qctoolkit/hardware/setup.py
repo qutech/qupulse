@@ -1,4 +1,4 @@
-from typing import NamedTuple, Set, Callable, Dict, Tuple, Union, Iterable
+from typing import NamedTuple, Set, Callable, Dict, Tuple, Union, Iterable, Any
 from collections import defaultdict, deque
 import warnings
 
@@ -33,11 +33,16 @@ class _SingleChannel:
         self.channel_on_awg = channel_on_awg
         """The channel's index(starting with 0) on the AWG."""
 
+    @property
+    def compare_key(self) -> Tuple[Any]:
+        return (id(self.awg), self.channel_on_awg, type(self))
+
     def __hash__(self):
-        return hash((id(self.awg), self.channel_on_awg, type(self)))
+        return hash(self.compare_key)
 
     def __eq__(self, other):
-        return hash(self) == hash(other)
+        if not isinstance(other, _SingleChannel): return False
+        return self.compare_key == other.compare_key
 
 
 class PlaybackChannel(_SingleChannel):
@@ -175,6 +180,16 @@ class HardwareSetup:
                 except RuntimeError:
                     warnings.warn("Could not remove Program({}) from DAC({})".format(name, dac))
 
+    def clear_programs(self) -> None:
+        """Clears all programs from all known AWG and DAC devices.
+
+        Does not affect channel configurations or measurement masks set by set_channel or set_measurement."""
+        for awg in self.known_awgs:
+            awg.clear()
+        for dac in self.known_dacs:
+            dac.clear()
+        self._registered_programs = dict()
+
     @property
     def known_awgs(self) -> Set[AWG]:
         return {single_channel.awg
@@ -183,7 +198,9 @@ class HardwareSetup:
 
     @property
     def known_dacs(self) -> Set[DAC]:
-        return {dac for dac, _ in self._measurement_map.values()}
+        masks = set.union(*self._measurement_map.values())
+        dacs = {mask.dac for mask in masks}
+        return dacs
 
     def arm_program(self, name: str) -> None:
         """Assert program is in memory. Hardware will wait for trigger event"""

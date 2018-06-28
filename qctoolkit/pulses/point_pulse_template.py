@@ -6,14 +6,13 @@ import numbers
 import numpy as np
 
 from qctoolkit.utils.types import ChannelID
-from qctoolkit.expressions import Expression
+from qctoolkit.expressions import Expression, ExpressionScalar
 from qctoolkit.pulses.conditions import Condition
 from qctoolkit.pulses.instructions import Waveform
 from qctoolkit.pulses.parameters import Parameter, ParameterNotProvidedException, ParameterConstraint,\
     ParameterConstrainer
 from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration
 from qctoolkit.pulses.table_pulse_template import TableEntry, EntryInInit, TableWaveform, TableWaveformEntry
-from qctoolkit.pulses.measurement import MeasurementDefiner
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 
 
@@ -140,6 +139,21 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
             )
         except KeyError as key_error:
             raise ParameterNotProvidedException(str(key_error)) from key_error
+
+    @property
+    def integral(self) -> Dict[ChannelID, ExpressionScalar]:
+        expressions = {channel: 0 for channel in self._channels}
+        for first_entry, second_entry in zip(self._entries[:-1], self._entries[1:]):
+            substitutions = {'t0': ExpressionScalar(first_entry.t).sympified_expression,
+                             't1': ExpressionScalar(second_entry.t).sympified_expression}
+
+            for i, channel in enumerate(self._channels):
+                substitutions['v0'] = ExpressionScalar(first_entry.v[i]).sympified_expression
+                substitutions['v1'] = ExpressionScalar(second_entry.v[i]).sympified_expression
+                expressions[channel] += first_entry.interp.integral.sympified_expression.subs(substitutions)
+
+        expressions = {c: ExpressionScalar(expressions[c]) for c in expressions}
+        return expressions
 
 
 class InvalidPointDimension(Exception):

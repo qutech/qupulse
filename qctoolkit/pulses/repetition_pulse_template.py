@@ -1,7 +1,7 @@
 """This module defines RepetitionPulseTemplate, a higher-order hierarchical pulse template that
 represents the n-times repetition of another PulseTemplate."""
 
-from typing import Dict, List, Set, Optional, Union, Any, Iterable, Tuple, cast
+from typing import Dict, List, Set, Optional, Union, Any, Tuple, cast
 from numbers import Real
 from warnings import warn
 
@@ -67,10 +67,12 @@ class RepetitionWaveform(Waveform):
 
 
 class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, MeasurementDefiner):
-    """Repeat a PulseTemplate a constant number of times.
+    """Repeats a PulseTemplate a constant number of times (possibly determined by a parameter value).
 
-    The equivalent to a simple for-loop in common programming languages in qctoolkit's pulse
-    modelling.
+    RepetitionPulseTemplate simply repeats the given body PulseTemplate with the same parameter set for the
+    specified number of times. It does not provide a loop index to the subtemplate. If you need to loop over an integer
+    range and provide an index to the repeated template (at the cost of sequencing performance), use
+    :class:`~qctoolkit.pulses.loop_pulse_template.ForLoopPulseTemplate`.
     """
 
     def __init__(self,
@@ -100,8 +102,11 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
 
         repetition_count = ExpressionScalar.make(repetition_count)
 
-        if (repetition_count < 0) is True:
+        if repetition_count < 0:
             raise ValueError('Repetition count may not be negative')
+
+        if repetition_count == 0:
+            warn("Repetition pulse template with 0 repetitions on construction.")
 
         self._repetition_count = repetition_count
 
@@ -141,20 +146,23 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
                        channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                        instruction_block: InstructionBlock) -> None:
         self.validate_parameter_constraints(parameters=parameters)
-
-        body_block = InstructionBlock()
-        body_block.return_ip = InstructionPointer(instruction_block, len(instruction_block))
-
         try:
             real_parameters = {v: parameters[v].get_value() for v in self._repetition_count.variables}
         except KeyError:
             raise ParameterNotProvidedException(next(v for v in self.repetition_count.variables if v not in parameters))
+
         self.insert_measurement_instruction(instruction_block,
                                             parameters=parameters,
                                             measurement_mapping=measurement_mapping)
-        instruction_block.add_instruction_repj(self.get_repetition_count_value(real_parameters), body_block)
-        sequencer.push(self.body, parameters=parameters, conditions=conditions,
-                       window_mapping=measurement_mapping, channel_mapping=channel_mapping, target_block=body_block)
+
+        repetition_count = self.get_repetition_count_value(real_parameters)
+        if repetition_count > 0:
+            body_block = InstructionBlock()
+            body_block.return_ip = InstructionPointer(instruction_block, len(instruction_block))
+
+            instruction_block.add_instruction_repj(repetition_count, body_block)
+            sequencer.push(self.body, parameters=parameters, conditions=conditions,
+                           window_mapping=measurement_mapping, channel_mapping=channel_mapping, target_block=body_block)
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],
@@ -184,6 +192,11 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
                                        identifier=identifier,
                                        parameter_constraints=parameter_constraints,
                                        measurements=measurements)
+
+    @property
+    def integral(self) -> Dict[ChannelID, ExpressionScalar]:
+        body_integral = self.body.integral
+        return [self.repetition_count * c for c in body_integral]
 
 
 class ParameterNotIntegerException(Exception):

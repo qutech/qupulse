@@ -3,6 +3,7 @@ another PulseTemplate based on a condition."""
 
 
 from typing import Dict, Set, Optional, Any, Union, Tuple, Generator, Sequence, cast
+import warnings
 
 import sympy
 
@@ -140,6 +141,14 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
             raise LoopIndexNotUsedException(loop_index, body_parameters)
         self._loop_index = loop_index
 
+        if self.loop_index in self.constrained_parameters:
+            constraints = [str(constraint) for constraint in self.parameter_constraints
+                           if self._loop_index in constraint.affected_parameters]
+            warnings.warn("ForLoopPulseTemplate was created with a constraint on a variable shadowing the loop index.\n" \
+                          "This will not constrain the actual loop index but introduce a new parameter.\n" \
+                          "To constrain the loop index, put the constraint in the body subtemplate.\n" \
+                          "Loop index is {} and offending constraints are: {}".format(self._loop_index, constraints))
+
     @property
     def loop_index(self) -> str:
         return self._loop_index
@@ -252,6 +261,33 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
                                     parameter_constraints=parameter_constraints
                                     )
 
+    @property
+    def integral(self) -> Dict[ChannelID, ExpressionScalar]:
+
+        step_size = self._loop_range.step.sympified_expression
+        loop_index = sympy.symbols(self._loop_index)
+        sum_index = sympy.symbols(self._loop_index)
+
+        body_integrals = self.body.integral
+        body_integrals = {
+            c: body_integrals[c].sympified_expression.subs(
+                {loop_index: self._loop_range.start.sympified_expression + sum_index*step_size}
+            )
+            for c in body_integrals
+        }
+
+        # number of sum contributions
+        step_count = sympy.ceiling((self._loop_range.stop.sympified_expression-self._loop_range.start.sympified_expression) / step_size)
+        sum_start = 0
+        sum_stop = sum_start + (sympy.functions.Max(step_count, 1) - 1)
+
+        for c in body_integrals:
+            channel_integral_expr = sympy.Sum(body_integrals[c], (sum_index, sum_start, sum_stop))
+            body_integrals[c] = ExpressionScalar(channel_integral_expr)
+
+        return body_integrals
+
+
 
 class WhileLoopPulseTemplate(LoopPulseTemplate):
     """Conditional looping in a pulse.
@@ -334,6 +370,10 @@ class WhileLoopPulseTemplate(LoopPulseTemplate):
                                         body=body,
                                         identifier=identifier)
         return result
+
+    @property
+    def integral(self) -> Dict[ChannelID, ExpressionScalar]:
+        return {c: ExpressionScalar('nan') for c in self.body.defined_channels}
 
 
 class LoopIndexNotUsedException(Exception):

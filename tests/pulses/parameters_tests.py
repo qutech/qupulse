@@ -1,11 +1,9 @@
 import unittest
-from typing import Union
 
 from qctoolkit.expressions import Expression
 from qctoolkit.pulses.parameters import ConstantParameter, MappedParameter, ParameterNotProvidedException,\
-    ParameterConstraint, ParameterConstraintViolation, InvalidParameterNameException, ParameterConstrainer
+    ParameterConstraint, InvalidParameterNameException, ParameterConstrainer, ParameterConstraintViolation
 
-from tests.serialization_dummies import DummySerializer
 from tests.pulses.sequencing_dummies import DummyParameter
 
 
@@ -177,7 +175,7 @@ class ParameterConstrainerTest(unittest.TestCase):
         self.assertEqual(c2.constrained_parameters, c3.constrained_parameters)
         self.assertEqual(c3.constrained_parameters, c1.constrained_parameters)
 
-        
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 

@@ -1,20 +1,23 @@
-function plot_pulse(pulse, varargin)
+function [t, channels, measurements, instantiatedPulse] = plot_pulse(pulse, varargin)
 	
 	global plsdata
 	
 	defaultArgs = struct(...
-		'sample_rate',       plsdata.awg.sampleRate, ... % in 1/s, converted to 1/ns below
-		'channel_names',     {{}}, ... % names of channels to plot, all if empty
-		'parameters',        [], ...
-		'channel_mapping',   py.None, ...
-		'window_mapping' ,   py.None, ...
-		'fig_id',            plsdata.qc.figId, ...
-		'clear_fig',         true, ...
-		'charge_diagram',    {{'X', 'Y'}}, ...
-		'lead_points',       1e-3*[-4 -1; -1 -2; 0 -4; 4 0; 2 1; 1 4], ...
-		'special_points',    struct('M', [0 0], 'R1', [-2.5e-3 -3.75e-3], 'R2', [-2e-3 1e-3], 'S', [-2e-3 -1e-3], 'Tp', [1.75e-3 0], 'STp', [1e-3 -1e-3]), ...
-		'plotRange',         [-8e-3 8e-3], ...
-		'max_n_points',      1e5 ...
+		'sample_rate',         plsdata.awg.sampleRate, ... % in 1/s, converted to 1/ns below
+		'channel_names',       {{}}, ... % names of channels to plot, all if empty
+		'parameters',          struct(), ...
+		'channel_mapping',     py.None, ...
+		'window_mapping' ,     py.None, ...
+		'fig_id',              plsdata.qc.figId, ...
+		'subplots',            [121 122], ...
+		'charge_diagram_data', {{}}, ... % inputs to imagesc 
+		'clear_fig',           true, ...
+		'charge_diagram',      {{'X', 'Y'}}, ...
+		'lead_points',         1e-3*[-4 -1; -1 -2; 0 -4; 4 0; 2 1; 1 4], ...
+		'special_points',      struct('M', [0 0], 'R1', [-2.5e-3 -3.75e-3], 'R2', [-2e-3 1e-3], 'S', [-2e-3 -1e-3], 'Tp', [1.75e-3 0], 'STp', [1e-3 -1e-3]), ...
+		'plot_range',          [-8e-3 8e-3], ...
+		'max_n_points',        1e4,...
+		'dont_plot',           false ...
 		);
 	
 	args = util.parse_varargin(varargin, defaultArgs);
@@ -39,9 +42,9 @@ function plot_pulse(pulse, varargin)
 	t = data{1}*1e-9;
 	
 	channels = data{2};
-	if ~isempty(args.plotRange)
+	if ~isempty(args.plot_range)
 		for chan_name = fieldnames(channels)'
-			channels.(chan_name{1}) = util.clamp(channels.(chan_name{1}), args.plotRange);
+			channels.(chan_name{1}) = util.clamp(channels.(chan_name{1}), args.plot_range);
 		end
 	end
 	measurements = struct();
@@ -49,17 +52,33 @@ function plot_pulse(pulse, varargin)
 		if ~isfield(measurements, m{1}{1})
 			measurements.(m{1}{1}) = [];
 		end
+		if strcmp(class(m{1}{2}), 'py.fractions.Fraction')
+			m{1}{2} = m{1}{2}.numerator/m{1}{2}.denominator;
+		end
+		if strcmp(class(m{1}{3}), 'py.fractions.Fraction')
+			m{1}{3} = m{1}{3}.numerator/m{1}{3}.denominator;
+		end
 		measurements.(m{1}{1})(end+1, 1:2) = [m{1}{2} m{1}{2}+m{1}{3}] * 1e-9;
+	end
+	
+	if args.dont_plot
+		return;
 	end
 	
 	plotChargeDiagram = ~isempty(args.charge_diagram) && all(cellfun(@(x)(isfield(channels, x)), args.charge_diagram));
 	
-	figure(args.fig_id);
+	hFig = figure(args.fig_id);
+	if ~qc.is_instantiated_pulse(pulse)
+		pulseName = sprintf('Pulse: %s', char(pulse.identifier));
+	else
+		pulseName = 'Pulse';
+	end
+	set(hFig, 'Name', pulseName);
 	if args.clear_fig
 		clf
 	end
 	if plotChargeDiagram
-		subplot(121);
+		subplot(args.subplots(1));
 	end	
 	hold on
 	
@@ -84,8 +103,8 @@ function plot_pulse(pulse, varargin)
 		end
 	end		
 	
-	if ~isempty(args.plotRange)
-		title(['Plot range: ' sprintf('%g ', args.plotRange)]);
+	if ~isempty(args.plot_range)
+		title(['Plot range: ' sprintf('%g ', args.plot_range)]);
 	end
 	xlabel('t(s)');
 	[~, hObj] = legend(legendHandles, legendEntries);	
@@ -93,23 +112,31 @@ function plot_pulse(pulse, varargin)
 	set(hObj, 'lineWidth', 2);	
 	
 	if plotChargeDiagram
-		subplot(122);
+		subplot(args.subplots(2));
 		hold on
 		ax = gca;
 		userData = get(ax, 'userData');
-		if ~isempty(args.plotRange)
-			title(['Plot range: ' sprintf('%g ', args.plotRange)]);
+		if ~isempty(args.plot_range)
+			title(['Plot range: ' sprintf('%g ', args.plot_range)]);
 		end
+		
+		if ~isempty(args.charge_diagram_data)
+			imagesc(args.charge_diagram_data{:});
+		end			
 	
 		if isempty(userData) || ~isstruct(userData) || ~isfield(userData, 'leadsPlotted') || ~userData.leadsPlotted			
-			color = [1 1 1]*0.7;
+			color = [0 0 0 0.1];
 			lineWidth = 3;
 			
-			plot(args.lead_points(1:3,1), args.lead_points(1:3,2), '-', 'lineWidth', lineWidth, 'color', color);
-			plot(args.lead_points(4:6,1), args.lead_points(4:6,2), '-', 'lineWidth', lineWidth, 'color', color);
-			plot(args.lead_points([2 5],1), args.lead_points([2 5],2), '--', 'lineWidth', lineWidth, 'color', color);
-			
-			offset = abs(max(args.lead_points(:))-min(args.lead_points(:)))*0.05;
+			if ~isempty(args.lead_points)
+				plot(args.lead_points(1:3,1), args.lead_points(1:3,2), '-', 'lineWidth', lineWidth, 'color', color);
+				plot(args.lead_points(4:6,1), args.lead_points(4:6,2), '-', 'lineWidth', lineWidth, 'color', color);
+				plot(args.lead_points([2 5],1), args.lead_points([2 5],2), '--', 'lineWidth', lineWidth, 'color', color);
+				
+				offset = abs(max(args.lead_points(:))-min(args.lead_points(:)))*0.05;
+			else
+				offset = 4e-4;
+			end
 			
 			for name = fieldnames(args.special_points)'
 				xy = args.special_points.(name{1});

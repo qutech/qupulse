@@ -269,24 +269,25 @@ class MultiChannelProgram:
             def find_defined_channels(instruction_list):
                 for instruction in instruction_list:
                     if isinstance(instruction, EXECInstruction):
-                        return instruction.waveform.defined_channels
+                        yield instruction.waveform.defined_channels
                     elif isinstance(instruction, REPJInstruction):
-                        for _ in range(instruction.count):
-                            return find_defined_channels(
-                                instruction.target.block.instructions[instruction.target.offset:])
+                        yield from find_defined_channels(
+                            instruction.target.block.instructions[instruction.target.offset:])
                     elif isinstance(instruction, GOTOInstruction):
-                        return find_defined_channels(instruction.target.block.instructions[instruction.target.offset:])
+                        yield from find_defined_channels(instruction.target.block.instructions[instruction.target.offset:])
                     elif isinstance(instruction, CHANInstruction):
-                        return itertools.chain(*instruction.channel_to_instruction_block.keys())
+                        yield itertools.chain(*instruction.channel_to_instruction_block.keys())
                     elif isinstance(instruction, STOPInstruction):
-                        break
+                        return
                     elif isinstance(instruction, MEASInstruction):
                         pass
                     else:
                         raise TypeError('Unhandled instruction type', type(instruction))
-                raise ValueError('Instruction block has no defined channels')
 
-            channels = find_defined_channels(instruction_block.instructions)
+            try:
+                channels = next(find_defined_channels(instruction_block.instructions))
+            except StopIteration:
+                raise ValueError('Instruction block has no defined channels')
         else:
             channels = set(channels)
 
@@ -456,9 +457,9 @@ def _make_compatible(program: Loop, min_len: int, quantum: int, sample_rate: Fra
             single_run = program.duration * sample_rate / program.repetition_count
             if is_integer(single_run / quantum) and single_run >= min_len:
                 new_repetition_count = program.repetition_count
+                program.repetition_count = 1
             else:
                 new_repetition_count = 1
-            program.repetition_count = 1
             program.waveform = to_waveform(program.copy_tree_structure())
             program.repetition_count = new_repetition_count
             program[:] = []

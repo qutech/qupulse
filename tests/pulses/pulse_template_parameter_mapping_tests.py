@@ -2,11 +2,11 @@ import unittest
 import itertools
 
 from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingException,\
-    UnnecessaryMappingException, MissingParameterDeclarationException, MappingPulseTemplate,\
+    UnnecessaryMappingException, MappingPulseTemplate,\
     AmbiguousMappingException, MappingCollisionException
-from qctoolkit.expressions import Expression
 from qctoolkit.pulses.parameters import ParameterNotProvidedException
 from qctoolkit.pulses.parameters import ConstantParameter, ParameterConstraintViolation
+from qctoolkit.expressions import Expression
 
 from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummySequencer, DummyInstructionBlock
 
@@ -205,13 +205,17 @@ class MappingTemplateTests(unittest.TestCase):
     def test_requires_stop(self):
         pass
 
+    def test_integral(self) -> None:
+        dummy = DummyPulseTemplate(defined_channels={'A', 'B'},
+                                   parameter_names={'k', 'f', 'b'},
+                                   integrals={'A': Expression('2*k'), 'other': Expression('-3.2*f+b')})
+        pulse = MappingPulseTemplate(dummy, parameter_mapping={'k': 'f', 'b': 2.3}, channel_mapping={'A': 'default'},
+                                     allow_partial_parameter_mapping=True)
+
+        self.assertEqual({'default': Expression('2*f'), 'other': Expression('-3.2*f+2.3')}, pulse.integral)
+
 
 class PulseTemplateParameterMappingExceptionsTests(unittest.TestCase):
-
-    def test_missing_parameter_declaration_exception_str(self) -> None:
-        dummy = DummyPulseTemplate()
-        exception = MissingParameterDeclarationException(dummy, 'foo')
-        self.assertIsInstance(str(exception), str)
 
     def test_missing_mapping_exception_str(self) -> None:
         dummy = DummyPulseTemplate()

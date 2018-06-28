@@ -403,6 +403,19 @@ LOOP 1 times:
         with self.assertRaises(KeyError):
             mcp['C']
 
+    def test_empty_repj(self):
+        empty_block = InstructionBlock()
+
+        root_block = InstructionBlock()
+        root_block.add_instruction_repj(1, empty_block)
+
+        with self.assertRaisesRegex(ValueError, 'no defined channels'):
+            MultiChannelProgram(root_block)
+
+        empty_block.add_instruction_exec(DummyWaveform(duration=1, defined_channels={'A', 'B'}))
+        MultiChannelProgram(root_block)
+
+
     def test_via_repr(self):
         root_loopA = self.get_mcp('A')
         root_loopB = self.get_mcp('B')
@@ -447,7 +460,7 @@ class ProgramWaveformCompatibilityTest(unittest.TestCase):
         self.assertEqual(_is_compatible(program, min_len=1, quantum=1, sample_rate=time_from_float(1.)),
                          _CompatibilityLevel.action_required)
 
-    def test_make_compatible(self):
+    def test_make_compatible_partial_unroll(self):
         wf1 = DummyWaveform(duration=1.5)
         wf2 = DummyWaveform(duration=2.0)
 
@@ -476,3 +489,26 @@ class ProgramWaveformCompatibilityTest(unittest.TestCase):
         self.assertIs(program.waveform._sequenced_waveforms[0]._body, wf1)
         self.assertEqual(program.waveform._sequenced_waveforms[0]._repetition_count, 2)
         self.assertIs(program.waveform._sequenced_waveforms[1], wf2)
+
+    def test_make_compatible_complete_unroll(self):
+        wf1 = DummyWaveform(duration=1.5)
+        wf2 = DummyWaveform(duration=2.0)
+
+        program = Loop(children=[Loop(waveform=wf1, repetition_count=2),
+                                 Loop(waveform=wf2, repetition_count=1)], repetition_count=2)
+
+        _make_compatible(program, min_len=5, quantum=10, sample_rate=time_from_float(1.))
+
+        self.assertIsInstance(program.waveform, RepetitionWaveform)
+        self.assertEqual(program.children, [])
+        self.assertEqual(program.repetition_count, 1)
+
+        self.assertIsInstance(program.waveform, RepetitionWaveform)
+
+        self.assertIsInstance(program.waveform._body, SequenceWaveform)
+        body_wf = program.waveform._body
+        self.assertEqual(len(body_wf._sequenced_waveforms), 2)
+        self.assertIsInstance(body_wf._sequenced_waveforms[0], RepetitionWaveform)
+        self.assertIs(body_wf._sequenced_waveforms[0]._body, wf1)
+        self.assertEqual(body_wf._sequenced_waveforms[0]._repetition_count, 2)
+        self.assertIs(body_wf._sequenced_waveforms[1], wf2)

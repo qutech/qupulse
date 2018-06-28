@@ -41,7 +41,7 @@ def iter_waveforms(instruction_block: AbstractInstructionBlock,
                 raise NotImplementedError("Instruction block contains an unexpected GOTO instruction.")
             return
         elif isinstance(instruction, STOPInstruction):
-            raise StopIteration()
+            return
         else:
             raise NotImplementedError('Rendering cannot handle instructions of type {}.'.format(type(instruction)))
 
@@ -111,22 +111,23 @@ def render(sequence: AbstractInstructionBlock,
     sample_count = total_time * sample_rate + 1
     if not float(sample_count).is_integer():
         warnings.warn('Sample count not whole number. Casted to integer.')
-    times = np.linspace(0, total_time, num=sample_count, dtype=float)
+    times = np.linspace(0, total_time, num=int(sample_count), dtype=float)
     # move the last sample inside the waveform
     times[-1] = np.nextafter(times[-1], times[-2])
 
     voltages = dict((ch, np.empty(len(times))) for ch in channels)
-    offsets = {ch: 0 for ch in channels}
+    offset = 0
     for waveform in waveforms:
+        wf_end = offset + waveform.duration
+        indices = slice(*np.searchsorted(times, (offset, wf_end)))
+        sample_times = times[indices] - float(offset)
         for channel in channels:
-            offset = offsets[channel]
-            indices = slice(*np.searchsorted(times, (offset, offset+waveform.duration)))
-            sample_times = times[indices] - offset
             output_array = voltages[channel][indices]
             waveform.get_sampled(channel=channel,
                                  sample_times=sample_times,
                                  output_array=output_array)
-            offsets[channel] += waveform.duration
+        assert(output_array.shape == sample_times.shape)
+        offset = wf_end
     if render_measurements:
         return times, voltages, measurements
     else:
@@ -185,10 +186,16 @@ def plot(pulse: PulseTemplate,
     else:
         times, voltages = render(sequence, sample_rate)
 
-    if times.size > maximum_points:
+    duration = 0
+    if times.size == 0:
+        warnings.warn("Pulse to be plotted is empty!")
+    elif times.size > maximum_points:
+        # todo [2018-05-30]: since it results in an empty return value this should arguably be an exception, not just a warning
         warnings.warn("Sampled pulse of size {wf_len} is lager than {max_points}".format(wf_len=times.size,
                                                                                          max_points=maximum_points))
         return None
+    else:
+        duration = times[-1]
 
     legend_handles = []
     if axes is None:
@@ -216,12 +223,12 @@ def plot(pulse: PulseTemplate,
 
     axes.legend(handles=legend_handles)
 
-    max_voltage = max(max(channel) for channel in voltages.values())
-    min_voltage = min(min(channel) for channel in voltages.values())
+    max_voltage = max((max(channel, default=0) for channel in voltages.values()), default=0)
+    min_voltage = min((min(channel, default=0) for channel in voltages.values()), default=0)
 
     # add some margins in the presentation
     plt.plot()
-    plt.xlim(-0.5, times[-1] + 0.5)
+    plt.xlim(-0.5, duration + 0.5)
     plt.ylim(min_voltage - 0.5, max_voltage + 0.5)
     plt.xlabel('Time in ns')
     plt.ylabel('Voltage')
