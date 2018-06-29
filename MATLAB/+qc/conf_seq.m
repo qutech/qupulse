@@ -256,7 +256,20 @@ function scan = conf_seq(varargin)
 			scan.disp(end+1).loop = 1;
 			scan.disp(end).channel = nGetChan + a.disp_ops(l);
 			scan.disp(end).dim = d;
-			scan.disp(end).title = prepare_title(sprintf(['%s: '], a.operations{1+mod(l-1, nOperations)}{:}));
+			
+			if a.disp_ops(l) <= nOperations
+				opInd = a.disp_ops(l)
+			else
+				opInd = a.procfn_ops{a.disp_ops(l)-nOperations}{4};
+			end
+			
+			if opInd <= numel(a.operations)
+				scan.disp(end).title = prepare_title(sprintf(['%s: '], a.operations{opInd}{:}));
+			elseif length(a.procfn_ops{opInd - nOperations}) > 4
+				scan.disp(end).title = prepare_title(sprintf(['%s: '], a.procfn_ops{opInd - nOperations}{5}));
+			else
+				scan.disp(end).title = '';
+			end
 		end
 	end
 	
