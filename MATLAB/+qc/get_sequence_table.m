@@ -63,9 +63,9 @@ for k = 1:length(known_awgs)
 			disp(seq_table{k});
 		end		
 		
-		if ~advanced_seq_table_flag
-			seq_table{k} = seq_table{k}{1}; % Since it is a list inside a list
-		end		
+% 		if ~advanced_seq_table_flag
+% 			seq_table{k} = seq_table{k}{1}; % Since it is a list inside a list -> one should pass all elements, list of list is used if advanced seq table is not trivial
+% 		end		
 		seq_table{k} = util.py.py2mat(seq_table{k});
 	else
 		tabor_program{k} = {};

@@ -52,7 +52,7 @@ function set_sequence_table(program_name, seq_table, advanced_seq_table_flag, aw
 				known_awgs{k}.set_program_advanced_sequence_table(program_name, py.list(seq_table{k}));
 				% known_awgs{k}.set_program_advanced_sequence_table(program_name, seq_table{k});
 			else
-				known_awgs{k}.set_program_sequence_table(program_name, py.list({py.list(seq_table{k})})); % Since it has to be a list inside a list
+				known_awgs{k}.set_program_sequence_table(program_name, py.list(seq_table{k})); % Since it has to be a list inside a list, but this list if list is only trivial if advanced seq table is trivial, otherwiese each entry can be called by advanced seq table
 				% known_awgs{k}.set_program_sequence_table(program_name,seq_table{k});
 			end
 
