@@ -13,6 +13,7 @@ function [t, channels, measurements, instantiatedPulse] = plot_pulse(pulse, vara
 		'charge_diagram_data', {{}}, ... % inputs to imagesc 
 		'clear_fig',           true, ...
 		'charge_diagram',      {{'X', 'Y'}}, ...
+		'plot_charge_diagram', true, ...
 		'lead_points',         1e-3*[-4 -1; -1 -2; 0 -4; 4 0; 2 1; 1 4], ...
 		'special_points',      struct('M', [0 0], 'R1', [-2.5e-3 -3.75e-3], 'R2', [-2e-3 1e-3], 'S', [-2e-3 -1e-3], 'Tp', [1.75e-3 0], 'STp', [1e-3 -1e-3]), ...
 		'plot_range',          [-8e-3 8e-3], ...
@@ -65,7 +66,7 @@ function [t, channels, measurements, instantiatedPulse] = plot_pulse(pulse, vara
 		return;
 	end
 	
-	plotChargeDiagram = ~isempty(args.charge_diagram) && all(cellfun(@(x)(isfield(channels, x)), args.charge_diagram));
+	plotChargeDiagram = args.plot_charge_diagram && ~isempty(args.charge_diagram) && all(cellfun(@(x)(isfield(channels, x)), args.charge_diagram));
 	
 	hFig = figure(args.fig_id);
 	if ~qc.is_instantiated_pulse(pulse)
@@ -77,7 +78,7 @@ function [t, channels, measurements, instantiatedPulse] = plot_pulse(pulse, vara
 	if args.clear_fig
 		clf
 	end
-	if plotChargeDiagram
+	if plotChargeDiagram || numel(args.subplots) == 1
 		subplot(args.subplots(1));
 	end	
 	hold on
