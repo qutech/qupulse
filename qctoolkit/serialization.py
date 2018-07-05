@@ -651,12 +651,25 @@ class PulseStorage:
 
     def __setitem__(self, identifier: str, serializable: Serializable) -> None:
         if identifier in self._temporary_storage:
-            # todo (lumip, 2018-05-30): only checking against the temporary storage is not sufficient to check for duplicates
             if self.temporary_storage[identifier].serializable is serializable:
                 return
             else:
                 raise RuntimeError('Identifier assigned twice with different objects', identifier)
+        elif identifier in self._storage_backend:
+            raise RuntimeError('Identifier already assigned in storage backend', identifier)
         self.overwrite(identifier, serializable)
+
+    def __delitem__(self, identifier: str) -> None:
+        """Delete an item from temporary storage and storage backend.
+
+        Does not raise an error if the deleted pulse is only in the storage backend. Assumes that all pulses
+        contained in temporary storage are always also contained in the storage backend.
+        """
+        del self._storage_backend[identifier]
+        try:
+            del self._temporary_storage[identifier]
+        except KeyError:
+            pass
 
     def overwrite(self, identifier: str, serializable: Serializable) -> None:
         """Use this method actively change a pulse"""
