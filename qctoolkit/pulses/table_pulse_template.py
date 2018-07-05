@@ -11,6 +11,7 @@ from typing import Union, Dict, List, Set, Optional, Any, Tuple, Sequence, Named
 import numbers
 import itertools
 import warnings
+import copy
 
 import numpy as np
 import sympy
@@ -26,7 +27,7 @@ from qctoolkit.pulses.instructions import Waveform
 from qctoolkit.expressions import ExpressionScalar, Expression
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 
-__all__ = ["TablePulseTemplate", "TableWaveform", "TableWaveformEntry"]
+__all__ = ["TablePulseTemplate", "TableWaveform", "TableWaveformEntry", "concatenate"]
 
 
 class TableWaveformEntry(NamedTuple('TableWaveformEntry', [('t', float),
@@ -465,6 +466,35 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
             expressions[channel] = ExpressionScalar(expr)
 
         return expressions
+
+
+def concatenate(first_table_pulse_template: TablePulseTemplate, *table_pulse_templates: TablePulseTemplate, **kwargs):
+    """Concatenate two or more table pulse templates"""
+    entries = {channel: [] for channel in first_table_pulse_template.defined_channels}
+    duration = ExpressionScalar(0)
+
+    for i, template in enumerate((first_table_pulse_template,) + table_pulse_templates):
+        new_duration = duration + template.duration
+
+        if template.defined_channels != first_table_pulse_template.defined_channels:
+            raise ValueError()
+
+        for channel, channel_entries in template.entries.items():
+            first_t, first_v, _ = channel_entries[0]
+            if i > 0 and first_t != 0:
+                if (first_v == 0) is False:
+                    entries[channel].append((duration, first_v, 'hold'))
+
+            for t, v, interp in channel_entries:
+                entries[channel].append((duration.sympified_expression + t, v, interp))
+
+            last_t, last_v, _ = channel_entries[-1]
+            if i < len(table_pulse_templates) and last_t != new_duration:
+                entries[channel].append((new_duration, last_v, TablePulseTemplate.interpolation_strategies['hold']))
+
+        duration = new_duration
+
+    return TablePulseTemplate(entries, **kwargs)
 
 
 class ZeroDurationTablePulseTemplate(UserWarning):
