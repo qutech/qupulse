@@ -86,10 +86,9 @@ class SerializableTests(metaclass=ABCMeta):
 
             self.assertEqual(serialization_data, expected)
 
-    def test_deserialiation(self) -> None:
+    def test_deserialization(self) -> None:
         registry_1 = dict()
         registry_2 = dict()
-
         for identifier in [None, 'some']:
             serialization_data = self.make_serialization_data(identifier=identifier)
             del serialization_data[Serializable.type_identifier_name]
@@ -104,7 +103,6 @@ class SerializableTests(metaclass=ABCMeta):
 
             self.assert_equal_instance(expected, instance)
 
-
     def test_serialization_and_deserialization(self):
         # TODO PulseStorage registry specification
         registry = dict()
@@ -115,7 +113,6 @@ class SerializableTests(metaclass=ABCMeta):
 
         storage['blub'] = instance
 
-        storage.flush()
         storage.clear()
 
         other_instance = typing.cast(self.class_to_test, storage['blub'])
@@ -499,44 +496,50 @@ class PulseStorageTests(unittest.TestCase):
 
         self.assertEqual(self.storage._temporary_storage, {'my_id': self.storage.StorageEntry('asd', instance)})
 
-    def test_flush(self):
+    def test_write_through(self):
         instance_1 = DummySerializable(identifier='my_id_1')
-        instance_2 = DummySerializable(identifier='my_id_2')
+        inner_instance = DummySerializable(identifier='my_id_2')
+        outer_instance = NestedDummySerializable(inner_instance, identifier='my_id_3')
 
         def get_expected():
             return {identifier: serialized
                     for identifier, (serialized, _) in self.storage.temporary_storage.items()}
 
         self.storage['my_id_1'] = instance_1
-        self.storage['my_id_2'] = instance_2
-
-        self.assertFalse(self.backend.stored_items)
-
-        self.storage.flush()
+        self.storage['my_id_3'] = outer_instance
 
         self.assertEqual(get_expected(), self.backend.stored_items)
 
-    def test_flush_with_ignore(self):
-        instance_1 = DummySerializable(identifier='my_id_1')
-        instance_2 = DummySerializable(identifier='my_id_2')
-        instance_3 = DummySerializable(identifier='my_id_3')
+    def test_write_through_does_not_overwrite_subpulses(self) -> None:
+        previous_inner = DummySerializable(identifier='my_id_1', data='hey', registry=dict())
+        inner_instance = DummySerializable(identifier='my_id_1', data='ho', registry=dict())
+        outer_instance = NestedDummySerializable(inner_instance, identifier='my_id_2', registry=dict())
 
-        ignore = ['my_id_1', 'my_id_3']
+        self.storage['my_id_1'] = previous_inner
+        with self.assertRaises(RuntimeError):
+            self.storage['my_id_2'] = outer_instance
+        self.assertNotIn('my_id_2', self.storage)
+        self.assertNotIn('my_id_2', self.backend)
+        self.assertIs(previous_inner, self.storage['my_id_1'])
 
-        def get_expected():
-            return {identifier: serialized
-                    for identifier, (serialized, _) in self.storage.temporary_storage.items()
-                    if identifier not in ignore}
+        enc = JSONSerializableEncoder(None)
+        expected = enc.encode(previous_inner.get_serialization_data())
+        self.assertEqual(expected, self.backend['my_id_1'])
 
-        self.storage['my_id_1'] = instance_1
-        self.storage['my_id_2'] = instance_2
-        self.storage['my_id_3'] = instance_3
+    def test_failed_overwrite_does_not_leave_subpulses(self) -> None:
+        inner_named = DummySerializable(data='bar', identifier='inner')
+        inner_known = DummySerializable(data='bar', identifier='known', registry=dict())
+        outer = DummySerializable(data=[inner_named, inner_known], identifier='outer')
+        inner_known_previous = DummySerializable(data='b38azodhg', identifier='known', registry=dict())
 
-        self.assertFalse(self.backend.stored_items)
+        self.storage['known'] = inner_known_previous
 
-        self.storage.flush(to_ignore=ignore)
+        self.assertIn('known', self.storage)
+        with self.assertRaises(RuntimeError):
+            self.storage['outer'] = outer
 
-        self.assertEqual(get_expected(), self.backend.stored_items)
+        self.assertNotIn('outer', self.storage)
+        self.assertNotIn('inner', self.storage)
 
     def test_clear(self):
         instance_1 = DummySerializable(identifier='my_id_1')
@@ -550,17 +553,6 @@ class PulseStorageTests(unittest.TestCase):
         self.storage.clear()
 
         self.assertFalse(self.storage.temporary_storage)
-
-    def test_flush_on_destroy_object(self) -> None:
-        instance_1 = DummySerializable(identifier='my_id_1')
-        backend = DummyStorageBackend()
-
-        storage = PulseStorage(backend)
-        storage['my_id_1'] = instance_1
-        self.assertNotIn('my_id_1', backend.stored_items)
-        del storage
-
-        self.assertIn('my_id_1', backend.stored_items)
 
 
 class JSONSerializableDecoderTests(unittest.TestCase):
@@ -658,8 +650,7 @@ class JSONSerializableEncoderTest(unittest.TestCase):
 
         outer = DummySerializable(data=[inner_named, inner_anon, inner_known])
 
-        inner_known_storage = [567]
-        storage = dict(known=inner_known_storage)
+        storage = dict(known=inner_known)
         encoder = JSONSerializableEncoder(storage)
 
         encoded = encoder.encode(outer)
@@ -679,9 +670,24 @@ class JSONSerializableEncoderTest(unittest.TestCase):
 
         self.assertEqual(set(storage.keys()), {'inner', 'known'})
         self.assertIs(storage['inner'], inner_named)
-        self.assertIs(storage['known'], inner_known_storage)
+        self.assertIs(storage['known'], inner_known)
 
+    def test_encoding_duplicated_id(self):
+        inner_named = DummySerializable(data='bar', identifier='inner', registry=dict())
+        inner_known = DummySerializable(data='bar', identifier='known', registry=dict())
+        inner_known_previous = DummySerializable(data='abh3h8ga', identifier='known', registry=dict())
 
+        outer = DummySerializable(data=[inner_named, inner_known])
+
+        storage = dict(known=inner_known_previous)
+        encoder = JSONSerializableEncoder(storage)
+
+        with self.assertRaises(RuntimeError):
+            encoder.encode(outer)
+
+        self.assertEqual(set(storage.keys()), {'inner', 'known'})
+        self.assertIs(storage['inner'], inner_named)
+        self.assertIs(storage['known'], inner_known_previous)
 
 ########################################################################################################################
 ################################ tests for old architecture, now deprecated ############################################
@@ -696,8 +702,8 @@ from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
 
 class NestedDummySerializable(Serializable):
 
-    def __init__(self, data: Serializable, identifier: Optional[str]=None) -> None:
-        super().__init__(identifier)
+    def __init__(self, data: Serializable, identifier: Optional[str]=None, registry: Optional[Dict]=None) -> None:
+        super().__init__(identifier, registry=registry)
         self.data = data
 
     @classmethod
