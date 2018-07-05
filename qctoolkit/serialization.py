@@ -666,8 +666,8 @@ class PulseStorage:
             self._transaction_storage[identifier] = self.StorageEntry(serialized, serializable)
 
             if is_transaction_begin:
-                for id in self._transaction_storage:
-                    self._storage_backend.put(id, self._transaction_storage[id].serialization, overwrite=True)
+                for identifier, entry in self._transaction_storage.items():
+                    self._storage_backend.put(identifier, entry.serialization, overwrite=True)
                 self._temporary_storage.update(**self._transaction_storage)
 
         finally:
