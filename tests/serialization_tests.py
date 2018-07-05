@@ -9,10 +9,11 @@ from unittest import mock
 from abc import ABCMeta, abstractmethod
 
 from tempfile import TemporaryDirectory
-from typing import Optional, Any
+from typing import Optional, Any, Dict
 
 from qctoolkit.serialization import FilesystemBackend, CachingBackend, Serializable, JSONSerializableEncoder,\
-    ZipFileBackend, AnonymousSerializable, DictBackend, PulseStorage, JSONSerializableDecoder, Serializer
+    ZipFileBackend, AnonymousSerializable, DictBackend, PulseStorage, JSONSerializableDecoder, Serializer,\
+    default_pulse_registry
 from qctoolkit.expressions import ExpressionScalar
 
 from tests.serialization_dummies import DummyStorageBackend
@@ -21,8 +22,8 @@ from tests.pulses.sequencing_dummies import DummyPulseTemplate
 
 class DummySerializable(Serializable):
 
-    def __init__(self, identifier: Optional[str]=None, **kwargs) -> None:
-        super().__init__(identifier)
+    def __init__(self, identifier: Optional[str]=None, registry: Optional[Dict]=None, **kwargs) -> None:
+        super().__init__(identifier, registry=registry)
         for name in kwargs:
             setattr(self, name, kwargs[name])
 
@@ -47,19 +48,19 @@ class SerializableTests(metaclass=ABCMeta):
 
     @property
     @abstractmethod
-    def class_to_test(self):
+    def class_to_test(self) -> typing.Any:
         pass
 
     @abstractmethod
-    def make_kwargs(self):
+    def make_kwargs(self) -> dict:
         pass
 
     @abstractmethod
     def assert_equal_instance(self, lhs, rhs):
         pass
 
-    def make_instance(self, identifier=None):
-        return self.class_to_test(identifier=identifier, **self.make_kwargs())
+    def make_instance(self, identifier=None, registry=None):
+        return self.class_to_test(identifier=identifier, registry=registry, **self.make_kwargs())
 
     def make_serialization_data(self, identifier=None):
         data = {Serializable.type_identifier_name: self.class_to_test.get_type_identifier(), **self.make_kwargs()}
@@ -80,25 +81,33 @@ class SerializableTests(metaclass=ABCMeta):
 
     def test_serialization(self):
         for identifier in [None, 'some']:
-            serialization_data = self.make_instance(identifier=identifier).get_serialization_data()
+            serialization_data = self.make_instance(identifier=identifier, registry=None).get_serialization_data()
             expected = self.make_serialization_data(identifier=identifier)
 
             self.assertEqual(serialization_data, expected)
 
     def test_deserialization(self) -> None:
+        registry_1 = dict()
+        registry_2 = dict()
         for identifier in [None, 'some']:
             serialization_data = self.make_serialization_data(identifier=identifier)
             del serialization_data[Serializable.type_identifier_name]
             if identifier:
                 serialization_data['identifier'] = serialization_data[Serializable.identifier_name]
                 del serialization_data[Serializable.identifier_name]
-            instance = self.class_to_test.deserialize(**serialization_data)
-            expected = self.make_instance(identifier=identifier)
+            instance = self.class_to_test.deserialize(**serialization_data, registry=registry_1)
+
+            if identifier:
+                self.assertIs(registry_1[identifier], instance)
+            expected = self.make_instance(identifier=identifier, registry=registry_2)
 
             self.assert_equal_instance(expected, instance)
 
     def test_serialization_and_deserialization(self):
-        instance = self.make_instance('blub')
+        # TODO PulseStorage registry specification
+        registry = dict()
+
+        instance = self.make_instance('blub', registry=registry)
         backend = DummyStorageBackend()
         storage = PulseStorage(backend)
 
@@ -108,6 +117,16 @@ class SerializableTests(metaclass=ABCMeta):
 
         other_instance = typing.cast(self.class_to_test, storage['blub'])
         self.assert_equal_instance(instance, other_instance)
+
+        self.assertIs(registry['blub'], instance)
+        self.assertIs(default_pulse_registry['blub'], other_instance)
+
+    def test_duplication_error(self):
+        registry = dict()
+
+        instance = self.make_instance('blub', registry=registry)
+        with self.assertRaises(RuntimeError):
+            self.make_instance('blub', registry=registry)
 
 
 class DummySerializableTests(SerializableTests, unittest.TestCase):
@@ -727,15 +746,15 @@ class SerializerTests(unittest.TestCase):
         self.assertEqual(expected, serialized)
 
     def test_serialize_subpulse_identifier(self) -> None:
-        serializable = DummySerializable(identifier='bar')
+        serializable = DummySerializable(identifier='bar', registry=dict())
         serialized = self.serializer.dictify(serializable)
         self.assertEqual(serializable.identifier, serialized)
 
     def test_serialize_subpulse_duplicate_identifier(self) -> None:
-        serializable = DummySerializable(identifier='bar')
+        serializable = DummySerializable(identifier='bar', registry=dict())
         self.serializer.dictify(serializable)
         self.serializer.dictify(serializable)
-        serializable = DummySerializable(data='this is other data than before', identifier='bar')
+        serializable = DummySerializable(data='this is other data than before', identifier='bar', registry=dict())
         with self.assertRaises(Exception):
             self.serializer.dictify(serializable)
 
@@ -853,15 +872,18 @@ class SerializerTests(unittest.TestCase):
         self.assertEqual(self.deserialization_data['data'], deserialized.data)
 
     def test_serialization_and_deserialization_combined(self) -> None:
+        registry = dict()
         table_foo = TablePulseTemplate(identifier='foo', entries={'default': [('hugo', 2),
                                                                               ('albert', 'voltage')]},
-                                       parameter_constraints=['albert<9.1'])
+                                       parameter_constraints=['albert<9.1'],
+                                       registry=registry)
         table = TablePulseTemplate({'default': [('t', 0)]})
 
         foo_mappings = dict(hugo='ilse', albert='albert', voltage='voltage')
         sequence = SequencePulseTemplate((table_foo, foo_mappings, dict()),
                                          (table, dict(t=0), dict()),
-                                         identifier=None)
+                                         identifier=None,
+                                         registry=registry)
         self.assertEqual({'ilse', 'albert', 'voltage'}, sequence.parameter_names)
 
         storage = DummyStorageBackend()

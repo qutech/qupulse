@@ -154,7 +154,7 @@ class FunctionPulseOldSerializationTests(FunctionPulseTest):
                                            channel='A',
                                            measurements=self.meas_list,
                                            parameter_constraints=self.constraints,
-                                           identifier='my_tpt')
+                                           identifier='my_tpt', registry=dict())
             serializer = Serializer(DummyStorageBackend())
             serializer.serialize(before)
             after = serializer.deserialize('my_tpt')

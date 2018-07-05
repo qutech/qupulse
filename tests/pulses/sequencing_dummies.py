@@ -298,8 +298,9 @@ class DummyPulseTemplate(AtomicPulseTemplate):
                  measurement_names: Set[str] = set(),
                  measurements: list=list(),
                  integrals: Dict[ChannelID, ExpressionScalar]={'default': ExpressionScalar(0)},
-                 identifier=None) -> None:
-        super().__init__(identifier=identifier, measurements=measurements)
+                 identifier=None,
+                 registry=None) -> None:
+        super().__init__(identifier=identifier, measurements=measurements, registry=registry)
         self.requires_stop_ = requires_stop
         self.requires_stop_arguments = []
 

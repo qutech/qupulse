@@ -186,11 +186,11 @@ class SequencePulseTemplateSerializationTests(SerializableTests, unittest.TestCa
             'measurements': [('m', 0, 1)]
         }
 
-    def make_instance(self, identifier=None):
+    def make_instance(self, identifier=None, registry=None):
         kwargs = self.make_kwargs()
         subtemplates = kwargs['subtemplates']
         del kwargs['subtemplates']
-        return self.class_to_test(identifier=identifier, *subtemplates, **kwargs)
+        return self.class_to_test(identifier=identifier, *subtemplates, **kwargs, registry=registry)
 
     def assert_equal_instance(self, lhs: SequencePulseTemplate, rhs: SequencePulseTemplate):
         self.assertIsInstance(lhs, SequencePulseTemplate)
@@ -207,7 +207,8 @@ class SequencePulseTemplateOldSerializationTests(unittest.TestCase):
                                                          ('albert', 'voltage')]},
                                             parameter_constraints=['albert<9.1'],
                                             measurements=[('mw_foo','hugo','albert')],
-                                            identifier='foo')
+                                            identifier='foo',
+                                            registry=dict())
 
         self.foo_param_mappings = dict(hugo='ilse', albert='albert', voltage='voltage')
         self.foo_meas_mappings = dict(mw_foo='mw_bar')
@@ -219,7 +220,8 @@ class SequencePulseTemplateOldSerializationTests(unittest.TestCase):
             dummy1 = DummyPulseTemplate()
             dummy2 = DummyPulseTemplate()
 
-            sequence = SequencePulseTemplate(dummy1, dummy2, parameter_constraints=['a<b'], measurements=[('m', 0, 1)])
+            sequence = SequencePulseTemplate(dummy1, dummy2, parameter_constraints=['a<b'], measurements=[('m', 0, 1)],
+                                             registry=dict())
             serializer = DummySerializer(serialize_callback=lambda x: str(x))
 
             expected_data = dict(

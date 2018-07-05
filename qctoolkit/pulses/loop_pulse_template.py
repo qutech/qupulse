@@ -24,8 +24,10 @@ __all__ = ['ForLoopPulseTemplate', 'LoopPulseTemplate', 'LoopIndexNotUsedExcepti
 
 class LoopPulseTemplate(PulseTemplate):
     """Base class for loop based pulse templates. This class is still abstract and cannot be instantiated."""
-    def __init__(self, body: PulseTemplate, identifier: Optional[str]=None):
-        super().__init__(identifier=identifier)
+    def __init__(self, body: PulseTemplate,
+                 identifier: Optional[str],
+                 registry: Optional[dict]):
+        super().__init__(identifier=identifier, registry=registry)
         self.__body = body
 
     @property
@@ -109,7 +111,8 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
                  identifier: Optional[str]=None,
                  *,
                  measurements: Optional[Sequence[MeasurementDeclaration]]=None,
-                 parameter_constraints: Optional[Sequence]=None):
+                 parameter_constraints: Optional[Sequence]=None,
+                 registry: Optional[dict]=None):
         """
         Args:
             body: The loop body. It is expected to have `loop_index` as an parameter
@@ -117,7 +120,7 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
             loop_range: Range to loop through
             identifier: Used for serialization
         """
-        LoopPulseTemplate.__init__(self, body=body, identifier=identifier)
+        LoopPulseTemplate.__init__(self, body=body, identifier=identifier, registry=registry)
         MeasurementDefiner.__init__(self, measurements=measurements)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 
@@ -291,7 +294,10 @@ class WhileLoopPulseTemplate(LoopPulseTemplate):
     during execution as long as a certain condition holds.
     """
     
-    def __init__(self, condition: str, body: PulseTemplate, identifier: Optional[str]=None) -> None:
+    def __init__(self, condition: str,
+                 body: PulseTemplate,
+                 identifier: Optional[str]=None,
+                 registry: Optional[dict]=None) -> None:
         """Create a new LoopPulseTemplate instance.
 
         Args:
@@ -301,7 +307,7 @@ class WhileLoopPulseTemplate(LoopPulseTemplate):
                 holds.
             identifier (str): A unique identifier for use in serialization. (optional)
         """
-        super().__init__(body=body, identifier=identifier)
+        super().__init__(body=body, identifier=identifier, registry=registry)
         self._condition = condition
 
     def __str__(self) -> str:
