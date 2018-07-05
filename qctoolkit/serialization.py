@@ -679,7 +679,7 @@ class PulseStorage:
             if is_transaction_begin:
                 self._transaction_storage = dict()
 
-            encoder = JSONSerializableEncoder(self)
+            encoder = JSONSerializableEncoder(self, sort_keys=True, indent=4)
 
             serialization_data = serializable.get_serialization_data()
             serialized = encoder.encode(serialization_data)
