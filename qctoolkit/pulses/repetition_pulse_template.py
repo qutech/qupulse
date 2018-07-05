@@ -163,29 +163,29 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
                       conditions: Dict[str, Condition]) -> bool:
         return any(parameters[v].requires_stop for v in self.repetition_count.variables)
 
-    def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
-        data = dict(
-            body=serializer.dictify(self.body),
-            repetition_count=self.repetition_count.original_expression
-        )
+    def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
+        data = super().get_serialization_data(serializer)
+        data['body'] = self.body
+
+        if serializer: # compatibility to old serialization routines, deprecated
+            data = dict()
+            data['body'] = serializer.dictify(self.body)
+
+        data['repetition_count'] = self.repetition_count.original_expression
+
         if self.parameter_constraints:
             data['parameter_constraints'] = [str(c) for c in self.parameter_constraints]
         if self.measurement_declarations:
             data['measurements'] = self.measurement_declarations
+
         return data
 
-    @staticmethod
-    def deserialize(serializer: Serializer,
-                    repetition_count: Union[str, int],
-                    body: Dict[str, Any],
-                    parameter_constraints: Optional[List[str]]=None,
-                    identifier: Optional[str]=None,
-                    measurements: Optional[List[MeasurementDeclaration]]=None) -> 'RepetitionPulseTemplate':
-        body = cast(PulseTemplate, serializer.deserialize(body))
-        return RepetitionPulseTemplate(body, repetition_count,
-                                       identifier=identifier,
-                                       parameter_constraints=parameter_constraints,
-                                       measurements=measurements)
+    @classmethod
+    def deserialize(cls, serializer: Optional[Serializer]=None, **kwargs) -> 'RepetitionPulseTemplate':
+        if serializer: # compatibility to old serialization routines, deprecated
+            kwargs['body'] = cast(PulseTemplate, serializer.deserialize(kwargs['body']))
+
+        return super().deserialize(**kwargs)
 
     @property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:

@@ -6,13 +6,14 @@ import numpy
 from qctoolkit.expressions import Expression
 from qctoolkit.serialization import Serializer
 from qctoolkit.pulses.table_pulse_template import TablePulseTemplate, TableWaveform, TableEntry, TableWaveformEntry, ZeroDurationTablePulseTemplate, AmbiguousTablePulseEntry
-from qctoolkit.pulses.parameters import ParameterNotProvidedException, ParameterConstraintViolation
+from qctoolkit.pulses.parameters import ParameterNotProvidedException, ParameterConstraintViolation, ParameterConstraint
 from qctoolkit.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy, JumpInterpolationStrategy
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 
 from tests.pulses.sequencing_dummies import DummyInterpolationStrategy, DummyParameter, DummyCondition
 from tests.serialization_dummies import DummySerializer, DummyStorageBackend
 from tests.pulses.measurement_tests import ParameterConstrainerTest, MeasurementDefinerTest
+from tests.serialization_tests import SerializableTests
 
 
 class WaveformEntryTest(unittest.TestCase):
@@ -437,49 +438,84 @@ class TablePulseTemplateMeasurementTest(MeasurementDefinerTest):
                          to_test_constructor=tpt_constructor, **kwargs)
 
 
-class TablePulseTemplateSerializationTests(unittest.TestCase):
+class TablePulseTemplateSerializationTests(SerializableTests, unittest.TestCase):
+
+    @property
+    def class_to_test(self):
+        return TablePulseTemplate
+
+    def make_kwargs(self):
+        return {
+            'entries': dict(A=[('foo', 2, 'hold'), ('hugo', 'ilse', 'linear')],
+                            B=[(0, 5, 'hold'), (1, 7, 'jump'), ('k', 't', 'hold')]),
+            'measurements': [('m', 1, 1), ('foo', 'z', 'o')],
+            'parameter_constraints': [str(ParameterConstraint('ilse>2')), str(ParameterConstraint('k>foo'))]
+        }
+
+    def assert_equal_instance(self, lhs: TablePulseTemplate, rhs: TablePulseTemplate):
+        self.assertIsInstance(lhs, TablePulseTemplate)
+        self.assertIsInstance(rhs, TablePulseTemplate)
+        self.assertEqual(lhs.identifier, rhs.identifier)
+        self.assertEqual(lhs.entries, rhs.entries)
+        self.assertEqual(lhs.measurement_declarations, rhs.measurement_declarations)
+        self.assertEqual(lhs.parameter_constraints, rhs.parameter_constraints)
+
+
+class TablePulseTemplateOldSerializationTests(unittest.TestCase):
 
     def setUp(self) -> None:
-        self.serializer = DummySerializer(lambda x: dict(name=x.name), lambda x: x.name, lambda x: x['name'])
-        self.entries = dict(A=[('foo', 2, 'hold'), ('hugo', 'ilse', 'linear')],
-                            B=[(0, 5, 'hold'), (1, 7, 'jump'), ('k', 't', 'hold')])
-        self.measurements = [('m', 1, 1), ('foo', 'z', 'o')]
-        self.template = TablePulseTemplate(entries=self.entries,
-                                           measurements=self.measurements,
-                                           identifier='foo', parameter_constraints=['ilse>2', 'k>foo'])
-        self.expected_data = dict(type=self.serializer.get_type_identifier(self.template))
-        self.maxDiff = None
+        # test for deprecated version during transition period, remove after final switch
+        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
+                                   msg="TablePT does not issue warning for old serialization routines."):
+            self.serializer = DummySerializer(lambda x: dict(name=x.name), lambda x: x.name, lambda x: x['name'])
+            self.entries = dict(A=[('foo', 2, 'hold'), ('hugo', 'ilse', 'linear')],
+                                B=[(0, 5, 'hold'), (1, 7, 'jump'), ('k', 't', 'hold')])
+            self.measurements = [('m', 1, 1), ('foo', 'z', 'o')]
+            self.template = TablePulseTemplate(entries=self.entries,
+                                               measurements=self.measurements,
+                                               identifier='foo', parameter_constraints=['ilse>2', 'k>foo'])
+            self.expected_data = dict(type=self.serializer.get_type_identifier(self.template))
+            self.maxDiff = None
 
-    def test_get_serialization_data(self) -> None:
-        expected_data = dict(measurements=self.measurements,
-                             entries=self.entries,
-                             parameter_constraints=[str(Expression('ilse>2')), str(Expression('k>foo'))])
+    def test_get_serialization_data_old(self) -> None:
+        # test for deprecated version during transition period, remove after final switch
+        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
+                                   msg="TablePT does not issue warning for old serialization routines."):
+            expected_data = dict(measurements=self.measurements,
+                                 entries=self.entries,
+                                 parameter_constraints=[str(Expression('ilse>2')), str(Expression('k>foo'))])
 
-        data = self.template.get_serialization_data(self.serializer)
-        self.assertEqual(expected_data, data)
+            data = self.template.get_serialization_data(self.serializer)
+            self.assertEqual(expected_data, data)
 
-    def test_deserialize(self) -> None:
-        data = dict(measurements=self.measurements,
-                    entries=self.entries,
-                    parameter_constraints=['ilse>2', 'k>foo'],
-                    identifier='foo')
+    def test_deserialize_old(self) -> None:
+        # test for deprecated version during transition period, remove after final switch
+        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
+                                   msg="TablePT does not issue warning for old serialization routines."):
+            data = dict(measurements=self.measurements,
+                        entries=self.entries,
+                        parameter_constraints=['ilse>2', 'k>foo'],
+                        identifier='foo')
 
-        # deserialize
-        template = TablePulseTemplate.deserialize(self.serializer, **data)
+            # deserialize
+            template = TablePulseTemplate.deserialize(self.serializer, **data)
 
-        self.assertEqual(template.entries, self.template.entries)
-        self.assertEqual(template.measurement_declarations, self.template.measurement_declarations)
-        self.assertEqual(template.parameter_constraints, self.template.parameter_constraints)
+            self.assertEqual(template.entries, self.template.entries)
+            self.assertEqual(template.measurement_declarations, self.template.measurement_declarations)
+            self.assertEqual(template.parameter_constraints, self.template.parameter_constraints)
 
-    def test_serializer_integration(self):
-        serializer = Serializer(DummyStorageBackend())
-        serializer.serialize(self.template)
-        template = serializer.deserialize('foo')
+    def test_serializer_integration_old(self):
+        # test for deprecated version during transition period, remove after final switch
+        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
+                                   msg="TablePT does not issue warning for old serialization routines."):
+            serializer = Serializer(DummyStorageBackend())
+            serializer.serialize(self.template)
+            template = serializer.deserialize('foo')
 
-        self.assertIsInstance(template, TablePulseTemplate)
-        self.assertEqual(template.entries, self.template.entries)
-        self.assertEqual(template.measurement_declarations, self.template.measurement_declarations)
-        self.assertEqual(template.parameter_constraints, self.template.parameter_constraints)
+            self.assertIsInstance(template, TablePulseTemplate)
+            self.assertEqual(template.entries, self.template.entries)
+            self.assertEqual(template.measurement_declarations, self.template.measurement_declarations)
+            self.assertEqual(template.parameter_constraints, self.template.parameter_constraints)
 
 
 class TablePulseTemplateSequencingTests(unittest.TestCase):
