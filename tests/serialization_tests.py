@@ -9,7 +9,7 @@ from unittest import mock
 from abc import ABCMeta, abstractmethod
 
 from tempfile import TemporaryDirectory
-from typing import Optional, Any
+from typing import Optional, Any, Dict
 
 from qctoolkit.serialization import FilesystemBackend, CachingBackend, Serializable, JSONSerializableEncoder,\
     ZipFileBackend, AnonymousSerializable, DictBackend, PulseStorage, JSONSerializableDecoder, Serializer,\
@@ -22,8 +22,8 @@ from tests.pulses.sequencing_dummies import DummyPulseTemplate
 
 class DummySerializable(Serializable):
 
-    def __init__(self, identifier: Optional[str]=None, **kwargs) -> None:
-        super().__init__(identifier)
+    def __init__(self, identifier: Optional[str]=None, registry: Optional[Dict]=None, **kwargs) -> None:
+        super().__init__(identifier, registry=registry)
         for name in kwargs:
             setattr(self, name, kwargs[name])
 
@@ -740,15 +740,15 @@ class SerializerTests(unittest.TestCase):
         self.assertEqual(expected, serialized)
 
     def test_serialize_subpulse_identifier(self) -> None:
-        serializable = DummySerializable(identifier='bar')
+        serializable = DummySerializable(identifier='bar', registry=dict())
         serialized = self.serializer.dictify(serializable)
         self.assertEqual(serializable.identifier, serialized)
 
     def test_serialize_subpulse_duplicate_identifier(self) -> None:
-        serializable = DummySerializable(identifier='bar')
+        serializable = DummySerializable(identifier='bar', registry=dict())
         self.serializer.dictify(serializable)
         self.serializer.dictify(serializable)
-        serializable = DummySerializable(data='this is other data than before', identifier='bar')
+        serializable = DummySerializable(data='this is other data than before', identifier='bar', registry=dict())
         with self.assertRaises(Exception):
             self.serializer.dictify(serializable)
 
@@ -866,15 +866,18 @@ class SerializerTests(unittest.TestCase):
         self.assertEqual(self.deserialization_data['data'], deserialized.data)
 
     def test_serialization_and_deserialization_combined(self) -> None:
+        registry = dict()
         table_foo = TablePulseTemplate(identifier='foo', entries={'default': [('hugo', 2),
                                                                               ('albert', 'voltage')]},
-                                       parameter_constraints=['albert<9.1'])
+                                       parameter_constraints=['albert<9.1'],
+                                       registry=registry)
         table = TablePulseTemplate({'default': [('t', 0)]})
 
         foo_mappings = dict(hugo='ilse', albert='albert', voltage='voltage')
         sequence = SequencePulseTemplate((table_foo, foo_mappings, dict()),
                                          (table, dict(t=0), dict()),
-                                         identifier=None)
+                                         identifier=None,
+                                         registry=registry)
         self.assertEqual({'ilse', 'albert', 'voltage'}, sequence.parameter_names)
 
         storage = DummyStorageBackend()
