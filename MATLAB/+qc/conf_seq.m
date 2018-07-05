@@ -58,7 +58,10 @@ function scan = conf_seq(varargin)
 		'procfn_ops',            {{}}, ...							            % Refers to operations: One entry for each virtual channel, each cell entry has four or five element: fn, args, dim, operation index, (optional) identifier
 		...											 												              If there are more entries than operations, the nth+1 entry is applied to the 1st operation again.
 		'saveloop',              0, ...						  		            % save every nth loop
-		'dnp',                   false, ...							            % enable DNP
+		'useCustomCleanupFn',    false, ...													% If this flag is true
+		'customCleanupFn',       [], ...									  				% clean up anything else you would like cleaned up
+		'useCustomConfigFn',     false, ...													% If this flag is true
+		'customConfigFn',        [], ...														% add a custom config function which is executed directly before the AWG is turned on
 		'arm_global',            false, ...							            % If true, set the program to be armed via tunedata.global_opts.conf_seq.arm_program_name.
 		...											 												            % If you use this, all programs need to be uploaded manually before the scan and need to 
 		...											 												            % have the same Alazar configuration.
@@ -191,6 +194,18 @@ function scan = conf_seq(varargin)
 	scan.configfn(end+1).fn = @smaconfigwrap_save_data;
 	scan.configfn(end).args = {'custom_var', a.save_custom_var_fn};	
 	
+	% Add custom cleanup fn
+	if a.useCustomCleanupFn && ~isempty(a.customCleanupFn)
+		scan.configfn(end+1).fn = a.customCleanupFn;
+		scan.configfn(end).args = {};
+	end
+	
+	% Add custom config fn
+  if a.useCustomConfigFn && ~isempty(a.customConfigFn)
+		scan.configfn(end+1).fn = a.customConfigFn;
+		scan.configfn(end).args = {};
+	end
+	
 	% Delete unnecessary data
 	scan.cleanupfn(end+1).fn = @qc.cleanupfn_delete_getchans;
 	scan.cleanupfn(end).args = {a.delete_getchans};
@@ -277,10 +292,6 @@ function scan = conf_seq(varargin)
 		scan.saveloop = [1, a.saveloop];
 	end
 	
-	% Add polarization
-	if a.dnp
-		warning('DNP currently not implemented, but basically need to add postfn/prefn which arms a different program w/o measurements and thus w/o Alazar reconfiguration');
-	end
 end		
 	
 	

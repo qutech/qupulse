@@ -78,11 +78,12 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 			% whole pulse time and can return data before the AWG stops playing
 			% the pulse.			
 			if ~isempty(plsdata.awg.currentProgam)
-				waitingTime = min(max(plsdata.awg.registeredPrograms.(plsdata.awg.currentProgam).pulse_duration - (now() - plsdata.awg.triggerStartTime)*24*60*60, 0), plsdata.awg.maxPulseWait);
+				waitingTime = min(max(plsdata.awg.registeredPrograms.(plsdata.awg.currentProgam).pulse_duration + plsdata.awg.registeredPrograms.(plsdata.awg.currentProgam).added_to_pulse_duration - (now() - plsdata.awg.triggerStartTime)*24*60*60, 0), plsdata.awg.maxPulseWait);
 				if waitingTime == plsdata.awg.maxPulseWait
 					warning('Maximum waiting time ''plsdata.awg.maxPulseWait'' = %g s reached.\nIncrease if you experience problems with the data acquistion.', plsdata.awg.maxPulseWait);
 				end
 				pause(waitingTime);
+% 				fprintf('Waited for %.3fs for pulse to complete\n', waitingTime);				
 			end
 			
 			hws.arm_program(a.program_name);			
@@ -186,9 +187,23 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 			
 			newProgram = qc.program_to_struct(a.program_name, a.pulse_template, a.parameters_and_dicts, a.channel_mapping, a.window_mapping);
 			newProgram = qc.get_minimal_program(newProgram);
+			% pulse_duration is just a helper field, can recognize whether
+			% program has changed without it. Removing it for the equality check
+			% below allows for changing the program duration dynamically on the
+			% AWG, e.g. for DNP.
+			if isfield(newProgram , 'added_to_pulse_duration')
+				newProgram  = rmfield(newProgram , 'added_to_pulse_duration');
+			end
 			
 			awgProgram = plsdata.awg.registeredPrograms.(a.program_name);
-			awgProgram = qc.get_minimal_program(awgProgram);			
+			awgProgram = qc.get_minimal_program(awgProgram);	
+			% pulse_duration is just a helper field, can recognize whether
+			% program has changed without it. Removing it for the equality check
+			% below allows for changing the program duration dynamically on the
+			% AWG, e.g. for DNP.
+			if isfield(awgProgram, 'added_to_pulse_duration')
+				awgProgram = rmfield(awgProgram, 'added_to_pulse_duration');
+			end
 			
 			bool = isequal(newProgram, awgProgram);
 			
