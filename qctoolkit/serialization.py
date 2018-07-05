@@ -347,6 +347,8 @@ class Serializable(metaclass=SerializableMeta):
             identifier: An optional, non-empty identifier for this Serializable.
                 If set, this Serializable will always be stored as a separate data item and never
                 be embedded.
+            registry: An optional dict where the Serializable is registered. If None, it gets registered in the
+                default_pulse_registry.
         Raises:
             ValueError: If identifier is the empty string
         """
@@ -359,14 +361,15 @@ class Serializable(metaclass=SerializableMeta):
             raise ValueError("Identifier must not be empty.")
         self.__identifier = identifier
 
-        if identifier and registry is not None:
-            # trigger garbage collection to "simulate" RAII
-            gc.collect(2)
-
+        if identifier:
             if identifier in registry:
-                raise RuntimeError('Pulse with name already exists', identifier)
-            else:
-                registry[identifier] = self
+                # trigger garbage collection in case the registered object isn't referenced anymore
+                gc.collect(2)
+
+                if identifier in registry:
+                    raise RuntimeError('Pulse with name already exists', identifier)
+
+            registry[identifier] = self
 
     @property
     def identifier(self) -> Optional[str]:
