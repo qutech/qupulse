@@ -15,8 +15,10 @@ from qctoolkit.utils.types import ChannelID, DocStringABCMeta
 from qctoolkit.serialization import Serializable
 from qctoolkit.expressions import ExpressionScalar
 
+from qctoolkit.hardware.program import Loop
+
 from qctoolkit.pulses.conditions import Condition
-from qctoolkit.pulses.parameters import Parameter
+from qctoolkit.pulses.parameters import Parameter, ConstantParameter
 from qctoolkit.pulses.sequencing import Sequencer, SequencingElement, InstructionBlock
 from qctoolkit._program.waveforms import Waveform
 from qctoolkit.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
@@ -97,6 +99,45 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
     @abstractmethod
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
         """Returns an expression giving the integral over the pulse."""
+
+    def create_program(self,
+                       parameters: Dict[str, Parameter],
+                       volatile_parameters: Set[str],
+                       measurement_mapping: Dict[str, Optional[str]],
+                       channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> 'Loop':
+        """Translates this PulseTemplate into a program Loop.
+
+        The returned Loop represents the PulseTemplate with all parameter values instantiated provided as dictated by
+        the parameters argument. Optionally, channels and measurements defined in the PulseTemplate can be renamed/mapped
+        via the channel_mapping and measurement_mapping arguments.
+
+        The returned Loop will ensure that the parameters marked as volatile (included in the volatile_parameters argument)
+        are updatable and that those updates are cheap. Changing other parameters will require rebuilding the program.
+
+        :param parameters: A mapping of parameter names to Parameter objects.
+        :param volatile_parameters: A set of names of parameters that are expected to change.
+        :param measurement_mapping: A mapping of measurement window names. Windows that are mapped to None are omitted.
+        :param channel_mapping: A mapping of channel names. Channels that are mapped to None are omitted.
+        :return: A Loop object corresponding to this PulseTemplate.
+        """
+        # make sure all values in the parameters dict are of type Parameter
+        for (key, value) in parameters.items():
+            if not isinstance(value, Parameter):
+                parameters[key] = ConstantParameter(value)
+
+        # call subclass specific implementation
+        return self._internal_create_program(parameters, volatile_parameters, measurement_mapping, channel_mapping)
+
+    @abstractmethod
+    def _internal_create_program(self,
+                                 parameters: Dict[Parameter],
+                                 volatile_parameters: Set[str],
+                                 measurement_mapping: Dict[str, Optional[str]],
+                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> 'Loop':
+        """The subclass specific implementation of create_program().
+
+        Subclasses should not overwrite create_program() directly but provide their implementation here. This method
+        is called by create_program()."""
 
 
 class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
