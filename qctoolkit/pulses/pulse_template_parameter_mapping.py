@@ -29,7 +29,8 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                  measurement_mapping: Optional[Dict[str, str]] = None,
                  channel_mapping: Optional[Dict[ChannelID, ChannelID]] = None,
                  parameter_constraints: Optional[List[str]]=None,
-                 allow_partial_parameter_mapping=False):
+                 allow_partial_parameter_mapping: bool=False,
+                 registry: Optional[dict]=None):
         """Standard constructor for the MappingPulseTemplate.
 
         Mappings that are not specified are defaulted to identity mappings. Channels and measurement names of the
@@ -47,7 +48,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         :param parameter_constraints:
         :param allow_partial_parameter_mapping:
         """
-        PulseTemplate.__init__(self, identifier=identifier)
+        PulseTemplate.__init__(self, identifier=identifier, registry=registry)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 
         if parameter_mapping is None:
