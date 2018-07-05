@@ -361,7 +361,7 @@ class Serializable(metaclass=SerializableMeta):
             raise ValueError("Identifier must not be empty.")
         self.__identifier = identifier
 
-        if identifier:
+        if identifier and registry is not None:
             if identifier in registry:
                 # trigger garbage collection in case the registered object isn't referenced anymore
                 gc.collect(2)
