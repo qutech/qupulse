@@ -17,6 +17,7 @@ import tempfile
 import json
 import weakref
 import warnings
+import gc
 
 from qctoolkit.utils.types import DocStringABCMeta
 
@@ -316,7 +317,7 @@ class SerializableMeta(DocStringABCMeta):
         return cls
 
 
-default_pulse_registration = weakref.WeakValueDictionary()
+default_pulse_registry = weakref.WeakValueDictionary()
 
 
 class Serializable(metaclass=SerializableMeta):
@@ -339,7 +340,7 @@ class Serializable(metaclass=SerializableMeta):
     type_identifier_name = '#type'
     identifier_name = '#identifier'
 
-    def __init__(self, identifier: Optional[str]=None, registration: weakref.WeakValueDictionary=None) -> None:
+    def __init__(self, identifier: Optional[str]=None, registry: Optional[dict]=None) -> None:
         """Initialize a Serializable.
 
         Args:
@@ -351,18 +352,21 @@ class Serializable(metaclass=SerializableMeta):
         """
         super().__init__()
 
-        if registration is None:
-            registration = default_pulse_registration
+        if registry is None:
+            registry = default_pulse_registry
 
         if identifier == '':
             raise ValueError("Identifier must not be empty.")
         self.__identifier = identifier
 
-        if identifier and registration:
-            if identifier in registration:
+        if identifier and registry is not None:
+            # trigger garbage collection to "simulate" RAII
+            gc.collect(2)
+
+            if identifier in registry:
                 raise RuntimeError('Pulse with name already exists', identifier)
             else:
-                registration[identifier] = self
+                registry[identifier] = self
 
     @property
     def identifier(self) -> Optional[str]:

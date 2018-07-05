@@ -12,7 +12,8 @@ from tempfile import TemporaryDirectory
 from typing import Optional, Any
 
 from qctoolkit.serialization import FilesystemBackend, CachingBackend, Serializable, JSONSerializableEncoder,\
-    ZipFileBackend, AnonymousSerializable, DictBackend, PulseStorage, JSONSerializableDecoder, Serializer
+    ZipFileBackend, AnonymousSerializable, DictBackend, PulseStorage, JSONSerializableDecoder, Serializer,\
+    default_pulse_registry
 from qctoolkit.expressions import ExpressionScalar
 
 from tests.serialization_dummies import DummyStorageBackend
@@ -47,19 +48,19 @@ class SerializableTests(metaclass=ABCMeta):
 
     @property
     @abstractmethod
-    def class_to_test(self):
+    def class_to_test(self) -> typing.Any:
         pass
 
     @abstractmethod
-    def make_kwargs(self):
+    def make_kwargs(self) -> dict:
         pass
 
     @abstractmethod
     def assert_equal_instance(self, lhs, rhs):
         pass
 
-    def make_instance(self, identifier=None):
-        return self.class_to_test(identifier=identifier, **self.make_kwargs())
+    def make_instance(self, identifier=None, registry=None):
+        return self.class_to_test(identifier=identifier, registry=registry, **self.make_kwargs())
 
     def make_serialization_data(self, identifier=None):
         data = {Serializable.type_identifier_name: self.class_to_test.get_type_identifier(), **self.make_kwargs()}
@@ -80,26 +81,35 @@ class SerializableTests(metaclass=ABCMeta):
 
     def test_serialization(self):
         for identifier in [None, 'some']:
-            serialization_data = self.make_instance(identifier=identifier).get_serialization_data()
+            serialization_data = self.make_instance(identifier=identifier, registry=None).get_serialization_data()
             expected = self.make_serialization_data(identifier=identifier)
 
             self.assertEqual(serialization_data, expected)
 
     def test_deserialiation(self) -> None:
+        registry_1 = dict()
+        registry_2 = dict()
+
         for identifier in [None, 'some']:
             serialization_data = self.make_serialization_data(identifier=identifier)
             del serialization_data[Serializable.type_identifier_name]
             if identifier:
                 serialization_data['identifier'] = serialization_data[Serializable.identifier_name]
                 del serialization_data[Serializable.identifier_name]
-            instance = self.class_to_test.deserialize(**serialization_data)
-            expected = self.make_instance(identifier=identifier)
+            instance = self.class_to_test.deserialize(**serialization_data, registry=registry_1)
+
+            if identifier:
+                self.assertIs(registry_1[identifier], instance)
+            expected = self.make_instance(identifier=identifier, registry=registry_2)
 
             self.assert_equal_instance(expected, instance)
 
 
     def test_serialization_and_deserialization(self):
-        instance = self.make_instance('blub')
+        # TODO PulseStorage registry specification
+        registry = dict()
+
+        instance = self.make_instance('blub', registry=registry)
         backend = DummyStorageBackend()
         storage = PulseStorage(backend)
 
@@ -110,6 +120,16 @@ class SerializableTests(metaclass=ABCMeta):
 
         other_instance = typing.cast(self.class_to_test, storage['blub'])
         self.assert_equal_instance(instance, other_instance)
+
+        self.assertIs(registry['blub'], instance)
+        self.assertIs(default_pulse_registry['blub'], other_instance)
+
+    def test_duplication_error(self):
+        registry = dict()
+
+        instance = self.make_instance('blub', registry=registry)
+        with self.assertRaises(RuntimeError):
+            self.make_instance('blub', registry=registry)
 
 
 class DummySerializableTests(SerializableTests, unittest.TestCase):

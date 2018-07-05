@@ -139,8 +139,9 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
                  external_parameters: Optional[Set[str]]=None,
                  identifier: Optional[str]=None,
                  parameter_constraints: Optional[List]=None,
-                 measurements: Optional[List[MeasurementDeclaration]]=None) -> None:
-        AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements)
+                 measurements: Optional[List[MeasurementDeclaration]]=None,
+                 registry: Optional[dict] = None) -> None:
+        AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements, registry=registry)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 
         self._subtemplates = [st if isinstance(st, PulseTemplate) else MappingPulseTemplate.from_tuple(st) for st in

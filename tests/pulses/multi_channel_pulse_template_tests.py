@@ -321,11 +321,11 @@ class AtomicMultiChannelPulseTemplateSerializationTests(SerializableTests, unitt
             'parameter_constraints': [str(ParameterConstraint('ilse>2')), str(ParameterConstraint('k>foo'))]
         }
 
-    def make_instance(self, identifier=None):
+    def make_instance(self, identifier=None, registry=None):
         kwargs = self.make_kwargs()
         subtemplates = kwargs['subtemplates']
         del kwargs['subtemplates']
-        return self.class_to_test(identifier=identifier, *subtemplates, **kwargs)
+        return self.class_to_test(identifier=identifier, *subtemplates, **kwargs, registry=registry)
 
     def assert_equal_instance(self, lhs: AtomicMultiChannelPulseTemplate, rhs: AtomicMultiChannelPulseTemplate):
         self.assertIsInstance(lhs, AtomicMultiChannelPulseTemplate)
