@@ -251,7 +251,8 @@ class PointPulseTemplateOldSerializationTests(unittest.TestCase):
         self.measurements = [('m', 1, 1), ('foo', 'z', 'o')]
         self.template = PointPulseTemplate(time_point_tuple_list=self.entries, channel_names=[0, 'A'],
                                            measurements=self.measurements,
-                                           identifier='foo', parameter_constraints=['ilse>2', 'k>foo'])
+                                           identifier='foo', parameter_constraints=['ilse>2', 'k>foo'],
+                                           registry=dict())
         self.maxDiff = None
 
     def test_get_serialization_data_old(self) -> None:
@@ -286,6 +287,8 @@ class PointPulseTemplateOldSerializationTests(unittest.TestCase):
             self.assertEqual(template.parameter_constraints, self.template.parameter_constraints)
 
     def test_serializer_integration_old(self):
+        registry = dict()
+
         # test for deprecated version during transition period, remove after final switch
         with self.assertWarnsRegex(DeprecationWarning, "deprecated",
                                    msg="PointPT does not issue warning for old serialization routines."):

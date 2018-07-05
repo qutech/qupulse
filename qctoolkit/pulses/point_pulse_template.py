@@ -45,9 +45,10 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
                  *,
                  parameter_constraints: Optional[List[Union[str, ParameterConstraint]]]=None,
                  measurements: Optional[List[MeasurementDeclaration]]=None,
-                 identifier=None):
+                 identifier: Optional[str]=None,
+                 registry: Optional[dict]=None):
 
-        AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements)
+        AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements, registry=registry)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 
         self._channels = tuple(channel_names)

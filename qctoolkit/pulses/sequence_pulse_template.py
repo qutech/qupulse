@@ -113,7 +113,8 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                  external_parameters: Optional[Union[Iterable[str], Set[str]]]=None,
                  identifier: Optional[str]=None,
                  parameter_constraints: Optional[List[Union[str, Expression]]]=None,
-                 measurements: Optional[List[MeasurementDeclaration]]=None) -> None:
+                 measurements: Optional[List[MeasurementDeclaration]]=None,
+                 registry: Optional[dict]=None) -> None:
         """Create a new SequencePulseTemplate instance.
 
         Requires a (correctly ordered) list of subtemplates in the form
@@ -135,7 +136,7 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                 SequencePulseTemplate. Deprecated.
             identifier (str): A unique identifier for use in serialization. (optional)
         """
-        PulseTemplate.__init__(self, identifier=identifier)
+        PulseTemplate.__init__(self, identifier=identifier, registry=registry)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
         MeasurementDefiner.__init__(self, measurements=measurements)
 

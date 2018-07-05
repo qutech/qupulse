@@ -344,7 +344,7 @@ class TablePulseTemplateTest(unittest.TestCase):
         tpt = TablePulseTemplate.from_entry_list([(0, 9, 8, 7, 'hold'),
                                                   (1, 2, 1, 3, 'hold'),
                                                   (4, 1, 2, 3, 'linear')],
-                                                 identifier='tpt')
+                                                 identifier='tpt2')
         self.assertEqual(tpt.entries, entries)
 
         entries = {k: entries[i]
@@ -352,10 +352,10 @@ class TablePulseTemplateTest(unittest.TestCase):
         tpt = TablePulseTemplate.from_entry_list([(0, 9, 8, 7),
                                                   (1, 2, 1, 3, 'hold'),
                                                   (4, 1, 2, 3, 'linear')],
-                                                 identifier='tpt',
+                                                 identifier='tpt3',
                                                  channel_names=['A', 'B', 'C'])
         self.assertEqual(tpt.entries, entries)
-        self.assertEqual(tpt.identifier, 'tpt')
+        self.assertEqual(tpt.identifier, 'tpt3')
 
         entries = {0: [(0, 9, HoldInterpolationStrategy()),
                        (1, 2, HoldInterpolationStrategy()),
@@ -369,7 +369,7 @@ class TablePulseTemplateTest(unittest.TestCase):
         tpt = TablePulseTemplate.from_entry_list([(0, 9, 8, 7),
                                                   (1, 2, 1, 3),
                                                   (4, 1, 2, 3)],
-                                                 identifier='tpt')
+                                                 identifier='tpt4')
         self.assertEqual(tpt.entries, entries)
 
     def test_add_entry_multi_same_time_param(self) -> None:
@@ -473,7 +473,8 @@ class TablePulseTemplateOldSerializationTests(unittest.TestCase):
             self.measurements = [('m', 1, 1), ('foo', 'z', 'o')]
             self.template = TablePulseTemplate(entries=self.entries,
                                                measurements=self.measurements,
-                                               identifier='foo', parameter_constraints=['ilse>2', 'k>foo'])
+                                               identifier='foo', parameter_constraints=['ilse>2', 'k>foo'],
+                                               registry=dict())
             self.expected_data = dict(type=self.serializer.get_type_identifier(self.template))
             self.maxDiff = None
 
@@ -489,6 +490,8 @@ class TablePulseTemplateOldSerializationTests(unittest.TestCase):
             self.assertEqual(expected_data, data)
 
     def test_deserialize_old(self) -> None:
+        registry = dict()
+
         # test for deprecated version during transition period, remove after final switch
         with self.assertWarnsRegex(DeprecationWarning, "deprecated",
                                    msg="TablePT does not issue warning for old serialization routines."):
@@ -498,13 +501,15 @@ class TablePulseTemplateOldSerializationTests(unittest.TestCase):
                         identifier='foo')
 
             # deserialize
-            template = TablePulseTemplate.deserialize(self.serializer, **data)
+            template = TablePulseTemplate.deserialize(self.serializer, **data, registry=registry)
 
             self.assertEqual(template.entries, self.template.entries)
             self.assertEqual(template.measurement_declarations, self.template.measurement_declarations)
             self.assertEqual(template.parameter_constraints, self.template.parameter_constraints)
 
     def test_serializer_integration_old(self):
+        registry = dict()
+
         # test for deprecated version during transition period, remove after final switch
         with self.assertWarnsRegex(DeprecationWarning, "deprecated",
                                    msg="TablePT does not issue warning for old serialization routines."):

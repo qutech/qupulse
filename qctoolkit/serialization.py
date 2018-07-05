@@ -17,6 +17,7 @@ import tempfile
 import json
 import weakref
 import warnings
+import gc
 
 from qctoolkit.utils.types import DocStringABCMeta
 
@@ -316,7 +317,7 @@ class SerializableMeta(DocStringABCMeta):
         return cls
 
 
-default_pulse_registration = weakref.WeakValueDictionary()
+default_pulse_registry = weakref.WeakValueDictionary()
 
 
 class Serializable(metaclass=SerializableMeta):
@@ -339,30 +340,36 @@ class Serializable(metaclass=SerializableMeta):
     type_identifier_name = '#type'
     identifier_name = '#identifier'
 
-    def __init__(self, identifier: Optional[str]=None, registration: weakref.WeakValueDictionary=None) -> None:
+    def __init__(self, identifier: Optional[str]=None, registry: Optional[dict]=None) -> None:
         """Initialize a Serializable.
 
         Args:
             identifier: An optional, non-empty identifier for this Serializable.
                 If set, this Serializable will always be stored as a separate data item and never
                 be embedded.
+            registry: An optional dict where the Serializable is registered. If None, it gets registered in the
+                default_pulse_registry.
         Raises:
             ValueError: If identifier is the empty string
         """
         super().__init__()
 
-        if registration is None:
-            registration = default_pulse_registration
+        if registry is None:
+            registry = default_pulse_registry
 
         if identifier == '':
             raise ValueError("Identifier must not be empty.")
         self.__identifier = identifier
 
-        if identifier and registration:
-            if identifier in registration:
-                raise RuntimeError('Pulse with name already exists', identifier)
-            else:
-                registration[identifier] = self
+        if identifier:
+            if identifier in registry:
+                # trigger garbage collection in case the registered object isn't referenced anymore
+                gc.collect(2)
+
+                if identifier in registry:
+                    raise RuntimeError('Pulse with name already exists', identifier)
+
+            registry[identifier] = self
 
     @property
     def identifier(self) -> Optional[str]:

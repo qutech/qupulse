@@ -19,6 +19,7 @@ from tests.serialization_tests import SerializableTests
 class DummyLoopPulseTemplate(LoopPulseTemplate):
     pass
 DummyLoopPulseTemplate.__abstractmethods__ = set()
+DummyLoopPulseTemplate.__init__ = lambda self, body: LoopPulseTemplate.__init__(self, body, None, None)
 
 
 class LoopPulseTemplateTests(unittest.TestCase):
