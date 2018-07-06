@@ -343,3 +343,61 @@ class HardwareSetupTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             setup.register_program('p1', block, lambda: None)
 
+    def test_known_dacs(self) -> None:
+        setup = HardwareSetup()
+        dac1 = DummyDAC()
+        dac2 = DummyDAC()
+        setup.set_measurement('m1', MeasurementMask(dac1, 'mask_1'))
+        setup.set_measurement('m2', MeasurementMask(dac2, 'mask_2'))
+        expected = {dac1, dac2}
+        self.assertEqual(expected, setup.known_dacs)
+
+    def test_known_awgs(self) -> None:
+        setup = HardwareSetup()
+        awg1 = DummyAWG(num_channels=2, num_markers=0)
+        awg2 = DummyAWG(num_channels=0, num_markers=1)
+        setup.set_channel('A', PlaybackChannel(awg1, 0))
+        setup.set_channel('B', PlaybackChannel(awg1, 1))
+        setup.set_channel('M1', MarkerChannel(awg2, 0))
+        expected = {awg1, awg2}
+        self.assertEqual(expected, setup.known_awgs)
+
+    def test_clear_programs(self) -> None:
+        setup = HardwareSetup()
+        awg1 = DummyAWG(num_channels=2, num_markers=0)
+        awg2 = DummyAWG(num_channels=1, num_markers=1)
+        dac1 = DummyDAC()
+        dac2 = DummyDAC()
+        setup.set_channel('A', PlaybackChannel(awg1, 0))
+        setup.set_channel('B', PlaybackChannel(awg1, 1))
+        setup.set_channel('C', PlaybackChannel(awg2, 0))
+        setup.set_channel('M1', MarkerChannel(awg2, 0))
+
+        wf1 = DummyWaveform(duration=1.1, defined_channels={'C'})
+        wf2 = DummyWaveform(duration=7.2, defined_channels={'A'})
+        wf3 = DummyWaveform(duration=3.7, defined_channels={'B', 'C'})
+
+        setup.set_measurement('m1', MeasurementMask(dac1, 'DAC_1'))
+        setup.set_measurement('m2', MeasurementMask(dac2, 'DAC_2'))
+
+        block1 = InstructionBlock()
+        block1.add_instruction_exec(wf1)
+
+        block2 = InstructionBlock()
+        block2.add_instruction_meas([('m1', 0., 1.)])
+        block2.add_instruction_exec(wf2)
+
+        block3 = InstructionBlock()
+        block3.add_instruction_meas([('m2', 2., 3.)])
+        block3.add_instruction_exec(wf3)
+
+        setup.register_program('prog1', block1)
+        setup.register_program('prog2', block2)
+        setup.register_program('prog3', block3)
+
+        self.assertTrue(setup.registered_programs)
+
+        setup.clear_programs()
+
+        self.assertFalse(setup.registered_programs)
+

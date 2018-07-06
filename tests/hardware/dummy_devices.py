@@ -30,6 +30,11 @@ class DummyDAC(DAC):
         if program_name in self._measurement_windows:
             self._measurement_windows.pop(program_name)
 
+    def clear(self) -> None:
+        self._measurement_windows = dict()
+        self._operations = dict()
+        self._armed_program = None
+
 
 class DummyAWG(AWG):
     """Dummy AWG for debugging purposes."""
@@ -51,15 +56,17 @@ class DummyAWG(AWG):
         super().__init__(identifier="DummyAWG{0}".format(id(self)))
 
         self._programs = {} # contains program names and programs
-        self._waveform_memory = [None for i in range(memory)]
-        self._waveform_indices = {} # dict that maps from waveform hash to memory index
-        self._program_wfs = {} # contains program names and necessary waveforms indices
         self._sample_rate = sample_rate
         self._output_range = output_range
         self._num_channels = num_channels
         self._num_markers = num_markers
         self._channels = ('default',)
         self._armed = None
+
+        # todo [2018-06-14]: The following attributes (and thus the memory argument) are never used. Remove?
+        self._waveform_memory = [None for i in range(memory)]
+        self._waveform_indices = {}  # dict that maps from waveform hash to memory index
+        self._program_wfs = {}  # contains program names and necessary waveforms indices
 
     def upload(self, name, program, channels, markers, voltage_transformation, force=False) -> None:
         if name in self.programs:
@@ -74,6 +81,9 @@ class DummyAWG(AWG):
     def remove(self, name) -> None:
         if name in self.programs:
             self._programs.pop(name)
+
+    def clear(self) -> None:
+        self._programs = {}
 
     def arm(self, name: str) -> None:
         self._armed = name

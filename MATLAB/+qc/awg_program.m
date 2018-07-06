@@ -42,14 +42,14 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 				fprintf('Program ''%s'' is now being instantiated...', a.program_name);
 				tic;
 			end
-			instantiated_pulse = qc.instantiate_pulse(a.pulse_template, 'parameters', qc.join_params_and_dicts(program.parameters_and_dicts), 'channel_mapping', program.channel_mapping, 'window_mapping', program.window_mapping);
+			instantiated_pulse = qc.instantiate_pulse(a.pulse_template, 'parameters', qc.join_params_and_dicts(program.parameters_and_dicts), 'channel_mapping', program.channel_mapping, 'window_mapping', program.window_mapping);			
 			
 			if a.verbosity > 9
 				fprintf('took %.0fs\n', toc);
 				fprintf('Program ''%s'' is now being uploaded...', a.program_name);
 				tic
 			end
-			hws.register_program(program.program_name, instantiated_pulse, pyargs('update', py.True));
+			util.py.call_with_interrupt_check(py.getattr(hws, 'register_program'), program.program_name, instantiated_pulse, pyargs('update', py.True));			
 			
 			if a.verbosity > 9
 				fprintf('took %.0fs\n', toc);
@@ -72,8 +72,18 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 		% Call directly before trigger comes, otherwise you might encounter a
 		% trigger timeout. Also, call after daq_operations('add')!
 		[~, bool, msg] = qc.awg_program('present', qc.change_field(a, 'verbosity', 0));
-		if bool
-			% qc.workaround_alazar_single_buffer_acquisition();
+		if bool			
+			% Wait for AWG to stop playing pulse, otherwise this might lead to a
+			% trigger timeout since the DAQ is not necessarily configured for the
+			% whole pulse time and can return data before the AWG stops playing
+			% the pulse.			
+			if ~isempty(plsdata.awg.currentProgam)
+				waitingTime = min(max(plsdata.awg.registeredPrograms.(plsdata.awg.currentProgam).pulse_duration - (now() - plsdata.awg.triggerStartTime)*24*60*60, 0), plsdata.awg.maxPulseWait);
+				if waitingTime == plsdata.awg.maxPulseWait
+					warning('Maximum waiting time ''plsdata.awg.maxPulseWait'' = %g s reached.\nIncrease if you experience problems with the data acquistion.', plsdata.awg.maxPulseWait);
+				end
+				pause(waitingTime);
+			end
 			
 			hws.arm_program(a.program_name);			
 			plsdata.awg.currentProgam = a.program_name;

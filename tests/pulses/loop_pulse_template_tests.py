@@ -1,5 +1,4 @@
 import unittest
-import warnings
 
 from sympy import Sum
 
@@ -161,19 +160,16 @@ class ForLoopPulseTemplateTest(unittest.TestCase):
         """This test is to assure the status-quo behavior of ForLoopPT handling parameter constraints affecting the loop index
         variable. Please see https://github.com/qutech/qc-toolkit/issues/232 ."""
 
-        with warnings.catch_warnings(record=True) as w:
+        with self.assertWarnsRegex(UserWarning, "constraint on a variable shadowing the loop index",
+                                   msg="ForLoopPT did not issue a warning when constraining the loop index"):
             flt = ForLoopPulseTemplate(body=DummyPulseTemplate(parameter_names={'k', 'i'}), loop_index='i',
-                                       loop_range=('a', 'b', 'c',), parameter_constraints=['k>i', 'k<=f'])
-            self.assertEqual(1, len(w),
-                             msg="ForLoopPT did not issue a warning when constraining the loop index")
-            self.assertTrue("constraint on a variable shadowing the loop index" in str(w[-1].message),
-                            msg="ForLoopPT did not issue a warning when constraining the loop index")
+                                       loop_range=('a', 'b', 'c',), parameter_constraints=['k<=f', 'k>i'])
 
         # loop index showing up in parameter_names because it appears in consraints
         self.assertEqual(flt.parameter_names, {'f', 'k', 'a', 'b', 'c', 'i'})
 
         parameters = {'k': ConstantParameter(1), 'a': ConstantParameter(0), 'b': ConstantParameter(2),
-                      'c': ConstantParameter(1), 'f': ConstantParameter(0)}
+                      'c': ConstantParameter(1), 'f': ConstantParameter(2)}
         sequencer = DummySequencer()
         block = DummyInstructionBlock()
 

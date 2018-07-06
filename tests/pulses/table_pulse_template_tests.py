@@ -5,12 +5,13 @@ import numpy
 
 from qctoolkit.expressions import Expression
 from qctoolkit.serialization import Serializer
-from qctoolkit.pulses.table_pulse_template import TablePulseTemplate, TableWaveform, TableEntry, TableWaveformEntry, ZeroDurationTablePulseTemplate, AmbiguousTablePulseEntry
+from qctoolkit.pulses.table_pulse_template import TablePulseTemplate, TableWaveform, TableEntry, TableWaveformEntry, ZeroDurationTablePulseTemplate, AmbiguousTablePulseEntry, concatenate
 from qctoolkit.pulses.parameters import ParameterNotProvidedException, ParameterConstraintViolation, ParameterConstraint
 from qctoolkit.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy, JumpInterpolationStrategy
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 
-from tests.pulses.sequencing_dummies import DummyInterpolationStrategy, DummyParameter, DummyCondition
+from tests.pulses.sequencing_dummies import DummyInterpolationStrategy, DummyParameter, DummyCondition,\
+    DummyPulseTemplate
 from tests.serialization_dummies import DummySerializer, DummyStorageBackend
 from tests.pulses.measurement_tests import ParameterConstrainerTest, MeasurementDefinerTest
 from tests.serialization_tests import SerializableTests
@@ -743,6 +744,97 @@ class TableWaveformTests(unittest.TestCase):
 
         self.assertEqual(waveform.defined_channels, {chan})
         self.assertIs(waveform.unsafe_get_subset_for_channels({'A'}), waveform)
+
+
+class TablePulseConcatenationTests(unittest.TestCase):
+    def test_simple_concatenation(self):
+        tpt_1 = TablePulseTemplate({'A': [(0, 1), ('a', 5, 'linear')],
+                                    'B': [(0, 2), ('b', 7)]})
+
+        tpt_2 = TablePulseTemplate({'A': [('c', 9), ('a', 10, 'jump')],
+                                    'B': [(0, 6),   ('b', 8)]})
+
+        expected = TablePulseTemplate({'A': [(0, 1),
+                                             ('a', 5, 'linear'),
+                                             ('Max(a, b)', 5),
+                                             ('Max(a, b)', 9),
+                                             ('Max(a, b) + c', 9),
+                                             ('Max(a, b) + a', 10, 'jump')],
+                                       'B': [(0,   2),
+                                             ('b', 7),
+                                             ('Max(a, b)', 7, 'hold'),
+                                             ('Max(a, b)', 6),
+                                             ('Max(a, b) + b', 8)]})
+
+        concatenated = concatenate(tpt_1, tpt_2)
+
+        self.assertEqual(expected.entries, concatenated.entries)
+
+    def test_triple_concatenation(self):
+        tpt_1 = TablePulseTemplate({'A': [(0, 1), ('a', 5, 'linear')],
+                                    'B': [(0, 2), ('b', 7)]})
+
+        tpt_2 = TablePulseTemplate({'A': [('c', 9), ('a', 10, 'jump')],
+                                    'B': [(0, 6),   ('b', 8)]})
+
+        tpt_3 = TablePulseTemplate({'A': [('fg', 19), ('ab', 110, 'jump')],
+                                    'B': [('df', 16), ('ab', 18)]})
+
+        expected = TablePulseTemplate({'A': [(0, 1),
+                                             ('a', 5, 'linear'),
+                                             ('Max(a, b)', 5),
+                                             ('Max(a, b)', 9),
+                                             ('Max(a, b) + c', 9),
+                                             ('Max(a, b) + a', 10, 'jump'),
+                                             ('2*Max(a, b)', 10),
+                                             ('2*Max(a, b)', 19),
+                                             ('2*Max(a, b) + fg', 19),
+                                             ('2*Max(a, b) + ab', 110, 'jump')],
+                                       'B': [(0,   2),
+                                             ('b', 7),
+                                             ('Max(a, b)', 7, 'hold'),
+                                             ('Max(a, b)', 6),
+                                             ('Max(a, b) + b', 8),
+                                             ('2*Max(a, b)', 8),
+                                             ('2*Max(a, b)', 16),
+                                             ('2*Max(a, b) + df', 16),
+                                             ('2*Max(a, b) + ab', 18)]})
+
+        concatenated = concatenate(tpt_1, tpt_2, tpt_3, identifier='asdf')
+
+        self.assertEqual(expected.entries, concatenated.entries)
+        self.assertEqual(concatenated.identifier, 'asdf')
+
+    def test_duplication(self):
+        tpt = TablePulseTemplate({'A': [(0, 1), ('a', 5)],
+                                  'B': [(0, 2), ('b', 3)]})
+
+        concatenated = concatenate(tpt, tpt)
+
+        self.assertIsNot(concatenated.entries, tpt.entries)
+
+        expected = TablePulseTemplate({'A': [(0, 1), ('a', 5), ('Max(a, b)', 5), ('Max(a, b)', 1), ('Max(a, b) + a', 5)],
+                                       'B': [(0, 2), ('b', 3), ('Max(a, b)', 3), ('Max(a, b)', 2), ('Max(a, b) + b', 3)]})
+
+        self.assertEqual(expected.entries, concatenated.entries)
+
+    def test_wrong_channels(self):
+        tpt_1 = TablePulseTemplate({'A': [(0, 1), ('a', 5, 'linear')],
+                                    'B': [(0, 2), ('b', 7)]})
+
+        tpt_2 = TablePulseTemplate({'A': [('c', 9), ('a', 10, 'jump')],
+                                    'C': [(0, 6), ('b', 8)]})
+
+        with self.assertRaisesRegex(ValueError, 'differing defined channels'):
+            concatenate(tpt_1, tpt_2)
+
+    def test_wrong_type(self):
+        dummy = DummyPulseTemplate()
+        tpt = TablePulseTemplate({'A': [(0, 1), ('a', 5, 'linear')],
+                                  'B': [(0, 2), ('b', 7)]})
+
+        with self.assertRaisesRegex(TypeError, 'not a TablePulseTemplate'):
+            concatenate(dummy, tpt)
 
 
 if __name__ == "__main__":

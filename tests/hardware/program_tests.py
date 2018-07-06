@@ -403,6 +403,19 @@ LOOP 1 times:
         with self.assertRaises(KeyError):
             mcp['C']
 
+    def test_empty_repj(self):
+        empty_block = InstructionBlock()
+
+        root_block = InstructionBlock()
+        root_block.add_instruction_repj(1, empty_block)
+
+        with self.assertRaisesRegex(ValueError, 'no defined channels'):
+            MultiChannelProgram(root_block)
+
+        empty_block.add_instruction_exec(DummyWaveform(duration=1, defined_channels={'A', 'B'}))
+        MultiChannelProgram(root_block)
+
+
     def test_via_repr(self):
         root_loopA = self.get_mcp('A')
         root_loopB = self.get_mcp('B')
