@@ -590,6 +590,31 @@ class PulseStorageTests(unittest.TestCase):
 }"""
         self.assertEqual(expected, pulse_storage._storage_backend['foo'])
 
+    def test_delitem(self):
+        instance_1 = DummySerializable(identifier='my_id_1')
+        instance_2 = DummySerializable(identifier='my_id_2')
+
+        backend = DummyStorageBackend()
+
+        pulse_storage = PulseStorage(backend)
+        with self.assertRaises(KeyError):
+            del pulse_storage[instance_1.identifier]
+
+        # write first instance to backend
+        pulse_storage[instance_1.identifier] = instance_1
+
+        del pulse_storage
+
+        # now instance_1 is not in the temporary storage
+        pulse_storage = PulseStorage(backend)
+        pulse_storage[instance_2.identifier] = instance_2
+
+        del pulse_storage[instance_1.identifier]
+        del pulse_storage[instance_2.identifier]
+
+        self.assertEqual({}, backend.stored_items)
+        self.assertEqual(pulse_storage.temporary_storage, {})
+
 
 class JSONSerializableDecoderTests(unittest.TestCase):
     def test_filter_serializables(self):
