@@ -523,7 +523,7 @@ class PulseStorageTests(unittest.TestCase):
         self.assertNotIn('my_id_2', self.backend)
         self.assertIs(previous_inner, self.storage['my_id_1'])
 
-        enc = JSONSerializableEncoder(None)
+        enc = JSONSerializableEncoder(None, sort_keys=True, indent=4)
         expected = enc.encode(previous_inner.get_serialization_data())
         self.assertEqual(expected, self.backend['my_id_1'])
 
@@ -571,6 +571,24 @@ class PulseStorageTests(unittest.TestCase):
         finally:
             import qctoolkit.serialization
             qctoolkit.serialization.default_pulse_registry = previous_default_registry
+
+    def test_beautified_json(self) -> None:
+        data = {'e': 89, 'b': 151, 'c': 123515, 'a': 123, 'h': 2415}
+        template = DummySerializable(data=data)
+        pulse_storage = PulseStorage(DummyStorageBackend())
+        pulse_storage['foo'] = template
+
+        expected = """{
+    \"#type\": \"""" + DummySerializable.get_type_identifier() + """\",
+    \"data\": {
+        \"a\": 123,
+        \"b\": 151,
+        \"c\": 123515,
+        \"e\": 89,
+        \"h\": 2415
+    }
+}"""
+        self.assertEqual(expected, pulse_storage._storage_backend['foo'])
 
 
 class JSONSerializableDecoderTests(unittest.TestCase):
