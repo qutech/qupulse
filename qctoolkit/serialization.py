@@ -18,6 +18,7 @@ import json
 import weakref
 import warnings
 import gc
+from contextlib import contextmanager
 
 from qctoolkit.utils.types import DocStringABCMeta
 
@@ -318,6 +319,10 @@ class SerializableMeta(DocStringABCMeta):
 
 
 default_pulse_registry = weakref.WeakValueDictionary()
+
+
+def get_default_pulse_registry() -> Union[weakref.WeakKeyDictionary, 'PulseStorage']:
+    return default_pulse_registry
 
 
 class Serializable(metaclass=SerializableMeta):
@@ -696,6 +701,20 @@ class PulseStorage:
 
     def clear(self) -> None:
         self._temporary_storage.clear()
+
+    @contextmanager
+    def as_default_registry(self) -> Any:
+        global default_pulse_registry
+        previous_registry = default_pulse_registry
+        default_pulse_registry = self
+        try:
+            yield self
+        finally:
+            default_pulse_registry = previous_registry
+
+    def set_to_default_registry(self) -> None:
+        global default_pulse_registry
+        default_pulse_registry = self
 
 
 class JSONSerializableDecoder(json.JSONDecoder):
