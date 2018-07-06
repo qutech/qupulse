@@ -476,10 +476,14 @@ def concatenate(*table_pulse_templates: TablePulseTemplate, **kwargs) -> TablePu
     duration = ExpressionScalar(0)
 
     for i, template in enumerate(table_pulse_templates):
+        if not isinstance(template, TablePulseTemplate):
+            raise TypeError('Template number %d is not a TablePulseTemplate' % i)
+
         new_duration = duration + template.duration
 
         if template.defined_channels != first_template.defined_channels:
-            raise ValueError()
+            raise ValueError('Template number %d has differing defined channels' % i,
+                             first_template.defined_channels, template.defined_channels)
 
         for channel, channel_entries in template.entries.items():
             first_t, first_v, _ = channel_entries[0]

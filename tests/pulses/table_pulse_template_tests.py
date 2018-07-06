@@ -10,7 +10,8 @@ from qctoolkit.pulses.parameters import ParameterNotProvidedException, Parameter
 from qctoolkit.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy, JumpInterpolationStrategy
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 
-from tests.pulses.sequencing_dummies import DummyInterpolationStrategy, DummyParameter, DummyCondition
+from tests.pulses.sequencing_dummies import DummyInterpolationStrategy, DummyParameter, DummyCondition,\
+    DummyPulseTemplate
 from tests.serialization_dummies import DummySerializer, DummyStorageBackend
 from tests.pulses.measurement_tests import ParameterConstrainerTest, MeasurementDefinerTest
 
@@ -775,6 +776,24 @@ class TablePulseConcatenationTests(unittest.TestCase):
                                        'B': [(0, 2), ('b', 3), ('Max(a, b)', 3), ('Max(a, b)', 2), ('Max(a, b) + b', 3)]})
 
         self.assertEqual(expected.entries, concatenated.entries)
+
+    def test_wrong_channels(self):
+        tpt_1 = TablePulseTemplate({'A': [(0, 1), ('a', 5, 'linear')],
+                                    'B': [(0, 2), ('b', 7)]})
+
+        tpt_2 = TablePulseTemplate({'A': [('c', 9), ('a', 10, 'jump')],
+                                    'C': [(0, 6), ('b', 8)]})
+
+        with self.assertRaisesRegex(ValueError, 'differing defined channels'):
+            concatenate(tpt_1, tpt_2)
+
+    def test_wrong_type(self):
+        dummy = DummyPulseTemplate()
+        tpt = TablePulseTemplate({'A': [(0, 1), ('a', 5, 'linear')],
+                                  'B': [(0, 2), ('b', 7)]})
+
+        with self.assertRaisesRegex(TypeError, 'not a TablePulseTemplate'):
+            concatenate(dummy, tpt)
 
 
 if __name__ == "__main__":
