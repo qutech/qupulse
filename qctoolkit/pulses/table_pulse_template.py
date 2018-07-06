@@ -468,15 +468,17 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
         return expressions
 
 
-def concatenate(first_table_pulse_template: TablePulseTemplate, *table_pulse_templates: TablePulseTemplate, **kwargs):
+def concatenate(*table_pulse_templates: TablePulseTemplate, **kwargs) -> TablePulseTemplate:
     """Concatenate two or more table pulse templates"""
-    entries = {channel: [] for channel in first_table_pulse_template.defined_channels}
+    first_template, *other_templates = table_pulse_templates
+
+    entries = {channel: [] for channel in first_template.defined_channels}
     duration = ExpressionScalar(0)
 
-    for i, template in enumerate((first_table_pulse_template,) + table_pulse_templates):
+    for i, template in enumerate(table_pulse_templates):
         new_duration = duration + template.duration
 
-        if template.defined_channels != first_table_pulse_template.defined_channels:
+        if template.defined_channels != first_template.defined_channels:
             raise ValueError()
 
         for channel, channel_entries in template.entries.items():
@@ -489,7 +491,7 @@ def concatenate(first_table_pulse_template: TablePulseTemplate, *table_pulse_tem
                 entries[channel].append((duration.sympified_expression + t, v, interp))
 
             last_t, last_v, _ = channel_entries[-1]
-            if i < len(table_pulse_templates) and last_t != new_duration:
+            if i < len(other_templates) and last_t != new_duration:
                 entries[channel].append((new_duration, last_v, TablePulseTemplate.interpolation_strategies['hold']))
 
         duration = new_duration
