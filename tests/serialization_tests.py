@@ -13,7 +13,7 @@ from typing import Optional, Any, Dict
 
 from qctoolkit.serialization import FilesystemBackend, CachingBackend, Serializable, JSONSerializableEncoder,\
     ZipFileBackend, AnonymousSerializable, DictBackend, PulseStorage, JSONSerializableDecoder, Serializer,\
-    get_default_pulse_registry
+    get_default_pulse_registry, SerializableMeta
 
 from qctoolkit.expressions import ExpressionScalar
 
@@ -165,40 +165,35 @@ class DummyPulseTemplateSerializationtests(SerializableTests, unittest.TestCase)
 
 
 class FileSystemBackendTest(unittest.TestCase):
-
     def setUp(self) -> None:
-        self.tmpdir = TemporaryDirectory()
-        self.cwd = os.getcwd()
-        os.chdir(self.tmpdir.name)
-        dirname = 'fsbackendtest'
-        os.mkdir(dirname) # replace by temporary directory
-        self.backend = FilesystemBackend(dirname)
-        self.testdata = 'dshiuasduzchjbfdnbewhsdcuzd'
+        self.tmp_dir = TemporaryDirectory()
+        self.backend = FilesystemBackend(self.tmp_dir.name)
+        self.test_data = 'dshiuasduzchjbfdnbewhsdcuzd'
         self.alternative_testdata = "8u993zhhbn\nb3tadgadg"
+
         self.identifier = 'some name'
 
     def tearDown(self) -> None:
-        os.chdir(self.cwd)
-        self.tmpdir.cleanup()
+        self.tmp_dir.cleanup()
 
     def test_put_and_get_normal(self) -> None:
         # first put the data
-        self.backend.put(self.identifier, self.testdata)
+        self.backend.put(self.identifier, self.test_data)
 
         # then retrieve it again
         data = self.backend.get(self.identifier)
-        self.assertEqual(data, self.testdata)
+        self.assertEqual(data, self.test_data)
 
     def test_put_file_exists_no_overwrite(self) -> None:
         name = 'test_put_file_exists_no_overwrite'
-        self.backend.put(name, self.testdata)
+        self.backend.put(name, self.test_data)
         with self.assertRaises(FileExistsError):
             self.backend.put(name, self.alternative_testdata)
-        self.assertEqual(self.testdata, self.backend.get(name))
+        self.assertEqual(self.test_data, self.backend.get(name))
 
     def test_put_file_exists_overwrite(self) -> None:
         name = 'test_put_file_exists_overwrite'
-        self.backend.put(name, self.testdata)
+        self.backend.put(name, self.test_data)
         self.backend.put(name, self.alternative_testdata, overwrite=True)
         self.assertEqual(self.alternative_testdata, self.backend.get(name))
 
@@ -208,7 +203,7 @@ class FileSystemBackendTest(unittest.TestCase):
 
     def test_exists(self) -> None:
         name = 'test_exists'
-        self.backend.put(name, self.testdata)
+        self.backend.put(name, self.test_data)
         self.assertTrue(self.backend.exists(name))
         self.assertFalse(self.backend.exists('exists_not'))
 
@@ -216,6 +211,17 @@ class FileSystemBackendTest(unittest.TestCase):
         name = 'test_get_not_existing'
         with self.assertRaisesRegex(KeyError, name):
             self.backend.get(name)
+
+    def test_delete(self):
+        name = 'test_delete'
+        with self.assertRaisesRegex(KeyError, name):
+            self.backend.delete(name)
+
+        self.backend.put(name, self.test_data)
+        self.assertTrue(self.backend.exists(name))
+        self.backend.delete(name)
+        self.assertFalse(self.backend.exists(name))
+        self.assertFalse(os.listdir(self.tmp_dir.name))
 
 
 class ZipFileBackendTests(unittest.TestCase):
@@ -301,6 +307,10 @@ class ZipFileBackendTests(unittest.TestCase):
 
             self.assertEqual(be.get('foo'), data)
 
+            os.remove(root)
+            with self.assertRaises(KeyError):
+                be.get('foo')
+
     def test_update(self):
         with TemporaryDirectory() as tmp_dir:
             root = os.path.join(tmp_dir, 'root.zip')
@@ -313,6 +323,25 @@ class ZipFileBackendTests(unittest.TestCase):
 
             self.assertEqual(be.get('foo'), 'foo_bar_data')
             self.assertEqual(be.get('bar'), 'bar_data')
+
+            be._update('foo.json', None)
+            self.assertFalse(be.exists('foo'))
+
+    def test_delete(self):
+        with TemporaryDirectory() as tmp_dir:
+            root = os.path.join(tmp_dir, 'root.zip')
+            backend = ZipFileBackend(root)
+
+            with self.assertRaisesRegex(KeyError, 'foo'):
+                backend.delete('foo')
+
+            backend.put('foo', 'foo_data')
+            self.assertTrue(backend.exists('foo'))
+            backend.delete('foo')
+            self.assertFalse(backend.exists('foo'))
+
+            with zipfile.ZipFile(root, 'r') as file:
+                self.assertNotIn('foo', file.namelist())
 
 
 class CachingBackendTests(unittest.TestCase):
@@ -390,6 +419,18 @@ class CachingBackendTests(unittest.TestCase):
         with self.assertRaises(KeyError):
             self.caching_backend.get(name)
 
+    def test_delete(self):
+        self.dummy_backend.put('foo', self.testdata)
+        self.caching_backend.put('bar', self.alternative_testdata)
+
+        self.caching_backend.delete('bar')
+        self.assertNotIn('bar', self.caching_backend)
+        self.assertNotIn('bar', self.dummy_backend)
+
+        self.caching_backend.delete('foo')
+        self.assertNotIn('foo', self.caching_backend)
+        self.assertNotIn('foo', self.dummy_backend)
+
 
 class DictBackendTests(unittest.TestCase):
     def setUp(self):
@@ -417,6 +458,27 @@ class DictBackendTests(unittest.TestCase):
         self.assertTrue(self.backend.exists('a'))
         self.assertTrue(self.backend.exists('b'))
         self.assertFalse(self.backend.exists('c'))
+
+    def test_delete(self):
+        self.backend.put('a', 'data')
+
+        with self.assertRaises(KeyError):
+            self.backend.delete('b')
+
+        self.backend.delete('a')
+        self.assertFalse(self.backend.storage)
+
+
+class SerializableMetaTests(unittest.TestCase):
+    def test_native_deserializable(self):
+
+        class NativeDeserializable(metaclass=SerializableMeta):
+            @classmethod
+            def get_type_identifier(cls):
+                return 'foo.bar.never'
+
+        self.assertIn('foo.bar.never', SerializableMeta.deserialization_callbacks)
+        self.assertEqual(SerializableMeta.deserialization_callbacks['foo.bar.never'], NativeDeserializable)
 
 
 class PulseStorageTests(unittest.TestCase):

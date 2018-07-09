@@ -203,7 +203,7 @@ class ZipFileBackend(StorageBackend):
             raise KeyError(identifier)
         self._update(self._path(identifier), None)
 
-    def _update(self, filename, data) -> None:
+    def _update(self, filename: str, data: Optional[str]) -> None:
         # generate a temp file
         tmpfd, tmpname = tempfile.mkstemp(dir=os.path.dirname(self._root))
         os.close(tmpfd)
@@ -221,7 +221,7 @@ class ZipFileBackend(StorageBackend):
         os.rename(tmpname, self._root)
 
         # now add filename with its new data
-        if data:
+        if data is not None:
             with zipfile.ZipFile(self._root, mode='a', compression=zipfile.ZIP_DEFLATED) as zf:
                 zf.writestr(filename, data)
 
