@@ -1098,9 +1098,10 @@ class ConversionTests(unittest.TestCase):
             serializer = Serializer(source_backend)
 
             hugo_serializable = DummySerializable(foo='bar',
-                                                  identifier='hugo')
+                                                  identifier='hugo',
+                                                  registry=dict())
 
-            serializable = NestedDummySerializable(hugo_serializable, identifier='hugos_parent')
+            serializable = NestedDummySerializable(hugo_serializable, identifier='hugos_parent', registry=dict())
             serializer.serialize(serializable)
 
             destination_backend = DummyStorageBackend()
@@ -1118,9 +1119,10 @@ class ConversionTests(unittest.TestCase):
             serializer = Serializer(source_backend)
 
             hugo_serializable = DummySerializable(foo='bar',
-                                                  identifier='hugo')
+                                                  identifier='hugo',
+                                                  registry=dict())
 
-            serializable = NestedDummySerializable(hugo_serializable, identifier='hugos_parent')
+            serializable = NestedDummySerializable(hugo_serializable, identifier='hugos_parent', registry=dict())
             serializer.serialize(serializable)
 
             destination_backend = DummyStorageBackend()
@@ -1139,9 +1141,10 @@ class ConversionTests(unittest.TestCase):
             serializer = Serializer(source_backend)
 
             hugo_serializable = DummySerializable(foo='bar',
-                                                  identifier='hugo')
+                                                  identifier='hugo',
+                                                  registry=dict())
 
-            serializable = NestedDummySerializable(hugo_serializable, identifier='hugos_parent')
+            serializable = NestedDummySerializable(hugo_serializable, identifier='hugos_parent', registry=dict())
             serializer.serialize(serializable)
 
             destination_backend = DummyStorageBackend()
@@ -1161,12 +1164,14 @@ class ConversionTests(unittest.TestCase):
             serializer = Serializer(source_backend)
 
             hugo_serializable = DummySerializable(foo='bar',
-                                                 identifier='hugo')
+                                                  identifier='hugo',
+                                                  registry=dict())
 
-            serializable_a = NestedDummySerializable(hugo_serializable, identifier='hugos_parent')
+            serializable_a = NestedDummySerializable(hugo_serializable, identifier='hugos_parent', registry=dict())
             serializable_b = DummySerializable(identifier='ilse',
                                                foo=dict(abc=123, data='adf8g23'),
-                                               number=7.3)
+                                               number=7.3,
+                                               registry=dict())
 
             serializer.serialize(serializable_a)
             serializer.serialize(serializable_b)
@@ -1188,12 +1193,14 @@ class ConversionTests(unittest.TestCase):
             serializer = Serializer(source_backend)
 
             hugo_serializable = DummySerializable(foo='bar',
-                                                 identifier='hugo')
+                                                  identifier='hugo',
+                                                  registry=dict())
 
-            serializable_a = NestedDummySerializable(hugo_serializable, identifier='hugos_parent')
+            serializable_a = NestedDummySerializable(hugo_serializable, identifier='hugos_parent', registry=dict())
             serializable_b = DummySerializable(identifier='ilse',
                                                foo=dict(abc=123, data='adf8g23'),
-                                               number=7.3)
+                                               number=7.3,
+                                               registry=dict())
 
             serializer.serialize(serializable_a)
             serializer.serialize(serializable_b)
@@ -1214,12 +1221,14 @@ class ConversionTests(unittest.TestCase):
             serializer = Serializer(source_backend)
 
             hugo_serializable = DummySerializable(foo='bar',
-                                                 identifier='hugo')
+                                                  identifier='hugo',
+                                                  registry=dict())
 
-            serializable_a = NestedDummySerializable(hugo_serializable, identifier='hugos_parent')
+            serializable_a = NestedDummySerializable(hugo_serializable, identifier='hugos_parent', registry=dict())
             serializable_b = DummySerializable(identifier='ilse',
                                                foo=dict(abc=123, data='adf8g23'),
-                                               number=7.3)
+                                               number=7.3,
+                                               registry=dict())
 
             serializer.serialize(serializable_a)
             serializer.serialize(serializable_b)

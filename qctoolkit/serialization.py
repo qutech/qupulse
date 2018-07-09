@@ -861,7 +861,6 @@ def convert_stored_pulse_in_storage(identifier: str, source_storage: StorageBack
         pulse_storage = PulseStorage(dest_storage)
         serializable = serializer.deserialize(identifier)
         pulse_storage.overwrite(identifier, serializable)
-        pulse_storage.flush()
 
 
 def convert_pulses_in_storage(source_storage: StorageBackend, dest_storage: StorageBackend) -> None:
@@ -885,4 +884,3 @@ def convert_pulses_in_storage(source_storage: StorageBackend, dest_storage: Stor
         for identifier in source_storage.list_contents():
             serializable = serializer.deserialize(identifier)
             pulse_storage.overwrite(identifier, serializable)
-        pulse_storage.flush()
