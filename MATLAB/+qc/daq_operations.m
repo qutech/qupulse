@@ -36,7 +36,8 @@ function [output, bool, msg] = daq_operations(ctrl, varargin)
 			msg = sprintf('Operations from last armed program ''%s'' reused.\n  If an error occurs, try executing another program\n  first to update the operations.', plsdata.awg.currentProgam);
 		else
 			daq.register_operations(a.program_name, qc.operations_to_python(a.operations));
-			msg = sprintf('Operations for program ''%s'' added', a.program_name);
+			msg = sprintf('Operations for program ''%s'' added', a.program_name);			
+			qc.workaround_alazar_single_buffer_acquisition();
 		end
 		bool = true;
 	

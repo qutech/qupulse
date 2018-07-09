@@ -84,6 +84,13 @@ class AWG(Comparable):
         """
 
     @abstractmethod
+    def clear(self) -> None:
+        """Removes all programs and waveforms from the AWG.
+
+        Caution: This affects all programs and waveforms on the AWG, not only those uploaded using qc-toolkit!
+        """
+
+    @abstractmethod
     def arm(self, name: Optional[str]) -> None:
         """Load the program 'name' and arm the device for running it. If name is None the awg will "dearm" its current
         program."""

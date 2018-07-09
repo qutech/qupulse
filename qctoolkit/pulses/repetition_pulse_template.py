@@ -81,7 +81,8 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
                  identifier: Optional[str]=None,
                  *args,
                  parameter_constraints: Optional[List]=None,
-                 measurements: Optional[List[MeasurementDeclaration]]=None
+                 measurements: Optional[List[MeasurementDeclaration]]=None,
+                 registry: Optional[dict]=None
                  ) -> None:
         """Create a new RepetitionPulseTemplate instance.
 
@@ -96,14 +97,17 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
         elif args:
             TypeError('RepetitionPulseTemplate expects 3 positional arguments, got ' + str(3 + len(args)))
 
-        LoopPulseTemplate.__init__(self, identifier=identifier, body=body)
+        LoopPulseTemplate.__init__(self, identifier=identifier, body=body, registry=registry)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
         MeasurementDefiner.__init__(self, measurements=measurements)
 
         repetition_count = ExpressionScalar.make(repetition_count)
 
-        if (repetition_count < 0) is True:
+        if repetition_count < 0:
             raise ValueError('Repetition count may not be negative')
+
+        if repetition_count == 0:
+            warn("Repetition pulse template with 0 repetitions on construction.")
 
         self._repetition_count = repetition_count
 
@@ -143,20 +147,23 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
                        channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                        instruction_block: InstructionBlock) -> None:
         self.validate_parameter_constraints(parameters=parameters)
-
-        body_block = InstructionBlock()
-        body_block.return_ip = InstructionPointer(instruction_block, len(instruction_block))
-
         try:
             real_parameters = {v: parameters[v].get_value() for v in self._repetition_count.variables}
         except KeyError:
             raise ParameterNotProvidedException(next(v for v in self.repetition_count.variables if v not in parameters))
+
         self.insert_measurement_instruction(instruction_block,
                                             parameters=parameters,
                                             measurement_mapping=measurement_mapping)
-        instruction_block.add_instruction_repj(self.get_repetition_count_value(real_parameters), body_block)
-        sequencer.push(self.body, parameters=parameters, conditions=conditions,
-                       window_mapping=measurement_mapping, channel_mapping=channel_mapping, target_block=body_block)
+
+        repetition_count = self.get_repetition_count_value(real_parameters)
+        if repetition_count > 0:
+            body_block = InstructionBlock()
+            body_block.return_ip = InstructionPointer(instruction_block, len(instruction_block))
+
+            instruction_block.add_instruction_repj(repetition_count, body_block)
+            sequencer.push(self.body, parameters=parameters, conditions=conditions,
+                           window_mapping=measurement_mapping, channel_mapping=channel_mapping, target_block=body_block)
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],

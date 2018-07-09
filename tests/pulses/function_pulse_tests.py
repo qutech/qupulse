@@ -7,11 +7,12 @@ from qctoolkit.pulses.function_pulse_template import FunctionPulseTemplate,\
     FunctionWaveform
 from qctoolkit.serialization import Serializer, Serializable, PulseStorage
 from qctoolkit.expressions import Expression
-from qctoolkit.pulses.parameters import ParameterConstraintViolation
+from qctoolkit.pulses.parameters import ParameterConstraintViolation, ParameterConstraint
 
 from tests.serialization_dummies import DummySerializer, DummyStorageBackend
 from tests.pulses.sequencing_dummies import DummyParameter
 from tests.pulses.measurement_tests import MeasurementDefinerTest, ParameterConstrainerTest
+from tests.serialization_tests import SerializableTests
 
 
 class FunctionPulseTest(unittest.TestCase):
@@ -82,76 +83,30 @@ class FunctionPulsePropertyTest(FunctionPulseTest):
         self.assertEqual(expected_parameter_names, template.parameter_names)
 
 
-class FunctionPulseSerializationTest(FunctionPulseTest):
+class FunctionPulseSerializationTest(SerializableTests, unittest.TestCase):
 
-    def test_get_serialization_data_with_identifier(self) -> None:
-        template = FunctionPulseTemplate(self.s, self.s2, channel='A',
-                                         measurements=self.meas_list,
-                                         parameter_constraints=self.constraints,
-                                         identifier='hugo')
+    @property
+    def class_to_test(self):
+        return FunctionPulseTemplate
 
-        expected_data = {
-             'duration_expression': str(self.s2),
-             'expression': str(self.s),
-             'channel': 'A',
-             'measurements': self.meas_list,
-             'parameter_constraints': self.constraints,
-            Serializable.type_identifier_name: FunctionPulseTemplate.get_type_identifier(),
-            Serializable.identifier_name: 'hugo'
+    def make_kwargs(self):
+        return {
+            'expression': Expression('a + b * t'),
+            'duration_expression': Expression('c'),
+            'channel': 'A',
+            'measurements': [('mw', 1, 1), ('mw', 'x', 'z'), ('drup', 'j', 'u')],
+            'parameter_constraints': [str(ParameterConstraint('a < b')), str(ParameterConstraint('c > 1')),
+                                      str(ParameterConstraint('d > c'))]
         }
-        self.assertEqual(expected_data, template.get_serialization_data())
 
-    def test_get_serialization_data_without_identifier(self) -> None:
-        template = FunctionPulseTemplate(self.s, self.s2, channel='A',
-                                         measurements=self.meas_list,
-                                         parameter_constraints=self.constraints)
-
-        expected_data = {
-             'duration_expression': str(self.s2),
-             'expression': str(self.s),
-             'channel': 'A',
-             'measurements': self.meas_list,
-             'parameter_constraints': self.constraints,
-            Serializable.type_identifier_name: FunctionPulseTemplate.get_type_identifier()
-        }
-        self.assertEqual(expected_data, template.get_serialization_data())
-
-    def test_deserialize(self) -> None:
-        basic_data = dict(duration_expression=Expression(self.s2),
-                          expression=Expression(self.s),
-                          channel='A',
-                          identifier='hugo',
-                          measurements=self.meas_list,
-                          parameter_constraints=self.constraints)
-        template = FunctionPulseTemplate.deserialize(**basic_data)
-        self.assertEqual('hugo', template.identifier)
-        self.assertEqual({'a', 'b', 'c', 'x', 'z', 'j', 'u', 'd'}, template.parameter_names)
-        self.assertEqual(template.measurement_declarations,
-                         self.meas_list)
-        self.assertEqual(basic_data['duration_expression'], template.duration)
-        self.assertEqual(basic_data['expression'], template.expression)
-
-    def test_serializer_integration(self):
-        ref_template = FunctionPulseTemplate(self.s, self.s2, channel='A',
-                                             measurements=self.meas_list,
-                                             parameter_constraints=self.constraints,
-                                             identifier='foo')
-
-        storage_backend = DummyStorageBackend()
-        pulse_storage = PulseStorage(storage_backend)
-        pulse_storage[ref_template.identifier] = ref_template
-        pulse_storage.flush()
-
-        pulse_storage = PulseStorage(storage_backend) #recreate object to clear temporary storage
-        template = pulse_storage[ref_template.identifier]
-
-        self.assertIsInstance(template, FunctionPulseTemplate)
-        self.assertEqual('foo', template.identifier)
-        self.assertEqual(ref_template.parameter_names, template.parameter_names)
-        self.assertEqual(ref_template.measurement_declarations, template.measurement_declarations)
-        self.assertEqual(ref_template.parameter_constraints, template.parameter_constraints)
-        self.assertEqual(ref_template.duration, template.duration)
-        self.assertEqual(ref_template.expression, template.expression)
+    def assert_equal_instance(self, lhs: FunctionPulseTemplate, rhs: FunctionPulseTemplate):
+        self.assertIsInstance(lhs, FunctionPulseTemplate)
+        self.assertIsInstance(rhs, FunctionPulseTemplate)
+        self.assertEqual(lhs.parameter_names, rhs.parameter_names)
+        self.assertEqual(lhs.measurement_declarations, rhs.measurement_declarations)
+        self.assertEqual(lhs.parameter_constraints, rhs.parameter_constraints)
+        self.assertEqual(lhs.duration, rhs.duration)
+        self.assertEqual(lhs.expression, rhs.expression)
 
 
 class FunctionPulseOldSerializationTests(FunctionPulseTest):
@@ -199,7 +154,7 @@ class FunctionPulseOldSerializationTests(FunctionPulseTest):
                                            channel='A',
                                            measurements=self.meas_list,
                                            parameter_constraints=self.constraints,
-                                           identifier='my_tpt')
+                                           identifier='my_tpt', registry=dict())
             serializer = Serializer(DummyStorageBackend())
             serializer.serialize(before)
             after = serializer.deserialize('my_tpt')

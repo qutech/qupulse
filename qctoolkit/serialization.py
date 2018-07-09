@@ -10,13 +10,15 @@ Classes:
 """
 
 from abc import ABCMeta, abstractmethod
-from typing import Dict, Any, Optional, NamedTuple, Union, Sequence, Set
+from typing import Dict, Any, Optional, NamedTuple, Union, Set
 import os
 import zipfile
 import tempfile
 import json
 import weakref
 import warnings
+import gc
+from contextlib import contextmanager
 
 from qctoolkit.utils.types import DocStringABCMeta
 
@@ -225,7 +227,7 @@ class ZipFileBackend(StorageBackend):
             raise KeyError(identifier)
         self._update(self._path(identifier), None)
 
-    def _update(self, filename, data) -> None:
+    def _update(self, filename: str, data: Optional[str]) -> None:
         # generate a temp file
         tmpfd, tmpname = tempfile.mkstemp(dir=os.path.dirname(self._root))
         os.close(tmpfd)
@@ -243,7 +245,7 @@ class ZipFileBackend(StorageBackend):
         os.rename(tmpname, self._root)
 
         # now add filename with its new data
-        if data:
+        if data is not None:
             with zipfile.ZipFile(self._root, mode='a', compression=zipfile.ZIP_DEFLATED) as zf:
                 zf.writestr(filename, data)
 
@@ -352,7 +354,11 @@ class SerializableMeta(DocStringABCMeta):
         return cls
 
 
-default_pulse_registration = weakref.WeakValueDictionary()
+default_pulse_registry = weakref.WeakValueDictionary()
+
+
+def get_default_pulse_registry() -> Union[weakref.WeakKeyDictionary, 'PulseStorage']:
+    return default_pulse_registry
 
 
 class Serializable(metaclass=SerializableMeta):
@@ -375,30 +381,36 @@ class Serializable(metaclass=SerializableMeta):
     type_identifier_name = '#type'
     identifier_name = '#identifier'
 
-    def __init__(self, identifier: Optional[str]=None, registration: weakref.WeakValueDictionary=None) -> None:
+    def __init__(self, identifier: Optional[str]=None, registry: Optional[dict]=None) -> None:
         """Initialize a Serializable.
 
         Args:
             identifier: An optional, non-empty identifier for this Serializable.
                 If set, this Serializable will always be stored as a separate data item and never
                 be embedded.
+            registry: An optional dict where the Serializable is registered. If None, it gets registered in the
+                default_pulse_registry.
         Raises:
             ValueError: If identifier is the empty string
         """
         super().__init__()
 
-        if registration is None:
-            registration = default_pulse_registration
+        if registry is None:
+            registry = default_pulse_registry
 
         if identifier == '':
             raise ValueError("Identifier must not be empty.")
         self.__identifier = identifier
 
-        if identifier and registration:
-            if identifier in registration:
-                raise RuntimeError('Pulse with name already exists', identifier)
-            else:
-                registration[identifier] = self
+        if identifier and registry is not None:
+            if identifier in registry:
+                # trigger garbage collection in case the registered object isn't referenced anymore
+                gc.collect(2)
+
+                if identifier in registry:
+                    raise RuntimeError('Pulse with name already exists', identifier)
+
+            registry[identifier] = self
 
     @property
     def identifier(self) -> Optional[str]:
@@ -631,6 +643,10 @@ class Serializer(object):
         """
         warnings.warn("Serializer is deprecated. Please switch to the new serialization routines.", DeprecationWarning)
         if isinstance(representation, str):
+            if representation in self.__subpulses:
+                return self.__subpulses[representation].serializable
+
+        if isinstance(representation, str):
             repr_ = json.loads(self.__storage_backend.get(representation))
             repr_['identifier'] = representation
         else:
@@ -640,8 +656,15 @@ class Serializer(object):
         module = __import__(module_name, fromlist=[class_name])
         class_ = getattr(module, class_name)
 
+        repr_to_store = repr_.copy()
         repr_.pop('type')
-        return class_.deserialize(self, **repr_)
+
+        serializable = class_.deserialize(self, **repr_)
+
+        if 'identifier' in repr_:
+            identifier = repr_['identifier']
+            self.__subpulses[identifier] = self.__FileEntry(repr_, serializable)
+        return serializable
 
 
 class PulseStorage:
@@ -652,6 +675,7 @@ class PulseStorage:
         self._storage_backend = storage_backend
 
         self._temporary_storage = dict() # type: Dict[str, StorageEntry]
+        self._transaction_storage = None
 
     def _deserialize(self, serialization: str) -> Serializable:
         decoder = JSONSerializableDecoder(storage=self)
@@ -679,34 +703,65 @@ class PulseStorage:
 
     def __setitem__(self, identifier: str, serializable: Serializable) -> None:
         if identifier in self._temporary_storage:
-            # todo (lumip, 2018-05-30): only checking against the temporary storage is not sufficient to check for duplicates
             if self.temporary_storage[identifier].serializable is serializable:
                 return
             else:
                 raise RuntimeError('Identifier assigned twice with different objects', identifier)
+        elif identifier in self._storage_backend:
+            raise RuntimeError('Identifier already assigned in storage backend', identifier)
         self.overwrite(identifier, serializable)
+
+    def __delitem__(self, identifier: str) -> None:
+        """Delete an item from temporary storage and storage backend.
+
+        Does not raise an error if the deleted pulse is only in the storage backend. Assumes that all pulses
+        contained in temporary storage are always also contained in the storage backend.
+        """
+        del self._storage_backend[identifier]
+        try:
+            del self._temporary_storage[identifier]
+        except KeyError:
+            pass
 
     def overwrite(self, identifier: str, serializable: Serializable) -> None:
         """Use this method actively change a pulse"""
 
-        encoder = JSONSerializableEncoder(self)
+        is_transaction_begin = (self._transaction_storage is None)
+        try:
+            if is_transaction_begin:
+                self._transaction_storage = dict()
 
-        serialization_data = serializable.get_serialization_data()
-        serialized = encoder.encode(serialization_data)
+            encoder = JSONSerializableEncoder(self, sort_keys=True, indent=4)
 
-        self._temporary_storage[identifier] = self.StorageEntry(serialized, serializable)
+            serialization_data = serializable.get_serialization_data()
+            serialized = encoder.encode(serialization_data)
+            self._transaction_storage[identifier] = self.StorageEntry(serialized, serializable)
 
-    def flush(self, to_ignore: Sequence[str]=None) -> None:
-        to_ignore = set(to_ignore) if to_ignore else set()
-        for identifier, (serialized, _) in self._temporary_storage.items():
-            if identifier not in to_ignore and serialized:
-                self._storage_backend.put(identifier, serialized, True)
+            if is_transaction_begin:
+                for identifier, entry in self._transaction_storage.items():
+                    self._storage_backend.put(identifier, entry.serialization, overwrite=True)
+                self._temporary_storage.update(**self._transaction_storage)
+
+        finally:
+            if is_transaction_begin:
+                self._transaction_storage = None
 
     def clear(self) -> None:
         self._temporary_storage.clear()
 
-    def __del__(self) -> None:
-        self.flush()
+    @contextmanager
+    def as_default_registry(self) -> Any:
+        global default_pulse_registry
+        previous_registry = default_pulse_registry
+        default_pulse_registry = self
+        try:
+            yield self
+        finally:
+            default_pulse_registry = previous_registry
+
+    def set_to_default_registry(self) -> None:
+        global default_pulse_registry
+        default_pulse_registry = self
 
 
 class JSONSerializableDecoder(json.JSONDecoder):
@@ -749,6 +804,9 @@ class JSONSerializableEncoder(json.JSONEncoder):
             if o.identifier:
                 if o.identifier not in self.storage:
                     self.storage[o.identifier] = o
+                elif o is not self.storage[o.identifier]:
+                    raise RuntimeError('Trying to store a subpulse with an identifier that is already taken.')
+
 
                 return {Serializable.type_identifier_name: 'reference',
                         Serializable.identifier_name: o.identifier}

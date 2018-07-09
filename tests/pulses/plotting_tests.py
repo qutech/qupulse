@@ -1,7 +1,7 @@
 import unittest
 import numpy
 
-from qctoolkit.pulses.plotting import PlottingNotPossibleException, render, iter_waveforms, iter_instruction_block
+from qctoolkit.pulses.plotting import PlottingNotPossibleException, render, iter_waveforms, iter_instruction_block, plot
 from qctoolkit.pulses.instructions import InstructionBlock
 from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
 from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
@@ -225,6 +225,14 @@ class PlotterTests(unittest.TestCase):
         # compare
         self.assertEqual(expected_times, times)
         self.assertEqual(expected_voltages, voltages)
+
+    def test_plot_empty_pulse(self) -> None:
+        import matplotlib
+        matplotlib.use('svg') # use non-interactive backend so that test does not fail on travis
+
+        pt = DummyPulseTemplate()
+        with self.assertWarnsRegex(UserWarning, "empty", msg="plot() did not issue a warning for an empty pulse"):
+            plot(pt, dict(), show=False)
 
 
 class PlottingNotPossibleExceptionTests(unittest.TestCase):

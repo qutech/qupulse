@@ -4,15 +4,17 @@ import warnings
 import numpy
 
 from qctoolkit.expressions import Expression
-from qctoolkit.serialization import Serializer, Serializable, PulseStorage
-from qctoolkit.pulses.table_pulse_template import TablePulseTemplate, TableWaveform, TableEntry, TableWaveformEntry, ZeroDurationTablePulseTemplate, AmbiguousTablePulseEntry
-from qctoolkit.pulses.parameters import ParameterNotProvidedException, ParameterConstraintViolation
+from qctoolkit.serialization import Serializer
+from qctoolkit.pulses.table_pulse_template import TablePulseTemplate, TableWaveform, TableEntry, TableWaveformEntry, ZeroDurationTablePulseTemplate, AmbiguousTablePulseEntry, concatenate
+from qctoolkit.pulses.parameters import ParameterNotProvidedException, ParameterConstraintViolation, ParameterConstraint
 from qctoolkit.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy, JumpInterpolationStrategy
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 
-from tests.pulses.sequencing_dummies import DummyInterpolationStrategy, DummyParameter, DummyCondition
+from tests.pulses.sequencing_dummies import DummyInterpolationStrategy, DummyParameter, DummyCondition,\
+    DummyPulseTemplate
 from tests.serialization_dummies import DummySerializer, DummyStorageBackend
 from tests.pulses.measurement_tests import ParameterConstrainerTest, MeasurementDefinerTest
+from tests.serialization_tests import SerializableTests
 
 
 class WaveformEntryTest(unittest.TestCase):
@@ -343,7 +345,7 @@ class TablePulseTemplateTest(unittest.TestCase):
         tpt = TablePulseTemplate.from_entry_list([(0, 9, 8, 7, 'hold'),
                                                   (1, 2, 1, 3, 'hold'),
                                                   (4, 1, 2, 3, 'linear')],
-                                                 identifier='tpt')
+                                                 identifier='tpt2')
         self.assertEqual(tpt.entries, entries)
 
         entries = {k: entries[i]
@@ -351,10 +353,10 @@ class TablePulseTemplateTest(unittest.TestCase):
         tpt = TablePulseTemplate.from_entry_list([(0, 9, 8, 7),
                                                   (1, 2, 1, 3, 'hold'),
                                                   (4, 1, 2, 3, 'linear')],
-                                                 identifier='tpt',
+                                                 identifier='tpt3',
                                                  channel_names=['A', 'B', 'C'])
         self.assertEqual(tpt.entries, entries)
-        self.assertEqual(tpt.identifier, 'tpt')
+        self.assertEqual(tpt.identifier, 'tpt3')
 
         entries = {0: [(0, 9, HoldInterpolationStrategy()),
                        (1, 2, HoldInterpolationStrategy()),
@@ -368,7 +370,7 @@ class TablePulseTemplateTest(unittest.TestCase):
         tpt = TablePulseTemplate.from_entry_list([(0, 9, 8, 7),
                                                   (1, 2, 1, 3),
                                                   (4, 1, 2, 3)],
-                                                 identifier='tpt')
+                                                 identifier='tpt4')
         self.assertEqual(tpt.entries, entries)
 
     def test_add_entry_multi_same_time_param(self) -> None:
@@ -437,78 +439,27 @@ class TablePulseTemplateMeasurementTest(MeasurementDefinerTest):
                          to_test_constructor=tpt_constructor, **kwargs)
 
 
-class TablePulseTemplateSerializationTests(unittest.TestCase):
+class TablePulseTemplateSerializationTests(SerializableTests, unittest.TestCase):
 
-    def setUp(self) -> None:
-        self.entries = dict(A=[('foo', 2, 'hold'), ('hugo', 'ilse', 'linear')],
-                            B=[(0, 5, 'hold'), (1, 7, 'jump'), ('k', 't', 'hold')])
-        self.measurements = [('m', 1, 1), ('foo', 'z', 'o')]
-        self.parameter_constraints = ['ilse>2', 'k>foo']
-        self.template = TablePulseTemplate(entries=self.entries,
-                                           measurements=self.measurements,
-                                           identifier='foo', parameter_constraints=['ilse>2', 'k>foo'])
-        self.maxDiff = None
+    @property
+    def class_to_test(self):
+        return TablePulseTemplate
 
-    def test_get_serialization_data_with_identifier(self) -> None:
-        template = TablePulseTemplate(entries=self.entries,
-                                      measurements=self.measurements,
-                                      parameter_constraints=self.parameter_constraints,
-                                      identifier='foo')
-        expected_data = {
-            'measurements': self.measurements,
-            'entries': self.entries,
-            'parameter_constraints': [str(Expression('ilse>2')), str(Expression('k>foo'))],
-            Serializable.type_identifier_name: TablePulseTemplate.get_type_identifier(),
-            Serializable.identifier_name: self.template.identifier
+    def make_kwargs(self):
+        return {
+            'entries': dict(A=[('foo', 2, 'hold'), ('hugo', 'ilse', 'linear')],
+                            B=[(0, 5, 'hold'), (1, 7, 'jump'), ('k', 't', 'hold')]),
+            'measurements': [('m', 1, 1), ('foo', 'z', 'o')],
+            'parameter_constraints': [str(ParameterConstraint('ilse>2')), str(ParameterConstraint('k>foo'))]
         }
 
-        data = template.get_serialization_data()
-        self.assertEqual(expected_data, data)
-
-    def test_get_serialization_data_without_identifier(self) -> None:
-        template = TablePulseTemplate(entries=self.entries,
-                                      measurements=self.measurements,
-                                      parameter_constraints=self.parameter_constraints,)
-        expected_data = {
-            'measurements': self.measurements,
-            'entries': self.entries,
-            'parameter_constraints': [str(Expression('ilse>2')), str(Expression('k>foo'))],
-            Serializable.type_identifier_name: TablePulseTemplate.get_type_identifier()
-        }
-
-        data = template.get_serialization_data()
-        self.assertEqual(expected_data, data)
-
-    def test_deserialize(self) -> None:
-        data = {
-            'measurements': self.measurements,
-            'entries': self.entries,
-            'parameter_constraints': self.parameter_constraints,
-            'identifier': self.template.identifier
-        }
-
-        # deserialize
-        template = TablePulseTemplate.deserialize(**data)
-
-        self.assertEqual(template.identifier, self.template.identifier)
-        self.assertEqual(template.entries, self.template.entries)
-        self.assertEqual(template.measurement_declarations, self.template.measurement_declarations)
-        self.assertEqual(template.parameter_constraints, self.template.parameter_constraints)
-
-    def test_serializer_integration(self):
-        storage_backend = DummyStorageBackend()
-        pulse_storage = PulseStorage(storage_backend)
-        pulse_storage[self.template.identifier] = self.template
-        pulse_storage.flush()
-
-        pulse_storage = PulseStorage(storage_backend) #recreate object to clear temporary storage
-        template = pulse_storage[self.template.identifier]
-
-        self.assertIsInstance(template, TablePulseTemplate)
-        self.assertEqual('foo', template.identifier)
-        self.assertEqual(self.template.entries, template.entries)
-        self.assertEqual(self.template.measurement_declarations, template.measurement_declarations)
-        self.assertEqual(self.template.parameter_constraints, template.parameter_constraints)
+    def assert_equal_instance(self, lhs: TablePulseTemplate, rhs: TablePulseTemplate):
+        self.assertIsInstance(lhs, TablePulseTemplate)
+        self.assertIsInstance(rhs, TablePulseTemplate)
+        self.assertEqual(lhs.identifier, rhs.identifier)
+        self.assertEqual(lhs.entries, rhs.entries)
+        self.assertEqual(lhs.measurement_declarations, rhs.measurement_declarations)
+        self.assertEqual(lhs.parameter_constraints, rhs.parameter_constraints)
 
 
 class TablePulseTemplateOldSerializationTests(unittest.TestCase):
@@ -523,7 +474,8 @@ class TablePulseTemplateOldSerializationTests(unittest.TestCase):
             self.measurements = [('m', 1, 1), ('foo', 'z', 'o')]
             self.template = TablePulseTemplate(entries=self.entries,
                                                measurements=self.measurements,
-                                               identifier='foo', parameter_constraints=['ilse>2', 'k>foo'])
+                                               identifier='foo', parameter_constraints=['ilse>2', 'k>foo'],
+                                               registry=dict())
             self.expected_data = dict(type=self.serializer.get_type_identifier(self.template))
             self.maxDiff = None
 
@@ -539,6 +491,8 @@ class TablePulseTemplateOldSerializationTests(unittest.TestCase):
             self.assertEqual(expected_data, data)
 
     def test_deserialize_old(self) -> None:
+        registry = dict()
+
         # test for deprecated version during transition period, remove after final switch
         with self.assertWarnsRegex(DeprecationWarning, "deprecated",
                                    msg="TablePT does not issue warning for old serialization routines."):
@@ -548,13 +502,15 @@ class TablePulseTemplateOldSerializationTests(unittest.TestCase):
                         identifier='foo')
 
             # deserialize
-            template = TablePulseTemplate.deserialize(self.serializer, **data)
+            template = TablePulseTemplate.deserialize(self.serializer, **data, registry=registry)
 
             self.assertEqual(template.entries, self.template.entries)
             self.assertEqual(template.measurement_declarations, self.template.measurement_declarations)
             self.assertEqual(template.parameter_constraints, self.template.parameter_constraints)
 
     def test_serializer_integration_old(self):
+        registry = dict()
+
         # test for deprecated version during transition period, remove after final switch
         with self.assertWarnsRegex(DeprecationWarning, "deprecated",
                                    msg="TablePT does not issue warning for old serialization routines."):
@@ -788,6 +744,97 @@ class TableWaveformTests(unittest.TestCase):
 
         self.assertEqual(waveform.defined_channels, {chan})
         self.assertIs(waveform.unsafe_get_subset_for_channels({'A'}), waveform)
+
+
+class TablePulseConcatenationTests(unittest.TestCase):
+    def test_simple_concatenation(self):
+        tpt_1 = TablePulseTemplate({'A': [(0, 1), ('a', 5, 'linear')],
+                                    'B': [(0, 2), ('b', 7)]})
+
+        tpt_2 = TablePulseTemplate({'A': [('c', 9), ('a', 10, 'jump')],
+                                    'B': [(0, 6),   ('b', 8)]})
+
+        expected = TablePulseTemplate({'A': [(0, 1),
+                                             ('a', 5, 'linear'),
+                                             ('Max(a, b)', 5),
+                                             ('Max(a, b)', 9),
+                                             ('Max(a, b) + c', 9),
+                                             ('Max(a, b) + a', 10, 'jump')],
+                                       'B': [(0,   2),
+                                             ('b', 7),
+                                             ('Max(a, b)', 7, 'hold'),
+                                             ('Max(a, b)', 6),
+                                             ('Max(a, b) + b', 8)]})
+
+        concatenated = concatenate(tpt_1, tpt_2)
+
+        self.assertEqual(expected.entries, concatenated.entries)
+
+    def test_triple_concatenation(self):
+        tpt_1 = TablePulseTemplate({'A': [(0, 1), ('a', 5, 'linear')],
+                                    'B': [(0, 2), ('b', 7)]})
+
+        tpt_2 = TablePulseTemplate({'A': [('c', 9), ('a', 10, 'jump')],
+                                    'B': [(0, 6),   ('b', 8)]})
+
+        tpt_3 = TablePulseTemplate({'A': [('fg', 19), ('ab', 110, 'jump')],
+                                    'B': [('df', 16), ('ab', 18)]})
+
+        expected = TablePulseTemplate({'A': [(0, 1),
+                                             ('a', 5, 'linear'),
+                                             ('Max(a, b)', 5),
+                                             ('Max(a, b)', 9),
+                                             ('Max(a, b) + c', 9),
+                                             ('Max(a, b) + a', 10, 'jump'),
+                                             ('2*Max(a, b)', 10),
+                                             ('2*Max(a, b)', 19),
+                                             ('2*Max(a, b) + fg', 19),
+                                             ('2*Max(a, b) + ab', 110, 'jump')],
+                                       'B': [(0,   2),
+                                             ('b', 7),
+                                             ('Max(a, b)', 7, 'hold'),
+                                             ('Max(a, b)', 6),
+                                             ('Max(a, b) + b', 8),
+                                             ('2*Max(a, b)', 8),
+                                             ('2*Max(a, b)', 16),
+                                             ('2*Max(a, b) + df', 16),
+                                             ('2*Max(a, b) + ab', 18)]})
+
+        concatenated = concatenate(tpt_1, tpt_2, tpt_3, identifier='asdf')
+
+        self.assertEqual(expected.entries, concatenated.entries)
+        self.assertEqual(concatenated.identifier, 'asdf')
+
+    def test_duplication(self):
+        tpt = TablePulseTemplate({'A': [(0, 1), ('a', 5)],
+                                  'B': [(0, 2), ('b', 3)]})
+
+        concatenated = concatenate(tpt, tpt)
+
+        self.assertIsNot(concatenated.entries, tpt.entries)
+
+        expected = TablePulseTemplate({'A': [(0, 1), ('a', 5), ('Max(a, b)', 5), ('Max(a, b)', 1), ('Max(a, b) + a', 5)],
+                                       'B': [(0, 2), ('b', 3), ('Max(a, b)', 3), ('Max(a, b)', 2), ('Max(a, b) + b', 3)]})
+
+        self.assertEqual(expected.entries, concatenated.entries)
+
+    def test_wrong_channels(self):
+        tpt_1 = TablePulseTemplate({'A': [(0, 1), ('a', 5, 'linear')],
+                                    'B': [(0, 2), ('b', 7)]})
+
+        tpt_2 = TablePulseTemplate({'A': [('c', 9), ('a', 10, 'jump')],
+                                    'C': [(0, 6), ('b', 8)]})
+
+        with self.assertRaisesRegex(ValueError, 'differing defined channels'):
+            concatenate(tpt_1, tpt_2)
+
+    def test_wrong_type(self):
+        dummy = DummyPulseTemplate()
+        tpt = TablePulseTemplate({'A': [(0, 1), ('a', 5, 'linear')],
+                                  'B': [(0, 2), ('b', 7)]})
+
+        with self.assertRaisesRegex(TypeError, 'not a TablePulseTemplate'):
+            concatenate(dummy, tpt)
 
 
 if __name__ == "__main__":

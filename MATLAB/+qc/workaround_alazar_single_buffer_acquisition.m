@@ -5,3 +5,5 @@ function workaround_alazar_single_buffer_acquisition()
 	plsdata.daq.inst.config.aimedBufferSize = int64(2^24);
 	plsdata.daq.inst.card.reset
 	plsdata.daq.inst.update_settings = py.True;
+	
+	fprintf('qc.workaround_alazar_single_buffer_acquisition executed\n');

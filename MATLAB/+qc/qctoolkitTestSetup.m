@@ -1,9 +1,9 @@
 %% --- Test setup without AWG and Alazar (only qctoolkit) -----------------
 global plsdata
 plsdata = struct( ...
-	'path', 'Y:\Cerfontaine\Code\qc-toolkit-pulses', ...
+	'path', 'C:\Users\Pascal\Janeway\Cerfontaine\Code\qc-toolkit-pulses', ...
 	'awg', struct('inst', [], 'hardwareSetup', [], 'sampleRate', 2e9, 'currentProgam', '', 'registeredPrograms', struct(), 'defaultChannelMapping', struct(), 'defaultWindowMapping', struct(), 'defaultParametersAndDicts', {{}}, 'defaultAddMarker', {{}}), ...
-  'dict', struct('cache', [], 'path', 'Y:\Cerfontaine\Code\qc-toolkit-dicts'), ...
+  'dict', struct('cache', [], 'path', 'C:\Users\Pascal\Janeway\Cerfontaine\Code\qc-toolkit-dicts'), ...
 	'qc', struct('figId', 801), ...
 	'daq', struct('inst', [], 'defaultOperations', {{}}, 'reuseOperations', false) ...
 	);
@@ -17,27 +17,46 @@ plsdata.qc.serializer = py.qctoolkit.serialization.Serializer(plsdata.qc.backend
 % Need the triton_200 repo on the path (for awgctrl)
 
 % Path for Triton 200 backups
-loadPath = 'Y:\Common\GaAs\Triton 200\Backup\DATA\workspace';
-pulsePath = 'Y:\Cerfontaine\Code\qc-toolkit-pulses';
-dictPath = 'Y:\Cerfontaine\Code\qc-toolkit-dicts';
-tunePath = 'Y:\Cerfontaine\Code\dev\+tune\data';
+loadPath = 'C:\Users\Pascal\Janeway\Common\GaAs\Triton 200\Backup\DATA\workspace';
+pulsePath = plsdata.path;
+dictPath = plsdata.dict.path;
+tunePath = 'C:\Users\Pascal\Janeway\Cerfontaine\Code\dev\+tune\data';
 
 % Loading
 if util.yes_no_input('Really load smdata?', 'n')
-	load(fullfile(loadPath, 'smdata_recent.mat'));
-	info = dir(fullfile(loadPath, 'smdata_recent.mat'));
+	try
+		copyfile(fullfile(loadPath, 'smdata_recent.mat'), fullfile(tunePath, 'smdata_recent.mat'));
+	catch err
+		warning(err.getReport());
+	end
+	load(fullfile(tunePath, 'smdata_recent.mat'));
+	info = dir(fullfile(tunePath, 'smdata_recent.mat'));
 	fprintf('Loaded smdata from %s', datestr(info.datenum));
 end
-load(fullfile(loadPath, 'tunedata_recent.mat'));
-info = dir(fullfile(loadPath, 'tunedata_recent.mat'));
+try
+	copyfile(fullfile(loadPath, 'tunedata_recent.mat'), fullfile(tunePath, 'tunedata_recent.mat'));
+catch err
+	warning(err.getReport());
+end
+load(fullfile(tunePath, 'tunedata_recent.mat'));
+info = dir(fullfile(tunePath, 'tunedata_recent.mat'));
 fprintf('Loaded tunedata from %s', datestr(info.datenum));
 
-load(fullfile(loadPath, 'plsdata_recent.mat'));
-info = dir(fullfile(loadPath, 'plsdata_recent.mat'));
+try
+	copyfile(fullfile(loadPath, 'plsdata_recent.mat'), fullfile(tunePath, 'plsdata_recent.mat'));
+catch err
+	warning(err.getReport());
+end
+load(fullfile(tunePath, 'plsdata_recent.mat'));
+info = dir(fullfile(tunePath, 'plsdata_recent.mat'));
 fprintf('Loaded plsdata from %s', datestr(info.datenum));
 
 global tunedata
 global plsdata
+tunedata.run{tunedata.runIndex}.opts.loadFile = 'C:\Users\Pascal\Janeway\Common\GaAs\Triton 200\Backup\DATA\tune';
+import tune.tune
+
+plsdata.path = pulsePath;
 
 % Alazar dummy instrument (simulator not implemented yet)
 smdata.inst(sminstlookup(plsdata.daq.instSmName)).data.address = 'simulator';
@@ -48,7 +67,7 @@ plsdata.daq.inst = py.qctoolkit.hardware.dacs.alazar.AlazarCard([]);
 % Initializes hardware setup
 % Can also be used for deleting all programs/resetting but then also need to setup Alazar again, i.e. the cell above and the three cells below )
 plsdata.awg.hardwareSetup = [];
-qc.setup_tabor_awg('realAWG', false, 'simulateAWG', false, 'taborDriverPath', 'Y:\Cerfontaine\Code\tabor');
+qc.setup_tabor_awg('realAWG', false, 'simulateAWG', false, 'taborDriverPath', 'C:\Users\Pascal\Janeway\Cerfontaine\Code\tabor');
 
 % AWG default settings
 % awgctrl('default');

@@ -11,6 +11,7 @@ from typing import Union, Dict, List, Set, Optional, Any, Tuple, Sequence, Named
 import numbers
 import itertools
 import warnings
+import copy
 
 import numpy as np
 import sympy
@@ -26,7 +27,7 @@ from qctoolkit.pulses.instructions import Waveform
 from qctoolkit.expressions import ExpressionScalar, Expression
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 
-__all__ = ["TablePulseTemplate", "TableWaveform", "TableWaveformEntry"]
+__all__ = ["TablePulseTemplate", "TableWaveform", "TableWaveformEntry", "concatenate"]
 
 
 class TableWaveformEntry(NamedTuple('TableWaveformEntry', [('t', float),
@@ -172,7 +173,8 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
                  *,
                  parameter_constraints: Optional[List[Union[str, ParameterConstraint]]]=None,
                  measurements: Optional[List[MeasurementDeclaration]]=None,
-                 consistency_check=True):
+                 consistency_check: bool=True,
+                 registry: Optional[dict]=None):
         """
         Construct a `TablePulseTemplate` from a dict which maps channels to their entries. By default the consistency
         of the provided entries is checked. There are two static functions for convenience construction: from_array and
@@ -186,7 +188,7 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
             measurements: Measurement declaration list that is forwarded to the MeasurementDefiner superclass
             consistency_check: If True the consistency of the times will be checked on construction as far as possible
         """
-        AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements)
+        AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements, registry=registry)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 
         self._entries = dict((ch, list()) for ch in entries.keys())
@@ -460,6 +462,41 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
             expressions[channel] = ExpressionScalar(expr)
 
         return expressions
+
+
+def concatenate(*table_pulse_templates: TablePulseTemplate, **kwargs) -> TablePulseTemplate:
+    """Concatenate two or more table pulse templates"""
+    first_template, *other_templates = table_pulse_templates
+
+    entries = {channel: [] for channel in first_template.defined_channels}
+    duration = ExpressionScalar(0)
+
+    for i, template in enumerate(table_pulse_templates):
+        if not isinstance(template, TablePulseTemplate):
+            raise TypeError('Template number %d is not a TablePulseTemplate' % i)
+
+        new_duration = duration + template.duration
+
+        if template.defined_channels != first_template.defined_channels:
+            raise ValueError('Template number %d has differing defined channels' % i,
+                             first_template.defined_channels, template.defined_channels)
+
+        for channel, channel_entries in template.entries.items():
+            first_t, first_v, _ = channel_entries[0]
+            if i > 0 and first_t != 0:
+                if (first_v == 0) is False:
+                    entries[channel].append((duration, first_v, 'hold'))
+
+            for t, v, interp in channel_entries:
+                entries[channel].append((duration.sympified_expression + t, v, interp))
+
+            last_t, last_v, _ = channel_entries[-1]
+            if i < len(other_templates) and last_t != new_duration:
+                entries[channel].append((new_duration, last_v, TablePulseTemplate.interpolation_strategies['hold']))
+
+        duration = new_duration
+
+    return TablePulseTemplate(entries, **kwargs)
 
 
 class ZeroDurationTablePulseTemplate(UserWarning):
