@@ -32,8 +32,8 @@ load(fullfile(tunePath, 'smdata_recent.mat'));
 info = dir(fullfile(tunePath, 'smdata_recent.mat'));
 fprintf('Loaded smdata from %s\n', datestr(info.datenum));
 try
-%   copyfile(fullfile(loadPath, 'tunedata_recent.mat'), fullfile(tunePath, 'tunedata_recent.mat'));
-	copyfile(fullfile(loadPath, 'tunedata_2018_06_25_21_08.mat'), fullfile(tunePath, 'tunedata_recent.mat'));
+  copyfile(fullfile(loadPath, 'tunedata_recent.mat'), fullfile(tunePath, 'tunedata_recent.mat'));
+% 	copyfile(fullfile(loadPath, 'tunedata_2018_06_25_21_08.mat'), fullfile(tunePath, 'tunedata_recent.mat'));
 catch err
 	warning(err.getReport());
 end
@@ -86,5 +86,7 @@ plsdata.dict.path = dictPath;
 % Tune
 tunedata.run{tunedata.runIndex}.opts.path = tunePath;
 
+
+import tune.tune
 disp('done');
 % -------------------------------------------------------------------------
