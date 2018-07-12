@@ -10,7 +10,7 @@ Classes:
 """
 
 from abc import ABCMeta, abstractmethod
-from typing import Dict, Any, Optional, NamedTuple, Union, Set
+from typing import Dict, Any, Optional, NamedTuple, Union, Mapping, MutableMapping, Set
 import os
 import zipfile
 import tempfile
@@ -686,7 +686,7 @@ class PulseStorage:
         serialization = self._storage_backend[identifier]
         serializable = self._deserialize(serialization)
         self._temporary_storage[identifier] = PulseStorage.StorageEntry(serialization=serialization,
-                                                                         serializable=serializable)
+                                                                        serializable=serializable)
         return self._temporary_storage[identifier]
 
     @property
@@ -766,7 +766,7 @@ class PulseStorage:
 
 class JSONSerializableDecoder(json.JSONDecoder):
 
-    def __init__(self, storage, *args, **kwargs) -> None:
+    def __init__(self, storage: Mapping, *args, **kwargs) -> None:
         super().__init__(*args, object_hook=self.filter_serializables, **kwargs)
 
         self.storage = storage
@@ -787,14 +787,23 @@ class JSONSerializableDecoder(json.JSONDecoder):
 
             else:
                 deserialization_callback = SerializableMeta.deserialization_callbacks[type_identifier]
-                return deserialization_callback(identifier=obj_identifier, **obj_dict)
+
+                # if the storage is the default registry, we would get conflicts when the Serializable tries to register
+                # itself on construction. Pass an empty dict as registry keyword argument in this case.
+                # calling PulseStorage objects will take care of registering.
+                # (solution to issue #301: https://github.com/qutech/qc-toolkit/issues/301 )
+                registry = None
+                if get_default_pulse_registry() is self.storage:
+                    registry = dict()
+
+                return deserialization_callback(identifier=obj_identifier, registry=registry, **obj_dict)
         return obj_dict
 
 
 class JSONSerializableEncoder(json.JSONEncoder):
     """"""
 
-    def __init__(self, storage, *args, **kwargs) -> None:
+    def __init__(self, storage: MutableMapping, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
         self.storage = storage
