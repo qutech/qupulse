@@ -366,6 +366,8 @@ class DummyPulseTemplate(AtomicPulseTemplate):
 
     def get_serialization_data(self, serializer: Optional['Serializer']=None) -> Dict[str, Any]:
         data = super().get_serialization_data(serializer=serializer)
+        if serializer: # compatibility with old serialization routines
+            data = dict()
         data['requires_stop'] = self.requires_stop_
         data['is_interruptable'] = self.is_interruptable
         data['parameter_names'] = self.parameter_names

@@ -13,7 +13,7 @@ from typing import Optional, Any, Dict, Tuple
 
 from qctoolkit.serialization import FilesystemBackend, CachingBackend, Serializable, JSONSerializableEncoder,\
     ZipFileBackend, AnonymousSerializable, DictBackend, PulseStorage, JSONSerializableDecoder, Serializer,\
-    get_default_pulse_registry, SerializableMeta
+    get_default_pulse_registry, set_default_pulse_registry, new_default_pulse_registry, SerializableMeta
 
 from qctoolkit.expressions import ExpressionScalar
 
@@ -117,17 +117,19 @@ class SerializableTests(metaclass=ABCMeta):
         storage['blub'] = instance
 
         storage.clear()
+        set_default_pulse_registry(dict())
 
         other_instance = typing.cast(self.class_to_test, storage['blub'])
         self.assert_equal_instance(instance, other_instance)
 
         self.assertIs(registry['blub'], instance)
         self.assertIs(get_default_pulse_registry()['blub'], other_instance)
+        set_default_pulse_registry(None)
 
     def test_duplication_error(self):
         registry = dict()
 
-        instance = self.make_instance('blub', registry=registry)
+        self.make_instance('blub', registry=registry)
         with self.assertRaises(RuntimeError):
             self.make_instance('blub', registry=registry)
 
@@ -154,6 +156,21 @@ class SerializableTests(metaclass=ABCMeta):
         self.assertIs(instance, registry[identifier][0])
         stored_instance = self.class_to_test.deserialize(identifier=identifier, registry=dict(), **(registry[identifier][1]))
         self.assert_equal_instance(instance, stored_instance)
+        
+    def test_conversion(self):
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', DeprecationWarning)
+            source_backend = DummyStorageBackend()
+            instance = self.make_instance(identifier='foo', registry=dict())
+            serializer = Serializer(source_backend)
+            serializer.serialize(instance)
+            del serializer
+
+            dest_backend = DummyStorageBackend()
+            convert_pulses_in_storage(source_backend, dest_backend)
+            pulse_storage = PulseStorage(dest_backend)
+            converted = pulse_storage['foo']
+            self.assert_equal_instance(instance, converted)
 
 
 class DummySerializableTests(SerializableTests, unittest.TestCase):
@@ -248,6 +265,14 @@ class FileSystemBackendTest(unittest.TestCase):
         self.backend.delete(name)
         self.assertFalse(self.backend.exists(name))
         self.assertFalse(os.listdir(self.tmp_dir.name))
+
+    def test_get_contents(self) -> None:
+        expected = {'foo', 'bar', 'hugo.test'}
+        for name in expected:
+            self.backend.put(name, self.test_data)
+        contents = self.backend.list_contents()
+
+        self.assertEqual(expected, contents)
 
 
 class ZipFileBackendTests(unittest.TestCase):
@@ -369,6 +394,17 @@ class ZipFileBackendTests(unittest.TestCase):
             with zipfile.ZipFile(root, 'r') as file:
                 self.assertNotIn('foo', file.namelist())
 
+    def test_get_contents(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            root = os.path.join(tmp_dir, 'root.zip')
+            backend = ZipFileBackend(root)
+            expected = {'foo', 'bar', 'hugo.test'}
+            for name in expected:
+                backend.put(name, 'foo_data')
+            contents = backend.list_contents()
+
+            self.assertEqual(expected, contents)
+
 
 class CachingBackendTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -457,10 +493,18 @@ class CachingBackendTests(unittest.TestCase):
         self.assertNotIn('foo', self.caching_backend)
         self.assertNotIn('foo', self.dummy_backend)
 
+    def test_get_contents(self) -> None:
+        expected = {'foo', 'bar', 'hugo.test'}
+        for name in expected:
+            self.caching_backend.put(name, self.testdata)
+        contents = self.caching_backend.list_contents()
+
+        self.assertEqual(expected, contents)
+
 
 class DictBackendTests(unittest.TestCase):
     def setUp(self):
-        self.backend =DictBackend()
+        self.backend = DictBackend()
 
     def test_put(self):
         self.backend.put('a', 'data')
@@ -494,6 +538,14 @@ class DictBackendTests(unittest.TestCase):
         self.backend.delete('a')
         self.assertFalse(self.backend.storage)
 
+    def test_get_contents(self) -> None:
+        expected = {'foo', 'bar', 'hugo.test'}
+        for name in expected:
+            self.backend.put(name, 'foo_data')
+        contents = self.backend.list_contents()
+
+        self.assertEqual(expected, contents)
+
 
 class SerializableMetaTests(unittest.TestCase):
     def test_native_deserializable(self):
@@ -505,6 +557,33 @@ class SerializableMetaTests(unittest.TestCase):
 
         self.assertIn('foo.bar.never', SerializableMeta.deserialization_callbacks)
         self.assertEqual(SerializableMeta.deserialization_callbacks['foo.bar.never'], NativeDeserializable)
+
+
+class DefaultPulseRegistryManipulationTests(unittest.TestCase):
+
+    def test_get_set_default_pulse_registry(self) -> None:
+        # store previous registry
+        previous_registry = get_default_pulse_registry()
+
+        registry = dict()
+        set_default_pulse_registry(registry)
+        self.assertIs(get_default_pulse_registry(), registry)
+
+        # restore previous registry
+        set_default_pulse_registry(previous_registry)
+        self.assertIs(get_default_pulse_registry(), previous_registry)
+
+    def test_new_default_pulse_registry(self) -> None:
+        # store previous registry
+        previous_registry = get_default_pulse_registry()
+
+        new_default_pulse_registry()
+        self.assertIsNotNone(get_default_pulse_registry())
+        self.assertIsNot(get_default_pulse_registry(), previous_registry)
+
+        # restore previous registry
+        set_default_pulse_registry(previous_registry)
+        self.assertIs(get_default_pulse_registry(), previous_registry)
 
 
 class PulseStorageTests(unittest.TestCase):
@@ -657,8 +736,7 @@ class PulseStorageTests(unittest.TestCase):
             pulse_storage.set_to_default_registry()
             self.assertIs(get_default_pulse_registry(), pulse_storage)
         finally:
-            import qctoolkit.serialization
-            qctoolkit.serialization.default_pulse_registry = previous_default_registry
+            set_default_pulse_registry(previous_default_registry)
 
     def test_beautified_json(self) -> None:
         data = {'e': 89, 'b': 151, 'c': 123515, 'a': 123, 'h': 2415}
@@ -731,6 +809,7 @@ class PulseStorageTests(unittest.TestCase):
         deserialized = pulse_storage['peter']
         self.assertEqual(deserialized, serializable)
 
+    @unittest.mock.patch('qctoolkit.serialization.default_pulse_registry', dict())
     def test_deserialize_storage_is_not_default_registry_id_occupied(self) -> None:
         backend = DummyStorageBackend()
 
@@ -1129,3 +1208,166 @@ class TriviallyRepresentableEncoderTest(unittest.TestCase):
             encoder.default(B())
 
         self.assertEqual(encoder.default({'a', 1}), list({'a', 1}))
+
+
+# the following are tests for the routines that convert pulses from old to new serialization formats
+# can be removed after transition period
+# todo (218-06-14): remove ConversionTests after finalizing transition period from old to new serialization routines
+from qctoolkit.serialization import convert_stored_pulse_in_storage, convert_pulses_in_storage
+
+
+class ConversionTests(unittest.TestCase):
+
+    def test_convert_stored_pulse_in_storage(self) -> None:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', DeprecationWarning)
+
+            source_backend = DummyStorageBackend()
+            serializer = Serializer(source_backend)
+
+            hugo_serializable = DummySerializable(foo='bar',
+                                                  identifier='hugo',
+                                                  registry=dict())
+
+            serializable = NestedDummySerializable(hugo_serializable, identifier='hugos_parent', registry=dict())
+            serializer.serialize(serializable)
+
+            destination_backend = DummyStorageBackend()
+            convert_stored_pulse_in_storage('hugos_parent', source_backend, destination_backend)
+
+            pulse_storage = PulseStorage(destination_backend)
+            deserialized = pulse_storage['hugos_parent']
+            self.assertEqual(serializable, deserialized)
+
+    def test_convert_stored_pulse_in_storage_dest_not_empty_id_overlap(self) -> None:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', DeprecationWarning)
+
+            source_backend = DummyStorageBackend()
+            serializer = Serializer(source_backend)
+
+            hugo_serializable = DummySerializable(foo='bar',
+                                                  identifier='hugo',
+                                                  registry=dict())
+
+            serializable = NestedDummySerializable(hugo_serializable, identifier='hugos_parent', registry=dict())
+            serializer.serialize(serializable)
+
+            destination_backend = DummyStorageBackend()
+            destination_backend.put('hugo', 'already_existing_data')
+            with self.assertRaises(ValueError):
+                convert_stored_pulse_in_storage('hugos_parent', source_backend, destination_backend)
+
+            self.assertEquals('already_existing_data', destination_backend['hugo'])
+            self.assertEquals(1, len(destination_backend.stored_items))
+
+    def test_convert_stored_pulse_in_storage_dest_not_empty_no_id_overlap(self) -> None:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', DeprecationWarning)
+
+            source_backend = DummyStorageBackend()
+            serializer = Serializer(source_backend)
+
+            hugo_serializable = DummySerializable(foo='bar',
+                                                  identifier='hugo',
+                                                  registry=dict())
+
+            serializable = NestedDummySerializable(hugo_serializable, identifier='hugos_parent', registry=dict())
+            serializer.serialize(serializable)
+
+            destination_backend = DummyStorageBackend()
+            destination_backend.put('ilse', 'already_existing_data')
+            convert_stored_pulse_in_storage('hugos_parent', source_backend, destination_backend)
+
+            self.assertEquals('already_existing_data', destination_backend['ilse'])
+            pulse_storage = PulseStorage(destination_backend)
+            deserialized = pulse_storage['hugos_parent']
+            self.assertEqual(serializable, deserialized)
+
+    def test_convert_stored_pulses(self) -> None:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', DeprecationWarning)
+
+            source_backend = DummyStorageBackend()
+            serializer = Serializer(source_backend)
+
+            hugo_serializable = DummySerializable(foo='bar',
+                                                  identifier='hugo',
+                                                  registry=dict())
+
+            serializable_a = NestedDummySerializable(hugo_serializable, identifier='hugos_parent', registry=dict())
+            serializable_b = DummySerializable(identifier='ilse',
+                                               foo=dict(abc=123, data='adf8g23'),
+                                               number=7.3,
+                                               registry=dict())
+
+            serializer.serialize(serializable_a)
+            serializer.serialize(serializable_b)
+
+            destination_backend = DummyStorageBackend()
+            convert_pulses_in_storage(source_backend, destination_backend)
+
+            pulse_storage = PulseStorage(destination_backend)
+            deserialized_a = pulse_storage['hugos_parent']
+            deserialized_b = pulse_storage['ilse']
+            self.assertEqual(serializable_a, deserialized_a)
+            self.assertEqual(serializable_b, deserialized_b)
+
+    def test_convert_stored_pulses_dest_not_empty_id_overlap(self) -> None:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', DeprecationWarning)
+
+            source_backend = DummyStorageBackend()
+            serializer = Serializer(source_backend)
+
+            hugo_serializable = DummySerializable(foo='bar',
+                                                  identifier='hugo',
+                                                  registry=dict())
+
+            serializable_a = NestedDummySerializable(hugo_serializable, identifier='hugos_parent', registry=dict())
+            serializable_b = DummySerializable(identifier='ilse',
+                                               foo=dict(abc=123, data='adf8g23'),
+                                               number=7.3,
+                                               registry=dict())
+
+            serializer.serialize(serializable_a)
+            serializer.serialize(serializable_b)
+
+            destination_backend = DummyStorageBackend()
+            destination_backend.put('hugo', 'already_existing_data')
+            with self.assertRaises(ValueError):
+                convert_pulses_in_storage(source_backend, destination_backend)
+
+            self.assertEquals('already_existing_data', destination_backend['hugo'])
+            self.assertEquals(1, len(destination_backend.stored_items))
+
+    def test_convert_stored_pulses_dest_not_empty_no_id_overlap(self) -> None:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', DeprecationWarning)
+
+            source_backend = DummyStorageBackend()
+            serializer = Serializer(source_backend)
+
+            hugo_serializable = DummySerializable(foo='bar',
+                                                  identifier='hugo',
+                                                  registry=dict())
+
+            serializable_a = NestedDummySerializable(hugo_serializable, identifier='hugos_parent', registry=dict())
+            serializable_b = DummySerializable(identifier='ilse',
+                                               foo=dict(abc=123, data='adf8g23'),
+                                               number=7.3,
+                                               registry=dict())
+
+            serializer.serialize(serializable_a)
+            serializer.serialize(serializable_b)
+
+            destination_backend = DummyStorageBackend()
+            destination_backend.put('peter', 'already_existing_data')
+            convert_pulses_in_storage(source_backend, destination_backend)
+
+            self.assertEqual('already_existing_data', destination_backend['peter'])
+            pulse_storage = PulseStorage(destination_backend)
+            deserialized_a = pulse_storage['hugos_parent']
+            deserialized_b = pulse_storage['ilse']
+            self.assertEqual(serializable_a, deserialized_a)
+            self.assertEqual(serializable_b, deserialized_b)
