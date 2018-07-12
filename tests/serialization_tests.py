@@ -56,8 +56,12 @@ class SerializableTests(metaclass=ABCMeta):
     def make_kwargs(self) -> dict:
         pass
 
-    @abstractmethod
     def assert_equal_instance(self, lhs, rhs):
+        self.assert_equal_instance_except_id(lhs, rhs)
+        self.assertEqual(lhs.identifier, rhs.identifier)
+
+    @abstractmethod
+    def assert_equal_instance_except_id(self, lhs, rhs):
         pass
 
     def make_instance(self, identifier=None, registry=None):
@@ -138,12 +142,11 @@ class DummySerializableTests(SerializableTests, unittest.TestCase):
     def make_kwargs(self):
         return {'data': 'blubber', 'test_dict': {'foo': 'bar', 'no': 17.3}}
 
-    def assert_equal_instance(self, lhs, rhs):
-        self.assertEqual(lhs.identifier, rhs.identifier)
+    def assert_equal_instance_except_id(self, lhs, rhs):
         self.assertEqual(lhs.data, rhs.data)
 
 
-class DummyPulseTemplateSerializationtests(SerializableTests, unittest.TestCase):
+class DummyPulseTemplateSerializationTests(SerializableTests, unittest.TestCase):
     @property
     def class_to_test(self):
         return DummyPulseTemplate
@@ -159,9 +162,8 @@ class DummyPulseTemplateSerializationtests(SerializableTests, unittest.TestCase)
             'integrals': {'default': ExpressionScalar(19.231)}
         }
 
-    def assert_equal_instance(self, lhs, rhs):
+    def assert_equal_instance_except_id(self, lhs, rhs):
         self.assertEqual(lhs.compare_key, rhs.compare_key)
-        self.assertEqual(lhs.identifier, rhs.identifier)
 
 
 class FileSystemBackendTest(unittest.TestCase):

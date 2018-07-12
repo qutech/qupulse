@@ -298,7 +298,7 @@ class RepetitionPulseTemplateSerializationTests(SerializableTests, unittest.Test
             'measurements': [('m', 0, 1)]
         }
 
-    def assert_equal_instance(self, lhs: RepetitionPulseTemplate, rhs: RepetitionPulseTemplate):
+    def assert_equal_instance_except_id(self, lhs: RepetitionPulseTemplate, rhs: RepetitionPulseTemplate):
         self.assertIsInstance(lhs, RepetitionPulseTemplate)
         self.assertIsInstance(rhs, RepetitionPulseTemplate)
         self.assertEqual(lhs.body, rhs.body)

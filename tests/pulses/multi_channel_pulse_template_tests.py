@@ -327,7 +327,7 @@ class AtomicMultiChannelPulseTemplateSerializationTests(SerializableTests, unitt
         del kwargs['subtemplates']
         return self.class_to_test(identifier=identifier, *subtemplates, **kwargs, registry=registry)
 
-    def assert_equal_instance(self, lhs: AtomicMultiChannelPulseTemplate, rhs: AtomicMultiChannelPulseTemplate):
+    def assert_equal_instance_except_id(self, lhs: AtomicMultiChannelPulseTemplate, rhs: AtomicMultiChannelPulseTemplate):
         self.assertIsInstance(lhs, AtomicMultiChannelPulseTemplate)
         self.assertIsInstance(rhs, AtomicMultiChannelPulseTemplate)
         self.assertEqual(lhs.subtemplates, rhs.subtemplates)
