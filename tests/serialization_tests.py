@@ -677,6 +677,21 @@ class PulseStorageTests(unittest.TestCase):
         self.assertEqual({}, backend.stored_items)
         self.assertEqual(pulse_storage.temporary_storage, {})
 
+    def test_deserialize_storage_is_default_registry(self) -> None:
+        backend = DummyStorageBackend()
+
+        # fill backend
+        serializable = DummySerializable(identifier='peter', registry=dict())
+        pulse_storage = PulseStorage(backend)
+        pulse_storage['peter'] = serializable
+        del pulse_storage
+
+        # try to deserialize while PulseStorage is default registry
+        pulse_storage = PulseStorage(backend)
+        with pulse_storage.as_default_registry():
+            deserialized = pulse_storage['peter']
+            self.assertEqual(deserialized, serializable)
+
 
 class JSONSerializableDecoderTests(unittest.TestCase):
     def test_filter_serializables(self):
