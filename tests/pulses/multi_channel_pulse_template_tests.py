@@ -120,6 +120,20 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
 
         self.assertEqual(AtomicMultiChannelPulseTemplate(*sts).measurement_names, {'A', 'B', 'C'})
 
+    def test_integral(self) -> None:
+        sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'},
+                                  integrals={'A': ExpressionScalar('2+k')}),
+               DummyPulseTemplate(duration='t1', defined_channels={'B', 'C'},
+                                  integrals={'B': ExpressionScalar('t1-t0*3.1'), 'C': ExpressionScalar('l')})]
+        pulse = AtomicMultiChannelPulseTemplate(*sts)
+        self.assertEqual({'A': ExpressionScalar('2+k'),
+                          'B': ExpressionScalar('t1-t0*3.1'),
+                          'C': ExpressionScalar('l')},
+                         pulse.integral)
+
+
+class MultiChannelPulseTemplateSequencingTests(unittest.TestCase):
+
     def test_requires_stop(self):
         sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'}, parameter_names={'a', 'b'}, requires_stop=False),
                DummyPulseTemplate(duration='t1', defined_channels={'B'}, parameter_names={'a', 'c'}, requires_stop=False)]
@@ -183,17 +197,6 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
         sts[0].waveform = None
         wf = pt.build_waveform(parameters, channel_mapping=channel_mapping)
         self.assertIsNone(wf)
-
-    def test_integral(self) -> None:
-        sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'},
-                                  integrals={'A': ExpressionScalar('2+k')}),
-               DummyPulseTemplate(duration='t1', defined_channels={'B', 'C'},
-                                  integrals={'B': ExpressionScalar('t1-t0*3.1'), 'C': ExpressionScalar('l')})]
-        pulse = AtomicMultiChannelPulseTemplate(*sts)
-        self.assertEqual({'A': ExpressionScalar('2+k'),
-                          'B': ExpressionScalar('t1-t0*3.1'),
-                          'C': ExpressionScalar('l')},
-                         pulse.integral)
 
 
 class AtomicMultiChannelPulseTemplateSerializationTests(SerializableTests, unittest.TestCase):

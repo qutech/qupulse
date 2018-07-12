@@ -149,7 +149,6 @@ class MappingTemplateTests(unittest.TestCase):
         self.assertIs(st_4.template, st_3)
         self.assertEqual(st_4.parameter_mapping, {'t': 't', 'k': 'k', 'bar': 't*l'})
 
-
     def test_get_updated_channel_mapping(self):
         template = DummyPulseTemplate(defined_channels={'foo', 'bar'})
         st = MappingPulseTemplate(template, channel_mapping={'bar': 'kneipe'})
@@ -176,6 +175,18 @@ class MappingTemplateTests(unittest.TestCase):
             st.get_updated_measurement_mapping(dict())
         self.assertEqual(st.get_updated_measurement_mapping({'kneipe': 'meas1', 'foo': 'meas2', 'troet': 'meas3'}),
                          {'foo': 'meas2', 'bar': 'meas1'})
+
+    def test_integral(self) -> None:
+        dummy = DummyPulseTemplate(defined_channels={'A', 'B'},
+                                   parameter_names={'k', 'f', 'b'},
+                                   integrals={'A': Expression('2*k'), 'other': Expression('-3.2*f+b')})
+        pulse = MappingPulseTemplate(dummy, parameter_mapping={'k': 'f', 'b': 2.3}, channel_mapping={'A': 'default'},
+                                     allow_partial_parameter_mapping=True)
+
+        self.assertEqual({'default': Expression('2*f'), 'other': Expression('-3.2*f+2.3')}, pulse.integral)
+
+
+class MappingPulseTemplateSequencingTests(unittest.TestCase):
 
     def test_build_sequence(self):
         measurement_mapping = {'meas1': 'meas2'}
@@ -206,16 +217,6 @@ class MappingTemplateTests(unittest.TestCase):
     @unittest.skip("Extend of dummy template for argument checking needed.")
     def test_requires_stop(self):
         pass
-
-    def test_integral(self) -> None:
-        dummy = DummyPulseTemplate(defined_channels={'A', 'B'},
-                                   parameter_names={'k', 'f', 'b'},
-                                   integrals={'A': Expression('2*k'), 'other': Expression('-3.2*f+b')})
-        pulse = MappingPulseTemplate(dummy, parameter_mapping={'k': 'f', 'b': 2.3}, channel_mapping={'A': 'default'},
-                                     allow_partial_parameter_mapping=True)
-
-        self.assertEqual({'default': Expression('2*f'), 'other': Expression('-3.2*f+2.3')}, pulse.integral)
-
 
 class PulseTemplateParameterMappingExceptionsTests(unittest.TestCase):
 
