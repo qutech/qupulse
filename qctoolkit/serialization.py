@@ -10,7 +10,7 @@ Classes:
 """
 
 from abc import ABCMeta, abstractmethod
-from typing import Dict, Any, Optional, NamedTuple, Union
+from typing import Dict, Any, Optional, NamedTuple, Union, Mapping, MutableMapping
 import os
 import zipfile
 import tempfile
@@ -730,7 +730,7 @@ class PulseStorage:
 
 class JSONSerializableDecoder(json.JSONDecoder):
 
-    def __init__(self, storage: PulseStorage, *args, **kwargs) -> None:
+    def __init__(self, storage: Mapping, *args, **kwargs) -> None:
         super().__init__(*args, object_hook=self.filter_serializables, **kwargs)
 
         self.storage = storage
@@ -767,7 +767,7 @@ class JSONSerializableDecoder(json.JSONDecoder):
 class JSONSerializableEncoder(json.JSONEncoder):
     """"""
 
-    def __init__(self, storage: PulseStorage, *args, **kwargs) -> None:
+    def __init__(self, storage: MutableMapping, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
         self.storage = storage
