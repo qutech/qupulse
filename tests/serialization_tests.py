@@ -133,6 +133,12 @@ class SerializableTests(metaclass=ABCMeta):
         with self.assertRaises(RuntimeError):
             self.make_instance('blub', registry=registry)
 
+    def test_renamed(self) -> None:
+        registry = dict()
+        instance = self.make_instance('hugo', registry=registry)
+        renamed_instance = instance.renamed('ilse', registry=registry)
+        self.assert_equal_instance_except_id(instance, renamed_instance)
+
 
 class DummySerializableTests(SerializableTests, unittest.TestCase):
     @property
