@@ -130,17 +130,19 @@ class SerializableTests(metaclass=ABCMeta):
             self.make_instance('blub', registry=registry)
 
     def test_conversion(self):
-        source_backend = DummyStorageBackend()
-        instance = self.make_instance(identifier='foo', registry=dict())
-        serializer = Serializer(source_backend)
-        serializer.serialize(instance)
-        del serializer
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', DeprecationWarning)
+            source_backend = DummyStorageBackend()
+            instance = self.make_instance(identifier='foo', registry=dict())
+            serializer = Serializer(source_backend)
+            serializer.serialize(instance)
+            del serializer
 
-        dest_backend = DummyStorageBackend()
-        convert_pulses_in_storage(source_backend, dest_backend)
-        pulse_storage = PulseStorage(dest_backend)
-        converted = pulse_storage['foo']
-        self.assert_equal_instance(instance, converted)
+            dest_backend = DummyStorageBackend()
+            convert_pulses_in_storage(source_backend, dest_backend)
+            pulse_storage = PulseStorage(dest_backend)
+            converted = pulse_storage['foo']
+            self.assert_equal_instance(instance, converted)
 
 
 class DummySerializableTests(SerializableTests, unittest.TestCase):
