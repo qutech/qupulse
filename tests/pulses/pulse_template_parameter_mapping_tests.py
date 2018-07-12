@@ -251,7 +251,7 @@ class MappingPulseTemplateSerializationTests(SerializableTests, unittest.TestCas
         kwargs = self.make_kwargs()
         return self.class_to_test(identifier=identifier, **kwargs, allow_partial_parameter_mapping=True, registry=registry)
 
-    def assert_equal_instance(self, lhs: MappingPulseTemplate, rhs: MappingPulseTemplate):
+    def assert_equal_instance_except_id(self, lhs: MappingPulseTemplate, rhs: MappingPulseTemplate):
         self.assertIsInstance(lhs, MappingPulseTemplate)
         self.assertIsInstance(rhs, MappingPulseTemplate)
         self.assertEqual(lhs.template, rhs.template)

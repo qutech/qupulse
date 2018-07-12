@@ -453,10 +453,9 @@ class TablePulseTemplateSerializationTests(SerializableTests, unittest.TestCase)
             'parameter_constraints': [str(ParameterConstraint('ilse>2')), str(ParameterConstraint('k>foo'))]
         }
 
-    def assert_equal_instance(self, lhs: TablePulseTemplate, rhs: TablePulseTemplate):
+    def assert_equal_instance_except_id(self, lhs: TablePulseTemplate, rhs: TablePulseTemplate):
         self.assertIsInstance(lhs, TablePulseTemplate)
         self.assertIsInstance(rhs, TablePulseTemplate)
-        self.assertEqual(lhs.identifier, rhs.identifier)
         self.assertEqual(lhs.entries, rhs.entries)
         self.assertEqual(lhs.measurement_declarations, rhs.measurement_declarations)
         self.assertEqual(lhs.parameter_constraints, rhs.parameter_constraints)

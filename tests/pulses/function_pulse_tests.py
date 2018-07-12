@@ -99,7 +99,7 @@ class FunctionPulseSerializationTest(SerializableTests, unittest.TestCase):
                                       str(ParameterConstraint('d > c'))]
         }
 
-    def assert_equal_instance(self, lhs: FunctionPulseTemplate, rhs: FunctionPulseTemplate):
+    def assert_equal_instance_except_id(self, lhs: FunctionPulseTemplate, rhs: FunctionPulseTemplate):
         self.assertIsInstance(lhs, FunctionPulseTemplate)
         self.assertIsInstance(rhs, FunctionPulseTemplate)
         self.assertEqual(lhs.parameter_names, rhs.parameter_names)

@@ -56,8 +56,12 @@ class SerializableTests(metaclass=ABCMeta):
     def make_kwargs(self) -> dict:
         pass
 
-    @abstractmethod
     def assert_equal_instance(self, lhs, rhs):
+        self.assert_equal_instance_except_id(lhs, rhs)
+        self.assertEqual(lhs.identifier, rhs.identifier)
+
+    @abstractmethod
+    def assert_equal_instance_except_id(self, lhs, rhs):
         pass
 
     def make_instance(self, identifier=None, registry=None):
@@ -131,6 +135,12 @@ class SerializableTests(metaclass=ABCMeta):
         with self.assertRaises(RuntimeError):
             self.make_instance('blub', registry=registry)
 
+    def test_renamed(self) -> None:
+        registry = dict()
+        instance = self.make_instance('hugo', registry=registry)
+        renamed_instance = instance.renamed('ilse', registry=registry)
+        self.assert_equal_instance_except_id(instance, renamed_instance)
+        
     def test_conversion(self):
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', DeprecationWarning)
@@ -155,12 +165,11 @@ class DummySerializableTests(SerializableTests, unittest.TestCase):
     def make_kwargs(self):
         return {'data': 'blubber', 'test_dict': {'foo': 'bar', 'no': 17.3}}
 
-    def assert_equal_instance(self, lhs, rhs):
-        self.assertEqual(lhs.identifier, rhs.identifier)
+    def assert_equal_instance_except_id(self, lhs, rhs):
         self.assertEqual(lhs.data, rhs.data)
 
 
-class DummyPulseTemplateSerializationtests(SerializableTests, unittest.TestCase):
+class DummyPulseTemplateSerializationTests(SerializableTests, unittest.TestCase):
     @property
     def class_to_test(self):
         return DummyPulseTemplate
@@ -176,9 +185,8 @@ class DummyPulseTemplateSerializationtests(SerializableTests, unittest.TestCase)
             'integrals': {'default': ExpressionScalar(19.231)}
         }
 
-    def assert_equal_instance(self, lhs, rhs):
+    def assert_equal_instance_except_id(self, lhs, rhs):
         self.assertEqual(lhs.compare_key, rhs.compare_key)
-        self.assertEqual(lhs.identifier, rhs.identifier)
 
 
 class FileSystemBackendTest(unittest.TestCase):
@@ -603,8 +611,8 @@ class PulseStorageTests(unittest.TestCase):
         self.assertIn('asdf', self.storage.temporary_storage)
 
     def test_setitem(self):
-        instance_1 = DummySerializable(identifier='my_id_1')
-        instance_2 = DummySerializable(identifier='my_id_2')
+        instance_1 = DummySerializable(identifier='my_id', registry=dict())
+        instance_2 = DummySerializable(identifier='my_id', registry=dict())
 
         def overwrite(identifier, serializable):
             self.assertFalse(overwrite.called)
@@ -624,6 +632,11 @@ class PulseStorageTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'assigned twice'):
             self.storage['my_id'] = instance_2
 
+    def test_setitem_different_id(self) -> None:
+        serializable = DummySerializable(identifier='my_id', registry=dict())
+        with self.assertRaisesRegex(ValueError, "different than its own internal identifier"):
+            self.storage['a_totally_different_id'] = serializable
+
     def test_overwrite(self):
 
         encode_mock = mock.Mock(return_value='asd')
@@ -639,9 +652,9 @@ class PulseStorageTests(unittest.TestCase):
         self.assertEqual(self.storage._temporary_storage, {'my_id': self.storage.StorageEntry('asd', instance)})
 
     def test_write_through(self):
-        instance_1 = DummySerializable(identifier='my_id_1')
-        inner_instance = DummySerializable(identifier='my_id_2')
-        outer_instance = NestedDummySerializable(inner_instance, identifier='my_id_3')
+        instance_1 = DummySerializable(identifier='my_id_1', registry=dict())
+        inner_instance = DummySerializable(identifier='my_id_2', registry=dict())
+        outer_instance = NestedDummySerializable(inner_instance, identifier='my_id_3', registry=dict())
 
         def get_expected():
             return {identifier: serialized
@@ -714,11 +727,12 @@ class PulseStorageTests(unittest.TestCase):
 
     def test_beautified_json(self) -> None:
         data = {'e': 89, 'b': 151, 'c': 123515, 'a': 123, 'h': 2415}
-        template = DummySerializable(data=data)
+        template = DummySerializable(data=data, identifier="foo")
         pulse_storage = PulseStorage(DummyStorageBackend())
         pulse_storage['foo'] = template
 
         expected = """{
+    \"#identifier\": \"foo\",
     \"#type\": \"""" + DummySerializable.get_type_identifier() + """\",
     \"data\": {
         \"a\": 123,

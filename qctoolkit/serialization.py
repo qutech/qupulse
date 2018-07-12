@@ -496,6 +496,13 @@ class Serializable(metaclass=SerializableMeta):
 
         return cls(**kwargs)
 
+    def renamed(self, new_identifier: str, registry: Optional[Dict]=None) -> 'Serializable':
+        """Returns a copy of the Serializable with its identifier set to new_identifier."""
+        data = self.get_serialization_data()
+        data.pop(Serializable.type_identifier_name)
+        data.pop(Serializable.identifier_name)
+        return self.deserialize(registry=registry, identifier=new_identifier, **data)
+
 
 class AnonymousSerializable:
     """Any object that can be converted into a serialized representation for storage and back which NEVER has an
@@ -715,6 +722,14 @@ class PulseStorage:
         return self._temporary_storage[identifier].serializable
 
     def __setitem__(self, identifier: str, serializable: Serializable) -> None:
+        if identifier != serializable.identifier: # address issue #272: https://github.com/qutech/qc-toolkit/issues/272
+            raise ValueError("Storing a Serializable under a different than its own internal identifier is currently"
+                             " not supported! If you want to rename the serializable, please use the "
+                             "Serializable.renamed() method to obtain a renamed copy which can then be stored with "
+                             "the new identifier.\n"
+                             "If you think that storing under a different identifier without explicit renaming should"
+                             "a supported feature, please contribute to our ongoing discussion about this on:\n"
+                             "https://github.com/qutech/qc-toolkit/issues/272")
         if identifier in self._temporary_storage:
             if self.temporary_storage[identifier].serializable is serializable:
                 return
