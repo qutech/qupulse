@@ -37,7 +37,7 @@ function [output, bool, msg] = daq_operations(ctrl, varargin)
 		else
 			daq.register_operations(a.program_name, qc.operations_to_python(a.operations));
 			msg = sprintf('Operations for program ''%s'' added', a.program_name);			
-			qc.workaround_alazar_single_buffer_acquisition();
+			% qc.workaround_alazar_single_buffer_acquisition();
 		end
 		bool = true;
 	
