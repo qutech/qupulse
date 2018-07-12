@@ -11,7 +11,7 @@ from qctoolkit.serialization import Serializer
 
 from qctoolkit.utils.types import MeasurementWindow, ChannelID, TimeType
 from qctoolkit.pulses.pulse_template import PulseTemplate
-from qctoolkit.pulses.parameters import Parameter, ParameterConstrainer
+from qctoolkit.pulses.parameters import Parameter, ParameterConstrainer, ParameterNotProvidedException
 from qctoolkit.pulses.sequencing import InstructionBlock, Sequencer
 from qctoolkit.pulses.conditions import Condition
 from qctoolkit.pulses.pulse_template_parameter_mapping import MappingPulseTemplate, MappingTuple
@@ -180,9 +180,17 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
     def requires_stop(self,
                       parameters: Dict[str, Parameter],
                       conditions: Dict[str, 'Condition']) -> bool:
-        """Returns the stop requirement of the first subtemplate. If a later subtemplate requires a stop the
-        SequencePulseTemplate can be partially sequenced."""
-        return self.__subtemplates[0].requires_stop(parameters, conditions) if self.__subtemplates else False
+        """Returns the stop requirement of parameter constraints. If all locally constrained parameters can be evaluated,
+        returns False without regard for subtemplates.
+
+        This will cause all subtemplates to be pushed to the sequencer, regardless of whether or not they require a
+        stop in sequence, which will be determined by querying their respective requires_stop property when the
+        sequencing process reaches them.
+        """
+        try:
+            return any(parameters[parameter_name].requires_stop for parameter_name in self.constrained_parameters)
+        except KeyError as ke:
+            raise ParameterNotProvidedException(str(ke))
 
     def build_waveform(self,
                        parameters: Dict[str, Real],
