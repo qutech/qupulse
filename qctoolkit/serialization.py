@@ -10,7 +10,7 @@ Classes:
 """
 
 from abc import ABCMeta, abstractmethod
-from typing import Dict, Any, Optional, NamedTuple, Union, Mapping, MutableMapping
+from typing import Dict, Any, Optional, NamedTuple, Union, Mapping, MutableMapping, Set
 import os
 import zipfile
 import tempfile
@@ -23,7 +23,8 @@ from contextlib import contextmanager
 from qctoolkit.utils.types import DocStringABCMeta
 
 __all__ = ["StorageBackend", "FilesystemBackend", "ZipFileBackend", "CachingBackend", "Serializable", "Serializer",
-           "AnonymousSerializable", "DictBackend", "JSONSerializableEncoder", "JSONSerializableDecoder", "PulseStorage"]
+           "AnonymousSerializable", "DictBackend", "JSONSerializableEncoder", "JSONSerializableDecoder", "PulseStorage",
+           "convert_pulses_in_storage", "convert_stored_pulse_in_storage"]
 
 
 class StorageBackend(metaclass=ABCMeta):
@@ -91,6 +92,14 @@ class StorageBackend(metaclass=ABCMeta):
     def __delitem__(self, identifier: str) -> None:
         self.delete(identifier)
 
+    @abstractmethod
+    def list_contents(self) -> Set[str]:
+        """Return a listing of all available identifiers.
+
+        Returns:
+            List of all available identifiers.
+        """
+
 
 class FilesystemBackend(StorageBackend):
     """A StorageBackend implementation based on a regular filesystem.
@@ -140,6 +149,21 @@ class FilesystemBackend(StorageBackend):
             os.remove(self._path(identifier))
         except FileNotFoundError as fnf:
             raise KeyError(identifier) from fnf
+
+    def list_contents(self) -> Set[str]:
+        contents = set()
+        for dirpath, dirs, files in os.walk(self._root):
+            contents = contents | {filename
+                                   for filename, ext in (os.path.splitext(file) for file in files)
+                                   if ext == '.json'}
+            break # abort after first iteration; FileSystemBackend doesn't allow for subdirectories anyway right now, so this is a safeguard
+
+            # pref = os.path.commonprefix((dirpath, self._root))
+            # dir_rel_path = dirpath[len(pref):]
+            # contents = contents | {os.path.join(dir_rel_path, filename)
+            #                        for filename, ext in (os.path.splitext(file) for file in files)
+            #                        if ext == '.json'}
+        return contents
 
 
 class ZipFileBackend(StorageBackend):
@@ -225,6 +249,12 @@ class ZipFileBackend(StorageBackend):
             with zipfile.ZipFile(self._root, mode='a', compression=zipfile.ZIP_DEFLATED) as zf:
                 zf.writestr(filename, data)
 
+    def list_contents(self) -> Set[str]:
+        with zipfile.ZipFile(self._root, 'r') as myzip:
+            return set(filename
+                       for filename, ext in (os.path.splitext(file) for file in myzip.namelist())
+                       if ext == '.json')
+
 
 class CachingBackend(StorageBackend):
     """Adds naive memory caching functionality to another StorageBackend.
@@ -265,6 +295,9 @@ class CachingBackend(StorageBackend):
         if identifier in self._cache:
             del self._cache[identifier]
 
+    def list_contents(self) -> Set[str]:
+        return self._backend.list_contents()
+
 
 class DictBackend(StorageBackend):
     """DictBackend uses a dictionary to store the data for convenience serialization."""
@@ -288,6 +321,9 @@ class DictBackend(StorageBackend):
 
     def delete(self, identifier: str) -> None:
         del self._cache[identifier]
+
+    def list_contents(self) -> Set[str]:
+        return set(self._cache.keys())
 
 
 def get_type_identifier(obj: Any) -> str:
@@ -622,7 +658,7 @@ class Serializer(object):
         if isinstance(representation, str):
             if representation in self.__subpulses:
                 return self.__subpulses[representation].serializable
-        
+
         if isinstance(representation, str):
             repr_ = json.loads(self.__storage_backend.get(representation))
             repr_['identifier'] = representation
@@ -632,12 +668,12 @@ class Serializer(object):
         module_name, class_name = repr_['type'].rsplit('.', 1)
         module = __import__(module_name, fromlist=[class_name])
         class_ = getattr(module, class_name)
-        
+
         repr_to_store = repr_.copy()
         repr_.pop('type')
-        
+
         serializable = class_.deserialize(self, **repr_)
-        
+
         if 'identifier' in repr_:
             identifier = repr_['identifier']
             self.__subpulses[identifier] = self.__FileEntry(repr_, serializable)
@@ -824,3 +860,49 @@ class ExtendedJSONEncoder(json.JSONEncoder):
             return list(o)
         else:
             return super().default(o)
+
+
+def convert_stored_pulse_in_storage(identifier: str, source_storage: StorageBackend, dest_storage: StorageBackend) -> None:
+    """Converts a pulse from the old to the new serialization format.
+
+    The pulse with the given identifier is completely (including subpulses) converted from the old serialization format
+    read from a given source storage to the new serialization format and written to a given destination storage.
+
+    Args:
+        identifier (str): The identifier of the pulse to convert.
+        source_storage (StorageBackend): A StorageBackend containing the pulse identified by the identifier argument in the old serialization format.
+        dest_storage (StorageBackend): A StorageBackend the converted pulse will be written to in the new serialization format.
+    Raises:
+        ValueError: if the dest_storage StorageBackend contains identifiers also assigned in source_storage.
+    """
+    if dest_storage.list_contents().intersection(source_storage.list_contents()):
+        raise ValueError("dest_storage already contains pulses with the same ids. Aborting to prevent inconsistencies for duplicate keys.")
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', DeprecationWarning)
+        serializer = Serializer(source_storage)
+        pulse_storage = PulseStorage(dest_storage)
+        serializable = serializer.deserialize(identifier)
+        pulse_storage.overwrite(identifier, serializable)
+
+
+def convert_pulses_in_storage(source_storage: StorageBackend, dest_storage: StorageBackend) -> None:
+    """Converts all pulses from the old to the new serialization format.
+
+        All pulses in a given source storage are completely (including subpulses) converted from the old serialization format
+        to the new serialization format and written to a given destination storage.
+
+        Args:
+            source_storage (StorageBackend): A StorageBackend containing pulses in the old serialization format.
+            dest_storage (StorageBackend): A StorageBackend the converted pulses will be written to in the new serialization format.
+        Raises:
+            ValueError: if the dest_storage StorageBackend contains identifiers also assigned in source_storage.
+        """
+    if dest_storage.list_contents().intersection(source_storage.list_contents()):
+        raise ValueError("dest_storage already contains pulses with the same ids. Aborting to prevent inconsistencies for duplicate keys.")
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', DeprecationWarning)
+        serializer = Serializer(source_storage)
+        pulse_storage = PulseStorage(dest_storage)
+        for identifier in source_storage.list_contents():
+            serializable = serializer.deserialize(identifier)
+            pulse_storage.overwrite(identifier, serializable)
