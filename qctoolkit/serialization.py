@@ -381,7 +381,7 @@ class Serializable(metaclass=SerializableMeta):
         """The (optional) identifier of this Serializable. Either a non-empty string or None."""
         return self.__identifier
 
-    def get_serialization_data(self, serializer: 'Serializer'=None) -> Dict[str, Any]:
+    def get_serialization_data(self, serializer: Optional['Serializer']=None) -> Dict[str, Any]:
         """Return all data relevant for serialization as a dictionary containing only base types.
 
         Implementation hint:
@@ -418,7 +418,7 @@ class Serializable(metaclass=SerializableMeta):
         return "{}.{}".format(cls.__module__, cls.__name__)
 
     @classmethod
-    def deserialize(cls, serializer: 'Serializer'=None, **kwargs) -> 'Serializable':
+    def deserialize(cls, serializer: Optional['Serializer']=None, **kwargs) -> 'Serializable':
         """Reconstruct the Serializable object from a dictionary.
 
         Implementation hint:

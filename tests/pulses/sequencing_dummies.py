@@ -32,11 +32,11 @@ class DummyParameter(Parameter):
     def __hash__(self):
         return hash(self.value)
 
-    def get_serialization_data(self, serializer: Serializer) -> None:
+    def get_serialization_data(self, serializer: Optional[Serializer]=None) -> None:
             raise NotImplementedError()
 
-    @staticmethod
-    def deserialize(serializer: Serializer) -> 'DummyParameter':
+    @classmethod
+    def deserialize(cls, serializer: Optional[Serializer]=None) -> 'DummyParameter':
         raise NotImplementedError()
 
 class DummyNoValueParameter(Parameter):
@@ -51,11 +51,11 @@ class DummyNoValueParameter(Parameter):
     def requires_stop(self) -> bool:
         return True
 
-    def get_serialization_data(self, serializer: Serializer) -> None:
+    def get_serialization_data(self, serializer: Optional[Serializer]=None) -> None:
             raise NotImplementedError()
 
-    @staticmethod
-    def deserialize(serializer: Serializer) -> 'DummyParameter':
+    @classmethod
+    def deserialize(cls, serializer: Optional[Serializer]=None) -> 'DummyParameter':
         raise NotImplementedError()
 
     def __hash__(self):
@@ -363,7 +363,7 @@ class DummyPulseTemplate(AtomicPulseTemplate):
         self.requires_stop_arguments.append((parameters,conditions))
         return self.requires_stop_
 
-    def get_serialization_data(self, serializer: 'Serializer'=None) -> Dict[str, Any]:
+    def get_serialization_data(self, serializer: Optional['Serializer']=None) -> Dict[str, Any]:
         data = super().get_serialization_data(serializer=serializer)
         data['requires_stop'] = self.requires_stop_
         data['is_interruptable'] = self.is_interruptable
