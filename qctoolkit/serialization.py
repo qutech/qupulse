@@ -673,6 +673,14 @@ class PulseStorage:
         return self._temporary_storage[identifier].serializable
 
     def __setitem__(self, identifier: str, serializable: Serializable) -> None:
+        if identifier != serializable.identifier: # address issue #272: https://github.com/qutech/qc-toolkit/issues/272
+            raise ValueError("Storing a Serializable under a different than its own internal identifier is currently"
+                             " not supported! If you want to rename the serializable, please use the "
+                             "Serializable.renamed() method to obtain a renamed copy which can then be stored with "
+                             "the new identifier.\n"
+                             "If you think that storing under a different identifier without explicit renaming should"
+                             "a supported feature, please contribute to our ongoing discussion about this on:\n"
+                             "https://github.com/qutech/qc-toolkit/issues/272")
         if identifier in self._temporary_storage:
             if self.temporary_storage[identifier].serializable is serializable:
                 return

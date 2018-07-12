@@ -532,8 +532,8 @@ class PulseStorageTests(unittest.TestCase):
         self.assertIn('asdf', self.storage.temporary_storage)
 
     def test_setitem(self):
-        instance_1 = DummySerializable(identifier='my_id_1')
-        instance_2 = DummySerializable(identifier='my_id_2')
+        instance_1 = DummySerializable(identifier='my_id', registry=dict())
+        instance_2 = DummySerializable(identifier='my_id', registry=dict())
 
         def overwrite(identifier, serializable):
             self.assertFalse(overwrite.called)
@@ -553,6 +553,11 @@ class PulseStorageTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'assigned twice'):
             self.storage['my_id'] = instance_2
 
+    def test_setitem_different_id(self) -> None:
+        serializable = DummySerializable(identifier='my_id', registry=dict())
+        with self.assertRaisesRegex(ValueError, "different than its own internal identifier"):
+            self.storage['a_totally_different_id'] = serializable
+
     def test_overwrite(self):
 
         encode_mock = mock.Mock(return_value='asd')
@@ -568,9 +573,9 @@ class PulseStorageTests(unittest.TestCase):
         self.assertEqual(self.storage._temporary_storage, {'my_id': self.storage.StorageEntry('asd', instance)})
 
     def test_write_through(self):
-        instance_1 = DummySerializable(identifier='my_id_1')
-        inner_instance = DummySerializable(identifier='my_id_2')
-        outer_instance = NestedDummySerializable(inner_instance, identifier='my_id_3')
+        instance_1 = DummySerializable(identifier='my_id_1', registry=dict())
+        inner_instance = DummySerializable(identifier='my_id_2', registry=dict())
+        outer_instance = NestedDummySerializable(inner_instance, identifier='my_id_3', registry=dict())
 
         def get_expected():
             return {identifier: serialized
@@ -644,11 +649,12 @@ class PulseStorageTests(unittest.TestCase):
 
     def test_beautified_json(self) -> None:
         data = {'e': 89, 'b': 151, 'c': 123515, 'a': 123, 'h': 2415}
-        template = DummySerializable(data=data)
+        template = DummySerializable(data=data, identifier="foo")
         pulse_storage = PulseStorage(DummyStorageBackend())
         pulse_storage['foo'] = template
 
         expected = """{
+    \"#identifier\": \"foo\",
     \"#type\": \"""" + DummySerializable.get_type_identifier() + """\",
     \"data\": {
         \"a\": 123,
