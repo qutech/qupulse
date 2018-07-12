@@ -229,7 +229,7 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
 
     @classmethod
     def deserialize(cls,
-                    serializer: Serializer=None,  # compatibility to old serialization routines, deprecated
+                    serializer: Optional[Serializer]=None,  # compatibility to old serialization routines, deprecated
                     **kwargs) -> 'SequencePulseTemplate':
         subtemplates = kwargs['subtemplates']
         del kwargs['subtemplates']
