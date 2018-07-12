@@ -192,7 +192,7 @@ class SequencePulseTemplateSerializationTests(SerializableTests, unittest.TestCa
         del kwargs['subtemplates']
         return self.class_to_test(identifier=identifier, *subtemplates, **kwargs, registry=registry)
 
-    def assert_equal_instance(self, lhs: SequencePulseTemplate, rhs: SequencePulseTemplate):
+    def assert_equal_instance_except_id(self, lhs: SequencePulseTemplate, rhs: SequencePulseTemplate):
         self.assertIsInstance(lhs, SequencePulseTemplate)
         self.assertIsInstance(rhs, SequencePulseTemplate)
         self.assertEqual(lhs.subtemplates, rhs.subtemplates)

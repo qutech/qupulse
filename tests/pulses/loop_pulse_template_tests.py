@@ -241,7 +241,7 @@ class ForLoopPulseTemplateSerializationTests(SerializableTests, unittest.TestCas
             'measurements': [('a', 0, 1), ('b', 1, 1)]
         }
 
-    def assert_equal_instance(self, lhs: ForLoopPulseTemplate, rhs: ForLoopPulseTemplate):
+    def assert_equal_instance_except_id(self, lhs: ForLoopPulseTemplate, rhs: ForLoopPulseTemplate):
         self.assertIsInstance(lhs, ForLoopPulseTemplate)
         self.assertIsInstance(rhs, ForLoopPulseTemplate)
         self.assertEqual(lhs.body, rhs.body)
@@ -453,7 +453,7 @@ class WhileLoopPulseTemplateSerializationTests(SerializableTests, unittest.TestC
             'condition': 'foo_cond'
         }
 
-    def assert_equal_instance(self, lhs: WhileLoopPulseTemplate, rhs: WhileLoopPulseTemplate):
+    def assert_equal_instance_except_id(self, lhs: WhileLoopPulseTemplate, rhs: WhileLoopPulseTemplate):
         self.assertIsInstance(lhs, WhileLoopPulseTemplate)
         self.assertIsInstance(rhs, WhileLoopPulseTemplate)
         self.assertEqual(lhs.body, rhs.body)
