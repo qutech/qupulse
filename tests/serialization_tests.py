@@ -9,7 +9,7 @@ from unittest import mock
 from abc import ABCMeta, abstractmethod
 
 from tempfile import TemporaryDirectory
-from typing import Optional, Any, Dict
+from typing import Optional, Any, Dict, Tuple
 
 from qctoolkit.serialization import FilesystemBackend, CachingBackend, Serializable, JSONSerializableEncoder,\
     ZipFileBackend, AnonymousSerializable, DictBackend, PulseStorage, JSONSerializableDecoder, Serializer,\
@@ -128,6 +128,30 @@ class SerializableTests(metaclass=ABCMeta):
         instance = self.make_instance('blub', registry=registry)
         with self.assertRaises(RuntimeError):
             self.make_instance('blub', registry=registry)
+
+    def test_no_registration_before_correct_serialization(self) -> None:
+        class RegistryStub:
+            def __init__(self) -> None:
+                self.storage = dict()
+
+            def __setitem__(self, key: str, value: Serializable) -> None:
+                serialization_data = value.get_serialization_data()
+                serialization_data.pop(Serializable.type_identifier_name)
+                serialization_data.pop(Serializable.identifier_name)
+                self.storage[key] = (value, serialization_data)
+
+            def __getitem__(self, key: str) -> Tuple[Serializable, Dict[str, Any]]:
+                return self.storage[key]
+
+            def __contains__(self, key: str) -> bool:
+                return key in self.storage
+
+        registry = RegistryStub()
+        identifier = 'foo'
+        instance = self.make_instance(identifier=identifier, registry=registry)
+        self.assertIs(instance, registry[identifier][0])
+        stored_instance = self.class_to_test.deserialize(identifier=identifier, registry=dict(), **(registry[identifier][1]))
+        self.assert_equal_instance(instance, stored_instance)
 
 
 class DummySerializableTests(SerializableTests, unittest.TestCase):
