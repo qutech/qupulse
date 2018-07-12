@@ -733,6 +733,7 @@ class PulseStorageTests(unittest.TestCase):
         deserialized = pulse_storage['peter']
         self.assertEqual(deserialized, serializable)
 
+    @unittest.mock.patch('qctoolkit.serialization.default_pulse_registry', dict())
     def test_deserialize_storage_is_not_default_registry_id_occupied(self) -> None:
         backend = DummyStorageBackend()
 
