@@ -318,7 +318,7 @@ class SerializableMeta(DocStringABCMeta):
         return cls
 
 
-default_pulse_registry = weakref.WeakValueDictionary()
+default_pulse_registry = None
 
 
 def get_default_pulse_registry() -> Union[Dict, 'PulseStorage']:

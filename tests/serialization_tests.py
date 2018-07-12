@@ -13,7 +13,7 @@ from typing import Optional, Any, Dict
 
 from qctoolkit.serialization import FilesystemBackend, CachingBackend, Serializable, JSONSerializableEncoder,\
     ZipFileBackend, AnonymousSerializable, DictBackend, PulseStorage, JSONSerializableDecoder, Serializer,\
-    get_default_pulse_registry, SerializableMeta
+    get_default_pulse_registry, set_default_pulse_registry, SerializableMeta
 
 from qctoolkit.expressions import ExpressionScalar
 
@@ -115,17 +115,19 @@ class SerializableTests(metaclass=ABCMeta):
         storage['blub'] = instance
 
         storage.clear()
+        set_default_pulse_registry(dict())
 
         other_instance = typing.cast(self.class_to_test, storage['blub'])
         self.assert_equal_instance(instance, other_instance)
 
         self.assertIs(registry['blub'], instance)
         self.assertIs(get_default_pulse_registry()['blub'], other_instance)
+        set_default_pulse_registry(None)
 
     def test_duplication_error(self):
         registry = dict()
 
-        instance = self.make_instance('blub', registry=registry)
+        self.make_instance('blub', registry=registry)
         with self.assertRaises(RuntimeError):
             self.make_instance('blub', registry=registry)
 
