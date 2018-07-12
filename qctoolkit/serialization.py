@@ -318,11 +318,24 @@ class SerializableMeta(DocStringABCMeta):
         return cls
 
 
-default_pulse_registry = weakref.WeakValueDictionary()
+default_pulse_registry = None
 
 
-def get_default_pulse_registry() -> Union[weakref.WeakKeyDictionary, 'PulseStorage']:
+def get_default_pulse_registry() -> MutableMapping:
     return default_pulse_registry
+
+
+def set_default_pulse_registry(new_default_registry: Optional[MutableMapping]) -> None:
+    global default_pulse_registry
+    default_pulse_registry = new_default_registry
+
+
+def new_default_pulse_registry() -> None:
+    """Sets a new empty default pulse registry.
+
+    The new registry is a newly created weakref.WeakValueDictionry().
+    """
+    set_default_pulse_registry(weakref.WeakValueDictionary())
 
 
 class Serializable(metaclass=SerializableMeta):
@@ -345,7 +358,7 @@ class Serializable(metaclass=SerializableMeta):
     type_identifier_name = '#type'
     identifier_name = '#identifier'
 
-    def __init__(self, identifier: Optional[str]=None, registry: Optional[dict]=None) -> None:
+    def __init__(self, identifier: Optional[str]=None, registry: Optional[MutableMapping]=None) -> None:
         """Initialize a Serializable.
 
         Args:

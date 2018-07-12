@@ -13,7 +13,7 @@ from typing import Optional, Any, Dict
 
 from qctoolkit.serialization import FilesystemBackend, CachingBackend, Serializable, JSONSerializableEncoder,\
     ZipFileBackend, AnonymousSerializable, DictBackend, PulseStorage, JSONSerializableDecoder, Serializer,\
-    get_default_pulse_registry, SerializableMeta
+    get_default_pulse_registry, set_default_pulse_registry, new_default_pulse_registry, SerializableMeta
 
 from qctoolkit.expressions import ExpressionScalar
 
@@ -115,17 +115,19 @@ class SerializableTests(metaclass=ABCMeta):
         storage['blub'] = instance
 
         storage.clear()
+        set_default_pulse_registry(dict())
 
         other_instance = typing.cast(self.class_to_test, storage['blub'])
         self.assert_equal_instance(instance, other_instance)
 
         self.assertIs(registry['blub'], instance)
         self.assertIs(get_default_pulse_registry()['blub'], other_instance)
+        set_default_pulse_registry(None)
 
     def test_duplication_error(self):
         registry = dict()
 
-        instance = self.make_instance('blub', registry=registry)
+        self.make_instance('blub', registry=registry)
         with self.assertRaises(RuntimeError):
             self.make_instance('blub', registry=registry)
 
@@ -481,6 +483,33 @@ class SerializableMetaTests(unittest.TestCase):
         self.assertEqual(SerializableMeta.deserialization_callbacks['foo.bar.never'], NativeDeserializable)
 
 
+class DefaultPulseRegistryManipulationTests(unittest.TestCase):
+
+    def test_get_set_default_pulse_registry(self) -> None:
+        # store previous registry
+        previous_registry = get_default_pulse_registry()
+
+        registry = dict()
+        set_default_pulse_registry(registry)
+        self.assertIs(get_default_pulse_registry(), registry)
+
+        # restore previous registry
+        set_default_pulse_registry(previous_registry)
+        self.assertIs(get_default_pulse_registry(), previous_registry)
+
+    def test_new_default_pulse_registry(self) -> None:
+        # store previous registry
+        previous_registry = get_default_pulse_registry()
+
+        new_default_pulse_registry()
+        self.assertIsNotNone(get_default_pulse_registry())
+        self.assertIsNot(get_default_pulse_registry(), previous_registry)
+
+        # restore previous registry
+        set_default_pulse_registry(previous_registry)
+        self.assertIs(get_default_pulse_registry(), previous_registry)
+
+
 class PulseStorageTests(unittest.TestCase):
     def setUp(self):
         self.backend = DummyStorageBackend()
@@ -631,8 +660,7 @@ class PulseStorageTests(unittest.TestCase):
             pulse_storage.set_to_default_registry()
             self.assertIs(get_default_pulse_registry(), pulse_storage)
         finally:
-            import qctoolkit.serialization
-            qctoolkit.serialization.default_pulse_registry = previous_default_registry
+            set_default_pulse_registry(previous_default_registry)
 
     def test_beautified_json(self) -> None:
         data = {'e': 89, 'b': 151, 'c': 123515, 'a': 123, 'h': 2415}
@@ -705,6 +733,7 @@ class PulseStorageTests(unittest.TestCase):
         deserialized = pulse_storage['peter']
         self.assertEqual(deserialized, serializable)
 
+    @unittest.mock.patch('qctoolkit.serialization.default_pulse_registry', dict())
     def test_deserialize_storage_is_not_default_registry_id_occupied(self) -> None:
         backend = DummyStorageBackend()
 
