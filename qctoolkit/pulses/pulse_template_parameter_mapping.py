@@ -48,7 +48,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         :param parameter_constraints:
         :param allow_partial_parameter_mapping:
         """
-        PulseTemplate.__init__(self, identifier=identifier, registry=registry)
+        PulseTemplate.__init__(self, identifier=identifier)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 
         if parameter_mapping is None:
@@ -100,6 +100,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         self.__external_parameters |= self.constrained_parameters
         self.__measurement_mapping = measurement_mapping
         self.__channel_mapping = channel_mapping
+        self._register(registry=registry)
 
     @staticmethod
     def from_tuple(mapping_tuple: MappingTuple) -> 'MappingPulseTemplate':

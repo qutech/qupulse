@@ -300,7 +300,7 @@ class DummyPulseTemplate(AtomicPulseTemplate):
                  integrals: Dict[ChannelID, ExpressionScalar]={'default': ExpressionScalar(0)},
                  identifier=None,
                  registry=None) -> None:
-        super().__init__(identifier=identifier, measurements=measurements, registry=registry)
+        super().__init__(identifier=identifier, measurements=measurements)
         self.requires_stop_ = requires_stop
         self.requires_stop_arguments = []
 
@@ -313,6 +313,7 @@ class DummyPulseTemplate(AtomicPulseTemplate):
         self.build_waveform_calls = []
         self.measurement_names_ = set(measurement_names)
         self._integrals = integrals
+        self._register(registry=registry)
 
     @property
     def duration(self):

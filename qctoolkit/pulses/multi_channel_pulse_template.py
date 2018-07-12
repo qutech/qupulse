@@ -141,7 +141,7 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
                  parameter_constraints: Optional[List]=None,
                  measurements: Optional[List[MeasurementDeclaration]]=None,
                  registry: Optional[dict] = None) -> None:
-        AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements, registry=registry)
+        AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 
         self._subtemplates = [st if isinstance(st, PulseTemplate) else MappingPulseTemplate.from_tuple(st) for st in
@@ -182,6 +182,8 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
             else:
                 raise ValueError('Could not assert duration equality of {} and {}'.format(duration,
                                                                                           subtemplate.duration))
+
+        self._register(registry=registry)
 
     @property
     def duration(self) -> Expression:

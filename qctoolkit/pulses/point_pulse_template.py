@@ -48,12 +48,14 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
                  identifier: Optional[str]=None,
                  registry: Optional[dict]=None):
 
-        AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements, registry=registry)
+        AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 
         self._channels = tuple(channel_names)
         self._entries = [PointPulseEntry(*tpt)
                          for tpt in time_point_tuple_list]
+
+        self._register(registry=registry)
 
     @property
     def defined_channels(self) -> Set[ChannelID]:

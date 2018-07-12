@@ -25,9 +25,8 @@ __all__ = ['ForLoopPulseTemplate', 'LoopPulseTemplate', 'LoopIndexNotUsedExcepti
 class LoopPulseTemplate(PulseTemplate):
     """Base class for loop based pulse templates. This class is still abstract and cannot be instantiated."""
     def __init__(self, body: PulseTemplate,
-                 identifier: Optional[str],
-                 registry: Optional[dict]):
-        super().__init__(identifier=identifier, registry=registry)
+                 identifier: Optional[str]):
+        super().__init__(identifier=identifier)
         self.__body = body
 
     @property
@@ -120,7 +119,7 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
             loop_range: Range to loop through
             identifier: Used for serialization
         """
-        LoopPulseTemplate.__init__(self, body=body, identifier=identifier, registry=registry)
+        LoopPulseTemplate.__init__(self, body=body, identifier=identifier)
         MeasurementDefiner.__init__(self, measurements=measurements)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 
@@ -151,6 +150,8 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
                           "This will not constrain the actual loop index but introduce a new parameter.\n" \
                           "To constrain the loop index, put the constraint in the body subtemplate.\n" \
                           "Loop index is {} and offending constraints are: {}".format(self._loop_index, constraints))
+
+        self._register(registry=registry)
 
     @property
     def loop_index(self) -> str:
@@ -307,8 +308,9 @@ class WhileLoopPulseTemplate(LoopPulseTemplate):
                 holds.
             identifier (str): A unique identifier for use in serialization. (optional)
         """
-        super().__init__(body=body, identifier=identifier, registry=registry)
+        super().__init__(body=body, identifier=identifier)
         self._condition = condition
+        self._register(registry=registry)
 
     def __str__(self) -> str:
         return "LoopPulseTemplate: Condition <{}>, Body <{}>".format(self._condition, self.body)

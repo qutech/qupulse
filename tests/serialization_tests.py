@@ -24,9 +24,11 @@ from tests.pulses.sequencing_dummies import DummyPulseTemplate
 class DummySerializable(Serializable):
 
     def __init__(self, identifier: Optional[str]=None, registry: Optional[Dict]=None, **kwargs) -> None:
-        super().__init__(identifier, registry=registry)
+        super().__init__(identifier)
         for name in kwargs:
             setattr(self, name, kwargs[name])
+
+        self._register(registry=registry)
 
     def get_serialization_data(self, serializer: Optional[Serializer]=None):
         local_data = dict(**self.__dict__)
@@ -907,8 +909,9 @@ from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
 class NestedDummySerializable(Serializable):
 
     def __init__(self, data: Serializable, identifier: Optional[str]=None, registry: Optional[Dict]=None) -> None:
-        super().__init__(identifier, registry=registry)
+        super().__init__(identifier)
         self.data = data
+        self._register(registry=registry)
 
     @classmethod
     def deserialize(cls, serializer: Optional[Serializer]=None, **kwargs) -> None:
