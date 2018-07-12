@@ -631,7 +631,7 @@ class Serializer(object):
         return serializable
 
 
-class PulseStorage:
+class PulseStorage(MutableMapping[str, Serializable]):
     StorageEntry = NamedTuple('StorageEntry', [('serialization', str), ('serializable', Serializable)])
 
     def __init__(self,
@@ -686,6 +686,16 @@ class PulseStorage:
             del self._temporary_storage[identifier]
         except KeyError:
             pass
+
+    def __len__(self) -> None:
+        raise NotImplementedError("len(PulseStorage) has currently no meaningful semantics and is not implemented."
+                                  " If you require this feature, please create a feature request at \n"
+                                  "https://github.com/qutech/qc-toolkit/issues/new")
+
+    def __iter__(self) -> None:
+        raise NotImplementedError("iter(PulseStorage) has currently no meaningful semantics and is not implemented."
+                                  " If you require this feature, please create a feature request at \n"
+                                  "https://github.com/qutech/qc-toolkit/issues/new")
 
     def overwrite(self, identifier: str, serializable: Serializable) -> None:
         """Use this method actively change a pulse"""
