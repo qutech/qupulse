@@ -162,7 +162,7 @@ class TektronixProgram:
                  markers: Sequence[Tuple[ChannelID, ChannelID]],
                  sample_rate: TimeType,
                  amplitudes: Sequence[float],
-                 voltage_transformations: Sequence[Callable, ...]):
+                 voltage_transformations: Sequence[Callable]):
         assert 2*len(channels) == len(markers), "Driver can currently only handle awgs wth two markers per channel"
         assert len(channels) == len(amplitudes)
 
