@@ -10,7 +10,7 @@ Classes:
 """
 
 from abc import ABCMeta, abstractmethod
-from typing import Dict, Any, Optional, NamedTuple, Union
+from typing import Dict, Any, Optional, NamedTuple, Union, MutableMapping
 import os
 import zipfile
 import tempfile
@@ -321,11 +321,11 @@ class SerializableMeta(DocStringABCMeta):
 default_pulse_registry = None
 
 
-def get_default_pulse_registry() -> Union[Dict, 'PulseStorage']:
+def get_default_pulse_registry() -> MutableMapping:
     return default_pulse_registry
 
 
-def set_default_pulse_registry(new_default_registry: Optional[Union[Dict, 'PulseStorage']]) -> None:
+def set_default_pulse_registry(new_default_registry: Optional[MutableMapping]) -> None:
     global default_pulse_registry
     default_pulse_registry = new_default_registry
 
@@ -358,7 +358,7 @@ class Serializable(metaclass=SerializableMeta):
     type_identifier_name = '#type'
     identifier_name = '#identifier'
 
-    def __init__(self, identifier: Optional[str]=None, registry: Optional[dict]=None) -> None:
+    def __init__(self, identifier: Optional[str]=None, registry: Optional[MutableMapping]=None) -> None:
         """Initialize a Serializable.
 
         Args:
