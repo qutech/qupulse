@@ -161,7 +161,8 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                                                     channel_mapping)
             if subprogram:
                 program.append_child(subprogram)
-        # todo (2018-07-05): only return an object if not empty sequence
+        if not program.children:
+            return None
         return program
 
     def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
