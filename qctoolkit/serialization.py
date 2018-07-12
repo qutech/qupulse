@@ -394,36 +394,44 @@ class Serializable(metaclass=SerializableMeta):
     type_identifier_name = '#type'
     identifier_name = '#identifier'
 
-    def __init__(self, identifier: Optional[str]=None, registry: Optional[MutableMapping]=None) -> None:
+    def __init__(self, identifier: Optional[str]=None) -> None:
         """Initialize a Serializable.
 
         Args:
             identifier: An optional, non-empty identifier for this Serializable.
                 If set, this Serializable will always be stored as a separate data item and never
                 be embedded.
-            registry: An optional dict where the Serializable is registered. If None, it gets registered in the
-                default_pulse_registry.
         Raises:
             ValueError: If identifier is the empty string
         """
         super().__init__()
 
-        if registry is None:
-            registry = default_pulse_registry
-
         if identifier == '':
             raise ValueError("Identifier must not be empty.")
         self.__identifier = identifier
 
-        if identifier and registry is not None:
-            if identifier in registry:
+    def _register(self, registry: Optional[MutableMapping]=None) -> None:
+        """Registers the Serializable in the global registry.
+
+        This method MUST be called by subclasses at some point during init.
+        Args:
+            registry: An optional dict where the Serializable is registered. If None, it gets registered in the
+                default_pulse_registry.
+        Raises:
+            RuntimeError: If a Serializable with the same name is already registered.
+        """
+        if registry is None:
+            registry = default_pulse_registry
+
+        if self.identifier and registry is not None:
+            if self.identifier in registry:
                 # trigger garbage collection in case the registered object isn't referenced anymore
                 gc.collect(2)
 
-                if identifier in registry:
-                    raise RuntimeError('Pulse with name already exists', identifier)
+                if self.identifier in registry:
+                    raise RuntimeError('Pulse with name already exists', self.identifier)
 
-            registry[identifier] = self
+            registry[self.identifier] = self
 
     @property
     def identifier(self) -> Optional[str]:

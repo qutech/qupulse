@@ -97,7 +97,7 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
         elif args:
             TypeError('RepetitionPulseTemplate expects 3 positional arguments, got ' + str(3 + len(args)))
 
-        LoopPulseTemplate.__init__(self, identifier=identifier, body=body, registry=registry)
+        LoopPulseTemplate.__init__(self, identifier=identifier, body=body)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
         MeasurementDefiner.__init__(self, measurements=measurements)
 
@@ -110,6 +110,8 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
             warn("Repetition pulse template with 0 repetitions on construction.")
 
         self._repetition_count = repetition_count
+
+        self._register(registry=registry)
 
     @property
     def repetition_count(self) -> ExpressionScalar:

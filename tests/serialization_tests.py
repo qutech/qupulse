@@ -9,7 +9,7 @@ from unittest import mock
 from abc import ABCMeta, abstractmethod
 
 from tempfile import TemporaryDirectory
-from typing import Optional, Any, Dict
+from typing import Optional, Any, Dict, Tuple
 
 from qctoolkit.serialization import FilesystemBackend, CachingBackend, Serializable, JSONSerializableEncoder,\
     ZipFileBackend, AnonymousSerializable, DictBackend, PulseStorage, JSONSerializableDecoder, Serializer,\
@@ -24,9 +24,11 @@ from tests.pulses.sequencing_dummies import DummyPulseTemplate
 class DummySerializable(Serializable):
 
     def __init__(self, identifier: Optional[str]=None, registry: Optional[Dict]=None, **kwargs) -> None:
-        super().__init__(identifier, registry=registry)
+        super().__init__(identifier)
         for name in kwargs:
             setattr(self, name, kwargs[name])
+
+        self._register(registry=registry)
 
     def get_serialization_data(self, serializer: Optional[Serializer]=None):
         local_data = dict(**self.__dict__)
@@ -134,6 +136,30 @@ class SerializableTests(metaclass=ABCMeta):
         self.make_instance('blub', registry=registry)
         with self.assertRaises(RuntimeError):
             self.make_instance('blub', registry=registry)
+
+    def test_no_registration_before_correct_serialization(self) -> None:
+        class RegistryStub:
+            def __init__(self) -> None:
+                self.storage = dict()
+
+            def __setitem__(self, key: str, value: Serializable) -> None:
+                serialization_data = value.get_serialization_data()
+                serialization_data.pop(Serializable.type_identifier_name)
+                serialization_data.pop(Serializable.identifier_name)
+                self.storage[key] = (value, serialization_data)
+
+            def __getitem__(self, key: str) -> Tuple[Serializable, Dict[str, Any]]:
+                return self.storage[key]
+
+            def __contains__(self, key: str) -> bool:
+                return key in self.storage
+
+        registry = RegistryStub()
+        identifier = 'foo'
+        instance = self.make_instance(identifier=identifier, registry=registry)
+        self.assertIs(instance, registry[identifier][0])
+        stored_instance = self.class_to_test.deserialize(identifier=identifier, registry=dict(), **(registry[identifier][1]))
+        self.assert_equal_instance(instance, stored_instance)
 
     def test_renamed(self) -> None:
         registry = dict()
@@ -976,8 +1002,9 @@ from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
 class NestedDummySerializable(Serializable):
 
     def __init__(self, data: Serializable, identifier: Optional[str]=None, registry: Optional[Dict]=None) -> None:
-        super().__init__(identifier, registry=registry)
+        super().__init__(identifier)
         self.data = data
+        self._register(registry=registry)
 
     @classmethod
     def deserialize(cls, serializer: Optional[Serializer]=None, **kwargs) -> None:

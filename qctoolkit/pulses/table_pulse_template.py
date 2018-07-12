@@ -188,7 +188,7 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
             measurements: Measurement declaration list that is forwarded to the MeasurementDefiner superclass
             consistency_check: If True the consistency of the times will be checked on construction as far as possible
         """
-        AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements, registry=registry)
+        AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 
         self._entries = dict((ch, list()) for ch in entries.keys())
@@ -230,6 +230,8 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
             inequalities = [eq for eq in inequalities if isinstance(eq, sympy.Rel) and len(eq.free_symbols) == 1]
             if not sympy.reduce_inequalities(inequalities):
                 raise ValueError('Table pulse template has impossible parametrization')
+
+        self._register(registry=registry)
 
     def _add_entry(self, channel, new_entry: TableEntry) -> None:
 
