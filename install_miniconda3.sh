@@ -14,7 +14,4 @@ fi
 
 $HOME/Downloads/miniconda3.sh -b
 
-rm -r -f $HOME/miniconda3/pkgs
-ln -s $HOME/.cache/miniconda3_pkgs $HOME/miniconda3/pkgs
-
 
