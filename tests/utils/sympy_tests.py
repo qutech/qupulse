@@ -13,7 +13,8 @@ from sympy import sin, Sum, IndexedBase
 a_ = IndexedBase(a)
 b_ = IndexedBase(b)
 
-from qctoolkit.utils.sympy import sympify as qc_sympify, substitute_with_eval, recursive_substitution, Len, evaluate_lambdified, evaluate_compiled, get_most_simple_representation
+from qctoolkit.utils.sympy import sympify as qc_sympify, substitute_with_eval, recursive_substitution, Len,\
+    evaluate_lambdified, evaluate_compiled, get_most_simple_representation, get_variables, get_free_symbols
 
 
 ################################################### SUBSTITUTION #######################################################
@@ -214,15 +215,34 @@ class RecursiveSubstitutionTests(SubstitutionTests):
         return recursive_substitution(expression, substitutions).doit()
 
 
+class GetFreeSymbolsTests(TestCase):
+    def assert_symbol_sets_equal(self, expected, actual):
+        self.assertEqual(len(expected), len(actual))
+        self.assertEqual(set(expected), set(actual))
+
+    def test_get_free_symbols(self):
+        expr = a * b / 5
+        self.assert_symbol_sets_equal([a, b], get_free_symbols(expr))
+
+    def test_get_free_symbols_indexed(self):
+        expr = a_[i] * IndexedBase(a*b)[j]
+        self.assert_symbol_sets_equal({a, b, i, j}, set(get_free_symbols(expr)))
+
+    def test_get_variables(self):
+        expr = a * b / 5
+        self.assertEqual({'a', 'b'}, set(get_variables(expr)))
+
+    def test_get_variables_indexed(self):
+        expr = a_[i] * IndexedBase(a*b)[j]
+        self.assertEqual({'a', 'b', 'i', 'j'}, set(get_variables(expr)))
+
+
 class EvaluationTests(TestCase):
     def evaluate(self, expression: Union[sympy.Expr, np.ndarray], parameters):
-        def get_variables(expr: sympy.Expr):
-            return {str(s) for s in expr.free_symbols}
         if isinstance(expression, np.ndarray):
-            vectorized = np.vectorize(get_variables)
-            get_variables = lambda expr: set.union(*vectorized(expr))
-
-        variables = get_variables(expression)
+            variables = set.union(*map(set, map(get_variables, expression.flat)))
+        else:
+            variables = get_variables(expression)
         return evaluate_lambdified(expression, variables=list(variables), parameters=parameters, lambdified=None)[0]
 
     def test_eval_simple(self):
