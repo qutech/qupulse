@@ -326,17 +326,6 @@ class DictBackend(StorageBackend):
         return set(self._cache.keys())
 
 
-def get_type_identifier(obj: Any) -> str:
-    """Return a unique type identifier for any object.
-
-    Args:
-        obj: The object for which to obtain a type identifier.
-    Returns:
-        The type identifier as a string.
-    """
-    return "{}.{}".format(obj.__module__, obj.__class__.__name__)
-
-
 class SerializableMeta(DocStringABCMeta):
     deserialization_callbacks = dict()
 
