@@ -865,6 +865,34 @@ class PulseStorageTests(unittest.TestCase):
             self.assertIs(deserialized_1, deserialized_2)
             self.assertEqual(deserialized_1, serializable)
 
+    @unittest.mock.patch('qctoolkit.serialization.default_pulse_registry', None)
+    def test_consistent_over_instances(self) -> None:
+        # tests that PulseStorage behaves consistently over several instance (especially with regards to duplicate test)
+        # demonstrates issue #273
+        identifier = 'hugo'
+        hidden_serializable = DummySerializable(identifier=identifier, foo='bar')
+        serializable = DummySerializable(identifier=identifier, data={'abc': 123, 'cde': 'fgh'})
+
+        backend = DummyStorageBackend()
+
+        pulse_storage = PulseStorage(backend)
+        pulse_storage[identifier] = hidden_serializable
+        with self.assertRaises(RuntimeError):
+            pulse_storage[identifier] = serializable
+        deserialized = pulse_storage[serializable.identifier]
+        self.assertEqual(hidden_serializable, deserialized)
+
+        pulse_storage = PulseStorage(backend)
+        with self.assertRaises(RuntimeError):
+            pulse_storage[serializable.identifier] = serializable
+        deserialized = pulse_storage[serializable.identifier]
+        self.assertEqual(hidden_serializable, deserialized)
+
+        pulse_storage = PulseStorage(backend)
+        deserialized = pulse_storage[serializable.identifier]
+        self.assertEqual(hidden_serializable, deserialized)
+
+
 class JSONSerializableDecoderTests(unittest.TestCase):
     def test_filter_serializables(self):
         storage = dict(asd='asd_value')
