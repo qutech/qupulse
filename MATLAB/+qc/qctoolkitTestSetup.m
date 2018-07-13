@@ -1,9 +1,9 @@
 %% --- Test setup without AWG and Alazar (only qctoolkit) -----------------
 global plsdata
 plsdata = struct( ...
-	'path', 'Z:\code\qc-toolkit-pulses', ...
+	'path', 'X:\meyer\code\qc-toolkit-pulses', ...
 	'awg', struct('inst', [], 'hardwareSetup', [], 'sampleRate', 2e9, 'currentProgam', '', 'registeredPrograms', struct(), 'defaultChannelMapping', struct(), 'defaultWindowMapping', struct(), 'defaultParametersAndDicts', {{}}, 'defaultAddMarker', {{}}), ...
-  'dict', struct('cache', [], 'path', 'Z:\code\qc-toolkit-dicts'), ...
+  'dict', struct('cache', [], 'path', 'X:\meyer\code\qc-toolkit-dicts'), ...
 	'qc', struct('figId', 801), ...
 	'daq', struct('inst', [], 'defaultOperations', {{}}, 'reuseOperations', false) ...
 	);
@@ -17,7 +17,7 @@ plsdata.qc.serializer = py.qctoolkit.serialization.Serializer(plsdata.qc.backend
 % Need the triton_200 repo on the path (for awgctrl)
 
 % Path for Triton 200 backups
-loadPath = 'Y:\GaAs\Triton 200\Backup\DATA\workspace';
+loadPath = 'X:\Common\GaAs\Triton 200\Backup\DATA\workspace';
 pulsePath = plsdata.path;
 dictPath = plsdata.dict.path;
 tunePath = 'Z:\DATA';
@@ -52,7 +52,7 @@ fprintf('Loaded plsdata from %s\n', datestr(info.datenum));
 
 global tunedata
 global plsdata
-tunedata.run{tunedata.runIndex}.opts.loadFile = 'Y:\GaAs\Triton 200\Backup\DATA\tune';
+tunedata.run{tunedata.runIndex}.opts.loadFile = 'X:\Common\GaAs\Triton 200\Backup\DATA\tune';
 import tune.tune
 
 plsdata.path = pulsePath;
@@ -66,7 +66,7 @@ plsdata.daq.inst = py.qctoolkit.hardware.dacs.alazar.AlazarCard([]);
 % Initializes hardware setup
 % Can also be used for deleting all programs/resetting but then also need to setup Alazar again, i.e. the cell above and the three cells below )
 plsdata.awg.hardwareSetup = [];
-qc.setup_tabor_awg('realAWG', false, 'simulateAWG', true, 'taborDriverPath', 'Z:\code\python-TaborDriver');
+qc.setup_tabor_awg('realAWG', false, 'simulateAWG', true, 'taborDriverPath', 'X:\meyer\code\python-TaborDriver');
 
 % AWG default settings
 awgctrl('default');
