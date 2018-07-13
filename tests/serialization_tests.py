@@ -796,6 +796,16 @@ class PulseStorageTests(unittest.TestCase):
         self.assertEqual({}, backend.stored_items)
         self.assertEqual(pulse_storage.temporary_storage, {})
 
+    def test_len(self) -> None:
+        pulse_storage = PulseStorage(DummyStorageBackend())
+        with self.assertRaisesRegex(NotImplementedError, "request"):
+            len(pulse_storage)
+
+    def test_iter(self) -> None:
+        pulse_storage = PulseStorage(DummyStorageBackend())
+        with self.assertRaisesRegex(NotImplementedError, "request"):
+            iter(pulse_storage)
+
     def test_deserialize_storage_is_default_registry(self) -> None:
         backend = DummyStorageBackend()
 
