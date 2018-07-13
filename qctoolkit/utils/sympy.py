@@ -9,7 +9,8 @@ import sympy
 import numpy
 
 
-__all__ = ["sympify", "substitute_with_eval", "to_numpy"]
+__all__ = ["sympify", "substitute_with_eval", "to_numpy", "get_variables", "get_free_symbols", "recursive_substitution",
+           "evaluate_lambdified", "get_most_simple_representation"]
 
 
 Sympifyable = Union[str, Number, sympy.Expr, numpy.str_]
@@ -119,13 +120,23 @@ def get_most_simple_representation(expression: sympy.Expr) -> Union[str, int, fl
         return str(expression)
 
 
+def get_free_symbols(expression: sympy.Expr) -> Sequence[sympy.Symbol]:
+    return tuple(symbol
+                 for symbol in expression.free_symbols
+                 if not isinstance(symbol, sympy.Indexed))
+
+
+def get_variables(expression: sympy.Expr) -> Sequence[str]:
+    return tuple(map(str, get_free_symbols(expression)))
+
+
 def substitute_with_eval(expression: sympy.Expr,
                          substitutions: Dict[str, Union[sympy.Expr, numpy.ndarray, str]]) -> sympy.Expr:
     """Substitutes only sympy.Symbols. Workaround for numpy like array behaviour. ~Factor 3 slower compared to subs"""
     substitutions = {k: v if isinstance(v, sympy.Expr) else sympify(v)
                      for k, v in substitutions.items()}
 
-    for symbol in expression.free_symbols:
+    for symbol in get_free_symbols(expression):
         symbol_name = str(symbol)
         if symbol_name not in substitutions:
             substitutions[symbol_name] = symbol
@@ -146,14 +157,14 @@ def _recursive_substitution(expression: sympy.Expr,
         func = numpy_compatible_mul
     else:
         func = expression.func
-    substitutions = {s: substitutions.get(s, s) for s in expression.free_symbols}
+    substitutions = {s: substitutions.get(s, s) for s in get_free_symbols(expression)}
     return func(*(_recursive_substitution(arg, substitutions) for arg in expression.args))
 
 
 def recursive_substitution(expression: sympy.Expr,
                            substitutions: Dict[str, Union[sympy.Expr, numpy.ndarray, str]]) -> sympy.Expr:
     substitutions = {sympy.Symbol(k): sympify(v) for k, v in substitutions.items()}
-    for s in expression.free_symbols:
+    for s in get_free_symbols(expression):
         substitutions.setdefault(s, s)
     return _recursive_substitution(expression, substitutions)
 
