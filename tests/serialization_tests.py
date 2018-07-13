@@ -132,11 +132,22 @@ class SerializableTests(metaclass=ABCMeta):
         set_default_pulse_registry(None)
 
     def test_duplication_error(self):
-        registry = dict()
+        import weakref
+        registry = weakref.WeakValueDictionary()
 
-        self.make_instance('blub', registry=registry)
+        inst = self.make_instance('blub', registry=registry)
+
+        # ensure that no two objects with same id can be created
         with self.assertRaises(RuntimeError):
             self.make_instance('blub', registry=registry)
+
+        # !!!! the following doesn't really seem to work in triggering the expected behavior... !!!!
+        # # ensure that pending deleted objects do not block new ones from being registered (i.e., gc invocation works)
+        # import gc
+        # gc.disable()
+        # del inst
+        # self.make_instance('blub', registry=registry)
+        # gc.enable()
 
     def test_no_registration_before_correct_serialization(self) -> None:
         class RegistryStub:
@@ -282,6 +293,10 @@ class FileSystemBackendTest(unittest.TestCase):
         contents = self.backend.list_contents()
 
         self.assertEqual(expected, contents)
+
+    def test_get_contents_empty(self) -> None:
+        contents = self.backend.list_contents()
+        self.assertEqual(0, len(contents))
 
 
 class ZipFileBackendTests(unittest.TestCase):
@@ -664,6 +679,15 @@ class PulseStorageTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "different than its own internal identifier"):
             self.storage['a_totally_different_id'] = serializable
 
+    def test_setitem_duplicate_only_in_backend(self) -> None:
+        serializable = DummySerializable(identifier='my_id', registry=dict())
+        backend = DummyStorageBackend()
+        backend['my_id'] = 'data_in_storage'
+        storage = PulseStorage(backend)
+        with self.assertRaisesRegex(RuntimeError, "assigned in storage backend"):
+            storage['my_id'] = serializable
+        self.assertEqual({'my_id': 'data_in_storage'}, backend.stored_items)
+
     def test_overwrite(self):
 
         encode_mock = mock.Mock(return_value='asd')
@@ -974,6 +998,13 @@ class JSONSerializableEncoderTest(unittest.TestCase):
         self.assertEqual(set(storage.keys()), {'existing_id', 'new_id'})
         self.assertIs(storage['new_id'], new_serializable)
         self.assertIs(storage['existing_id'], existing_serializable)
+
+    def test_default_else_branch(self) -> None:
+        encoder = JSONSerializableEncoder(dict())
+        data = {'a': 'bc', 'b': [1, 2, 3]}
+
+        with self.assertRaises(TypeError):
+            encoder.default(data)
 
     def test_encoding(self):
         class A(AnonymousSerializable):
