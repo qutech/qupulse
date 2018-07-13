@@ -61,13 +61,15 @@ class FunctionPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
             parameter_constraints: A list of parameter constraints forwarded to the
                 :class:`~`qctoolkit.pulses.measurement.ParameterConstrainer superclass
         """
-        AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements, registry=registry)
+        AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 
         self.__expression = ExpressionScalar.make(expression)
         self.__duration_expression = ExpressionScalar.make(duration_expression)
         self.__parameter_names = {*self.__duration_expression.variables, *self.__expression.variables} - {'t'}
         self.__channel = channel
+
+        self._register(registry=registry)
 
     @property
     def expression(self) -> ExpressionScalar:

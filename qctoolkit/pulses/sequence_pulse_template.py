@@ -136,7 +136,7 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                 SequencePulseTemplate. Deprecated.
             identifier (str): A unique identifier for use in serialization. (optional)
         """
-        PulseTemplate.__init__(self, identifier=identifier, registry=registry)
+        PulseTemplate.__init__(self, identifier=identifier)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
         MeasurementDefiner.__init__(self, measurements=measurements)
 
@@ -152,6 +152,8 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
         if external_parameters:
             warnings.warn("external_parameters is an obsolete argument and will be removed in the future.",
                           category=DeprecationWarning)
+
+        self._register(registry=registry)
 
     @property
     def parameter_names(self) -> Set[str]:

@@ -19,12 +19,13 @@ class PulseTemplateStub(PulseTemplate):
                  parameter_names=None,
                  measurement_names=None,
                  registry=None):
-        super().__init__(identifier=identifier, registry=registry)
+        super().__init__(identifier=identifier)
 
         self._defined_channels = defined_channels
         self._duration = duration
         self._parameter_names = parameter_names
         self._measurement_names = set() if measurement_names is None else measurement_names
+        self._register(registry=registry)
 
     @property
     def defined_channels(self) -> Set[ChannelID]:
@@ -85,9 +86,10 @@ class AtomicPulseTemplateStub(AtomicPulseTemplate):
     def __init__(self, *, waveform: Waveform=None, duration: Expression=None, measurements=None,
                  identifier: Optional[str]=None,
                  registry=None) -> None:
-        super().__init__(identifier=identifier, measurements=measurements, registry=registry)
+        super().__init__(identifier=identifier, measurements=measurements)
         self.waveform = waveform
         self._duration = duration
+        self._register(registry=registry)
 
     def build_waveform(self, parameters: Dict[str, Parameter], channel_mapping):
         return self.waveform
