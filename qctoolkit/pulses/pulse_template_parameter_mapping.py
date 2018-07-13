@@ -10,7 +10,7 @@ from qctoolkit.pulses.parameters import Parameter, MappedParameter, ParameterNot
 from qctoolkit.pulses.sequencing import Sequencer
 from qctoolkit.pulses.instructions import InstructionBlock, Waveform
 from qctoolkit.pulses.conditions import Condition
-from qctoolkit.serialization import Serializer
+from qctoolkit.serialization import Serializer, PulseRegistryType
 
 __all__ = [
     "MappingPulseTemplate",
@@ -30,7 +30,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                  channel_mapping: Optional[Dict[ChannelID, ChannelID]] = None,
                  parameter_constraints: Optional[List[str]]=None,
                  allow_partial_parameter_mapping: bool=False,
-                 registry: Optional[dict]=None):
+                 registry: PulseRegistryType=None) -> None:
         """Standard constructor for the MappingPulseTemplate.
 
         Mappings that are not specified are defaulted to identity mappings. Channels and measurement names of the

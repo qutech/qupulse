@@ -14,7 +14,7 @@ import warnings
 import numpy
 
 
-from qctoolkit.serialization import Serializer
+from qctoolkit.serialization import Serializer, PulseRegistryType
 
 from qctoolkit.utils.types import ChannelID, TimeType
 from qctoolkit.pulses.instructions import Waveform
@@ -140,7 +140,7 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
                  identifier: Optional[str]=None,
                  parameter_constraints: Optional[List]=None,
                  measurements: Optional[List[MeasurementDeclaration]]=None,
-                 registry: Optional[dict] = None) -> None:
+                 registry: PulseRegistryType=None) -> None:
         AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 

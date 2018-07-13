@@ -24,7 +24,7 @@ from qctoolkit.utils.types import DocStringABCMeta
 
 __all__ = ["StorageBackend", "FilesystemBackend", "ZipFileBackend", "CachingBackend", "Serializable", "Serializer",
            "AnonymousSerializable", "DictBackend", "JSONSerializableEncoder", "JSONSerializableDecoder", "PulseStorage",
-           "convert_pulses_in_storage", "convert_stored_pulse_in_storage"]
+           "convert_pulses_in_storage", "convert_stored_pulse_in_storage", "PulseRegistryType"]
 
 
 class StorageBackend(metaclass=ABCMeta):
@@ -354,14 +354,15 @@ class SerializableMeta(DocStringABCMeta):
         return cls
 
 
-default_pulse_registry = None
+PulseRegistryType = Optional[MutableMapping[str, 'Serializable']]
+default_pulse_registry = None # type: PulseRegistryType
 
 
-def get_default_pulse_registry() -> MutableMapping:
+def get_default_pulse_registry() -> PulseRegistryType:
     return default_pulse_registry
 
 
-def set_default_pulse_registry(new_default_registry: Optional[MutableMapping]) -> None:
+def set_default_pulse_registry(new_default_registry: PulseRegistryType) -> None:
     global default_pulse_registry
     default_pulse_registry = new_default_registry
 
@@ -410,7 +411,7 @@ class Serializable(metaclass=SerializableMeta):
             raise ValueError("Identifier must not be empty.")
         self.__identifier = identifier
 
-    def _register(self, registry: Optional[MutableMapping]=None) -> None:
+    def _register(self, registry: PulseRegistryType=None) -> None:
         """Registers the Serializable in the global registry.
 
         This method MUST be called by subclasses at some point during init.
@@ -504,7 +505,7 @@ class Serializable(metaclass=SerializableMeta):
 
         return cls(**kwargs)
 
-    def renamed(self, new_identifier: str, registry: Optional[Dict]=None) -> 'Serializable':
+    def renamed(self, new_identifier: str, registry: PulseRegistryType=None) -> 'Serializable':
         """Returns a copy of the Serializable with its identifier set to new_identifier."""
         data = self.get_serialization_data()
         data.pop(Serializable.type_identifier_name)
@@ -695,7 +696,7 @@ class Serializer(object):
         return serializable
 
 
-class PulseStorage:
+class PulseStorage(MutableMapping[str, Serializable]):
     StorageEntry = NamedTuple('StorageEntry', [('serialization', str), ('serializable', Serializable)])
 
     def __init__(self,
@@ -758,6 +759,16 @@ class PulseStorage:
             del self._temporary_storage[identifier]
         except KeyError:
             pass
+
+    def __len__(self) -> None:
+        raise NotImplementedError("len(PulseStorage) has currently no meaningful semantics and is not implemented."
+                                  " If you require this feature, please create a feature request at \n"
+                                  "https://github.com/qutech/qc-toolkit/issues/new")
+
+    def __iter__(self) -> None:
+        raise NotImplementedError("iter(PulseStorage) has currently no meaningful semantics and is not implemented."
+                                  " If you require this feature, please create a feature request at \n"
+                                  "https://github.com/qutech/qc-toolkit/issues/new")
 
     def overwrite(self, identifier: str, serializable: Serializable) -> None:
         """Use this method actively change a pulse"""
