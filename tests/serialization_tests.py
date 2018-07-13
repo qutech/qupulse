@@ -13,7 +13,8 @@ from typing import Optional, Any, Dict, Tuple
 
 from qctoolkit.serialization import FilesystemBackend, CachingBackend, Serializable, JSONSerializableEncoder,\
     ZipFileBackend, AnonymousSerializable, DictBackend, PulseStorage, JSONSerializableDecoder, Serializer,\
-    get_default_pulse_registry, set_default_pulse_registry, new_default_pulse_registry, SerializableMeta
+    get_default_pulse_registry, set_default_pulse_registry, new_default_pulse_registry, SerializableMeta, \
+    PulseRegistryType
 
 from qctoolkit.expressions import ExpressionScalar
 
@@ -23,7 +24,7 @@ from tests.pulses.sequencing_dummies import DummyPulseTemplate
 
 class DummySerializable(Serializable):
 
-    def __init__(self, identifier: Optional[str]=None, registry: Optional[Dict]=None, **kwargs) -> None:
+    def __init__(self, identifier: Optional[str]=None, registry: PulseRegistryType=None, **kwargs) -> None:
         super().__init__(identifier)
         for name in kwargs:
             setattr(self, name, kwargs[name])
@@ -1001,7 +1002,7 @@ from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
 
 class NestedDummySerializable(Serializable):
 
-    def __init__(self, data: Serializable, identifier: Optional[str]=None, registry: Optional[Dict]=None) -> None:
+    def __init__(self, data: Serializable, identifier: Optional[str]=None, registry: PulseRegistryType=None) -> None:
         super().__init__(identifier)
         self.data = data
         self._register(registry=registry)

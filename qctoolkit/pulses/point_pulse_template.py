@@ -14,7 +14,7 @@ from qctoolkit.pulses.parameters import Parameter, ParameterNotProvidedException
 from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration
 from qctoolkit.pulses.table_pulse_template import TableEntry, EntryInInit, TableWaveform, TableWaveformEntry
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
-from qctoolkit.serialization import Serializer
+from qctoolkit.serialization import Serializer, PulseRegistryType
 
 
 __all__ = ["PointWaveform", "PointPulseTemplate", "PointPulseEntry", "PointWaveformEntry", "InvalidPointDimension"]
@@ -46,7 +46,7 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
                  parameter_constraints: Optional[List[Union[str, ParameterConstraint]]]=None,
                  measurements: Optional[List[MeasurementDeclaration]]=None,
                  identifier: Optional[str]=None,
-                 registry: Optional[dict]=None):
+                 registry: PulseRegistryType=None) -> None:
 
         AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)

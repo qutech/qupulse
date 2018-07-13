@@ -17,7 +17,7 @@ import numpy as np
 import sympy
 
 from qctoolkit.utils.types import ChannelID, TimeType, time_from_float
-from qctoolkit.serialization import Serializer
+from qctoolkit.serialization import Serializer, PulseRegistryType
 from qctoolkit.pulses.parameters import Parameter, \
     ParameterNotProvidedException, ParameterConstraint, ParameterConstrainer
 from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration
@@ -174,7 +174,7 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
                  parameter_constraints: Optional[List[Union[str, ParameterConstraint]]]=None,
                  measurements: Optional[List[MeasurementDeclaration]]=None,
                  consistency_check: bool=True,
-                 registry: Optional[dict]=None):
+                 registry: PulseRegistryType=None) -> None:
         """
         Construct a `TablePulseTemplate` from a dict which maps channels to their entries. By default the consistency
         of the provided entries is checked. There are two static functions for convenience construction: from_array and

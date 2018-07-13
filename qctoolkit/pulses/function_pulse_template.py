@@ -14,7 +14,7 @@ import numpy as np
 import sympy
 
 from qctoolkit.expressions import ExpressionScalar
-from qctoolkit.serialization import Serializer, Serializable
+from qctoolkit.serialization import Serializer, PulseRegistryType
 
 from qctoolkit.utils.types import ChannelID, TimeType, time_from_float
 from qctoolkit.pulses.parameters import Parameter, ParameterConstrainer, ParameterConstraint
@@ -45,7 +45,7 @@ class FunctionPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
                  *,
                  measurements: Optional[List[MeasurementDeclaration]]=None,
                  parameter_constraints: Optional[List[Union[str, ParameterConstraint]]]=None,
-                 registry: Dict[str, Serializable]=None) -> None:
+                 registry: PulseRegistryType=None) -> None:
         """
         Args:
             expression: The function represented by this FunctionPulseTemplate

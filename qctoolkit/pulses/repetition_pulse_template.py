@@ -7,7 +7,7 @@ from warnings import warn
 
 import numpy as np
 
-from qctoolkit.serialization import Serializer
+from qctoolkit.serialization import Serializer, PulseRegistryType
 
 from qctoolkit.utils.types import ChannelID, TimeType
 from qctoolkit.expressions import ExpressionScalar
@@ -82,7 +82,7 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
                  *args,
                  parameter_constraints: Optional[List]=None,
                  measurements: Optional[List[MeasurementDeclaration]]=None,
-                 registry: Optional[dict]=None
+                 registry: PulseRegistryType=None
                  ) -> None:
         """Create a new RepetitionPulseTemplate instance.
 

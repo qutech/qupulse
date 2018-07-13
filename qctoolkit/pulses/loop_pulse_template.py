@@ -7,7 +7,7 @@ import warnings
 
 import sympy
 
-from qctoolkit.serialization import Serializer
+from qctoolkit.serialization import Serializer, PulseRegistryType
 
 from qctoolkit.expressions import ExpressionScalar
 from qctoolkit.utils import checked_int_cast
@@ -111,7 +111,7 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
                  *,
                  measurements: Optional[Sequence[MeasurementDeclaration]]=None,
                  parameter_constraints: Optional[Sequence]=None,
-                 registry: Optional[dict]=None):
+                 registry: PulseRegistryType=None) -> None:
         """
         Args:
             body: The loop body. It is expected to have `loop_index` as an parameter
@@ -298,7 +298,7 @@ class WhileLoopPulseTemplate(LoopPulseTemplate):
     def __init__(self, condition: str,
                  body: PulseTemplate,
                  identifier: Optional[str]=None,
-                 registry: Optional[dict]=None) -> None:
+                 registry: PulseRegistryType=None) -> None:
         """Create a new LoopPulseTemplate instance.
 
         Args:

@@ -7,7 +7,7 @@ from numbers import Real
 import functools
 import warnings
 
-from qctoolkit.serialization import Serializer
+from qctoolkit.serialization import Serializer, PulseRegistryType
 
 from qctoolkit.utils.types import MeasurementWindow, ChannelID, TimeType
 from qctoolkit.pulses.pulse_template import PulseTemplate
@@ -114,7 +114,7 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                  identifier: Optional[str]=None,
                  parameter_constraints: Optional[List[Union[str, Expression]]]=None,
                  measurements: Optional[List[MeasurementDeclaration]]=None,
-                 registry: Optional[dict]=None) -> None:
+                 registry: PulseRegistryType=None) -> None:
         """Create a new SequencePulseTemplate instance.
 
         Requires a (correctly ordered) list of subtemplates in the form
