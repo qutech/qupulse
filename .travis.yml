@@ -20,7 +20,7 @@ before_install:
   - conda update -q conda
   - conda create -q -n test-environment python=$CONDA_PYTHON_VERSION pip atlas numpy
   - source activate test-environment
-  - pip install pyflakes coverage coveralls
+  - pip install pyflakes coverage coveralls matplotlib
 install:
   - python setup.py install
 script:
