@@ -414,12 +414,12 @@ class Serializable(metaclass=SerializableMeta):
             registry = default_pulse_registry
 
         if self.identifier and registry is not None:
-            if self.identifier in registry:
+            if self.identifier in registry and isinstance(registry, weakref.WeakValueDictionary):
                 # trigger garbage collection in case the registered object isn't referenced anymore
                 gc.collect(2)
 
-                if self.identifier in registry:
-                    raise RuntimeError('Pulse with name already exists', self.identifier)
+            if self.identifier in registry:
+                raise RuntimeError('Pulse with name already exists', self.identifier)
 
             registry[self.identifier] = self
 

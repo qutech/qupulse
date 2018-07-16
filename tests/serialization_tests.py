@@ -132,8 +132,7 @@ class SerializableTests(metaclass=ABCMeta):
         set_default_pulse_registry(None)
 
     def test_duplication_error(self):
-        import weakref
-        registry = weakref.WeakValueDictionary()
+        registry = dict()
 
         inst = self.make_instance('blub', registry=registry)
 
@@ -141,13 +140,32 @@ class SerializableTests(metaclass=ABCMeta):
         with self.assertRaises(RuntimeError):
             self.make_instance('blub', registry=registry)
 
-        # !!!! the following doesn't really seem to work in triggering the expected behavior... !!!!
-        # # ensure that pending deleted objects do not block new ones from being registered (i.e., gc invocation works)
-        # import gc
-        # gc.disable()
-        # del inst
-        # self.make_instance('blub', registry=registry)
-        # gc.enable()
+    def test_manual_garbage_collect(self):
+        import weakref
+        registry = weakref.WeakValueDictionary()
+
+        inst = self.make_instance('blub', registry=registry)
+
+        import gc
+        gc_state = gc.isenabled()
+        try:
+            # Disable garbage collection and create circular references to check whether manual gc invocation works
+            gc.disable()
+
+            temp = ({}, {})
+            temp[0][0] = temp[1]
+            temp[1][0] = temp[0]
+            temp[0][1] = inst
+
+            del inst
+            del temp
+            with mock.patch('qctoolkit.serialization.gc.collect', mock.MagicMock(side_effect=gc.collect)) as mocked_gc:
+                self.make_instance('blub', registry=registry)
+                mocked_gc.assert_called_once_with(2)
+        finally:
+            # reenable gc if it was enabled before
+            if gc_state:
+                gc.enable()
 
     def test_no_registration_before_correct_serialization(self) -> None:
         class RegistryStub:
