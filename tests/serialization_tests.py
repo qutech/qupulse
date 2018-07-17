@@ -134,9 +134,38 @@ class SerializableTests(metaclass=ABCMeta):
     def test_duplication_error(self):
         registry = dict()
 
-        self.make_instance('blub', registry=registry)
+        inst = self.make_instance('blub', registry=registry)
+
+        # ensure that no two objects with same id can be created
         with self.assertRaises(RuntimeError):
             self.make_instance('blub', registry=registry)
+
+    def test_manual_garbage_collect(self):
+        import weakref
+        registry = weakref.WeakValueDictionary()
+
+        inst = self.make_instance('blub', registry=registry)
+
+        import gc
+        gc_state = gc.isenabled()
+        try:
+            # Disable garbage collection and create circular references to check whether manual gc invocation works
+            gc.disable()
+
+            temp = ({}, {})
+            temp[0][0] = temp[1]
+            temp[1][0] = temp[0]
+            temp[0][1] = inst
+
+            del inst
+            del temp
+            with mock.patch('qctoolkit.serialization.gc.collect', mock.MagicMock(side_effect=gc.collect)) as mocked_gc:
+                self.make_instance('blub', registry=registry)
+                mocked_gc.assert_called_once_with(2)
+        finally:
+            # reenable gc if it was enabled before
+            if gc_state:
+                gc.enable()
 
     def test_no_registration_before_correct_serialization(self) -> None:
         class RegistryStub:
@@ -282,6 +311,10 @@ class FileSystemBackendTest(unittest.TestCase):
         contents = self.backend.list_contents()
 
         self.assertEqual(expected, contents)
+
+    def test_get_contents_empty(self) -> None:
+        contents = self.backend.list_contents()
+        self.assertEqual(0, len(contents))
 
 
 class ZipFileBackendTests(unittest.TestCase):
@@ -664,6 +697,15 @@ class PulseStorageTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "different than its own internal identifier"):
             self.storage['a_totally_different_id'] = serializable
 
+    def test_setitem_duplicate_only_in_backend(self) -> None:
+        serializable = DummySerializable(identifier='my_id', registry=dict())
+        backend = DummyStorageBackend()
+        backend['my_id'] = 'data_in_storage'
+        storage = PulseStorage(backend)
+        with self.assertRaisesRegex(RuntimeError, "assigned in storage backend"):
+            storage['my_id'] = serializable
+        self.assertEqual({'my_id': 'data_in_storage'}, backend.stored_items)
+
     def test_overwrite(self):
 
         encode_mock = mock.Mock(return_value='asd')
@@ -865,6 +907,34 @@ class PulseStorageTests(unittest.TestCase):
             self.assertIs(deserialized_1, deserialized_2)
             self.assertEqual(deserialized_1, serializable)
 
+    @unittest.mock.patch('qctoolkit.serialization.default_pulse_registry', None)
+    def test_consistent_over_instances(self) -> None:
+        # tests that PulseStorage behaves consistently over several instance (especially with regards to duplicate test)
+        # demonstrates issue #273
+        identifier = 'hugo'
+        hidden_serializable = DummySerializable(identifier=identifier, foo='bar')
+        serializable = DummySerializable(identifier=identifier, data={'abc': 123, 'cde': 'fgh'})
+
+        backend = DummyStorageBackend()
+
+        pulse_storage = PulseStorage(backend)
+        pulse_storage[identifier] = hidden_serializable
+        with self.assertRaises(RuntimeError):
+            pulse_storage[identifier] = serializable
+        deserialized = pulse_storage[serializable.identifier]
+        self.assertEqual(hidden_serializable, deserialized)
+
+        pulse_storage = PulseStorage(backend)
+        with self.assertRaises(RuntimeError):
+            pulse_storage[serializable.identifier] = serializable
+        deserialized = pulse_storage[serializable.identifier]
+        self.assertEqual(hidden_serializable, deserialized)
+
+        pulse_storage = PulseStorage(backend)
+        deserialized = pulse_storage[serializable.identifier]
+        self.assertEqual(hidden_serializable, deserialized)
+
+
 class JSONSerializableDecoderTests(unittest.TestCase):
     def test_filter_serializables(self):
         storage = dict(asd='asd_value')
@@ -946,6 +1016,13 @@ class JSONSerializableEncoderTest(unittest.TestCase):
         self.assertEqual(set(storage.keys()), {'existing_id', 'new_id'})
         self.assertIs(storage['new_id'], new_serializable)
         self.assertIs(storage['existing_id'], existing_serializable)
+
+    def test_default_else_branch(self) -> None:
+        encoder = JSONSerializableEncoder(dict())
+        data = {'a': 'bc', 'b': [1, 2, 3]}
+
+        with self.assertRaises(TypeError):
+            encoder.default(data)
 
     def test_encoding(self):
         class A(AnonymousSerializable):
