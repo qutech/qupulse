@@ -8,7 +8,8 @@ from qctoolkit.expressions import Expression, ExpressionScalar
 from qctoolkit.pulses.pulse_template import PulseTemplate, MappingTuple
 from qctoolkit.pulses.parameters import Parameter, MappedParameter, ParameterNotProvidedException, ParameterConstrainer
 from qctoolkit.pulses.sequencing import Sequencer
-from qctoolkit.pulses.instructions import InstructionBlock, Waveform
+from qctoolkit._program.instructions import InstructionBlock
+from qctoolkit._program.waveforms import Waveform
 from qctoolkit.pulses.conditions import Condition
 from qctoolkit.serialization import Serializer, PulseRegistryType
 

@@ -14,9 +14,9 @@ from qctoolkit.utils import checked_int_cast
 from qctoolkit.pulses.parameters import Parameter, ConstantParameter, InvalidParameterNameException, ParameterConstrainer
 from qctoolkit.pulses.pulse_template import PulseTemplate, ChannelID
 from qctoolkit.pulses.conditions import Condition, ConditionMissingException
-from qctoolkit.pulses.instructions import InstructionBlock
+from qctoolkit._program.instructions import InstructionBlock
 from qctoolkit.pulses.sequencing import Sequencer
-from qctoolkit.pulses.sequence_pulse_template import SequenceWaveform as ForLoopWaveform
+from qctoolkit._program.waveforms import SequenceWaveform as ForLoopWaveform
 from qctoolkit.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
 
 __all__ = ['ForLoopPulseTemplate', 'LoopPulseTemplate', 'LoopIndexNotUsedException']

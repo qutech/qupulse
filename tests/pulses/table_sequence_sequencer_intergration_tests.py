@@ -5,7 +5,7 @@ from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
 from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
 from qctoolkit.pulses.parameters import ParameterNotProvidedException
 from qctoolkit.pulses.sequencing import Sequencer
-from qctoolkit.pulses.instructions import EXECInstruction, AbstractInstructionBlock, MEASInstruction
+from qctoolkit._program.instructions import EXECInstruction, AbstractInstructionBlock, MEASInstruction
 
 from tests.pulses.sequencing_dummies import DummyParameter, DummyNoValueParameter
 

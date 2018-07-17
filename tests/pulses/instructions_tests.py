@@ -2,87 +2,11 @@ import unittest
 import numpy
 from typing import Dict, Any, List
 
-from qctoolkit.pulses.instructions import InstructionBlock, InstructionPointer,\
+from qctoolkit._program.instructions import InstructionBlock, InstructionPointer,\
     Trigger, CJMPInstruction, REPJInstruction, GOTOInstruction, EXECInstruction, STOPInstruction,\
     InstructionSequence, AbstractInstructionBlock, ImmutableInstructionBlock, Instruction, CHANInstruction
 
 from tests.pulses.sequencing_dummies import DummyWaveform, DummyInstructionBlock
-
-
-class WaveformTest(unittest.TestCase):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        super().__init__(*args, **kwargs)
-
-    def test_get_sampled_exceptions(self):
-        wf = DummyWaveform(duration=2., sample_output=[1, 2], defined_channels={'A', 'B'})
-
-        with self.assertRaises(ValueError):
-            wf.get_sampled(channel='A',
-                           sample_times=numpy.asarray([2, 1], dtype=float))
-        with self.assertRaises(ValueError):
-            wf.get_sampled(channel='A',
-                           sample_times=numpy.asarray([-12, 1], dtype=float))
-        with self.assertRaises(KeyError):
-                wf.get_sampled(channel='C',
-                               sample_times=numpy.asarray([0.5, 1], dtype=float))
-        with self.assertRaises(ValueError):
-            wf.get_sampled(channel='A',
-                           sample_times=numpy.asarray([0.5, 1], dtype=float),
-                           output_array=numpy.empty(1))
-
-    def test_get_sampled_caching(self):
-        wf = DummyWaveform(duration=2., sample_output=[1, 2], defined_channels={'A', 'B'})
-
-        self.assertIs(wf.get_sampled('A', sample_times=numpy.arange(2)),
-                      wf.get_sampled('A', sample_times=numpy.arange(2)))
-
-    def test_get_sampled_empty(self):
-        wf = DummyWaveform(duration=2., defined_channels={'A', 'B'})
-
-        sample_times = numpy.zeros(0)
-        output_array = numpy.zeros(0)
-
-        sampled = wf.get_sampled('A', sample_times=sample_times)
-        self.assertIsInstance(sampled, numpy.ndarray)
-        self.assertEqual(len(sampled), 0)
-
-        self.assertIs(wf.get_sampled('A', sample_times=sample_times, output_array=output_array), output_array)
-        self.assertEqual(len(output_array), 0)
-
-        with self.assertRaises(ValueError):
-            wf.get_sampled('A', sample_times=sample_times, output_array=numpy.zeros(1))
-
-    def test_get_sampled_argument_forwarding(self):
-        wf = DummyWaveform(duration=2., sample_output=[1, 2], defined_channels={'A', 'B'})
-
-        out_expected = numpy.empty(2)
-
-        out_received = wf.get_sampled('A', sample_times=numpy.arange(2), output_array=out_expected)
-
-        self.assertIs(out_expected, out_received)
-        self.assertEqual(len(wf.sample_calls), 1)
-        self.assertIs(wf.sample_calls[0][-1], out_expected)
-        self.assertEqual(out_received.tolist(), [1, 2])
-
-    def test_get_subset_for_channels(self):
-        wf_ab = DummyWaveform(defined_channels={'A', 'B'})
-        wf_a = DummyWaveform(defined_channels={'A'})
-
-        with self.assertRaises(KeyError):
-            wf_ab.get_subset_for_channels({'C'})
-        with self.assertRaises(KeyError):
-            wf_ab.get_subset_for_channels({'A', 'C'})
-        with self.assertRaises(KeyError):
-            wf_a.get_subset_for_channels({'C'})
-        with self.assertRaises(KeyError):
-            wf_a.get_subset_for_channels({'A', 'C'})
-
-        self.assertIs(wf_ab, wf_ab.get_subset_for_channels({'A', 'B'}))
-        self.assertIs(wf_a, wf_a.get_subset_for_channels({'A'}))
-
-        wf_sub = wf_ab.get_subset_for_channels({'A'})
-        self.assertEqual(wf_sub.defined_channels, {'A'})
 
  
 class InstructionPointerTest(unittest.TestCase):

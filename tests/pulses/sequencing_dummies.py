@@ -7,7 +7,8 @@ import numpy
 """LOCAL IMPORTS"""
 from qctoolkit.utils.types import MeasurementWindow, ChannelID, TimeType, time_from_float
 from qctoolkit.serialization import Serializer
-from qctoolkit.pulses.instructions import Waveform, Instruction, CJMPInstruction, GOTOInstruction, REPJInstruction
+from qctoolkit._program.waveforms import Waveform
+from qctoolkit._program.instructions import Instruction, CJMPInstruction, GOTOInstruction, REPJInstruction
 from qctoolkit.pulses.sequencing import Sequencer, InstructionBlock, SequencingElement
 from qctoolkit.pulses.parameters import Parameter
 from qctoolkit.pulses.pulse_template import AtomicPulseTemplate
