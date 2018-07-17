@@ -5,10 +5,12 @@ from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingExce
     UnnecessaryMappingException, MappingPulseTemplate,\
     AmbiguousMappingException, MappingCollisionException
 from qctoolkit.pulses.parameters import ParameterNotProvidedException
-from qctoolkit.pulses.parameters import ConstantParameter, ParameterConstraintViolation
+from qctoolkit.pulses.parameters import ConstantParameter, ParameterConstraintViolation, ParameterConstraint
 from qctoolkit.expressions import Expression
 
 from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummySequencer, DummyInstructionBlock
+from tests.serialization_tests import SerializableTests
+from tests.serialization_dummies import DummySerializer
 
 
 class MappingTemplateTests(unittest.TestCase):
@@ -226,3 +228,88 @@ class PulseTemplateParameterMappingExceptionsTests(unittest.TestCase):
         dummy = DummyPulseTemplate()
         exception = UnnecessaryMappingException(dummy, 'foo')
         self.assertIsInstance(str(exception), str)
+
+
+class MappingPulseTemplateSerializationTests(SerializableTests, unittest.TestCase):
+
+    @property
+    def class_to_test(self):
+        return MappingPulseTemplate
+
+    def make_kwargs(self):
+        return {
+            'template': DummyPulseTemplate(defined_channels={'foo'},
+                                           measurement_names={'meas'},
+                                           parameter_names={'hugo', 'herbert', 'ilse'}),
+            'parameter_mapping': {'hugo': Expression('2*k+c'), 'herbert': Expression('c-1.5'), 'ilse': Expression('ilse')},
+            'measurement_mapping': {'meas': 'seam'},
+            'channel_mapping': {'foo': 'default_channel'},
+            'parameter_constraints': [str(ParameterConstraint('c > 0'))]
+        }
+
+    def make_instance(self, identifier=None, registry=None):
+        kwargs = self.make_kwargs()
+        return self.class_to_test(identifier=identifier, **kwargs, allow_partial_parameter_mapping=True, registry=registry)
+
+    def assert_equal_instance_except_id(self, lhs: MappingPulseTemplate, rhs: MappingPulseTemplate):
+        self.assertIsInstance(lhs, MappingPulseTemplate)
+        self.assertIsInstance(rhs, MappingPulseTemplate)
+        self.assertEqual(lhs.template, rhs.template)
+        self.assertEqual(lhs.parameter_constraints, rhs.parameter_constraints)
+        self.assertEqual(lhs.channel_mapping, rhs.channel_mapping)
+        self.assertEqual(lhs.measurement_mapping, rhs.measurement_mapping)
+        self.assertEqual(lhs.parameter_mapping, rhs.parameter_mapping)
+
+
+class MappingPulseTemplateOldSerializationTests(unittest.TestCase):
+
+    def test_get_serialization_data(self) -> None:
+        # test for deprecated version during transition period, remove after final switch
+        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
+                                   msg="SequencePT does not issue warning for old serialization routines."):
+            dummy_pt = DummyPulseTemplate(defined_channels={'foo'},
+                                          measurement_names={'meas'},
+                                          parameter_names={'hugo', 'herbert', 'ilse'})
+            mpt = MappingPulseTemplate(
+                template=dummy_pt,
+                parameter_mapping={'hugo': Expression('2*k+c'), 'herbert': Expression('c-1.5'), 'ilse': Expression('ilse')},
+                measurement_mapping={'meas': 'seam'},
+                channel_mapping={'foo': 'default_channel'},
+                parameter_constraints=[str(ParameterConstraint('c > 0'))]
+            )
+            serializer = DummySerializer()
+            expected_data = {
+                'template': serializer.dictify(dummy_pt),
+                'parameter_mapping': {'hugo': str(Expression('2*k+c')), 'herbert': str(Expression('c-1.5')),
+                                      'ilse': str(Expression('ilse'))},
+                'measurement_mapping': {'meas': 'seam'},
+                'channel_mapping': {'foo': 'default_channel'},
+                'parameter_constraints': [str(ParameterConstraint('c > 0'))]
+            }
+            data = mpt.get_serialization_data(serializer=serializer)
+            self.assertEqual(expected_data, data)
+
+    def test_deserialize(self) -> None:
+        # test for deprecated version during transition period, remove after final switch
+        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
+                                   msg="SequencePT does not issue warning for old serialization routines."):
+            dummy_pt = DummyPulseTemplate(defined_channels={'foo'},
+                                          measurement_names={'meas'},
+                                          parameter_names={'hugo', 'herbert', 'ilse'})
+            serializer = DummySerializer()
+            data = {
+                'template': serializer.dictify(dummy_pt),
+                'parameter_mapping': {'hugo': str(Expression('2*k+c')), 'herbert': str(Expression('c-1.5')),
+                                      'ilse': str(Expression('ilse'))},
+                'measurement_mapping': {'meas': 'seam'},
+                'channel_mapping': {'foo': 'default_channel'},
+                'parameter_constraints': [str(ParameterConstraint('c > 0'))]
+            }
+            deserialized = MappingPulseTemplate.deserialize(serializer=serializer, **data)
+
+            self.assertIsInstance(deserialized, MappingPulseTemplate)
+            self.assertEqual(data['parameter_mapping'], deserialized.parameter_mapping)
+            self.assertEqual(data['channel_mapping'], deserialized.channel_mapping)
+            self.assertEqual(data['measurement_mapping'], deserialized.measurement_mapping)
+            self.assertEqual(data['parameter_constraints'], [str(pc) for pc in deserialized.parameter_constraints])
+            self.assertIs(deserialized.template, dummy_pt)

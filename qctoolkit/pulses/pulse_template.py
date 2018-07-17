@@ -43,7 +43,7 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
 
     def __init__(self, *,
                  identifier: Optional[str]) -> None:
-        super().__init__(identifier)
+        super().__init__(identifier=identifier)
 
     @property
     @abstractmethod

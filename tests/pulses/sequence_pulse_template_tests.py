@@ -1,5 +1,4 @@
 import unittest
-import warnings
 
 import numpy as np
 
@@ -14,6 +13,7 @@ from qctoolkit.pulses.instructions import MEASInstruction
 from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyPulseTemplate,\
     DummyNoValueParameter, DummyWaveform
 from tests.serialization_dummies import DummySerializer
+from tests.serialization_tests import SerializableTests
 
 
 class SequenceWaveformTest(unittest.TestCase):
@@ -173,52 +173,85 @@ class SequencePulseTemplateTest(unittest.TestCase):
         self.assertEqual({'A': ExpressionScalar('k+2*b+7*(b-f)'), 'B': ExpressionScalar('0.24*f')}, pulse.integral)
 
 
-class SequencePulseTemplateSerializationTests(unittest.TestCase):
+class SequencePulseTemplateSerializationTests(SerializableTests, unittest.TestCase):
+
+    @property
+    def class_to_test(self):
+        return SequencePulseTemplate
+
+    def make_kwargs(self):
+        return {
+            'subtemplates': [DummyPulseTemplate(), DummyPulseTemplate()],
+            'parameter_constraints': [str(ParameterConstraint('a<b'))],
+            'measurements': [('m', 0, 1)]
+        }
+
+    def make_instance(self, identifier=None, registry=None):
+        kwargs = self.make_kwargs()
+        subtemplates = kwargs['subtemplates']
+        del kwargs['subtemplates']
+        return self.class_to_test(identifier=identifier, *subtemplates, **kwargs, registry=registry)
+
+    def assert_equal_instance_except_id(self, lhs: SequencePulseTemplate, rhs: SequencePulseTemplate):
+        self.assertIsInstance(lhs, SequencePulseTemplate)
+        self.assertIsInstance(rhs, SequencePulseTemplate)
+        self.assertEqual(lhs.subtemplates, rhs.subtemplates)
+        self.assertEqual(lhs.parameter_constraints, rhs.parameter_constraints)
+        self.assertEqual(lhs.measurement_declarations, rhs.measurement_declarations)
+
+
+class SequencePulseTemplateOldSerializationTests(unittest.TestCase):
 
     def setUp(self) -> None:
-        self.serializer = DummySerializer()
-
         self.table_foo = TablePulseTemplate({'default': [('hugo', 2),
                                                          ('albert', 'voltage')]},
                                             parameter_constraints=['albert<9.1'],
                                             measurements=[('mw_foo','hugo','albert')],
-                                            identifier='foo')
+                                            identifier='foo',
+                                            registry=dict())
 
         self.foo_param_mappings = dict(hugo='ilse', albert='albert', voltage='voltage')
         self.foo_meas_mappings = dict(mw_foo='mw_bar')
 
-    def test_get_serialization_data(self) -> None:
-        dummy1 = DummyPulseTemplate()
-        dummy2 = DummyPulseTemplate()
+    def test_get_serialization_data_old(self) -> None:
+        # test for deprecated version during transition period, remove after final switch
+        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
+                                   msg="SequencePT does not issue warning for old serialization routines."):
+            dummy1 = DummyPulseTemplate()
+            dummy2 = DummyPulseTemplate()
 
-        sequence = SequencePulseTemplate(dummy1, dummy2, parameter_constraints=['a<b'], measurements=[('m', 0, 1)])
-        serializer = DummySerializer(serialize_callback=lambda x: str(x))
+            sequence = SequencePulseTemplate(dummy1, dummy2, parameter_constraints=['a<b'], measurements=[('m', 0, 1)],
+                                             registry=dict())
+            serializer = DummySerializer(serialize_callback=lambda x: str(x))
 
-        expected_data = dict(
-            subtemplates=[str(dummy1), str(dummy2)],
-            parameter_constraints=['a < b'],
-            measurements=[('m', 0, 1)]
-        )
-        data = sequence.get_serialization_data(serializer)
-        self.assertEqual(expected_data, data)
+            expected_data = dict(
+                subtemplates=[str(dummy1), str(dummy2)],
+                parameter_constraints=['a < b'],
+                measurements=[('m', 0, 1)]
+            )
+            data = sequence.get_serialization_data(serializer)
+            self.assertEqual(expected_data, data)
 
-    def test_deserialize(self) -> None:
-        dummy1 = DummyPulseTemplate()
-        dummy2 = DummyPulseTemplate()
+    def test_deserialize_old(self) -> None:
+        # test for deprecated version during transition period, remove after final switch
+        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
+                                   msg="SequencePT does not issue warning for old serialization routines."):
+            dummy1 = DummyPulseTemplate()
+            dummy2 = DummyPulseTemplate()
 
-        serializer = DummySerializer(serialize_callback=lambda x: str(id(x)))
+            serializer = DummySerializer(serialize_callback=lambda x: str(id(x)))
 
-        data = dict(
-            subtemplates=[serializer.dictify(dummy1), serializer.dictify(dummy2)],
-            identifier='foo',
-            parameter_constraints=['a < b'],
-            measurements=[('m', 0, 1)]
-        )
+            data = dict(
+                subtemplates=[serializer.dictify(dummy1), serializer.dictify(dummy2)],
+                identifier='foo',
+                parameter_constraints=['a < b'],
+                measurements=[('m', 0, 1)]
+            )
 
-        template = SequencePulseTemplate.deserialize(serializer, **data)
-        self.assertEqual(template.subtemplates, [dummy1, dummy2])
-        self.assertEqual(template.parameter_constraints, [ParameterConstraint('a<b')])
-        self.assertEqual(template.measurement_declarations, [('m', 0, 1)])
+            template = SequencePulseTemplate.deserialize(serializer, **data)
+            self.assertEqual(template.subtemplates, [dummy1, dummy2])
+            self.assertEqual(template.parameter_constraints, [ParameterConstraint('a<b')])
+            self.assertEqual(template.measurement_declarations, [('m', 0, 1)])
 
 
 class SequencePulseTemplateSequencingTests(SequencePulseTemplateTest):

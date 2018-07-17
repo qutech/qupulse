@@ -10,7 +10,7 @@ from qctoolkit.pulses.parameters import Parameter, MappedParameter, ParameterNot
 from qctoolkit.pulses.sequencing import Sequencer
 from qctoolkit.pulses.instructions import InstructionBlock, Waveform
 from qctoolkit.pulses.conditions import Condition
-from qctoolkit.serialization import Serializer
+from qctoolkit.serialization import Serializer, PulseRegistryType
 
 __all__ = [
     "MappingPulseTemplate",
@@ -29,7 +29,8 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                  measurement_mapping: Optional[Dict[str, str]] = None,
                  channel_mapping: Optional[Dict[ChannelID, ChannelID]] = None,
                  parameter_constraints: Optional[List[str]]=None,
-                 allow_partial_parameter_mapping=False):
+                 allow_partial_parameter_mapping: bool=False,
+                 registry: PulseRegistryType=None) -> None:
         """Standard constructor for the MappingPulseTemplate.
 
         Mappings that are not specified are defaulted to identity mappings. Channels and measurement names of the
@@ -99,6 +100,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         self.__external_parameters |= self.constrained_parameters
         self.__measurement_mapping = measurement_mapping
         self.__channel_mapping = channel_mapping
+        self._register(registry=registry)
 
     @staticmethod
     def from_tuple(mapping_tuple: MappingTuple) -> 'MappingPulseTemplate':
@@ -184,18 +186,39 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
     def duration(self) -> Expression:
         return self.__template.duration.evaluate_symbolic(self.__parameter_mapping)
 
-    def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
-        parameter_mapping_dict = dict((key, str(expression)) for key, expression in self.__parameter_mapping.items())
-        return dict(template=serializer.dictify(self.template),
-                    parameter_mapping=parameter_mapping_dict,
-                    measurement_mapping=self.__measurement_mapping,
-                    channel_mapping=self.__channel_mapping)
+    def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
+        data = super().get_serialization_data(serializer)
 
-    @staticmethod
-    def deserialize(serializer: Serializer,
-                    template: Union[str, Dict[str, Any]], **kwargs) -> 'MappingPulseTemplate':
-        return MappingPulseTemplate(template=serializer.deserialize(template),
-                                    **kwargs)
+        if serializer: # compatibility to old serialization routines, deprecated
+            parameter_mapping_dict = dict((key, str(expression)) for key, expression in self.__parameter_mapping.items())
+            data = dict(template=serializer.dictify(self.template),
+                        parameter_mapping=parameter_mapping_dict,
+                        measurement_mapping=self.__measurement_mapping,
+                        channel_mapping=self.__channel_mapping)
+
+        else:
+            data['template'] = self.template
+            if self.__parameter_mapping:
+                data['parameter_mapping'] = self.__parameter_mapping
+            if self.__measurement_mapping:
+                data['measurement_mapping'] = self.__measurement_mapping
+            if self.__channel_mapping:
+                data['channel_mapping'] = self.__channel_mapping
+
+        if self.parameter_constraints:
+            data['parameter_constraints'] = [str(c) for c in self.parameter_constraints]
+
+        return data
+
+    @classmethod
+    def deserialize(cls,
+                    serializer: Optional[Serializer]=None, # compatibility to old serialization routines, deprecated
+                    **kwargs) -> 'MappingPulseTemplate':
+        if serializer: # compatibility to old serialization routines, deprecated
+            kwargs['template'] = serializer.deserialize(kwargs["template"])
+        return cls(**kwargs, allow_partial_parameter_mapping=True)
+        # return MappingPulseTemplate(template=serializer.deserialize(template),
+        #                             **kwargs)
 
     def map_parameters(self,
                        parameters: Dict[str, Union[Parameter, numbers.Real]]) -> Dict[str, Parameter]:

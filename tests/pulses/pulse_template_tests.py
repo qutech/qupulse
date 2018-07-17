@@ -17,13 +17,15 @@ class PulseTemplateStub(PulseTemplate):
                  defined_channels=None,
                  duration=None,
                  parameter_names=None,
-                 measurement_names=None):
+                 measurement_names=None,
+                 registry=None):
         super().__init__(identifier=identifier)
 
         self._defined_channels = defined_channels
         self._duration = duration
         self._parameter_names = parameter_names
         self._measurement_names = set() if measurement_names is None else measurement_names
+        self._register(registry=registry)
 
     @property
     def defined_channels(self) -> Set[ChannelID]:
@@ -38,11 +40,11 @@ class PulseTemplateStub(PulseTemplate):
             raise NotImplementedError()
         return self._parameter_names
 
-    def get_serialization_data(self, serializer: 'Serializer') -> Dict[str, Any]:
+    def get_serialization_data(self, serializer: Optional['Serializer']=None) -> Dict[str, Any]:
         raise NotImplementedError()
 
     @staticmethod
-    def deserialize(serializer: 'Serializer', **kwargs) -> 'AtomicPulseTemplateStub':
+    def deserialize(serializer: Optional['Serializer']=None, **kwargs) -> 'AtomicPulseTemplateStub':
         raise NotImplementedError()
 
     @property
@@ -82,10 +84,12 @@ class AtomicPulseTemplateStub(AtomicPulseTemplate):
         return super().is_interruptable()
 
     def __init__(self, *, waveform: Waveform=None, duration: Expression=None, measurements=None,
-                 identifier: Optional[str]=None) -> None:
+                 identifier: Optional[str]=None,
+                 registry=None) -> None:
         super().__init__(identifier=identifier, measurements=measurements)
         self.waveform = waveform
         self._duration = duration
+        self._register(registry=registry)
 
     def build_waveform(self, parameters: Dict[str, Parameter], channel_mapping):
         return self.waveform
@@ -103,15 +107,15 @@ class AtomicPulseTemplateStub(AtomicPulseTemplate):
     def parameter_names(self) -> Set[str]:
         raise NotImplementedError()
 
-    def get_serialization_data(self, serializer: 'Serializer') -> Dict[str, Any]:
+    def get_serialization_data(self, serializer: Optional['Serializer']=None) -> Dict[str, Any]:
         raise NotImplementedError()
 
     @property
     def measurement_names(self):
         raise NotImplementedError()
 
-    @staticmethod
-    def deserialize(serializer: 'Serializer', **kwargs) -> 'AtomicPulseTemplateStub':
+    @classmethod
+    def deserialize(cls, serializer: Optional['Serializer']=None, **kwargs) -> 'AtomicPulseTemplateStub':
         raise NotImplementedError()
 
     @property

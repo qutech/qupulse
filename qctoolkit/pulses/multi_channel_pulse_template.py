@@ -14,7 +14,7 @@ import warnings
 import numpy
 
 
-from qctoolkit.serialization import Serializer
+from qctoolkit.serialization import Serializer, PulseRegistryType
 
 from qctoolkit.utils.types import ChannelID, TimeType
 from qctoolkit.pulses.instructions import Waveform
@@ -139,7 +139,8 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
                  external_parameters: Optional[Set[str]]=None,
                  identifier: Optional[str]=None,
                  parameter_constraints: Optional[List]=None,
-                 measurements: Optional[List[MeasurementDeclaration]]=None) -> None:
+                 measurements: Optional[List[MeasurementDeclaration]]=None,
+                 registry: PulseRegistryType=None) -> None:
         AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 
@@ -181,6 +182,8 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
             else:
                 raise ValueError('Could not assert duration equality of {} and {}'.format(duration,
                                                                                           subtemplate.duration))
+
+        self._register(registry=registry)
 
     @property
     def duration(self) -> Expression:
@@ -225,26 +228,30 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
                       conditions: Dict[str, 'Condition']) -> bool:
         return any(st.requires_stop(parameters, conditions) for st in self._subtemplates)
 
-    def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
-        data = dict(subtemplates=[serializer.dictify(subtemplate) for subtemplate in self.subtemplates])
+    def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
+        data = super().get_serialization_data(serializer)
+        data['subtemplates'] = self.subtemplates
+
+        if serializer: # compatibility to old serialization routines, deprecated
+            data = dict()
+            data['subtemplates'] = [serializer.dictify(subtemplate) for subtemplate in self.subtemplates]
 
         if self.parameter_constraints:
             data['parameter_constraints'] = [str(constraint) for constraint in self.parameter_constraints]
-
         if self.measurement_declarations:
             data['measurements'] = self.measurement_declarations
+
         return data
 
-    @staticmethod
-    def deserialize(serializer: Serializer,
-                    subtemplates: Iterable[Dict[str, Any]],
-                    parameter_constraints: Optional[Any]=None,
-                    identifier: Optional[str]=None,
-                    measurements: Optional[List[MeasurementDeclaration]]=None) -> 'AtomicMultiChannelPulseTemplate':
-        subtemplates = [serializer.deserialize(st) for st in subtemplates]
-        return AtomicMultiChannelPulseTemplate(*subtemplates,
-                                               parameter_constraints=parameter_constraints,
-                                               identifier=identifier, measurements=measurements)
+    @classmethod
+    def deserialize(cls, serializer: Optional[Serializer]=None, **kwargs) -> 'AtomicMultiChannelPulseTemplate':
+        subtemplates = kwargs['subtemplates']
+        del kwargs['subtemplates']
+
+        if serializer: # compatibility to old serialization routines, deprecated
+            subtemplates = [serializer.deserialize(st) for st in subtemplates]
+
+        return cls(*subtemplates, **kwargs)
 
     @property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:

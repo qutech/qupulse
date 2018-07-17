@@ -9,9 +9,13 @@ from tests.pulses.measurement_tests import ParameterConstrainerTest, Measurement
 from tests.pulses.sequencing_dummies import DummyParameter, DummyCondition
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 from qctoolkit.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy
-from tests.serialization_dummies import DummySerializer, DummyStorageBackend
 from qctoolkit.expressions import Expression, ExpressionScalar
 from qctoolkit.serialization import Serializer
+from qctoolkit.pulses.parameters import ParameterConstraint
+
+from tests.serialization_dummies import DummySerializer, DummyStorageBackend
+from tests.serialization_tests import SerializableTests
+
 
 class PointPulseEntryTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -218,46 +222,81 @@ class TablePulseTemplateMeasurementTest(MeasurementDefinerTest):
                          to_test_constructor=tpt_constructor, **kwargs)
 
 
-class PointPulseTemplateSerializationTests(unittest.TestCase):
+class PointPulseTemplateSerializationTests(SerializableTests, unittest.TestCase):
+
+    @property
+    def class_to_test(self):
+        return PointPulseTemplate
+
+    def make_kwargs(self):
+        return {
+            'time_point_tuple_list': [('foo', 2, 'hold'), ('hugo', 'A + B', 'linear'), ('sudo', [1, 'a'], 'jump')],
+            'channel_names': (0, 'A'),
+            'measurements': [('m', 1, 1), ('foo', 'z', 'o')],
+            'parameter_constraints': [str(ParameterConstraint('ilse>2')), str(ParameterConstraint('k>foo'))]
+        }
+
+    def assert_equal_instance_except_id(self, lhs: PointPulseTemplate, rhs: PointPulseTemplate):
+        self.assertIsInstance(lhs, PointPulseTemplate)
+        self.assertIsInstance(rhs, PointPulseTemplate)
+        self.assertEqual(lhs.point_pulse_entries, rhs.point_pulse_entries)
+        self.assertEqual(lhs.measurement_declarations, rhs.measurement_declarations)
+        self.assertEqual(lhs.parameter_constraints, rhs.parameter_constraints)
+        self.assertEqual(lhs.defined_channels, rhs.defined_channels)
+
+
+class PointPulseTemplateOldSerializationTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.serializer = DummySerializer(lambda x: dict(name=x.name), lambda x: x.name, lambda x: x['name'])
         self.entries = [('foo', 2, 'hold'), ('hugo', 'A + B', 'linear'), ('sudo', [1, 'a'], 'jump')]
         self.measurements = [('m', 1, 1), ('foo', 'z', 'o')]
         self.template = PointPulseTemplate(time_point_tuple_list=self.entries, channel_names=[0, 'A'],
                                            measurements=self.measurements,
-                                           identifier='foo', parameter_constraints=['ilse>2', 'k>foo'])
-        self.expected_data = dict(type=self.serializer.get_type_identifier(self.template))
+                                           identifier='foo', parameter_constraints=['ilse>2', 'k>foo'],
+                                           registry=dict())
         self.maxDiff = None
 
-    def test_get_serialization_data(self) -> None:
-        expected_data = dict(measurements=self.measurements,
-                             time_point_tuple_list=self.entries,
-                             channel_names=(0, 'A'),
-                             parameter_constraints=[str(Expression('ilse>2')), str(Expression('k>foo'))])
+    def test_get_serialization_data_old(self) -> None:
+        # test for deprecated version during transition period, remove after final switch
+        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
+                                   msg="PointPT does not issue warning for old serialization routines."):
+            expected_data = dict(measurements=self.measurements,
+                                 time_point_tuple_list=self.entries,
+                                 channel_names=(0, 'A'),
+                                 parameter_constraints=[str(Expression('ilse>2')), str(Expression('k>foo'))])
 
-        data = self.template.get_serialization_data(self.serializer)
-        self.assertEqual(expected_data, data)
+            serializer = DummySerializer(lambda x: dict(name=x.name), lambda x: x.name, lambda x: x['name'])
+            data = self.template.get_serialization_data(serializer)
+            self.assertEqual(expected_data, data)
 
-    def test_deserialize(self) -> None:
-        data = dict(measurements=self.measurements,
-                    time_point_tuple_list=self.entries,
-                    channel_names=(0, 'A'),
-                    parameter_constraints=['ilse>2', 'k>foo'],
-                    identifier='foo')
+    def test_deserialize_old(self) -> None:
+        # test for deprecated version during transition period, remove after final switch
+        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
+                                   msg="PointPT does not issue warning for old serialization routines."):
+            data = dict(measurements=self.measurements,
+                        time_point_tuple_list=self.entries,
+                        channel_names=(0, 'A'),
+                        parameter_constraints=['ilse>2', 'k>foo'],
+                        identifier='foo')
 
-        # deserialize
-        template = PointPulseTemplate.deserialize(self.serializer, **data)
+            # deserialize
+            serializer = DummySerializer(lambda x: dict(name=x.name), lambda x: x.name, lambda x: x['name'])
+            template = PointPulseTemplate.deserialize(serializer, **data)
 
-        self.assertEqual(template.point_pulse_entries, self.template.point_pulse_entries)
-        self.assertEqual(template.measurement_declarations, self.template.measurement_declarations)
-        self.assertEqual(template.parameter_constraints, self.template.parameter_constraints)
+            self.assertEqual(template.point_pulse_entries, self.template.point_pulse_entries)
+            self.assertEqual(template.measurement_declarations, self.template.measurement_declarations)
+            self.assertEqual(template.parameter_constraints, self.template.parameter_constraints)
 
-    def test_serializer_integration(self):
-        serializer = Serializer(DummyStorageBackend())
-        serializer.serialize(self.template)
-        template = serializer.deserialize('foo')
+    def test_serializer_integration_old(self):
+        registry = dict()
 
-        self.assertIsInstance(template, PointPulseTemplate)
-        self.assertEqual(template.point_pulse_entries, self.template.point_pulse_entries)
-        self.assertEqual(template.measurement_declarations, self.template.measurement_declarations)
-        self.assertEqual(template.parameter_constraints, self.template.parameter_constraints)
+        # test for deprecated version during transition period, remove after final switch
+        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
+                                   msg="PointPT does not issue warning for old serialization routines."):
+            serializer = Serializer(DummyStorageBackend())
+            serializer.serialize(self.template)
+            template = serializer.deserialize('foo')
+
+            self.assertIsInstance(template, PointPulseTemplate)
+            self.assertEqual(template.point_pulse_entries, self.template.point_pulse_entries)
+            self.assertEqual(template.measurement_declarations, self.template.measurement_declarations)
+            self.assertEqual(template.parameter_constraints, self.template.parameter_constraints)
