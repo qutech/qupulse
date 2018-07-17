@@ -6,10 +6,11 @@ Classes:
 
 import itertools
 from abc import ABCMeta, abstractmethod
-from weakref import WeakValueDictionary
+from weakref import WeakValueDictionary, ref
 from typing import Union, Set, Sequence, NamedTuple, Tuple, Any, List, Iterable
 
 import numpy as np
+import pandas as pd
 
 from qctoolkit import ChannelID
 from qctoolkit.utils import checked_int_cast
@@ -17,6 +18,7 @@ from qctoolkit.utils.types import TimeType, time_from_float
 from qctoolkit.comparable import Comparable
 from qctoolkit.expressions import ExpressionScalar
 from qctoolkit.pulses.interpolation import InterpolationStrategy
+from qctoolkit._program.transformation import Transformation
 
 
 __all__ = ["Waveform", "TableWaveform", "TableWaveformEntry", "FunctionWaveform", "SequenceWaveform",
@@ -481,3 +483,58 @@ class RepetitionWaveform(Waveform):
     def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> 'RepetitionWaveform':
         return RepetitionWaveform(body=self._body.unsafe_get_subset_for_channels(channels),
                                   repetition_count=self._repetition_count)
+
+
+
+class TransformingWaveform(Waveform):
+    def __init__(self, inner_waveform: Waveform, transformation: Transformation):
+        self._inner_waveform = inner_waveform
+        self._transformation = transformation
+
+        self._cached_data = None
+        self._cached_times = lambda : None
+
+    @property
+    def inner_waveform(self) -> Waveform:
+        return self._inner_waveform
+
+    @property
+    def transformation(self) -> Transformation:
+        return self._transformation
+
+    @property
+    def defined_channels(self) -> Set[ChannelID]:
+        return self.transformation.get_output_channels(self.inner_waveform.defined_channels)
+
+    @property
+    def compare_key(self) -> Tuple[Any, int]:
+        return self.inner_waveform.compare_key, self.transformation.compare_key
+
+    @property
+    def duration(self) -> TimeType:
+        return self.inner_waveform.duration
+
+    def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> 'TransformingWaveform':
+        return TransformingWaveform(self.inner_waveform.get_subset_for_channels(channels), self.transformation)
+
+    def unsafe_sample(self,
+                      channel: ChannelID,
+                      sample_times: np.ndarray,
+                      output_array: Union[np.ndarray, None] = None) -> np.ndarray:
+
+        if self._cached_times() is not sample_times:
+            inner_channels = tuple(self.inner_waveform.defined_channels)
+            inner_data = np.empty((len(self.inner_waveform.defined_channels), sample_times.size))
+
+            for idx, inner_channel in enumerate(self.inner_waveform.defined_channels):
+                self.inner_waveform.unsafe_sample(inner_channel, sample_times,
+                                                  output_array=inner_data[idx, :])
+
+            inner_data = pd.DataFrame(inner_data, index=inner_channels)
+
+            outer_data = self.transformation(sample_times, inner_data)
+
+            self._cached_data = outer_data
+            self._cached_times = ref(sample_times)
+
+        return self._cached_data.loc[channel].values
