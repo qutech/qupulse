@@ -6,8 +6,8 @@ from teawg import model_properties_dict
 
 from qctoolkit.hardware.awgs.tabor import TaborException, TaborProgram, \
     TaborSegment, TaborSequencing, with_configuration_guard, PlottableProgram
-from qctoolkit.hardware.program import MultiChannelProgram, Loop
-from qctoolkit.pulses.instructions import InstructionBlock
+from qctoolkit._program._loop import MultiChannelProgram, Loop
+from qctoolkit._program.instructions import InstructionBlock
 from qctoolkit.hardware.util import voltage_to_uint16
 
 from tests.pulses.sequencing_dummies import DummyWaveform

@@ -8,12 +8,12 @@ from fractions import Fraction
 import numpy as np
 
 from qctoolkit.utils.types import ChannelID, TimeType
-from qctoolkit.pulses.instructions import AbstractInstructionBlock, EXECInstruction, REPJInstruction, GOTOInstruction,\
+from qctoolkit._program.instructions import AbstractInstructionBlock, EXECInstruction, REPJInstruction, GOTOInstruction,\
     STOPInstruction, CHANInstruction, Waveform, MEASInstruction, Instruction
 from qctoolkit.comparable import Comparable
 from qctoolkit.utils.tree import Node, is_tree_circular
 from qctoolkit.utils.types import MeasurementWindow
-from qctoolkit.utils import checked_int_cast, is_integer
+from qctoolkit.utils import is_integer
 
 from qctoolkit.pulses.sequence_pulse_template import SequenceWaveform
 from qctoolkit.pulses.repetition_pulse_template import RepetitionWaveform

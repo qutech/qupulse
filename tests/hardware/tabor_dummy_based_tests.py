@@ -1,6 +1,5 @@
 import sys
 import unittest
-import importlib
 
 from typing import List
 from copy import copy, deepcopy
@@ -164,7 +163,7 @@ class TaborChannelPairTests(TaborDummyBasedTest):
         from qctoolkit.hardware.awgs.tabor import TaborChannelPair, TaborProgramMemory, TaborSegment, TaborSequencing
         from qctoolkit.pulses.table_pulse_template import TableWaveform
         from qctoolkit.pulses.interpolation import HoldInterpolationStrategy
-        from qctoolkit.hardware.program import Loop
+        from qctoolkit._program._loop import Loop
 
         from tests.pulses.sequencing_dummies import DummyWaveform
 

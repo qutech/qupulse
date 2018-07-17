@@ -1,14 +1,11 @@
 import unittest
 import itertools
-from copy import deepcopy
 
-import numpy as np
+from string import ascii_uppercase
 
-from string import Formatter, ascii_uppercase
-
-from qctoolkit.utils.types import TimeType, time_from_float
-from qctoolkit.hardware.program import Loop, MultiChannelProgram, make_compatible, _make_compatible, _is_compatible, _CompatibilityLevel, RepetitionWaveform, SequenceWaveform
-from qctoolkit.pulses.instructions import REPJInstruction, InstructionBlock, ImmutableInstructionBlock
+from qctoolkit.utils.types import time_from_float
+from qctoolkit._program._loop import Loop, MultiChannelProgram, _make_compatible, _is_compatible, _CompatibilityLevel, RepetitionWaveform, SequenceWaveform
+from qctoolkit._program.instructions import InstructionBlock, ImmutableInstructionBlock
 from tests.pulses.sequencing_dummies import DummyWaveform
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 

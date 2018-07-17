@@ -3,8 +3,8 @@ import itertools
 
 import numpy as np
 
-from qctoolkit.pulses.instructions import InstructionBlock, EXECInstruction, MEASInstruction
-from qctoolkit.hardware.setup import HardwareSetup, ChannelID, PlaybackChannel, _SingleChannel, MarkerChannel, MeasurementMask
+from qctoolkit._program.instructions import InstructionBlock, MEASInstruction
+from qctoolkit.hardware.setup import HardwareSetup, PlaybackChannel, MarkerChannel, MeasurementMask
 
 from tests.pulses.sequencing_dummies import DummyWaveform
 
