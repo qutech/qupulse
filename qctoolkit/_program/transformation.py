@@ -20,7 +20,7 @@ class Transformation(Comparable):
             data:
 
         Returns:
-
+            transformed: A DataFrame that has been transformed with index == output_channels
         """
 
     @abstractmethod
@@ -39,14 +39,14 @@ class LinearTransformation(Transformation):
 
     def __call__(self, time: np.ndarray, data: pd.DataFrame) -> Mapping[ChannelID, np.ndarray]:
         data_in = pd.DataFrame(data)
-        if data_in.index != self._matrix.columns:
-            raise KeyError()
+        if set(data_in.index) != set(self._matrix.columns):
+            raise KeyError('Invalid input channels', set(data_in.index), set(self._matrix.columns))
 
         return self._matrix @ data_in
 
     def get_output_channels(self, input_channels: Set[ChannelID]):
         if input_channels != set(self._matrix.columns):
-            raise KeyError()
+            raise KeyError('Invalid input channels', input_channels, set(self._matrix.columns))
 
         return set(self._matrix.index)
 
