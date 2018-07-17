@@ -11,7 +11,7 @@ from qctoolkit._program.instructions import InstructionBlock
 from qctoolkit.hardware.util import voltage_to_uint16
 
 from tests.pulses.sequencing_dummies import DummyWaveform
-from tests.hardware.program_tests import LoopTests, WaveformGenerator, MultiChannelTests
+from tests._program.loop_tests import LoopTests, WaveformGenerator, MultiChannelTests
 
 
 class TaborSegmentTests(unittest.TestCase):
