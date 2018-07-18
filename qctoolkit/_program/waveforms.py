@@ -7,7 +7,7 @@ Classes:
 import itertools
 from abc import ABCMeta, abstractmethod
 from weakref import WeakValueDictionary, ref
-from typing import Union, Set, Sequence, NamedTuple, Tuple, Any, List, Iterable
+from typing import Union, Set, Sequence, NamedTuple, Tuple, Any, Iterable, FrozenSet, Optional
 
 import numpy as np
 import pandas as pd
@@ -22,7 +22,7 @@ from qctoolkit._program.transformation import Transformation
 
 
 __all__ = ["Waveform", "TableWaveform", "TableWaveformEntry", "FunctionWaveform", "SequenceWaveform",
-           "MultiChannelWaveform", "RepetitionWaveform"]
+           "MultiChannelWaveform", "RepetitionWaveform", "TransformingWaveform"]
 
 
 class Waveform(Comparable, metaclass=ABCMeta):
@@ -485,14 +485,15 @@ class RepetitionWaveform(Waveform):
                                   repetition_count=self._repetition_count)
 
 
-
 class TransformingWaveform(Waveform):
     def __init__(self, inner_waveform: Waveform, transformation: Transformation):
+        """"""
         self._inner_waveform = inner_waveform
         self._transformation = transformation
 
+        # cache data of inner channels based identified and invalidated by the sample times
         self._cached_data = None
-        self._cached_times = lambda : None
+        self._cached_times = lambda: None
 
     @property
     def inner_waveform(self) -> Waveform:
@@ -507,26 +508,25 @@ class TransformingWaveform(Waveform):
         return self.transformation.get_output_channels(self.inner_waveform.defined_channels)
 
     @property
-    def compare_key(self) -> Tuple[Any, int]:
-        return self.inner_waveform.compare_key, self.transformation.compare_key
+    def compare_key(self) -> Tuple[Waveform, Transformation]:
+        return self.inner_waveform, self.transformation
 
     @property
     def duration(self) -> TimeType:
         return self.inner_waveform.duration
 
-    def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> 'TransformingWaveform':
-        return TransformingWaveform(self.inner_waveform.get_subset_for_channels(channels), self.transformation)
+    def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> 'SubsetWaveform':
+        return SubsetWaveform(self, channel_subset=channels)
 
     def unsafe_sample(self,
                       channel: ChannelID,
                       sample_times: np.ndarray,
                       output_array: Union[np.ndarray, None] = None) -> np.ndarray:
-
         if self._cached_times() is not sample_times:
             inner_channels = tuple(self.inner_waveform.defined_channels)
-            inner_data = np.empty((len(self.inner_waveform.defined_channels), sample_times.size))
+            inner_data = np.empty((len(inner_channels), sample_times.size))
 
-            for idx, inner_channel in enumerate(self.inner_waveform.defined_channels):
+            for idx, inner_channel in enumerate(inner_channels):
                 self.inner_waveform.unsafe_sample(inner_channel, sample_times,
                                                   output_array=inner_data[idx, :])
 
@@ -537,4 +537,40 @@ class TransformingWaveform(Waveform):
             self._cached_data = outer_data
             self._cached_times = ref(sample_times)
 
-        return self._cached_data.loc[channel].values
+        if output_array is None:
+            output_array = self._cached_data.loc[channel].values
+        else:
+            output_array[:] = self._cached_data.loc[channel].values
+
+        return output_array
+
+
+class SubsetWaveform(Waveform):
+    def __init__(self, inner_waveform: Waveform, channel_subset: Set[ChannelID]):
+        self._inner_waveform = inner_waveform
+        self._channel_subset = frozenset(channel_subset)
+
+    @property
+    def inner_waveform(self) -> Waveform:
+        return self._inner_waveform
+
+    @property
+    def defined_channels(self) -> FrozenSet[ChannelID]:
+        return self._channel_subset
+
+    @property
+    def duration(self) -> TimeType:
+        return self.inner_waveform.duration
+
+    @property
+    def compare_key(self) -> Tuple[frozenset, Waveform]:
+        return self.defined_channels, self.inner_waveform
+
+    def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> Waveform:
+        return self.inner_waveform.get_subset_for_channels(channels)
+
+    def unsafe_sample(self,
+                      channel: ChannelID,
+                      sample_times: np.ndarray,
+                      output_array: Union[np.ndarray, None]=None) -> np.ndarray:
+        return self.inner_waveform.unsafe_sample(channel, sample_times, output_array)

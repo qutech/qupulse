@@ -1,13 +1,16 @@
 import unittest
+from unittest import mock
 
 import numpy
 import numpy as np
+import pandas as pd
 
 from qctoolkit.utils.types import time_from_float
 from qctoolkit.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy,\
     JumpInterpolationStrategy
 from qctoolkit._program.waveforms import MultiChannelWaveform, RepetitionWaveform, SequenceWaveform,\
-    TableWaveformEntry, TableWaveform
+    TableWaveformEntry, TableWaveform, TransformingWaveform, SubsetWaveform
+from qctoolkit._program.transformation import Transformation
 
 from tests.pulses.sequencing_dummies import DummyWaveform, DummyInterpolationStrategy
 
@@ -414,3 +417,126 @@ class WaveformEntryTest(unittest.TestCase):
     def test_interpolation_exception(self):
         with self.assertRaises(TypeError):
             TableWaveformEntry(1, 2, 3)
+
+
+class TransformationDummy(Transformation):
+    def __init__(self, output_channels=None, transformed=None):
+        if output_channels:
+            self.get_output_channels = mock.MagicMock(return_value=output_channels)
+
+        if transformed is not None:
+            type(self).__call__ = mock.MagicMock(return_value=transformed)
+
+    def __call__(self, *args, **kwargs):
+        raise NotImplementedError()
+
+    get_output_channels = ()
+
+    @property
+    def compare_key(self):
+        return id(self)
+
+
+class TransformingWaveformTest(unittest.TestCase):
+    def test_simple_properties(self):
+        output_channels = {'c', 'd', 'e'}
+
+        trafo = TransformationDummy(output_channels=output_channels)
+
+        inner_wf = DummyWaveform(duration=1.5, defined_channels={'a', 'b'})
+        trafo_wf = TransformingWaveform(inner_waveform=inner_wf, transformation=trafo)
+
+        self.assertIs(trafo_wf.inner_waveform, inner_wf)
+        self.assertIs(trafo_wf.transformation, trafo)
+        self.assertEqual(trafo_wf.compare_key, (inner_wf, trafo))
+        self.assertIs(trafo_wf.duration, inner_wf.duration)
+        self.assertIs(trafo_wf.defined_channels, output_channels)
+        trafo.get_output_channels.assert_called_once_with(inner_wf.defined_channels)
+
+    def test_get_subset_for_channels(self):
+        output_channels = {'c', 'd', 'e'}
+
+        trafo = TransformationDummy(output_channels=output_channels)
+
+        inner_wf = DummyWaveform(duration=1.5, defined_channels={'a', 'b'})
+        trafo_wf = TransformingWaveform(inner_waveform=inner_wf, transformation=trafo)
+
+        subset_wf = trafo_wf.get_subset_for_channels({'c', 'd'})
+        self.assertIsInstance(subset_wf, SubsetWaveform)
+        self.assertIs(subset_wf.inner_waveform, trafo_wf)
+        self.assertEqual(subset_wf.defined_channels, {'c', 'd'})
+
+    def test_unsafe_sample(self):
+        time = np.linspace(10, 20, num=25)
+        ch_a = np.exp(time)
+        ch_b = np.exp(-time)
+        ch_c = np.sinh(time)
+        ch_d = np.cosh(time)
+        ch_e = np.arctan(time)
+
+        sample_output = {'a': ch_a, 'b': ch_b}
+        expected_call_data = pd.DataFrame(sample_output).T
+
+        transformed = pd.DataFrame({'c': ch_c, 'd': ch_d, 'e': ch_e}).T
+
+        trafo = TransformationDummy(transformed=transformed)
+        inner_wf = DummyWaveform(duration=1.5, defined_channels={'a', 'b'}, sample_output=sample_output)
+        trafo_wf = TransformingWaveform(inner_waveform=inner_wf, transformation=trafo)
+
+        ch_d_out = trafo_wf.unsafe_sample('d', time)
+        np.testing.assert_equal(ch_d_out, ch_d)
+
+        output = np.empty_like(time)
+        ch_d_out = trafo_wf.unsafe_sample('d', time, output_array=output)
+        self.assertIs(output, ch_d_out)
+        np.testing.assert_equal(ch_d_out, ch_d)
+
+        call_list = TransformationDummy.__call__.call_args_list
+        self.assertEqual(len(call_list), 1)
+
+        (pos_args, kw_args), = call_list
+        self.assertEqual(len(kw_args), 0)
+
+        c_time, c_data = pos_args
+        np.testing.assert_equal(time, c_time)
+        pd.testing.assert_frame_equal(expected_call_data.sort_index(), c_data.sort_index())
+
+
+class SubsetWaveformTest(unittest.TestCase):
+    def test_simple_properties(self):
+        inner_wf = DummyWaveform(duration=1.5, defined_channels={'a', 'b', 'c'})
+
+        subset_wf = SubsetWaveform(inner_wf, {'a', 'c'})
+
+        self.assertIs(subset_wf.inner_waveform, inner_wf)
+        self.assertEqual(subset_wf.compare_key, (frozenset(['a', 'c']), inner_wf))
+        self.assertIs(subset_wf.duration, inner_wf.duration)
+        self.assertEqual(subset_wf.defined_channels, {'a', 'c'})
+
+    def test_get_subset_for_channels(self):
+        subsetted = DummyWaveform(defined_channels={'a'})
+        with mock.patch.object(DummyWaveform,
+                               'get_subset_for_channels',
+                               mock.Mock(return_value=subsetted)) as get_subset_for_channels:
+            inner_wf = DummyWaveform(defined_channels={'a', 'b', 'c'})
+            subset_wf = SubsetWaveform(inner_wf, {'a', 'c'})
+
+            actual_subsetted = subset_wf.get_subset_for_channels({'a'})
+            get_subset_for_channels.assert_called_once_with({'a'})
+            self.assertIs(subsetted, actual_subsetted)
+
+    def test_unsafe_sample(self):
+        """Test perfect forwarding"""
+        time = {'time'}
+        output = {'output'}
+        expected_data = {'data'}
+
+        with mock.patch.object(DummyWaveform,
+                               'unsafe_sample',
+                               mock.Mock(return_value=expected_data)) as unsafe_sample:
+            inner_wf = DummyWaveform(defined_channels={'a', 'b', 'c'})
+            subset_wf = SubsetWaveform(inner_wf, {'a', 'c'})
+
+            actual_data = subset_wf.unsafe_sample('g', time, output)
+            self.assertIs(expected_data, actual_data)
+            unsafe_sample.assert_called_once_with('g', time, output)
