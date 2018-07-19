@@ -137,19 +137,20 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
         except KeyError:
             raise ParameterNotProvidedException(next(v for v in self.repetition_count.variables if v not in parameters))
 
+        measurement_parameters = {parameter_name: parameters[parameter_name].get_value()
+                                  for parameter_name in self.measurement_parameters}
+        measurements = self.get_measurement_windows(measurement_parameters, measurement_mapping)
+
         repetition_count = self.get_repetition_count_value(real_parameters)
-        if repetition_count > 0:
-            subprogram = self.body.create_program(parameters,
-                                                  measurement_mapping,
-                                                  channel_mapping)
-            if subprogram is not None:
-                measurements = self.get_measurement_windows(parameters, measurement_mapping)
-                program = Loop(measurements=measurements, repetition_count=repetition_count)
-                program.append_child(loop=subprogram)
-                # todo (2018-07-19): could in some circumstances possibly just multiply subprogram repetition count
-                # could be tricky if any repetition count is volatile ? check later and optimize if necessary
-                return program
-        return None
+
+        subprogram = self.body.create_program(parameters,
+                                              measurement_mapping,
+                                              channel_mapping)
+
+        if subprogram or measurements:
+            return Loop(children=[subprogram], measurements=measurements, repetition_count=repetition_count)
+        else:
+            return None
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],
