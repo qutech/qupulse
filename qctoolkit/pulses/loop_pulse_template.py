@@ -230,7 +230,6 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
 
     def _internal_create_program(self,
                                  parameters: Dict[str, Parameter],
-                                 volatile_parameters: Set[str],
                                  measurement_mapping: Dict[str, Optional[str]],
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Loop]:
         self.validate_parameter_constraints(parameters=parameters)
@@ -240,7 +239,6 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
 
         for local_parameters in self._body_parameter_generator(parameters, forward=True):
             subprogram = self.body.create_program(local_parameters,
-                                                  volatile_parameters,
                                                   measurement_mapping,
                                                   channel_mapping)
             if subprogram:
@@ -374,7 +372,6 @@ class WhileLoopPulseTemplate(LoopPulseTemplate):
 
     def _internal_create_program(self,
                                  parameters: Dict[str, Parameter],
-                                 volatile_parameters: Set[str],
                                  measurement_mapping: Dict[str, Optional[str]],
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Loop]:
         raise NotImplementedError("create_program() does not handle conditions/triggers right now and cannot be meaningfully implemented for a WhileLoopPulseTemplate")

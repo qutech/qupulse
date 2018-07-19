@@ -105,16 +105,14 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
         body = DummyPulseTemplate(duration=2.0, program=body_program)
         t = RepetitionPulseTemplate(body, repetitions, parameter_constraints=['foo<9'])
         parameters = {'foo': 8}
-        volatile_parameters = {}
         measurement_mapping = {'my': 'thy'}
         channel_mapping = {}
         program = t.create_program(parameters=parameters,
-                                   volatile_parameters=volatile_parameters,
                                    measurement_mapping=measurement_mapping,
                                    channel_mapping=channel_mapping)
 
         self.assertEqual(repetitions, program.repetition_count)
-        self.assertEqual((parameters, volatile_parameters, measurement_mapping, channel_mapping), body.create_program_calls[-1])
+        self.assertEqual((parameters, measurement_mapping, channel_mapping), body.create_program_calls[-1])
         self.assertEqual([body_program], program.children)
 
     def test_create_program_declaration_success(self) -> None:
@@ -123,16 +121,14 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
         body = DummyPulseTemplate(duration=2.0, program=body_program)
         t = RepetitionPulseTemplate(body, repetitions, parameter_constraints=['foo<9'])
         parameters = dict(foo=ConstantParameter(3))
-        volatile_parameters = {}
         measurement_mapping = dict(moth='fire')
         channel_mapping = dict(asd='f')
         program = t.create_program(parameters=parameters,
-                                   volatile_parameters=volatile_parameters,
                                    measurement_mapping=measurement_mapping,
                                    channel_mapping=channel_mapping)
 
         self.assertEqual(parameters[repetitions].get_value(), program.repetition_count)
-        self.assertEqual((parameters, volatile_parameters, measurement_mapping, channel_mapping),
+        self.assertEqual((parameters, measurement_mapping, channel_mapping),
                          body.create_program_calls[-1])
         self.assertEqual([body_program], program.children)
 
@@ -142,12 +138,10 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
         body = DummyPulseTemplate(duration=2.0, program=body_program)
         t = RepetitionPulseTemplate(body, repetitions, parameter_constraints=['foo<9'])
         parameters = dict(foo=ConstantParameter(9))
-        volatile_parameters = {}
         measurement_mapping = dict(moth='fire')
         channel_mapping = dict(asd='f')
         with self.assertRaises(ParameterConstraintViolation):
             t.create_program(parameters=parameters,
-                             volatile_parameters=volatile_parameters,
                              measurement_mapping=measurement_mapping,
                              channel_mapping=channel_mapping)
         self.assertFalse(body.create_program_calls)
@@ -158,12 +152,10 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
         body = DummyPulseTemplate(duration=2.0, program=body_program)
         t = RepetitionPulseTemplate(body, repetitions, parameter_constraints=['foo<9'])
         parameters = {}
-        volatile_parameters = {}
         measurement_mapping = dict(moth='fire')
         channel_mapping = dict(asd='f')
         with self.assertRaises(ParameterNotProvidedException):
             t.create_program(parameters=parameters,
-                             volatile_parameters=volatile_parameters,
                              measurement_mapping=measurement_mapping,
                              channel_mapping=channel_mapping)
         self.assertFalse(body.create_program_calls)
@@ -174,12 +166,10 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
         body = DummyPulseTemplate(duration=2.0, program=body_program)
         t = RepetitionPulseTemplate(body, repetitions, parameter_constraints=['foo<9'])
         parameters = dict(foo=ConstantParameter(3.3))
-        volatile_parameters = {}
         measurement_mapping = dict(moth='fire')
         channel_mapping = dict(asd='f')
         with self.assertRaises(ParameterNotIntegerException):
             t.create_program(parameters=parameters,
-                            volatile_parameters=volatile_parameters,
                             measurement_mapping=measurement_mapping,
                             channel_mapping=channel_mapping)
         self.assertFalse(body.create_program_calls)
@@ -194,12 +184,10 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
             t = RepetitionPulseTemplate(body, repetitions)
 
         parameters = {}
-        volatile_parameters = {}
         measurement_mapping = dict(moth='fire')
         channel_mapping = dict(asd='f')
 
         program = t.create_program(parameters=parameters,
-                                   volatile_parameters=volatile_parameters,
                                    measurement_mapping=measurement_mapping,
                                    channel_mapping=channel_mapping)
         self.assertFalse(body.create_program_calls)
@@ -215,12 +203,10 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
             t = RepetitionPulseTemplate(body, repetitions)
 
         parameters = dict(foo=ConstantParameter(0))
-        volatile_parameters = {}
         measurement_mapping = dict(moth='fire')
         channel_mapping = dict(asd='f')
 
         program = t.create_program(parameters=parameters,
-                                   volatile_parameters=volatile_parameters,
                                    measurement_mapping=measurement_mapping,
                                    channel_mapping=channel_mapping)
         self.assertFalse(body.create_program_calls)
@@ -236,12 +222,10 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
             t = RepetitionPulseTemplate(body, repetitions)
 
         parameters = dict(foo=ConstantParameter(-1))
-        volatile_parameters = {}
         measurement_mapping = dict(moth='fire')
         channel_mapping = dict(asd='f')
 
         program = t.create_program(parameters=parameters,
-                                   volatile_parameters=volatile_parameters,
                                    measurement_mapping=measurement_mapping,
                                    channel_mapping=channel_mapping)
         self.assertFalse(body.create_program_calls)
@@ -253,16 +237,14 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
         body = DummyPulseTemplate(duration=2.0, program=body_program)
         t = RepetitionPulseTemplate(body, repetitions, parameter_constraints=['foo<9'])
         parameters = dict(foo=ConstantParameter(3))
-        volatile_parameters = {}
         measurement_mapping = dict(moth='fire')
         channel_mapping = dict(asd='f')
         program = t.create_program(parameters=parameters,
-                                   volatile_parameters=volatile_parameters,
                                    measurement_mapping=measurement_mapping,
                                    channel_mapping=channel_mapping)
 
         self.assertIsNone(program)
-        self.assertEqual((parameters, volatile_parameters, measurement_mapping, channel_mapping),
+        self.assertEqual((parameters, measurement_mapping, channel_mapping),
                          body.create_program_calls[-1])
 
 

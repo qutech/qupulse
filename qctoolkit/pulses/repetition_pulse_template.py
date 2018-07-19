@@ -129,7 +129,6 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
 
     def _internal_create_program(self,
                                  parameters: Dict[str, Parameter],
-                                 volatile_parameters: Set[str],
                                  measurement_mapping: Dict[str, Optional[str]],
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Loop]:
         self.validate_parameter_constraints(parameters=parameters)
@@ -141,7 +140,6 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
         repetition_count = self.get_repetition_count_value(real_parameters)
         if repetition_count > 0:
             subprogram = self.body.create_program(parameters,
-                                                  volatile_parameters,
                                                   measurement_mapping,
                                                   channel_mapping)
             if subprogram is not None:
