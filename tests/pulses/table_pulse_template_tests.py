@@ -17,11 +17,6 @@ from tests.pulses.measurement_tests import ParameterConstrainerTest, Measurement
 from tests.serialization_tests import SerializableTests
 
 
-class WaveformEntryTest(unittest.TestCase):
-    def test_interpolation_exception(self):
-        with self.assertRaises(TypeError):
-            TableWaveformEntry(1, 2, 3)
-
 class TableEntryTest(unittest.TestCase):
     def test_known_interpolation_strategies(self):
         strategies = [("linear", LinearInterpolationStrategy()),
@@ -652,97 +647,6 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
                                           'other_channel': Expression(7),
                                           'symbolic': Expression('(b-3)*a + 0.5 * (c-b)*(d+4)')})
 
-
-class TableWaveformTests(unittest.TestCase):
-
-    def test_validate_input_errors(self):
-        with self.assertRaises(ValueError):
-            TableWaveform._validate_input([TableWaveformEntry(0.0, 0.2, HoldInterpolationStrategy())])
-
-        with self.assertRaises(ValueError):
-            TableWaveform._validate_input([TableWaveformEntry(0.0, 0.2, HoldInterpolationStrategy()),
-                                           TableWaveformEntry(0.0, 0.3, HoldInterpolationStrategy())])
-
-        with self.assertRaises(ValueError):
-            TableWaveform._validate_input([TableWaveformEntry(0.1, 0.2, HoldInterpolationStrategy()),
-                                           TableWaveformEntry(0.2, 0.2, HoldInterpolationStrategy())])
-
-        with self.assertRaises(ValueError):
-            TableWaveform._validate_input([TableWaveformEntry(0.0, 0.2, HoldInterpolationStrategy()),
-                                           TableWaveformEntry(0.2, 0.2, HoldInterpolationStrategy()),
-                                           TableWaveformEntry(0.1, 0.2, HoldInterpolationStrategy())])
-
-    def test_validate_input_duplicate_removal(self):
-        validated = TableWaveform._validate_input([TableWaveformEntry(0.0, 0.2, HoldInterpolationStrategy()),
-                                                   TableWaveformEntry(0.1, 0.2, LinearInterpolationStrategy()),
-                                                   TableWaveformEntry(0.1, 0.3, JumpInterpolationStrategy()),
-                                                   TableWaveformEntry(0.1, 0.3, HoldInterpolationStrategy()),
-                                                   TableWaveformEntry(0.2, 0.3, LinearInterpolationStrategy()),
-                                                   TableWaveformEntry(0.3, 0.3, JumpInterpolationStrategy())])
-
-        self.assertEqual(validated, (TableWaveformEntry(0.0, 0.2, HoldInterpolationStrategy()),
-                                     TableWaveformEntry(0.1, 0.2, LinearInterpolationStrategy()),
-                                     TableWaveformEntry(0.1, 0.3, HoldInterpolationStrategy()),
-                                     TableWaveformEntry(0.3, 0.3, JumpInterpolationStrategy())))
-
-
-
-    def test_duration(self) -> None:
-        entries = [TableWaveformEntry(0, 0, HoldInterpolationStrategy()), TableWaveformEntry(5, 1, HoldInterpolationStrategy())]
-        waveform = TableWaveform('A', entries)
-        self.assertEqual(5, waveform.duration)
-
-    def test_duration_no_entries_exception(self) -> None:
-        with self.assertRaises(ValueError):
-            waveform = TableWaveform('A', [])
-            self.assertEqual(0, waveform.duration)
-
-    def test_few_entries(self) -> None:
-        with self.assertRaises(ValueError):
-            TableWaveform('A', [[]])
-        with self.assertRaises(ValueError):
-            TableWaveform('A', [TableWaveformEntry(0, 0, HoldInterpolationStrategy())])
-
-    def test_unsafe_get_subset_for_channels(self):
-        interp = DummyInterpolationStrategy()
-        entries = [TableWaveformEntry(0, 0, interp),
-                   TableWaveformEntry(2.1, -33.2, interp),
-                   TableWaveformEntry(5.7, 123.4, interp)]
-        waveform = TableWaveform('A', entries)
-        self.assertIs(waveform.unsafe_get_subset_for_channels({'A'}), waveform)
-
-    def test_unsafe_sample(self) -> None:
-        interp = DummyInterpolationStrategy()
-        entries = [TableWaveformEntry(0, 0, interp),
-                   TableWaveformEntry(2.1, -33.2, interp),
-                   TableWaveformEntry(5.7, 123.4, interp)]
-        waveform = TableWaveform('A', entries)
-        sample_times = numpy.linspace(.5, 5.5, num=11)
-
-        expected_interp_arguments = [((0, 0), (2.1, -33.2), [0.5, 1.0, 1.5, 2.0]),
-                                     ((2.1, -33.2), (5.7, 123.4), [2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5])]
-        expected_result = numpy.copy(sample_times)
-
-        result = waveform.unsafe_sample('A', sample_times)
-
-        self.assertEqual(expected_interp_arguments, interp.call_arguments)
-        numpy.testing.assert_equal(expected_result, result)
-
-        output_expected = numpy.empty_like(expected_result)
-        output_received = waveform.unsafe_sample('A', sample_times, output_array=output_expected)
-        self.assertIs(output_expected, output_received)
-        numpy.testing.assert_equal(expected_result, output_received)
-
-    def test_simple_properties(self):
-        interp = DummyInterpolationStrategy()
-        entries = [TableWaveformEntry(0, 0, interp),
-                   TableWaveformEntry(2.1, -33.2, interp),
-                   TableWaveformEntry(5.7, 123.4, interp)]
-        chan = 'A'
-        waveform = TableWaveform(chan, entries)
-
-        self.assertEqual(waveform.defined_channels, {chan})
-        self.assertIs(waveform.unsafe_get_subset_for_channels({'A'}), waveform)
 
 
 class TablePulseConcatenationTests(unittest.TestCase):

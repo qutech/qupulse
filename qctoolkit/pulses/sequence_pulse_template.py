@@ -15,84 +15,14 @@ from qctoolkit.pulses.parameters import Parameter, ParameterConstrainer
 from qctoolkit.pulses.sequencing import InstructionBlock, Sequencer
 from qctoolkit.pulses.conditions import Condition
 from qctoolkit.pulses.pulse_template_parameter_mapping import MappingPulseTemplate, MappingTuple
-from qctoolkit.pulses.instructions import Waveform
+from qctoolkit._program.waveforms import SequenceWaveform
 from qctoolkit.pulses.measurement import MeasurementDeclaration, MeasurementDefiner
 from qctoolkit.expressions import Expression, ExpressionScalar
 
 __all__ = ["SequencePulseTemplate"]
 
 
-class SequenceWaveform(Waveform):
-    """This class allows putting multiple PulseTemplate together in one waveform on the hardware."""
-    def __init__(self, subwaveforms: List[Waveform]):
-        """
 
-        :param subwaveforms: All waveforms must have the same defined channels
-        """
-        if not subwaveforms:
-            raise ValueError(
-                "SequenceWaveform cannot be constructed without channel waveforms."
-            )
-
-        def flattened_sub_waveforms():
-            for sub_waveform in subwaveforms:
-                if isinstance(sub_waveform, SequenceWaveform):
-                    yield from sub_waveform._sequenced_waveforms
-                else:
-                    yield sub_waveform
-
-        self._sequenced_waveforms = tuple(flattened_sub_waveforms())
-        self._duration = sum(waveform.duration for waveform in self._sequenced_waveforms)
-        if not all(waveform.defined_channels == self.defined_channels for waveform in self._sequenced_waveforms[1:]):
-            raise ValueError(
-                "SequenceWaveform cannot be constructed from waveforms of different"
-                "defined channels."
-            )
-
-    @property
-    def defined_channels(self) -> Set[ChannelID]:
-        return self._sequenced_waveforms[0].defined_channels
-
-    def unsafe_sample(self,
-                      channel: ChannelID,
-                      sample_times: np.ndarray,
-                      output_array: Union[np.ndarray, None]=None) -> np.ndarray:
-        if output_array is None:
-            output_array = np.empty_like(sample_times)
-        time = 0
-        for subwaveform in self._sequenced_waveforms:
-            # before you change anything here, make sure to understand the difference between basic and advanced
-            # indexing in numpy and their copy/reference behaviour
-            end = time + subwaveform.duration
-
-            indices = slice(*np.searchsorted(sample_times, (float(time), float(end)), 'left'))
-            subwaveform.unsafe_sample(channel=channel,
-                                      sample_times=sample_times[indices]-time,
-                                      output_array=output_array[indices])
-            time = end
-        return output_array
-
-    @property
-    def compare_key(self) -> Tuple[Waveform]:
-        return self._sequenced_waveforms
-
-    @property
-    def duration(self) -> TimeType:
-        return self._duration
-
-    def get_measurement_windows(self) -> Iterable[MeasurementWindow]:
-        def updated_measurement_window_generator(sequenced_waveforms):
-            offset = 0
-            for sub_waveform in sequenced_waveforms:
-                for (name, begin, length) in sub_waveform.get_measurement_windows():
-                    yield (name, begin+offset, length)
-                offset += sub_waveform.duration
-        return updated_measurement_window_generator(self._sequenced_waveforms)
-
-    def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> 'Waveform':
-        return SequenceWaveform(
-            sub_waveform.unsafe_get_subset_for_channels(channels & sub_waveform.defined_channels)
-            for sub_waveform in self._sequenced_waveforms if sub_waveform.defined_channels & channels)
 
 
 class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefiner):

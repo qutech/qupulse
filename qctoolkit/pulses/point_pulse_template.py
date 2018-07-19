@@ -8,11 +8,11 @@ import numpy as np
 from qctoolkit.utils.types import ChannelID
 from qctoolkit.expressions import Expression, ExpressionScalar
 from qctoolkit.pulses.conditions import Condition
-from qctoolkit.pulses.instructions import Waveform
+from qctoolkit._program.waveforms import TableWaveform, TableWaveformEntry
 from qctoolkit.pulses.parameters import Parameter, ParameterNotProvidedException, ParameterConstraint,\
     ParameterConstrainer
 from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration
-from qctoolkit.pulses.table_pulse_template import TableEntry, EntryInInit, TableWaveform, TableWaveformEntry
+from qctoolkit.pulses.table_pulse_template import TableEntry, EntryInInit
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 from qctoolkit.serialization import Serializer, PulseRegistryType
 
@@ -63,7 +63,7 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
 
     def build_waveform(self,
                        parameters: Dict[str, Real],
-                       channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Waveform]:
+                       channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[TableWaveform]:
         self.validate_parameter_constraints(parameters)
 
         if all(channel_mapping[channel] is None

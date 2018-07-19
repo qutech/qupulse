@@ -5,7 +5,7 @@ from typing import Optional, Dict, Set, Any
 from qctoolkit.utils.types import ChannelID
 from qctoolkit.expressions import Expression, ExpressionScalar
 from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, PulseTemplate
-from qctoolkit.pulses.instructions import Waveform, EXECInstruction, MEASInstruction
+from qctoolkit._program.instructions import Waveform, EXECInstruction, MEASInstruction
 from qctoolkit.pulses.parameters import Parameter
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 
