@@ -19,7 +19,7 @@ from qctoolkit.serialization import Serializer, PulseRegistryType
 from qctoolkit.utils.types import ChannelID, TimeType
 from qctoolkit._program.waveforms import MultiChannelWaveform
 from qctoolkit.pulses.pulse_template import PulseTemplate, AtomicPulseTemplate
-from qctoolkit.pulses.pulse_template_parameter_mapping import MappingPulseTemplate, MappingTuple
+from qctoolkit.pulses.mapping_pulse_template import MappingPulseTemplate, MappingTuple
 from qctoolkit.pulses.parameters import Parameter, ParameterConstrainer
 from qctoolkit.pulses.measurement import MeasurementDeclaration
 from qctoolkit.expressions import Expression, ExpressionScalar

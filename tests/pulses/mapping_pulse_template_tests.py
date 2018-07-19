@@ -1,7 +1,7 @@
 import unittest
 import itertools
 
-from qctoolkit.pulses.pulse_template_parameter_mapping import MissingMappingException,\
+from qctoolkit.pulses.mapping_pulse_template import MissingMappingException,\
     UnnecessaryMappingException, MappingPulseTemplate,\
     AmbiguousMappingException, MappingCollisionException
 from qctoolkit.pulses.parameters import ParameterNotProvidedException
