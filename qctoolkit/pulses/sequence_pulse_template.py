@@ -163,7 +163,10 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
             if subprogram:
                 subprograms.append(subprogram)
 
-        return Loop(children=subprograms, measurements=measurements)
+        if subprograms or measurements:
+            return Loop(children=subprograms, measurements=measurements)
+        else:
+            return None
 
     def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
         data = super().get_serialization_data(serializer)

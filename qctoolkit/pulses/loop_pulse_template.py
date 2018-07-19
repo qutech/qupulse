@@ -246,7 +246,10 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
             if subprogram:
                 subprograms.append(subprogram)
 
-        return Loop(children=subprograms, measurements=measurements)
+        if subprograms or measurements:
+            return Loop(children=subprograms, measurements=measurements)
+        else:
+            return None
 
     def build_waveform(self, parameters: Dict[str, Parameter]) -> ForLoopWaveform:
         return ForLoopWaveform([self.body.build_waveform(local_parameters)
