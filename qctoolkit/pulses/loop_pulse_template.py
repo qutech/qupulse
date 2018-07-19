@@ -230,24 +230,23 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
 
     def _internal_create_program(self,
                                  parameters: Dict[str, Parameter],
-                                 volatile_parameters: Set[str],
                                  measurement_mapping: Dict[str, Optional[str]],
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Loop]:
         self.validate_parameter_constraints(parameters=parameters)
 
-        measurements = self.get_measurement_windows(parameters, measurement_mapping)
-        program = Loop(measurements=measurements)
+        measurement_parameters = {parameter_name: parameters[parameter_name].get_value()
+                                  for parameter_name in self.measurement_parameters}
+        measurements = self.get_measurement_windows(measurement_parameters, measurement_mapping)
 
+        subprograms = []
         for local_parameters in self._body_parameter_generator(parameters, forward=True):
             subprogram = self.body.create_program(local_parameters,
-                                                  volatile_parameters,
                                                   measurement_mapping,
                                                   channel_mapping)
             if subprogram:
-                program.append_child(subprogram)
-        if not program.children:
-            return None
-        return program
+                subprograms.append(subprogram)
+
+        return Loop(children=subprograms, measurements=measurements)
 
     def build_waveform(self, parameters: Dict[str, Parameter]) -> ForLoopWaveform:
         return ForLoopWaveform([self.body.build_waveform(local_parameters)
@@ -374,10 +373,10 @@ class WhileLoopPulseTemplate(LoopPulseTemplate):
 
     def _internal_create_program(self,
                                  parameters: Dict[str, Parameter],
-                                 volatile_parameters: Set[str],
                                  measurement_mapping: Dict[str, Optional[str]],
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Loop]:
-        raise NotImplementedError("create_program() does not handle conditions/triggers right now and cannot be meaningfully implemented for a WhileLoopPulseTemplate")
+        raise NotImplementedError("create_program() does not handle conditions/triggers right now and cannot "
+                                  "be meaningfully implemented for a WhileLoopPulseTemplate")
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],

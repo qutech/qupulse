@@ -147,23 +147,23 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
 
     def _internal_create_program(self,
                                  parameters: Dict[str, Parameter],
-                                 volatile_parameters: Set[str],
                                  measurement_mapping: Dict[str, Optional[str]],
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Loop]:
         self.validate_parameter_constraints(parameters=parameters)
-        measurements = self.get_measurement_windows(parameters, measurement_mapping)
-        program = Loop(measurements=measurements)
 
+        measurement_parameters = {parameter_name: parameters[parameter_name].get_value()
+                                  for parameter_name in self.measurement_parameters}
+        measurements = self.get_measurement_windows(measurement_parameters, measurement_mapping)
+
+        subprograms = []
         for subtemplate in self.subtemplates:
             subprogram = subtemplate.create_program(parameters,
-                                                    volatile_parameters,
                                                     measurement_mapping,
                                                     channel_mapping)
             if subprogram:
-                program.append_child(subprogram)
-        if not program.children:
-            return None
-        return program
+                subprograms.append(subprogram)
+
+        return Loop(children=subprograms, measurements=measurements)
 
     def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
         data = super().get_serialization_data(serializer)
