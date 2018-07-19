@@ -10,7 +10,7 @@ Classes:
 """
 
 from abc import ABCMeta, abstractmethod
-from typing import Dict, Any, Optional, NamedTuple, Union, Set
+from typing import Dict, Any, Optional, NamedTuple, Union, Mapping, MutableMapping, Set
 import os
 import zipfile
 import tempfile
@@ -24,7 +24,7 @@ from qctoolkit.utils.types import DocStringABCMeta
 
 __all__ = ["StorageBackend", "FilesystemBackend", "ZipFileBackend", "CachingBackend", "Serializable", "Serializer",
            "AnonymousSerializable", "DictBackend", "JSONSerializableEncoder", "JSONSerializableDecoder", "PulseStorage",
-           "convert_pulses_in_storage", "convert_stored_pulse_in_storage"]
+           "convert_pulses_in_storage", "convert_stored_pulse_in_storage", "PulseRegistryType"]
 
 
 class StorageBackend(metaclass=ABCMeta):
@@ -326,17 +326,6 @@ class DictBackend(StorageBackend):
         return set(self._cache.keys())
 
 
-def get_type_identifier(obj: Any) -> str:
-    """Return a unique type identifier for any object.
-
-    Args:
-        obj: The object for which to obtain a type identifier.
-    Returns:
-        The type identifier as a string.
-    """
-    return "{}.{}".format(obj.__module__, obj.__class__.__name__)
-
-
 class SerializableMeta(DocStringABCMeta):
     deserialization_callbacks = dict()
 
@@ -354,11 +343,25 @@ class SerializableMeta(DocStringABCMeta):
         return cls
 
 
-default_pulse_registry = weakref.WeakValueDictionary()
+PulseRegistryType = Optional[MutableMapping[str, 'Serializable']]
+default_pulse_registry = None # type: PulseRegistryType
 
 
-def get_default_pulse_registry() -> Union[weakref.WeakKeyDictionary, 'PulseStorage']:
+def get_default_pulse_registry() -> PulseRegistryType:
     return default_pulse_registry
+
+
+def set_default_pulse_registry(new_default_registry: PulseRegistryType) -> None:
+    global default_pulse_registry
+    default_pulse_registry = new_default_registry
+
+
+def new_default_pulse_registry() -> None:
+    """Sets a new empty default pulse registry.
+
+    The new registry is a newly created weakref.WeakValueDictionry().
+    """
+    set_default_pulse_registry(weakref.WeakValueDictionary())
 
 
 class Serializable(metaclass=SerializableMeta):
@@ -381,36 +384,44 @@ class Serializable(metaclass=SerializableMeta):
     type_identifier_name = '#type'
     identifier_name = '#identifier'
 
-    def __init__(self, identifier: Optional[str]=None, registry: Optional[dict]=None) -> None:
+    def __init__(self, identifier: Optional[str]=None) -> None:
         """Initialize a Serializable.
 
         Args:
             identifier: An optional, non-empty identifier for this Serializable.
                 If set, this Serializable will always be stored as a separate data item and never
                 be embedded.
-            registry: An optional dict where the Serializable is registered. If None, it gets registered in the
-                default_pulse_registry.
         Raises:
             ValueError: If identifier is the empty string
         """
         super().__init__()
 
-        if registry is None:
-            registry = default_pulse_registry
-
         if identifier == '':
             raise ValueError("Identifier must not be empty.")
         self.__identifier = identifier
 
-        if identifier and registry is not None:
-            if identifier in registry:
+    def _register(self, registry: PulseRegistryType=None) -> None:
+        """Registers the Serializable in the global registry.
+
+        This method MUST be called by subclasses at some point during init.
+        Args:
+            registry: An optional dict where the Serializable is registered. If None, it gets registered in the
+                default_pulse_registry.
+        Raises:
+            RuntimeError: If a Serializable with the same name is already registered.
+        """
+        if registry is None:
+            registry = default_pulse_registry
+
+        if self.identifier and registry is not None:
+            if self.identifier in registry and isinstance(registry, weakref.WeakValueDictionary):
                 # trigger garbage collection in case the registered object isn't referenced anymore
                 gc.collect(2)
 
-                if identifier in registry:
-                    raise RuntimeError('Pulse with name already exists', identifier)
+            if self.identifier in registry:
+                raise RuntimeError('Pulse with name already exists', self.identifier)
 
-            registry[identifier] = self
+            registry[self.identifier] = self
 
     @property
     def identifier(self) -> Optional[str]:
@@ -482,6 +493,13 @@ class Serializable(metaclass=SerializableMeta):
             warnings.warn("{c}.deserialize(*) was called with a serializer argument, indicating deprecated behavior. Please switch to the new serialization routines.".format(c=cls.__name__), DeprecationWarning)
 
         return cls(**kwargs)
+
+    def renamed(self, new_identifier: str, registry: PulseRegistryType=None) -> 'Serializable':
+        """Returns a copy of the Serializable with its identifier set to new_identifier."""
+        data = self.get_serialization_data()
+        data.pop(Serializable.type_identifier_name)
+        data.pop(Serializable.identifier_name)
+        return self.deserialize(registry=registry, identifier=new_identifier, **data)
 
 
 class AnonymousSerializable:
@@ -667,7 +685,7 @@ class Serializer(object):
         return serializable
 
 
-class PulseStorage:
+class PulseStorage(MutableMapping[str, Serializable]):
     StorageEntry = NamedTuple('StorageEntry', [('serialization', str), ('serializable', Serializable)])
 
     def __init__(self,
@@ -686,7 +704,7 @@ class PulseStorage:
         serialization = self._storage_backend[identifier]
         serializable = self._deserialize(serialization)
         self._temporary_storage[identifier] = PulseStorage.StorageEntry(serialization=serialization,
-                                                                         serializable=serializable)
+                                                                        serializable=serializable)
         return self._temporary_storage[identifier]
 
     @property
@@ -702,6 +720,14 @@ class PulseStorage:
         return self._temporary_storage[identifier].serializable
 
     def __setitem__(self, identifier: str, serializable: Serializable) -> None:
+        if identifier != serializable.identifier: # address issue #272: https://github.com/qutech/qc-toolkit/issues/272
+            raise ValueError("Storing a Serializable under a different than its own internal identifier is currently"
+                             " not supported! If you want to rename the serializable, please use the "
+                             "Serializable.renamed() method to obtain a renamed copy which can then be stored with "
+                             "the new identifier.\n"
+                             "If you think that storing under a different identifier without explicit renaming should"
+                             "a supported feature, please contribute to our ongoing discussion about this on:\n"
+                             "https://github.com/qutech/qc-toolkit/issues/272")
         if identifier in self._temporary_storage:
             if self.temporary_storage[identifier].serializable is serializable:
                 return
@@ -722,6 +748,16 @@ class PulseStorage:
             del self._temporary_storage[identifier]
         except KeyError:
             pass
+
+    def __len__(self) -> None:
+        raise NotImplementedError("len(PulseStorage) has currently no meaningful semantics and is not implemented."
+                                  " If you require this feature, please create a feature request at \n"
+                                  "https://github.com/qutech/qc-toolkit/issues/new")
+
+    def __iter__(self) -> None:
+        raise NotImplementedError("iter(PulseStorage) has currently no meaningful semantics and is not implemented."
+                                  " If you require this feature, please create a feature request at \n"
+                                  "https://github.com/qutech/qc-toolkit/issues/new")
 
     def overwrite(self, identifier: str, serializable: Serializable) -> None:
         """Use this method actively change a pulse"""
@@ -766,7 +802,7 @@ class PulseStorage:
 
 class JSONSerializableDecoder(json.JSONDecoder):
 
-    def __init__(self, storage, *args, **kwargs) -> None:
+    def __init__(self, storage: Mapping, *args, **kwargs) -> None:
         super().__init__(*args, object_hook=self.filter_serializables, **kwargs)
 
         self.storage = storage
@@ -787,14 +823,23 @@ class JSONSerializableDecoder(json.JSONDecoder):
 
             else:
                 deserialization_callback = SerializableMeta.deserialization_callbacks[type_identifier]
-                return deserialization_callback(identifier=obj_identifier, **obj_dict)
+
+                # if the storage is the default registry, we would get conflicts when the Serializable tries to register
+                # itself on construction. Pass an empty dict as registry keyword argument in this case.
+                # calling PulseStorage objects will take care of registering.
+                # (solution to issue #301: https://github.com/qutech/qc-toolkit/issues/301 )
+                registry = None
+                if get_default_pulse_registry() is self.storage:
+                    registry = dict()
+
+                return deserialization_callback(identifier=obj_identifier, registry=registry, **obj_dict)
         return obj_dict
 
 
 class JSONSerializableEncoder(json.JSONEncoder):
     """"""
 
-    def __init__(self, storage, *args, **kwargs) -> None:
+    def __init__(self, storage: MutableMapping, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
         self.storage = storage

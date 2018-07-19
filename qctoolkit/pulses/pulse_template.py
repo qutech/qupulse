@@ -18,7 +18,7 @@ from qctoolkit.expressions import ExpressionScalar
 from qctoolkit.pulses.conditions import Condition
 from qctoolkit.pulses.parameters import Parameter
 from qctoolkit.pulses.sequencing import Sequencer, SequencingElement, InstructionBlock
-from qctoolkit.pulses.instructions import Waveform
+from qctoolkit._program.waveforms import Waveform
 from qctoolkit.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
 
 __all__ = ["PulseTemplate", "AtomicPulseTemplate", "DoubleParameterNameException", "MappingTuple"]
@@ -42,10 +42,8 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
     """
 
     def __init__(self, *,
-                 identifier: Optional[str],
-                 registry: Optional[Dict[str, Serializable]]) -> None:
-        super().__init__(identifier=identifier,
-                         registry=registry)
+                 identifier: Optional[str]) -> None:
+        super().__init__(identifier=identifier)
 
     @property
     @abstractmethod
@@ -109,9 +107,8 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
     """
     def __init__(self, *,
                  identifier: Optional[str],
-                 measurements: Optional[List[MeasurementDeclaration]],
-                 registry: Optional[Dict[str, Serializable]]):
-        PulseTemplate.__init__(self, identifier=identifier, registry=registry)
+                 measurements: Optional[List[MeasurementDeclaration]]):
+        PulseTemplate.__init__(self, identifier=identifier)
         MeasurementDefiner.__init__(self, measurements=measurements)
 
     def is_interruptable(self) -> bool:

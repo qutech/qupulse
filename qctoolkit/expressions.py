@@ -7,13 +7,14 @@ from numbers import Number
 import warnings
 import functools
 import array
+import itertools
 
 import sympy
 import numpy
 
 from qctoolkit.serialization import AnonymousSerializable
 from qctoolkit.utils.sympy import sympify, to_numpy, recursive_substitution, evaluate_lambdified,\
-    get_most_simple_representation
+    get_most_simple_representation, get_variables
 
 __all__ = ["Expression", "ExpressionVariableMissingException", "ExpressionScalar", "ExpressionVector"]
 
@@ -125,9 +126,7 @@ class ExpressionVector(Expression):
         if isinstance(expression_vector, sympy.NDimArray):
             expression_vector = to_numpy(expression_vector)
         self._expression_vector = self.sympify_vector(expression_vector)
-        variables = {str(x)
-                     for expr in self._expression_vector.ravel()
-                     for x in expr.free_symbols}
+        variables = set(itertools.chain.from_iterable(map(get_variables, self._expression_vector.flat)))
         self._variables = tuple(variables)
 
     @property
@@ -220,7 +219,7 @@ class ExpressionScalar(Expression):
             self._original_expression = ex
             self._sympified_expression = sympify(ex)
 
-        self._variables = tuple(str(var) for var in self._sympified_expression.free_symbols)
+        self._variables = get_variables(self._sympified_expression)
 
     @property
     def underlying_expression(self) -> sympy.Expr:

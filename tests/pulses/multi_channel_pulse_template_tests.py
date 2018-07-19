@@ -14,118 +14,6 @@ from tests.pulses.pulse_template_tests import PulseTemplateStub
 from tests.serialization_tests import SerializableTests
 
 
-class MultiChannelWaveformTest(unittest.TestCase):
-    def test_init_no_args(self) -> None:
-        with self.assertRaises(ValueError):
-            MultiChannelWaveform(dict())
-        with self.assertRaises(ValueError):
-            MultiChannelWaveform(None)
-
-    def test_get_item(self):
-        dwf_a = DummyWaveform(duration=2.2, defined_channels={'A'})
-        dwf_b = DummyWaveform(duration=2.2, defined_channels={'B'})
-        dwf_c = DummyWaveform(duration=2.2, defined_channels={'C'})
-
-        wf = MultiChannelWaveform([dwf_a, dwf_b, dwf_c])
-
-        self.assertIs(wf['A'], dwf_a)
-        self.assertIs(wf['B'], dwf_b)
-        self.assertIs(wf['C'], dwf_c)
-
-        with self.assertRaises(KeyError):
-            wf['D']
-
-    def test_init_single_channel(self) -> None:
-        dwf = DummyWaveform(duration=1.3, defined_channels={'A'})
-
-        waveform = MultiChannelWaveform([dwf])
-        self.assertEqual({'A'}, waveform.defined_channels)
-        self.assertEqual(time_from_float(1.3), waveform.duration)
-
-    def test_init_several_channels(self) -> None:
-        dwf_a = DummyWaveform(duration=2.2, defined_channels={'A'})
-        dwf_b = DummyWaveform(duration=2.2, defined_channels={'B'})
-        dwf_c = DummyWaveform(duration=2.3, defined_channels={'C'})
-
-        waveform = MultiChannelWaveform([dwf_a, dwf_b])
-        self.assertEqual({'A', 'B'}, waveform.defined_channels)
-        self.assertEqual(time_from_float(2.2), waveform.duration)
-
-        with self.assertRaises(ValueError):
-            MultiChannelWaveform([dwf_a, dwf_c])
-        with self.assertRaises(ValueError):
-            MultiChannelWaveform([waveform, dwf_c])
-        with self.assertRaises(ValueError):
-            MultiChannelWaveform((dwf_a, dwf_a))
-
-        dwf_c_valid = DummyWaveform(duration=2.2, defined_channels={'C'})
-        waveform_flat = MultiChannelWaveform((waveform, dwf_c_valid))
-        self.assertEqual(len(waveform_flat.compare_key), 3)
-
-    def test_unsafe_sample(self) -> None:
-        sample_times = numpy.linspace(98.5, 103.5, num=11)
-        samples_a = numpy.linspace(4, 5, 11)
-        samples_b = numpy.linspace(2, 3, 11)
-        dwf_a = DummyWaveform(duration=3.2, sample_output=samples_a, defined_channels={'A'})
-        dwf_b = DummyWaveform(duration=3.2, sample_output=samples_b, defined_channels={'B', 'C'})
-        waveform = MultiChannelWaveform((dwf_a, dwf_b))
-
-        result_a = waveform.unsafe_sample('A', sample_times)
-        numpy.testing.assert_equal(result_a, samples_a)
-
-        result_b = waveform.unsafe_sample('B', sample_times)
-        numpy.testing.assert_equal(result_b, samples_b)
-
-        self.assertEqual(len(dwf_a.sample_calls), 1)
-        self.assertEqual(len(dwf_b.sample_calls), 1)
-
-        numpy.testing.assert_equal(sample_times, dwf_a.sample_calls[0][1])
-        numpy.testing.assert_equal(sample_times, dwf_b.sample_calls[0][1])
-
-        self.assertEqual('A', dwf_a.sample_calls[0][0])
-        self.assertEqual('B', dwf_b.sample_calls[0][0])
-
-        self.assertIs(dwf_a.sample_calls[0][2], None)
-        self.assertIs(dwf_b.sample_calls[0][2], None)
-
-        reuse_output = numpy.empty_like(samples_a)
-        result_a = waveform.unsafe_sample('A', sample_times, reuse_output)
-        self.assertEqual(len(dwf_a.sample_calls), 2)
-        self.assertIs(result_a, reuse_output)
-        self.assertIs(result_a, dwf_a.sample_calls[1][2])
-        numpy.testing.assert_equal(result_b, samples_b)
-
-    def test_equality(self) -> None:
-        dwf_a = DummyWaveform(duration=246.2, defined_channels={'A'})
-        dwf_b = DummyWaveform(duration=246.2, defined_channels={'B'})
-        dwf_c = DummyWaveform(duration=246.2, defined_channels={'C'})
-        waveform_a1 = MultiChannelWaveform([dwf_a, dwf_b])
-        waveform_a2 = MultiChannelWaveform([dwf_a, dwf_b])
-        waveform_a3 = MultiChannelWaveform([dwf_a, dwf_c])
-        self.assertEqual(waveform_a1, waveform_a1)
-        self.assertEqual(waveform_a1, waveform_a2)
-        self.assertNotEqual(waveform_a1, waveform_a3)
-
-    def test_unsafe_get_subset_for_channels(self):
-        dwf_a = DummyWaveform(duration=246.2, defined_channels={'A'})
-        dwf_b = DummyWaveform(duration=246.2, defined_channels={'B'})
-        dwf_c = DummyWaveform(duration=246.2, defined_channels={'C'})
-
-        mcwf = MultiChannelWaveform((dwf_a, dwf_b, dwf_c))
-        with self.assertRaises(KeyError):
-            mcwf.unsafe_get_subset_for_channels({'D'})
-        with self.assertRaises(KeyError):
-            mcwf.unsafe_get_subset_for_channels({'A', 'D'})
-
-        self.assertIs(mcwf.unsafe_get_subset_for_channels({'A'}), dwf_a)
-        self.assertIs(mcwf.unsafe_get_subset_for_channels({'B'}), dwf_b)
-        self.assertIs(mcwf.unsafe_get_subset_for_channels({'C'}), dwf_c)
-
-        sub_ab = mcwf.unsafe_get_subset_for_channels({'A', 'B'})
-        self.assertEqual(sub_ab.defined_channels, {'A', 'B'})
-        self.assertIsInstance(sub_ab, MultiChannelWaveform)
-        self.assertIs(sub_ab.unsafe_get_subset_for_channels({'A'}), dwf_a)
-        self.assertIs(sub_ab.unsafe_get_subset_for_channels({'B'}), dwf_b)
 
 
 class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
@@ -327,7 +215,7 @@ class AtomicMultiChannelPulseTemplateSerializationTests(SerializableTests, unitt
         del kwargs['subtemplates']
         return self.class_to_test(identifier=identifier, *subtemplates, **kwargs, registry=registry)
 
-    def assert_equal_instance(self, lhs: AtomicMultiChannelPulseTemplate, rhs: AtomicMultiChannelPulseTemplate):
+    def assert_equal_instance_except_id(self, lhs: AtomicMultiChannelPulseTemplate, rhs: AtomicMultiChannelPulseTemplate):
         self.assertIsInstance(lhs, AtomicMultiChannelPulseTemplate)
         self.assertIsInstance(rhs, AtomicMultiChannelPulseTemplate)
         self.assertEqual(lhs.subtemplates, rhs.subtemplates)

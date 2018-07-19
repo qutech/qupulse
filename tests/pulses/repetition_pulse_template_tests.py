@@ -7,7 +7,7 @@ from qctoolkit.expressions import Expression
 from qctoolkit.pulses.repetition_pulse_template import RepetitionPulseTemplate,ParameterNotIntegerException, RepetitionWaveform
 from qctoolkit.pulses.parameters import ParameterNotProvidedException, ParameterConstraintViolation, ConstantParameter, \
     ParameterConstraint
-from qctoolkit.pulses.instructions import REPJInstruction, InstructionPointer
+from qctoolkit._program.instructions import REPJInstruction, InstructionPointer
 from qctoolkit.utils.types import time_from_float
 
 from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummySequencer, DummyInstructionBlock, DummyParameter,\
@@ -16,62 +16,7 @@ from tests.serialization_dummies import DummySerializer
 from tests.serialization_tests import SerializableTests
 
 
-class RepetitionWaveformTest(unittest.TestCase):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
 
-    def test_init(self):
-        body_wf = DummyWaveform()
-
-        with self.assertRaises(ValueError):
-            RepetitionWaveform(body_wf, -1)
-
-        with self.assertRaises(ValueError):
-            RepetitionWaveform(body_wf, 1.1)
-
-        wf = RepetitionWaveform(body_wf, 3)
-        self.assertIs(wf._body, body_wf)
-        self.assertEqual(wf._repetition_count, 3)
-
-    def test_duration(self):
-        wf = RepetitionWaveform(DummyWaveform(duration=2.2), 3)
-        self.assertEqual(wf.duration, time_from_float(2.2)*3)
-
-    def test_defined_channels(self):
-        body_wf = DummyWaveform(defined_channels={'a'})
-        self.assertIs(RepetitionWaveform(body_wf, 2).defined_channels, body_wf.defined_channels)
-
-    def test_compare_key(self):
-        body_wf = DummyWaveform(defined_channels={'a'})
-        wf = RepetitionWaveform(body_wf, 2)
-        self.assertEqual(wf.compare_key, (body_wf.compare_key, 2))
-
-    def test_unsafe_get_subset_for_channels(self):
-        body_wf = DummyWaveform(defined_channels={'a', 'b'})
-
-        chs = {'a'}
-
-        subset = RepetitionWaveform(body_wf, 3).get_subset_for_channels(chs)
-        self.assertIsInstance(subset, RepetitionWaveform)
-        self.assertIsInstance(subset._body, DummyWaveform)
-        self.assertIs(subset._body.defined_channels, chs)
-        self.assertEqual(subset._repetition_count, 3)
-
-    def test_unsafe_sample(self):
-        body_wf = DummyWaveform(duration=7)
-
-        rwf = RepetitionWaveform(body=body_wf, repetition_count=10)
-
-        sample_times = np.arange(80) * 70./80.
-        inner_sample_times = (sample_times.reshape((10, -1)) - (7 * np.arange(10))[:, np.newaxis]).ravel()
-
-        result = rwf.unsafe_sample(channel='A', sample_times=sample_times)
-        np.testing.assert_equal(result, inner_sample_times)
-
-        output_expected = np.empty_like(sample_times)
-        output_received = rwf.unsafe_sample(channel='A', sample_times=sample_times, output_array=output_expected)
-        self.assertIs(output_expected, output_received)
-        np.testing.assert_equal(output_received, inner_sample_times)
 
 
 class RepetitionPulseTemplateTest(unittest.TestCase):
@@ -298,7 +243,7 @@ class RepetitionPulseTemplateSerializationTests(SerializableTests, unittest.Test
             'measurements': [('m', 0, 1)]
         }
 
-    def assert_equal_instance(self, lhs: RepetitionPulseTemplate, rhs: RepetitionPulseTemplate):
+    def assert_equal_instance_except_id(self, lhs: RepetitionPulseTemplate, rhs: RepetitionPulseTemplate):
         self.assertIsInstance(lhs, RepetitionPulseTemplate)
         self.assertIsInstance(rhs, RepetitionPulseTemplate)
         self.assertEqual(lhs.body, rhs.body)

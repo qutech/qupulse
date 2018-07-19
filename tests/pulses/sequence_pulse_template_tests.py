@@ -8,69 +8,13 @@ from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
 from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate, SequenceWaveform
 from qctoolkit.pulses.pulse_template_parameter_mapping import MappingPulseTemplate
 from qctoolkit.pulses.parameters import ConstantParameter, ParameterConstraint, ParameterConstraintViolation
-from qctoolkit.pulses.instructions import MEASInstruction
+from qctoolkit._program.instructions import MEASInstruction
 
 from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyPulseTemplate,\
     DummyNoValueParameter, DummyWaveform
 from tests.serialization_dummies import DummySerializer
 from tests.serialization_tests import SerializableTests
 
-
-class SequenceWaveformTest(unittest.TestCase):
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
-
-    def test_init(self):
-        dwf_ab = DummyWaveform(duration=1.1, defined_channels={'A', 'B'})
-        dwf_abc = DummyWaveform(duration=2.2, defined_channels={'A', 'B', 'C'})
-
-        with self.assertRaises(ValueError):
-            SequenceWaveform([])
-
-        with self.assertRaises(ValueError):
-            SequenceWaveform((dwf_ab, dwf_abc))
-
-        swf1 = SequenceWaveform((dwf_ab, dwf_ab))
-        self.assertEqual(swf1.duration, 2*dwf_ab.duration)
-        self.assertEqual(len(swf1.compare_key), 2)
-
-        swf2 = SequenceWaveform((swf1, dwf_ab))
-        self.assertEqual(swf2.duration, 3 * dwf_ab.duration)
-
-        self.assertEqual(len(swf2.compare_key), 3)
-
-    def test_unsafe_sample(self):
-        dwfs = (DummyWaveform(duration=1.),
-                DummyWaveform(duration=3.),
-                DummyWaveform(duration=2.))
-
-        swf = SequenceWaveform(dwfs)
-
-        sample_times = np.arange(0, 60)*0.1
-        expected_output = np.concatenate((sample_times[:10], sample_times[10:40]-1, sample_times[40:]-4))
-
-        output = swf.unsafe_sample('A', sample_times=sample_times)
-        np.testing.assert_equal(expected_output, output)
-
-        output_2 = swf.unsafe_sample('A', sample_times=sample_times, output_array=output)
-        self.assertIs(output_2, output)
-
-    def test_unsafe_get_subset_for_channels(self):
-        dwf_1 = DummyWaveform(duration=2.2, defined_channels={'A', 'B', 'C'})
-        dwf_2 = DummyWaveform(duration=3.3, defined_channels={'A', 'B', 'C'})
-
-        wf = SequenceWaveform([dwf_1, dwf_2])
-
-        subset = {'A', 'C'}
-        sub_wf = wf.unsafe_get_subset_for_channels(subset)
-        self.assertIsInstance(sub_wf, SequenceWaveform)
-
-        self.assertEqual(len(sub_wf.compare_key), 2)
-        self.assertEqual(sub_wf.compare_key[0].defined_channels, subset)
-        self.assertEqual(sub_wf.compare_key[1].defined_channels, subset)
-
-        self.assertEqual(sub_wf.compare_key[0].duration, time_from_float(2.2))
-        self.assertEqual(sub_wf.compare_key[1].duration, time_from_float(3.3))
 
 
 class SequencePulseTemplateTest(unittest.TestCase):
@@ -192,7 +136,7 @@ class SequencePulseTemplateSerializationTests(SerializableTests, unittest.TestCa
         del kwargs['subtemplates']
         return self.class_to_test(identifier=identifier, *subtemplates, **kwargs, registry=registry)
 
-    def assert_equal_instance(self, lhs: SequencePulseTemplate, rhs: SequencePulseTemplate):
+    def assert_equal_instance_except_id(self, lhs: SequencePulseTemplate, rhs: SequencePulseTemplate):
         self.assertIsInstance(lhs, SequencePulseTemplate)
         self.assertIsInstance(rhs, SequencePulseTemplate)
         self.assertEqual(lhs.subtemplates, rhs.subtemplates)

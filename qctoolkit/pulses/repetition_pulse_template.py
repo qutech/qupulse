@@ -7,63 +7,22 @@ from warnings import warn
 
 import numpy as np
 
-from qctoolkit.serialization import Serializer
+from qctoolkit.serialization import Serializer, PulseRegistryType
 
-from qctoolkit.utils.types import ChannelID, TimeType
+from qctoolkit.utils.types import ChannelID
 from qctoolkit.expressions import ExpressionScalar
 from qctoolkit.utils import checked_int_cast
 from qctoolkit.pulses.pulse_template import PulseTemplate
 from qctoolkit.pulses.loop_pulse_template import LoopPulseTemplate
 from qctoolkit.pulses.sequencing import Sequencer
-from qctoolkit.pulses.instructions import InstructionBlock, InstructionPointer, Waveform
+from qctoolkit._program.instructions import InstructionBlock, InstructionPointer
+from qctoolkit._program.waveforms import RepetitionWaveform
 from qctoolkit.pulses.parameters import Parameter, ParameterConstrainer, ParameterNotProvidedException
 from qctoolkit.pulses.conditions import Condition
 from qctoolkit.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
 
 
 __all__ = ["RepetitionPulseTemplate", "ParameterNotIntegerException"]
-
-
-class RepetitionWaveform(Waveform):
-    """This class allows putting multiple PulseTemplate together in one waveform on the hardware."""
-    def __init__(self, body: Waveform, repetition_count: int):
-        self._body = body
-        self._repetition_count = checked_int_cast(repetition_count)
-        if repetition_count < 1 or not isinstance(repetition_count, int):
-            raise ValueError('Repetition count must be an integer >0')
-
-    @property
-    def defined_channels(self) -> Set[ChannelID]:
-        return self._body.defined_channels
-
-    def unsafe_sample(self,
-                      channel: ChannelID,
-                      sample_times: np.ndarray,
-                      output_array: Union[np.ndarray, None]=None) -> np.ndarray:
-        if output_array is None:
-            output_array = np.empty_like(sample_times)
-        body_duration = self._body.duration
-        time = 0
-        for _ in range(self._repetition_count):
-            end = time + body_duration
-            indices = slice(*np.searchsorted(sample_times, (float(time), float(end)), 'left'))
-            self._body.unsafe_sample(channel=channel,
-                                     sample_times=sample_times[indices] - time,
-                                     output_array=output_array[indices])
-            time = end
-        return output_array
-
-    @property
-    def compare_key(self) -> Tuple[Any, int]:
-        return self._body.compare_key, self._repetition_count
-
-    @property
-    def duration(self) -> TimeType:
-        return self._body.duration*self._repetition_count
-
-    def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> 'RepetitionWaveform':
-        return RepetitionWaveform(body=self._body.unsafe_get_subset_for_channels(channels),
-                                  repetition_count=self._repetition_count)
 
 
 class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, MeasurementDefiner):
@@ -82,7 +41,7 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
                  *args,
                  parameter_constraints: Optional[List]=None,
                  measurements: Optional[List[MeasurementDeclaration]]=None,
-                 registry: Optional[dict]=None
+                 registry: PulseRegistryType=None
                  ) -> None:
         """Create a new RepetitionPulseTemplate instance.
 
@@ -97,7 +56,7 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
         elif args:
             TypeError('RepetitionPulseTemplate expects 3 positional arguments, got ' + str(3 + len(args)))
 
-        LoopPulseTemplate.__init__(self, identifier=identifier, body=body, registry=registry)
+        LoopPulseTemplate.__init__(self, identifier=identifier, body=body)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
         MeasurementDefiner.__init__(self, measurements=measurements)
 
@@ -110,6 +69,8 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
             warn("Repetition pulse template with 0 repetitions on construction.")
 
         self._repetition_count = repetition_count
+
+        self._register(registry=registry)
 
     @property
     def repetition_count(self) -> ExpressionScalar:

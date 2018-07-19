@@ -7,16 +7,16 @@ import warnings
 
 import sympy
 
-from qctoolkit.serialization import Serializer
+from qctoolkit.serialization import Serializer, PulseRegistryType
 
 from qctoolkit.expressions import ExpressionScalar
 from qctoolkit.utils import checked_int_cast
 from qctoolkit.pulses.parameters import Parameter, ConstantParameter, InvalidParameterNameException, ParameterConstrainer
 from qctoolkit.pulses.pulse_template import PulseTemplate, ChannelID
 from qctoolkit.pulses.conditions import Condition, ConditionMissingException
-from qctoolkit.pulses.instructions import InstructionBlock
+from qctoolkit._program.instructions import InstructionBlock
 from qctoolkit.pulses.sequencing import Sequencer
-from qctoolkit.pulses.sequence_pulse_template import SequenceWaveform as ForLoopWaveform
+from qctoolkit._program.waveforms import SequenceWaveform as ForLoopWaveform
 from qctoolkit.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
 
 __all__ = ['ForLoopPulseTemplate', 'LoopPulseTemplate', 'LoopIndexNotUsedException']
@@ -25,9 +25,8 @@ __all__ = ['ForLoopPulseTemplate', 'LoopPulseTemplate', 'LoopIndexNotUsedExcepti
 class LoopPulseTemplate(PulseTemplate):
     """Base class for loop based pulse templates. This class is still abstract and cannot be instantiated."""
     def __init__(self, body: PulseTemplate,
-                 identifier: Optional[str],
-                 registry: Optional[dict]):
-        super().__init__(identifier=identifier, registry=registry)
+                 identifier: Optional[str]):
+        super().__init__(identifier=identifier)
         self.__body = body
 
     @property
@@ -112,7 +111,7 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
                  *,
                  measurements: Optional[Sequence[MeasurementDeclaration]]=None,
                  parameter_constraints: Optional[Sequence]=None,
-                 registry: Optional[dict]=None):
+                 registry: PulseRegistryType=None) -> None:
         """
         Args:
             body: The loop body. It is expected to have `loop_index` as an parameter
@@ -120,7 +119,7 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
             loop_range: Range to loop through
             identifier: Used for serialization
         """
-        LoopPulseTemplate.__init__(self, body=body, identifier=identifier, registry=registry)
+        LoopPulseTemplate.__init__(self, body=body, identifier=identifier)
         MeasurementDefiner.__init__(self, measurements=measurements)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 
@@ -151,6 +150,8 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
                           "This will not constrain the actual loop index but introduce a new parameter.\n" \
                           "To constrain the loop index, put the constraint in the body subtemplate.\n" \
                           "Loop index is {} and offending constraints are: {}".format(self._loop_index, constraints))
+
+        self._register(registry=registry)
 
     @property
     def loop_index(self) -> str:
@@ -297,7 +298,7 @@ class WhileLoopPulseTemplate(LoopPulseTemplate):
     def __init__(self, condition: str,
                  body: PulseTemplate,
                  identifier: Optional[str]=None,
-                 registry: Optional[dict]=None) -> None:
+                 registry: PulseRegistryType=None) -> None:
         """Create a new LoopPulseTemplate instance.
 
         Args:
@@ -307,8 +308,9 @@ class WhileLoopPulseTemplate(LoopPulseTemplate):
                 holds.
             identifier (str): A unique identifier for use in serialization. (optional)
         """
-        super().__init__(body=body, identifier=identifier, registry=registry)
+        super().__init__(body=body, identifier=identifier)
         self._condition = condition
+        self._register(registry=registry)
 
     def __str__(self) -> str:
         return "LoopPulseTemplate: Condition <{}>, Body <{}>".format(self._condition, self.body)

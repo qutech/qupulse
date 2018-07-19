@@ -1,13 +1,11 @@
 import unittest
 
-from sympy import Sum
-
 from qctoolkit.expressions import Expression, ExpressionScalar
 from qctoolkit.pulses.loop_pulse_template import ForLoopPulseTemplate, WhileLoopPulseTemplate,\
     ConditionMissingException, ParametrizedRange, LoopIndexNotUsedException, LoopPulseTemplate
 from qctoolkit.pulses.parameters import ConstantParameter, InvalidParameterNameException, ParameterConstraintViolation,\
     ParameterNotProvidedException, ParameterConstraint
-from qctoolkit.pulses.instructions import MEASInstruction
+from qctoolkit._program.instructions import MEASInstruction
 
 from tests.pulses.sequencing_dummies import DummyCondition, DummyPulseTemplate, DummySequencer, DummyInstructionBlock,\
     DummyParameter
@@ -18,7 +16,7 @@ from tests.serialization_tests import SerializableTests
 class DummyLoopPulseTemplate(LoopPulseTemplate):
     pass
 DummyLoopPulseTemplate.__abstractmethods__ = set()
-DummyLoopPulseTemplate.__init__ = lambda self, body: LoopPulseTemplate.__init__(self, body, None, None)
+DummyLoopPulseTemplate.__init__ = lambda self, body: LoopPulseTemplate.__init__(self, body, identifier=None)
 
 
 class LoopPulseTemplateTests(unittest.TestCase):
@@ -241,7 +239,7 @@ class ForLoopPulseTemplateSerializationTests(SerializableTests, unittest.TestCas
             'measurements': [('a', 0, 1), ('b', 1, 1)]
         }
 
-    def assert_equal_instance(self, lhs: ForLoopPulseTemplate, rhs: ForLoopPulseTemplate):
+    def assert_equal_instance_except_id(self, lhs: ForLoopPulseTemplate, rhs: ForLoopPulseTemplate):
         self.assertIsInstance(lhs, ForLoopPulseTemplate)
         self.assertIsInstance(rhs, ForLoopPulseTemplate)
         self.assertEqual(lhs.body, rhs.body)
@@ -453,7 +451,7 @@ class WhileLoopPulseTemplateSerializationTests(SerializableTests, unittest.TestC
             'condition': 'foo_cond'
         }
 
-    def assert_equal_instance(self, lhs: WhileLoopPulseTemplate, rhs: WhileLoopPulseTemplate):
+    def assert_equal_instance_except_id(self, lhs: WhileLoopPulseTemplate, rhs: WhileLoopPulseTemplate):
         self.assertIsInstance(lhs, WhileLoopPulseTemplate)
         self.assertIsInstance(rhs, WhileLoopPulseTemplate)
         self.assertEqual(lhs.body, rhs.body)

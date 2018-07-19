@@ -236,7 +236,7 @@ class PointPulseTemplateSerializationTests(SerializableTests, unittest.TestCase)
             'parameter_constraints': [str(ParameterConstraint('ilse>2')), str(ParameterConstraint('k>foo'))]
         }
 
-    def assert_equal_instance(self, lhs: PointPulseTemplate, rhs: PointPulseTemplate):
+    def assert_equal_instance_except_id(self, lhs: PointPulseTemplate, rhs: PointPulseTemplate):
         self.assertIsInstance(lhs, PointPulseTemplate)
         self.assertIsInstance(rhs, PointPulseTemplate)
         self.assertEqual(lhs.point_pulse_entries, rhs.point_pulse_entries)

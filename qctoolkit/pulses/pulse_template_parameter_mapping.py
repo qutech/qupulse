@@ -8,9 +8,10 @@ from qctoolkit.expressions import Expression, ExpressionScalar
 from qctoolkit.pulses.pulse_template import PulseTemplate, MappingTuple
 from qctoolkit.pulses.parameters import Parameter, MappedParameter, ParameterNotProvidedException, ParameterConstrainer
 from qctoolkit.pulses.sequencing import Sequencer
-from qctoolkit.pulses.instructions import InstructionBlock, Waveform
+from qctoolkit._program.instructions import InstructionBlock
+from qctoolkit._program.waveforms import Waveform
 from qctoolkit.pulses.conditions import Condition
-from qctoolkit.serialization import Serializer
+from qctoolkit.serialization import Serializer, PulseRegistryType
 
 __all__ = [
     "MappingPulseTemplate",
@@ -30,7 +31,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                  channel_mapping: Optional[Dict[ChannelID, ChannelID]] = None,
                  parameter_constraints: Optional[List[str]]=None,
                  allow_partial_parameter_mapping: bool=False,
-                 registry: Optional[dict]=None):
+                 registry: PulseRegistryType=None) -> None:
         """Standard constructor for the MappingPulseTemplate.
 
         Mappings that are not specified are defaulted to identity mappings. Channels and measurement names of the
@@ -48,7 +49,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         :param parameter_constraints:
         :param allow_partial_parameter_mapping:
         """
-        PulseTemplate.__init__(self, identifier=identifier, registry=registry)
+        PulseTemplate.__init__(self, identifier=identifier)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 
         if parameter_mapping is None:
@@ -100,6 +101,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         self.__external_parameters |= self.constrained_parameters
         self.__measurement_mapping = measurement_mapping
         self.__channel_mapping = channel_mapping
+        self._register(registry=registry)
 
     @staticmethod
     def from_tuple(mapping_tuple: MappingTuple) -> 'MappingPulseTemplate':

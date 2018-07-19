@@ -8,13 +8,13 @@ import numpy as np
 from qctoolkit.utils.types import ChannelID
 from qctoolkit.expressions import Expression, ExpressionScalar
 from qctoolkit.pulses.conditions import Condition
-from qctoolkit.pulses.instructions import Waveform
+from qctoolkit._program.waveforms import TableWaveform, TableWaveformEntry
 from qctoolkit.pulses.parameters import Parameter, ParameterNotProvidedException, ParameterConstraint,\
     ParameterConstrainer
 from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration
-from qctoolkit.pulses.table_pulse_template import TableEntry, EntryInInit, TableWaveform, TableWaveformEntry
+from qctoolkit.pulses.table_pulse_template import TableEntry, EntryInInit
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
-from qctoolkit.serialization import Serializer
+from qctoolkit.serialization import Serializer, PulseRegistryType
 
 
 __all__ = ["PointWaveform", "PointPulseTemplate", "PointPulseEntry", "PointWaveformEntry", "InvalidPointDimension"]
@@ -46,14 +46,16 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
                  parameter_constraints: Optional[List[Union[str, ParameterConstraint]]]=None,
                  measurements: Optional[List[MeasurementDeclaration]]=None,
                  identifier: Optional[str]=None,
-                 registry: Optional[dict]=None):
+                 registry: PulseRegistryType=None) -> None:
 
-        AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements, registry=registry)
+        AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 
         self._channels = tuple(channel_names)
         self._entries = [PointPulseEntry(*tpt)
                          for tpt in time_point_tuple_list]
+
+        self._register(registry=registry)
 
     @property
     def defined_channels(self) -> Set[ChannelID]:
@@ -61,7 +63,7 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
 
     def build_waveform(self,
                        parameters: Dict[str, Real],
-                       channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Waveform]:
+                       channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[TableWaveform]:
         self.validate_parameter_constraints(parameters)
 
         if all(channel_mapping[channel] is None
