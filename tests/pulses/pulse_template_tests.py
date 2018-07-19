@@ -40,7 +40,7 @@ class PulseTemplateStub(PulseTemplate):
             raise NotImplementedError()
         return self._parameter_names
 
-    def get_serialization_data(self, serializer: Optional['Serializer']=None) -> Dict[str, Any]:
+    def get_serialization_data(self) -> Dict[str, Any]:
         raise NotImplementedError()
 
     @staticmethod
@@ -107,7 +107,7 @@ class AtomicPulseTemplateStub(AtomicPulseTemplate):
     def parameter_names(self) -> Set[str]:
         raise NotImplementedError()
 
-    def get_serialization_data(self, serializer: Optional['Serializer']=None) -> Dict[str, Any]:
+    def get_serialization_data(self) -> Dict[str, Any]:
         raise NotImplementedError()
 
     @property

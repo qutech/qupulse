@@ -251,50 +251,6 @@ class ForLoopPulseTemplateSerializationTests(SerializableTests, unittest.TestCas
 
 class ForLoopPulseTemplateOldSerializationTests(unittest.TestCase):
 
-    def test_get_serialization_data_minimal_old(self) -> None:
-        # test for deprecated version during transition period, remove after final switch
-        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
-                                   msg="ForLoopPT does not issue warning for old serialization routines."):
-            dt = DummyPulseTemplate(parameter_names={'i'})
-            flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=('A', 'B'))
-
-            def check_dt(to_dictify) -> str:
-                self.assertIs(to_dictify, dt)
-                return 'dt'
-
-            serializer = DummySerializer(serialize_callback=check_dt)
-
-            data = flt.get_serialization_data(serializer)
-            expected_data = dict(body='dt',
-                                 loop_range=('A', 'B', 1),
-                                 loop_index='i')
-            self.assertEqual(data, expected_data)
-
-    def test_get_serialization_data_all_features_old(self) -> None:
-        # test for deprecated version during transition period, remove after final switch
-        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
-                                   msg="ForLoopPT does not issue warning for old serialization routines."):
-            measurements = [('a', 0, 1), ('b', 1, 1)]
-            parameter_constraints = ['foo < 3']
-
-            dt = DummyPulseTemplate(parameter_names={'i'})
-            flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=('A', 'B'),
-                                       measurements=measurements, parameter_constraints=parameter_constraints)
-
-            def check_dt(to_dictify) -> str:
-                self.assertIs(to_dictify, dt)
-                return 'dt'
-
-            serializer = DummySerializer(serialize_callback=check_dt)
-
-            data = flt.get_serialization_data(serializer)
-            expected_data = dict(body='dt',
-                                 loop_range=('A', 'B', 1),
-                                 loop_index='i',
-                                 measurements=measurements,
-                                 parameter_constraints=parameter_constraints)
-            self.assertEqual(data, expected_data)
-
     def test_deserialize_minimal_old(self) -> None:
         # test for deprecated version during transition period, remove after final switch
         with self.assertWarnsRegex(DeprecationWarning, "deprecated",
@@ -459,22 +415,6 @@ class WhileLoopPulseTemplateSerializationTests(SerializableTests, unittest.TestC
 
 
 class WhileLoopPulseTemplateOldSerializationTests(unittest.TestCase):
-
-    def test_get_serialization_data_old(self) -> None:
-        # test for deprecated version during transition period, remove after final switch
-        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
-                                   msg="WhileLoopPT does not issue warning for old serialization routines."):
-            body = DummyPulseTemplate()
-            condition_name = 'foo_cond'
-            identifier = 'foo_loop'
-            t = WhileLoopPulseTemplate(condition_name, body, identifier=identifier)
-
-            serializer = DummySerializer()
-            expected_data = dict(body=str(id(body)),
-                                 condition=condition_name)
-
-            data = t.get_serialization_data(serializer)
-            self.assertEqual(expected_data, data)
 
     def test_deserialize(self) -> None:
         # test for deprecated version during transition period, remove after final switch

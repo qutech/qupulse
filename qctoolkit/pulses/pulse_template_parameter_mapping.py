@@ -187,24 +187,16 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
     def duration(self) -> Expression:
         return self.__template.duration.evaluate_symbolic(self.__parameter_mapping)
 
-    def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
-        data = super().get_serialization_data(serializer)
+    def get_serialization_data(self) -> Dict[str, Any]:
+        data = super().get_serialization_data()
 
-        if serializer: # compatibility to old serialization routines, deprecated
-            parameter_mapping_dict = dict((key, str(expression)) for key, expression in self.__parameter_mapping.items())
-            data = dict(template=serializer.dictify(self.template),
-                        parameter_mapping=parameter_mapping_dict,
-                        measurement_mapping=self.__measurement_mapping,
-                        channel_mapping=self.__channel_mapping)
-
-        else:
-            data['template'] = self.template
-            if self.__parameter_mapping:
-                data['parameter_mapping'] = self.__parameter_mapping
-            if self.__measurement_mapping:
-                data['measurement_mapping'] = self.__measurement_mapping
-            if self.__channel_mapping:
-                data['channel_mapping'] = self.__channel_mapping
+        data['template'] = self.template
+        if self.__parameter_mapping:
+            data['parameter_mapping'] = self.__parameter_mapping
+        if self.__measurement_mapping:
+            data['measurement_mapping'] = self.__measurement_mapping
+        if self.__channel_mapping:
+            data['channel_mapping'] = self.__channel_mapping
 
         if self.parameter_constraints:
             data['parameter_constraints'] = [str(c) for c in self.parameter_constraints]

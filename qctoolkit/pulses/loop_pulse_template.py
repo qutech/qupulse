@@ -236,14 +236,10 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
                       conditions: Dict[str, 'Condition']) -> bool:
         return any(parameters[parameter_name].requires_stop for parameter_name in self._loop_range.parameter_names)
 
-    def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
-        data = super().get_serialization_data(serializer)
+    def get_serialization_data(self) -> Dict[str, Any]:
+        data = super().get_serialization_data()
 
         data['body'] = self.body
-
-        if serializer: # compatibility to old serialization routines, deprecated
-            data = dict()
-            data['body'] = serializer.dictify(self.body)
 
         data['loop_range'] = self._loop_range.to_tuple()
         data['loop_index'] = self._loop_index
@@ -355,16 +351,10 @@ class WhileLoopPulseTemplate(LoopPulseTemplate):
                       conditions: Dict[str, Condition]) -> bool:
         return self.__obtain_condition_object(conditions).requires_stop()
 
-    def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
-        data = super().get_serialization_data(serializer)
+    def get_serialization_data(self) -> Dict[str, Any]:
+        data = super().get_serialization_data()
         data['body'] = self.body
-
-        if serializer: # compatibility to old serialization routines, deprecated
-            data = dict()
-            data['body'] = serializer.dictify(self.body)
-
         data['condition'] = self._condition
-
         return data
 
     @classmethod

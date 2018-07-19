@@ -473,17 +473,6 @@ class TablePulseTemplateOldSerializationTests(unittest.TestCase):
             self.expected_data = dict(type=self.serializer.get_type_identifier(self.template))
             self.maxDiff = None
 
-    def test_get_serialization_data_old(self) -> None:
-        # test for deprecated version during transition period, remove after final switch
-        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
-                                   msg="TablePT does not issue warning for old serialization routines."):
-            expected_data = dict(measurements=self.measurements,
-                                 entries=self.entries,
-                                 parameter_constraints=[str(Expression('ilse>2')), str(Expression('k>foo'))])
-
-            data = self.template.get_serialization_data(self.serializer)
-            self.assertEqual(expected_data, data)
-
     def test_deserialize_old(self) -> None:
         registry = dict()
 
@@ -498,21 +487,6 @@ class TablePulseTemplateOldSerializationTests(unittest.TestCase):
             # deserialize
             template = TablePulseTemplate.deserialize(self.serializer, **data, registry=registry)
 
-            self.assertEqual(template.entries, self.template.entries)
-            self.assertEqual(template.measurement_declarations, self.template.measurement_declarations)
-            self.assertEqual(template.parameter_constraints, self.template.parameter_constraints)
-
-    def test_serializer_integration_old(self):
-        registry = dict()
-
-        # test for deprecated version during transition period, remove after final switch
-        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
-                                   msg="TablePT does not issue warning for old serialization routines."):
-            serializer = Serializer(DummyStorageBackend())
-            serializer.serialize(self.template)
-            template = serializer.deserialize('foo')
-
-            self.assertIsInstance(template, TablePulseTemplate)
             self.assertEqual(template.entries, self.template.entries)
             self.assertEqual(template.measurement_declarations, self.template.measurement_declarations)
             self.assertEqual(template.parameter_constraints, self.template.parameter_constraints)

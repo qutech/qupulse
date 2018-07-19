@@ -144,13 +144,9 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                            channel_mapping=channel_mapping,
                            target_block=instruction_block)
 
-    def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
-        data = super().get_serialization_data(serializer)
+    def get_serialization_data(self) -> Dict[str, Any]:
+        data = super().get_serialization_data()
         data['subtemplates'] = self.subtemplates
-
-        if serializer: # compatibility to old serialization routines, deprecated
-            data = dict()
-            data['subtemplates'] = [serializer.dictify(subtemplate) for subtemplate in self.subtemplates]
 
         if self.parameter_constraints:
             data['parameter_constraints'] = [str(c) for c in self.parameter_constraints]

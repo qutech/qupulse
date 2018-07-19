@@ -157,25 +157,6 @@ class SequencePulseTemplateOldSerializationTests(unittest.TestCase):
         self.foo_param_mappings = dict(hugo='ilse', albert='albert', voltage='voltage')
         self.foo_meas_mappings = dict(mw_foo='mw_bar')
 
-    def test_get_serialization_data_old(self) -> None:
-        # test for deprecated version during transition period, remove after final switch
-        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
-                                   msg="SequencePT does not issue warning for old serialization routines."):
-            dummy1 = DummyPulseTemplate()
-            dummy2 = DummyPulseTemplate()
-
-            sequence = SequencePulseTemplate(dummy1, dummy2, parameter_constraints=['a<b'], measurements=[('m', 0, 1)],
-                                             registry=dict())
-            serializer = DummySerializer(serialize_callback=lambda x: str(x))
-
-            expected_data = dict(
-                subtemplates=[str(dummy1), str(dummy2)],
-                parameter_constraints=['a < b'],
-                measurements=[('m', 0, 1)]
-            )
-            data = sequence.get_serialization_data(serializer)
-            self.assertEqual(expected_data, data)
-
     def test_deserialize_old(self) -> None:
         # test for deprecated version during transition period, remove after final switch
         with self.assertWarnsRegex(DeprecationWarning, "deprecated",

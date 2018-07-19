@@ -253,42 +253,6 @@ class RepetitionPulseTemplateSerializationTests(SerializableTests, unittest.Test
 
 class RepetitionPulseTemplateOldSerializationTests(unittest.TestCase):
 
-    def test_get_serialization_data_minimal_old(self) -> None:
-        # test for deprecated version during transition period, remove after final switch
-        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
-                                   msg="RepetitionPT does not issue warning for old serialization routines."):
-            serializer = DummySerializer(deserialize_callback=lambda x: x['name'])
-            body = DummyPulseTemplate()
-            repetition_count = 3
-            template = RepetitionPulseTemplate(body, repetition_count)
-            expected_data = dict(
-                body=str(id(body)),
-                repetition_count=repetition_count,
-            )
-            data = template.get_serialization_data(serializer)
-            self.assertEqual(expected_data, data)
-
-    def test_get_serialization_data_all_features_old(self) -> None:
-        # test for deprecated version during transition period, remove after final switch
-        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
-                                   msg="RepetitionPT does not issue warning for old serialization routines."):
-            serializer = DummySerializer(deserialize_callback=lambda x: x['name'])
-            body = DummyPulseTemplate()
-            repetition_count = 'foo'
-            measurements = [('a', 0, 1), ('b', 1, 1)]
-            parameter_constraints = ['foo < 3']
-            template = RepetitionPulseTemplate(body, repetition_count,
-                                               measurements=measurements,
-                                               parameter_constraints=parameter_constraints)
-            expected_data = dict(
-                body=str(id(body)),
-                repetition_count=repetition_count,
-                measurements=measurements,
-                parameter_constraints=parameter_constraints
-            )
-            data = template.get_serialization_data(serializer)
-            self.assertEqual(expected_data, data)
-
     def test_deserialize_minimal_old(self) -> None:
         # test for deprecated version during transition period, remove after final switch
         with self.assertWarnsRegex(DeprecationWarning, "deprecated",

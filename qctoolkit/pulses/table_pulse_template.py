@@ -228,11 +228,8 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
         except KeyError as key_error:
             raise ParameterNotProvidedException(str(key_error)) from key_error
 
-    def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
-        data = super().get_serialization_data(serializer)
-
-        if serializer: # compatibility to old serialization routines, deprecated
-            data = dict()
+    def get_serialization_data(self) -> Dict[str, Any]:
+        data = super().get_serialization_data()
 
         local_data = dict(
             entries=dict(

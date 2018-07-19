@@ -263,32 +263,6 @@ class MappingPulseTemplateSerializationTests(SerializableTests, unittest.TestCas
 
 class MappingPulseTemplateOldSerializationTests(unittest.TestCase):
 
-    def test_get_serialization_data(self) -> None:
-        # test for deprecated version during transition period, remove after final switch
-        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
-                                   msg="SequencePT does not issue warning for old serialization routines."):
-            dummy_pt = DummyPulseTemplate(defined_channels={'foo'},
-                                          measurement_names={'meas'},
-                                          parameter_names={'hugo', 'herbert', 'ilse'})
-            mpt = MappingPulseTemplate(
-                template=dummy_pt,
-                parameter_mapping={'hugo': Expression('2*k+c'), 'herbert': Expression('c-1.5'), 'ilse': Expression('ilse')},
-                measurement_mapping={'meas': 'seam'},
-                channel_mapping={'foo': 'default_channel'},
-                parameter_constraints=[str(ParameterConstraint('c > 0'))]
-            )
-            serializer = DummySerializer()
-            expected_data = {
-                'template': serializer.dictify(dummy_pt),
-                'parameter_mapping': {'hugo': str(Expression('2*k+c')), 'herbert': str(Expression('c-1.5')),
-                                      'ilse': str(Expression('ilse'))},
-                'measurement_mapping': {'meas': 'seam'},
-                'channel_mapping': {'foo': 'default_channel'},
-                'parameter_constraints': [str(ParameterConstraint('c > 0'))]
-            }
-            data = mpt.get_serialization_data(serializer=serializer)
-            self.assertEqual(expected_data, data)
-
     def test_deserialize(self) -> None:
         # test for deprecated version during transition period, remove after final switch
         with self.assertWarnsRegex(DeprecationWarning, "deprecated",

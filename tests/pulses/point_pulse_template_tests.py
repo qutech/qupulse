@@ -255,19 +255,6 @@ class PointPulseTemplateOldSerializationTests(unittest.TestCase):
                                            registry=dict())
         self.maxDiff = None
 
-    def test_get_serialization_data_old(self) -> None:
-        # test for deprecated version during transition period, remove after final switch
-        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
-                                   msg="PointPT does not issue warning for old serialization routines."):
-            expected_data = dict(measurements=self.measurements,
-                                 time_point_tuple_list=self.entries,
-                                 channel_names=(0, 'A'),
-                                 parameter_constraints=[str(Expression('ilse>2')), str(Expression('k>foo'))])
-
-            serializer = DummySerializer(lambda x: dict(name=x.name), lambda x: x.name, lambda x: x['name'])
-            data = self.template.get_serialization_data(serializer)
-            self.assertEqual(expected_data, data)
-
     def test_deserialize_old(self) -> None:
         # test for deprecated version during transition period, remove after final switch
         with self.assertWarnsRegex(DeprecationWarning, "deprecated",
@@ -282,21 +269,6 @@ class PointPulseTemplateOldSerializationTests(unittest.TestCase):
             serializer = DummySerializer(lambda x: dict(name=x.name), lambda x: x.name, lambda x: x['name'])
             template = PointPulseTemplate.deserialize(serializer, **data)
 
-            self.assertEqual(template.point_pulse_entries, self.template.point_pulse_entries)
-            self.assertEqual(template.measurement_declarations, self.template.measurement_declarations)
-            self.assertEqual(template.parameter_constraints, self.template.parameter_constraints)
-
-    def test_serializer_integration_old(self):
-        registry = dict()
-
-        # test for deprecated version during transition period, remove after final switch
-        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
-                                   msg="PointPT does not issue warning for old serialization routines."):
-            serializer = Serializer(DummyStorageBackend())
-            serializer.serialize(self.template)
-            template = serializer.deserialize('foo')
-
-            self.assertIsInstance(template, PointPulseTemplate)
             self.assertEqual(template.point_pulse_entries, self.template.point_pulse_entries)
             self.assertEqual(template.measurement_declarations, self.template.measurement_declarations)
             self.assertEqual(template.parameter_constraints, self.template.parameter_constraints)

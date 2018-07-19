@@ -122,13 +122,9 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
                       conditions: Dict[str, 'Condition']) -> bool:
         return any(st.requires_stop(parameters, conditions) for st in self._subtemplates)
 
-    def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
-        data = super().get_serialization_data(serializer)
+    def get_serialization_data(self) -> Dict[str, Any]:
+        data = super().get_serialization_data()
         data['subtemplates'] = self.subtemplates
-
-        if serializer: # compatibility to old serialization routines, deprecated
-            data = dict()
-            data['subtemplates'] = [serializer.dictify(subtemplate) for subtemplate in self.subtemplates]
 
         if self.parameter_constraints:
             data['parameter_constraints'] = [str(constraint) for constraint in self.parameter_constraints]

@@ -103,11 +103,8 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
     def point_pulse_entries(self) -> Sequence[PointPulseEntry]:
         return self._entries
 
-    def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
-        data = super().get_serialization_data(serializer)
-
-        if serializer: # compatibility to old serialization routines, deprecated
-            data = dict()
+    def get_serialization_data(self) -> Dict[str, Any]:
+        data = super().get_serialization_data()
 
         data['time_point_tuple_list'] = [entry.get_serialization_data() for entry in self._entries]
         data['channel_names'] = self._channels
