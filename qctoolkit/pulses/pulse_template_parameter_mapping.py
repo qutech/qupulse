@@ -1,6 +1,6 @@
 from qctoolkit.pulses.mapping_pulse_template import MappingPulseTemplate
 
-__all__ = [MappingPulseTemplate]
+__all__ = ["MappingPulseTemplate"]
 
 import warnings
 warnings.warn("MappingPulseTemplate was moved from qctoolkit.pulses.pulse_template_parameter_mapping to "
