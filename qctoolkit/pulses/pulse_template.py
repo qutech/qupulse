@@ -14,8 +14,8 @@ from numbers import Real
 from qctoolkit.utils.types import ChannelID, DocStringABCMeta
 from qctoolkit.serialization import Serializable
 from qctoolkit.expressions import ExpressionScalar
+from qctoolkit._program._loop import Loop
 
-from qctoolkit.hardware.program import Loop
 
 from qctoolkit.pulses.conditions import Condition
 from qctoolkit.pulses.parameters import Parameter, ConstantParameter
@@ -104,7 +104,7 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
                        parameters: Dict[str, Parameter],
                        volatile_parameters: Set[str],
                        measurement_mapping: Dict[str, Optional[str]],
-                       channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> 'Loop':
+                       channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional['Loop']:
         """Translates this PulseTemplate into a program Loop.
 
         The returned Loop represents the PulseTemplate with all parameter values instantiated provided as dictated by
@@ -130,10 +130,10 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
 
     @abstractmethod
     def _internal_create_program(self,
-                                 parameters: Dict[Parameter],
+                                 parameters: Dict[str, Parameter],
                                  volatile_parameters: Set[str],
                                  measurement_mapping: Dict[str, Optional[str]],
-                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> 'Loop':
+                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional['Loop']:
         """The subclass specific implementation of create_program().
 
         Subclasses should not overwrite create_program() directly but provide their implementation here. This method
@@ -177,6 +177,22 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
             measurements = self.get_measurement_windows(parameters=parameters, measurement_mapping=measurement_mapping)
             instruction_block.add_instruction_meas(measurements)
             instruction_block.add_instruction_exec(waveform)
+
+    def _internal_create_program(self,
+                                 parameters: Dict[str, Parameter],
+                                 volatile_parameters: Set[str],
+                                 measurement_mapping: Dict[str, Optional[str]],
+                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional['Loop']:
+        # todo (2018-07-05): why are parameter constraints not validated here?
+        parameters = {parameter_name: parameter_value.get_value()
+                      for parameter_name, parameter_value in parameters.items()
+                      if parameter_name in self.parameter_names}
+        waveform = self.build_waveform(parameters,
+                                       channel_mapping=channel_mapping)
+        if waveform:
+            measurements = self.get_measurement_windows(parameters=parameters, measurement_mapping=measurement_mapping)
+            return Loop(waveform=waveform, measurements=measurements)
+        return None
 
     @abstractmethod
     def build_waveform(self,

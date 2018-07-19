@@ -62,6 +62,13 @@ class PulseTemplateStub(PulseTemplate):
                        instruction_block: 'InstructionBlock'):
         raise NotImplementedError()
 
+    def _internal_create_program(self,
+                                 parameters: Dict[str, Parameter],
+                                 volatile_parameters: Set[str],
+                                 measurement_mapping: Dict[str, Optional[str]],
+                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional['Loop']:
+        raise NotImplementedError()
+
     def is_interruptable(self):
         raise NotImplementedError()
 

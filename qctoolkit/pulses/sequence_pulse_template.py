@@ -8,6 +8,7 @@ import functools
 import warnings
 
 from qctoolkit.serialization import Serializer, PulseRegistryType
+from qctoolkit._program._loop import Loop
 
 from qctoolkit.utils.types import MeasurementWindow, ChannelID, TimeType
 from qctoolkit.pulses.pulse_template import PulseTemplate
@@ -143,6 +144,25 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                            window_mapping=measurement_mapping,
                            channel_mapping=channel_mapping,
                            target_block=instruction_block)
+
+    def _internal_create_program(self,
+                                 parameters: Dict[str, Parameter],
+                                 volatile_parameters: Set[str],
+                                 measurement_mapping: Dict[str, Optional[str]],
+                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Loop]:
+        self.validate_parameter_constraints(parameters=parameters)
+        measurements = self.get_measurement_windows(parameters, measurement_mapping)
+        program = Loop(measurements=measurements)
+
+        for subtemplate in self.subtemplates:
+            subprogram = subtemplate.create_program(parameters,
+                                                    volatile_parameters,
+                                                    measurement_mapping,
+                                                    channel_mapping)
+            if subprogram:
+                program.append_child(subprogram)
+        # todo (2018-07-05): only return an object if not empty sequence
+        return program
 
     def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
         data = super().get_serialization_data(serializer)

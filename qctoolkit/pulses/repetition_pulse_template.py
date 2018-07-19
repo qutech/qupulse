@@ -8,6 +8,7 @@ from warnings import warn
 import numpy as np
 
 from qctoolkit.serialization import Serializer, PulseRegistryType
+from qctoolkit._program._loop import Loop
 
 from qctoolkit.utils.types import ChannelID
 from qctoolkit.expressions import ExpressionScalar
@@ -125,6 +126,30 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
             instruction_block.add_instruction_repj(repetition_count, body_block)
             sequencer.push(self.body, parameters=parameters, conditions=conditions,
                            window_mapping=measurement_mapping, channel_mapping=channel_mapping, target_block=body_block)
+
+    def _internal_create_program(self,
+                                 parameters: Dict[str, Parameter],
+                                 volatile_parameters: Set[str],
+                                 measurement_mapping: Dict[str, Optional[str]],
+                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Loop]:
+        self.validate_parameter_constraints(parameters=parameters)
+        try:
+            real_parameters = {v: parameters[v].get_value() for v in self._repetition_count.variables}
+        except KeyError:
+            raise ParameterNotProvidedException(next(v for v in self.repetition_count.variables if v not in parameters))
+
+        repetition_count = self.get_repetition_count_value(real_parameters)
+        if repetition_count > 0:
+            subprogram = self.body.create_program(parameters,
+                                                  volatile_parameters,
+                                                  measurement_mapping,
+                                                  channel_mapping)
+            if subprogram:
+                measurements = self.get_measurement_windows(parameters, measurement_mapping)
+                program = Loop(measurements=measurements, repetition_count=repetition_count)
+                program.append_child(subprogram)
+                return program
+        return None
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],

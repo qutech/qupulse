@@ -3,6 +3,8 @@ from typing import Optional, Set, Dict, Union, List, Any, Tuple
 import itertools
 import numbers
 
+from qctoolkit._program._loop import Loop
+
 from qctoolkit.utils.types import ChannelID
 from qctoolkit.expressions import Expression, ExpressionScalar
 from qctoolkit.pulses.pulse_template import PulseTemplate, MappingTuple
@@ -265,6 +267,22 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                                      measurement_mapping=self.get_updated_measurement_mapping(measurement_mapping),
                                      channel_mapping=self.get_updated_channel_mapping(channel_mapping),
                                      instruction_block=instruction_block)
+
+    def _internal_create_program(self,
+                                 parameters: Dict[str, Parameter],
+                                 volatile_parameters: Set[str],
+                                 measurement_mapping: Dict[str, Optional[str]],
+                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Loop]:
+        # parameters are validated in map_parameters() call, no need to do it here again explicitly
+
+        # derive which of the parameters of the subpulse must be marked as volatile from the mapping and the given
+        # volatile parameters for the MappingPT
+        mapped_volatile_parameters = set(param for param, mapping in self.parameter_mapping
+                                         if volatile_parameters.intersection(mapping.variables))
+        return self.create_program(parameters=self.map_parameters(parameters),
+                                   volatile_parameters=mapped_volatile_parameters,
+                                   measurement_mapping=self.get_updated_measurement_mapping(measurement_mapping),
+                                   channel_mapping=self.get_updated_channel_mapping(channel_mapping))
 
     def build_waveform(self,
                        parameters: Dict[str, numbers.Real],

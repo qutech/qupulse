@@ -8,6 +8,7 @@ import warnings
 import sympy
 
 from qctoolkit.serialization import Serializer, PulseRegistryType
+from qctoolkit._program._loop import Loop
 
 from qctoolkit.expressions import ExpressionScalar
 from qctoolkit.utils import checked_int_cast
@@ -227,6 +228,26 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
                            channel_mapping=channel_mapping,
                            target_block=instruction_block)
 
+    def _internal_create_program(self,
+                                 parameters: Dict[str, Parameter],
+                                 volatile_parameters: Set[str],
+                                 measurement_mapping: Dict[str, Optional[str]],
+                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Loop]:
+        self.validate_parameter_constraints(parameters=parameters)
+
+        measurements = self.get_measurement_windows(parameters, measurement_mapping)
+        program = Loop(measurements=measurements)
+
+        for local_parameters in self._body_parameter_generator(parameters, forward=True):
+            subprogram = self.body.create_program(local_parameters,
+                                                  volatile_parameters,
+                                                  measurement_mapping,
+                                                  channel_mapping)
+            if subprogram:
+                program.append_child(subprogram)
+        # todo (2018-07-05): only return an object if not empty sequence
+        return program
+
     def build_waveform(self, parameters: Dict[str, Parameter]) -> ForLoopWaveform:
         return ForLoopWaveform([self.body.build_waveform(local_parameters)
                                 for local_parameters in self._body_parameter_generator(parameters, forward=True)])
@@ -349,6 +370,13 @@ class WhileLoopPulseTemplate(LoopPulseTemplate):
                                                                        measurement_mapping,
                                                                        channel_mapping,
                                                                        instruction_block)
+
+    def _internal_create_program(self,
+                                 parameters: Dict[str, Parameter],
+                                 volatile_parameters: Set[str],
+                                 measurement_mapping: Dict[str, Optional[str]],
+                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Loop]:
+        raise NotImplementedError("create_program() does not handle conditions/triggers right now and cannot be meaningfully implemented for a WhileLoopPulseTemplate")
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],
