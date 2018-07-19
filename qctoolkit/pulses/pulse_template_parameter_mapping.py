@@ -270,17 +270,10 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
 
     def _internal_create_program(self,
                                  parameters: Dict[str, Parameter],
-                                 volatile_parameters: Set[str],
                                  measurement_mapping: Dict[str, Optional[str]],
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Loop]:
         # parameters are validated in map_parameters() call, no need to do it here again explicitly
-
-        # derive which of the parameters of the subpulse must be marked as volatile from the mapping and the given
-        # volatile parameters for the MappingPT
-        mapped_volatile_parameters = set(param for param, mapping in self.parameter_mapping
-                                         if volatile_parameters.intersection(mapping.variables))
         return self.create_program(parameters=self.map_parameters(parameters),
-                                   volatile_parameters=mapped_volatile_parameters,
                                    measurement_mapping=self.get_updated_measurement_mapping(measurement_mapping),
                                    channel_mapping=self.get_updated_channel_mapping(channel_mapping))
 

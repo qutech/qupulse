@@ -65,10 +65,9 @@ class PulseTemplateStub(PulseTemplate):
 
     def _internal_create_program(self,
                                  parameters: Dict[str, Parameter],
-                                 volatile_parameters: Set[str],
                                  measurement_mapping: Dict[str, Optional[str]],
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional['Loop']:
-        self.internal_create_program_args.append((parameters, volatile_parameters, measurement_mapping, channel_mapping))
+        self.internal_create_program_args.append((parameters, measurement_mapping, channel_mapping))
         return None
 
     def is_interruptable(self):
@@ -148,18 +147,13 @@ class PulseTemplateTest(unittest.TestCase):
     def test_create_program(self) -> None:
         template = PulseTemplateStub(defined_channels={'A'}, parameter_names={'foo'})
         parameters = {'foo': ConstantParameter(2.126), 'bar': -26.2, 'hugo': '2*x+b'}
-        volatile_parameters = {'foo'}
         measurement_mapping = {'M': 'N'}
         channel_mapping = {'B': 'A'}
         template.create_program(parameters=parameters,
-                                volatile_parameters=volatile_parameters,
                                 measurement_mapping=measurement_mapping,
                                 channel_mapping=channel_mapping)
         expected_parameters = {'foo': ConstantParameter(2.126), 'bar': ConstantParameter(-26.2), 'hugo': ConstantParameter('2*x+b')}
-        self.assertEqual(expected_parameters, template.internal_create_program_args[-1][0])
-        self.assertIs(volatile_parameters, template.internal_create_program_args[-1][1])
-        self.assertIs(measurement_mapping, template.internal_create_program_args[-1][2])
-        self.assertIs(channel_mapping, template.internal_create_program_args[-1][3])
+        self.assertEqual((expected_parameters, measurement_mapping, channel_mapping), template.internal_create_program_args[-1])
 
 
 class AtomicPulseTemplateTests(unittest.TestCase):
@@ -207,9 +201,7 @@ class AtomicPulseTemplateTests(unittest.TestCase):
         template = AtomicPulseTemplateStub(waveform=wf, measurements=measurement_windows, parameter_names={'foo'})
         parameters = {'foo': ConstantParameter(7.2)}
         channel_mapping = {'B': 'A'}
-        # todo (2018-07-12): test for volatile paramters
         program = template._internal_create_program(parameters=parameters,
-                                                    volatile_parameters=dict(),
                                                     measurement_mapping={'M': 'N'},
                                                     channel_mapping=channel_mapping)
         self.assertEqual({k: p.get_value() for k, p in parameters.items()}, template.retrieved_parameters[-1])

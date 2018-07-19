@@ -355,10 +355,9 @@ class DummyPulseTemplate(AtomicPulseTemplate):
 
     def create_program(self,
                        parameters: Dict[str, Parameter],
-                       volatile_parameters: Set[str],
                        measurement_mapping: Dict[str, Optional[str]],
                        channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Loop]:
-        self.create_program_calls.append((parameters, volatile_parameters, measurement_mapping, channel_mapping))
+        self.create_program_calls.append((parameters, measurement_mapping, channel_mapping))
         return self._program
 
     def build_waveform(self,
