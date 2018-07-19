@@ -99,38 +99,6 @@ class RepetitionPulseTemplateTest(unittest.TestCase):
 
 class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
 
-    def test_requires_stop_constant(self) -> None:
-        body = DummyPulseTemplate(requires_stop=False)
-        t = RepetitionPulseTemplate(body, 2)
-        self.assertFalse(t.requires_stop({}, {}))
-        body.requires_stop_ = True
-        self.assertFalse(t.requires_stop({}, {}))
-
-    def test_requires_stop_declaration(self) -> None:
-        body = DummyPulseTemplate(requires_stop=False)
-        t = RepetitionPulseTemplate(body, 'foo')
-
-        parameter = DummyParameter()
-        parameters = dict(foo=parameter)
-        condition = DummyCondition()
-        conditions = dict(foo=condition)
-
-        for body_requires_stop in [True, False]:
-            for condition_requires_stop in [True, False]:
-                for parameter_requires_stop in [True, False]:
-                    body.requires_stop_ = body_requires_stop
-                    condition.requires_stop_ = condition_requires_stop
-                    parameter.requires_stop_ = parameter_requires_stop
-                    self.assertEqual(parameter_requires_stop, t.requires_stop(parameters, conditions))
-
-
-    def setUp(self) -> None:
-        self.body = DummyPulseTemplate()
-        self.repetitions = 'foo'
-        self.template = RepetitionPulseTemplate(self.body, self.repetitions, parameter_constraints=['foo<9'])
-        self.sequencer = DummySequencer()
-        self.block = DummyInstructionBlock()
-
     def test_create_program_constant(self) -> None:
         repetitions = 3
         body_program = Loop()
@@ -182,6 +150,7 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
                              volatile_parameters=volatile_parameters,
                              measurement_mapping=measurement_mapping,
                              channel_mapping=channel_mapping)
+        self.assertFalse(body.create_program_calls)
 
     def test_create_program_declaration_parameter_not_provided(self) -> None:
         repetitions = "foo"
@@ -197,6 +166,7 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
                              volatile_parameters=volatile_parameters,
                              measurement_mapping=measurement_mapping,
                              channel_mapping=channel_mapping)
+        self.assertFalse(body.create_program_calls)
 
     def test_create_program_declaration_parameter_value_not_whole(self) -> None:
         repetitions = "foo"
@@ -212,6 +182,7 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
                             volatile_parameters=volatile_parameters,
                             measurement_mapping=measurement_mapping,
                             channel_mapping=channel_mapping)
+        self.assertFalse(body.create_program_calls)
 
     def test_create_program_rep_count_zero_constant(self) -> None:
         repetitions = 0
@@ -231,6 +202,7 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
                                    volatile_parameters=volatile_parameters,
                                    measurement_mapping=measurement_mapping,
                                    channel_mapping=channel_mapping)
+        self.assertFalse(body.create_program_calls)
         self.assertIsNone(program)
 
     def test_create_program_rep_count_zero_declaration(self) -> None:
@@ -251,9 +223,10 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
                                    volatile_parameters=volatile_parameters,
                                    measurement_mapping=measurement_mapping,
                                    channel_mapping=channel_mapping)
+        self.assertFalse(body.create_program_calls)
         self.assertIsNone(program)
 
-    def test_rep_count_neg_declaration(self) -> None:
+    def test_create_program_rep_count_neg_declaration(self) -> None:
         repetitions = "foo"
         body_program = Loop()
         body = DummyPulseTemplate(duration=2.0, program=body_program)
@@ -271,7 +244,26 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
                                    volatile_parameters=volatile_parameters,
                                    measurement_mapping=measurement_mapping,
                                    channel_mapping=channel_mapping)
+        self.assertFalse(body.create_program_calls)
         self.assertIsNone(program)
+
+    def test_create_program_none_subprogram(self) -> None:
+        repetitions = "foo"
+        body_program = None
+        body = DummyPulseTemplate(duration=2.0, program=body_program)
+        t = RepetitionPulseTemplate(body, repetitions, parameter_constraints=['foo<9'])
+        parameters = dict(foo=ConstantParameter(3))
+        volatile_parameters = {}
+        measurement_mapping = dict(moth='fire')
+        channel_mapping = dict(asd='f')
+        program = t.create_program(parameters=parameters,
+                                   volatile_parameters=volatile_parameters,
+                                   measurement_mapping=measurement_mapping,
+                                   channel_mapping=channel_mapping)
+
+        self.assertIsNone(program)
+        self.assertEqual((parameters, volatile_parameters, measurement_mapping, channel_mapping),
+                         body.create_program_calls[-1])
 
 
 class RepetitionPulseTemplateOldSequencingTests(unittest.TestCase):
@@ -381,6 +373,30 @@ class RepetitionPulseTemplateOldSequencingTests(unittest.TestCase):
 
         self.assertFalse(self.block.embedded_blocks)  # no new blocks created
         self.assertFalse(self.block.instructions)  # no instructions added to block
+
+    def test_requires_stop_constant(self) -> None:
+        body = DummyPulseTemplate(requires_stop=False)
+        t = RepetitionPulseTemplate(body, 2)
+        self.assertFalse(t.requires_stop({}, {}))
+        body.requires_stop_ = True
+        self.assertFalse(t.requires_stop({}, {}))
+
+    def test_requires_stop_declaration(self) -> None:
+        body = DummyPulseTemplate(requires_stop=False)
+        t = RepetitionPulseTemplate(body, 'foo')
+
+        parameter = DummyParameter()
+        parameters = dict(foo=parameter)
+        condition = DummyCondition()
+        conditions = dict(foo=condition)
+
+        for body_requires_stop in [True, False]:
+            for condition_requires_stop in [True, False]:
+                for parameter_requires_stop in [True, False]:
+                    body.requires_stop_ = body_requires_stop
+                    condition.requires_stop_ = condition_requires_stop
+                    parameter.requires_stop_ = parameter_requires_stop
+                    self.assertEqual(parameter_requires_stop, t.requires_stop(parameters, conditions))
 
 
 class RepetitionPulseTemplateSerializationTests(SerializableTests, unittest.TestCase):
