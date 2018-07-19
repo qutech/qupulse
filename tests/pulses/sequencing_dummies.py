@@ -5,6 +5,7 @@ import copy
 import numpy
 
 """LOCAL IMPORTS"""
+from qctoolkit._program._loop import Loop
 from qctoolkit.utils.types import MeasurementWindow, ChannelID, TimeType, time_from_float
 from qctoolkit.serialization import Serializer
 from qctoolkit._program.waveforms import Waveform
@@ -136,7 +137,7 @@ class DummyInstructionBlock(InstructionBlock):
 
 class DummyWaveform(Waveform):
 
-    def __init__(self, duration: float=0, sample_output: numpy.ndarray=None, defined_channels={'A'}) -> None:
+    def __init__(self, duration: float=0.0, sample_output: numpy.ndarray=None, defined_channels={'A'}) -> None:
         super().__init__()
         self.duration_ = time_from_float(duration)
         self.sample_output = sample_output
@@ -299,6 +300,7 @@ class DummyPulseTemplate(AtomicPulseTemplate):
                  measurement_names: Set[str] = set(),
                  measurements: list=list(),
                  integrals: Dict[ChannelID, ExpressionScalar]={'default': ExpressionScalar(0)},
+                 program: Optional[Loop]=None,
                  identifier=None,
                  registry=None) -> None:
         super().__init__(identifier=identifier, measurements=measurements)
@@ -314,6 +316,8 @@ class DummyPulseTemplate(AtomicPulseTemplate):
         self.build_waveform_calls = []
         self.measurement_names_ = set(measurement_names)
         self._integrals = integrals
+        self.create_program_calls = []
+        self._program = program
         self._register(registry=registry)
 
     @property
@@ -323,10 +327,6 @@ class DummyPulseTemplate(AtomicPulseTemplate):
     @property
     def parameter_names(self) -> Set[str]:
         return set(self.parameter_names_)
-
-    def get_measurement_windows(self, parameters: Dict[str, Parameter] = None) -> List[MeasurementWindow]:
-        """Return all measurement windows defined in this PulseTemplate."""
-        raise NotImplementedError()
 
     @property
     def build_sequence_calls(self):
@@ -353,13 +353,21 @@ class DummyPulseTemplate(AtomicPulseTemplate):
                        instruction_block: InstructionBlock):
         self.build_sequence_arguments.append((sequencer,parameters,conditions, measurement_mapping, channel_mapping, instruction_block))
 
+    def create_program(self,
+                       parameters: Dict[str, Parameter],
+                       volatile_parameters: Set[str],
+                       measurement_mapping: Dict[str, Optional[str]],
+                       channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Loop]:
+        self.create_program_calls.append((parameters, volatile_parameters, measurement_mapping, channel_mapping))
+        return self._program
+
     def build_waveform(self,
                        parameters: Dict[str, Parameter],
                        channel_mapping: Dict[ChannelID, ChannelID]):
         self.build_waveform_calls.append((parameters, channel_mapping))
         if self.waveform or self.waveform is None:
             return self.waveform
-        return DummyWaveform(duration=self.duration, defined_channels=self.defined_channels)
+        return DummyWaveform(duration=self.duration.evaluate_numeric(**parameters), defined_channels=self.defined_channels)
 
     def requires_stop(self, parameters: Dict[str, Parameter], conditions: Dict[str, Condition]) -> bool:
         self.requires_stop_arguments.append((parameters,conditions))

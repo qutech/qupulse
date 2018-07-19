@@ -207,6 +207,7 @@ class AtomicPulseTemplateTests(unittest.TestCase):
         template = AtomicPulseTemplateStub(waveform=wf, measurements=measurement_windows, parameter_names={'foo'})
         parameters = {'foo': ConstantParameter(7.2)}
         channel_mapping = {'B': 'A'}
+        # todo (2018-07-12): test for volatile paramters
         program = template._internal_create_program(parameters=parameters,
                                                     volatile_parameters=dict(),
                                                     measurement_mapping={'M': 'N'},

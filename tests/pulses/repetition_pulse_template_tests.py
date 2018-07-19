@@ -3,6 +3,7 @@ import warnings
 
 import numpy as np
 
+from qctoolkit._program._loop import Loop
 from qctoolkit.expressions import Expression
 from qctoolkit.pulses.repetition_pulse_template import RepetitionPulseTemplate,ParameterNotIntegerException, RepetitionWaveform
 from qctoolkit.pulses.parameters import ParameterNotProvidedException, ParameterConstraintViolation, ConstantParameter, \
@@ -91,6 +92,10 @@ class RepetitionPulseTemplateTest(unittest.TestCase):
         template = RepetitionPulseTemplate(dummy, Expression('2+m'))
         self.assertEqual([Expression('(2+m)*(foo+2)'), Expression('(2+m)*(k*3+x**2)')], template.integral)
 
+    def test_parameter_names_param_only_in_constraint(self) -> None:
+        pt = RepetitionPulseTemplate(DummyPulseTemplate(parameter_names={'a'}), 'n', parameter_constraints=['a<c'])
+        self.assertEqual(pt.parameter_names, {'a','c', 'n'})
+
 
 class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
 
@@ -117,6 +122,159 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
                     condition.requires_stop_ = condition_requires_stop
                     parameter.requires_stop_ = parameter_requires_stop
                     self.assertEqual(parameter_requires_stop, t.requires_stop(parameters, conditions))
+
+
+    def setUp(self) -> None:
+        self.body = DummyPulseTemplate()
+        self.repetitions = 'foo'
+        self.template = RepetitionPulseTemplate(self.body, self.repetitions, parameter_constraints=['foo<9'])
+        self.sequencer = DummySequencer()
+        self.block = DummyInstructionBlock()
+
+    def test_create_program_constant(self) -> None:
+        repetitions = 3
+        body_program = Loop()
+        body = DummyPulseTemplate(duration=2.0, program=body_program)
+        t = RepetitionPulseTemplate(body, repetitions, parameter_constraints=['foo<9'])
+        parameters = {'foo': 8}
+        volatile_parameters = {}
+        measurement_mapping = {'my': 'thy'}
+        channel_mapping = {}
+        program = t.create_program(parameters=parameters,
+                                   volatile_parameters=volatile_parameters,
+                                   measurement_mapping=measurement_mapping,
+                                   channel_mapping=channel_mapping)
+
+        self.assertEqual(repetitions, program.repetition_count)
+        self.assertEqual((parameters, volatile_parameters, measurement_mapping, channel_mapping), body.create_program_calls[-1])
+        self.assertEqual([body_program], program.children)
+
+    def test_create_program_declaration_success(self) -> None:
+        repetitions = "foo"
+        body_program = Loop()
+        body = DummyPulseTemplate(duration=2.0, program=body_program)
+        t = RepetitionPulseTemplate(body, repetitions, parameter_constraints=['foo<9'])
+        parameters = dict(foo=ConstantParameter(3))
+        volatile_parameters = {}
+        measurement_mapping = dict(moth='fire')
+        channel_mapping = dict(asd='f')
+        program = t.create_program(parameters=parameters,
+                                   volatile_parameters=volatile_parameters,
+                                   measurement_mapping=measurement_mapping,
+                                   channel_mapping=channel_mapping)
+
+        self.assertEqual(parameters[repetitions].get_value(), program.repetition_count)
+        self.assertEqual((parameters, volatile_parameters, measurement_mapping, channel_mapping),
+                         body.create_program_calls[-1])
+        self.assertEqual([body_program], program.children)
+
+    def test_create_program_declaration_exceeds_bounds(self) -> None:
+        repetitions = "foo"
+        body_program = Loop()
+        body = DummyPulseTemplate(duration=2.0, program=body_program)
+        t = RepetitionPulseTemplate(body, repetitions, parameter_constraints=['foo<9'])
+        parameters = dict(foo=ConstantParameter(9))
+        volatile_parameters = {}
+        measurement_mapping = dict(moth='fire')
+        channel_mapping = dict(asd='f')
+        with self.assertRaises(ParameterConstraintViolation):
+            t.create_program(parameters=parameters,
+                             volatile_parameters=volatile_parameters,
+                             measurement_mapping=measurement_mapping,
+                             channel_mapping=channel_mapping)
+
+    def test_create_program_declaration_parameter_not_provided(self) -> None:
+        repetitions = "foo"
+        body_program = Loop()
+        body = DummyPulseTemplate(duration=2.0, program=body_program)
+        t = RepetitionPulseTemplate(body, repetitions, parameter_constraints=['foo<9'])
+        parameters = {}
+        volatile_parameters = {}
+        measurement_mapping = dict(moth='fire')
+        channel_mapping = dict(asd='f')
+        with self.assertRaises(ParameterNotProvidedException):
+            t.create_program(parameters=parameters,
+                             volatile_parameters=volatile_parameters,
+                             measurement_mapping=measurement_mapping,
+                             channel_mapping=channel_mapping)
+
+    def test_create_program_declaration_parameter_value_not_whole(self) -> None:
+        repetitions = "foo"
+        body_program = Loop()
+        body = DummyPulseTemplate(duration=2.0, program=body_program)
+        t = RepetitionPulseTemplate(body, repetitions, parameter_constraints=['foo<9'])
+        parameters = dict(foo=ConstantParameter(3.3))
+        volatile_parameters = {}
+        measurement_mapping = dict(moth='fire')
+        channel_mapping = dict(asd='f')
+        with self.assertRaises(ParameterNotIntegerException):
+            t.create_program(parameters=parameters,
+                            volatile_parameters=volatile_parameters,
+                            measurement_mapping=measurement_mapping,
+                            channel_mapping=channel_mapping)
+
+    def test_create_program_rep_count_zero_constant(self) -> None:
+        repetitions = 0
+        body_program = Loop()
+        body = DummyPulseTemplate(duration=2.0, program=body_program)
+
+        # suppress warning about 0 repetitions on construction here, we are only interested in correct behavior during sequencing (i.e., do nothing)
+        with warnings.catch_warnings(record=True):
+            t = RepetitionPulseTemplate(body, repetitions)
+
+        parameters = {}
+        volatile_parameters = {}
+        measurement_mapping = dict(moth='fire')
+        channel_mapping = dict(asd='f')
+
+        program = t.create_program(parameters=parameters,
+                                   volatile_parameters=volatile_parameters,
+                                   measurement_mapping=measurement_mapping,
+                                   channel_mapping=channel_mapping)
+        self.assertIsNone(program)
+
+    def test_create_program_rep_count_zero_declaration(self) -> None:
+        repetitions = "foo"
+        body_program = Loop()
+        body = DummyPulseTemplate(duration=2.0, program=body_program)
+
+        # suppress warning about 0 repetitions on construction here, we are only interested in correct behavior during sequencing (i.e., do nothing)
+        with warnings.catch_warnings(record=True):
+            t = RepetitionPulseTemplate(body, repetitions)
+
+        parameters = dict(foo=ConstantParameter(0))
+        volatile_parameters = {}
+        measurement_mapping = dict(moth='fire')
+        channel_mapping = dict(asd='f')
+
+        program = t.create_program(parameters=parameters,
+                                   volatile_parameters=volatile_parameters,
+                                   measurement_mapping=measurement_mapping,
+                                   channel_mapping=channel_mapping)
+        self.assertIsNone(program)
+
+    def test_rep_count_neg_declaration(self) -> None:
+        repetitions = "foo"
+        body_program = Loop()
+        body = DummyPulseTemplate(duration=2.0, program=body_program)
+
+        # suppress warning about 0 repetitions on construction here, we are only interested in correct behavior during sequencing (i.e., do nothing)
+        with warnings.catch_warnings(record=True):
+            t = RepetitionPulseTemplate(body, repetitions)
+
+        parameters = dict(foo=ConstantParameter(-1))
+        volatile_parameters = {}
+        measurement_mapping = dict(moth='fire')
+        channel_mapping = dict(asd='f')
+
+        program = t.create_program(parameters=parameters,
+                                   volatile_parameters=volatile_parameters,
+                                   measurement_mapping=measurement_mapping,
+                                   channel_mapping=channel_mapping)
+        self.assertIsNone(program)
+
+
+class RepetitionPulseTemplateOldSequencingTests(unittest.TestCase):
 
     def setUp(self) -> None:
         self.body = DummyPulseTemplate()
@@ -186,10 +344,6 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
         with self.assertRaises(ParameterNotIntegerException):
             self.template.build_sequence(self.sequencer, parameters, conditions, {}, {}, self.block)
         self.assertFalse(self.sequencer.sequencing_stacks)
-
-    def test_parameter_names_param_only_in_constraint(self) -> None:
-        pt = RepetitionPulseTemplate(DummyPulseTemplate(parameter_names={'a'}), 'n', parameter_constraints=['a<c'])
-        self.assertEqual(pt.parameter_names, {'a','c', 'n'})
 
     def test_rep_count_zero_constant(self) -> None:
         repetitions = 0

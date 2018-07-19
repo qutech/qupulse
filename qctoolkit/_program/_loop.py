@@ -46,9 +46,15 @@ class Loop(Comparable, Node):
     def compare_key(self) -> Tuple:
         return self._waveform, self.repetition_count, tuple(c.compare_key for c in self)
 
-    def append_child(self, **kwargs) -> None:
+    def append_child(self, loop: Optional['Loop']=None, **kwargs) -> None:
         # do not invalidate but update cached duration
-        super().__setitem__(slice(len(self), len(self)), (kwargs, ))
+        if loop is not None:
+            if kwargs:
+                raise ValueError("Cannot pass a Loop object and Loop constructor arguments at the same time in append_child")
+            arg = (loop,)
+        else:
+            arg = (kwargs,)
+        super().__setitem__(slice(len(self), len(self)), arg)
         self._invalidate_duration(body_duration_increment=self[-1].duration)
 
     def _invalidate_duration(self, body_duration_increment=None):

@@ -144,10 +144,12 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
                                                   volatile_parameters,
                                                   measurement_mapping,
                                                   channel_mapping)
-            if subprogram:
+            if subprogram is not None:
                 measurements = self.get_measurement_windows(parameters, measurement_mapping)
                 program = Loop(measurements=measurements, repetition_count=repetition_count)
-                program.append_child(subprogram)
+                program.append_child(loop=subprogram)
+                # todo (2018-07-19): could in some circumstances possibly just multiply subprogram repetition count
+                # could be tricky if any repetition count is volatile ? check later and optimize if necessary
                 return program
         return None
 
