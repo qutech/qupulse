@@ -100,10 +100,10 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
         """Returns an expression giving the integral over the pulse."""
 
-    def create_program(self,
-                       parameters: Dict[str, Parameter],
-                       measurement_mapping: Dict[str, Optional[str]],
-                       channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional['Loop']:
+    def create_program(self, *,
+                       parameters: Optional[Dict[str, Parameter]]=None,
+                       measurement_mapping: Optional[Dict[str, Optional[str]]]=None,
+                       channel_mapping: Optional[Dict[ChannelID, Optional[ChannelID]]]=None) -> Optional['Loop']:
         """Translates this PulseTemplate into a program Loop.
 
         The returned Loop represents the PulseTemplate with all parameter values instantiated provided as dictated by
@@ -115,6 +115,13 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
         :param channel_mapping: A mapping of channel names. Channels that are mapped to None are omitted.
         :return: A Loop object corresponding to this PulseTemplate.
         """
+        if parameters is None:
+            parameters = dict()
+        if measurement_mapping is None:
+            measurement_mapping = dict()
+        if channel_mapping is None:
+            channel_mapping = dict()
+
         # make sure all values in the parameters dict are of type Parameter
         for (key, value) in parameters.items():
             if not isinstance(value, Parameter):
