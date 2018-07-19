@@ -132,23 +132,26 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
                                  measurement_mapping: Dict[str, Optional[str]],
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Loop]:
         self.validate_parameter_constraints(parameters=parameters)
+        relevant_parames = set(self._repetition_count.variables).union(self.measurement_parameters)
         try:
-            real_parameters = {v: parameters[v].get_value() for v in self._repetition_count.variables}
+            real_parameters = {v: parameters[v].get_value() for v in relevant_parames}
         except KeyError:
             raise ParameterNotProvidedException(next(v for v in self.repetition_count.variables if v not in parameters))
 
-        repetition_count = self.get_repetition_count_value(real_parameters)
+        repetition_count = max(0, self.get_repetition_count_value(real_parameters))
+        measurements = self.get_measurement_windows(real_parameters, measurement_mapping)
+        subprograms = []
+
+        # todo (2018-07-19): could in some circumstances possibly just multiply subprogram repetition count
+        # could be tricky if any repetition count is volatile ? check later and optimize if necessary
         if repetition_count > 0:
             subprogram = self.body.create_program(parameters,
                                                   measurement_mapping,
                                                   channel_mapping)
             if subprogram is not None:
-                measurements = self.get_measurement_windows(parameters, measurement_mapping)
-                program = Loop(measurements=measurements, repetition_count=repetition_count)
-                program.append_child(loop=subprogram)
-                # todo (2018-07-19): could in some circumstances possibly just multiply subprogram repetition count
-                # could be tricky if any repetition count is volatile ? check later and optimize if necessary
-                return program
+                subprograms = [subprogram]
+        if measurements or (subprograms and repetition_count > 0):
+            return Loop(measurements=measurements, repetition_count=repetition_count, children=subprograms)
         return None
 
     def requires_stop(self,

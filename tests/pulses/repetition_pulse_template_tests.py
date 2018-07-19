@@ -114,6 +114,7 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
         self.assertEqual(repetitions, program.repetition_count)
         self.assertEqual((parameters, measurement_mapping, channel_mapping), body.create_program_calls[-1])
         self.assertEqual([body_program], program.children)
+        self.assertEqual([], program._measurements)
 
     def test_create_program_declaration_success(self) -> None:
         repetitions = "foo"
@@ -131,6 +132,25 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
         self.assertEqual((parameters, measurement_mapping, channel_mapping),
                          body.create_program_calls[-1])
         self.assertEqual([body_program], program.children)
+        self.assertEqual([], program._measurements)
+
+    def test_create_program_declaration_success_measurements(self) -> None:
+        repetitions = "foo"
+        body_program = Loop(waveform=DummyWaveform(duration=1.0))
+        body = DummyPulseTemplate(duration=2.0, program=body_program)
+        t = RepetitionPulseTemplate(body, repetitions, parameter_constraints=['foo<9'], measurements=[('moth', 0, 'meas_end')])
+        parameters = dict(foo=ConstantParameter(3), meas_end=ConstantParameter(7.1))
+        measurement_mapping = dict(moth='fire')
+        channel_mapping = dict(asd='f')
+        program = t.create_program(parameters=parameters,
+                                   measurement_mapping=measurement_mapping,
+                                   channel_mapping=channel_mapping)
+
+        self.assertEqual(parameters[repetitions].get_value(), program.repetition_count)
+        self.assertEqual((parameters, measurement_mapping, channel_mapping),
+                         body.create_program_calls[-1])
+        self.assertEqual([body_program], program.children)
+        self.assertEqual([('fire', 0, 7.1)], program._measurements)
 
     def test_create_program_declaration_exceeds_bounds(self) -> None:
         repetitions = "foo"
@@ -193,6 +213,27 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
         self.assertFalse(body.create_program_calls)
         self.assertIsNone(program)
 
+    def test_create_program_rep_count_zero_constant_with_measurement(self) -> None:
+        repetitions = 0
+        body_program = Loop(waveform=DummyWaveform(duration=1.0))
+        body = DummyPulseTemplate(duration=2.0, program=body_program)
+
+        # suppress warning about 0 repetitions on construction here, we are only interested in correct behavior during sequencing (i.e., do nothing)
+        with warnings.catch_warnings(record=True):
+            t = RepetitionPulseTemplate(body, repetitions, measurements=[('moth', 0, 'meas_end')])
+
+        parameters = dict(meas_end=ConstantParameter(7.1))
+        measurement_mapping = dict(moth='fire')
+        channel_mapping = dict(asd='f')
+
+        program = t.create_program(parameters=parameters,
+                                   measurement_mapping=measurement_mapping,
+                                   channel_mapping=channel_mapping)
+        self.assertFalse(body.create_program_calls)
+        self.assertFalse(program.children)
+        self.assertEqual([('fire', 0, 7.1)], program._measurements)
+        self.assertEqual(0, program.repetition_count)
+
     def test_create_program_rep_count_zero_declaration(self) -> None:
         repetitions = "foo"
         body_program = Loop()
@@ -211,6 +252,27 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
                                    channel_mapping=channel_mapping)
         self.assertFalse(body.create_program_calls)
         self.assertIsNone(program)
+
+    def test_create_program_rep_count_zero_declaration_with_measurement(self) -> None:
+        repetitions = "foo"
+        body_program = Loop()
+        body = DummyPulseTemplate(duration=2.0, program=body_program)
+
+        # suppress warning about 0 repetitions on construction here, we are only interested in correct behavior during sequencing (i.e., do nothing)
+        with warnings.catch_warnings(record=True):
+            t = RepetitionPulseTemplate(body, repetitions, measurements=[('moth', 0, 'meas_end')])
+
+        parameters = dict(foo=ConstantParameter(0), meas_end=ConstantParameter(7.1))
+        measurement_mapping = dict(moth='fire')
+        channel_mapping = dict(asd='f')
+
+        program = t.create_program(parameters=parameters,
+                                   measurement_mapping=measurement_mapping,
+                                   channel_mapping=channel_mapping)
+        self.assertFalse(body.create_program_calls)
+        self.assertFalse(program.children)
+        self.assertEqual([('fire', 0, 7.1)], program._measurements)
+        self.assertEqual(0, program.repetition_count)
 
     def test_create_program_rep_count_neg_declaration(self) -> None:
         repetitions = "foo"
@@ -231,6 +293,27 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
         self.assertFalse(body.create_program_calls)
         self.assertIsNone(program)
 
+    def test_create_program_rep_count_neg_declaration_with_measurements(self) -> None:
+        repetitions = "foo"
+        body_program = Loop()
+        body = DummyPulseTemplate(duration=2.0, program=body_program)
+
+        # suppress warning about 0 repetitions on construction here, we are only interested in correct behavior during sequencing (i.e., do nothing)
+        with warnings.catch_warnings(record=True):
+            t = RepetitionPulseTemplate(body, repetitions, measurements=[('moth', 0, 'meas_end')])
+
+        parameters = dict(foo=ConstantParameter(-1), meas_end=ConstantParameter(7.1))
+        measurement_mapping = dict(moth='fire')
+        channel_mapping = dict(asd='f')
+
+        program = t.create_program(parameters=parameters,
+                                   measurement_mapping=measurement_mapping,
+                                   channel_mapping=channel_mapping)
+        self.assertFalse(body.create_program_calls)
+        self.assertFalse(program.children)
+        self.assertEqual([('fire', 0, 7.1)], program._measurements)
+        self.assertEqual(0, program.repetition_count)
+
     def test_create_program_none_subprogram(self) -> None:
         repetitions = "foo"
         body_program = None
@@ -246,6 +329,22 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
         self.assertIsNone(program)
         self.assertEqual((parameters, measurement_mapping, channel_mapping),
                          body.create_program_calls[-1])
+
+    def test_create_program_none_subprogram_with_measurement(self) -> None:
+        repetitions = "foo"
+        body_program = None
+        body = DummyPulseTemplate(duration=2.0, program=body_program)
+        t = RepetitionPulseTemplate(body, repetitions, parameter_constraints=['foo<9'], measurements=[('moth', 0, 'meas_end')])
+        parameters = dict(foo=ConstantParameter(3), meas_end=ConstantParameter(7.1))
+        measurement_mapping = dict(moth='fire')
+        channel_mapping = dict(asd='f')
+        program = t.create_program(parameters=parameters,
+                                   measurement_mapping=measurement_mapping,
+                                   channel_mapping=channel_mapping)
+
+        self.assertFalse(program.children)
+        self.assertEqual([('fire', 0, 7.1)], program._measurements)
+        self.assertEqual(3, program.repetition_count) # 0 or 3, what is correct?
 
 
 class RepetitionPulseTemplateOldSequencingTests(unittest.TestCase):
