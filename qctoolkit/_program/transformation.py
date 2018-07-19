@@ -1,4 +1,4 @@
-from typing import Mapping, Set
+from typing import Mapping, Set, Dict
 from abc import abstractmethod
 
 import numpy as np
@@ -44,12 +44,12 @@ class LinearTransformation(Transformation):
 
         return self._matrix @ data_in
 
-    def get_output_channels(self, input_channels: Set[ChannelID]):
+    def get_output_channels(self, input_channels: Set[ChannelID]) -> Set[ChannelID]:
         if input_channels != set(self._matrix.columns):
             raise KeyError('Invalid input channels', input_channels, set(self._matrix.columns))
 
         return set(self._matrix.index)
 
     @property
-    def compare_key(self):
+    def compare_key(self) -> Dict[ChannelID, Dict[ChannelID, float]]:
         return self._matrix.to_dict()
