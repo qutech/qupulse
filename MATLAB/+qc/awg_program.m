@@ -83,10 +83,13 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 					warning('Maximum waiting time ''plsdata.awg.maxPulseWait'' = %g s reached.\nIncrease if you experience problems with the data acquistion.', plsdata.awg.maxPulseWait);
 				end
 				pause(waitingTime);
-% 				fprintf('Waited for %.3fs for pulse to complete\n', waitingTime);				
-			end
+				% fprintf('Waited for %.3fs for pulse to complete\n', waitingTime);				
+			end			
 			
-			hws.arm_program(a.program_name);			
+			qc.workaround_4chan_program_errors(a);		
+			
+			hws.arm_program(a.program_name);	
+	
 			plsdata.awg.currentProgam = a.program_name;
 			bool = true;
 			msg = sprintf('Program ''%s'' armed', a.program_name);
@@ -116,7 +119,7 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 % 			dacToArm{1}.arm_program(plsdata.awg.currentProgam);
 % 		end
 		
-		qc.awg_program('arm', 'program_name', globalProgram, 'verbosity', a.verbosity);
+		qc.awg_program('arm', 'program_name', globalProgram, 'verbosity', a.verbosity, 'arm_global_for_workaround_4chan_program_errors', []);
 		
 	% --- remove ------------------------------------------------------------
 	elseif strcmp(ctrl, 'remove')		
