@@ -1182,6 +1182,12 @@ class TaborChannelPair(AWG):
         while len(advanced_sequencer_table) < self.device.dev_properties['min_aseq_len']:
             advanced_sequencer_table.append((1, 1, 0))
 
+        # reset sequencer and advanced sequencer tables to fix bug which occurs when switching between some programs
+        self.device.send_cmd('SEQ:DEL:ALL')
+        self._sequencer_tables = []
+        self.device.send_cmd('ASEQ:DEL')
+        self._advanced_sequence_table = []
+
         # download all sequence tables
         for i, sequencer_table in enumerate(sequencer_tables):
             if i >= len(self._sequencer_tables) or self._sequencer_tables[i] != sequencer_table:

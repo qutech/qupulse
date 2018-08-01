@@ -21,27 +21,31 @@ function workaround_4chan_program_errors(a)
 	% program and then arming the idle program manually. Next, the erroneous
 	% program can be run and now yields the correct result.
 	%
-	% Once this bug has been fixed, this function and all calls to it can be
-	% removed.
+	% This bug has been fixed now by adding the following lines in tabor.py
+	%		self.device.send_cmd('SEQ:DEL:ALL')
+	%   self._sequencer_tables = []
+	%   self.device.send_cmd('ASEQ:DEL')
+	%   self._advanced_sequence_table = []
 	
+	warning('No longer needed since bug has been fixed');
 	
-	global plsdata
-	
-	if ~strcmp(plsdata.awg.currentProgam, a.program_name) && (~isfield(a, 'arm_global_for_workaround_4chan_program_errors'))
-		tic
-		
-		hws = plsdata.awg.hardwareSetup;
-		known_awgs = util.py.py2mat(hws.known_awgs);
-		
-		for k = 1:numel(known_awgs)
-			if any(cellfun(@(x)(strcmp(x, a.program_name)), fieldnames(util.py.py2mat(py.getattr(known_awgs{k}, '_known_programs')))))
-				known_awgs{k}.change_armed_program(a.program_name);
-			end
-		end
-		
-		for k = 1:numel(known_awgs)
-			known_awgs{k}.change_armed_program(py.None);
-		end
-		
-		fprintf('qc.workaround_4chan_program_errors executed...took %.0fs\n', toc);
-	end
+	% 	global plsdata
+	% 	
+	% 	if ~strcmp(plsdata.awg.currentProgam, a.program_name) && (~isfield(a, 'arm_global_for_workaround_4chan_program_errors'))
+	% 		tic
+	% 		
+	% 		hws = plsdata.awg.hardwareSetup;
+	% 		known_awgs = util.py.py2mat(hws.known_awgs);
+	% 		
+	% 		for k = 1:numel(known_awgs)
+	% 			if any(cellfun(@(x)(strcmp(x, a.program_name)), fieldnames(util.py.py2mat(py.getattr(known_awgs{k}, '_known_programs')))))
+	% 				known_awgs{k}.change_armed_program(a.program_name);
+	% 			end
+	% 		end
+	% 		
+	% 		for k = 1:numel(known_awgs)
+	% 			known_awgs{k}.change_armed_program(py.None);
+	% 		end
+	% 		
+	% 		fprintf('qc.workaround_4chan_program_errors executed...took %.0fs\n', toc);
+	% 	end

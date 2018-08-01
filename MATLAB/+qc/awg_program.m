@@ -86,7 +86,8 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 				% fprintf('Waited for %.3fs for pulse to complete\n', waitingTime);				
 			end			
 			
-			qc.workaround_4chan_program_errors(a);		
+			% No longer needed since bug has been fixed
+			% qc.workaround_4chan_program_errors(a);		
 			
 			hws.arm_program(a.program_name);	
 	
