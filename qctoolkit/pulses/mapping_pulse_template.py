@@ -10,6 +10,7 @@ from qctoolkit.pulses.parameters import Parameter, MappedParameter, ParameterNot
 from qctoolkit.pulses.sequencing import Sequencer
 from qctoolkit._program.instructions import InstructionBlock
 from qctoolkit._program.waveforms import Waveform
+from qctoolkit._program._loop import Loop
 from qctoolkit.pulses.conditions import Condition
 from qctoolkit.serialization import Serializer, PulseRegistryType
 
@@ -265,6 +266,15 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                                      measurement_mapping=self.get_updated_measurement_mapping(measurement_mapping),
                                      channel_mapping=self.get_updated_channel_mapping(channel_mapping),
                                      instruction_block=instruction_block)
+
+    def _internal_create_program(self,
+                                 parameters: Dict[str, Parameter],
+                                 measurement_mapping: Dict[str, Optional[str]],
+                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Loop]:
+        # parameters are validated in map_parameters() call, no need to do it here again explicitly
+        return self.template.create_program(parameters=self.map_parameters(parameters),
+                                            measurement_mapping=self.get_updated_measurement_mapping(measurement_mapping),
+                                            channel_mapping=self.get_updated_channel_mapping(channel_mapping))
 
     def build_waveform(self,
                        parameters: Dict[str, numbers.Real],
