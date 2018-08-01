@@ -411,6 +411,19 @@ class TablePulseTemplateTest(unittest.TestCase):
         tpt = TablePulseTemplate({0: [(10, 1)]}, measurements=[('A', 2, 3), ('AB', 0, 1)])
         self.assertEqual(tpt.measurement_names, {'A', 'AB'})
 
+    def test_identifier(self) -> None:
+        identifier = 'some name'
+        pulse = TablePulseTemplate(entries={0: [(1, 0)]}, identifier=identifier)
+        self.assertEqual(pulse.identifier, identifier)
+
+    def test_integral(self) -> None:
+        pulse = TablePulseTemplate(entries={0: [(1, 2, 'linear'), (3, 0, 'jump'), (4, 2, 'hold'), (5, 8, 'hold')],
+                                            'other_channel': [(0, 7, 'linear'), (2, 0, 'hold'), (10, 0)],
+                                            'symbolic': [(3, 'a', 'hold'), ('b', 4, 'linear'), ('c', Expression('d'), 'hold')]})
+        self.assertEqual(pulse.integral, {0: Expression('6'),
+                                          'other_channel': Expression(7),
+                                          'symbolic': Expression('(b-3)*a + 0.5 * (c-b)*(d+4)')})
+
 
 class TablePulseTemplateConstraintTest(ParameterConstrainerTest):
     def __init__(self, *args, **kwargs):
@@ -633,19 +646,6 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
                      (True, {'foo': DummyParameter(0, True), 'bar': DummyParameter(0, True), 'v': DummyParameter(0, True)}, {'foo': DummyCondition(True)})]
         for expected_result, parameter_set, condition_set in test_sets:
             self.assertEqual(expected_result, table.requires_stop(parameter_set, condition_set))
-
-    def test_identifier(self) -> None:
-        identifier = 'some name'
-        pulse = TablePulseTemplate(entries={0: [(1, 0)]}, identifier=identifier)
-        self.assertEqual(pulse.identifier, identifier)
-
-    def test_integral(self) -> None:
-        pulse = TablePulseTemplate(entries={0: [(1, 2, 'linear'), (3, 0, 'jump'), (4, 2, 'hold'), (5, 8, 'hold')],
-                                            'other_channel': [(0, 7, 'linear'), (2, 0, 'hold'), (10, 0)],
-                                            'symbolic': [(3, 'a', 'hold'), ('b', 4, 'linear'), ('c', Expression('d'), 'hold')]})
-        self.assertEqual(pulse.integral, {0: Expression('6'),
-                                          'other_channel': Expression(7),
-                                          'symbolic': Expression('(b-3)*a + 0.5 * (c-b)*(d+4)')})
 
 
 

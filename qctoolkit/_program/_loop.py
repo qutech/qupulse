@@ -15,8 +15,7 @@ from qctoolkit.utils.tree import Node, is_tree_circular
 from qctoolkit.utils.types import MeasurementWindow
 from qctoolkit.utils import is_integer
 
-from qctoolkit._program.waveforms import SequenceWaveform
-from qctoolkit._program.waveforms import RepetitionWaveform
+from qctoolkit._program.waveforms import SequenceWaveform, RepetitionWaveform
 
 __all__ = ['Loop', 'MultiChannelProgram', 'make_compatible']
 

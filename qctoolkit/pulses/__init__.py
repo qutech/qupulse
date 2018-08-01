@@ -4,7 +4,7 @@ subclasses that are final and ready to be used are imported here with their reco
 from qctoolkit.pulses.function_pulse_template import FunctionPulseTemplate as FunctionPT
 from qctoolkit.pulses.loop_pulse_template import ForLoopPulseTemplate as ForLoopPT
 from qctoolkit.pulses.multi_channel_pulse_template import AtomicMultiChannelPulseTemplate as AtomicMultiChannelPT
-from qctoolkit.pulses.pulse_template_parameter_mapping import MappingPulseTemplate as MappingPT
+from qctoolkit.pulses.mapping_pulse_template import MappingPulseTemplate as MappingPT
 from qctoolkit.pulses.repetition_pulse_template import RepetitionPulseTemplate as RepetitionPT
 from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate as SequencePT
 from qctoolkit.pulses.table_pulse_template import TablePulseTemplate as TablePT
