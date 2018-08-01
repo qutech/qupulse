@@ -18,7 +18,8 @@ function program = program_to_struct(program_name, pulse_template, parameters_an
 		'window_mapping',       window_mapping ...
 		);			
 	program.pulse_duration = qc.get_pulse_duration(pulse_template, qc.join_params_and_dicts(program.parameters_and_dicts));
-		
+	program.added_to_pulse_duration	= 0;
+	
 	for name = fieldnames(program.channel_mapping)'
 		if strcmp(class(program.channel_mapping.(name{1})), 'py.NoneType')
 			program.channel_mapping.(name{1}) = py.None;
