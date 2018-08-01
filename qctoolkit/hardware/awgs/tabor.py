@@ -1190,9 +1190,8 @@ class TaborChannelPair(AWG):
 
         # download all sequence tables
         for i, sequencer_table in enumerate(sequencer_tables):
-            if i >= len(self._sequencer_tables) or self._sequencer_tables[i] != sequencer_table:
-                self.device.send_cmd('SEQ:SEL {}'.format(i+1))
-                self.device.download_sequencer_table(sequencer_table)
+            self.device.send_cmd('SEQ:SEL {}'.format(i+1))
+            self.device.download_sequencer_table(sequencer_table)
         self._sequencer_tables = sequencer_tables
         self.device.send_cmd('SEQ:SEL 1')
 
