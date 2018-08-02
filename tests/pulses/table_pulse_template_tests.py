@@ -111,6 +111,10 @@ class TablePulseTemplateTest(unittest.TestCase):
                                     ('b', 1),
                                     ('c*a', 'k')]}, parameter_constraints=['a*c < b'])
 
+    def test_parameter_names(self) -> None:
+        table = TablePulseTemplate({'a': [('foo', 'bar')]}, parameter_constraints=['foo < hugo'], measurements=[('meas', 'd', 2)])
+        self.assertEqual({'foo', 'bar', 'hugo', 'd'}, table.parameter_names)
+
     def test_time_is_0_on_construction(self) -> None:
         with self.assertWarns(ZeroDurationTablePulseTemplate):
             warnings.simplefilter('default', ZeroDurationTablePulseTemplate)
