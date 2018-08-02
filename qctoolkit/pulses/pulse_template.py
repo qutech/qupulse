@@ -130,9 +130,9 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
         root_loop = Loop()
         # call subclass specific implementation
         self._internal_create_program(parameters=parameters,
-                                             measurement_mapping=measurement_mapping,
-                                             channel_mapping=channel_mapping,
-                                             parent_loop=root_loop)
+                                      measurement_mapping=measurement_mapping,
+                                      channel_mapping=channel_mapping,
+                                      parent_loop=root_loop)
         return root_loop
 
     @abstractmethod
@@ -143,8 +143,13 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
                                  parent_loop: Loop) -> None:
         """The subclass specific implementation of create_program().
 
+        Receives a Loop instance parent_loop to which it should append measurements and its own Loops as children.
+
         Subclasses should not overwrite create_program() directly but provide their implementation here. This method
-        is called by create_program()."""
+        is called by create_program().
+        Implementations should not call create_program() of any subtemplates to obtain Loop objects for them but
+        call subtemplate._internal_create_program() instead, providing an adequate parent_loop object to which
+        the subtemplate will append."""
 
 
 class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
