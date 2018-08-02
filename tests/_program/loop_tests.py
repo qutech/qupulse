@@ -287,6 +287,26 @@ LOOP 1 times:
 
         self.assertEqual(expected_after_repr, repr(after))
 
+    def test_unroll(self):
+        wf = DummyWaveform(duration=1)
+        wf2 = DummyWaveform(duration=2)
+        wf3 = DummyWaveform(duration=3)
+        root = Loop(waveform=wf)
+
+        with self.assertRaisesRegex(RuntimeError, 'Leaves cannot be unrolled'):
+            root.unroll()
+
+        root = Loop(children=[Loop(waveform=wf),
+                              Loop(children=[Loop(waveform=wf2), Loop(waveform=wf3)], repetition_count=2)])
+        root.children[1].unroll()
+
+        expected = Loop(children=[Loop(waveform=wf),
+                                  Loop(waveform=wf2),
+                                  Loop(waveform=wf3),
+                                  Loop(waveform=wf2),
+                                  Loop(waveform=wf3)])
+        self.assertEqual(expected, root)
+
 
 class MultiChannelTests(unittest.TestCase):
     def __init__(self, *args, **kwargs):
