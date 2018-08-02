@@ -21,7 +21,7 @@ from qctoolkit._program.waveforms import MultiChannelWaveform
 from qctoolkit.pulses.pulse_template import PulseTemplate, AtomicPulseTemplate
 from qctoolkit.pulses.mapping_pulse_template import MappingPulseTemplate, MappingTuple
 from qctoolkit.pulses.parameters import Parameter, ParameterConstrainer
-from qctoolkit.pulses.measurement import MeasurementDeclaration
+from qctoolkit.pulses.measurement import MeasurementDeclaration, MeasurementWindow
 from qctoolkit.expressions import Expression, ExpressionScalar
 
 __all__ = ["AtomicMultiChannelPulseTemplate"]
@@ -116,6 +116,16 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
             return sub_waveforms[0]
         else:
             return MultiChannelWaveform(sub_waveforms)
+
+    def get_measurement_windows(self,
+                                parameters: Dict[str, numbers.Real],
+                                measurement_mapping: Dict[str, Optional[str]]) -> List[MeasurementWindow]:
+        measurements = super().get_measurement_windows(parameters=parameters,
+                                                       measurement_mapping=measurement_mapping)
+        for st in self.subtemplates:
+            measurements.extend(st.get_measurement_windows(parameters=parameters,
+                                                           measurement_mapping=measurement_mapping))
+        return measurements
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],
