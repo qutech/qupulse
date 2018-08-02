@@ -18,7 +18,7 @@ from qctoolkit._program._loop import Loop
 
 
 from qctoolkit.pulses.conditions import Condition
-from qctoolkit.pulses.parameters import Parameter, ConstantParameter
+from qctoolkit.pulses.parameters import Parameter, ConstantParameter, ParameterNotProvidedException
 from qctoolkit.pulses.sequencing import Sequencer, SequencingElement, InstructionBlock
 from qctoolkit._program.waveforms import Waveform
 from qctoolkit.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
@@ -118,7 +118,7 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
         if parameters is None:
             parameters = dict()
         if measurement_mapping is None:
-            measurement_mapping = dict()
+            measurement_mapping = dict() # todo (2018-08-02): should not be empty but an identity mapping; requires PT to be a MeasurementDefiner (?)
         if channel_mapping is None:
             channel_mapping = dict()
 
@@ -133,6 +133,9 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
                                       measurement_mapping=measurement_mapping,
                                       channel_mapping=channel_mapping,
                                       parent_loop=root_loop)
+
+        if root_loop.waveform is None and len(root_loop.children) == 0:
+            return None # return None if no program
         return root_loop
 
     @abstractmethod
@@ -149,7 +152,11 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
         is called by create_program().
         Implementations should not call create_program() of any subtemplates to obtain Loop objects for them but
         call subtemplate._internal_create_program() instead, providing an adequate parent_loop object to which
-        the subtemplate will append."""
+        the subtemplate will append. Implementations must make sure not to append invalid Loop objects (no waveform or no children).
+
+        In case of an error (e.g. invalid measurement mapping, missing parameters, violated parameter constraints, etc),
+        implementations of this method must throw an adequate exception. They do not have to ensure that the parent_loop
+        remains unchanged in this case."""
 
 
 class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
@@ -190,19 +197,25 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
             instruction_block.add_instruction_meas(measurements)
             instruction_block.add_instruction_exec(waveform)
 
-    def _internal_create_program(self,
+    def _internal_create_program(self, *,
                                  parameters: Dict[str, Parameter],
                                  measurement_mapping: Dict[str, Optional[str]],
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  parent_loop: Loop) -> None:
         # todo (2018-07-05): why are parameter constraints not validated here?
-        parameters = {parameter_name: parameter_value.get_value()
-                      for parameter_name, parameter_value in parameters.items()
-                      if parameter_name in self.parameter_names}
+        try:
+            parameters = {parameter_name: parameters[parameter_name].get_value()
+                          for parameter_name in self.parameter_names}
+
+            measurement_parameters = {parameter_name: parameters[parameter_name].get_value()
+                                      for parameter_name in self.measurement_parameters}
+        except KeyError as e:
+            raise ParameterNotProvidedException(str(e)) from e
+
+        measurements = self.get_measurement_windows(parameters=measurement_parameters, measurement_mapping=measurement_mapping)
         waveform = self.build_waveform(parameters,
                                        channel_mapping=channel_mapping)
         if waveform:
-            measurements = self.get_measurement_windows(parameters=parameters, measurement_mapping=measurement_mapping)
             parent_loop.append_child(waveform=waveform, measurements=measurements)
 
 
@@ -211,6 +224,10 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
                        parameters: Dict[str, Real],
                        channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Waveform]:
         """Translate this PulseTemplate into a waveform according to the given parameters.
+
+
+        Subclasses of AtomicPulseTemplate must check for ParameterConstraintViolation
+        errors in their build_waveform implementation and raise corresponding exceptions.
 
         Args:
             parameters (Dict(str -> Parameter)): A mapping of parameter names to real numbers.
