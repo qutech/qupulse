@@ -199,19 +199,19 @@ class TektronixProgram:
         return self._waveforms
 
     @property
-    def sample_rate(self):
+    def sample_rate(self) -> TimeType:
         return self._sample_rate
 
     @property
-    def channels(self):
+    def channels(self) -> Tuple[ChannelID]:
         return self._channels
 
     @property
-    def markers(self):
+    def markers(self) -> Tuple[Tuple[ChannelID, ChannelID]]:
         return self._markers
 
     @property
-    def amplitudes(self):
+    def amplitudes(self) -> Tuple[float]:
         return self._amplitudes
 
 
