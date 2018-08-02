@@ -1,5 +1,5 @@
 """STANDARD LIBRARY IMPORTS"""
-from typing import Tuple, List, Dict, Optional, Set, Any
+from typing import Tuple, List, Dict, Optional, Set, Any, Union
 import copy
 
 import numpy
@@ -136,7 +136,7 @@ class DummyInstructionBlock(InstructionBlock):
 
 class DummyWaveform(Waveform):
 
-    def __init__(self, duration: float=0, sample_output: numpy.ndarray=None, defined_channels={'A'}) -> None:
+    def __init__(self, duration: float=0, sample_output: Union[numpy.ndarray, dict]=None, defined_channels={'A'}) -> None:
         super().__init__()
         self.duration_ = time_from_float(duration)
         self.sample_output = sample_output
@@ -166,7 +166,10 @@ class DummyWaveform(Waveform):
         if output_array is None:
             output_array = numpy.empty_like(sample_times)
         if self.sample_output is not None:
-            output_array[:] = self.sample_output
+            if isinstance(self.sample_output, dict):
+                output_array[:] = self.sample_output[channel]
+            else:
+                output_array[:] = self.sample_output
         else:
             output_array[:] = sample_times
         return output_array
@@ -323,10 +326,6 @@ class DummyPulseTemplate(AtomicPulseTemplate):
     @property
     def parameter_names(self) -> Set[str]:
         return set(self.parameter_names_)
-
-    def get_measurement_windows(self, parameters: Dict[str, Parameter] = None) -> List[MeasurementWindow]:
-        """Return all measurement windows defined in this PulseTemplate."""
-        raise NotImplementedError()
 
     @property
     def build_sequence_calls(self):

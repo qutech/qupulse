@@ -154,6 +154,20 @@ class ForLoopPulseTemplateTest(unittest.TestCase):
                                    loop_range=('a', 'b', 'c',), parameter_constraints=['k<=f'])
         self.assertEqual(flt.parameter_names, {'k', 'a', 'b', 'c', 'f'})
 
+    def test_integral(self) -> None:
+        dummy = DummyPulseTemplate(defined_channels={'A', 'B'},
+                                   parameter_names={'t1', 'i'},
+                                   integrals={'A': ExpressionScalar('t1-i*3.1'), 'B': ExpressionScalar('i')})
+
+        pulse = ForLoopPulseTemplate(dummy, 'i', (1, 8, 2))
+
+        expected = {'A': ExpressionScalar('Sum(t1-3.1*(1+2*i), (i, 0, 3))'),
+                    'B': ExpressionScalar('Sum((1+2*i), (i, 0, 3))') }
+        self.assertEqual(expected, pulse.integral)
+
+
+class ForLoopTemplateSequencingTests(unittest.TestCase):
+
     def test_build_sequence_constraint_on_loop_var_exception(self):
         """This test is to assure the status-quo behavior of ForLoopPT handling parameter constraints affecting the loop index
         variable. Please see https://github.com/qutech/qc-toolkit/issues/232 ."""
@@ -211,17 +225,6 @@ class ForLoopPulseTemplateTest(unittest.TestCase):
 
         parameters['A'] = DummyParameter(requires_stop=True)
         self.assertTrue(flt.requires_stop(parameters, dict()))
-
-    def test_integral(self) -> None:
-        dummy = DummyPulseTemplate(defined_channels={'A', 'B'},
-                                   parameter_names={'t1', 'i'},
-                                   integrals={'A': ExpressionScalar('t1-i*3.1'), 'B': ExpressionScalar('i')})
-
-        pulse = ForLoopPulseTemplate(dummy, 'i', (1, 8, 2))
-
-        expected = {'A': ExpressionScalar('Sum(t1-3.1*(1+2*i), (i, 0, 3))'),
-                    'B': ExpressionScalar('Sum((1+2*i), (i, 0, 3))') }
-        self.assertEqual(expected, pulse.integral)
 
 
 class ForLoopPulseTemplateSerializationTests(SerializableTests, unittest.TestCase):

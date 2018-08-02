@@ -82,6 +82,10 @@ class FunctionPulsePropertyTest(FunctionPulseTest):
         expected_parameter_names = {'foo', 'bar', 'hugo'}
         self.assertEqual(expected_parameter_names, template.parameter_names)
 
+    def test_integral(self) -> None:
+        pulse = FunctionPulseTemplate('sin(0.5*t+b)', '2*Tmax')
+        self.assertEqual({'default': Expression('2.0*cos(b) - 2.0*cos(1.0*Tmax+b)')}, pulse.integral)
+
 
 class FunctionPulseSerializationTest(SerializableTests, unittest.TestCase):
 
@@ -156,10 +160,6 @@ class FunctionPulseSequencingTest(FunctionPulseTest):
 
     def test_build_waveform_none(self):
         self.assertIsNone(self.fpt.build_waveform(self.valid_par_vals, channel_mapping={'A': None}))
-
-    def test_integral(self) -> None:
-        pulse = FunctionPulseTemplate('sin(0.5*t+b)', '2*Tmax')
-        self.assertEqual({'default': Expression('2.0*cos(b) - 2.0*cos(1.0*Tmax+b)')}, pulse.integral)
 
 
 class TablePulseTemplateConstraintTest(ParameterConstrainerTest):
