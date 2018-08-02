@@ -1,4 +1,4 @@
-from typing import Tuple, Callable, Optional, Sequence, Union, Dict, Mapping
+from typing import Tuple, Callable, Optional, Sequence, Union, Dict, Mapping, Set
 import numpy as np
 import contextlib
 import itertools
@@ -65,7 +65,7 @@ class WaveformStorage:
             # remove cleanup
             exit_stack.pop_all()
 
-    def pop_waveform(self, name: str):
+    def pop_waveform(self, name: str) -> WaveformEntry:
         wf = self._waveforms_by_name.pop(name)
         del self._waveforms_by_data[wf.waveform]
         return wf
@@ -76,7 +76,10 @@ def parse_program(program: Loop,
                   markers: Tuple[Tuple[ChannelID, ChannelID], ...],
                   sample_rate: TimeType,
                   amplitudes: Tuple[float, ...],
-                  voltage_transformations: Tuple[Callable, ...]):
+                  voltage_transformations: Tuple[Callable, ...]) -> Tuple[Sequence[TekAwg.SequenceEntry],
+                                                                          Sequence[TekAwg.Waveform]]:
+    """Convert the program into a sequence of sequence table entries and a sequence of waveforms that can be uploaded
+    to the device."""
     assert program.depth() == 1, "Invalid program depth."
 
     sequencing_elements = []
@@ -156,6 +159,8 @@ def parse_program(program: Loop,
 
 
 class TektronixProgram:
+    """Bundles all information used to generate the sequence table entries and waveforms."""
+
     def __init__(self,
                  program: Loop,
                  channels: Sequence[ChannelID],
@@ -179,9 +184,6 @@ class TektronixProgram:
         make_compatible(program, 250, 1, sample_rate)
         self._program.flatten_and_balance(1)
 
-        self._initialize()
-
-    def _initialize(self):
         self._sequencing_elements, self._waveforms = parse_program(program=self._program,
                                                                    channels=self.channels,
                                                                    markers=self.markers,
@@ -193,7 +195,6 @@ class TektronixProgram:
         return self._sequencing_elements
 
     def get_waveforms(self) -> Sequence[Union[TekAwg.Waveform, int]]:
-
         """Integers denote idle waveforms of this length"""
         return self._waveforms
 
@@ -215,6 +216,8 @@ class TektronixProgram:
 
 
 class TektronixAWG(AWG):
+    """TODO: Explain general idea here"""
+
     def __init__(self, tek_awg: TekAwg.TekAwg,
                  synchronize: str,
                  identifier='Tektronix',
@@ -237,9 +240,10 @@ class TektronixAWG(AWG):
         self._idle_waveform = self.make_idle_waveform(4000)
 
         self._programs = dict()
-        self._idle_program = None
 
-        self._armed_program = None
+        self._idle_program_index = None
+
+        self._armed_program = None, None
 
         self._sequence_entries = []
 
@@ -272,14 +276,22 @@ class TektronixAWG(AWG):
         self._clear_waveforms()
         self._programs = dict()
         self._armed_program = None
-        self._idle_program = None
+        self._idle_program_index = None
 
     def synchronize(self):
         """Read waveforms and sequences from device"""
         self.read_waveforms()
         self.read_sequence()
 
+    @property
+    def armed_program(self) -> Optional[str]:
+        return self._armed_program[0]
+
     def initialize_idle_program(self):
+        """Make sure we can arm the idle program which plays the idle waveform(default 0V) on all channels.
+
+
+        """
         if self._idle_waveform in self._waveforms.by_data:
             idle_waveform_name = self._waveforms.by_data[self._idle_waveform].name
         else:
@@ -295,18 +307,19 @@ class TektronixAWG(AWG):
                                                      jmp_type='OFF',
                                                      jmp_ind=None)
         try:
-            self._idle_program = self._sequence_entries.index(idle_sequence_element) + 1
+            self._idle_program_index = self._sequence_entries.index(idle_sequence_element) + 1
         except ValueError:
             idle_index, *_ = self._get_empty_sequence_positions(1)
             self._upload_sequencing_element(idle_index, idle_sequence_element)
 
-            self._idle_program = self._sequence_entries.index(idle_sequence_element) + 1
+            self._idle_program_index = self._sequence_entries.index(idle_sequence_element) + 1
 
     @property
     def device(self) -> TekAwg.TekAwg:
         return self._device
 
     def read_waveforms(self):
+        """Read all waveform data from the device (including binary data)."""
         wf_names = self.device.get_waveform_names()
         wf_times = self.device.get_waveform_timestamps(wf_names)
         wf_lengths = self.device.get_waveform_lengths(wf_names)
@@ -319,6 +332,7 @@ class TektronixAWG(AWG):
         self._waveforms = WaveformStorage(waveforms)
 
     def read_sequence(self):
+        """Read all sequence data from the device"""
         entries = [self.device.get_seq_element(i)
                    for i in range(1, 1 + self.device.get_seq_length())]
         entries = [None if all(wf == '' for wf in entry.entries) else entry
@@ -326,15 +340,15 @@ class TektronixAWG(AWG):
         self._sequence_entries = entries
 
     @property
-    def num_channels(self):
+    def num_channels(self) -> int:
         return self.device.n_channels
 
     @property
-    def num_markers(self):
+    def num_markers(self) -> int:
         return self.num_channels * 2
 
     @property
-    def programs(self):
+    def programs(self) -> Set[str]:
         return set(self._programs.keys())
 
     def cleanup(self):
@@ -371,7 +385,7 @@ class TektronixAWG(AWG):
 
     def _process_program(self, name: str, tek_program: TektronixProgram) -> Tuple[Sequence[TekAwg.SequenceEntry],
                                                                                   Mapping[TekAwg.Waveform, str]]:
-        """Detect which waveforms are missing and craete sequencing entries.
+        """Detect which waveforms are missing and create sequencing entries.
         This function does not change the state of the device.
 
         Args:
@@ -429,6 +443,7 @@ class TektronixAWG(AWG):
         return sequencing_elements, waveforms_to_upload
 
     def _upload_parsed(self, name: str, tek_program: TektronixProgram, cleanup_stack: contextlib.ExitStack):
+        """"""
         sequencing_elements, waveforms_to_upload = self._process_program(name, tek_program)
 
         for waveform_data, waveform_name in waveforms_to_upload.items():
@@ -459,7 +474,7 @@ class TektronixAWG(AWG):
                 force: bool,
                 cleanup_stack: contextlib.ExitStack):
 
-        assert self._idle_program
+        assert self._idle_program_index
 
         if name in self._programs:
             if not force:
@@ -484,7 +499,7 @@ class TektronixAWG(AWG):
                                   cleanup_stack=cleanup_stack)
 
         positions = self._get_empty_sequence_positions(len(sequencing_elements))
-        for (element_index, next_element), sequencing_element in zip(pairwise(positions, fillvalue=self._idle_program),
+        for (element_index, next_element), sequencing_element in zip(pairwise(positions, fillvalue=self._idle_program_index),
                                                                      sequencing_elements):
             assert next_element is not None
 
@@ -497,6 +512,7 @@ class TektronixAWG(AWG):
         self._programs[name] = (positions, tek_program, sequencing_elements)
 
     def _get_empty_sequence_positions(self, length: int) -> Sequence[int]:
+        """Return a list of n empty sequence positions"""
         free_positions = [idx + 1
                           for idx, sequencing_element in enumerate(self._sequence_entries)
                           if sequencing_element is None]
@@ -528,7 +544,7 @@ class TektronixAWG(AWG):
         self._sequence_entries[element_index - 1] = sequencing_element
         self.device.set_seq_element(element_index, sequencing_element)
 
-    def make_idle_waveform(self, length):
+    def make_idle_waveform(self, length) -> TekAwg.Waveform:
         return TekAwg.Waveform(channel=np.full(length,
                                                fill_value=self.idle_value,
                                                dtype=np.uint16),
@@ -546,10 +562,9 @@ class TektronixAWG(AWG):
         _, positions, _ = self._programs[name]
         self._armed_program = (name, positions[0])
 
-    def run(self):
-        pass
+    def run_current_program(self):
+        _, program_index = self._armed_program
 
-
-
-
-
+        self.device.run()
+        self.device.jump_to_sequence_element(program_index)
+        self.device.wait_until_commands_executed()
