@@ -85,7 +85,9 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
 
     @property
     def parameter_names(self) -> Set[str]:
-        return set.union(*(st.parameter_names for st in self._subtemplates)) | self.constrained_parameters
+        return set.union(self.measurement_parameters,
+                         self.constrained_parameters,
+                         *(st.parameter_names for st in self._subtemplates))
 
     @property
     def subtemplates(self) -> Sequence[AtomicPulseTemplate]:
@@ -97,7 +99,7 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
 
     @property
     def measurement_names(self) -> Set[str]:
-        return set.union(*(st.measurement_names for st in self._subtemplates))
+        return super().measurement_names.union(*(st.measurement_names for st in self._subtemplates))
 
     def build_waveform(self, parameters: Dict[str, numbers.Real],
                        channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional['MultiChannelWaveform']:
