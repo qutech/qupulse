@@ -127,32 +127,34 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
             sequencer.push(self.body, parameters=parameters, conditions=conditions,
                            window_mapping=measurement_mapping, channel_mapping=channel_mapping, target_block=body_block)
 
-    def _internal_create_program(self,
+    def _internal_create_program(self, *,
                                  parameters: Dict[str, Parameter],
                                  measurement_mapping: Dict[str, Optional[str]],
-                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Loop]:
+                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]],
+                                 parent_loop: Loop) -> None:
         self.validate_parameter_constraints(parameters=parameters)
-        relevant_parames = set(self._repetition_count.variables).union(self.measurement_parameters)
+        relevant_params = set(self._repetition_count.variables).union(self.measurement_parameters)
         try:
-            real_parameters = {v: parameters[v].get_value() for v in relevant_parames}
-        except KeyError:
-            raise ParameterNotProvidedException(next(v for v in self.repetition_count.variables if v not in parameters))
+            real_parameters = {v: parameters[v].get_value() for v in relevant_params}
+        except KeyError as e:
+            raise ParameterNotProvidedException(str(e)) from e
 
         repetition_count = max(0, self.get_repetition_count_value(real_parameters))
         measurements = self.get_measurement_windows(real_parameters, measurement_mapping)
-        subprograms = []
 
-        # todo (2018-07-19): could in some circumstances possibly just multiply subprogram repetition count
+        # todo (2018-07-19): could in some circumstances possibly just multiply subprogram repetition count?
         # could be tricky if any repetition count is volatile ? check later and optimize if necessary
         if repetition_count > 0:
-            subprogram = self.body.create_program(parameters,
-                                                  measurement_mapping,
-                                                  channel_mapping)
-            if subprogram is not None:
-                subprograms = [subprogram]
-        if measurements or (subprograms and repetition_count > 0):
-            return Loop(measurements=measurements, repetition_count=repetition_count, children=subprograms)
-        return None
+            repj_loop = Loop(repetition_count=repetition_count)
+            self.body._internal_create_program(parameters=parameters,
+                                               measurement_mapping=measurement_mapping,
+                                               channel_mapping=channel_mapping,
+                                               parent_loop=repj_loop)
+            if repj_loop.waveform is not None or len(repj_loop.children) > 0:
+                if measurements:
+                    parent_loop.add_measurements(measurements)
+
+                parent_loop.append_child(loop=repj_loop)
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],

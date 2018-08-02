@@ -12,7 +12,7 @@ from qctoolkit._program._loop import Loop
 
 from qctoolkit.expressions import ExpressionScalar
 from qctoolkit.utils import checked_int_cast
-from qctoolkit.pulses.parameters import Parameter, ConstantParameter, InvalidParameterNameException, ParameterConstrainer
+from qctoolkit.pulses.parameters import Parameter, ConstantParameter, InvalidParameterNameException, ParameterConstrainer, ParameterNotProvidedException
 from qctoolkit.pulses.pulse_template import PulseTemplate, ChannelID
 from qctoolkit.pulses.conditions import Condition, ConditionMissingException
 from qctoolkit._program.instructions import InstructionBlock
@@ -228,28 +228,30 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
                            channel_mapping=channel_mapping,
                            target_block=instruction_block)
 
-    def _internal_create_program(self,
+    def _internal_create_program(self, *,
                                  parameters: Dict[str, Parameter],
                                  measurement_mapping: Dict[str, Optional[str]],
-                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Loop]:
+                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]],
+                                 parent_loop: Loop) -> None:
         self.validate_parameter_constraints(parameters=parameters)
 
-        measurement_parameters = {parameter_name: parameters[parameter_name].get_value()
-                                  for parameter_name in self.measurement_parameters}
+        try:
+            measurement_parameters = {parameter_name: parameters[parameter_name].get_value()
+                                      for parameter_name in self.measurement_parameters}
+            duration_parameters = {parameter_name: parameters[parameter_name].get_value()
+                                      for parameter_name in self.duration.variables}
+        except KeyError as e:
+            raise ParameterNotProvidedException(str(e)) from e
         measurements = self.get_measurement_windows(measurement_parameters, measurement_mapping)
+        if self.duration.evaluate_numeric(**duration_parameters) > 0:
+            if measurements:
+                parent_loop.add_measurements(measurements)
 
-        subprograms = []
-        for local_parameters in self._body_parameter_generator(parameters, forward=True):
-            subprogram = self.body.create_program(local_parameters,
-                                                  measurement_mapping,
-                                                  channel_mapping)
-            if subprogram:
-                subprograms.append(subprogram)
-
-        if subprograms or measurements:
-            return Loop(children=subprograms, measurements=measurements)
-        else:
-            return None
+            for local_parameters in self._body_parameter_generator(parameters, forward=True):
+                self.body._internal_create_program(parameters=local_parameters,
+                                                   measurement_mapping=measurement_mapping,
+                                                   channel_mapping=channel_mapping,
+                                                   parent_loop=parent_loop)
 
     def build_waveform(self, parameters: Dict[str, Parameter]) -> ForLoopWaveform:
         return ForLoopWaveform([self.body.build_waveform(local_parameters)
@@ -374,10 +376,11 @@ class WhileLoopPulseTemplate(LoopPulseTemplate):
                                                                        channel_mapping,
                                                                        instruction_block)
 
-    def _internal_create_program(self,
+    def _internal_create_program(self, *, # pragma: no cover
                                  parameters: Dict[str, Parameter],
                                  measurement_mapping: Dict[str, Optional[str]],
-                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Loop]:
+                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]],
+                                 parent_loop: Loop) -> None:
         raise NotImplementedError("create_program() does not handle conditions/triggers right now and cannot "
                                   "be meaningfully implemented for a WhileLoopPulseTemplate")
 

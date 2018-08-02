@@ -3,6 +3,7 @@ from typing import Tuple, List, Dict, Optional, Set, Any, Union
 import copy
 
 import numpy
+import unittest
 
 """LOCAL IMPORTS"""
 from qctoolkit._program._loop import Loop
@@ -16,6 +17,16 @@ from qctoolkit.pulses.pulse_template import AtomicPulseTemplate
 from qctoolkit.pulses.interpolation import InterpolationStrategy
 from qctoolkit.pulses.conditions import Condition
 from qctoolkit.expressions import Expression, ExpressionScalar
+
+
+class MeasurementWindowTestCase(unittest.TestCase):
+
+    def assert_measurement_windows_equal(self, expected, actual) -> bool:
+        self.assertEqual(expected.keys(), actual.keys())
+        for k in expected:
+            self.assertEqual(list(expected[k][0]), list(actual[k][0]))
+            self.assertEqual(list(expected[k][1]), list(actual[k][1]))
+
 
 class DummyParameter(Parameter):
 
@@ -356,12 +367,24 @@ class DummyPulseTemplate(AtomicPulseTemplate):
                        instruction_block: InstructionBlock):
         self.build_sequence_arguments.append((sequencer,parameters,conditions, measurement_mapping, channel_mapping, instruction_block))
 
-    def create_program(self,
-                       parameters: Dict[str, Parameter],
-                       measurement_mapping: Dict[str, Optional[str]],
-                       channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Loop]:
-        self.create_program_calls.append((parameters, measurement_mapping, channel_mapping))
-        return self._program
+    # def create_program(self, *,
+    #                    parameters: Dict[str, Parameter],
+    #                    measurement_mapping: Dict[str, Optional[str]],
+    #                    channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Loop]:
+    #     self.create_program_calls.append((parameters, measurement_mapping, channel_mapping))
+    #     return self._program
+
+    def _internal_create_program(self, *,
+                                 parameters: Dict[str, Parameter],
+                                 measurement_mapping: Dict[str, Optional[str]],
+                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]],
+                                 parent_loop: Loop) -> None:
+        measurements = self.get_measurement_windows(parameters, measurement_mapping)
+        self.create_program_calls.append((parameters, measurement_mapping, channel_mapping, parent_loop))
+        if self._program:
+            parent_loop.append_child(waveform=self._program.waveform, children=self._program.children, measurements=measurements)
+        elif self.waveform:
+            parent_loop.append_child(waveform=self.waveform, measurements=measurements)
 
     def build_waveform(self,
                        parameters: Dict[str, Parameter],
