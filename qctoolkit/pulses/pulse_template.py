@@ -118,7 +118,7 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
         if parameters is None:
             parameters = dict()
         if measurement_mapping is None:
-            measurement_mapping = dict() # todo (2018-08-02): should not be empty but an identity mapping; requires PT to be a MeasurementDefiner (?)
+            measurement_mapping = {name: name for name in self.measurement_names}
         if channel_mapping is None:
             channel_mapping = dict()
 

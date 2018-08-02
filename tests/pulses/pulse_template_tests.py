@@ -155,8 +155,24 @@ class PulseTemplateTest(unittest.TestCase):
         program = template.create_program(parameters=parameters,
                                           measurement_mapping=measurement_mapping,
                                           channel_mapping=channel_mapping)
-        expected_parameters = {'foo': ConstantParameter(2.126), 'bar': ConstantParameter(-26.2), 'hugo': ConstantParameter('2*x+b'), 'append_a_child': ConstantParameter('1')}
-        self.assertEqual((expected_parameters, measurement_mapping, channel_mapping), template.internal_create_program_args[-1])
+        expected_parameters = {'foo': ConstantParameter(2.126), 'bar': ConstantParameter(-26.2),
+                               'hugo': ConstantParameter('2*x+b'), 'append_a_child': ConstantParameter('1')}
+        self.assertEqual((expected_parameters, measurement_mapping, channel_mapping),
+                         template.internal_create_program_args[-1])
+        self.assertIsNotNone(program)
+
+    def test_create_program_measurement_mapping_none(self) -> None:
+        template = PulseTemplateStub(defined_channels={'A'}, parameter_names={'foo'}, measurement_names={'hugo', 'foo'})
+        parameters = {'foo': ConstantParameter(2.126), 'bar': -26.2, 'hugo': '2*x+b', 'append_a_child': '1'}
+        measurement_mapping = None
+        channel_mapping = {'B': 'A'}
+        program = template.create_program(parameters=parameters,
+                                          measurement_mapping=measurement_mapping,
+                                          channel_mapping=channel_mapping)
+        expected_parameters = {'foo': ConstantParameter(2.126), 'bar': ConstantParameter(-26.2),
+                               'hugo': ConstantParameter('2*x+b'), 'append_a_child': ConstantParameter('1')}
+        self.assertEqual((expected_parameters, {'hugo': 'hugo', 'foo': 'foo'}, channel_mapping),
+                         template.internal_create_program_args[-1])
         self.assertIsNotNone(program)
 
     def test_create_program_none(self) -> None:
@@ -164,8 +180,11 @@ class PulseTemplateTest(unittest.TestCase):
         parameters = {'foo': ConstantParameter(2.126), 'bar': -26.2, 'hugo': '2*x+b'}
         measurement_mapping = {'M': 'N'}
         channel_mapping = {'B': 'A'}
-        program = template.create_program(parameters=parameters, measurement_mapping=measurement_mapping, channel_mapping=channel_mapping)
-        expected_parameters = {'foo': ConstantParameter(2.126), 'bar': ConstantParameter(-26.2), 'hugo': ConstantParameter('2*x+b')}
+        program = template.create_program(parameters=parameters,
+                                          measurement_mapping=measurement_mapping,
+                                          channel_mapping=channel_mapping)
+        expected_parameters = {'foo': ConstantParameter(2.126), 'bar': ConstantParameter(-26.2),
+                               'hugo': ConstantParameter('2*x+b')}
         self.assertEqual((expected_parameters, measurement_mapping, channel_mapping),
                          template.internal_create_program_args[-1])
         self.assertIsNone(program)
