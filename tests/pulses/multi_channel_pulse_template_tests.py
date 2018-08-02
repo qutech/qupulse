@@ -226,6 +226,19 @@ class MultiChannelPulseTemplateSequencingTests(unittest.TestCase):
         self.assertEqual(block.instructions[0].compare_key, expected_block.instructions[0].compare_key)
         self.assertEqual(block.instructions[1].compare_key, expected_block.instructions[1].compare_key)
 
+    def test_get_measurement_windows(self):
+        wfs = [DummyWaveform(duration=1.1, defined_channels={'A'}), DummyWaveform(duration=1.1, defined_channels={'B'})]
+        sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'}, waveform=wfs[0], measurements=[('m', 0, 1),
+                                                                                                        ('n', 0.3, 0.4)]),
+               DummyPulseTemplate(duration='t1', defined_channels={'B'}, waveform=wfs[1], measurements=[('m', 0.1, .2)])]
+
+        pt = AtomicMultiChannelPulseTemplate(*sts, parameter_constraints=['a < b'], measurements=[('n', .1, .2)])
+
+        measurement_mapping = dict(m='foo', n='bar')
+        expected = [('bar', .1, .2), ('foo', 0, 1), ('bar', .3, .4), ('foo', .1, .2)]
+        meas_windows = pt.get_measurement_windows({}, measurement_mapping)
+        self.assertEqual(expected, meas_windows)
+
 
 class AtomicMultiChannelPulseTemplateSerializationTests(SerializableTests, unittest.TestCase):
 
