@@ -290,6 +290,26 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
         self.assertIsNone(program._measurements)
         self.assert_measurement_windows_equal({}, program.get_measurement_windows())
 
+    def test_create_program_body_none(self) -> None:
+        dt = DummyPulseTemplate(parameter_names={'i'}, waveform=None, duration=0,
+                                measurements=[('b', 2, 1)])
+        flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=('a', 'b', 'c'),
+                                   measurements=[('A', 0, 1)], parameter_constraints=['c > 1'])
+
+        parameters = {'a': ConstantParameter(1), 'b': ConstantParameter(4), 'c': ConstantParameter(2)}
+        measurement_mapping = dict(A='B', b='b')
+        channel_mapping = dict(C='D')
+
+        program = Loop()
+        flt._internal_create_program(parameters=parameters,
+                                     measurement_mapping=measurement_mapping,
+                                     channel_mapping=channel_mapping,
+                                     parent_loop=program)
+
+        self.assertEqual(0, len(program.children))
+        self.assertEqual(1, program.repetition_count)
+        self.assertEqual([], program.children)
+
     def test_create_program(self) -> None:
         dt = DummyPulseTemplate(parameter_names={'i'}, waveform=DummyWaveform(duration=4.0), duration=4,
                                 measurements=[('b', 2, 1)])
@@ -300,8 +320,6 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
         measurement_mapping = dict(A='B', b='b')
         channel_mapping = dict(C='D')
 
-        #children = [Loop(waveform=DummyWaveform(duration=2.0))]
-        #program = Loop(children=children)
         program = Loop()
         flt._internal_create_program(parameters=parameters,
                                      measurement_mapping=measurement_mapping,

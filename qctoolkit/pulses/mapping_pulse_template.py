@@ -267,14 +267,16 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                                      channel_mapping=self.get_updated_channel_mapping(channel_mapping),
                                      instruction_block=instruction_block)
 
-    def _internal_create_program(self,
+    def _internal_create_program(self, *,
                                  parameters: Dict[str, Parameter],
                                  measurement_mapping: Dict[str, Optional[str]],
-                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Loop]:
+                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]],
+                                 parent_loop: Loop) -> None:
         # parameters are validated in map_parameters() call, no need to do it here again explicitly
-        return self.template.create_program(parameters=self.map_parameters(parameters),
-                                            measurement_mapping=self.get_updated_measurement_mapping(measurement_mapping),
-                                            channel_mapping=self.get_updated_channel_mapping(channel_mapping))
+        self.template._internal_create_program(parameters=self.map_parameters(parameters),
+                                               measurement_mapping=self.get_updated_measurement_mapping(measurement_mapping),
+                                               channel_mapping=self.get_updated_channel_mapping(channel_mapping),
+                                               parent_loop=parent_loop)
 
     def build_waveform(self,
                        parameters: Dict[str, numbers.Real],
