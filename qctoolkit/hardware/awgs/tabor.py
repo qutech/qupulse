@@ -15,7 +15,7 @@ import numpy as np
 
 from qctoolkit.utils.types import ChannelID
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
-from qctoolkit.hardware.program import Loop, make_compatible
+from qctoolkit._program._loop import Loop, make_compatible
 from qctoolkit.hardware.util import voltage_to_uint16, make_combined_wave, find_positions
 from qctoolkit.hardware.awgs.base import AWG
 

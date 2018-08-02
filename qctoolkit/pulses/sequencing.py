@@ -12,7 +12,8 @@ from typing import Tuple, Dict, Union, Optional
 
 from qctoolkit.utils.types import ChannelID
 
-from qctoolkit.pulses.instructions import InstructionBlock, ImmutableInstructionBlock, Waveform
+from qctoolkit._program.instructions import InstructionBlock, ImmutableInstructionBlock
+from qctoolkit._program.waveforms import Waveform
 from qctoolkit.pulses.parameters import Parameter, ConstantParameter
 
 
