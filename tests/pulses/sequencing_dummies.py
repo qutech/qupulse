@@ -327,10 +327,6 @@ class DummyPulseTemplate(AtomicPulseTemplate):
     def parameter_names(self) -> Set[str]:
         return set(self.parameter_names_)
 
-    def get_measurement_windows(self, parameters: Dict[str, Parameter] = None) -> List[MeasurementWindow]:
-        """Return all measurement windows defined in this PulseTemplate."""
-        raise NotImplementedError()
-
     @property
     def build_sequence_calls(self):
         return len(self.build_sequence_arguments)
