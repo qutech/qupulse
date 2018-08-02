@@ -14,7 +14,7 @@ except ImportError:
 
 from qctoolkit.hardware.awgs.base import AWG
 from qctoolkit import ChannelID
-from qctoolkit.hardware.program import Loop, make_compatible
+from qctoolkit._program._loop import Loop, make_compatible
 from qctoolkit.utils.types import TimeType, ConstantDictView
 from qctoolkit.hardware.util import voltage_to_uint16
 from qctoolkit.utils import pairwise
