@@ -15,8 +15,6 @@ from tests.pulses.pulse_template_tests import PulseTemplateStub
 from tests.serialization_tests import SerializableTests
 
 
-
-
 class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
     def __init__(self,*args,**kwargs):
         super().__init__(*args,**kwargs)
@@ -119,7 +117,19 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
         sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'}, parameter_names={'a', 'b'}, measurement_names={'A', 'C'}),
                DummyPulseTemplate(duration='t1', defined_channels={'B'}, parameter_names={'a', 'c'}, measurement_names={'A', 'B'})]
 
-        self.assertEqual(AtomicMultiChannelPulseTemplate(*sts).measurement_names, {'A', 'B', 'C'})
+        self.assertEqual(AtomicMultiChannelPulseTemplate(*sts, measurements=[('D', 1, 2)]).measurement_names,
+                         {'A', 'B', 'C', 'D'})
+
+    def test_parameter_names(self):
+        sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'}, parameter_names={'a', 'b'},
+                                  measurement_names={'A', 'C'}),
+               DummyPulseTemplate(duration='t1', defined_channels={'B'}, parameter_names={'a', 'c'},
+                                  measurement_names={'A', 'B'})]
+        pt = AtomicMultiChannelPulseTemplate(*sts, measurements=[('D', 'd', 2)], parameter_constraints=['d < e'])
+
+        self.assertEqual(pt.parameter_names,
+                         {'a', 'b', 'c', 'd', 'e'})
+
 
     def test_integral(self) -> None:
         sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'},
