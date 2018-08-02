@@ -127,14 +127,20 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
             if not isinstance(value, Parameter):
                 parameters[key] = ConstantParameter(value)
 
+        root_loop = Loop()
         # call subclass specific implementation
-        return self._internal_create_program(parameters, measurement_mapping, channel_mapping)
+        self._internal_create_program(parameters=parameters,
+                                             measurement_mapping=measurement_mapping,
+                                             channel_mapping=channel_mapping,
+                                             parent_loop=root_loop)
+        return root_loop
 
     @abstractmethod
-    def _internal_create_program(self,
+    def _internal_create_program(self, *,
                                  parameters: Dict[str, Parameter],
                                  measurement_mapping: Dict[str, Optional[str]],
-                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional['Loop']:
+                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]],
+                                 parent_loop: Loop) -> None:
         """The subclass specific implementation of create_program().
 
         Subclasses should not overwrite create_program() directly but provide their implementation here. This method
@@ -182,7 +188,8 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
     def _internal_create_program(self,
                                  parameters: Dict[str, Parameter],
                                  measurement_mapping: Dict[str, Optional[str]],
-                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional['Loop']:
+                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]],
+                                 parent_loop: Loop) -> None:
         # todo (2018-07-05): why are parameter constraints not validated here?
         parameters = {parameter_name: parameter_value.get_value()
                       for parameter_name, parameter_value in parameters.items()
@@ -191,8 +198,8 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
                                        channel_mapping=channel_mapping)
         if waveform:
             measurements = self.get_measurement_windows(parameters=parameters, measurement_mapping=measurement_mapping)
-            return Loop(waveform=waveform, measurements=measurements)
-        return None
+            parent_loop.append_child(waveform=waveform, measurements=measurements)
+
 
     @abstractmethod
     def build_waveform(self,
