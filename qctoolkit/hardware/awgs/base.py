@@ -7,13 +7,13 @@ Classes:
     - OutOfWaveformMemoryException
 """
 
-from abc import abstractmethod, abstractproperty
-from typing import Set, Tuple, List, Callable, Optional
+from abc import abstractmethod
+from typing import Set, Tuple, Callable, Optional
 
 from qctoolkit.utils.types import ChannelID
-from qctoolkit.hardware.program import Loop
+from qctoolkit._program._loop import Loop
 from qctoolkit.comparable import Comparable
-from qctoolkit.pulses.instructions import InstructionSequence
+from qctoolkit._program.instructions import InstructionSequence
 
 __all__ = ["AWG", "Program", "ProgramOverwriteException",
            "OutOfWaveformMemoryException"]
@@ -81,6 +81,13 @@ class AWG(Comparable):
 
         Args:
             name: The name of the program to remove.
+        """
+
+    @abstractmethod
+    def clear(self) -> None:
+        """Removes all programs and waveforms from the AWG.
+
+        Caution: This affects all programs and waveforms on the AWG, not only those uploaded using qc-toolkit!
         """
 
     @abstractmethod

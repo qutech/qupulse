@@ -7,70 +7,16 @@ from qctoolkit.expressions import Expression
 from qctoolkit.pulses.repetition_pulse_template import RepetitionPulseTemplate,ParameterNotIntegerException, RepetitionWaveform
 from qctoolkit.pulses.parameters import ParameterNotProvidedException, ParameterConstraintViolation, ConstantParameter, \
     ParameterConstraint
-from qctoolkit.pulses.instructions import REPJInstruction, InstructionPointer
+from qctoolkit._program.instructions import REPJInstruction, InstructionPointer
 from qctoolkit.utils.types import time_from_float
 
 from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummySequencer, DummyInstructionBlock, DummyParameter,\
     DummyCondition, DummyWaveform
 from tests.serialization_dummies import DummySerializer
+from tests.serialization_tests import SerializableTests
 
 
-class RepetitionWaveformTest(unittest.TestCase):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
 
-    def test_init(self):
-        body_wf = DummyWaveform()
-
-        with self.assertRaises(ValueError):
-            RepetitionWaveform(body_wf, -1)
-
-        with self.assertRaises(ValueError):
-            RepetitionWaveform(body_wf, 1.1)
-
-        wf = RepetitionWaveform(body_wf, 3)
-        self.assertIs(wf._body, body_wf)
-        self.assertEqual(wf._repetition_count, 3)
-
-    def test_duration(self):
-        wf = RepetitionWaveform(DummyWaveform(duration=2.2), 3)
-        self.assertEqual(wf.duration, time_from_float(2.2)*3)
-
-    def test_defined_channels(self):
-        body_wf = DummyWaveform(defined_channels={'a'})
-        self.assertIs(RepetitionWaveform(body_wf, 2).defined_channels, body_wf.defined_channels)
-
-    def test_compare_key(self):
-        body_wf = DummyWaveform(defined_channels={'a'})
-        wf = RepetitionWaveform(body_wf, 2)
-        self.assertEqual(wf.compare_key, (body_wf.compare_key, 2))
-
-    def test_unsafe_get_subset_for_channels(self):
-        body_wf = DummyWaveform(defined_channels={'a', 'b'})
-
-        chs = {'a'}
-
-        subset = RepetitionWaveform(body_wf, 3).get_subset_for_channels(chs)
-        self.assertIsInstance(subset, RepetitionWaveform)
-        self.assertIsInstance(subset._body, DummyWaveform)
-        self.assertIs(subset._body.defined_channels, chs)
-        self.assertEqual(subset._repetition_count, 3)
-
-    def test_unsafe_sample(self):
-        body_wf = DummyWaveform(duration=7)
-
-        rwf = RepetitionWaveform(body=body_wf, repetition_count=10)
-
-        sample_times = np.arange(80) * 70./80.
-        inner_sample_times = (sample_times.reshape((10, -1)) - (7 * np.arange(10))[:, np.newaxis]).ravel()
-
-        result = rwf.unsafe_sample(channel='A', sample_times=sample_times)
-        np.testing.assert_equal(result, inner_sample_times)
-
-        output_expected = np.empty_like(sample_times)
-        output_received = rwf.unsafe_sample(channel='A', sample_times=sample_times, output_array=output_expected)
-        self.assertIs(output_expected, output_received)
-        np.testing.assert_equal(output_received, inner_sample_times)
 
 
 class RepetitionPulseTemplateTest(unittest.TestCase):
@@ -90,10 +36,9 @@ class RepetitionPulseTemplateTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             RepetitionPulseTemplate(body, Expression(-1))
 
-        with warnings.catch_warnings(record=True) as w:
+        with self.assertWarnsRegex(UserWarning, '0 repetitions',
+                                   msg='RepetitionPulseTemplate did not raise a warning for 0 repetitions on consruction.'):
             RepetitionPulseTemplate(body, 0)
-            self.assertEqual(1, len(w), msg='RepetitionPulseTemplate did not raise a warning for 0 repetitions on consruction.')
-            self.assertTrue('0 repetitions' in str(w[-1].message), msg='RepetitionPulseTemplate did not raise a warning for 0 repetitions on consruction.')
 
     def test_parameter_names_and_declarations(self) -> None:
         body = DummyPulseTemplate()
@@ -134,6 +79,17 @@ class RepetitionPulseTemplateTest(unittest.TestCase):
         t = RepetitionPulseTemplate(body, 'bar')
 
         self.assertEqual(t.duration, Expression('foo*bar'))
+
+    def test_integral(self) -> None:
+        dummy = DummyPulseTemplate(integrals=['foo+2', 'k*3+x**2'])
+        template = RepetitionPulseTemplate(dummy, 7)
+        self.assertEqual([Expression('7*(foo+2)'), Expression('7*(k*3+x**2)')], template.integral)
+
+        template = RepetitionPulseTemplate(dummy, '2+m')
+        self.assertEqual([Expression('(2+m)*(foo+2)'), Expression('(2+m)*(k*3+x**2)')], template.integral)
+
+        template = RepetitionPulseTemplate(dummy, Expression('2+m'))
+        self.assertEqual([Expression('(2+m)*(foo+2)'), Expression('(2+m)*(k*3+x**2)')], template.integral)
 
 
 class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
@@ -242,6 +198,7 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
         conditions = {}
         channel_mapping = {}
 
+        # suppress warning about 0 repetitions on construction here, we are only interested in correct behavior during sequencing (i.e., do nothing)
         with warnings.catch_warnings(record=True):
             t = RepetitionPulseTemplate(self.body, repetitions)
             t.build_sequence(self.sequencer, parameters, conditions, measurement_mapping, channel_mapping, self.block)
@@ -272,84 +229,111 @@ class RepetitionPulseTemplateSequencingTests(unittest.TestCase):
         self.assertFalse(self.block.instructions)  # no instructions added to block
 
 
-class RepetitionPulseTemplateSerializationTests(unittest.TestCase):
+class RepetitionPulseTemplateSerializationTests(SerializableTests, unittest.TestCase):
 
-    def setUp(self) -> None:
-        self.serializer = DummySerializer(deserialize_callback=lambda x: x['name'])
-        self.body = DummyPulseTemplate()
+    @property
+    def class_to_test(self):
+        return RepetitionPulseTemplate
 
-    def test_get_serialization_data_minimal(self) -> None:
-        repetition_count = 3
-        template = RepetitionPulseTemplate(self.body, repetition_count)
-        expected_data = dict(
-            body=str(id(self.body)),
-            repetition_count=repetition_count,
-        )
-        data = template.get_serialization_data(self.serializer)
-        self.assertEqual(expected_data, data)
+    def make_kwargs(self):
+        return {
+            'body': DummyPulseTemplate(),
+            'repetition_count': 3,
+            'parameter_constraints': [str(ParameterConstraint('a<b'))],
+            'measurements': [('m', 0, 1)]
+        }
 
-    def test_get_serialization_data_all_features(self) -> None:
-        repetition_count = 'foo'
-        measurements = [('a', 0, 1), ('b', 1, 1)]
-        parameter_constraints = ['foo < 3']
-        template = RepetitionPulseTemplate(self.body, repetition_count,
-                                           measurements=measurements,
-                                           parameter_constraints=parameter_constraints)
-        expected_data = dict(
-            body=str(id(self.body)),
-            repetition_count=repetition_count,
-            measurements=measurements,
-            parameter_constraints=parameter_constraints
-        )
-        data = template.get_serialization_data(self.serializer)
-        self.assertEqual(expected_data, data)
+    def assert_equal_instance_except_id(self, lhs: RepetitionPulseTemplate, rhs: RepetitionPulseTemplate):
+        self.assertIsInstance(lhs, RepetitionPulseTemplate)
+        self.assertIsInstance(rhs, RepetitionPulseTemplate)
+        self.assertEqual(lhs.body, rhs.body)
+        self.assertEqual(lhs.parameter_constraints, rhs.parameter_constraints)
+        self.assertEqual(lhs.measurement_declarations, rhs.measurement_declarations)
 
-    def test_deserialize_minimal(self) -> None:
-        repetition_count = 3
-        data = dict(
-            repetition_count=repetition_count,
-            body=dict(name=str(id(self.body))),
-            identifier='foo'
-        )
-        # prepare dependencies for deserialization
-        self.serializer.subelements[str(id(self.body))] = self.body
-        # deserialize
-        template = RepetitionPulseTemplate.deserialize(self.serializer, **data)
-        # compare!
-        self.assertIs(self.body, template.body)
-        self.assertEqual(repetition_count, template.repetition_count)
-        #self.assertEqual([str(c) for c in template.parameter_constraints], ['bar < 3'])
 
-    def test_deserialize_all_features(self) -> None:
-        data = dict(
-            repetition_count='foo',
-            body=dict(name=str(id(self.body))),
-            identifier='foo',
-            parameter_constraints=['foo < 3'],
-            measurements=[('a', 0, 1), ('b', 1, 1)]
-        )
-        # prepare dependencies for deserialization
-        self.serializer.subelements[str(id(self.body))] = self.body
+class RepetitionPulseTemplateOldSerializationTests(unittest.TestCase):
 
-        # deserialize
-        template = RepetitionPulseTemplate.deserialize(self.serializer, **data)
+    def test_get_serialization_data_minimal_old(self) -> None:
+        # test for deprecated version during transition period, remove after final switch
+        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
+                                   msg="RepetitionPT does not issue warning for old serialization routines."):
+            serializer = DummySerializer(deserialize_callback=lambda x: x['name'])
+            body = DummyPulseTemplate()
+            repetition_count = 3
+            template = RepetitionPulseTemplate(body, repetition_count)
+            expected_data = dict(
+                body=str(id(body)),
+                repetition_count=repetition_count,
+            )
+            data = template.get_serialization_data(serializer)
+            self.assertEqual(expected_data, data)
 
-        # compare!
-        self.assertIs(self.body, template.body)
-        self.assertEqual('foo', template.repetition_count)
-        self.assertEqual(template.parameter_constraints, [ParameterConstraint('foo < 3')])
-        self.assertEqual(template.measurement_declarations, data['measurements'])
+    def test_get_serialization_data_all_features_old(self) -> None:
+        # test for deprecated version during transition period, remove after final switch
+        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
+                                   msg="RepetitionPT does not issue warning for old serialization routines."):
+            serializer = DummySerializer(deserialize_callback=lambda x: x['name'])
+            body = DummyPulseTemplate()
+            repetition_count = 'foo'
+            measurements = [('a', 0, 1), ('b', 1, 1)]
+            parameter_constraints = ['foo < 3']
+            template = RepetitionPulseTemplate(body, repetition_count,
+                                               measurements=measurements,
+                                               parameter_constraints=parameter_constraints)
+            expected_data = dict(
+                body=str(id(body)),
+                repetition_count=repetition_count,
+                measurements=measurements,
+                parameter_constraints=parameter_constraints
+            )
+            data = template.get_serialization_data(serializer)
+            self.assertEqual(expected_data, data)
 
-    def test_integral(self) -> None:
-        dummy = DummyPulseTemplate(integrals=['foo+2', 'k*3+x**2'])
-        template = RepetitionPulseTemplate(dummy, 7)
-        self.assertEqual([Expression('7*(foo+2)'), Expression('7*(k*3+x**2)')], template.integral)
+    def test_deserialize_minimal_old(self) -> None:
+        # test for deprecated version during transition period, remove after final switch
+        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
+                                   msg="RepetitionPT does not issue warning for old serialization routines."):
+            serializer = DummySerializer(deserialize_callback=lambda x: x['name'])
+            body = DummyPulseTemplate()
+            repetition_count = 3
+            data = dict(
+                repetition_count=repetition_count,
+                body=dict(name=str(id(body))),
+                identifier='foo'
+            )
+            # prepare dependencies for deserialization
+            serializer.subelements[str(id(body))] = body
+            # deserialize
+            template = RepetitionPulseTemplate.deserialize(serializer, **data)
+            # compare!
+            self.assertIs(body, template.body)
+            self.assertEqual(repetition_count, template.repetition_count)
+            #self.assertEqual([str(c) for c in template.parameter_constraints], ['bar < 3'])
 
-        template = RepetitionPulseTemplate(dummy, '2+m')
-        self.assertEqual([Expression('(2+m)*(foo+2)'), Expression('(2+m)*(k*3+x**2)')], template.integral)
+    def test_deserialize_all_features_old(self) -> None:
+        # test for deprecated version during transition period, remove after final switch
+        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
+                                   msg="RepetitionPT does not issue warning for old serialization routines."):
+            serializer = DummySerializer(deserialize_callback=lambda x: x['name'])
+            body = DummyPulseTemplate()
+            data = dict(
+                repetition_count='foo',
+                body=dict(name=str(id(body))),
+                identifier='foo',
+                parameter_constraints=['foo < 3'],
+                measurements=[('a', 0, 1), ('b', 1, 1)]
+            )
+            # prepare dependencies for deserialization
+            serializer.subelements[str(id(body))] = body
 
-        template = RepetitionPulseTemplate(dummy, Expression('2+m'))
-        self.assertEqual([Expression('(2+m)*(foo+2)'), Expression('(2+m)*(k*3+x**2)')], template.integral)
+            # deserialize
+            template = RepetitionPulseTemplate.deserialize(serializer, **data)
+
+            # compare!
+            self.assertIs(body, template.body)
+            self.assertEqual('foo', template.repetition_count)
+            self.assertEqual(template.parameter_constraints, [ParameterConstraint('foo < 3')])
+            self.assertEqual(template.measurement_declarations, data['measurements'])
 
 
 class ParameterNotIntegerExceptionTests(unittest.TestCase):

@@ -1,14 +1,11 @@
 import unittest
 import itertools
-from copy import deepcopy
 
-import numpy as np
+from string import ascii_uppercase
 
-from string import Formatter, ascii_uppercase
-
-from qctoolkit.utils.types import TimeType, time_from_float
-from qctoolkit.hardware.program import Loop, MultiChannelProgram, make_compatible, _make_compatible, _is_compatible, _CompatibilityLevel, RepetitionWaveform, SequenceWaveform
-from qctoolkit.pulses.instructions import REPJInstruction, InstructionBlock, ImmutableInstructionBlock
+from qctoolkit.utils.types import time_from_float
+from qctoolkit._program._loop import Loop, MultiChannelProgram, _make_compatible, _is_compatible, _CompatibilityLevel, RepetitionWaveform, SequenceWaveform
+from qctoolkit._program.instructions import InstructionBlock, ImmutableInstructionBlock
 from tests.pulses.sequencing_dummies import DummyWaveform
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 
@@ -402,6 +399,19 @@ LOOP 1 times:
 
         with self.assertRaises(KeyError):
             mcp['C']
+
+    def test_empty_repj(self):
+        empty_block = InstructionBlock()
+
+        root_block = InstructionBlock()
+        root_block.add_instruction_repj(1, empty_block)
+
+        with self.assertRaisesRegex(ValueError, 'no defined channels'):
+            MultiChannelProgram(root_block)
+
+        empty_block.add_instruction_exec(DummyWaveform(duration=1, defined_channels={'A', 'B'}))
+        MultiChannelProgram(root_block)
+
 
     def test_via_repr(self):
         root_loopA = self.get_mcp('A')

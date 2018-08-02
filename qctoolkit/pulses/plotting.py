@@ -17,8 +17,9 @@ from qctoolkit.utils.types import ChannelID, MeasurementWindow
 from qctoolkit.pulses.pulse_template import PulseTemplate
 from qctoolkit.pulses.parameters import Parameter
 from qctoolkit.pulses.sequencing import Sequencer
-from qctoolkit.pulses.instructions import EXECInstruction, STOPInstruction, AbstractInstructionBlock, \
-    REPJInstruction, MEASInstruction, GOTOInstruction, Waveform, InstructionPointer
+from qctoolkit._program.waveforms import Waveform
+from qctoolkit._program.instructions import EXECInstruction, STOPInstruction, AbstractInstructionBlock, \
+    REPJInstruction, MEASInstruction, GOTOInstruction, InstructionPointer
 
 
 __all__ = ["render", "plot", "PlottingNotPossibleException"]

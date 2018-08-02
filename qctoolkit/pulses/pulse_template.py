@@ -18,7 +18,7 @@ from qctoolkit.expressions import ExpressionScalar
 from qctoolkit.pulses.conditions import Condition
 from qctoolkit.pulses.parameters import Parameter
 from qctoolkit.pulses.sequencing import Sequencer, SequencingElement, InstructionBlock
-from qctoolkit.pulses.instructions import Waveform
+from qctoolkit._program.waveforms import Waveform
 from qctoolkit.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
 
 __all__ = ["PulseTemplate", "AtomicPulseTemplate", "DoubleParameterNameException", "MappingTuple"]
@@ -43,7 +43,7 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
 
     def __init__(self, *,
                  identifier: Optional[str]) -> None:
-        super().__init__(identifier)
+        super().__init__(identifier=identifier)
 
     @property
     @abstractmethod

@@ -8,15 +8,14 @@ from fractions import Fraction
 import numpy as np
 
 from qctoolkit.utils.types import ChannelID, TimeType
-from qctoolkit.pulses.instructions import AbstractInstructionBlock, EXECInstruction, REPJInstruction, GOTOInstruction,\
+from qctoolkit._program.instructions import AbstractInstructionBlock, EXECInstruction, REPJInstruction, GOTOInstruction,\
     STOPInstruction, CHANInstruction, Waveform, MEASInstruction, Instruction
 from qctoolkit.comparable import Comparable
 from qctoolkit.utils.tree import Node, is_tree_circular
 from qctoolkit.utils.types import MeasurementWindow
-from qctoolkit.utils import checked_int_cast, is_integer
+from qctoolkit.utils import is_integer
 
-from qctoolkit.pulses.sequence_pulse_template import SequenceWaveform
-from qctoolkit.pulses.repetition_pulse_template import RepetitionWaveform
+from qctoolkit._program.waveforms import SequenceWaveform, RepetitionWaveform
 
 __all__ = ['Loop', 'MultiChannelProgram', 'make_compatible']
 
@@ -269,24 +268,25 @@ class MultiChannelProgram:
             def find_defined_channels(instruction_list):
                 for instruction in instruction_list:
                     if isinstance(instruction, EXECInstruction):
-                        return instruction.waveform.defined_channels
+                        yield instruction.waveform.defined_channels
                     elif isinstance(instruction, REPJInstruction):
-                        for _ in range(instruction.count):
-                            return find_defined_channels(
-                                instruction.target.block.instructions[instruction.target.offset:])
+                        yield from find_defined_channels(
+                            instruction.target.block.instructions[instruction.target.offset:])
                     elif isinstance(instruction, GOTOInstruction):
-                        return find_defined_channels(instruction.target.block.instructions[instruction.target.offset:])
+                        yield from find_defined_channels(instruction.target.block.instructions[instruction.target.offset:])
                     elif isinstance(instruction, CHANInstruction):
-                        return itertools.chain(*instruction.channel_to_instruction_block.keys())
+                        yield itertools.chain(*instruction.channel_to_instruction_block.keys())
                     elif isinstance(instruction, STOPInstruction):
-                        break
+                        return
                     elif isinstance(instruction, MEASInstruction):
                         pass
                     else:
                         raise TypeError('Unhandled instruction type', type(instruction))
-                raise ValueError('Instruction block has no defined channels')
 
-            channels = find_defined_channels(instruction_block.instructions)
+            try:
+                channels = next(find_defined_channels(instruction_block.instructions))
+            except StopIteration:
+                raise ValueError('Instruction block has no defined channels')
         else:
             channels = set(channels)
 

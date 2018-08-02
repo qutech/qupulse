@@ -8,7 +8,7 @@ import sys
 from tests.hardware.tabor_simulator_based_tests import TaborSimulatorManager
 from tests.hardware.dummy_devices import DummyDAC
 
-from qctoolkit.serialization import Serializer, FilesystemBackend
+from qctoolkit.serialization import Serializer, FilesystemBackend, PulseStorage
 from qctoolkit.pulses.sequencing import Sequencer
 from qctoolkit.pulses.pulse_template import PulseTemplate
 from qctoolkit.hardware.setup import HardwareSetup, PlaybackChannel, MarkerChannel, MeasurementMask
@@ -95,6 +95,10 @@ class PulseLoadingAndSequencingHelper:
         serializer = Serializer(FilesystemBackend(os.path.join(self.data_folder, 'pulse_storage')))
         self.pulse = typing.cast(PulseTemplate, serializer.deserialize(self.pulse_name))
 
+    def deserialize_pulse_2018(self) -> None:
+        pulse_storage = PulseStorage(FilesystemBackend(os.path.join(self.data_folder, 'pulse_storage_converted_2018')))
+        self.pulse = typing.cast(PulseTemplate, pulse_storage[self.pulse_name])
+
     def sequence_pulse(self):
         sequencer = Sequencer()
         sequencer.push(self.pulse,
@@ -158,6 +162,9 @@ class CompleteIntegrationTestHelper(unittest.TestCase):
 
     def test_1_1_deserialization(self):
         self.test_state.deserialize_pulse()
+
+    def test_1_2_deserialization_2018(self) -> None:
+        self.test_state.deserialize_pulse_2018()
 
     def test_2_1_sequencing(self):
         if self.test_state.pulse is None:
