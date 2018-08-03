@@ -1140,6 +1140,12 @@ class TaborChannelPair(AWG):
         else:
             self.change_armed_program(name)
 
+    def set_program_advanced_sequence_table(self, name, new_advanced_sequence_table):
+        self._known_programs[name][1]._advanced_sequencer_table = new_advanced_sequence_table
+
+    def set_program_sequence_table(self, name, new_sequence_table):
+        self._known_programs[name][1]._sequencer_tables = new_sequence_table
+
     @with_select
     @with_configuration_guard
     def change_armed_program(self, name: Optional[str]) -> None:
@@ -1176,11 +1182,16 @@ class TaborChannelPair(AWG):
         while len(advanced_sequencer_table) < self.device.dev_properties['min_aseq_len']:
             advanced_sequencer_table.append((1, 1, 0))
 
+        # reset sequencer and advanced sequencer tables to fix bug which occurs when switching between some programs
+        self.device.send_cmd('SEQ:DEL:ALL')
+        self._sequencer_tables = []
+        self.device.send_cmd('ASEQ:DEL')
+        self._advanced_sequence_table = []
+
         # download all sequence tables
         for i, sequencer_table in enumerate(sequencer_tables):
-            if i >= len(self._sequencer_tables) or self._sequencer_tables[i] != sequencer_table:
-                self.device.send_cmd('SEQ:SEL {}'.format(i+1))
-                self.device.download_sequencer_table(sequencer_table)
+            self.device.send_cmd('SEQ:SEL {}'.format(i+1))
+            self.device.download_sequencer_table(sequencer_table)
         self._sequencer_tables = sequencer_tables
         self.device.send_cmd('SEQ:SEL 1')
 

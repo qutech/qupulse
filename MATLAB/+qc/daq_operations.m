@@ -37,7 +37,7 @@ function [output, bool, msg] = daq_operations(ctrl, varargin)
 		else
 			daq.register_operations(a.program_name, qc.operations_to_python(a.operations));
 			msg = sprintf('Operations for program ''%s'' added', a.program_name);			
-			qc.workaround_alazar_single_buffer_acquisition();
+			% qc.workaround_alazar_single_buffer_acquisition();
 		end
 		bool = true;
 	
@@ -52,14 +52,23 @@ function [output, bool, msg] = daq_operations(ctrl, varargin)
 		% Operations need to have been added beforehand
 		masks = util.py.py2mat(py.getattr(daq, '_registered_programs'));
 		masks = util.py.py2mat(masks.(a.program_name));
-		operations = masks.operations;
+		operations = masks.operations;		
 		masks = util.py.py2mat(masks.masks);
+		
+		maskIdsFromOperations = cellfun(@(x)(char(x.maskID)), util.py.py2mat(operations), 'UniformOutput', false);
+		maskIdsFromMasks = cellfun(@(x)(char(x.identifier)), util.py.py2mat(masks), 'UniformOutput', false);
+		
 		output = [];
-		for k = 1:numel(masks)
+		for k = 1:length(operations)
+			maskIndex = find(  cellfun(@(x)(strcmp(x, maskIdsFromOperations{k})), maskIdsFromMasks) );
+			if numel(maskIndex) ~= 1
+				error('Found several masks with same identifier. Might be a problem in qctoolkit or in this function.');
+			end
+			
 			if isa(operations{k}, 'py.atsaverage._atsaverage_release.ComputeDownsampleDefinition')
-				output(k) = util.py.py2mat(size(masks{k}.length));
+				output(k) = util.py.py2mat(size(masks{maskIndex}.length));
 			elseif isa(operations{k}, 'py.atsaverage._atsaverage_release.ComputeRepAverageDefinition')
-			  n = util.py.py2mat(masks{k}.length.to_ndarray);
+			  n = util.py.py2mat(masks{maskIndex}.length.to_ndarray);
 				if any(n ~= n(1))
 					error('daq_operations assumes that all masks should have the same length if using ComputeRepAverageDefinition.');
 				end				

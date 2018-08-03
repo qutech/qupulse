@@ -570,7 +570,6 @@ class TaborChannelPairTests(TaborDummyBasedTest):
         w2s = np.array([2, 5, 3, 1])
 
         expected_sequencer_table = [(3, 3, 0), (2, 6, 0), (1, 3, 0), (1, 4, 0), (1, 2, 0)]
-        idle_sequencer_table = [(1, 1, 0), (1, 1, 0), (1, 1, 0)]
 
         program = DummyTaborProgramClass(advanced_sequencer_table=advanced_sequencer_table,
                                          sequencer_tables=sequencer_tables,
@@ -582,7 +581,8 @@ class TaborChannelPairTests(TaborDummyBasedTest):
 
         expected_adv_seq_table_log = [([(1, 1, 1), (2, 2, 0), (1, 1, 0)], ':ASEQ:DATA', None)]
         expected_sequencer_table_log = [((sequencer_table,), dict(pref=':SEQ:DATA', paranoia_level=None))
-                                        for sequencer_table in [expected_sequencer_table]]
+                                        for sequencer_table in [channel_pair._idle_sequence_table,
+                                                                expected_sequencer_table]]
 
         for device in self.instrument.all_devices:
             self.assertEqual(device._download_adv_seq_table_calls, expected_adv_seq_table_log)
@@ -603,7 +603,6 @@ class TaborChannelPairTests(TaborDummyBasedTest):
         w2s = np.array([4])
 
         expected_sequencer_table = [(10, 5, 0), (1, 1, 0), (1, 1, 0)]
-        idle_sequencer_table = [(1, 1, 0), (1, 1, 0), (1, 1, 0)]
 
         program = DummyTaborProgramClass(advanced_sequencer_table=advanced_sequencer_table,
                                          sequencer_tables=sequencer_tables,
@@ -615,7 +614,8 @@ class TaborChannelPairTests(TaborDummyBasedTest):
 
         expected_adv_seq_table_log = [([(1, 1, 1), (1, 2, 0), (1, 1, 0)], ':ASEQ:DATA', None)]
         expected_sequencer_table_log = [((sequencer_table,), dict(pref=':SEQ:DATA', paranoia_level=None))
-                                        for sequencer_table in [expected_sequencer_table]]
+                                        for sequencer_table in [channel_pair._idle_sequence_table,
+                                                                expected_sequencer_table]]
 
         for device in self.instrument.all_devices:
             self.assertEqual(device._download_adv_seq_table_calls, expected_adv_seq_table_log)
@@ -638,7 +638,6 @@ class TaborChannelPairTests(TaborDummyBasedTest):
                             [(4, 1, 0), (2, 1, 0), (1, 0, 0), (1, 2, 0), (1, 3, 0)]]
         wf_idx2seg_idx = np.array([2, 5, 3, 1])
 
-        idle_sequencer_table = [(1, 1, 0), (1, 1, 0), (1, 1, 0)]
         expected_sequencer_tables = [[(3, 3, 0), (2, 6, 0), (1, 3, 0), (1, 4, 0), (1, 2, 0)],
                                      [(4, 6, 0), (2, 6, 0), (1, 3, 0), (1, 4, 0), (1, 2, 0)]]
 
@@ -652,7 +651,8 @@ class TaborChannelPairTests(TaborDummyBasedTest):
 
         expected_adv_seq_table_log = [([(1, 1, 1), (2, 2, 0), (3, 3, 0)], ':ASEQ:DATA', None)]
         expected_sequencer_table_log = [((sequencer_table,), dict(pref=':SEQ:DATA', paranoia_level=None))
-                                        for sequencer_table in expected_sequencer_tables]
+                                        for sequencer_table in [channel_pair._idle_sequence_table] +
+                                        expected_sequencer_tables]
 
         for device in self.instrument.all_devices:
             self.assertEqual(device._download_adv_seq_table_calls, expected_adv_seq_table_log)
