@@ -23,16 +23,14 @@ dictPath = plsdata.dict.path;
 tunePath = 'C:\Users\Pascal\Janeway\Cerfontaine\Code\dev\+tune\data';
 
 % Loading
-if util.yes_no_input('Really load smdata?', 'n')
-	try
-		copyfile(fullfile(loadPath, 'smdata_recent.mat'), fullfile(tunePath, 'smdata_recent.mat'));
-	catch err
-		warning(err.getReport());
-	end
-	load(fullfile(tunePath, 'smdata_recent.mat'));
-	info = dir(fullfile(tunePath, 'smdata_recent.mat'));
-	fprintf('Loaded smdata from %s', datestr(info.datenum));
+try
+	copyfile(fullfile(loadPath, 'smdata_recent.mat'), fullfile(tunePath, 'smdata_recent.mat'));
+catch err
+	warning(err.getReport());
 end
+load(fullfile(tunePath, 'smdata_recent.mat'));
+info = dir(fullfile(tunePath, 'smdata_recent.mat'));
+fprintf('Loaded smdata from %s\n', datestr(info.datenum));
 try
 	copyfile(fullfile(loadPath, 'tunedata_recent.mat'), fullfile(tunePath, 'tunedata_recent.mat'));
 catch err
@@ -40,7 +38,7 @@ catch err
 end
 load(fullfile(tunePath, 'tunedata_recent.mat'));
 info = dir(fullfile(tunePath, 'tunedata_recent.mat'));
-fprintf('Loaded tunedata from %s', datestr(info.datenum));
+fprintf('Loaded tunedata from %s\n', datestr(info.datenum));
 
 try
 	copyfile(fullfile(loadPath, 'plsdata_recent.mat'), fullfile(tunePath, 'plsdata_recent.mat'));
@@ -49,11 +47,11 @@ catch err
 end
 load(fullfile(tunePath, 'plsdata_recent.mat'));
 info = dir(fullfile(tunePath, 'plsdata_recent.mat'));
-fprintf('Loaded plsdata from %s', datestr(info.datenum));
+fprintf('Loaded plsdata from %s\n', datestr(info.datenum));
 
 global tunedata
 global plsdata
-tunedata.run{tunedata.runIndex}.opts.loadFile = 'C:\Users\Pascal\Janeway\Common\GaAs\Triton 200\Backup\DATA\tune';
+tunedata.run{tunedata.runIndex}.opts.loadFile = 'C:\Users\Pascal\Janeway\Common\GaAs\Triton 200\Backup\DATA\tune#most_recent_file';
 import tune.tune
 
 plsdata.path = pulsePath;
@@ -67,10 +65,11 @@ plsdata.daq.inst = py.qctoolkit.hardware.dacs.alazar.AlazarCard([]);
 % Initializes hardware setup
 % Can also be used for deleting all programs/resetting but then also need to setup Alazar again, i.e. the cell above and the three cells below )
 plsdata.awg.hardwareSetup = [];
-qc.setup_tabor_awg('realAWG', false, 'simulateAWG', false, 'taborDriverPath', 'C:\Users\Pascal\Janeway\Cerfontaine\Code\tabor');
+qc.setup_tabor_awg('realAWG', false, 'simulateAWG', true, 'taborDriverPath', 'C:\Users\Pascal\Janeway\Cerfontaine\Code\tabor');
 
 % AWG default settings
-% awgctrl('default');
+awgctrl('default');
+plsdata.awg.inst.send_cmd(':OUTP:COUP:ALL HV');
 
 % Alazar
 % Execute after setting up the AWG since needs hardware setup initialized
