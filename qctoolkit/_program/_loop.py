@@ -259,6 +259,7 @@ class Loop(Comparable, Node):
                 sub_program.unroll()
 
             else:
+                # we land in this case if the function gets called with depth == 0 and the current subprogram is a leaf
                 i += 1
 
     def remove_empty_loops(self):
@@ -272,7 +273,11 @@ class Loop(Comparable, Node):
                     new_children.append(child)
             else:
                 child.remove_empty_loops()
-                new_children.append(child)
+                if not child.is_leaf():
+                    new_children.append(child)
+                else:
+                    # all children of child were empty
+                    pass
         self[:] = new_children
 
 
