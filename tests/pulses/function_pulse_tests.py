@@ -64,7 +64,8 @@ class FunctionPulsePropertyTest(FunctionPulseTest):
         self.assertEqual({'A'}, self.fpt.defined_channels)
 
     def test_parameter_names(self):
-        self.assertEqual(self.fpt.parameter_names, {'a', 'b', 'c', 'd', 'x', 'z', 'j', 'u'})
+        fpt = FunctionPulseTemplate('k*r*sin(x)', '1.14*d', parameter_constraints={'x < hugo'}, measurements=[('meas', 'f', 1)])
+        self.assertEqual(fpt.parameter_names, {'k', 'r', 'x', 'd', 'hugo', 'f'})
 
     def test_duration(self):
         self.assertEqual(self.fpt.duration, self.s2)

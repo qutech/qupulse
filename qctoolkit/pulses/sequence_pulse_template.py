@@ -87,7 +87,7 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
 
     @property
     def parameter_names(self) -> Set[str]:
-        return self.constrained_parameters.union(*(st.parameter_names for st in self.__subtemplates))
+        return self.constrained_parameters.union(self.measurement_parameters, *(st.parameter_names for st in self.__subtemplates))
 
     @property
     def subtemplates(self) -> List[MappingPulseTemplate]:

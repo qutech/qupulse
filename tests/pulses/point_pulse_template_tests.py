@@ -68,11 +68,11 @@ class PointPulseTemplateTests(unittest.TestCase):
                          {'A', 'B', 't', 'C'})
 
     def test_parameter_names(self):
-        self.assertEqual(PointPulseTemplate([(1, 'A'), ('t+6', 'B+C')],
+        self.assertEqual({'a', 'b', 'n', 'A', 'B', 't', 'C'},
+                         PointPulseTemplate([(1, 'A'), ('t+6', 'B+C')],
                                             [0, 'asd'],
                                             measurements=[('M', 'n', 1)],
-                                            parameter_constraints=['a < b']).parameter_names,
-                         {'a', 'b', 'n', 'A', 'B', 't', 'C'})
+                                            parameter_constraints=['a < b']).parameter_names)
 
     def test_integral(self) -> None:
         pulse = PointPulseTemplate(
