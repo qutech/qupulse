@@ -1,4 +1,5 @@
 import unittest
+from unittest import mock
 
 from typing import Optional, Dict, Set, Any
 
@@ -162,3 +163,24 @@ class AtomicPulseTemplateTests(unittest.TestCase):
 
         self.assertIsInstance(exec, EXECInstruction)
         self.assertEqual(exec.waveform.defined_channels, {'A'})
+
+
+class PulseTemplateTests(unittest.TestCase):
+    def test_matmul(self):
+        a = PulseTemplateStub()
+        b = PulseTemplateStub()
+
+        from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
+        with mock.patch.object(SequencePulseTemplate, 'concatenate', return_value='concat') as mock_concatenate:
+            self.assertEqual(a @ b, 'concat')
+            mock_concatenate.assert_called_once_with(a, b)
+
+    def test_rmatmul(self):
+        a = PulseTemplateStub()
+        b = (1, 2, 3)
+
+        from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
+        with mock.patch.object(SequencePulseTemplate, 'concatenate', return_value='concat') as mock_concatenate:
+            self.assertEqual(b @ a, 'concat')
+            mock_concatenate.assert_called_once_with(b, a)
+
