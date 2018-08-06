@@ -44,6 +44,7 @@ function scan = conf_seq(varargin)
 		...
 		... Saving variables
 		'save_custom_var_fn',    @tune.get_global_opts,...          % Can specify a function which returns data to be saved in the scan
+		'save_custom_var_args',  {{'dnp', 'tune_gui'}}, ...
 		...                      
 		... Measurements         
 		'operations',            {plsdata.daq.defaultOperations}, ...
@@ -192,7 +193,7 @@ function scan = conf_seq(varargin)
 	
 	% Add custom variables for documentation purposes
 	scan.configfn(end+1).fn = @smaconfigwrap_save_data;
-	scan.configfn(end).args = {'custom_var', a.save_custom_var_fn};	
+	scan.configfn(end).args = {'custom_var', a.save_custom_var_fn,  a.save_custom_var_args};	
 	
 	% Add custom cleanup fn
 	if a.useCustomCleanupFn && ~isempty(a.customCleanupFn)
@@ -247,7 +248,11 @@ function scan = conf_seq(varargin)
 	end	
 	
 	% Add user procfns	
-	nProcFn = numel(scan.loops(1).procfn);
+	if isfield(scan.loops(1), 'procfn')
+		nProcFn = numel(scan.loops(1).procfn);
+	else
+		nProcFn = 0;
+	end
 	for opInd = 1:numel(a.procfn_ops) % count through operations				
 		inchan = nGetChan + a.procfn_ops{opInd}{4};
 		scan.loops(1).procfn(end+1).fn(1) = struct( ...
