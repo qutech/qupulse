@@ -145,9 +145,9 @@ class ForLoopPulseTemplateTest(unittest.TestCase):
 
     def test_parameter_names(self):
         dt = DummyPulseTemplate(parameter_names={'i', 'k'})
-        flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=('a', 'b', 'c'))
-
-        self.assertEqual(flt.parameter_names, {'k', 'a', 'b', 'c'})
+        flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=('a', 'b', 'c'),
+                                   parameter_constraints={'c > hugo'}, measurements=[('meas', 'd', 1)])
+        self.assertEqual({'k', 'a', 'b', 'c', 'd', 'hugo'}, flt.parameter_names)
 
     def test_parameter_names_param_only_in_constraint(self) -> None:
         flt = ForLoopPulseTemplate(body=DummyPulseTemplate(parameter_names={'k', 'i'}), loop_index='i',

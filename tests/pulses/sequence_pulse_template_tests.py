@@ -16,9 +16,7 @@ from tests.serialization_dummies import DummySerializer
 from tests.serialization_tests import SerializableTests
 
 
-
 class SequencePulseTemplateTest(unittest.TestCase):
-
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
@@ -61,9 +59,10 @@ class SequencePulseTemplateTest(unittest.TestCase):
                                    DummyPulseTemplate(duration='b'))
         self.assertEqual(pt.duration, Expression('a+a+b'))
 
-    def test_parameter_names_param_only_in_constraint(self) -> None:
-        pt = SequencePulseTemplate(DummyPulseTemplate(parameter_names={'a'}), DummyPulseTemplate(parameter_names={'b'}), parameter_constraints=['a==b', 'a<c'])
-        self.assertEqual(pt.parameter_names, {'a','b','c'})
+    def test_parameter_names(self) -> None:
+        pt = SequencePulseTemplate(DummyPulseTemplate(parameter_names={'a'}), DummyPulseTemplate(parameter_names={'b'}),
+                                   parameter_constraints=['a==b', 'a<c'], measurements=[('meas', 'd', 1)])
+        self.assertEqual({'a', 'b', 'c', 'd'}, pt.parameter_names, )
 
     def test_build_waveform(self):
         wfs = [DummyWaveform(), DummyWaveform()]
@@ -115,6 +114,27 @@ class SequencePulseTemplateTest(unittest.TestCase):
         pulse = SequencePulseTemplate(dummy1, dummy2)
 
         self.assertEqual({'A': ExpressionScalar('k+2*b+7*(b-f)'), 'B': ExpressionScalar('0.24*f')}, pulse.integral)
+
+    def test_concatenate(self):
+        a = DummyPulseTemplate(parameter_names={'foo'}, defined_channels={'A'})
+        b = DummyPulseTemplate(parameter_names={'bar'}, defined_channels={'A'})
+
+        spt_anon = SequencePulseTemplate(a, b)
+        spt_id = SequencePulseTemplate(a, b, identifier='id')
+        spt_meas = SequencePulseTemplate(a, b, measurements=[('m', 0, 'd')])
+        spt_constr = SequencePulseTemplate(a, b, parameter_constraints=['a < b'])
+
+        merged = SequencePulseTemplate.concatenate(a, spt_anon, b)
+        self.assertEqual(merged.subtemplates, [a, a, b, b])
+
+        result = SequencePulseTemplate.concatenate(a, spt_id, b)
+        self.assertEqual(result.subtemplates, [a, spt_id, b])
+
+        result = SequencePulseTemplate.concatenate(a, spt_meas, b)
+        self.assertEqual(result.subtemplates, [a, spt_meas, b])
+
+        result = SequencePulseTemplate.concatenate(a, spt_constr, b)
+        self.assertEqual(result.subtemplates, [a, spt_constr, b])
 
 
 class SequencePulseTemplateSerializationTests(SerializableTests, unittest.TestCase):
@@ -307,69 +327,6 @@ class SequencePulseTemplateTestProperties(SequencePulseTemplateTest):
 
         self.assertEqual(spt.measurement_names, {'a', 'b', 'c'})
 
-
-class PulseTemplateConcatenationTest(unittest.TestCase):
-    def __init__(self,*args,**kwargs):
-        super().__init__(*args,**kwargs)
-
-    def test_concatenation_pulse_template(self):
-        a = DummyPulseTemplate(parameter_names={'foo'}, defined_channels={'A'})
-        b = DummyPulseTemplate(parameter_names={'bar'}, defined_channels={'A'})
-        c = DummyPulseTemplate(parameter_names={'snu'}, defined_channels={'A'})
-        d = (c, {'snu': 'bar'})
-
-        seq = a @ a
-        self.assertTrue(len(seq.subtemplates) == 2)
-        for st in seq.subtemplates:
-            self.assertEqual(st, a)
-
-        seq = a @ b
-        self.assertTrue(len(seq.subtemplates)==2)
-        for st, expected in zip(seq.subtemplates,[a, b]):
-            self.assertTrue(st, expected)
-
-        seq = a @ b @ c
-        self.assertTrue(len(seq.subtemplates) == 3)
-        for st, expected in zip(seq.subtemplates, [a, b, c]):
-            self.assertTrue(st, expected)
-
-        seq = a @ d
-        self.assertTrue(len(seq.subtemplates) == 2)
-        self.assertIs(seq.subtemplates[0], a)
-        self.assertIsInstance(seq.subtemplates[1], MappingPulseTemplate)
-        self.assertIs(seq.subtemplates[1].template, c)
-
-        seq = d @ a
-        self.assertTrue(len(seq.subtemplates) == 2)
-        self.assertIs(seq.subtemplates[1], a)
-        self.assertIsInstance(seq.subtemplates[0], MappingPulseTemplate)
-        self.assertIs(seq.subtemplates[0].template, c)
-
-    def test_concatenation_sequence_table_pulse(self):
-        a = DummyPulseTemplate(parameter_names={'foo'}, defined_channels={'A'})
-        b = DummyPulseTemplate(parameter_names={'bar'}, defined_channels={'A'})
-        c = DummyPulseTemplate(parameter_names={'snu'}, defined_channels={'A'})
-        d = DummyPulseTemplate(parameter_names={'snu'}, defined_channels={'A'})
-
-        seq1 = SequencePulseTemplate(a, b)
-        self.assertEqual({'foo', 'bar'}, seq1.parameter_names)
-        seq2 = SequencePulseTemplate(c, d)
-        self.assertEqual({'snu'}, seq2.parameter_names)
-
-        seq = seq1 @ c
-        self.assertTrue(len(seq.subtemplates) == 3)
-        for st, expected in zip(seq.subtemplates,[a, b, c]):
-            self.assertTrue(st, expected)
-
-        seq = c @ seq1
-        self.assertTrue(len(seq.subtemplates) == 3)
-        for st, expected in zip(seq.subtemplates, [c, a, b]):
-            self.assertTrue(st, expected)
-
-        seq = seq1 @ seq2
-        self.assertTrue(len(seq.subtemplates) == 4)
-        for st, expected in zip(seq.subtemplates, [a, b, c, d]):
-            self.assertTrue(st, expected)
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

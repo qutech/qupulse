@@ -85,9 +85,31 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
 
         self._register(registry=registry)
 
+    @classmethod
+    def concatenate(cls, *pulse_templates: Union[PulseTemplate, MappingTuple], **kwargs) -> 'SequencePulseTemplate':
+        """Sequences the given pulse templates by creating a SequencePulseTemplate. Pulse templates that are
+        SequencePulseTemplates and do not carry additional information (identifier, measurements, parameter constraints)
+        are not used directly but their sub templates are.
+        Args:
+            *pulse_templates: Pulse templates to concatenate
+            **kwargs: Forwarded to the __init__
+
+        Returns: Concatenated templates
+        """
+        parsed = []
+        for pt in pulse_templates:
+            if (isinstance(pt, SequencePulseTemplate)
+                    and pt.identifier is None
+                    and not pt.measurement_declarations
+                    and not pt.parameter_constraints):
+                parsed.extend(pt.subtemplates)
+            else:
+                parsed.append(pt)
+        return cls(*parsed, **kwargs)
+
     @property
     def parameter_names(self) -> Set[str]:
-        return self.constrained_parameters.union(*(st.parameter_names for st in self.__subtemplates))
+        return self.constrained_parameters.union(self.measurement_parameters, *(st.parameter_names for st in self.__subtemplates))
 
     @property
     def subtemplates(self) -> List[MappingPulseTemplate]:
@@ -183,3 +205,5 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
             return {k: x[k] + y[k] for k in x}
 
         return functools.reduce(add_dicts, [sub.integral for sub in self.__subtemplates], expressions)
+
+

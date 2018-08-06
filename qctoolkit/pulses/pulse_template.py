@@ -79,19 +79,14 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
     def __matmul__(self, other: Union['PulseTemplate', MappingTuple]) -> 'SequencePulseTemplate':
         """This method enables using the @-operator (intended for matrix multiplication) for
          concatenating pulses. If one of the pulses is a SequencePulseTemplate the other pulse gets merged into it"""
-
         from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
 
-        subtemplates = itertools.chain(self.subtemplates if isinstance(self, SequencePulseTemplate) else [self],
-                                       other.subtemplates if isinstance(other, SequencePulseTemplate) else [other])
-        return SequencePulseTemplate(*subtemplates)
+        return SequencePulseTemplate.concatenate(self, other)
 
     def __rmatmul__(self, other: MappingTuple) -> 'SequencePulseTemplate':
         from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
 
-        subtemplates = itertools.chain([other],
-                                       self.subtemplates if isinstance(self, SequencePulseTemplate) else [self])
-        return SequencePulseTemplate(*subtemplates)
+        return SequencePulseTemplate.concatenate(other, self)
 
     @property
     @abstractmethod
