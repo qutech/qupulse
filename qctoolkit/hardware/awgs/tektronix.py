@@ -89,7 +89,9 @@ def parse_program(program: Loop,
     ch_waveforms = {}
     bin_waveforms = {}
 
-    time_per_sample = float(1 / sample_rate)
+    sample_rate_in_GHz = sample_rate / 10**9
+
+    time_per_sample = float(1 / sample_rate_in_GHz)
 
     def make_binary_converter(amp, trafo):
         def to_uint16(voltage):
@@ -103,7 +105,7 @@ def parse_program(program: Loop,
                          for amplitude, voltage_transformation in zip(amplitudes, voltage_transformations)]
 
     for loop in program:
-        n_samples = int(loop.waveform.duration * sample_rate)
+        n_samples = int(loop.waveform.duration * sample_rate_in_GHz)
         if loop.waveform.duration > time_array[-1]:
             time_array = np.arange(0, float(loop.waveform.duration), step=time_per_sample)
 
@@ -168,7 +170,8 @@ class TektronixProgram:
                  sample_rate: TimeType,
                  amplitudes: Sequence[float],
                  voltage_transformations: Sequence[Callable]):
-        assert 2*len(channels) == len(markers), "Driver can currently only handle awgs wth two markers per channel"
+        assert len(channels) == len(markers) and all(len(marker) == 2 for marker in markers), "Driver can currently only handle awgs wth two markers per channel"
+
         assert len(channels) == len(amplitudes)
 
         self._program = program.copy_tree_structure()
@@ -188,6 +191,7 @@ class TektronixProgram:
                                                                    channels=self.channels,
                                                                    markers=self.markers,
                                                                    sample_rate=self._sample_rate,
+                                                                   amplitudes=self._amplitudes,
                                                                    voltage_transformations=self._voltage_transformations)
 
     def get_sequencing_elements(self) -> Sequence[TekAwg.SequenceEntry]:
@@ -353,15 +357,22 @@ class TektronixAWG(AWG):
 
     def cleanup(self):
         """Delete all waveforms not used anymore and rewrite sequence entries if they are fragmented"""
-        raise NotImplementedError()
+
         used_waveforms = set()
-        sequence_entries = set()
-        max_seq_entry = 0 if self._idle_program is None else self._idle_program
-        for tek_program, positions, sequencing_elements in self._programs.values():
+        if self._idle_waveform in self._waveforms.by_data:
+            used_waveforms.add(self._waveforms.by_data[self._idle_waveform].name)
+
+        programs = self._programs.copy()
+        self._clear_sequence()
+
+        self.initialize_idle_program()
+
+        for name, (_, tek_program, sequencing_elements) in programs.items():
             used_waveforms.update(itertools.chain.from_iterable(element.entries for element in sequencing_elements))
-            sequence_entries.update(positions)
-        self.device.set_seq_length(max_seq_entry)
-        self._sequence_entries = self._sequence_entries[:max_seq_entry]
+            self._upload_parsed(name, tek_program)
+
+        for name in set(self._waveforms.by_name.keys()) - used_waveforms:
+            self._delete_waveform(name)
 
     def remove(self, name: str):
         raise NotImplementedError()
@@ -377,6 +388,7 @@ class TektronixAWG(AWG):
         if self._cleanup_stack is None:
             with contextlib.ExitStack() as auto_cleanup:
                 self._upload(*args, **kwargs, cleanup_stack=auto_cleanup)
+                auto_cleanup.pop_all()
         else:
             cleanup_stack = contextlib.ExitStack()
             self._cleanup_stack.push(cleanup_stack)
@@ -413,7 +425,7 @@ class TektronixAWG(AWG):
                         wf_data = self.make_idle_waveform(entry)
 
                         if wf_data in self._waveforms.by_data:
-                            wf_name = self._waveforms.by_data[wf_data]
+                            wf_name = self._waveforms.by_data[wf_data].name
 
                         else:
                             # rename waveform to idle waveform for clarity
@@ -422,14 +434,14 @@ class TektronixAWG(AWG):
                         required_idle_pulses[entry] = wf_name
 
                 elif isinstance(entry, TekAwg.Waveform):
-                    if entry in self._waveforms.by_data[entry]:
-                        wf_name = self._waveforms.by_data[entry]
+                    if entry in self._waveforms.by_data:
+                        wf_name = self._waveforms.by_data[entry].name
 
                     elif entry in waveforms_to_upload:
                         wf_name = waveforms_to_upload[entry]
 
                     else:
-                        wf_name = name + '_' + str(hash(entry))
+                        wf_name = name + '_' + str(abs(hash(entry)))
                         waveforms_to_upload[entry] = wf_name
 
                 else:
@@ -442,8 +454,7 @@ class TektronixAWG(AWG):
                                                             *sequencing_info))
         return sequencing_elements, waveforms_to_upload
 
-    def _upload_parsed(self, name: str, tek_program: TektronixProgram, cleanup_stack: contextlib.ExitStack):
-        """"""
+    def _upload_parsed(self, name: str, tek_program: TektronixProgram, cleanup_stack: contextlib.ExitStack=None):
         sequencing_elements, waveforms_to_upload = self._process_program(name, tek_program)
 
         for waveform_data, waveform_name in waveforms_to_upload.items():
@@ -452,19 +463,25 @@ class TektronixAWG(AWG):
                                   cleanup_stack=cleanup_stack)
 
         positions = self._get_empty_sequence_positions(len(sequencing_elements))
-        for (element_index, next_element), sequencing_element in zip(pairwise(positions), sequencing_elements):
-            if next_element is not None and element_index + 1 != next_element:
+        for (element_index, next_element), sequencing_element in zip(
+                pairwise(positions, fillvalue=self._idle_program_index),
+                sequencing_elements):
+            assert next_element is not None
+
+            if element_index + 1 != next_element:
                 sequencing_element.goto_ind = next_element
                 sequencing_element.goto_state = True
 
             self._upload_sequencing_element(element_index, sequencing_element)
-        self._programs[name] = (tek_program, positions, sequencing_elements)
+
+        self._programs[name] = (positions, tek_program, sequencing_elements)
 
     def _unload(self, name: str):
-        positions, tek_program = self._programs.pop(name)
+        positions, tek_program, seq_entries = self._programs.pop(name)
 
         for position in positions:
-            self._sequence_entries[position - 1] = None
+            if position <= len(self._sequence_entries):
+                self._sequence_entries[position - 1] = None
 
     def _upload(self, name: str,
                 program: Loop,
@@ -491,28 +508,10 @@ class TektronixAWG(AWG):
                                        voltage_transformations=voltage_transformation,
                                        sample_rate=TimeType(self.sample_rate))
 
-        sequencing_elements, waveforms_to_upload = self._process_program(name, tek_program)
-
-        for waveform_data, waveform_name in waveforms_to_upload.items():
-            self._upload_waveform(waveform_data=waveform_data,
-                                  waveform_name=waveform_name,
-                                  cleanup_stack=cleanup_stack)
-
-        positions = self._get_empty_sequence_positions(len(sequencing_elements))
-        for (element_index, next_element), sequencing_element in zip(pairwise(positions, fillvalue=self._idle_program_index),
-                                                                     sequencing_elements):
-            assert next_element is not None
-
-            if element_index + 1 != next_element:
-                sequencing_element.goto_ind = next_element
-                sequencing_element.goto_state = True
-
-            self._upload_sequencing_element(element_index, sequencing_element)
-
-        self._programs[name] = (positions, tek_program, sequencing_elements)
+        self._upload_parsed(name, tek_program, cleanup_stack)
 
     def _get_empty_sequence_positions(self, length: int) -> Sequence[int]:
-        """Return a list of n empty sequence positions"""
+        """Return a list of ``length`` empty sequence positions"""
         free_positions = [idx + 1
                           for idx, sequencing_element in enumerate(self._sequence_entries)
                           if sequencing_element is None]
