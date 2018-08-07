@@ -19,6 +19,9 @@ class DummyTekAwg:
     def __init__(self, **kwargs):
         pass
 
+    def write(self):
+        raise NotImplementedError()
+
 
 class TektronixAWGTests(unittest.TestCase):
     def make_dummy_tek_awg(self, **kwargs) -> tektronix.TekAwg.TekAwg:
@@ -71,3 +74,23 @@ class TektronixAWGTests(unittest.TestCase):
 
         tek_awg = self.make_awg(manual_cleanup=True)
         self.assertIsInstance(tek_awg._cleanup_stack, contextlib.ExitStack)
+
+    def test_clear_waveforms(self):
+        tek_awg = self.make_awg()
+
+        with mock.patch.object(tek_awg.device, 'write') as dev_write, \
+                mock.patch.object(tek_awg, 'read_waveforms') as read_waveforms:
+            tek_awg._clear_waveforms()
+
+            dev_write.assert_called_once_with('WLIS:WAV:DEL ALL')
+            read_waveforms.assert_called_once_with()
+
+    def test_clear_sequence(self):
+        tek_awg = self.make_awg()
+
+        with mock.patch.object(tek_awg.device, 'write') as dev_write, \
+                mock.patch.object(tek_awg, 'read_sequence') as read_sequence:
+            tek_awg._clear_sequence()
+
+            dev_write.assert_called_once_with('SEQ:LENG 0')
+            read_sequence.assert_called_once_with()
