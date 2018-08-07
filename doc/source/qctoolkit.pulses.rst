@@ -28,14 +28,6 @@ qctoolkit\.pulses\.function\_pulse\_template module
     :undoc-members:
     :show-inheritance:
 
-qctoolkit\.pulses\.instructions module
---------------------------------------
-
-.. automodule:: qctoolkit.pulses.instructions
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
 qctoolkit\.pulses\.interpolation module
 ---------------------------------------
 
@@ -100,10 +92,10 @@ qctoolkit\.pulses\.pulse\_template module
     :undoc-members:
     :show-inheritance:
 
-qctoolkit\.pulses\.pulse\_template\_parameter\_mapping module
--------------------------------------------------------------
+qctoolkit\.pulses\.mapping\_pulse\_template module
+--------------------------------------------------
 
-.. automodule:: qctoolkit.pulses.pulse_template_parameter_mapping
+.. automodule:: qctoolkit.pulses.mapping_pulse_template
     :members:
     :undoc-members:
     :show-inheritance:

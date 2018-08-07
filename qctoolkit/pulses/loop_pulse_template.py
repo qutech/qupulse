@@ -256,7 +256,7 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
         return data
 
     @classmethod
-    def deserialize(cls, serializer: Optional[Serializer]=None, **kwargs) -> 'ForLoopTemplate':
+    def deserialize(cls, serializer: Optional[Serializer]=None, **kwargs) -> 'ForLoopPulseTemplate':
         if serializer: # compatibility to old serialization routines, deprecated
             kwargs['body'] = cast(PulseTemplate, serializer.deserialize(kwargs['body']))
         return super().deserialize(None, **kwargs)
