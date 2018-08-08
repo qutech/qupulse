@@ -367,18 +367,18 @@ def new_default_pulse_registry() -> None:
 class Serializable(metaclass=SerializableMeta):
     """Any object that can be converted into a serialized representation for storage and back.
 
-    Serializable is the interface used by Serializer to obtain representations of objects that
+    Serializable is the interface used by PulseStorage to obtain representations of objects that
     need to be stored. It essentially provides the methods get_serialization_data, which returns
     a dictionary which contains all relevant properties of the Serializable object encoded as
     basic Python types, and deserialize, which is able to reconstruct the object from given
     such a dictionary.
 
     Additionally, a Serializable object MAY have a unique identifier, which indicates towards
-    the Serializer that this object should be stored as a separate data item and accessed by
+    the PulseStorage that this object should be stored as a separate data item and accessed by
     reference instead of possibly embedding it into a containing Serializable's representation.
 
     See also:
-        Serializer
+        PulseStorage
     """
 
     type_identifier_name = '#type'
@@ -432,7 +432,7 @@ class Serializable(metaclass=SerializableMeta):
         """Return all data relevant for serialization as a dictionary containing only base types.
 
         Implementation hint:
-        In the old serialization routines, if the Serializer contains complex objects which are itself
+        In the old serialization routines, if the Serializable contains complex objects which are itself
         Serializables, a serialized representation for these MUST be obtained by calling the dictify()
         method of serializer. The reason is that serializer may decide to either return a dictionary
         to embed or only a reference to the Serializable subelement. This is DEPRECATED behavior as of May 2018.
@@ -472,12 +472,13 @@ class Serializable(metaclass=SerializableMeta):
             For greater clarity, implementations of this method should be precise in their return value,
             i.e., give their exact class name, and also replace the **kwargs argument by a list of
             arguments required, i.e., those returned by get_serialization_data.
-            If this Serializable contains complex objects which are itself of type Serializable, their
-            dictionary representations MUST be converted into objects using serializers deserialize()
-            method when using the old serialization routines. This is DEPRECATED behavior.
-            Using the new routines a serializable is only responsible to decode it's own dictionary,
+            Using old serialization routines, if this Serializable contains complex objects which are itself
+            of type Serializable, their dictionary representations MUST be converted into objects using
+            serializers deserialize() method. This is DEPRECATED behavior.
+            Using the new routines, a serializable is only responsible to decode it's own dictionary,
             not those of nested objects (i.e., all incoming arguments are already processed by the
-            serialization routines). For the transition time where both implementations are
+            serialization routines).
+            For the transition time where both variants are
             available, implementations of this method should support the old and new routines, using
             the presence of the serializer argument to differentiate between both. For the new routines,
             just call this base class function.
