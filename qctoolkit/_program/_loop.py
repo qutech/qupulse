@@ -4,6 +4,7 @@ from collections import defaultdict, deque
 from copy import deepcopy
 from enum import Enum
 from fractions import Fraction
+import warnings
 
 import numpy as np
 
@@ -117,6 +118,8 @@ class Loop(Comparable, Node):
         self._repetition_count = new_repetition
 
     def unroll(self) -> None:
+        if self.is_leaf():
+            raise RuntimeError('Leaves cannot be unrolled')
         for i, e in enumerate(self.parent):
             if id(e) == id(self):
                 self.parent[i:i+1] = (child.copy_tree_structure(new_parent=self.parent)
@@ -181,7 +184,7 @@ class Loop(Comparable, Node):
 
         # calculate duration together with meas windows in the same iteration
         if self.is_leaf():
-            body_duration = float(self.waveform.duration)
+            body_duration = float(self.body_duration)
         else:
             offset = TimeType(0)
             for child in self:
@@ -258,8 +261,30 @@ class Loop(Comparable, Node):
                 sub_program[:] = sub_sub_program[:]
                 sub_program.waveform = sub_sub_program.waveform
 
-            else:
+            elif not sub_program.is_leaf():
                 sub_program.unroll()
+
+            else:
+                # we land in this case if the function gets called with depth == 0 and the current subprogram is a leaf
+                i += 1
+
+    def remove_empty_loops(self):
+        new_children = []
+        for child in self:
+            if child.is_leaf():
+                if child.waveform is None:
+                    if child._measurements:
+                        warnings.warn("Dropping measurement since there is no waveform attached")
+                else:
+                    new_children.append(child)
+            else:
+                child.remove_empty_loops()
+                if not child.is_leaf():
+                    new_children.append(child)
+                else:
+                    # all children of child were empty
+                    pass
+        self[:] = new_children
 
 
 class ChannelSplit(Exception):
@@ -333,6 +358,8 @@ class MultiChannelProgram:
                             iterable = itertools.chain((loop,), iterable)
             except StopIteration:
                 pass
+        for program in self.programs.values():
+            program.remove_empty_loops()
 
     @property
     def programs(self) -> Dict[FrozenSet[ChannelID], Loop]:
@@ -435,7 +462,7 @@ def _is_compatible(program: Loop, min_len: int, quantum: int, sample_rate: TimeT
         return _CompatibilityLevel.incompatible
 
     if program.is_leaf():
-        waveform_duration_in_samples = program.waveform.duration * sample_rate
+        waveform_duration_in_samples = program.body_duration * sample_rate
         if waveform_duration_in_samples < min_len or (waveform_duration_in_samples / quantum).denominator != 1:
             return _CompatibilityLevel.action_required
         else:

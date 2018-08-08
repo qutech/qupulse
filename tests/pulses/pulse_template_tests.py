@@ -1,4 +1,5 @@
 import unittest
+from unittest import mock
 
 from typing import Optional, Dict, Set, Any
 
@@ -189,6 +190,24 @@ class PulseTemplateTest(unittest.TestCase):
                          template.internal_create_program_args[-1])
         self.assertIsNone(program)
 
+    def test_matmul(self):
+        a = PulseTemplateStub()
+        b = PulseTemplateStub()
+
+        from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
+        with mock.patch.object(SequencePulseTemplate, 'concatenate', return_value='concat') as mock_concatenate:
+            self.assertEqual(a @ b, 'concat')
+            mock_concatenate.assert_called_once_with(a, b)
+
+    def test_rmatmul(self):
+        a = PulseTemplateStub()
+        b = (1, 2, 3)
+
+        from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
+        with mock.patch.object(SequencePulseTemplate, 'concatenate', return_value='concat') as mock_concatenate:
+            self.assertEqual(b @ a, 'concat')
+            mock_concatenate.assert_called_once_with(b, a)
+
 
 class AtomicPulseTemplateTests(unittest.TestCase):
 
@@ -282,4 +301,3 @@ class AtomicPulseTemplateTests(unittest.TestCase):
                                               measurement_mapping=dict(),
                                               channel_mapping=dict(),
                                               parent_loop=program)
-

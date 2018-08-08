@@ -44,6 +44,12 @@ class RepetitionPulseTemplateTest(unittest.TestCase):
         body.parameter_names_ = {'foo', 't', 'bar'}
         self.assertEqual(body.parameter_names, t.parameter_names)
 
+    def test_parameter_names(self) -> None:
+        body = DummyPulseTemplate(parameter_names={'foo', 'bar'})
+        t = RepetitionPulseTemplate(body, 5, parameter_constraints={'foo > hugo'}, measurements=[('meas', 'd', 0)])
+
+        self.assertEqual({'foo', 'bar', 'hugo', 'd'}, t.parameter_names)
+
     @unittest.skip('is interruptable not implemented for loops')
     def test_is_interruptable(self) -> None:
         body = DummyPulseTemplate(is_interruptable=False)

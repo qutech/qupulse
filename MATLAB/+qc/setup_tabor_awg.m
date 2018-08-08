@@ -19,6 +19,8 @@ function setup_tabor_awg(varargin)
 	plsdata.awg.dcMode = args.dcMode;
 	plsdata.awg.triggerStartTime = 0;
 	plsdata.awg.maxPulseWait = args.maxPulseWait;
+	plsdata.awg.minSamples = 192;
+	plsdata.awg.sampleQuantum = 16;
 	
 	for smChannels = args.smChannels		
 		if ~(smdata.channels(smchanlookup(smChannels{1})).instchan(1) == sminstlookup(args.taborName))

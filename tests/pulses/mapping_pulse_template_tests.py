@@ -149,6 +149,12 @@ class MappingTemplateTests(unittest.TestCase):
         self.assertIs(st_4.template, st_3)
         self.assertEqual(st_4.parameter_mapping, {'t': 't', 'k': 'k', 'bar': 't*l'})
 
+    def test_parameter_names(self) -> None:
+        template = DummyPulseTemplate(parameter_names={'foo'}, measurement_names={'meas1'})
+        mt = MappingPulseTemplate(template, parameter_mapping={'foo': 't*k'}, parameter_constraints={'t >= m'},
+                                  measurement_mapping={'meas1': 'meas2'})
+        self.assertEqual({'t', 'k', 'm'}, mt.parameter_names)
+
     def test_get_updated_channel_mapping(self):
         template = DummyPulseTemplate(defined_channels={'foo', 'bar'})
         st = MappingPulseTemplate(template, channel_mapping={'bar': 'kneipe'})

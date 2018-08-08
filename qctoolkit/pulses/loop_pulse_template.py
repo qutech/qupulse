@@ -192,7 +192,7 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
     def parameter_names(self) -> Set[str]:
         parameter_names = self.body.parameter_names.copy()
         parameter_names.remove(self._loop_index)
-        return parameter_names | self._loop_range.parameter_names | self.constrained_parameters
+        return parameter_names | self._loop_range.parameter_names | self.constrained_parameters | self.measurement_parameters
 
     def _body_parameter_generator(self, parameters: Dict[str, Parameter], forward=True) -> Generator:
         loop_range_parameters = dict((parameter_name, parameters[parameter_name].get_value())
@@ -282,7 +282,7 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
         return data
 
     @classmethod
-    def deserialize(cls, serializer: Optional[Serializer]=None, **kwargs) -> 'ForLoopTemplate':
+    def deserialize(cls, serializer: Optional[Serializer]=None, **kwargs) -> 'ForLoopPulseTemplate':
         if serializer: # compatibility to old serialization routines, deprecated
             kwargs['body'] = cast(PulseTemplate, serializer.deserialize(kwargs['body']))
         return super().deserialize(None, **kwargs)
