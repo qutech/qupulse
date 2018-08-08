@@ -9,18 +9,20 @@ Classes:
 """
 
 from abc import abstractmethod
-from typing import Optional, Union, Dict, Any, Iterable, Set, List
+from typing import Optional, Union, Dict, Any, Iterable, Set, List, Sequence, Mapping
 from numbers import Real
+from collections import ChainMap
 
 import sympy
 import numpy
 
 from qctoolkit.serialization import AnonymousSerializable
 from qctoolkit.expressions import Expression
-from qctoolkit.utils.types import HashableNumpyArray, DocStringABCMeta
+from qctoolkit.utils.types import HashableNumpyArray, DocStringABCMeta, ReadOnlyChainMap
 
 __all__ = ["Parameter", "ConstantParameter",
-           "ParameterNotProvidedException", "ParameterConstraintViolation"]
+           "ParameterNotProvidedException", "ParameterConstraintViolation",
+           "ParameterMap", "ParameterEncyclopedia", "ParameterLibrary", "ParameterProviderContext"]
 
 
 class Parameter(metaclass=DocStringABCMeta):
@@ -53,7 +55,7 @@ class Parameter(metaclass=DocStringABCMeta):
 
     def __eq__(self, other) -> bool:
         return type(self) is type(other) and hash(self) == hash(other)
-        
+
         
 class ConstantParameter(Parameter):
     """A pulse parameter with a constant value."""
@@ -248,3 +250,147 @@ class InvalidParameterNameException(Exception):
 
     def __str__(self) -> str:
         return '{} is an invalid parameter name'.format(self.parameter_name)
+
+
+ParameterMap = Mapping[str, Parameter]
+ParameterEncyclopedia = Dict[str, ParameterMap]
+
+
+class ParameterProviderContext():
+    """A view at a parameter library within the context of a certain pulse.
+
+    Implements the python context manager idiom."""
+
+    Delimiter = '.'
+
+    def __init__(self, *, parameter_library: 'ParameterLibrary', pulse_context: str='') -> None:
+        self.__context = pulse_context
+        self.__library = parameter_library
+
+    @property
+    def context(self) -> str:
+        return self.__context
+
+    @property
+    def library(self) -> 'ParameterLibrary':
+        return self.__library
+
+    def enter_context(self, pulse_context_name: Optional[str]) -> 'ParameterProviderContext':
+        """Steps into a subcontext.
+
+        Returns a ParameterProviderContext for the new context. If the previous context was e.g. "foo" and enter_context
+        was called with argument "bar", the context of the returned object will be "foo.bar".
+        If the given pulse_context_name is empty or None, the context of the returned object is the same as the one on
+        which enter_context was called, i.e., if the previous context was "foo" and enter_context was called with empty
+        argument, the context of the returned object will also be "foo"."""
+        if pulse_context_name is None or len(pulse_context_name) == 0:
+            return ParameterProviderContext(self.__context)
+        return ParameterProviderContext(self.__context + self.Delimiter + pulse_context_name)
+
+    def __enter__(self) -> None:
+        pass
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
+
+    def get_parameters(self, subst_params: Optional[ParameterMap]=None) -> ParameterMap:
+        return self.__library.get_parameters(self.__context, subst_params=subst_params)
+
+    def get_volatile_parameter_names(self) -> Set[str]:
+        return set()
+
+    def have_parameters_changed(self) -> bool:
+        return True # no way to distinguish yet, always return True so that pulses are rebuilt in any case
+
+
+class ParameterLibrary(ParameterProviderContext):
+    """Composes pulse-specific parameter dictionaries from hierarchical source dictionaries.
+
+    Nomenclature: In the following,
+    - a ParameterMap refers to a simple (dictionary) mapping of parameter names to values
+    - a ParameterEncyclopedia refers to a dictionary where pulse identifiers are keys and ParameterDicts are values.
+        Additionally, there might be a 'global' key also referring to a ParameterDict. Parameter values under the 'global'
+        key are applied to all pulses.
+
+    Example for a ParameterMap:
+    book = dict(foo_param=17.24, bar_param=-2363.4)
+
+    Example for a ParameterEncyclopedia:
+    encl = dict(
+        global=dict(foo_param=17.24, bar_param=-2363.4),
+        test_pulse_1=dict(foo_param=5.125, another_param=13.37)
+    )
+
+    ParameterLibrary gets a sequence of ParameterEncyclopedias on initialization. This sequence is
+    understood to be in hierarchical order where parameter values in ParameterDicts later in the sequence supersede
+    values for the same parameter in earlier dictionaries. In that sense, the order can be understood of being in
+    increasing specialization, i.e., most general "default" values come in early ParameterDicts while more
+    specialized parameter values (for a specific experiment, hardware setup) are placed in ParameterDicts later in the
+    sequence and replace the default values.
+
+    Within a single ParameterDict, parameter values under the 'global' key are applied to every pulse first. If a pulse
+    has an identifier for which a key is present in the ParameterDict, the contained parameter values are applied after
+    the globals and replace global values (if colliding).
+    """
+
+    def __init__(self, parameter_source_dicts: Sequence[ParameterEncyclopedia]) -> None:
+        """Creates a ParameterLibrary instance.
+
+        Args:
+            parameter_source_dicts (Sequence(Dict(str -> Dict(str -> Parameter)))): A sequence of parameter source dictionaries.
+        """
+        super().__init__(parameter_library=self)
+        self._parameter_sources = parameter_source_dicts
+        self._dict_chains = []
+        self._create_pulse_dict_chains()
+
+    def _create_pulse_dict_chains(self) -> None:
+        all_known_pulses = set.union(*(set(parameter_encl.keys()) for parameter_encl in self._parameter_sources))
+        pulse_dict_chains = dict()
+        for pulse in all_known_pulses:
+            dict_chain = []
+            for parameter_encl in reversed(self._parameter_sources):
+                if pulse != 'global':
+                    if pulse in parameter_encl:
+                        dict_chain.append(parameter_encl[pulse])
+                if 'global' in parameter_encl:
+                    dict_chain.append(parameter_encl['global'])
+            pulse_dict_chains[pulse] = dict_chain
+        self._dict_chains = pulse_dict_chains
+
+    @property
+    def parameter_sources(self) -> Sequence[ParameterEncyclopedia]:
+        return self._parameter_sources
+
+    def update_internals(self) -> None:
+        self._create_pulse_dict_chains()
+
+    def get_parameters(self, pulse_context: str, subst_params: Optional[ParameterMap]=None) -> ParameterMap:
+        """Returns a dictionary with parameters from the library for a given pulse template.
+
+        The parameter source dictionaries (i.e. the library) given to the ParameterLibrary instance on construction
+        are processed to extract the most specialized parameter values for the given pulse as described in the
+        class docstring (of ParameterLibrary).
+
+        Additionally, the optional argument subst_params is applied after processing the library to allow for a final
+        specialization by custom replacements. subst_params must be a simple parameter dictionary of the form
+        parameter_name -> parameter_value .
+
+        Args:
+            pulse_context (str): The pulse context to fetch parameters for.
+            subst_params (Dict(str -> Parameter)): An optional additional parameter specialization dictionary to be applied
+                after processing the parameter library.
+        Returns:
+            a mapping giving the most specialized parameter values for the given pulse template. also contains all
+            globally specified parameters, even if they are not required by the pulse template.
+        """
+        maps = []
+        if subst_params:
+            maps.append(subst_params)
+        if pulse_context in self._dict_chains:
+            maps.extend(self._dict_chains[pulse_context])
+        elif 'global' in self._dict_chains: # if no pulse specific chain is known, supply chain of global parameters if existent
+            maps.extend(self._dict_chains['global'])
+
+        return ReadOnlyChainMap(ChainMap(*maps))
+

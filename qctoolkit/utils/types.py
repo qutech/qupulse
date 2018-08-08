@@ -6,7 +6,7 @@ import fractions
 
 import numpy
 
-__all__ = ["MeasurementWindow", "ChannelID", "HashableNumpyArray", "TimeType", "time_from_float"]
+__all__ = ["MeasurementWindow", "ChannelID", "HashableNumpyArray", "TimeType", "time_from_float", "ReadOnlyChainMap"]
 
 MeasurementWindow = typing.Tuple[str, numbers.Real, numbers.Real]
 ChannelID = typing.Union[str, int]
@@ -54,3 +54,27 @@ class HashableNumpyArray(numpy.ndarray):
     """
     def __hash__(self):
         return hash(self.tobytes())
+
+
+KT, VT = typing.TypeVar('KT'), typing.TypeVar('VT')
+
+
+class ReadOnlyChainMap(typing.Mapping, typing.Generic[KT, VT]):
+
+    def __init__(self, chain_map: typing.ChainMap) -> None:
+        self._chain_map = chain_map
+
+    def __getitem__(self, item: KT) -> VT:
+        return self._chain_map[item]
+
+    def __len__(self) -> int:
+        return len(self._chain_map)
+
+    def __iter__(self) -> typing.Iterator:
+         return iter(self._chain_map)
+
+    def __str__(self) -> str:
+        return "ReadOnly{}".format(str(self._chain_map))
+
+    def __repr__(self) -> str:
+        return "ReadOnly{}".format(repr(self._chain_map))
