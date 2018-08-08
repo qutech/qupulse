@@ -197,6 +197,10 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
                                  measurement_mapping: Dict[str, Optional[str]],
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  parent_loop: Loop) -> None:
+        ### current behavior (same as previously): only adds EXEC Loop and measurements if a waveform exists.
+        ### measurements are directly added to parent_loop (to reflect behavior of Sequencer + MultiChannelProgram)
+        # todo (2018-08-08): could move measurements into own Loop object?
+
         # todo (2018-07-05): why are parameter constraints not validated here?
         try:
             parameters = {parameter_name: parameters[parameter_name].get_value()
@@ -211,8 +215,8 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
         waveform = self.build_waveform(parameters,
                                        channel_mapping=channel_mapping)
         if waveform:
-            parent_loop.append_child(waveform=waveform, measurements=measurements)
-
+            parent_loop.add_measurements(measurements=measurements)
+            parent_loop.append_child(waveform=waveform)
 
     @abstractmethod
     def build_waveform(self,

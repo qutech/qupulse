@@ -8,6 +8,9 @@ from qctoolkit.pulses.parameters import ConstantParameter, InvalidParameterNameE
 from qctoolkit._program.instructions import MEASInstruction
 from qctoolkit._program._loop import Loop
 
+from qctoolkit._program._loop import MultiChannelProgram
+from qctoolkit.pulses.sequencing import Sequencer
+
 from tests.pulses.sequencing_dummies import DummyCondition, DummyPulseTemplate, DummySequencer, DummyInstructionBlock,\
     DummyParameter, MeasurementWindowTestCase, DummyWaveform
 from tests.serialization_dummies import DummySerializer
@@ -310,8 +313,19 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
         self.assertEqual(1, program.repetition_count)
         self.assertEqual([], program.children)
 
+        # ensure same result as from Sequencer
+        sequencer = Sequencer()
+        sequencer.push(flt, parameters=parameters, conditions={}, window_mapping=measurement_mapping,
+                       channel_mapping=channel_mapping)
+        block = sequencer.build()
+        program_old = MultiChannelProgram(block, channels={'A'}).programs[frozenset({'A'})]
+        self.assertEqual(program_old.repetition_count, program.repetition_count)
+        self.assertEqual(program_old.children, program.children)
+        self.assertEqual(program_old.waveform, program.waveform)
+        # program_old defines measurements while program does not
+
     def test_create_program(self) -> None:
-        dt = DummyPulseTemplate(parameter_names={'i'}, waveform=DummyWaveform(duration=4.0), duration=4,
+        dt = DummyPulseTemplate(parameter_names={'i'}, waveform=DummyWaveform(duration=4.0, defined_channels={'A'}), duration=4,
                                 measurements=[('b', 2, 1)])
         flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=('a', 'b', 'c'),
                                    measurements=[('A', 0, 1)], parameter_constraints=['c > 1'])
@@ -333,6 +347,14 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
         self.assertEqual(1, program.children[1].repetition_count)
         self.assertEqual(1, program.repetition_count)
         self.assert_measurement_windows_equal({'b': ([2, 6], [1, 1]), 'B': ([0], [1])}, program.get_measurement_windows())
+
+        # ensure same result as from Sequencer
+        sequencer = Sequencer()
+        sequencer.push(flt, parameters=parameters, conditions={}, window_mapping=measurement_mapping,
+                       channel_mapping=channel_mapping)
+        block = sequencer.build()
+        program_old = MultiChannelProgram(block, channels={'A'}).programs[frozenset({'A'})]
+        self.assertEqual(program_old, program)
 
     def test_create_program_append(self) -> None:
         dt = DummyPulseTemplate(parameter_names={'i'}, waveform=DummyWaveform(duration=4.0), duration=4,
@@ -359,6 +381,9 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
         self.assertEqual(1, program.children[2].repetition_count)
         self.assertEqual(1, program.repetition_count)
         self.assert_measurement_windows_equal({'b': ([4, 8], [1, 1]), 'B': ([2], [1])}, program.get_measurement_windows())
+
+        # not ensure same result as from Sequencer here - we're testing appending to an already existing parent loop
+        # which is a use case that does not immediately arise from using Sequencer
 
 
 class ForLoopTemplateOldSequencingTests(unittest.TestCase):

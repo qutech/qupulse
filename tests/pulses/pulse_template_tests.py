@@ -11,6 +11,9 @@ from qctoolkit.pulses.parameters import Parameter, ConstantParameter, ParameterN
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 from qctoolkit._program._loop import Loop
 
+from qctoolkit._program._loop import MultiChannelProgram
+from qctoolkit.pulses.sequencing import Sequencer
+
 from tests.pulses.sequencing_dummies import DummyWaveform, DummySequencer, DummyInstructionBlock
 
 
@@ -253,10 +256,11 @@ class AtomicPulseTemplateTests(unittest.TestCase):
 
         template = AtomicPulseTemplateStub(waveform=wf, measurements=measurement_windows, parameter_names={'foo'})
         parameters = {'foo': ConstantParameter(7.2)}
+        measurement_mapping = {'M': 'N'}
         channel_mapping = {'B': 'A'}
         program = Loop()
         template._internal_create_program(parameters=parameters,
-                                          measurement_mapping={'M': 'N'},
+                                          measurement_mapping=measurement_mapping,
                                           channel_mapping=channel_mapping,
                                           parent_loop=program)
         self.assertEqual({k: p.get_value() for k, p in parameters.items()}, template.retrieved_parameters[-1])
@@ -266,6 +270,38 @@ class AtomicPulseTemplateTests(unittest.TestCase):
         self.assertEqual(1, program.children[0].repetition_count)
         self.assertIs(program.children[0].waveform, wf)
         self.assertEqual(expected_measurement_windows, program.get_measurement_windows())
+
+        # ensure same result as from Sequencer
+        sequencer = Sequencer()
+        sequencer.push(template, parameters=parameters, conditions={}, window_mapping=measurement_mapping,
+                       channel_mapping=channel_mapping)
+        block = sequencer.build()
+        old_program = MultiChannelProgram(block, channels={'A'})
+        self.assertEqual(old_program.programs[frozenset({'A'})], program)
+
+    def test_internal_create_program_no_waveform(self) -> None:
+        measurement_windows = [('M', 0, 5)]
+
+        template = AtomicPulseTemplateStub(waveform=None, measurements=measurement_windows, parameter_names={'foo'})
+        parameters = {'foo': ConstantParameter(7.2)}
+        measurement_mapping = {'M': 'N'}
+        channel_mapping = {'B': 'A'}
+        program = Loop()
+        template._internal_create_program(parameters=parameters,
+                                          measurement_mapping=measurement_mapping,
+                                          channel_mapping=channel_mapping,
+                                          parent_loop=program)
+        self.assertEqual({k: p.get_value() for k, p in parameters.items()}, template.retrieved_parameters[-1])
+        self.assertIsNone(program.waveform)
+        self.assertFalse(program.children)
+        self.assertFalse(program._measurements)
+
+        # ensure same result as from Sequencer
+        sequencer = Sequencer()
+        sequencer.push(template, parameters=parameters, conditions={}, window_mapping=measurement_mapping, channel_mapping=channel_mapping)
+        block = sequencer.build()
+        old_program = MultiChannelProgram(block, channels={'A'})
+        self.assertEqual(old_program.programs[frozenset({'A'})], program)
 
     def test_internal_create_program_invalid_measurement_mapping(self) -> None:
         measurement_windows = [('M', 0, 5)]

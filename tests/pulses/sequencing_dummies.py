@@ -366,6 +366,10 @@ class DummyPulseTemplate(AtomicPulseTemplate):
                        channel_mapping: Dict['ChannelID', 'ChannelID'],
                        instruction_block: InstructionBlock):
         self.build_sequence_arguments.append((sequencer,parameters,conditions, measurement_mapping, channel_mapping, instruction_block))
+        measurements = self.get_measurement_windows(parameters, measurement_mapping)
+        if self.waveform:
+            instruction_block.add_instruction_meas(measurements)
+            instruction_block.add_instruction_exec(waveform=self.waveform)
 
     # def create_program(self, *,
     #                    parameters: Dict[str, Parameter],
@@ -382,9 +386,11 @@ class DummyPulseTemplate(AtomicPulseTemplate):
         measurements = self.get_measurement_windows(parameters, measurement_mapping)
         self.create_program_calls.append((parameters, measurement_mapping, channel_mapping, parent_loop))
         if self._program:
-            parent_loop.append_child(waveform=self._program.waveform, children=self._program.children, measurements=measurements)
+            parent_loop.add_measurements(measurements)
+            parent_loop.append_child(waveform=self._program.waveform, children=self._program.children)
         elif self.waveform:
-            parent_loop.append_child(waveform=self.waveform, measurements=measurements)
+            parent_loop.add_measurements(measurements)
+            parent_loop.append_child(waveform=self.waveform)
 
     def build_waveform(self,
                        parameters: Dict[str, Parameter],
