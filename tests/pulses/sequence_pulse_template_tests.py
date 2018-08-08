@@ -1,5 +1,4 @@
 import unittest
-import warnings
 
 import numpy as np
 
@@ -7,74 +6,17 @@ from qctoolkit.utils.types import time_from_float
 from qctoolkit.expressions import Expression, ExpressionScalar
 from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
 from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate, SequenceWaveform
-from qctoolkit.pulses.pulse_template_parameter_mapping import MappingPulseTemplate
+from qctoolkit.pulses.mapping_pulse_template import MappingPulseTemplate
 from qctoolkit.pulses.parameters import ConstantParameter, ParameterConstraint, ParameterConstraintViolation
-from qctoolkit.pulses.instructions import MEASInstruction
+from qctoolkit._program.instructions import MEASInstruction
 
 from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyPulseTemplate,\
     DummyNoValueParameter, DummyWaveform
 from tests.serialization_dummies import DummySerializer
-
-
-class SequenceWaveformTest(unittest.TestCase):
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
-
-    def test_init(self):
-        dwf_ab = DummyWaveform(duration=1.1, defined_channels={'A', 'B'})
-        dwf_abc = DummyWaveform(duration=2.2, defined_channels={'A', 'B', 'C'})
-
-        with self.assertRaises(ValueError):
-            SequenceWaveform([])
-
-        with self.assertRaises(ValueError):
-            SequenceWaveform((dwf_ab, dwf_abc))
-
-        swf1 = SequenceWaveform((dwf_ab, dwf_ab))
-        self.assertEqual(swf1.duration, 2*dwf_ab.duration)
-        self.assertEqual(len(swf1.compare_key), 2)
-
-        swf2 = SequenceWaveform((swf1, dwf_ab))
-        self.assertEqual(swf2.duration, 3 * dwf_ab.duration)
-
-        self.assertEqual(len(swf2.compare_key), 3)
-
-    def test_unsafe_sample(self):
-        dwfs = (DummyWaveform(duration=1.),
-                DummyWaveform(duration=3.),
-                DummyWaveform(duration=2.))
-
-        swf = SequenceWaveform(dwfs)
-
-        sample_times = np.arange(0, 60)*0.1
-        expected_output = np.concatenate((sample_times[:10], sample_times[10:40]-1, sample_times[40:]-4))
-
-        output = swf.unsafe_sample('A', sample_times=sample_times)
-        np.testing.assert_equal(expected_output, output)
-
-        output_2 = swf.unsafe_sample('A', sample_times=sample_times, output_array=output)
-        self.assertIs(output_2, output)
-
-    def test_unsafe_get_subset_for_channels(self):
-        dwf_1 = DummyWaveform(duration=2.2, defined_channels={'A', 'B', 'C'})
-        dwf_2 = DummyWaveform(duration=3.3, defined_channels={'A', 'B', 'C'})
-
-        wf = SequenceWaveform([dwf_1, dwf_2])
-
-        subset = {'A', 'C'}
-        sub_wf = wf.unsafe_get_subset_for_channels(subset)
-        self.assertIsInstance(sub_wf, SequenceWaveform)
-
-        self.assertEqual(len(sub_wf.compare_key), 2)
-        self.assertEqual(sub_wf.compare_key[0].defined_channels, subset)
-        self.assertEqual(sub_wf.compare_key[1].defined_channels, subset)
-
-        self.assertEqual(sub_wf.compare_key[0].duration, time_from_float(2.2))
-        self.assertEqual(sub_wf.compare_key[1].duration, time_from_float(3.3))
+from tests.serialization_tests import SerializableTests
 
 
 class SequencePulseTemplateTest(unittest.TestCase):
-
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
@@ -117,9 +59,10 @@ class SequencePulseTemplateTest(unittest.TestCase):
                                    DummyPulseTemplate(duration='b'))
         self.assertEqual(pt.duration, Expression('a+a+b'))
 
-    def test_parameter_names_param_only_in_constraint(self) -> None:
-        pt = SequencePulseTemplate(DummyPulseTemplate(parameter_names={'a'}), DummyPulseTemplate(parameter_names={'b'}), parameter_constraints=['a==b', 'a<c'])
-        self.assertEqual(pt.parameter_names, {'a','b','c'})
+    def test_parameter_names(self) -> None:
+        pt = SequencePulseTemplate(DummyPulseTemplate(parameter_names={'a'}), DummyPulseTemplate(parameter_names={'b'}),
+                                   parameter_constraints=['a==b', 'a<c'], measurements=[('meas', 'd', 1)])
+        self.assertEqual({'a', 'b', 'c', 'd'}, pt.parameter_names, )
 
     def test_build_waveform(self):
         wfs = [DummyWaveform(), DummyWaveform()]
@@ -172,53 +115,107 @@ class SequencePulseTemplateTest(unittest.TestCase):
 
         self.assertEqual({'A': ExpressionScalar('k+2*b+7*(b-f)'), 'B': ExpressionScalar('0.24*f')}, pulse.integral)
 
+    def test_concatenate(self):
+        a = DummyPulseTemplate(parameter_names={'foo'}, defined_channels={'A'})
+        b = DummyPulseTemplate(parameter_names={'bar'}, defined_channels={'A'})
 
-class SequencePulseTemplateSerializationTests(unittest.TestCase):
+        spt_anon = SequencePulseTemplate(a, b)
+        spt_id = SequencePulseTemplate(a, b, identifier='id')
+        spt_meas = SequencePulseTemplate(a, b, measurements=[('m', 0, 'd')])
+        spt_constr = SequencePulseTemplate(a, b, parameter_constraints=['a < b'])
+
+        merged = SequencePulseTemplate.concatenate(a, spt_anon, b)
+        self.assertEqual(merged.subtemplates, [a, a, b, b])
+
+        result = SequencePulseTemplate.concatenate(a, spt_id, b)
+        self.assertEqual(result.subtemplates, [a, spt_id, b])
+
+        result = SequencePulseTemplate.concatenate(a, spt_meas, b)
+        self.assertEqual(result.subtemplates, [a, spt_meas, b])
+
+        result = SequencePulseTemplate.concatenate(a, spt_constr, b)
+        self.assertEqual(result.subtemplates, [a, spt_constr, b])
+
+
+class SequencePulseTemplateSerializationTests(SerializableTests, unittest.TestCase):
+
+    @property
+    def class_to_test(self):
+        return SequencePulseTemplate
+
+    def make_kwargs(self):
+        return {
+            'subtemplates': [DummyPulseTemplate(), DummyPulseTemplate()],
+            'parameter_constraints': [str(ParameterConstraint('a<b'))],
+            'measurements': [('m', 0, 1)]
+        }
+
+    def make_instance(self, identifier=None, registry=None):
+        kwargs = self.make_kwargs()
+        subtemplates = kwargs['subtemplates']
+        del kwargs['subtemplates']
+        return self.class_to_test(identifier=identifier, *subtemplates, **kwargs, registry=registry)
+
+    def assert_equal_instance_except_id(self, lhs: SequencePulseTemplate, rhs: SequencePulseTemplate):
+        self.assertIsInstance(lhs, SequencePulseTemplate)
+        self.assertIsInstance(rhs, SequencePulseTemplate)
+        self.assertEqual(lhs.subtemplates, rhs.subtemplates)
+        self.assertEqual(lhs.parameter_constraints, rhs.parameter_constraints)
+        self.assertEqual(lhs.measurement_declarations, rhs.measurement_declarations)
+
+
+class SequencePulseTemplateOldSerializationTests(unittest.TestCase):
 
     def setUp(self) -> None:
-        self.serializer = DummySerializer()
-
         self.table_foo = TablePulseTemplate({'default': [('hugo', 2),
                                                          ('albert', 'voltage')]},
                                             parameter_constraints=['albert<9.1'],
                                             measurements=[('mw_foo','hugo','albert')],
-                                            identifier='foo')
+                                            identifier='foo',
+                                            registry=dict())
 
         self.foo_param_mappings = dict(hugo='ilse', albert='albert', voltage='voltage')
         self.foo_meas_mappings = dict(mw_foo='mw_bar')
 
-    def test_get_serialization_data(self) -> None:
-        dummy1 = DummyPulseTemplate()
-        dummy2 = DummyPulseTemplate()
+    def test_get_serialization_data_old(self) -> None:
+        # test for deprecated version during transition period, remove after final switch
+        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
+                                   msg="SequencePT does not issue warning for old serialization routines."):
+            dummy1 = DummyPulseTemplate()
+            dummy2 = DummyPulseTemplate()
 
-        sequence = SequencePulseTemplate(dummy1, dummy2, parameter_constraints=['a<b'], measurements=[('m', 0, 1)])
-        serializer = DummySerializer(serialize_callback=lambda x: str(x))
+            sequence = SequencePulseTemplate(dummy1, dummy2, parameter_constraints=['a<b'], measurements=[('m', 0, 1)],
+                                             registry=dict())
+            serializer = DummySerializer(serialize_callback=lambda x: str(x))
 
-        expected_data = dict(
-            subtemplates=[str(dummy1), str(dummy2)],
-            parameter_constraints=['a < b'],
-            measurements=[('m', 0, 1)]
-        )
-        data = sequence.get_serialization_data(serializer)
-        self.assertEqual(expected_data, data)
+            expected_data = dict(
+                subtemplates=[str(dummy1), str(dummy2)],
+                parameter_constraints=['a < b'],
+                measurements=[('m', 0, 1)]
+            )
+            data = sequence.get_serialization_data(serializer)
+            self.assertEqual(expected_data, data)
 
-    def test_deserialize(self) -> None:
-        dummy1 = DummyPulseTemplate()
-        dummy2 = DummyPulseTemplate()
+    def test_deserialize_old(self) -> None:
+        # test for deprecated version during transition period, remove after final switch
+        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
+                                   msg="SequencePT does not issue warning for old serialization routines."):
+            dummy1 = DummyPulseTemplate()
+            dummy2 = DummyPulseTemplate()
 
-        serializer = DummySerializer(serialize_callback=lambda x: str(id(x)))
+            serializer = DummySerializer(serialize_callback=lambda x: str(id(x)))
 
-        data = dict(
-            subtemplates=[serializer.dictify(dummy1), serializer.dictify(dummy2)],
-            identifier='foo',
-            parameter_constraints=['a < b'],
-            measurements=[('m', 0, 1)]
-        )
+            data = dict(
+                subtemplates=[serializer.dictify(dummy1), serializer.dictify(dummy2)],
+                identifier='foo',
+                parameter_constraints=['a < b'],
+                measurements=[('m', 0, 1)]
+            )
 
-        template = SequencePulseTemplate.deserialize(serializer, **data)
-        self.assertEqual(template.subtemplates, [dummy1, dummy2])
-        self.assertEqual(template.parameter_constraints, [ParameterConstraint('a<b')])
-        self.assertEqual(template.measurement_declarations, [('m', 0, 1)])
+            template = SequencePulseTemplate.deserialize(serializer, **data)
+            self.assertEqual(template.subtemplates, [dummy1, dummy2])
+            self.assertEqual(template.parameter_constraints, [ParameterConstraint('a<b')])
+            self.assertEqual(template.measurement_declarations, [('m', 0, 1)])
 
 
 class SequencePulseTemplateSequencingTests(SequencePulseTemplateTest):
@@ -330,69 +327,6 @@ class SequencePulseTemplateTestProperties(SequencePulseTemplateTest):
 
         self.assertEqual(spt.measurement_names, {'a', 'b', 'c'})
 
-
-class PulseTemplateConcatenationTest(unittest.TestCase):
-    def __init__(self,*args,**kwargs):
-        super().__init__(*args,**kwargs)
-
-    def test_concatenation_pulse_template(self):
-        a = DummyPulseTemplate(parameter_names={'foo'}, defined_channels={'A'})
-        b = DummyPulseTemplate(parameter_names={'bar'}, defined_channels={'A'})
-        c = DummyPulseTemplate(parameter_names={'snu'}, defined_channels={'A'})
-        d = (c, {'snu': 'bar'})
-
-        seq = a @ a
-        self.assertTrue(len(seq.subtemplates) == 2)
-        for st in seq.subtemplates:
-            self.assertEqual(st, a)
-
-        seq = a @ b
-        self.assertTrue(len(seq.subtemplates)==2)
-        for st, expected in zip(seq.subtemplates,[a, b]):
-            self.assertTrue(st, expected)
-
-        seq = a @ b @ c
-        self.assertTrue(len(seq.subtemplates) == 3)
-        for st, expected in zip(seq.subtemplates, [a, b, c]):
-            self.assertTrue(st, expected)
-
-        seq = a @ d
-        self.assertTrue(len(seq.subtemplates) == 2)
-        self.assertIs(seq.subtemplates[0], a)
-        self.assertIsInstance(seq.subtemplates[1], MappingPulseTemplate)
-        self.assertIs(seq.subtemplates[1].template, c)
-
-        seq = d @ a
-        self.assertTrue(len(seq.subtemplates) == 2)
-        self.assertIs(seq.subtemplates[1], a)
-        self.assertIsInstance(seq.subtemplates[0], MappingPulseTemplate)
-        self.assertIs(seq.subtemplates[0].template, c)
-
-    def test_concatenation_sequence_table_pulse(self):
-        a = DummyPulseTemplate(parameter_names={'foo'}, defined_channels={'A'})
-        b = DummyPulseTemplate(parameter_names={'bar'}, defined_channels={'A'})
-        c = DummyPulseTemplate(parameter_names={'snu'}, defined_channels={'A'})
-        d = DummyPulseTemplate(parameter_names={'snu'}, defined_channels={'A'})
-
-        seq1 = SequencePulseTemplate(a, b)
-        self.assertEqual({'foo', 'bar'}, seq1.parameter_names)
-        seq2 = SequencePulseTemplate(c, d)
-        self.assertEqual({'snu'}, seq2.parameter_names)
-
-        seq = seq1 @ c
-        self.assertTrue(len(seq.subtemplates) == 3)
-        for st, expected in zip(seq.subtemplates,[a, b, c]):
-            self.assertTrue(st, expected)
-
-        seq = c @ seq1
-        self.assertTrue(len(seq.subtemplates) == 3)
-        for st, expected in zip(seq.subtemplates, [c, a, b]):
-            self.assertTrue(st, expected)
-
-        seq = seq1 @ seq2
-        self.assertTrue(len(seq.subtemplates) == 4)
-        for st, expected in zip(seq.subtemplates, [a, b, c, d]):
-            self.assertTrue(st, expected)
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

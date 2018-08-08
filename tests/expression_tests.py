@@ -201,6 +201,12 @@ class ExpressionScalarTests(unittest.TestCase):
         received = sorted(e.variables)
         self.assertEqual(expected, received)
 
+    def test_variables_indexed(self):
+        e = ExpressionScalar('a[i] * c')
+        expected = sorted(['a', 'i', 'c'])
+        received = sorted(e.variables)
+        self.assertEqual(expected, received)
+
     def test_evaluate_variable_missing(self) -> None:
         e = ExpressionScalar('a * b + c')
         params = {

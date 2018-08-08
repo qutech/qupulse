@@ -14,15 +14,16 @@ import numpy as np
 import sympy
 
 from qctoolkit.expressions import ExpressionScalar
-from qctoolkit.serialization import Serializer
+from qctoolkit.serialization import Serializer, PulseRegistryType
 
+from qctoolkit.pulses.conditions import Condition
 from qctoolkit.utils.types import ChannelID, TimeType, time_from_float
 from qctoolkit.pulses.parameters import Parameter, ParameterConstrainer, ParameterConstraint
 from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration
-from qctoolkit.pulses.instructions import Waveform
+from qctoolkit._program.waveforms import FunctionWaveform
 
 
-__all__ = ["FunctionPulseTemplate", "FunctionWaveform"]
+__all__ = ["FunctionPulseTemplate"]
 
 
 class FunctionPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
@@ -44,7 +45,8 @@ class FunctionPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
                  identifier: Optional[str] = None,
                  *,
                  measurements: Optional[List[MeasurementDeclaration]]=None,
-                 parameter_constraints: Optional[List[Union[str, ParameterConstraint]]]=None) -> None:
+                 parameter_constraints: Optional[List[Union[str, ParameterConstraint]]]=None,
+                 registry: PulseRegistryType=None) -> None:
         """
         Args:
             expression: The function represented by this FunctionPulseTemplate
@@ -67,6 +69,8 @@ class FunctionPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
         self.__duration_expression = ExpressionScalar.make(duration_expression)
         self.__parameter_names = {*self.__duration_expression.variables, *self.__expression.variables} - {'t'}
         self.__channel = channel
+
+        self._register(registry=registry)
 
     @property
     def expression(self) -> ExpressionScalar:
@@ -119,31 +123,37 @@ class FunctionPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
             for name in parameters.keys() if (name in self.parameter_names)
         )
 
-    def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
-        return dict(
+    def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
+        data = super().get_serialization_data(serializer)
+
+        if serializer: # compatibility to old serialization routines, deprecated
+            return dict(
+                duration_expression=self.__duration_expression,
+                expression=self.__expression,
+                channel=self.__channel,
+                measurement_declarations=self.measurement_declarations,
+                parameter_constraints=[str(c) for c in self.parameter_constraints]
+            )
+
+        local_data = dict(
             duration_expression=self.__duration_expression,
             expression=self.__expression,
             channel=self.__channel,
-            measurement_declarations=self.measurement_declarations,
+            measurements=self.measurement_declarations,
             parameter_constraints=[str(c) for c in self.parameter_constraints]
         )
 
-    @staticmethod
-    def deserialize(serializer: Serializer,
-                    expression: Any,
-                    duration_expression: Any,
-                    channel: 'ChannelID',
-                    measurement_declarations: List[MeasurementDeclaration],
-                    parameter_constraints: List,
-                    identifier: Optional[bool]=None) -> 'FunctionPulseTemplate':
-        return FunctionPulseTemplate(
-            expression,
-            duration_expression,
-            channel=channel,
-            identifier=identifier,
-            measurements=measurement_declarations,
-            parameter_constraints=parameter_constraints
-        )
+        data.update(**local_data)
+        return data
+
+    @classmethod
+    def deserialize(cls,
+                    serializer: Optional[Serializer]=None,
+                    **kwargs) -> 'FunctionPulseTemplate':
+        if serializer:
+            kwargs['measurements'] = kwargs['measurement_declarations'] # compatibility to old serialization routines, deprecated
+            del kwargs['measurement_declarations']
+        return super().deserialize(None, **kwargs)
 
     @property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
@@ -152,49 +162,3 @@ class FunctionPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
         )}
 
 
-class FunctionWaveform(Waveform):
-    """Waveform obtained from instantiating a FunctionPulseTemplate."""
-
-    def __init__(self, expression: ExpressionScalar,
-                 duration: float,
-                 channel: ChannelID) -> None:
-        """Creates a new FunctionWaveform instance.
-
-        Args:
-            expression: The function represented by this FunctionWaveform
-                as a mathematical expression where 't' denotes the time variable. It must not have other variables
-            duration: The duration of the waveform
-            measurement_windows: A list of measurement windows
-            channel: The channel this waveform is played on
-        """
-        super().__init__()
-        if set(expression.variables) - set('t'):
-            raise ValueError('FunctionWaveforms may not depend on anything but "t"')
-
-        self._expression = expression
-        self._duration = time_from_float(duration)
-        self._channel_id = channel
-
-    @property
-    def defined_channels(self) -> Set[ChannelID]:
-        return {self._channel_id}
-    
-    @property
-    def compare_key(self) -> Any:
-        return self._channel_id, self._expression, self._duration
-
-    @property
-    def duration(self) -> TimeType:
-        return self._duration
-
-    def unsafe_sample(self,
-                      channel: ChannelID,
-                      sample_times: np.ndarray,
-                      output_array: Union[np.ndarray, None] = None) -> np.ndarray:
-        if output_array is None:
-            output_array = np.empty(len(sample_times))
-        output_array[:] = self._expression.evaluate_numeric(t=sample_times)
-        return output_array
-
-    def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> Waveform:
-        return self
