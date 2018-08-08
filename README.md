@@ -44,9 +44,14 @@ The optional script *tests/utils/syntax_check.py* invokes pyflakes to perform a 
 You can find documentation on how to use this library on [readthedocs](http://qc-toolkit.readthedocs.io/en/latest/) and [IPython notebooks with examples in this repo](doc/source/examples)
 
 ## Folder Structure
-The repository primarily consists of the folders `qctoolkit` and `tests`.
+The repository primarily consists of the folders `qctoolkit` (toolkit core code) and `tests` (toolkit core tests). Additional parts of the project reside in `MATLAB` (MATLAB interface) and `doc` (configuration and source files to build documentation)  
 
-`qctoolkit` contains the entire source code of the project and is further partitioned into packages of related modules (i.e. a package folder `pulses` which contains all modules related to pulse representation and translation).
+`qctoolkit` contains the entire Python source code of the project and is further partitioned the following packages of related modules 
+
+- `pulses` which contains all modules related to pulse representation).
+- `hardware` containing classes for hardware representation as well as hardware drivers
+- `utils` containing miscellaneous utility modules or wrapping code for external libraries
+
 
 Contents of `tests` mirror the structure of `qctoolkit`. For every `<module>` somewhere in `qctoolkit` there should exist a `<module>Tests.py` in the corresponding subdirectory of `tests`.
 
