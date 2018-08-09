@@ -8,6 +8,9 @@ from qctoolkit.pulses.parameters import ConstantParameter, ParameterConstraintVi
 from qctoolkit.expressions import Expression
 from qctoolkit._program._loop import Loop
 
+from qctoolkit._program._loop import MultiChannelProgram
+from qctoolkit.pulses.sequencing import Sequencer
+
 from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummySequencer, DummyInstructionBlock, MeasurementWindowTestCase, DummyWaveform
 from tests.serialization_tests import SerializableTests
 from tests.serialization_dummies import DummySerializer
@@ -228,6 +231,14 @@ class MappingPulseTemplateSequencingTest(MeasurementWindowTestCase):
         self.assertIs(template.waveform, program.children[0].waveform)
         self.assert_measurement_windows_equal({'meas3': ([0], [1])}, program.get_measurement_windows())
 
+        # ensure same result as from Sequencer
+        sequencer = Sequencer()
+        sequencer.push(st, parameters=pre_parameters, conditions={}, window_mapping=pre_measurement_mapping,
+                       channel_mapping=pre_channel_mapping)
+        block = sequencer.build()
+        program_old = MultiChannelProgram(block, channels={'A'}).programs[frozenset({'A'})]
+        self.assertEqual(program_old, program)
+
     def test_create_program_invalid_measurement_mapping(self) -> None:
         measurement_mapping = {'meas1': 'meas2'}
         parameter_mapping = {'t': 'k'}
@@ -334,6 +345,14 @@ class MappingPulseTemplateSequencingTest(MeasurementWindowTestCase):
         self.assertEqual(1, program.repetition_count)
         self.assertEqual(0, len(program.children))
         self.assertIsNone(program._measurements)
+
+        # ensure same result as from Sequencer
+        sequencer = Sequencer()
+        sequencer.push(st, parameters=pre_parameters, conditions={}, window_mapping=pre_measurement_mapping,
+                       channel_mapping=pre_channel_mapping)
+        block = sequencer.build()
+        program_old = MultiChannelProgram(block, channels={'A'}).programs[frozenset({'A'})]
+        self.assertEqual(program_old, program)
 
 
 class MappingPulseTemplateOldSequencingTests(unittest.TestCase):
