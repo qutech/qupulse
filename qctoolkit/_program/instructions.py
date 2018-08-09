@@ -1,7 +1,6 @@
 """This module defines the abstract hardware instruction model of the qc-toolkit.
 
 Classes:
-    - Waveform: An instantiated pulse which can be sampled to a raw voltage value array.
     - Trigger: Representation of a hardware trigger.
     - Instruction: Base class for hardware instructions.
     - CJMPInstruction: Conditional jump instruction.
@@ -24,117 +23,12 @@ import numpy
 
 from qctoolkit.utils.types import ChannelID, MeasurementWindow, TimeType
 from qctoolkit.comparable import Comparable
+from qctoolkit._program.waveforms import Waveform
 
-__all__ = ["Waveform", "Trigger",
+__all__ = ["Trigger",
            "InstructionPointer", "Instruction", "CJMPInstruction", "EXECInstruction",
            "GOTOInstruction", "STOPInstruction", "REPJInstruction", "AbstractInstructionBlock", "InstructionBlock",
-           "ImmutableInstructionBlock", "InstructionSequence", "ChannelID"
-           ]
-
-
-class Waveform(Comparable, metaclass=ABCMeta):
-    """Represents an instantiated PulseTemplate which can be sampled to retrieve arrays of voltage
-    values for the hardware."""
-
-    __sampled_cache = WeakValueDictionary()
-
-    @property
-    @abstractmethod
-    def duration(self) -> TimeType:
-        """The duration of the waveform in time units."""
-
-    @abstractmethod
-    def unsafe_sample(self,
-                      channel: ChannelID,
-                      sample_times: numpy.ndarray,
-                      output_array: Union[numpy.ndarray, None]=None) -> numpy.ndarray:
-        """Sample the waveform at given sample times.
-
-        The unsafe means that there are no sanity checks performed. The provided sample times are assumed to be
-        monotonously increasing and lie in the range of [0, waveform.duration]
-
-        Args:
-            sample_times: Times at which this Waveform will be sampled.
-            output_array: Has to be either None or an array of the same size and type as sample_times. If
-                not None, the sampled values will be written here and this array will be returned
-        Result:
-            The sampled values of this Waveform at the provided sample times. Has the same number of
-            elements as sample_times.
-        """
-
-    def get_sampled(self,
-                    channel: ChannelID,
-                    sample_times: numpy.ndarray,
-                    output_array: Union[numpy.ndarray, None]=None) -> numpy.ndarray:
-        """A wrapper to the unsafe_sample method which caches the result. This method enforces the constrains
-        unsafe_sample expects and caches the result to save memory.
-
-        Args/Result:
-            sample_times: Times at which this Waveform will be sampled.
-            output_array: Has to be either None or an array of the same size and type as sample_times.
-                 - If None, a new array will be created and cached to save memory.
-                 - If not None, the sampled values will be written here and this array will be returned.
-        Result:
-            The sampled values of this Waveform at the provided sample times.
-        """
-        if len(sample_times) == 0:
-            if output_array is None:
-                return numpy.zeros_like(sample_times)
-            elif len(output_array) == len(sample_times):
-                return output_array
-            else:
-                raise ValueError('Output array length and sample time length are different')
-
-        if numpy.any(sample_times[:-1] >= sample_times[1:]):
-            raise ValueError('The sample times are not monotonously increasing')
-        if sample_times[0] < 0 or sample_times[-1] > self.duration:
-            raise ValueError('The sample times are not in the range [0, duration]')
-        if channel not in self.defined_channels:
-            raise KeyError('Channel not defined in this waveform: {}'.format(channel))
-
-        if output_array is None:
-            # cache the result to save memory
-            result = self.unsafe_sample(channel, sample_times)
-            result.flags.writeable = False
-            key = hash(bytes(result))
-            if key not in self.__sampled_cache:
-                self.__sampled_cache[key] = result
-            return self.__sampled_cache[key]
-        else:
-            if len(output_array) != len(sample_times):
-                raise ValueError('Output array length and sample time length are different')
-            # use the user provided memory
-            return self.unsafe_sample(channel=channel,
-                                      sample_times=sample_times,
-                                      output_array=output_array)
-
-    @property
-    @abstractmethod
-    def defined_channels(self) -> Set[ChannelID]:
-        """The channels this waveform should played on. Use
-            :func:`~qctoolkit.pulses.instructions.get_measurement_windows` to get a waveform for a subset of these."""
-
-    @abstractmethod
-    def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> 'Waveform':
-        """Unsafe version of :func:`~qctoolkit.pulses.instructions.get_measurement_windows`."""
-
-    def get_subset_for_channels(self, channels: Set[ChannelID]) -> 'Waveform':
-        """Get a waveform that only describes the channels contained in `channels`.
-
-        Args:
-            channels: A channel set the return value should confine to.
-
-        Raises:
-            KeyError: If `channels` is not a subset of the waveform's defined channels.
-
-        Returns:
-            A waveform with waveform.defined_channels == `channels`
-        """
-        if not channels <= self.defined_channels:
-            raise KeyError('Channels not defined on waveform: {}'.format(channels))
-        if channels == self.defined_channels:
-            return self
-        return self.unsafe_get_subset_for_channels(channels=channels)
+           "ImmutableInstructionBlock", "InstructionSequence", "ChannelID"]
 
 
 class Trigger(Comparable):

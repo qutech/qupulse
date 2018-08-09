@@ -2,7 +2,7 @@ import unittest
 import numpy
 
 from qctoolkit.pulses.plotting import PlottingNotPossibleException, render, iter_waveforms, iter_instruction_block, plot
-from qctoolkit.pulses.instructions import InstructionBlock
+from qctoolkit._program.instructions import InstructionBlock
 from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
 from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
 from qctoolkit.pulses.sequencing import Sequencer

@@ -7,63 +7,22 @@ from warnings import warn
 
 import numpy as np
 
-from qctoolkit.serialization import Serializer
+from qctoolkit.serialization import Serializer, PulseRegistryType
 
-from qctoolkit.utils.types import ChannelID, TimeType
+from qctoolkit.utils.types import ChannelID
 from qctoolkit.expressions import ExpressionScalar
 from qctoolkit.utils import checked_int_cast
 from qctoolkit.pulses.pulse_template import PulseTemplate
 from qctoolkit.pulses.loop_pulse_template import LoopPulseTemplate
 from qctoolkit.pulses.sequencing import Sequencer
-from qctoolkit.pulses.instructions import InstructionBlock, InstructionPointer, Waveform
+from qctoolkit._program.instructions import InstructionBlock, InstructionPointer
+from qctoolkit._program.waveforms import RepetitionWaveform
 from qctoolkit.pulses.parameters import Parameter, ParameterConstrainer, ParameterNotProvidedException
 from qctoolkit.pulses.conditions import Condition
 from qctoolkit.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
 
 
 __all__ = ["RepetitionPulseTemplate", "ParameterNotIntegerException"]
-
-
-class RepetitionWaveform(Waveform):
-    """This class allows putting multiple PulseTemplate together in one waveform on the hardware."""
-    def __init__(self, body: Waveform, repetition_count: int):
-        self._body = body
-        self._repetition_count = checked_int_cast(repetition_count)
-        if repetition_count < 1 or not isinstance(repetition_count, int):
-            raise ValueError('Repetition count must be an integer >0')
-
-    @property
-    def defined_channels(self) -> Set[ChannelID]:
-        return self._body.defined_channels
-
-    def unsafe_sample(self,
-                      channel: ChannelID,
-                      sample_times: np.ndarray,
-                      output_array: Union[np.ndarray, None]=None) -> np.ndarray:
-        if output_array is None:
-            output_array = np.empty_like(sample_times)
-        body_duration = self._body.duration
-        time = 0
-        for _ in range(self._repetition_count):
-            end = time + body_duration
-            indices = slice(*np.searchsorted(sample_times, (float(time), float(end)), 'left'))
-            self._body.unsafe_sample(channel=channel,
-                                     sample_times=sample_times[indices] - time,
-                                     output_array=output_array[indices])
-            time = end
-        return output_array
-
-    @property
-    def compare_key(self) -> Tuple[Any, int]:
-        return self._body.compare_key, self._repetition_count
-
-    @property
-    def duration(self) -> TimeType:
-        return self._body.duration*self._repetition_count
-
-    def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> 'RepetitionWaveform':
-        return RepetitionWaveform(body=self._body.unsafe_get_subset_for_channels(channels),
-                                  repetition_count=self._repetition_count)
 
 
 class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, MeasurementDefiner):
@@ -81,7 +40,8 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
                  identifier: Optional[str]=None,
                  *args,
                  parameter_constraints: Optional[List]=None,
-                 measurements: Optional[List[MeasurementDeclaration]]=None
+                 measurements: Optional[List[MeasurementDeclaration]]=None,
+                 registry: PulseRegistryType=None
                  ) -> None:
         """Create a new RepetitionPulseTemplate instance.
 
@@ -109,6 +69,8 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
             warn("Repetition pulse template with 0 repetitions on construction.")
 
         self._repetition_count = repetition_count
+
+        self._register(registry=registry)
 
     @property
     def repetition_count(self) -> ExpressionScalar:
@@ -170,29 +132,29 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
                       conditions: Dict[str, Condition]) -> bool:
         return any(parameters[v].requires_stop for v in self.repetition_count.variables)
 
-    def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
-        data = dict(
-            body=serializer.dictify(self.body),
-            repetition_count=self.repetition_count.original_expression
-        )
+    def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
+        data = super().get_serialization_data(serializer)
+        data['body'] = self.body
+
+        if serializer: # compatibility to old serialization routines, deprecated
+            data = dict()
+            data['body'] = serializer.dictify(self.body)
+
+        data['repetition_count'] = self.repetition_count.original_expression
+
         if self.parameter_constraints:
             data['parameter_constraints'] = [str(c) for c in self.parameter_constraints]
         if self.measurement_declarations:
             data['measurements'] = self.measurement_declarations
+
         return data
 
-    @staticmethod
-    def deserialize(serializer: Serializer,
-                    repetition_count: Union[str, int],
-                    body: Dict[str, Any],
-                    parameter_constraints: Optional[List[str]]=None,
-                    identifier: Optional[str]=None,
-                    measurements: Optional[List[MeasurementDeclaration]]=None) -> 'RepetitionPulseTemplate':
-        body = cast(PulseTemplate, serializer.deserialize(body))
-        return RepetitionPulseTemplate(body, repetition_count,
-                                       identifier=identifier,
-                                       parameter_constraints=parameter_constraints,
-                                       measurements=measurements)
+    @classmethod
+    def deserialize(cls, serializer: Optional[Serializer]=None, **kwargs) -> 'RepetitionPulseTemplate':
+        if serializer: # compatibility to old serialization routines, deprecated
+            kwargs['body'] = cast(PulseTemplate, serializer.deserialize(kwargs['body']))
+
+        return super().deserialize(**kwargs)
 
     @property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:

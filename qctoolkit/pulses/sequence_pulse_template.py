@@ -7,92 +7,22 @@ from numbers import Real
 import functools
 import warnings
 
-from qctoolkit.serialization import Serializer
+from qctoolkit.serialization import Serializer, PulseRegistryType
 
 from qctoolkit.utils.types import MeasurementWindow, ChannelID, TimeType
 from qctoolkit.pulses.pulse_template import PulseTemplate
 from qctoolkit.pulses.parameters import Parameter, ParameterConstrainer
 from qctoolkit.pulses.sequencing import InstructionBlock, Sequencer
 from qctoolkit.pulses.conditions import Condition
-from qctoolkit.pulses.pulse_template_parameter_mapping import MappingPulseTemplate, MappingTuple
-from qctoolkit.pulses.instructions import Waveform
+from qctoolkit.pulses.mapping_pulse_template import MappingPulseTemplate, MappingTuple
+from qctoolkit._program.waveforms import SequenceWaveform
 from qctoolkit.pulses.measurement import MeasurementDeclaration, MeasurementDefiner
 from qctoolkit.expressions import Expression, ExpressionScalar
 
 __all__ = ["SequencePulseTemplate"]
 
 
-class SequenceWaveform(Waveform):
-    """This class allows putting multiple PulseTemplate together in one waveform on the hardware."""
-    def __init__(self, subwaveforms: List[Waveform]):
-        """
 
-        :param subwaveforms: All waveforms must have the same defined channels
-        """
-        if not subwaveforms:
-            raise ValueError(
-                "SequenceWaveform cannot be constructed without channel waveforms."
-            )
-
-        def flattened_sub_waveforms():
-            for sub_waveform in subwaveforms:
-                if isinstance(sub_waveform, SequenceWaveform):
-                    yield from sub_waveform._sequenced_waveforms
-                else:
-                    yield sub_waveform
-
-        self._sequenced_waveforms = tuple(flattened_sub_waveforms())
-        self._duration = sum(waveform.duration for waveform in self._sequenced_waveforms)
-        if not all(waveform.defined_channels == self.defined_channels for waveform in self._sequenced_waveforms[1:]):
-            raise ValueError(
-                "SequenceWaveform cannot be constructed from waveforms of different"
-                "defined channels."
-            )
-
-    @property
-    def defined_channels(self) -> Set[ChannelID]:
-        return self._sequenced_waveforms[0].defined_channels
-
-    def unsafe_sample(self,
-                      channel: ChannelID,
-                      sample_times: np.ndarray,
-                      output_array: Union[np.ndarray, None]=None) -> np.ndarray:
-        if output_array is None:
-            output_array = np.empty_like(sample_times)
-        time = 0
-        for subwaveform in self._sequenced_waveforms:
-            # before you change anything here, make sure to understand the difference between basic and advanced
-            # indexing in numpy and their copy/reference behaviour
-            end = time + subwaveform.duration
-
-            indices = slice(*np.searchsorted(sample_times, (float(time), float(end)), 'left'))
-            subwaveform.unsafe_sample(channel=channel,
-                                      sample_times=sample_times[indices]-time,
-                                      output_array=output_array[indices])
-            time = end
-        return output_array
-
-    @property
-    def compare_key(self) -> Tuple[Waveform]:
-        return self._sequenced_waveforms
-
-    @property
-    def duration(self) -> TimeType:
-        return self._duration
-
-    def get_measurement_windows(self) -> Iterable[MeasurementWindow]:
-        def updated_measurement_window_generator(sequenced_waveforms):
-            offset = 0
-            for sub_waveform in sequenced_waveforms:
-                for (name, begin, length) in sub_waveform.get_measurement_windows():
-                    yield (name, begin+offset, length)
-                offset += sub_waveform.duration
-        return updated_measurement_window_generator(self._sequenced_waveforms)
-
-    def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> 'Waveform':
-        return SequenceWaveform(
-            sub_waveform.unsafe_get_subset_for_channels(channels & sub_waveform.defined_channels)
-            for sub_waveform in self._sequenced_waveforms if sub_waveform.defined_channels & channels)
 
 
 class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefiner):
@@ -113,7 +43,8 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                  external_parameters: Optional[Union[Iterable[str], Set[str]]]=None,
                  identifier: Optional[str]=None,
                  parameter_constraints: Optional[List[Union[str, Expression]]]=None,
-                 measurements: Optional[List[MeasurementDeclaration]]=None) -> None:
+                 measurements: Optional[List[MeasurementDeclaration]]=None,
+                 registry: PulseRegistryType=None) -> None:
         """Create a new SequencePulseTemplate instance.
 
         Requires a (correctly ordered) list of subtemplates in the form
@@ -151,6 +82,8 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
         if external_parameters:
             warnings.warn("external_parameters is an obsolete argument and will be removed in the future.",
                           category=DeprecationWarning)
+
+        self._register(registry=registry)
 
     @property
     def parameter_names(self) -> Set[str]:
@@ -211,26 +144,32 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                            channel_mapping=channel_mapping,
                            target_block=instruction_block)
 
-    def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
-        data = dict(subtemplates=[serializer.dictify(subtemplate) for subtemplate in self.subtemplates])
+    def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
+        data = super().get_serialization_data(serializer)
+        data['subtemplates'] = self.subtemplates
+
+        if serializer: # compatibility to old serialization routines, deprecated
+            data = dict()
+            data['subtemplates'] = [serializer.dictify(subtemplate) for subtemplate in self.subtemplates]
+
         if self.parameter_constraints:
             data['parameter_constraints'] = [str(c) for c in self.parameter_constraints]
         if self.measurement_declarations:
             data['measurements'] = self.measurement_declarations
+
         return data
 
-    @staticmethod
-    def deserialize(serializer: Serializer,
-                    subtemplates: Iterable[Dict[str, Any]],
-                    parameter_constraints: Optional[List[str]]=None,
-                    identifier: Optional[str]=None,
-                    measurements: Optional[List[MeasurementDeclaration]]=None) -> 'SequencePulseTemplate':
-        subtemplates = [serializer.deserialize(st) for st in subtemplates]
-        seq_template = SequencePulseTemplate(*subtemplates,
-                                             parameter_constraints=parameter_constraints,
-                                             identifier=identifier,
-                                             measurements=measurements)
-        return seq_template
+    @classmethod
+    def deserialize(cls,
+                    serializer: Optional[Serializer]=None,  # compatibility to old serialization routines, deprecated
+                    **kwargs) -> 'SequencePulseTemplate':
+        subtemplates = kwargs['subtemplates']
+        del kwargs['subtemplates']
+
+        if serializer: # compatibility to old serialization routines, deprecated
+            subtemplates = [serializer.deserialize(st) for st in subtemplates]
+
+        return cls(*subtemplates, **kwargs)
 
     @property
     def defined_channels(self) -> Set[ChannelID]:

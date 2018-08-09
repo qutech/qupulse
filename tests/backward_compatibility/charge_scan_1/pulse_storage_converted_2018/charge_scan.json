@@ -1,0 +1,196 @@
+{
+    "#identifier": "charge_scan",
+    "#type": "qctoolkit.pulses.pulse_template_parameter_mapping.MappingPulseTemplate",
+    "channel_mapping": {
+        "W": "W",
+        "X": "X",
+        "Y": "Y",
+        "Z": "Z",
+        "marker": "marker"
+    },
+    "measurement_mapping": {
+        "A": "A",
+        "B": "B"
+    },
+    "parameter_mapping": {
+        "N_x": "charge_scan___N_x",
+        "N_y": "charge_scan___N_y",
+        "W_fast": "charge_scan___W_fast",
+        "W_slow": "charge_scan___W_slow",
+        "X_fast": "charge_scan___X_fast",
+        "X_slow": "charge_scan___X_slow",
+        "Y_fast": "charge_scan___Y_fast",
+        "Y_slow": "charge_scan___Y_slow",
+        "Z_fast": "charge_scan___Z_fast",
+        "Z_slow": "charge_scan___Z_slow",
+        "meas_time_multiplier": "charge_scan___meas_time_multiplier",
+        "rep_count": "charge_scan___rep_count",
+        "sample_rate": "charge_scan___sample_rate",
+        "t_meas": "charge_scan___t_meas",
+        "t_wait": "charge_scan___t_wait",
+        "x_start": "charge_scan___x_start",
+        "x_stop": "charge_scan___x_stop",
+        "y_start": "charge_scan___y_start",
+        "y_stop": "charge_scan___y_stop"
+    },
+    "template": {
+        "#type": "qctoolkit.pulses.repetition_pulse_template.RepetitionPulseTemplate",
+        "body": {
+            "#type": "qctoolkit.pulses.pulse_template_parameter_mapping.MappingPulseTemplate",
+            "channel_mapping": {
+                "W": "W",
+                "X": "X",
+                "Y": "Y",
+                "Z": "Z",
+                "marker": "marker"
+            },
+            "measurement_mapping": {
+                "A": "A",
+                "B": "B"
+            },
+            "parameter_mapping": {
+                "N_x": "N_x",
+                "N_y": "N_y",
+                "W_fast": "W_fast",
+                "W_slow": "W_slow",
+                "X_fast": "X_fast",
+                "X_slow": "X_slow",
+                "Y_fast": "Y_fast",
+                "Y_slow": "Y_slow",
+                "Z_fast": "Z_fast",
+                "Z_slow": "Z_slow",
+                "meas_time_multiplier": "meas_time_multiplier",
+                "sample_rate": "sample_rate",
+                "t_meas": "t_meas",
+                "t_wait": "t_wait",
+                "x_start": "x_start",
+                "x_step": "(-x_start + x_stop)/N_x",
+                "y_start": "y_start",
+                "y_step": "(-y_start + y_stop)/N_y"
+            },
+            "template": {
+                "#type": "qctoolkit.pulses.loop_pulse_template.ForLoopPulseTemplate",
+                "body": {
+                    "#type": "qctoolkit.pulses.loop_pulse_template.ForLoopPulseTemplate",
+                    "body": {
+                        "#type": "qctoolkit.pulses.sequence_pulse_template.SequencePulseTemplate",
+                        "subtemplates": [
+                            {
+                                "#type": "qctoolkit.pulses.table_pulse_template.TablePulseTemplate",
+                                "entries": {
+                                    "W": [
+                                        [
+                                            "(t_meas + t_wait)/sample_rate",
+                                            "W_fast*(i_x*x_step + x_start) + W_slow*(i_y*y_step + y_start)",
+                                            "hold"
+                                        ]
+                                    ],
+                                    "X": [
+                                        [
+                                            "(t_meas + t_wait)/sample_rate",
+                                            "X_fast*(i_x*x_step + x_start) + X_slow*(i_y*y_step + y_start)",
+                                            "hold"
+                                        ]
+                                    ],
+                                    "Y": [
+                                        [
+                                            "(t_meas + t_wait)/sample_rate",
+                                            "Y_fast*(i_x*x_step + x_start) + Y_slow*(i_y*y_step + y_start)",
+                                            "hold"
+                                        ]
+                                    ],
+                                    "Z": [
+                                        [
+                                            "(t_meas + t_wait)/sample_rate",
+                                            "Z_fast*(i_x*x_step + x_start) + Z_slow*(i_y*y_step + y_start)",
+                                            "hold"
+                                        ]
+                                    ],
+                                    "marker": [
+                                        [
+                                            "(t_meas + t_wait)/sample_rate",
+                                            1.0,
+                                            "hold"
+                                        ]
+                                    ]
+                                },
+                                "measurements": [
+                                    [
+                                        "A",
+                                        "t_wait/sample_rate",
+                                        "(t_meas/sample_rate)*meas_time_multiplier"
+                                    ],
+                                    [
+                                        "B",
+                                        "t_wait/sample_rate",
+                                        "(t_meas/sample_rate)*meas_time_multiplier"
+                                    ]
+                                ],
+                                "parameter_constraints": []
+                            },
+                            {
+                                "#type": "qctoolkit.pulses.repetition_pulse_template.RepetitionPulseTemplate",
+                                "body": {
+                                    "#type": "qctoolkit.pulses.table_pulse_template.TablePulseTemplate",
+                                    "entries": {
+                                        "W": [
+                                            [
+                                                "(t_meas + t_wait)/sample_rate",
+                                                "W_fast*(i_x*x_step + x_start) + W_slow*(i_y*y_step + y_start)",
+                                                "hold"
+                                            ]
+                                        ],
+                                        "X": [
+                                            [
+                                                "(t_meas + t_wait)/sample_rate",
+                                                "X_fast*(i_x*x_step + x_start) + X_slow*(i_y*y_step + y_start)",
+                                                "hold"
+                                            ]
+                                        ],
+                                        "Y": [
+                                            [
+                                                "(t_meas + t_wait)/sample_rate",
+                                                "Y_fast*(i_x*x_step + x_start) + Y_slow*(i_y*y_step + y_start)",
+                                                "hold"
+                                            ]
+                                        ],
+                                        "Z": [
+                                            [
+                                                "(t_meas + t_wait)/sample_rate",
+                                                "Z_fast*(i_x*x_step + x_start) + Z_slow*(i_y*y_step + y_start)",
+                                                "hold"
+                                            ]
+                                        ],
+                                        "marker": [
+                                            [
+                                                "(t_meas + t_wait)/sample_rate",
+                                                1.0,
+                                                "hold"
+                                            ]
+                                        ]
+                                    },
+                                    "measurements": [],
+                                    "parameter_constraints": []
+                                },
+                                "repetition_count": "meas_time_multiplier-1"
+                            }
+                        ]
+                    },
+                    "loop_index": "i_x",
+                    "loop_range": [
+                        0,
+                        "N_x",
+                        1
+                    ]
+                },
+                "loop_index": "i_y",
+                "loop_range": [
+                    0,
+                    "N_y",
+                    1
+                ]
+            }
+        },
+        "repetition_count": "rep_count"
+    }
+}

@@ -9,15 +9,14 @@ import warnings
 import numpy as np
 
 from qctoolkit.utils.types import ChannelID, TimeType
-from qctoolkit.pulses.instructions import AbstractInstructionBlock, EXECInstruction, REPJInstruction, GOTOInstruction,\
+from qctoolkit._program.instructions import AbstractInstructionBlock, EXECInstruction, REPJInstruction, GOTOInstruction,\
     STOPInstruction, CHANInstruction, Waveform, MEASInstruction, Instruction
 from qctoolkit.comparable import Comparable
 from qctoolkit.utils.tree import Node, is_tree_circular
 from qctoolkit.utils.types import MeasurementWindow
-from qctoolkit.utils import checked_int_cast, is_integer
+from qctoolkit.utils import is_integer
 
-from qctoolkit.pulses.sequence_pulse_template import SequenceWaveform
-from qctoolkit.pulses.repetition_pulse_template import RepetitionWaveform
+from qctoolkit._program.waveforms import SequenceWaveform, RepetitionWaveform
 
 __all__ = ['Loop', 'MultiChannelProgram', 'make_compatible']
 
@@ -260,6 +259,7 @@ class Loop(Comparable, Node):
                 sub_program.unroll()
 
             else:
+                # we land in this case if the function gets called with depth == 0 and the current subprogram is a leaf
                 i += 1
 
     def remove_empty_loops(self):
@@ -273,7 +273,11 @@ class Loop(Comparable, Node):
                     new_children.append(child)
             else:
                 child.remove_empty_loops()
-                new_children.append(child)
+                if not child.is_leaf():
+                    new_children.append(child)
+                else:
+                    # all children of child were empty
+                    pass
         self[:] = new_children
 
 

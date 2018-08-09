@@ -3,13 +3,13 @@ import itertools
 
 import numpy as np
 
-from qctoolkit.pulses.instructions import InstructionBlock, EXECInstruction, MEASInstruction
-from qctoolkit.hardware.setup import HardwareSetup, ChannelID, PlaybackChannel, _SingleChannel, MarkerChannel, MeasurementMask
+from qctoolkit._program.instructions import InstructionBlock, MEASInstruction
+from qctoolkit.hardware.setup import HardwareSetup, PlaybackChannel, MarkerChannel, MeasurementMask
 
 from tests.pulses.sequencing_dummies import DummyWaveform
 
 from tests.hardware.dummy_devices import DummyAWG, DummyDAC
-from tests.hardware.program_tests import get_two_chan_test_block, WaveformGenerator
+from tests._program.loop_tests import get_two_chan_test_block, WaveformGenerator
 
 
 class SingleChannelTests(unittest.TestCase):
