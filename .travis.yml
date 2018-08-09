@@ -25,6 +25,9 @@ before_install:
   - conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION pip atlas numpy matplotlib
   - source activate test-environment
   - pip install pyflakes coverage coveralls sympy
+
+# tektronix backend
+  - pip install https://github.com/qutech/TekAwg/archive/qc_toolkit_1.zip
 install:
   - python setup.py install
 script:
