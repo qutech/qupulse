@@ -185,7 +185,7 @@ class TektronixProgram:
         self._sequencing_elements = None
         self._waveforms = None
 
-        make_compatible(program, 250, 1, sample_rate)
+        make_compatible(program, 250, 1, sample_rate / 10**9)
         self._program.flatten_and_balance(1)
 
         self._sequencing_elements, self._waveforms = parse_program(program=self._program,
