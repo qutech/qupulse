@@ -53,6 +53,26 @@ class TaborSegment:
         if marker_b is not None and len(marker_b)*2 != self.num_points:
             raise TaborException('Marker A has to have half of the channels length')
 
+    @classmethod
+    def from_binary_segment(cls, segment_data: np.ndarray) -> 'TaborSegment':
+        data_a = segment_data.reshape((-1, 16))[1::2, :].reshape((-1, ))
+        ch_b = segment_data.reshape((-1, 16))[0::2, :].ravel()
+
+        channel_mask = np.uint16(2**14 - 1)
+        ch_a = np.bitwise_and(data_a, channel_mask)
+
+        marker_a_mask = np.uint16(2**14)
+        marker_b_mask = np.uint16(2**15)
+        marker_data = data_a.reshape(-1, 8)[1::2, :].reshape((-1, ))
+
+        marker_a = np.bitwise_and(marker_data, marker_a_mask)
+        marker_b = np.bitwise_and(marker_data, marker_b_mask)
+
+        return cls(ch_a=ch_a,
+                   ch_b=ch_b,
+                   marker_a=marker_a,
+                   marker_b=marker_b)
+
     def __hash__(self) -> int:
         return hash(tuple(0 if data is None else bytes(data)
                           for data in (self.ch_a, self.ch_b, self.marker_a, self.marker_b)))
