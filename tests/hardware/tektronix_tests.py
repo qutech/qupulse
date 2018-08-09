@@ -5,10 +5,19 @@ from unittest import mock
 
 import qctoolkit.hardware.awgs.tektronix as tektronix
 from qctoolkit.hardware.awgs.tektronix import TektronixAWG, TektronixProgram, parse_program
+from qctoolkit._program._loop import Loop
+from qctoolkit.utils.types import TimeType
 
 
 class TektronixProgramTests(unittest.TestCase):
     def test_parse_program(self):
+        ill_formed_program = Loop(children=[Loop(children=[Loop()])])
+
+        with self.assertRaisesRegex(AssertionError, 'Invalid program depth'):
+            parse_program(ill_formed_program, (), (), TimeType(), (), ())
+
+
+
         raise NotImplementedError()
 
     def test_init(self):
