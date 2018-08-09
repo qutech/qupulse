@@ -11,7 +11,7 @@ Pulses can be assembled from previously defined subpulses, allowing easy constru
 Additionally, all pulses are parameterizable allowing users to fine-tune and adapt pulse templates to specific hardware or functionality without redefining an entire pulse sequence. To ensure meaningful parameter values, constraints can be put on parameters on a per-pulse basis.  
 
 ## Status
-Note that the project is still in somewhat early development and thus not feature-complete.
+Note that the project is still in development and thus not feature-complete.
 
 The qc-toolkit library is already used productively by the Bluhm research group at the 2nd Institute of Physics at the RWTH Aachen University. As such, some features - such as pulse definition - are mostly complete and tested and interfaces are expected to remain largely stable (or changes to be backward compatible).
 However, it is still possible for existing portions of the code base to be redesigned if this will increase the usability long-term.
