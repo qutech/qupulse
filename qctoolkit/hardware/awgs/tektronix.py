@@ -20,6 +20,9 @@ from qctoolkit.hardware.util import voltage_to_uint16
 from qctoolkit.utils import pairwise
 
 
+__all__ = ['TektronixAWG']
+
+
 class WaveformEntry:
     def __init__(self, name: str, length: int, waveform: TekAwg.Waveform, timestamp):
         self.name = name
@@ -84,8 +87,6 @@ def parse_program(program: Loop,
 
     sequencing_elements = []
 
-    time_array = np.zeros(1)
-
     ch_waveforms = {}
     bin_waveforms = {}
 
@@ -100,14 +101,14 @@ def parse_program(program: Loop,
                                      output_offset=0., resolution=14)
 
         return to_uint16
+    longest_waveform_n_samples = int(max(loop.waveform.duration for loop in program) * sample_rate_in_GHz)
+    time_array = np.arange(longest_waveform_n_samples) * time_per_sample
 
     binary_converters = [make_binary_converter(amplitude, voltage_transformation)
                          for amplitude, voltage_transformation in zip(amplitudes, voltage_transformations)]
 
     for loop in program:
         n_samples = int(loop.waveform.duration * sample_rate_in_GHz)
-        if loop.waveform.duration > time_array[-1]:
-            time_array = np.arange(0, float(loop.waveform.duration), step=time_per_sample)
 
         entries = []
 
