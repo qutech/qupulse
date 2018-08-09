@@ -497,12 +497,14 @@ class TektronixAWG(AWG):
 
         self._programs[name] = (positions, tek_program, sequencing_elements)
 
-    def _unload(self, name: str):
+    def _unload(self, name: str) -> TektronixProgram:
         positions, tek_program, seq_entries = self._programs.pop(name)
 
         for position in positions:
             if position <= len(self._sequence_entries):
                 self._sequence_entries[position - 1] = None
+
+        return tek_program
 
     def _upload(self, name: str,
                 program: Loop,
@@ -519,7 +521,8 @@ class TektronixAWG(AWG):
                 raise ValueError('{} is already known on {}'.format(name, self.identifier))
 
             else:
-                raise NotImplementedError()
+                old_program = self._unload(name)
+                cleanup_stack.callback(lambda: self._upload_parsed(name, old_program))
 
         # group markers in by channels
         markers = tuple(zip(markers[0::2], markers[1::2]))
