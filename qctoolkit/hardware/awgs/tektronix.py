@@ -4,6 +4,7 @@ import contextlib
 import itertools
 import functools
 import warnings
+import logging
 
 try:
     import TekAwg
@@ -458,12 +459,23 @@ class TektronixAWG(AWG):
     def _upload_parsed(self, name: str, tek_program: TektronixProgram, cleanup_stack: contextlib.ExitStack=None):
         sequencing_elements, waveforms_to_upload = self._process_program(name, tek_program)
 
-        for waveform_data, waveform_name in waveforms_to_upload.items():
+        logger = logging.getLogger('tektronix')
+
+        for idx, (waveform_data, waveform_name) in enumerate(waveforms_to_upload.items()):
             self._upload_waveform(waveform_data=waveform_data,
                                   waveform_name=waveform_name,
                                   cleanup_stack=cleanup_stack)
+            if idx % 10 == 0:
+                logging.debug('Waiting for sync after waveform %d' % idx)
+                self.device.wait_until_commands_executed()
+                logging.debug('Synced after waveform %d' % idx)
+
+        logger.info('Waiting for all waveforms to be uploaded...')
+        self.device.wait_until_commands_executed()
+        logger.info('All waveforms uploaded')
 
         positions = self._get_empty_sequence_positions(len(sequencing_elements))
+
         for (element_index, next_element), sequencing_element in zip(
                 pairwise(positions, fillvalue=self._idle_program_index),
                 sequencing_elements):
@@ -474,6 +486,14 @@ class TektronixAWG(AWG):
                 sequencing_element.goto_state = True
 
             self._upload_sequencing_element(element_index, sequencing_element)
+
+            if element_index % 100 == 0:
+                logger.debug('Waiting for sync after element %d' % element_index)
+                self.device.wait_until_commands_executed()
+                logger.debug('Synced after element %d' % element_index)
+
+        self.device.wait_until_commands_executed()
+        logger.info('All sequence elements uploaded')
 
         self._programs[name] = (positions, tek_program, sequencing_elements)
 
