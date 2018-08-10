@@ -41,8 +41,8 @@ class TaborSegment:
         if ch_a is not None and ch_b is not None and len(ch_a) != len(ch_b):
             raise TaborException('Channel entries to have to have the same length')
 
-        self.ch_a = ch_a
-        self.ch_b = ch_b
+        self.ch_a = None if ch_a is None else np.asarray(ch_a, dtype=np.uint16)
+        self.ch_b = None if ch_b is None else np.asarray(ch_b, dtype=np.uint16)
 
         self.marker_a = None if marker_a is None else np.asarray(marker_a, dtype=bool)
         self.marker_b = None if marker_b is None else np.asarray(marker_b, dtype=bool)
@@ -55,7 +55,12 @@ class TaborSegment:
     @classmethod
     def from_binary_segment(cls, segment_data: np.ndarray) -> 'TaborSegment':
         data_a = segment_data.reshape((-1, 16))[1::2, :].reshape((-1, ))
-        ch_b = segment_data.reshape((-1, 16))[0::2, :].ravel()
+        data_b = segment_data.reshape((-1, 16))[0::2, :].ravel()
+        return cls.from_binary_data(data_a, data_b)
+
+    @classmethod
+    def from_binary_data(cls, data_a: np.ndarray, data_b: np.ndarray) -> 'TaborSegment':
+        ch_b = data_b
 
         channel_mask = np.uint16(2**14 - 1)
         ch_a = np.bitwise_and(data_a, channel_mask)
@@ -75,6 +80,12 @@ class TaborSegment:
     def __hash__(self) -> int:
         return hash(tuple(0 if data is None else bytes(data)
                           for data in (self.ch_a, self.ch_b, self.marker_a, self.marker_b)))
+
+    def __eq__(self, other: 'TaborSegment'):
+        return (np.array_equal(self.ch_a, other.ch_a) and
+                np.array_equal(self.ch_b, other.ch_b) and
+                np.array_equal(self.marker_a, other.marker_a) and
+                np.array_equal(self.marker_b, other.marker_b))
 
     @property
     def data_a(self) -> np.ndarray:

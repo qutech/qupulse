@@ -76,7 +76,6 @@ class TaborSegmentTests(unittest.TestCase):
         with self.assertRaises(NotImplementedError):
             TaborSegment(ch_a=None, ch_b=ch_b, marker_a=marker_a, marker_b=marker_b).data_a
 
-
     def test_data_b(self):
         ch_a = np.asarray(100 + np.arange(6), dtype=np.uint16)
         ch_b = np.asarray(1000 + np.arange(6), dtype=np.uint16)
@@ -87,6 +86,37 @@ class TaborSegmentTests(unittest.TestCase):
         ts = TaborSegment(ch_a=ch_a, ch_b=ch_b, marker_a=marker_a, marker_b=marker_b)
 
         self.assertIs(ts.data_b, ch_b)
+
+    def test_from_binary_segment(self):
+        ch_a = np.asarray(100 + np.arange(32), dtype=np.uint16)
+        ch_b = np.asarray(1000 + np.arange(32), dtype=np.uint16)
+
+        marker_a = np.ones(16, dtype=bool)
+        marker_b = np.asarray(list(range(5)) + list(range(6)) + list(range(5)), dtype=np.uint16)
+
+        segment = TaborSegment(ch_a=ch_a, ch_b=ch_b, marker_a=marker_a, marker_b=marker_b)
+
+        binary = segment.get_as_binary()
+
+        reconstructed = TaborSegment.from_binary_segment(binary)
+
+        self.assertEqual(segment, reconstructed)
+
+    def test_from_binary_data(self):
+        ch_a = np.asarray(100 + np.arange(32), dtype=np.uint16)
+        ch_b = np.asarray(1000 + np.arange(32), dtype=np.uint16)
+
+        marker_a = np.ones(16, dtype=bool)
+        marker_b = np.asarray(list(range(5)) + list(range(6)) + list(range(5)), dtype=np.uint16)
+
+        segment = TaborSegment(ch_a=ch_a, ch_b=ch_b, marker_a=marker_a, marker_b=marker_b)
+
+        data_a = segment.data_a
+        data_b = segment.data_b
+
+        reconstructed = TaborSegment.from_binary_data(data_a, data_b)
+
+        self.assertEqual(segment, reconstructed)
 
 
 class TaborProgramTests(unittest.TestCase):
