@@ -721,6 +721,10 @@ class PlottableProgram:
         return [ch_getter(self._segments[segment_no - 1])
                 for _, segment_no, _ in self._iter_segment_table_entry()]
 
+    def get_segment_waveform(self, channel: int, segment_no: int) -> np.ndarray:
+        ch_getter = (operator.attrgetter('ch_a'), operator.attrgetter('ch_b'))[channel]
+        return [ch_getter(self._segments[segment_no - 1])]
+
     def get_repetitions(self) -> np.ndarray:
         return np.fromiter((segment_repeat
                             for segment_repeat, *_ in self._iter_segment_table_entry()), dtype=np.uint32)
