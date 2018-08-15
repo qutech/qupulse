@@ -34,161 +34,6 @@ MappingTuple = Union[Tuple['PulseTemplate'],
                      Tuple['PulseTemplate', Dict, Dict, Dict]]
 
 
-ValueType = TypeVar('ValueType')
-
-
-class Selector(Mapping[Union[str, 'PulseTemplate'], ValueType]):
-    """Mapping of pulse templates. If the key is a str the value is for all pulse templates with this identifier. If the
-    key is a PulseTemplate the value is only for the specific instance
-
-    If the key is a str
-    1. Based on the key itself
-    2. Reverse lookup of known objects
-
-    If the key is a PulseTemplate
-    1. Based on the key itself
-    2. Based on the keys identifier
-
-    TODO: Better name
-    TODO: Find better place
-    TODO: Write tests
-    """
-
-    def __init__(self, mapping: Optional[Mapping[Union[str, 'PulseTemplate'], ValueType]]=None):
-        self._by_identifier = dict()
-        self._by_object = dict()
-        self._known = dict()
-
-        mapping = dict() if mapping is None else mapping
-
-        for key, value in mapping.items():
-            self[key] = value
-
-    def __getitem__(self, item: Union['PulseTemplate', str]) -> ValueType:
-        if isinstance(item, str):
-            if item in self._by_identifier:
-                return self._by_identifier[item]
-            else:
-                return self._by_object[self._known[item]]
-
-        elif item in self._by_object:
-            return self._by_object[item]
-
-        elif item.identifier in self._by_identifier:
-            return self._by_identifier[item.identifier]
-
-        else:
-            raise KeyError(item)
-
-    def __contains__(self, item: Union['PulseTemplate', str]):
-        if isinstance(item, str):
-            return item in self._by_identifier or item in self._known
-
-        else:
-            return item in self._by_object or item.identifier in self._by_identifier
-
-    def __setitem__(self, key: Union['PulseTemplate', str], value: ValueType):
-        """
-
-        Ptifall: If the key is a pulse template and there is a value for self[key.identifier] the value is not deleted.
-
-        >>> selector = Selector()
-        >>> my_obj = PulseTemplate(identifier='asd')
-        >>> selector['asd'] = 5
-        >>> selector[my_obj] = 6
-        >>> assert selector[my_obj] == 6
-        >>> assert selector['asd'] == 5
-
-        But:
-        >>> selector = Selector()
-        >>> my_obj = PulseTemplate(identifier='asd')
-        >>> selector[my_obj] = 6
-        >>> selector['asd'] = 5
-        >>> assert selector[my_obj] == 5
-        >>> assert selector['asd'] == 5
-        """
-        if isinstance(key, str):
-            if key in self._known:
-                self._by_object[self._known[key]] = value
-            else:
-                self._by_identifier[key] = value
-
-        else:
-            self._by_object[key] = value
-
-            if key.identifier:
-                self._known[key.identifier] = key
-
-    def __delitem__(self, key):
-        if isinstance(key, str):
-            if key in self._known:
-                del self._by_object[self._known[key]]
-                del self._known[key]
-            if key in self._by_identifier:
-                del self._by_identifier[key]
-            else:
-                raise KeyError(key)
-        else:
-            if key.identifier in self._known:
-                del self._known[key.identifier]
-            del self._by_object[key]
-
-    def __iter__(self):
-        return itertools.chain(self._by_object, self._by_identifier)
-
-    def __len__(self):
-        return len(self._by_object) + len(self._by_identifier)
-
-    def __repr__(self):
-        return 'Selector(by_object={},\nby_identifier={})'.format(self._by_object,
-                                                                  self._by_identifier)
-
-
-class Transformer:
-    """Applies transformations based on a "transformation chain".
-
-    TODO: find appropriate place
-    TODO: write tests
-    """
-    def __init__(self, selector: Mapping[Union['PulseTemplate', str], List[Tuple[int, Transformation]]]):
-        self._selector = selector
-        max_index = max(idx
-                        for key, ordered_transformations in self._selector.items()
-                        for idx, _ in ordered_transformations)
-
-        self._transformation_chain = [IdentityTransformation()] * (max_index + 1)
-
-    @classmethod
-    def from_unordered_transformations(cls, selector: Mapping[Union[str, 'PulseTemplate'], ValueType]) -> 'Transformer':
-        ordered_transformations = Selector()
-        for key, value in selector.items():
-            ordered_transformations[key] = [(0, value)]
-        return cls(ordered_transformations)
-
-    @contextmanager
-    def applied(self, key: 'PulseTemplate') -> 'Transformer':
-        if key in self._selector:
-            old_trafos = []
-            for idx, trafo in self._selector[key]:
-                old_trafos.append((idx, trafo))
-                self._transformation_chain[idx] = trafo
-
-            yield self
-
-            for idx, old_trafo in old_trafos:
-                self._transformation_chain[idx] = old_trafo
-        else:
-            yield self
-
-    def transform(self, waveform: Waveform) -> Waveform:
-        transformation_chain = [trafo for trafo in self._transformation_chain if trafo is not IdentityTransformation()]
-        if transformation_chain:
-            final_transformation = chain_transformations(*transformation_chain)
-            return TransformingWaveform(waveform, final_transformation)
-        else:
-            return waveform
-
-
 class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta):
     """A PulseTemplate represents the parametrized general structure of a pulse.
 
@@ -256,7 +101,7 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
                        parameters: Optional[Dict[str, Parameter]]=None,
                        measurement_mapping: Optional[Dict[str, Optional[str]]]=None,
                        channel_mapping: Optional[Dict[ChannelID, Optional[ChannelID]]]=None,
-                       transformer: Optional[Transformer]=None,
+                       global_transformation: Optional[Transformation]=None,
                        to_single_waveform: Set[Union[str, 'PulseTemplate']]=None) -> Optional['Loop']:
         """Translates this PulseTemplate into a program Loop.
 
@@ -267,7 +112,7 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
         :param parameters: A mapping of parameter names to Parameter objects.
         :param measurement_mapping: A mapping of measurement window names. Windows that are mapped to None are omitted.
         :param channel_mapping: A mapping of channel names. Channels that are mapped to None are omitted.
-        :param transformer: This object dictates how transformations are applied
+        :param global_transformation: This transformation is applied to every waveform
         :param to_single_waveform: A set of pulse templates (or identifiers) which are directly translated to a
         waveform. This might change how transformations are applied. TODO: clarify
         :return: A Loop object corresponding to this PulseTemplate.
@@ -278,8 +123,6 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
             measurement_mapping = {name: name for name in self.measurement_names}
         if channel_mapping is None:
             channel_mapping = dict()
-        if transformer is None:
-            transformer = Transformer(dict())
         if to_single_waveform is None:
             to_single_waveform = set()
 
@@ -293,7 +136,7 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
         self._create_program(parameters=parameters,
                              measurement_mapping=measurement_mapping,
                              channel_mapping=channel_mapping,
-                             transformer=transformer,
+                             global_transformation=global_transformation,
                              to_single_waveform=to_single_waveform,
                              parent_loop=root_loop)
 
@@ -306,7 +149,7 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
                                  parameters: Dict[str, Parameter],
                                  measurement_mapping: Dict[str, Optional[str]],
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
-                                 transformer: Transformer,
+                                 global_transformation: Optional[Transformation],
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
                                  parent_loop: Loop) -> None:
         """The subclass specific implementation of create_program().
@@ -327,7 +170,7 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
                         parameters: Dict[str, Parameter],
                         measurement_mapping: Dict[str, Optional[str]],
                         channel_mapping: Dict[ChannelID, Optional[ChannelID]],
-                        transformer: Transformer,
+                        global_transformation: Optional[Transformation],
                         to_single_waveform: Set[Union[str, 'PulseTemplate']],
                         parent_loop: Loop):
         """Generic part of create program. This method handles to_single_waveform and the configuration of the
@@ -335,20 +178,17 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
         if self.identifier in to_single_waveform or self in to_single_waveform:
             root = Loop()
 
-            # do not transform here
-            dummy_transformer = Transformer(dict())
             self._internal_create_program(parameters=parameters,
                                           measurement_mapping=measurement_mapping,
                                           channel_mapping=channel_mapping,
-                                          transformer=dummy_transformer,
-                                          to_single_waveform=set(),
+                                          global_transformation=None,
+                                          to_single_waveform=to_single_waveform,
                                           parent_loop=root)
 
             waveform = to_waveform(root)
 
-            with transformer.applied(self):
-                # apply transformation to final waveform
-                waveform = transformer.transform(waveform)
+            if global_transformation:
+                waveform = TransformingWaveform(waveform, global_transformation)
 
             # convert the nicely formatted measurement windows back into the old format again :(
             measurements = root.get_measurement_windows()
@@ -360,13 +200,12 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
             parent_loop.append_child(waveform=waveform)
 
         else:
-            with transformer.applied(self):
-                self._internal_create_program(parameters=parameters,
-                                              measurement_mapping=measurement_mapping,
-                                              channel_mapping=channel_mapping,
-                                              to_single_waveform=to_single_waveform,
-                                              transformer=transformer,
-                                              parent_loop=parent_loop)
+            self._internal_create_program(parameters=parameters,
+                                          measurement_mapping=measurement_mapping,
+                                          channel_mapping=channel_mapping,
+                                          to_single_waveform=to_single_waveform,
+                                          global_transformation=global_transformation,
+                                          parent_loop=parent_loop)
 
 
 class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
@@ -411,7 +250,7 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
                                  parameters: Dict[str, Parameter],
                                  measurement_mapping: Dict[str, Optional[str]],
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
-                                 transformations: Selector[Callable[[Waveform], Waveform]],
+                                 global_transformation: Optional[Transformation],
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
                                  parent_loop: Loop) -> None:
         """Parameter constraints are validated in build_waveform because build_waveform is guaranteed to be called
@@ -431,10 +270,11 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
             raise ParameterNotProvidedException(str(e)) from e
 
         measurements = self.get_measurement_windows(parameters=measurement_parameters, measurement_mapping=measurement_mapping)
-        waveform = self.build_waveform(parameters,
+        waveform = self.build_waveform(parameters=parameters,
                                        channel_mapping=channel_mapping)
         if waveform:
-            waveform = transformations[self](waveform)
+            if global_transformation:
+                waveform = TransformingWaveform(waveform, global_transformation)
 
             parent_loop.add_measurements(measurements=measurements)
             parent_loop.append_child(waveform=waveform)
