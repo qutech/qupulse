@@ -3,6 +3,8 @@ from collections import deque, namedtuple
 from copy import copy as shallow_copy
 import weakref
 
+from qctoolkit.comparable import Comparable
+
 
 __all__ = ['Node']
 
@@ -14,7 +16,7 @@ def make_empty_weak_reference() -> weakref.ref:
 _NodeType = TypeVar('_NodeType', bound='Node')
 
 
-class Node:
+class Node(Comparable):
     debug = False
 
     def __init__(self: _NodeType,
@@ -140,6 +142,10 @@ class Node:
             return self.__children[location[0]].locate(location[1:])
         else:
             return self
+
+    @property
+    def compare_key(self) -> List:
+        return self.__children
 
 
 def is_tree_circular(root: Node) -> Union[None, Tuple[List[Node], int]]:
