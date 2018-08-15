@@ -47,9 +47,12 @@ class DocStringABCMeta(abc.ABCMeta):
         return cls
 
 
+T = typing.TypeVar('T')
+
+
 class SingletonABCMeta(DocStringABCMeta):
     """Metaclass that enforces singletons"""
-    def __call__(cls):
+    def __call__(cls: typing.Type[T]) -> T:
         return cls._instance
 
     def __init__(cls, name, bases, dct):
