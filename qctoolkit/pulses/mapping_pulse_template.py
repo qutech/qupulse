@@ -2,6 +2,7 @@
 from typing import Optional, Set, Dict, Union, List, Any, Tuple
 import itertools
 import numbers
+import warnings
 
 from qctoolkit.utils.types import ChannelID
 from qctoolkit.expressions import Expression, ExpressionScalar
@@ -30,16 +31,12 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                  measurement_mapping: Optional[Dict[str, str]] = None,
                  channel_mapping: Optional[Dict[ChannelID, ChannelID]] = None,
                  parameter_constraints: Optional[List[str]]=None,
-                 allow_partial_parameter_mapping: bool=False,
+                 allow_partial_parameter_mapping: Optional[bool]=False,
                  registry: PulseRegistryType=None) -> None:
         """Standard constructor for the MappingPulseTemplate.
 
-        Mappings that are not specified are defaulted to identity mappings. Channels and measurement names of the
-        encapsulated template can be mapped partially by default. F.i. if channel_mapping only contains one of two
-        channels the other channel name is mapped to itself.
-        However, if a parameter mapping is specified and one or more parameters are not mapped a MissingMappingException
-        is raised. To allow partial mappings and enable the same behaviour as for the channel and measurement name
-        mapping allow_partial_parameter_mapping must be set to True.
+        Mappings that are not specified are defaulted to identity mappings. F.i. if channel_mapping only contains one of
+        two channels the other channel name is mapped to itself.
         Furthermore parameter constrains can be specified.
         
         :param template: The encapsulated pulse template whose parameters, measurement names and channels are mapped
@@ -47,8 +44,10 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         :param measurement_mapping: mappings for other measurement names are inserted
         :param channel_mapping: mappings for other channels are auto inserted
         :param parameter_constraints:
-        :param allow_partial_parameter_mapping:
+        :param allow_partial_parameter_mapping: deprecated
         """
+        if allow_partial_parameter_mapping:
+            warnings.warn("The allow_partial_parameter_mapping argument is deprecated and will be ignored. Partial parameter mappings are always possible.", category=DeprecationWarning)
         PulseTemplate.__init__(self, identifier=identifier)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 
@@ -61,10 +60,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
             if mapped_internal_parameters - internal_parameters:
                 raise UnnecessaryMappingException(template, mapped_internal_parameters - internal_parameters)
             elif missing_parameter_mappings:
-                if allow_partial_parameter_mapping:
-                    parameter_mapping.update({p: p for p in missing_parameter_mappings})
-                else:
-                    raise MissingMappingException(template, internal_parameters - mapped_internal_parameters)
+                parameter_mapping.update({p: p for p in missing_parameter_mappings})
         parameter_mapping = dict((k, Expression(v)) for k, v in parameter_mapping.items())
 
         measurement_mapping = dict() if measurement_mapping is None else measurement_mapping
@@ -305,20 +301,6 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
             expressions[channel_out] = expr
 
         return expressions
-
-
-class MissingMappingException(Exception):
-    """Indicates that no mapping was specified for some parameter declaration of a
-    SequencePulseTemplate's subtemplate."""
-
-    def __init__(self, template: PulseTemplate, key: Union[str,Set[str]]) -> None:
-        super().__init__()
-        self.key = key
-        self.template = template
-
-    def __str__(self) -> str:
-        return "The template {} needs a mapping function for parameter(s) {}".\
-            format(self.template, self.key)
 
 
 class UnnecessaryMappingException(Exception):

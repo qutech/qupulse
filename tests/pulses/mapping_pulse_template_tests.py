@@ -1,8 +1,7 @@
 import unittest
 import itertools
 
-from qctoolkit.pulses.mapping_pulse_template import MissingMappingException,\
-    UnnecessaryMappingException, MappingPulseTemplate,\
+from qctoolkit.pulses.mapping_pulse_template import UnnecessaryMappingException, MappingPulseTemplate,\
     AmbiguousMappingException, MappingCollisionException
 from qctoolkit.pulses.parameters import ParameterNotProvidedException
 from qctoolkit.pulses.parameters import ConstantParameter, ParameterConstraintViolation, ParameterConstraint
@@ -21,10 +20,6 @@ class MappingTemplateTests(unittest.TestCase):
         template = DummyPulseTemplate(parameter_names={'foo', 'bar'}, defined_channels={'A'}, measurement_names={'B'})
         parameter_mapping = {'foo': 't*k', 'bar': 't*l'}
 
-        with self.assertRaises(MissingMappingException):
-            MappingPulseTemplate(template, parameter_mapping={})
-        with self.assertRaises(MissingMappingException):
-            MappingPulseTemplate(template, parameter_mapping={'bar': 'kneipe'})
         with self.assertRaises(UnnecessaryMappingException):
             MappingPulseTemplate(template, parameter_mapping=dict(**parameter_mapping, foobar='asd'))
 
@@ -224,12 +219,8 @@ class MappingPulseTemplateSequencingTests(unittest.TestCase):
     def test_requires_stop(self):
         pass
 
-class PulseTemplateParameterMappingExceptionsTests(unittest.TestCase):
 
-    def test_missing_mapping_exception_str(self) -> None:
-        dummy = DummyPulseTemplate()
-        exception = MissingMappingException(dummy, 'foo')
-        self.assertIsInstance(str(exception), str)
+class PulseTemplateParameterMappingExceptionsTests(unittest.TestCase):
 
     def test_unnecessary_mapping_exception_str(self) -> None:
         dummy = DummyPulseTemplate()
