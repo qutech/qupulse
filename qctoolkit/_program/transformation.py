@@ -58,7 +58,7 @@ class ChainedTransformation(Transformation):
     def transformations(self) -> Tuple[Transformation, ...]:
         return self._transformations
 
-    def get_output_channels(self, input_channels: Set[ChannelID]):
+    def get_output_channels(self, input_channels: Set[ChannelID]) -> Set[ChannelID]:
         for transformation in self._transformations:
             input_channels = transformation.get_output_channels(input_channels)
         return input_channels
@@ -102,7 +102,7 @@ class LinearTransformation(Transformation):
         return self._matrix.to_dict()
 
 
-def chain_transformations(*transformations: Transformation):
+def chain_transformations(*transformations: Transformation) -> Transformation:
     parsed_transformations = []
     for transformation in transformations:
         if transformation is IdentityTransformation():
