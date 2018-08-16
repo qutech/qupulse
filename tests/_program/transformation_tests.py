@@ -3,8 +3,19 @@ import unittest
 import pandas as pd
 import numpy as np
 
-from qctoolkit._program.transformation import LinearTransformation
+from qctoolkit._program.transformation import LinearTransformation, Transformation
 
+
+class TransformationStub(Transformation):
+    def __call__(self, *args, **kwargs):
+        raise NotImplementedError()
+
+    def get_output_channels(self, input_channels):
+        raise NotImplementedError()
+
+    @property
+    def compare_key(self):
+        return id(self)
 
 
 class LinearTransformationTests(unittest.TestCase):

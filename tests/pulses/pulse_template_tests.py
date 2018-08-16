@@ -12,9 +12,11 @@ from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
 from qctoolkit._program._loop import Loop, MultiChannelProgram
 
 from qctoolkit._program.transformation import Transformation
+from qctoolkit._program.waveforms import TransformingWaveform
 from qctoolkit.pulses.sequencing import Sequencer
 
 from tests.pulses.sequencing_dummies import DummyWaveform, DummySequencer, DummyInstructionBlock
+from tests._program.transformation_tests import TransformationStub
 
 
 class PulseTemplateStub(PulseTemplate):
@@ -96,9 +98,9 @@ class PulseTemplateStub(PulseTemplate):
         raise NotImplementedError()
 
 
-def get_appending_internal_create_program(waveform=DummyWaveform()):
+def get_appending_internal_create_program(waveform=DummyWaveform(), always_append=False):
     def internal_create_program(*, parameters, parent_loop: Loop, **_):
-        if 'append_a_child' in parameters:
+        if always_append or 'append_a_child' in parameters:
             parent_loop.append_child(waveform=waveform)
     return internal_create_program
 
@@ -163,12 +165,14 @@ class PulseTemplateTest(unittest.TestCase):
 
         expected_parameters = {'foo': ConstantParameter(2.126), 'bar': ConstantParameter(-26.2),
                                'hugo': ConstantParameter('2*x+b'), 'append_a_child': ConstantParameter('1')}
+        to_single_waveform = {'voll', 'toggo'}
+        global_transformation = TransformationStub()
 
         expected_internal_kwargs = dict(parameters=expected_parameters,
                                         measurement_mapping=measurement_mapping,
                                         channel_mapping=channel_mapping,
-                                        global_transformation=None,
-                                        to_single_waveform=set())
+                                        global_transformation=global_transformation,
+                                        to_single_waveform=to_single_waveform)
 
         dummy_waveform = DummyWaveform()
         expected_program = Loop(children=[Loop(waveform=dummy_waveform)])
@@ -178,21 +182,18 @@ class PulseTemplateTest(unittest.TestCase):
                                wraps=get_appending_internal_create_program(dummy_waveform)) as _internal_create_program:
             program = template.create_program(parameters=parameters,
                                               measurement_mapping=measurement_mapping,
-                                              channel_mapping=channel_mapping)
+                                              channel_mapping=channel_mapping,
+                                              to_single_waveform=to_single_waveform,
+                                              global_transformation=global_transformation)
             _internal_create_program.assert_called_once_with(**expected_internal_kwargs, parent_loop=program)
         self.assertEqual(expected_program, program)
 
-    def test_create_program_measurement_mapping_none(self) -> None:
+    def test_create_program_defaults(self) -> None:
         template = PulseTemplateStub(defined_channels={'A'}, parameter_names={'foo'}, measurement_names={'hugo', 'foo'})
-        parameters = {'foo': ConstantParameter(2.126), 'bar': -26.2, 'hugo': '2*x+b', 'append_a_child': '1'}
-        measurement_mapping = None
-        channel_mapping = {'B': 'A'}
-        expected_parameters = {'foo': ConstantParameter(2.126), 'bar': ConstantParameter(-26.2),
-                               'hugo': ConstantParameter('2*x+b'), 'append_a_child': ConstantParameter('1')}
 
-        expected_internal_kwargs = dict(parameters=expected_parameters,
+        expected_internal_kwargs = dict(parameters=dict(),
                                         measurement_mapping={'hugo': 'hugo', 'foo': 'foo'},
-                                        channel_mapping=channel_mapping,
+                                        channel_mapping=dict(),
                                         global_transformation=None,
                                         to_single_waveform=set())
 
@@ -201,10 +202,8 @@ class PulseTemplateTest(unittest.TestCase):
 
         with mock.patch.object(template,
                                '_internal_create_program',
-                               wraps=get_appending_internal_create_program(dummy_waveform)) as _internal_create_program:
-            program = template.create_program(parameters=parameters,
-                                              measurement_mapping=measurement_mapping,
-                                              channel_mapping=channel_mapping)
+                               wraps=get_appending_internal_create_program(dummy_waveform, True)) as _internal_create_program:
+            program = template.create_program()
             _internal_create_program.assert_called_once_with(**expected_internal_kwargs, parent_loop=program)
         self.assertEqual(expected_program, program)
 
@@ -272,9 +271,16 @@ class AtomicPulseTemplateTests(unittest.TestCase):
         sequencer = DummySequencer()
         block = DummyInstructionBlock()
 
-        template = AtomicPulseTemplateStub(waveform=wf, measurements=measurement_windows)
-        template.build_sequence(sequencer, {}, {}, measurement_mapping={'M': 'N'}, channel_mapping={},
-                                instruction_block=block)
+        parameters = {'a': ConstantParameter(1), 'b': ConstantParameter(2), 'c': ConstantParameter(3)}
+        expected_parameters = {'a': 1, 'b': 2}
+        channel_mapping = {'B': 'A'}
+
+        template = AtomicPulseTemplateStub(measurements=measurement_windows, parameter_names={'a', 'b'})
+        with mock.patch.object(template, 'build_waveform', return_value=wf) as build_waveform:
+            template.build_sequence(sequencer, parameters=parameters, conditions={},
+                                    measurement_mapping={'M': 'N'}, channel_mapping=channel_mapping,
+                                    instruction_block=block)
+            build_waveform.assert_called_once_with(parameters=expected_parameters, channel_mapping=channel_mapping)
         self.assertEqual(len(block.instructions), 2)
 
         meas, exec = block.instructions
@@ -296,7 +302,8 @@ class AtomicPulseTemplateTests(unittest.TestCase):
         program = Loop()
 
         expected_parameters = {k: p.get_value() for k, p in parameters.items()}
-        expected_program = Loop(children=[Loop(waveform=wf)], measurements=[('N', 0, 5)])
+        expected_program = Loop(children=[Loop(waveform=wf)],
+                                measurements=[('N', 0, 5)])
 
         with mock.patch.object(template, 'build_waveform', return_value=wf) as build_waveform:
             template._internal_create_program(parameters=parameters,
@@ -318,27 +325,56 @@ class AtomicPulseTemplateTests(unittest.TestCase):
         old_program = MultiChannelProgram(block, channels={'A'})
         self.assertEqual(old_program.programs[frozenset({'A'})], program)
 
+    def test_internal_create_program_transformation(self):
+        inner_wf = DummyWaveform()
+        template = AtomicPulseTemplateStub(parameter_names=set())
+        program = Loop()
+        global_transformation = TransformationStub()
+
+        expected_program = Loop(children=[Loop(waveform=TransformingWaveform(inner_wf, global_transformation))])
+
+        with mock.patch.object(template, 'build_waveform', return_value=inner_wf):
+            template._internal_create_program(parameters={},
+                                              measurement_mapping={},
+                                              channel_mapping={},
+                                              parent_loop=program,
+                                              to_single_waveform=set(),
+                                              global_transformation=global_transformation)
+
+        self.assertEqual(expected_program, program)
+
     def test_internal_create_program_no_waveform(self) -> None:
         measurement_windows = [('M', 0, 5)]
 
-        template = AtomicPulseTemplateStub(waveform=None, measurements=measurement_windows, parameter_names={'foo'})
+        template = AtomicPulseTemplateStub(measurements=measurement_windows, parameter_names={'foo'})
         parameters = {'foo': ConstantParameter(7.2)}
         measurement_mapping = {'M': 'N'}
         channel_mapping = {'B': 'A'}
         program = Loop()
-        template._internal_create_program(parameters=parameters,
-                                          measurement_mapping=measurement_mapping,
-                                          channel_mapping=channel_mapping,
-                                          parent_loop=program)
-        self.assertEqual({k: p.get_value() for k, p in parameters.items()}, template.retrieved_parameters[-1])
-        self.assertIsNone(program.waveform)
-        self.assertFalse(program.children)
-        self.assertFalse(program._measurements)
+
+        expected_parameters = {k: p.get_value() for k, p in parameters.items()}
+        expected_program = Loop()
+
+        with mock.patch.object(template, 'build_waveform', return_value=None) as build_waveform:
+            with mock.patch.object(template,
+                                   'get_measurement_windows',
+                                   wraps=template.get_measurement_windows) as get_meas_windows:
+                template._internal_create_program(parameters=parameters,
+                                                  measurement_mapping=measurement_mapping,
+                                                  channel_mapping=channel_mapping,
+                                                  parent_loop=program,
+                                                  to_single_waveform=set(),
+                                                  global_transformation=None)
+                build_waveform.assert_called_once_with(parameters=expected_parameters, channel_mapping=channel_mapping)
+                get_meas_windows.assert_not_called()
+
+        self.assertEqual(expected_program, program)
 
         # ensure same result as from Sequencer
         sequencer = Sequencer()
         sequencer.push(template, parameters=parameters, conditions={}, window_mapping=measurement_mapping, channel_mapping=channel_mapping)
-        block = sequencer.build()
+        with mock.patch.object(template, 'build_waveform', return_value=None):
+            block = sequencer.build()
         old_program = MultiChannelProgram(block, channels={'A'})
         self.assertEqual(old_program.programs[frozenset({'A'})], program)
 
@@ -346,7 +382,7 @@ class AtomicPulseTemplateTests(unittest.TestCase):
         measurement_windows = [('M', 0, 5)]
         wf = DummyWaveform(duration=6, defined_channels={'A'})
 
-        template = AtomicPulseTemplateStub(waveform=wf, measurements=measurement_windows, parameter_names={'foo'})
+        template = AtomicPulseTemplateStub(measurements=measurement_windows, parameter_names={'foo'})
         parameters = {'foo': ConstantParameter(7.2)}
         program = Loop()
         with self.assertRaises(KeyError):
@@ -359,7 +395,7 @@ class AtomicPulseTemplateTests(unittest.TestCase):
         measurement_windows = [('M', 'z', 5)]
         wf = DummyWaveform(duration=6, defined_channels={'A'})
 
-        template = AtomicPulseTemplateStub(waveform=wf, measurements=measurement_windows, parameter_names={'foo'})
+        template = AtomicPulseTemplateStub(measurements=measurement_windows, parameter_names={'foo'})
 
         program = Loop()
         # test parameter from declarations
@@ -368,7 +404,9 @@ class AtomicPulseTemplateTests(unittest.TestCase):
             template._internal_create_program(parameters=parameters,
                                               measurement_mapping=dict(),
                                               channel_mapping=dict(),
-                                              parent_loop=program)
+                                              parent_loop=program,
+                                              to_single_waveform=set(),
+                                              global_transformation=None)
         # test parameter from measurements
         parameters = {'foo': ConstantParameter(7.2)}
         with self.assertRaises(ParameterNotProvidedException):
