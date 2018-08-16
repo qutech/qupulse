@@ -126,7 +126,7 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         real_relevant_parameters = dict(n_rep=3, mul=2, a=0.1, b=0.2)
 
         with mock.patch.object(body, '_create_program',
-                               wraps=get_appending_internal_create_program(wf, True)) as body_create_program:
+                               wraps=get_appending_internal_create_program(wf, always_append=True)) as body_create_program:
             with mock.patch.object(rpt, 'validate_parameter_constraints') as validate_parameter_constraints:
                 with mock.patch.object(rpt, 'get_repetition_count_value', return_value=6) as get_repetition_count_value:
                     with mock.patch.object(rpt, 'get_measurement_windows', return_value=[('l', .1, .2)]) as get_meas:

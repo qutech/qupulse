@@ -99,8 +99,8 @@ class PulseTemplateStub(PulseTemplate):
 
 
 def get_appending_internal_create_program(waveform=DummyWaveform(),
-                                          measurements: list=None,
-                                          always_append=False):
+                                          always_append=False,
+                                          measurements: list=None):
     def internal_create_program(*, parameters, parent_loop: Loop, **_):
         if always_append or 'append_a_child' in parameters:
             if measurements is not None:
