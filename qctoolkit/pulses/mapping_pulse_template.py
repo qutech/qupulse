@@ -31,12 +31,16 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                  measurement_mapping: Optional[Dict[str, str]] = None,
                  channel_mapping: Optional[Dict[ChannelID, ChannelID]] = None,
                  parameter_constraints: Optional[List[str]]=None,
-                 allow_partial_parameter_mapping: Optional[bool]=False,
+                 mapping_namespace: Optional[str]=None,
+                 allow_partial_parameter_mapping: Optional[bool]=False, # deprecated; todo: remove
                  registry: PulseRegistryType=None) -> None:
         """Standard constructor for the MappingPulseTemplate.
 
         Mappings that are not specified are defaulted to identity mappings. F.i. if channel_mapping only contains one of
         two channels the other channel name is mapped to itself.
+        All parameters that are not explicitly mapped in the parameter_mapping dictionary are mapped to themselves if
+        the mapping_namespace argument is not given or set to None. Otherwise, MappingPT maps these parameters are into
+        the namespace given by internal_namespace.
         Furthermore parameter constrains can be specified.
         
         :param template: The encapsulated pulse template whose parameters, measurement names and channels are mapped
@@ -44,6 +48,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         :param measurement_mapping: mappings for other measurement names are inserted
         :param channel_mapping: mappings for other channels are auto inserted
         :param parameter_constraints:
+        :param mapping_namespace: Namespace into which unmapped parameters will be placed (i.e., prefix for parameter name)
         :param allow_partial_parameter_mapping: deprecated
         """
         if allow_partial_parameter_mapping:
@@ -51,16 +56,18 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         PulseTemplate.__init__(self, identifier=identifier)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 
-        if parameter_mapping is None:
-            parameter_mapping = dict((par, par) for par in template.parameter_names)
-        else:
-            mapped_internal_parameters = set(parameter_mapping.keys())
-            internal_parameters = template.parameter_names
-            missing_parameter_mappings = internal_parameters - mapped_internal_parameters
-            if mapped_internal_parameters - internal_parameters:
-                raise UnnecessaryMappingException(template, mapped_internal_parameters - internal_parameters)
-            elif missing_parameter_mappings:
-                parameter_mapping.update({p: p for p in missing_parameter_mappings})
+        parameter_mapping = dict() if parameter_mapping is None else parameter_mapping
+        mapped_internal_parameters = set(parameter_mapping.keys())
+        internal_parameters = template.parameter_names
+        missing_parameter_mappings = internal_parameters - mapped_internal_parameters
+        if mapped_internal_parameters - internal_parameters:
+            raise UnnecessaryMappingException(template, mapped_internal_parameters - internal_parameters)
+        elif missing_parameter_mappings:
+            if not mapping_namespace:
+                mapping_namespace = ""
+            else:
+                mapping_namespace += "___" # namespace - parameter delimiter
+            parameter_mapping.update({p: mapping_namespace+p.rpartition('___')[2] for p in missing_parameter_mappings})
         parameter_mapping = dict((k, Expression(v)) for k, v in parameter_mapping.items())
 
         measurement_mapping = dict() if measurement_mapping is None else measurement_mapping
