@@ -260,7 +260,8 @@ class AtomicPulseTemplateTests(unittest.TestCase):
         block = DummyInstructionBlock()
 
         template = AtomicPulseTemplateStub()
-        template.build_sequence(sequencer, {}, {}, {}, {}, block)
+        with mock.patch.object(template, 'build_waveform', return_value=None):
+            template.build_sequence(sequencer, {}, {}, {}, {}, block)
         self.assertFalse(block.instructions)
 
     def test_build_sequence(self) -> None:
@@ -378,6 +379,7 @@ class AtomicPulseTemplateTests(unittest.TestCase):
         old_program = MultiChannelProgram(block, channels={'A'})
         self.assertEqual(old_program.programs[frozenset({'A'})], program)
 
+    @unittest.skip('not a job of internal_create_program: remove?')
     def test_internal_create_program_invalid_measurement_mapping(self) -> None:
         measurement_windows = [('M', 0, 5)]
         wf = DummyWaveform(duration=6, defined_channels={'A'})
@@ -413,4 +415,6 @@ class AtomicPulseTemplateTests(unittest.TestCase):
             template._internal_create_program(parameters=parameters,
                                               measurement_mapping=dict(),
                                               channel_mapping=dict(),
-                                              parent_loop=program)
+                                              parent_loop=program,
+                                              to_single_waveform=set(),
+                                              global_transformation=None)
