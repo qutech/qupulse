@@ -98,10 +98,15 @@ class PulseTemplateStub(PulseTemplate):
         raise NotImplementedError()
 
 
-def get_appending_internal_create_program(waveform=DummyWaveform(), always_append=False):
+def get_appending_internal_create_program(waveform=DummyWaveform(),
+                                          measurements: list=None,
+                                          always_append=False):
     def internal_create_program(*, parameters, parent_loop: Loop, **_):
         if always_append or 'append_a_child' in parameters:
+            if measurements is not None:
+                parent_loop.add_measurements(measurements=measurements)
             parent_loop.append_child(waveform=waveform)
+
     return internal_create_program
 
 
@@ -178,15 +183,91 @@ class PulseTemplateTest(unittest.TestCase):
         expected_program = Loop(children=[Loop(waveform=dummy_waveform)])
 
         with mock.patch.object(template,
-                               '_internal_create_program',
-                               wraps=get_appending_internal_create_program(dummy_waveform)) as _internal_create_program:
+                               '_create_program',
+                               wraps=get_appending_internal_create_program(dummy_waveform)) as _create_program:
             program = template.create_program(parameters=parameters,
                                               measurement_mapping=measurement_mapping,
                                               channel_mapping=channel_mapping,
                                               to_single_waveform=to_single_waveform,
                                               global_transformation=global_transformation)
-            _internal_create_program.assert_called_once_with(**expected_internal_kwargs, parent_loop=program)
+            _create_program.assert_called_once_with(**expected_internal_kwargs, parent_loop=program)
         self.assertEqual(expected_program, program)
+
+    def test__create_program(self):
+        parameters = {'a': ConstantParameter(.1), 'b': ConstantParameter(.2)}
+        measurement_mapping = {'M': 'N'}
+        channel_mapping = {'B': 'A'}
+        global_transformation = TransformationStub()
+        to_single_waveform = {'voll', 'toggo'}
+        parent_loop = Loop()
+
+        template = PulseTemplateStub()
+        with mock.patch.object(template, '_internal_create_program') as _internal_create_program:
+            template._create_program(parameters=parameters,
+                                     measurement_mapping=measurement_mapping,
+                                     channel_mapping=channel_mapping,
+                                     global_transformation=global_transformation,
+                                     to_single_waveform=to_single_waveform,
+                                     parent_loop=parent_loop)
+
+            _internal_create_program.assert_called_once_with(parameters=parameters,
+                                     measurement_mapping=measurement_mapping,
+                                     channel_mapping=channel_mapping,
+                                     global_transformation=global_transformation,
+                                     to_single_waveform=to_single_waveform,
+                                     parent_loop=parent_loop)
+
+            self.assertEqual(parent_loop, Loop())
+
+    def test__create_program_single_waveform(self):
+        template = PulseTemplateStub(identifier='pt_identifier')
+
+        for to_single_waveform in ({template}, {template.identifier}):
+            for global_transformation in (None, TransformationStub()):
+                parameters = {'a': ConstantParameter(.1), 'b': ConstantParameter(.2)}
+                measurement_mapping = {'M': 'N'}
+                channel_mapping = {'B': 'A'}
+                parent_loop = Loop()
+
+                wf = DummyWaveform()
+                single_waveform = DummyWaveform()
+                measurements = [('m', 0, 1), ('n', 0.1, .9)]
+
+                expected_inner_program = Loop(children=[Loop(waveform=wf)], measurements=measurements)
+
+                appending_create_program = get_appending_internal_create_program(wf,
+                                                                                 measurements=measurements,
+                                                                                 always_append=True)
+
+                if global_transformation:
+                    final_waveform = TransformingWaveform(single_waveform, global_transformation)
+                else:
+                    final_waveform = single_waveform
+
+                expected_program = Loop(children=[Loop(waveform=final_waveform)],
+                                        measurements=measurements)
+
+                with mock.patch.object(template, '_internal_create_program',
+                                       wraps=appending_create_program) as _internal_create_program:
+                    with mock.patch('qctoolkit.pulses.pulse_template.to_waveform',
+                                    return_value=single_waveform) as to_waveform:
+                        template._create_program(parameters=parameters,
+                                                 measurement_mapping=measurement_mapping,
+                                                 channel_mapping=channel_mapping,
+                                                 global_transformation=global_transformation,
+                                                 to_single_waveform=to_single_waveform,
+                                                 parent_loop=parent_loop)
+
+                        _internal_create_program.assert_called_once_with(parameters=parameters,
+                                                                         measurement_mapping=measurement_mapping,
+                                                                         channel_mapping=channel_mapping,
+                                                                         global_transformation=None,
+                                                                         to_single_waveform=to_single_waveform,
+                                                                         parent_loop=expected_inner_program)
+
+                        to_waveform.assert_called_once_with(expected_inner_program)
+
+                        self.assertEqual(expected_program, parent_loop)
 
     def test_create_program_defaults(self) -> None:
         template = PulseTemplateStub(defined_channels={'A'}, parameter_names={'foo'}, measurement_names={'hugo', 'foo'})
