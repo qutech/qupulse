@@ -267,6 +267,9 @@ class PulseTemplateTest(unittest.TestCase):
 
                         to_waveform.assert_called_once_with(expected_inner_program)
 
+                        expected_program._measurements = set(expected_program._measurements)
+                        parent_loop._measurements = set(parent_loop._measurements)
+
                         self.assertEqual(expected_program, parent_loop)
 
     def test_create_program_defaults(self) -> None:
