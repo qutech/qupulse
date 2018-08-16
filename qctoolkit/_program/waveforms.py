@@ -392,8 +392,8 @@ class MultiChannelWaveform(Waveform):
             return tuple(sorted(tuple('{}_stringified_numeric_channel'.format(ch) if isinstance(ch, int) else ch
                                       for ch in waveform.defined_channels)))
 
-        self._sub_waveforms = sorted(flatten_sub_waveforms(sub_waveforms),
-                                     key=get_sub_waveform_sort_key)
+        self._sub_waveforms = tuple(sorted(flatten_sub_waveforms(sub_waveforms),
+                                           key=get_sub_waveform_sort_key))
 
         if not all(waveform.duration == self._sub_waveforms[0].duration for waveform in self._sub_waveforms[1:]):
             raise ValueError(
@@ -423,7 +423,7 @@ class MultiChannelWaveform(Waveform):
     @property
     def compare_key(self) -> Any:
         # sort with channels
-        return tuple(sub_waveform.compare_key for sub_waveform in self._sub_waveforms)
+        return self._sub_waveforms
 
     def unsafe_sample(self,
                       channel: ChannelID,

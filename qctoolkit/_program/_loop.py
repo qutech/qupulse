@@ -11,7 +11,6 @@ import numpy as np
 from qctoolkit.utils.types import ChannelID, TimeType
 from qctoolkit._program.instructions import AbstractInstructionBlock, EXECInstruction, REPJInstruction, GOTOInstruction,\
     STOPInstruction, CHANInstruction, Waveform, MEASInstruction, Instruction
-from qctoolkit.comparable import Comparable
 from qctoolkit.utils.tree import Node, is_tree_circular
 from qctoolkit.utils.types import MeasurementWindow
 from qctoolkit.utils import is_integer
@@ -21,7 +20,7 @@ from qctoolkit._program.waveforms import SequenceWaveform, RepetitionWaveform
 __all__ = ['Loop', 'MultiChannelProgram', 'make_compatible']
 
 
-class Loop(Comparable, Node):
+class Loop(Node):
     """Build a loop tree. The leaves of the tree are loops with one element."""
     def __init__(self,
                  parent: Union['Loop', None]=None,
@@ -44,7 +43,7 @@ class Loop(Comparable, Node):
 
     @property
     def compare_key(self) -> Tuple:
-        return self._waveform, self.repetition_count, self._measurements, tuple(c.compare_key for c in self)
+        return self._waveform, self.repetition_count, self._measurements, super().compare_key
 
     def append_child(self, loop: Optional['Loop']=None, **kwargs) -> None:
         # do not invalidate but update cached duration
