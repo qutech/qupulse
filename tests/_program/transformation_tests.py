@@ -89,6 +89,10 @@ class IdentityTransformationTests(unittest.TestCase):
         chans = {'a', 'b'}
         self.assertIs(IdentityTransformation().get_output_channels(chans), chans)
 
+    def test_chain(self):
+        trafo = TransformationStub()
+        self.assertIs(IdentityTransformation().chain(trafo), trafo)
+
 
 class ChainedTransformationTests(unittest.TestCase):
     def test_init_and_properties(self):
@@ -135,6 +139,17 @@ class ChainedTransformationTests(unittest.TestCase):
                 self.assertEqual(kwargs, {})
                 self.assertIs(time, time_arg)
                 self.assertIs(expected_data, data_arg)
+
+    def test_chain(self):
+        trafos = TransformationStub(), TransformationStub()
+        trafo = TransformationStub()
+        chained = ChainedTransformation(*trafos)
+
+        with mock.patch('qctoolkit._program.transformation.chain_transformations',
+                        return_value='asd') as chain_transformations:
+            self.assertEqual(chained.chain(trafo), 'asd')
+            chain_transformations.assert_called_once_with(*trafos, trafo)
+
 
 
 class TestChaining(unittest.TestCase):
