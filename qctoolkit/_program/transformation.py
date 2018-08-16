@@ -43,6 +43,7 @@ class IdentityTransformation(Transformation, metaclass=SingletonABCMeta):
     def get_output_channels(self, input_channels: Set[ChannelID]) -> Set[ChannelID]:
         return input_channels
 
+    @property
     def compare_key(self) -> None:
         return None
 
@@ -68,6 +69,7 @@ class ChainedTransformation(Transformation):
             data = transformation(time, data)
         return data
 
+    @property
     def compare_key(self) -> Tuple[Transformation, ...]:
         return self._transformations
 
