@@ -263,16 +263,13 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
         try:
             parameters = {parameter_name: parameters[parameter_name].get_value()
                           for parameter_name in self.parameter_names}
-
-            measurement_parameters = {parameter_name: parameters[parameter_name].get_value()
-                                      for parameter_name in self.measurement_parameters}
         except KeyError as e:
             raise ParameterNotProvidedException(str(e)) from e
 
         waveform = self.build_waveform(parameters=parameters,
                                        channel_mapping=channel_mapping)
         if waveform:
-            measurements = self.get_measurement_windows(parameters=measurement_parameters,
+            measurements = self.get_measurement_windows(parameters=parameters,
                                                         measurement_mapping=measurement_mapping)
 
             if global_transformation:

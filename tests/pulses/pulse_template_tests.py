@@ -409,12 +409,3 @@ class AtomicPulseTemplateTests(unittest.TestCase):
                                               parent_loop=program,
                                               to_single_waveform=set(),
                                               global_transformation=None)
-        # test parameter from measurements
-        parameters = {'foo': ConstantParameter(7.2)}
-        with self.assertRaises(ParameterNotProvidedException):
-            template._internal_create_program(parameters=parameters,
-                                              measurement_mapping=dict(),
-                                              channel_mapping=dict(),
-                                              parent_loop=program,
-                                              to_single_waveform=set(),
-                                              global_transformation=None)

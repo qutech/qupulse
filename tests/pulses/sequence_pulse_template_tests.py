@@ -1,23 +1,22 @@
 import unittest
+from unittest import mock
 
-import numpy as np
-
-from qctoolkit.utils.types import time_from_float
 from qctoolkit.expressions import Expression, ExpressionScalar
 from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
 from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate, SequenceWaveform
 from qctoolkit.pulses.mapping_pulse_template import MappingPulseTemplate
 from qctoolkit.pulses.parameters import ConstantParameter, ParameterConstraint, ParameterConstraintViolation, ParameterNotProvidedException
 from qctoolkit._program.instructions import MEASInstruction
-from qctoolkit._program._loop import Loop
+from qctoolkit._program._loop import Loop, MultiChannelProgram
 
-from qctoolkit._program._loop import MultiChannelProgram
 from qctoolkit.pulses.sequencing import Sequencer
 
 from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyPulseTemplate,\
     DummyNoValueParameter, DummyWaveform, MeasurementWindowTestCase
 from tests.serialization_dummies import DummySerializer
 from tests.serialization_tests import SerializableTests
+from tests._program.transformation_tests import TransformationStub
+from tests.pulses.pulse_template_tests import get_appending_internal_create_program, PulseTemplateStub
 
 
 class SequencePulseTemplateTest(unittest.TestCase):
@@ -223,6 +222,45 @@ class SequencePulseTemplateOldSerializationTests(unittest.TestCase):
 
 
 class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
+    def test_internal_create_program(self):
+        sub_templates = PulseTemplateStub(defined_channels={'a'}, duration=ExpressionScalar('t1')),\
+                        PulseTemplateStub(defined_channels={'a'}, duration=ExpressionScalar('t2'))
+
+        wfs = DummyWaveform(duration=1), DummyWaveform(duration=2)
+
+        spt = SequencePulseTemplate(*sub_templates, measurements=[('m', 'a', 'b')])
+
+        kwargs = dict(parameters=dict(t1=ConstantParameter(.4),
+                                      t2=ConstantParameter(.5),
+                                      a=ConstantParameter(.1), b=ConstantParameter(.2),
+                                      irrelevant=ConstantParameter(42)),
+                      measurement_mapping={'m': 'l'},
+                      channel_mapping={'g': 'h'},
+                      global_transformation=TransformationStub(),
+                      to_single_waveform={'to', 'single', 'waveform'})
+
+        program = Loop()
+
+        expected_program = Loop(children=[Loop(waveform=wfs[0]),
+                                          Loop(waveform=wfs[1])],
+                                measurements=[('l', .1, .2)])
+
+        with mock.patch.object(spt, 'validate_parameter_constraints') as validate_parameter_constraints:
+            with mock.patch.object(spt, 'get_measurement_windows',
+                                   return_value=[('l', .1, .2)]) as get_measurement_windows:
+                with mock.patch.object(sub_templates[0], '_create_program',
+                                       wraps=get_appending_internal_create_program(wfs[0], True)) as create_0,\
+                    mock.patch.object(sub_templates[1], '_create_program',
+                                       wraps=get_appending_internal_create_program(wfs[1], True)) as create_1:
+
+                    spt._internal_create_program(**kwargs, parent_loop=program)
+
+                    self.assertEqual(expected_program, program)
+
+                    validate_parameter_constraints.assert_called_once_with(parameters=kwargs['parameters'])
+                    get_measurement_windows.assert_called_once_with(dict(a=.1, b=.2), kwargs['measurement_mapping'])
+                    create_0.assert_called_once_with(**kwargs, parent_loop=program)
+                    create_1.assert_called_once_with(**kwargs, parent_loop=program)
 
     def test_create_program_internal(self) -> None:
         sub1 = DummyPulseTemplate(duration=3, waveform=DummyWaveform(duration=3), measurements=[('b', 1, 2)], defined_channels={'A'})
@@ -235,6 +273,8 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
         seq._internal_create_program(parameters=parameters,
                                      measurement_mapping=measurement_mapping,
                                      channel_mapping=channel_mapping,
+                                     global_transformation=None,
+                                     to_single_waveform=set(),
                                      parent_loop=loop)
         self.assertEqual(1, loop.repetition_count)
         self.assertIsNone(loop.waveform)
@@ -256,6 +296,8 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
         seq._internal_create_program(parameters=parameters,
                                      measurement_mapping=measurement_mapping,
                                      channel_mapping=channel_mapping,
+                                     global_transformation=None,
+                                     to_single_waveform=set(),
                                      parent_loop=loop)
         self.assertEqual(1, loop.repetition_count)
         self.assertIsNone(loop.waveform)
@@ -283,6 +325,8 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
             seq._internal_create_program(parameters=parameters,
                                          measurement_mapping=dict(),
                                          channel_mapping=dict(),
+                                         global_transformation=None,
+                                         to_single_waveform=set(),
                                          parent_loop=loop)
 
         self.assertFalse(sub1.create_program_calls)
@@ -297,6 +341,8 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
             seq._internal_create_program(parameters=parameters,
                                          measurement_mapping=dict(a='a'),
                                          channel_mapping=dict(),
+                                     global_transformation=None,
+                                     to_single_waveform=set(),
                                          parent_loop=loop)
 
     def test_internal_create_program_one_child_no_duration(self) -> None:
@@ -310,6 +356,8 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
         seq._internal_create_program(parameters=parameters,
                                      measurement_mapping=measurement_mapping,
                                      channel_mapping=channel_mapping,
+                                     global_transformation=None,
+                                     to_single_waveform=set(),
                                      parent_loop=loop)
         self.assertEqual(1, loop.repetition_count)
         self.assertIsNone(loop.waveform)
@@ -330,6 +378,8 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
         seq._internal_create_program(parameters=parameters,
                                      measurement_mapping=measurement_mapping,
                                      channel_mapping=channel_mapping,
+                                     global_transformation=None,
+                                     to_single_waveform=set(),
                                      parent_loop=loop)
         self.assertEqual(1, loop.repetition_count)
         self.assertIsNone(loop.waveform)
@@ -356,6 +406,8 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
         seq._internal_create_program(parameters=parameters,
                                      measurement_mapping=measurement_mapping,
                                      channel_mapping=channel_mapping,
+                                     global_transformation=None,
+                                     to_single_waveform=set(),
                                      parent_loop=loop)
         self.assertEqual(1, loop.repetition_count)
         self.assertIsNone(loop.waveform)
@@ -382,6 +434,8 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
             seq._internal_create_program(parameters=parameters,
                                          measurement_mapping={'a': 'a', 'b': 'b'},
                                          channel_mapping=dict(),
+                                         global_transformation=None,
+                                         to_single_waveform=set(),
                                          parent_loop=loop)
 
     def test_internal_create_program_parameter_missing(self) -> None:
@@ -396,6 +450,8 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
             seq._internal_create_program(parameters=parameters,
                                          measurement_mapping={'a': 'a', 'b': 'b'},
                                          channel_mapping=dict(),
+                                         global_transformation=None,
+                                         to_single_waveform=set(),
                                          parent_loop=loop)
 
         # test parameter from measurements
@@ -404,6 +460,8 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
             seq._internal_create_program(parameters=parameters,
                                          measurement_mapping={'a': 'a', 'b': 'b'},
                                          channel_mapping=dict(),
+                                         global_transformation=None,
+                                         to_single_waveform=set(),
                                          parent_loop=loop)
 
         # test parameter from duration
@@ -412,6 +470,8 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
             seq._internal_create_program(parameters=parameters,
                                          measurement_mapping={'a': 'a', 'b': 'b'},
                                          channel_mapping=dict(),
+                                         global_transformation=None,
+                                         to_single_waveform=set(),
                                          parent_loop=loop)
 
 
