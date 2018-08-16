@@ -43,7 +43,8 @@ class Loop(Node):
 
     @property
     def compare_key(self) -> Tuple:
-        return self._waveform, self.repetition_count, self._measurements, super().compare_key
+        return self._waveform, self.repetition_count, self._measurements if self._measurements else None,\
+               super().compare_key
 
     def append_child(self, loop: Optional['Loop']=None, **kwargs) -> None:
         # do not invalidate but update cached duration
