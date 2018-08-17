@@ -293,8 +293,24 @@ class ChannelSplit(Exception):
 
 
 class MultiChannelProgram:
-    def __init__(self, instruction_block: AbstractInstructionBlock, channels: Iterable[ChannelID] = None):
+    def __init__(self, instruction_block: Union[AbstractInstructionBlock, Loop], channels: Iterable[ChannelID] = None):
         """Channels with identifier None are ignored."""
+        self._programs = dict()
+        if isinstance(instruction_block, AbstractInstructionBlock):
+            self._init_from_instruction_block(instruction_block, channels)
+        elif isinstance(instruction_block, Loop):
+            assert channels is None
+        else:
+            raise TypeError('Invalid program type', type(instruction_block), instruction_block)
+
+    def _init_from_loop(self, loop: Loop):
+        first_waveform = next(loop.get_depth_first_iterator()).waveform
+
+        assert first_waveform is not None
+
+        self._programs[first_waveform.defined_channels] = loop
+
+    def _init_from_instruction_block(self, instruction_block, channels):
         if channels is None:
             def find_defined_channels(instruction_list):
                 for instruction in instruction_list:
@@ -325,7 +341,6 @@ class MultiChannelProgram:
 
         root = Loop()
         stacks = {channels: (root, [((), deque(instruction_block.instructions))])}
-        self._programs = dict()
 
         while len(stacks) > 0:
             chans, (root_loop, stack) = stacks.popitem()
