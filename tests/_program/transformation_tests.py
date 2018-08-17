@@ -38,7 +38,15 @@ class LinearTransformationTests(unittest.TestCase):
         trafo_matrix = pd.DataFrame(trafo_dict).T
         trafo = LinearTransformation(trafo_matrix)
 
-        self.assertEqual(trafo_matrix.to_dict(), trafo.compare_key)
+        trafo_matrix_2 = pd.DataFrame(trafo_dict).T[['a', 'c', 'b']]
+        trafo_2 = LinearTransformation(trafo_matrix_2)
+
+        self.assertEqual(trafo.compare_key, trafo_2.compare_key)
+        self.assertEqual(trafo.compare_key, frozenset([('a', frozenset([('transformed_a', 1), ('transformed_b', 1)])),
+                                                       ('b', frozenset([('transformed_a', -1), ('transformed_b', 1)])),
+                                                       ('c', frozenset([('transformed_a', 0), ('transformed_b', 1)]))
+                                                       ]))
+
 
     def test_get_output_channels(self):
         trafo_dict = {'transformed_a': {'a': 1, 'b': -1, 'c': 0}, 'transformed_b': {'a': 1, 'b': 1, 'c': 1}}

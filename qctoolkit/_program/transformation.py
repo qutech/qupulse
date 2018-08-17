@@ -91,7 +91,7 @@ class LinearTransformation(Transformation):
         if set(data_in.index) != set(self._matrix.columns):
             raise KeyError('Invalid input channels', set(data_in.index), set(self._matrix.columns))
 
-        return self._matrix @ data_in
+        return self._matrix.dot(data_in)
 
     def get_output_channels(self, input_channels: Set[ChannelID]) -> Set[ChannelID]:
         if input_channels != set(self._matrix.columns):
@@ -101,7 +101,8 @@ class LinearTransformation(Transformation):
 
     @property
     def compare_key(self) -> Dict[ChannelID, Dict[ChannelID, float]]:
-        return self._matrix.to_dict()
+        return frozenset((key, frozenset(value.items()))
+                         for key, value in self._matrix.to_dict().items())
 
 
 def chain_transformations(*transformations: Transformation) -> Transformation:
