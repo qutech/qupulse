@@ -1,4 +1,4 @@
-function seq_table = get_sequence_table_from_simulator(program_name, advanced_seq_table_flag, awg_channel_pair_identifiers, verbosity)
+function seq_table = get_sequence_table_from_simulator(program_name, advanced_seq_table_flag, awg_channel_pair_identifiers, verbosity, return_python_list)
 
   global plsdata
   hws = plsdata.awg.hardwareSetup;
@@ -12,6 +12,11 @@ function seq_table = get_sequence_table_from_simulator(program_name, advanced_se
   if nargin < 4 || isempty(verbosity)
     verbosity = 0;
   end
+  
+  if nargin < 5 || isempty(return_python_list)
+  return_python_list = false;
+  end
+
   if advanced_seq_table_flag
     seq_txt = 'A';
   else
@@ -31,17 +36,23 @@ function seq_table = get_sequence_table_from_simulator(program_name, advanced_se
     
     if isfield(known_programs{k}, program_name)
       
+      % one has to arm the program before accessing its plottableProgram
+      % object
       known_awgs{k}.arm(program_name);
       plottableProgram = known_awgs{k}.read_complete_program();
       
       if advanced_seq_table_flag
-        seq_table{k} =   util.py.py2mat(py.getattr(plottableProgram, '_advanced_sequence_table'));
+        seq_table{k} =   py.getattr(plottableProgram, '_advanced_sequence_table');
       else
-        seq_table{k} =   util.py.py2mat(py.getattr(plottableProgram, '_sequence_tables'));
+        seq_table{k} =   py.getattr(plottableProgram, '_sequence_tables');
       end
       
       if verbosity > 0
         disp(seq_table{k});
+      end
+      
+      if ~return_python_list
+        seq_table{k} = util.py.py2mat(seq_table{k});
       end
       
     else

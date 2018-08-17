@@ -1,4 +1,4 @@
-function seq_table = get_sequence_table(program_name, advanced_seq_table_flag, awg_channel_pair_identifiers, verbosity)
+function seq_table = get_sequence_table(program_name, advanced_seq_table_flag, awg_channel_pair_identifiers, verbosity, return_python_list)
 % GET_SEQUENCE_TABLE Get sequence table of program on Tabor AWG
 %
 % --- Outputs -------------------------------------------------------------
@@ -19,7 +19,7 @@ function seq_table = get_sequence_table(program_name, advanced_seq_table_flag, a
 %                                Default is 0.
 %
 % -------------------------------------------------------------------------
-% (c) 2018/06 Pascal Cerfontaine (cerfontaine@physik.rwth-aachen.de)
+% (c) 2018/06 Pascal Cerfontaine and Marcel Meyer (cerfontaine@physik.rwth-aachen.de)
 
 global plsdata
 hws = plsdata.awg.hardwareSetup;
@@ -33,6 +33,9 @@ end
 if nargin < 4 || isempty(verbosity)
 	verbosity = 0;
 end	
+if nargin < 5 || isempty(return_python_list)
+  return_python_list = false;
+end
 if advanced_seq_table_flag
 	seq_txt = 'A';
 else
@@ -53,20 +56,19 @@ for k = 1:length(known_awgs)
 	if isfield(known_programs{k}, program_name)
 		tabor_program{k} = known_programs{k}.(program_name){2};
 
-		if advanced_seq_table_flag
-			seq_table{k} = py.getattr(tabor_program{k}, '_advanced_sequencer_table');
-		else
-			seq_table{k} = py.getattr(tabor_program{k}, '_sequencer_tables');			
-		end
-		
-		if verbosity > 0
-			disp(seq_table{k});
-		end		
-		
-% 		if ~advanced_seq_table_flag
-% 			seq_table{k} = seq_table{k}{1}; % Since it is a list inside a list -> one should pass all elements, list of list is used if advanced seq table is not trivial
-% 		end		
-		seq_table{k} = util.py.py2mat(seq_table{k});
+    if advanced_seq_table_flag
+      seq_table{k} = py.getattr(tabor_program{k}, '_advanced_sequencer_table');
+    else
+      seq_table{k} = py.getattr(tabor_program{k}, '_sequencer_tables');
+    end
+    
+    if verbosity > 0
+      disp(seq_table{k});
+    end
+    
+    if ~return_python_list
+      seq_table{k} = util.py.py2mat(seq_table{k});
+    end
 	else
 		tabor_program{k} = {};
 		seq_table{k} = {};
