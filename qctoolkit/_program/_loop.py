@@ -300,6 +300,7 @@ class MultiChannelProgram:
             self._init_from_instruction_block(instruction_block, channels)
         elif isinstance(instruction_block, Loop):
             assert channels is None
+            self._init_from_loop(loop=instruction_block)
         else:
             raise TypeError('Invalid program type', type(instruction_block), instruction_block)
 
@@ -308,7 +309,7 @@ class MultiChannelProgram:
 
         assert first_waveform is not None
 
-        self._programs[first_waveform.defined_channels] = loop
+        self._programs[frozenset(first_waveform.defined_channels)] = loop
 
     def _init_from_instruction_block(self, instruction_block, channels):
         if channels is None:
