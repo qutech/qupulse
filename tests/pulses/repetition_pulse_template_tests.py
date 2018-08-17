@@ -1,21 +1,22 @@
 import unittest
 import warnings
+from unittest import mock
 
-from qctoolkit._program._loop import Loop
+from qctoolkit._program._loop import Loop, MultiChannelProgram
 from qctoolkit.expressions import Expression
 from qctoolkit.pulses.repetition_pulse_template import RepetitionPulseTemplate,ParameterNotIntegerException, RepetitionWaveform
 from qctoolkit.pulses.parameters import ParameterNotProvidedException, ParameterConstraintViolation, ConstantParameter, \
     ParameterConstraint
 from qctoolkit._program.instructions import REPJInstruction, InstructionPointer
-from qctoolkit.utils.types import time_from_float
 
-from qctoolkit._program._loop import MultiChannelProgram
 from qctoolkit.pulses.sequencing import Sequencer
 
 from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummySequencer, DummyInstructionBlock, DummyParameter,\
     DummyCondition, DummyWaveform, MeasurementWindowTestCase
 from tests.serialization_dummies import DummySerializer
 from tests.serialization_tests import SerializableTests
+from tests._program.transformation_tests import TransformationStub
+from tests.pulses.pulse_template_tests import PulseTemplateStub, get_appending_internal_create_program
 
 
 class RepetitionPulseTemplateTest(unittest.TestCase):
@@ -102,6 +103,50 @@ class RepetitionPulseTemplateTest(unittest.TestCase):
 
 
 class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
+    def test_internal_create_program(self):
+        wf = DummyWaveform(duration=2.)
+        body = PulseTemplateStub()
+
+        rpt = RepetitionPulseTemplate(body, 'n_rep*mul', measurements=[('m', 'a', 'b')])
+
+        parameters = dict(n_rep=ConstantParameter(3),
+                          mul=ConstantParameter(2),
+                          a=ConstantParameter(0.1),
+                          b=ConstantParameter(0.2),
+                          irrelevant=ConstantParameter(42))
+        measurement_mapping = {'m': 'l'}
+        channel_mapping = {'x': 'Y'}
+        global_transformation = TransformationStub()
+        to_single_waveform = {'to', 'single', 'waveform'}
+
+        program = Loop()
+        expected_program = Loop(children=[Loop(children=[Loop(waveform=wf)], repetition_count=6)],
+                                measurements=[('l', .1, .2)])
+
+        real_relevant_parameters = dict(n_rep=3, mul=2, a=0.1, b=0.2)
+
+        with mock.patch.object(body, '_create_program',
+                               wraps=get_appending_internal_create_program(wf, always_append=True)) as body_create_program:
+            with mock.patch.object(rpt, 'validate_parameter_constraints') as validate_parameter_constraints:
+                with mock.patch.object(rpt, 'get_repetition_count_value', return_value=6) as get_repetition_count_value:
+                    with mock.patch.object(rpt, 'get_measurement_windows', return_value=[('l', .1, .2)]) as get_meas:
+                        rpt._internal_create_program(parameters=parameters,
+                                                     measurement_mapping=measurement_mapping,
+                                                     channel_mapping=channel_mapping,
+                                                     global_transformation=global_transformation,
+                                                     to_single_waveform=to_single_waveform,
+                                                     parent_loop=program)
+
+                        self.assertEqual(program, expected_program)
+                        body_create_program.assert_called_once_with(parameters=parameters,
+                                                                    measurement_mapping=measurement_mapping,
+                                                                    channel_mapping=channel_mapping,
+                                                                    global_transformation=global_transformation,
+                                                                    to_single_waveform=to_single_waveform,
+                                                                    parent_loop=program.children[0])
+                        validate_parameter_constraints.assert_called_once_with(parameters=parameters)
+                        get_repetition_count_value.assert_called_once_with(real_relevant_parameters)
+                        get_meas.assert_called_once_with(real_relevant_parameters, measurement_mapping)
 
     def test_create_program_constant_success_measurements(self) -> None:
         repetitions = 3
@@ -114,6 +159,8 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         t._internal_create_program(parameters=parameters,
                                    measurement_mapping=measurement_mapping,
                                    channel_mapping=channel_mapping,
+                                   to_single_waveform=set(),
+                                   global_transformation=None,
                                    parent_loop=program)
 
         self.assertEqual(1, len(program.children))
@@ -144,6 +191,8 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         t._internal_create_program(parameters=parameters,
                                    measurement_mapping=measurement_mapping,
                                    channel_mapping=channel_mapping,
+                                   to_single_waveform=set(),
+                                   global_transformation=None,
                                    parent_loop=program)
 
         self.assertEqual(1, program.repetition_count)
@@ -175,6 +224,8 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         t._internal_create_program(parameters=parameters,
                                    measurement_mapping=measurement_mapping,
                                    channel_mapping=channel_mapping,
+                                   to_single_waveform=set(),
+                                   global_transformation=None,
                                    parent_loop=program)
 
         self.assertEqual(2, program.repetition_count)
@@ -205,6 +256,8 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         t._internal_create_program(parameters=parameters,
                                    measurement_mapping=measurement_mapping,
                                    channel_mapping=channel_mapping,
+                                   to_single_waveform=set(),
+                                   global_transformation=None,
                                    parent_loop=program)
 
         self.assertEqual(1, program.repetition_count)
@@ -241,6 +294,8 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
             t._internal_create_program(parameters=parameters,
                                        measurement_mapping=measurement_mapping,
                                        channel_mapping=channel_mapping,
+                                   to_single_waveform=set(),
+                                   global_transformation=None,
                                        parent_loop=program)
         self.assertFalse(body.create_program_calls)
         self.assertEqual(1, program.repetition_count)
@@ -261,6 +316,8 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
             t._internal_create_program(parameters=parameters,
                                        measurement_mapping=measurement_mapping,
                                        channel_mapping=channel_mapping,
+                                   to_single_waveform=set(),
+                                   global_transformation=None,
                                        parent_loop=program)
 
         parameters = {'foo': ConstantParameter(7)}
@@ -268,6 +325,8 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
             t._internal_create_program(parameters=parameters,
                                        measurement_mapping=measurement_mapping,
                                        channel_mapping=channel_mapping,
+                                   to_single_waveform=set(),
+                                   global_transformation=None,
                                        parent_loop=program)
 
         self.assertFalse(body.create_program_calls)
@@ -289,6 +348,8 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
             t._internal_create_program(parameters=parameters,
                                        measurement_mapping=measurement_mapping,
                                        channel_mapping=channel_mapping,
+                                   to_single_waveform=set(),
+                                   global_transformation=None,
                                        parent_loop=program)
         self.assertFalse(body.create_program_calls)
         self.assertEqual(1, program.repetition_count)
@@ -309,6 +370,8 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
             t._internal_create_program(parameters=parameters,
                                        measurement_mapping=measurement_mapping,
                                        channel_mapping=channel_mapping,
+                                   to_single_waveform=set(),
+                                   global_transformation=None,
                                        parent_loop=program)
 
         # test for failure on child level
@@ -317,6 +380,8 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
             t._internal_create_program(parameters=parameters,
                                        measurement_mapping=measurement_mapping,
                                        channel_mapping=channel_mapping,
+                                   to_single_waveform=set(),
+                                   global_transformation=None,
                                        parent_loop=program)
         self.assertFalse(body.create_program_calls)
         self.assertEqual(1, program.repetition_count)
@@ -341,6 +406,8 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         t._internal_create_program(parameters=parameters,
                                    measurement_mapping=measurement_mapping,
                                    channel_mapping=channel_mapping,
+                                   to_single_waveform=set(),
+                                   global_transformation=None,
                                    parent_loop=program)
         self.assertFalse(body.create_program_calls)
         self.assertFalse(program.children)
@@ -372,6 +439,8 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         t._internal_create_program(parameters=parameters,
                                    measurement_mapping=measurement_mapping,
                                    channel_mapping=channel_mapping,
+                                   to_single_waveform=set(),
+                                   global_transformation=None,
                                    parent_loop=program)
         self.assertFalse(body.create_program_calls)
         self.assertFalse(program.children)
@@ -406,6 +475,8 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         t._internal_create_program(parameters=parameters,
                                    measurement_mapping=measurement_mapping,
                                    channel_mapping=channel_mapping,
+                                   to_single_waveform=set(),
+                                   global_transformation=None,
                                    parent_loop=program)
         self.assertFalse(body.create_program_calls)
         self.assertFalse(program.children)
@@ -437,6 +508,8 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         t._internal_create_program(parameters=parameters,
                                    measurement_mapping=measurement_mapping,
                                    channel_mapping=channel_mapping,
+                                   to_single_waveform=set(),
+                                   global_transformation=None,
                                    parent_loop=program)
         self.assertFalse(body.create_program_calls)
         self.assertFalse(program.children)
@@ -471,6 +544,8 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         t._internal_create_program(parameters=parameters,
                                    measurement_mapping=measurement_mapping,
                                    channel_mapping=channel_mapping,
+                                   to_single_waveform=set(),
+                                   global_transformation=None,
                                    parent_loop=program)
         self.assertFalse(body.create_program_calls)
         self.assertFalse(program.children)
@@ -502,6 +577,8 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         t._internal_create_program(parameters=parameters,
                                    measurement_mapping=measurement_mapping,
                                    channel_mapping=channel_mapping,
+                                   to_single_waveform=set(),
+                                   global_transformation=None,
                                    parent_loop=program)
         self.assertFalse(body.create_program_calls)
         self.assertFalse(program.children)
@@ -530,6 +607,8 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         t._internal_create_program(parameters=parameters,
                                    measurement_mapping=measurement_mapping,
                                    channel_mapping=channel_mapping,
+                                   to_single_waveform=set(),
+                                   global_transformation=None,
                                    parent_loop=program)
         self.assertFalse(program.children)
         self.assertEqual(1, program.repetition_count)
@@ -557,6 +636,8 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         t._internal_create_program(parameters=parameters,
                                    measurement_mapping=measurement_mapping,
                                    channel_mapping=channel_mapping,
+                                   to_single_waveform=set(),
+                                   global_transformation=None,
                                    parent_loop=program)
         self.assertFalse(program.children)
         self.assertEqual(1, program.repetition_count)

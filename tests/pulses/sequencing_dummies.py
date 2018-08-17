@@ -382,6 +382,8 @@ class DummyPulseTemplate(AtomicPulseTemplate):
                                  parameters: Dict[str, Parameter],
                                  measurement_mapping: Dict[str, Optional[str]],
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
+                                 global_transformation: Optional['Transformation'],
+                                 to_single_waveform: Set[Union[str, 'PulseTemplate']],
                                  parent_loop: Loop) -> None:
         measurements = self.get_measurement_windows(parameters, measurement_mapping)
         self.create_program_calls.append((parameters, measurement_mapping, channel_mapping, parent_loop))
@@ -422,11 +424,6 @@ class DummyPulseTemplate(AtomicPulseTemplate):
         return self._integrals
 
     @property
-    def compare_key(self) -> Tuple[Any]:
+    def compare_key(self) -> Tuple[Any, ...]:
         return (self.requires_stop_, self.is_interruptable, self.parameter_names,
                 self.defined_channels, self.duration, self.waveform, self.measurement_names, self.integral)
-
-    def __eq__(self, other) -> bool:
-        if not isinstance(other, DummyPulseTemplate):
-            return False
-        return self.compare_key == other.compare_key

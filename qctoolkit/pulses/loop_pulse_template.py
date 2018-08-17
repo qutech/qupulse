@@ -232,6 +232,8 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
                                  parameters: Dict[str, Parameter],
                                  measurement_mapping: Dict[str, Optional[str]],
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
+                                 global_transformation: Optional['Transformation'],
+                                 to_single_waveform: Set[Union[str, 'PulseTemplate']],
                                  parent_loop: Loop) -> None:
         self.validate_parameter_constraints(parameters=parameters)
 
@@ -242,16 +244,19 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
                                       for parameter_name in self.duration.variables}
         except KeyError as e:
             raise ParameterNotProvidedException(str(e)) from e
-        measurements = self.get_measurement_windows(measurement_parameters, measurement_mapping)
+
         if self.duration.evaluate_numeric(**duration_parameters) > 0:
+            measurements = self.get_measurement_windows(measurement_parameters, measurement_mapping)
             if measurements:
                 parent_loop.add_measurements(measurements)
 
             for local_parameters in self._body_parameter_generator(parameters, forward=True):
-                self.body._internal_create_program(parameters=local_parameters,
-                                                   measurement_mapping=measurement_mapping,
-                                                   channel_mapping=channel_mapping,
-                                                   parent_loop=parent_loop)
+                self.body._create_program(parameters=local_parameters,
+                                          measurement_mapping=measurement_mapping,
+                                          channel_mapping=channel_mapping,
+                                          global_transformation=global_transformation,
+                                          to_single_waveform=to_single_waveform,
+                                          parent_loop=parent_loop)
 
     def build_waveform(self, parameters: Dict[str, Parameter]) -> ForLoopWaveform:
         return ForLoopWaveform([self.body.build_waveform(local_parameters)

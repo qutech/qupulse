@@ -1,4 +1,5 @@
 import unittest
+from unittest import mock
 
 from qctoolkit.expressions import Expression, ExpressionScalar
 from qctoolkit.pulses.loop_pulse_template import ForLoopPulseTemplate, WhileLoopPulseTemplate,\
@@ -15,6 +16,7 @@ from tests.pulses.sequencing_dummies import DummyCondition, DummyPulseTemplate, 
     DummyParameter, MeasurementWindowTestCase, DummyWaveform
 from tests.serialization_dummies import DummySerializer
 from tests.serialization_tests import SerializableTests
+from tests._program.transformation_tests import TransformationStub
 
 
 class DummyLoopPulseTemplate(LoopPulseTemplate):
@@ -190,11 +192,14 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
         # loop index not accessible in current build_sequence -> Exception
         children = [Loop(waveform=DummyWaveform(duration=2.0))]
         program = Loop(children=children)
+
         with self.assertRaises(ParameterNotProvidedException):
             flt._internal_create_program(parameters=parameters,
                                          measurement_mapping=dict(),
                                          channel_mapping=dict(),
-                                         parent_loop=program)
+                                         parent_loop=program,
+                                         to_single_waveform=set(),
+                                         global_transformation=None)
         self.assertEqual(children, program.children)
         self.assertEqual(1, program.repetition_count)
         self.assertIsNone(program._measurements)
@@ -215,7 +220,9 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
             flt._internal_create_program(parameters=invalid_parameters,
                                          measurement_mapping=measurement_mapping,
                                          channel_mapping=channel_mapping,
-                                         parent_loop=program)
+                                         parent_loop=program,
+                                         to_single_waveform=set(),
+                                         global_transformation=None)
 
         self.assertEqual(children, program.children)
         self.assertEqual(1, program.repetition_count)
@@ -238,7 +245,9 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
             flt._internal_create_program(parameters=invalid_parameters,
                                          measurement_mapping=measurement_mapping,
                                          channel_mapping=channel_mapping,
-                                         parent_loop=program)
+                                         parent_loop=program,
+                                         to_single_waveform=set(),
+                                         global_transformation=None)
 
         self.assertEqual(children, program.children)
         self.assertEqual(1, program.repetition_count)
@@ -251,7 +260,9 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
             flt._internal_create_program(parameters=invalid_parameters,
                                          measurement_mapping=measurement_mapping,
                                          channel_mapping=channel_mapping,
-                                         parent_loop=program)
+                                         parent_loop=program,
+                                         to_single_waveform=set(),
+                                         global_transformation=None)
 
     def test_create_program_missing_params(self) -> None:
         dt = DummyPulseTemplate(parameter_names={'i'}, waveform=DummyWaveform(duration=4.0), duration='t', measurements=[('b', 2, 1)])
@@ -270,7 +281,9 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
             flt._internal_create_program(parameters=parameters,
                                          measurement_mapping=measurement_mapping,
                                          channel_mapping=channel_mapping,
-                                         parent_loop=program)
+                                         parent_loop=program,
+                                         to_single_waveform=set(),
+                                         global_transformation=None)
 
         # test parameter in measurement mappings
         parameters = {'a': ConstantParameter(1), 'b': ConstantParameter(4), 'c': ConstantParameter(2)}
@@ -278,7 +291,9 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
             flt._internal_create_program(parameters=parameters,
                                          measurement_mapping=measurement_mapping,
                                          channel_mapping=channel_mapping,
-                                         parent_loop=program)
+                                         parent_loop=program,
+                                         to_single_waveform=set(),
+                                         global_transformation=None)
 
         # test parameter in duration
         parameters = {'a': ConstantParameter(1), 'b': ConstantParameter(4), 'c': ConstantParameter(2), 'alph': ConstantParameter(0)}
@@ -286,7 +301,9 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
             flt._internal_create_program(parameters=parameters,
                                          measurement_mapping=measurement_mapping,
                                          channel_mapping=channel_mapping,
-                                         parent_loop=program)
+                                         parent_loop=program,
+                                         to_single_waveform=set(),
+                                         global_transformation=None)
 
         self.assertEqual(children, program.children)
         self.assertEqual(1, program.repetition_count)
@@ -307,7 +324,9 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
         flt._internal_create_program(parameters=parameters,
                                      measurement_mapping=measurement_mapping,
                                      channel_mapping=channel_mapping,
-                                     parent_loop=program)
+                                     parent_loop=program,
+                                     to_single_waveform=set(),
+                                     global_transformation=None)
 
         self.assertEqual(0, len(program.children))
         self.assertEqual(1, program.repetition_count)
@@ -325,36 +344,53 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
         # program_old defines measurements while program does not
 
     def test_create_program(self) -> None:
-        dt = DummyPulseTemplate(parameter_names={'i'}, waveform=DummyWaveform(duration=4.0, defined_channels={'A'}), duration=4,
-                                measurements=[('b', 2, 1)])
+        dt = DummyPulseTemplate(parameter_names={'i'},
+                                waveform=DummyWaveform(duration=4.0, defined_channels={'A'}),
+                                duration=4,
+                                measurements=[('b', .2, .3)])
         flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=('a', 'b', 'c'),
-                                   measurements=[('A', 0, 1)], parameter_constraints=['c > 1'])
+                                   measurements=[('A', 'meas_param', 1)], parameter_constraints=['c > 1'])
 
-        parameters = {'a': ConstantParameter(1), 'b': ConstantParameter(4), 'c': ConstantParameter(2)}
+        parameters = {'a': ConstantParameter(1), 'b': ConstantParameter(4), 'c': ConstantParameter(2),
+                      'meas_param': ConstantParameter(.1)}
         measurement_mapping = dict(A='B', b='b')
         channel_mapping = dict(C='D')
 
+        to_single_waveform = {'tom', 'jerry'}
+        global_transformation = TransformationStub()
+
+        expected_meas_params = {'meas_param': .1}
+
         program = Loop()
-        flt._internal_create_program(parameters=parameters,
-                                     measurement_mapping=measurement_mapping,
-                                     channel_mapping=channel_mapping,
-                                     parent_loop=program)
 
-        self.assertEqual(2, len(program.children))
-        self.assertEqual(dt.waveform, program.children[0].waveform)
-        self.assertEqual(dt.waveform, program.children[1].waveform)
-        self.assertEqual(1, program.children[0].repetition_count)
-        self.assertEqual(1, program.children[1].repetition_count)
-        self.assertEqual(1, program.repetition_count)
-        self.assert_measurement_windows_equal({'b': ([2, 6], [1, 1]), 'B': ([0], [1])}, program.get_measurement_windows())
+        # inner _create_program does nothing
+        expected_program = Loop(measurements=[('B', .1, 1)])
 
-        # ensure same result as from Sequencer
-        sequencer = Sequencer()
-        sequencer.push(flt, parameters=parameters, conditions={}, window_mapping=measurement_mapping,
-                       channel_mapping=channel_mapping)
-        block = sequencer.build()
-        program_old = MultiChannelProgram(block, channels={'A'}).programs[frozenset({'A'})]
-        self.assertEqual(program_old, program)
+        expected_create_program_kwargs = dict(measurement_mapping=measurement_mapping,
+                                              channel_mapping=channel_mapping,
+                                              global_transformation=global_transformation,
+                                              to_single_waveform=to_single_waveform,
+                                              parent_loop=program)
+        expected_create_program_calls = [mock.call(**expected_create_program_kwargs,
+                                                   parameters=dict(i=ConstantParameter(i)))
+                                         for i in (1, 3)]
+
+        with mock.patch.object(flt, 'validate_parameter_constraints') as validate_parameter_constraints:
+            with mock.patch.object(dt, '_create_program') as body_create_program:
+                with mock.patch.object(flt, 'get_measurement_windows',
+                                       wraps=flt.get_measurement_windows) as get_measurement_windows:
+                    flt._internal_create_program(parameters=parameters,
+                                                 measurement_mapping=measurement_mapping,
+                                                 channel_mapping=channel_mapping,
+                                                 parent_loop=program,
+                                                 to_single_waveform=to_single_waveform,
+                                                 global_transformation=global_transformation)
+
+                    validate_parameter_constraints.assert_called_once_with(parameters=parameters)
+                    get_measurement_windows.assert_called_once_with(expected_meas_params, measurement_mapping)
+                    self.assertEqual(body_create_program.call_args_list, expected_create_program_calls)
+
+        self.assertEqual(expected_program, program)
 
     def test_create_program_append(self) -> None:
         dt = DummyPulseTemplate(parameter_names={'i'}, waveform=DummyWaveform(duration=4.0), duration=4,
@@ -371,7 +407,9 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
         flt._internal_create_program(parameters=parameters,
                                      measurement_mapping=measurement_mapping,
                                      channel_mapping=channel_mapping,
-                                     parent_loop=program)
+                                     parent_loop=program,
+                                     to_single_waveform=set(),
+                                     global_transformation=None)
 
         self.assertEqual(3, len(program.children))
         self.assertIs(children[0], program.children[0])

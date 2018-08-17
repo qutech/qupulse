@@ -132,6 +132,8 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
                                  parameters: Dict[str, Parameter],
                                  measurement_mapping: Dict[str, Optional[str]],
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
+                                 global_transformation: Optional['Transformation'],
+                                 to_single_waveform: Set[Union[str, 'PulseTemplate']],
                                  parent_loop: Loop) -> None:
         self.validate_parameter_constraints(parameters=parameters)
         relevant_params = set(self._repetition_count.variables).union(self.measurement_parameters)
@@ -141,17 +143,19 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
             raise ParameterNotProvidedException(str(e)) from e
 
         repetition_count = max(0, self.get_repetition_count_value(real_parameters))
-        measurements = self.get_measurement_windows(real_parameters, measurement_mapping)
 
         # todo (2018-07-19): could in some circumstances possibly just multiply subprogram repetition count?
         # could be tricky if any repetition count is volatile ? check later and optimize if necessary
         if repetition_count > 0:
             repj_loop = Loop(repetition_count=repetition_count)
-            self.body._internal_create_program(parameters=parameters,
-                                               measurement_mapping=measurement_mapping,
-                                               channel_mapping=channel_mapping,
-                                               parent_loop=repj_loop)
+            self.body._create_program(parameters=parameters,
+                                      measurement_mapping=measurement_mapping,
+                                      channel_mapping=channel_mapping,
+                                      global_transformation=global_transformation,
+                                      to_single_waveform=to_single_waveform,
+                                      parent_loop=repj_loop)
             if repj_loop.waveform is not None or len(repj_loop.children) > 0:
+                measurements = self.get_measurement_windows(real_parameters, measurement_mapping)
                 if measurements:
                     parent_loop.add_measurements(measurements)
 

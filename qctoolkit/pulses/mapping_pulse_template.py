@@ -271,12 +271,16 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                                  parameters: Dict[str, Parameter],
                                  measurement_mapping: Dict[str, Optional[str]],
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
+                                 global_transformation: Optional['Transformation'],
+                                 to_single_waveform: Set[Union[str, 'PulseTemplate']],
                                  parent_loop: Loop) -> None:
         # parameters are validated in map_parameters() call, no need to do it here again explicitly
-        self.template._internal_create_program(parameters=self.map_parameters(parameters),
-                                               measurement_mapping=self.get_updated_measurement_mapping(measurement_mapping),
-                                               channel_mapping=self.get_updated_channel_mapping(channel_mapping),
-                                               parent_loop=parent_loop)
+        self.template._create_program(parameters=self.map_parameters(parameters),
+                                      measurement_mapping=self.get_updated_measurement_mapping(measurement_mapping),
+                                      channel_mapping=self.get_updated_channel_mapping(channel_mapping),
+                                      global_transformation=global_transformation,
+                                      to_single_waveform=to_single_waveform,
+                                      parent_loop=parent_loop)
 
     def build_waveform(self,
                        parameters: Dict[str, numbers.Real],
@@ -285,6 +289,14 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         return self.template.build_waveform(
             parameters=self.map_parameters(parameters),
             channel_mapping=self.get_updated_channel_mapping(channel_mapping))
+
+    def get_measurement_windows(self,
+                                parameters: Dict[str, numbers.Real],
+                                measurement_mapping: Dict[str, Optional[str]]) -> List:
+        return self.template.get_measurement_windows(
+            parameters=self.map_parameters(parameters=parameters),
+            measurement_mapping=self.get_updated_measurement_mapping(measurement_mapping=measurement_mapping)
+        )
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],

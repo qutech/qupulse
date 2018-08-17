@@ -168,6 +168,8 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                                  parameters: Dict[str, Parameter],
                                  measurement_mapping: Dict[str, Optional[str]],
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
+                                 global_transformation: Optional['Transformation'],
+                                 to_single_waveform: Set[Union[str, 'PulseTemplate']],
                                  parent_loop: Loop) -> None:
         self.validate_parameter_constraints(parameters=parameters)
 
@@ -179,16 +181,18 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
         except KeyError as e:
             raise ParameterNotProvidedException(e) from e
 
-        measurements = self.get_measurement_windows(measurement_parameters, measurement_mapping)
         if self.duration.evaluate_numeric(**duration_parameters) > 0:
+            measurements = self.get_measurement_windows(measurement_parameters, measurement_mapping)
             if measurements:
                 parent_loop.add_measurements(measurements)
 
             for subtemplate in self.subtemplates:
-                subtemplate._internal_create_program(parameters=parameters,
-                                                     measurement_mapping=measurement_mapping,
-                                                     channel_mapping=channel_mapping,
-                                                     parent_loop=parent_loop)
+                subtemplate._create_program(parameters=parameters,
+                                            measurement_mapping=measurement_mapping,
+                                            channel_mapping=channel_mapping,
+                                            global_transformation=global_transformation,
+                                            to_single_waveform=to_single_waveform,
+                                            parent_loop=parent_loop)
 
     def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
         data = super().get_serialization_data(serializer)
