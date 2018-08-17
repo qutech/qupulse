@@ -12,6 +12,8 @@ from numbers import Real
 
 import numpy as np
 import warnings
+import operator
+import itertools
 
 from qctoolkit.utils.types import ChannelID, MeasurementWindow
 from qctoolkit.pulses.pulse_template import PulseTemplate
@@ -20,6 +22,7 @@ from qctoolkit.pulses.sequencing import Sequencer
 from qctoolkit._program.waveforms import Waveform
 from qctoolkit._program.instructions import EXECInstruction, STOPInstruction, AbstractInstructionBlock, \
     REPJInstruction, MEASInstruction, GOTOInstruction, InstructionPointer
+from qctoolkit._program._loop import Loop, to_waveform
 
 
 __all__ = ["render", "plot", "PlottingNotPossibleException"]
@@ -86,22 +89,35 @@ def iter_instruction_block(instruction_block: AbstractInstructionBlock,
     return waveforms, measurements, time
 
 
-def render(sequence: AbstractInstructionBlock,
+def render(sequence: Union[AbstractInstructionBlock, Loop],
            sample_rate: Real=10.0,
            render_measurements=False) -> Union[Tuple[np.ndarray, Dict[ChannelID, np.ndarray]],
                                                Tuple[np.ndarray, Dict[ChannelID, np.ndarray], List[MeasurementWindow]]]:
     """'Render' an instruction sequence (sample all contained waveforms into an array).
+        TODO: update docstring
+        Args:
+            sequence (AbstractInstructionBlock): block of instructions representing a (sub)sequence
+                in the control flow of a pulse template instantiation.
+            sample_rate (float): The sample rate in GHz.
+            render_measurements: If True, the third return value is a list of measurement windows
 
-    Args:
-        sequence (AbstractInstructionBlock): block of instructions representing a (sub)sequence
-            in the control flow of a pulse template instantiation.
-        sample_rate (float): The sample rate in GHz.
-        render_measurements: If True, the third return value is a list of measurement windows
+        Returns:
+            a tuple (times, values) of numpy.ndarrays of similar size. times contains the time value
+            of all sample times and values the corresponding sampled value.
+        """
 
-    Returns:
-        a tuple (times, values) of numpy.ndarrays of similar size. times contains the time value
-        of all sample times and values the corresponding sampled value.
-    """
+    if isinstance(sequence, AbstractInstructionBlock):
+        return _render_instruction_block(sequence, sample_rate=sample_rate, render_measurements=render_measurements)
+    elif isinstance(sequence, Loop):
+        return _render_loop(sequence, sample_rate=sample_rate, render_measurements=render_measurements)
+
+
+def _render_instruction_block(sequence: AbstractInstructionBlock,
+                              sample_rate: Real=10.0,
+                              render_measurements=False) -> Union[Tuple[np.ndarray, Dict[ChannelID, np.ndarray]],
+                                                                  Tuple[np.ndarray, Dict[ChannelID, np.ndarray],
+                                                                        List[MeasurementWindow]]]:
+
     waveforms, measurements, total_time = iter_instruction_block(sequence, render_measurements)
     if not waveforms:
         return np.empty(0), dict()
@@ -130,6 +146,35 @@ def render(sequence: AbstractInstructionBlock,
         assert(output_array.shape == sample_times.shape)
         offset = wf_end
     if render_measurements:
+        return times, voltages, measurements
+    else:
+        return times, voltages
+
+
+def _render_loop(loop: Loop,
+                 sample_rate: Real,
+                 render_measurements: bool) -> Union[Tuple[np.ndarray, Dict[ChannelID, np.ndarray]],
+                                                     Tuple[np.ndarray, Dict[ChannelID, np.ndarray],
+                                                           List[MeasurementWindow]]]:
+    waveform = to_waveform(loop)
+    channels = waveform.defined_channels
+
+    sample_count = waveform.duration * sample_rate + 1
+    times = np.linspace(0., float(waveform.duration), num=int(sample_count), dtype=float)
+    times[-1] = np.nextafter(times[-1], times[-2])
+
+    voltages = {}
+
+    for ch in channels:
+        voltages[ch] = waveform.get_sampled(ch, times)
+
+    if render_measurements:
+        measurement_dict = loop.get_measurement_windows()
+        measurement_list = []
+        for name, (begins, lengths) in measurement_dict.items():
+            measurement_list.extend(zip(itertools.repeat(name), begins, lengths))
+        measurements = sorted(measurement_list, key=operator.itemgetter(1))
+
         return times, voltages, measurements
     else:
         return times, voltages
