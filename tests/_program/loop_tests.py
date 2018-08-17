@@ -488,6 +488,15 @@ LOOP 1 times:
         self.assertEqual(root_loopA.__repr__(), reprA)
         self.assertEqual(root_loopB.__repr__(), reprB)
 
+    def test_init_from_loop(self):
+        program = Loop(waveform=DummyWaveform(defined_channels={'A', 'B'}))
+
+        mcp = MultiChannelProgram(program)
+        self.assertEqual(mcp.programs, {frozenset('AB'): program})
+
+        with self.assertRaises(TypeError):
+            MultiChannelProgram(mcp)
+
 
 class ProgramWaveformCompatibilityTest(unittest.TestCase):
     def test_is_compatible_incompatible(self):
