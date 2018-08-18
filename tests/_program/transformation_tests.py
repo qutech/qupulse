@@ -136,6 +136,10 @@ class IdentityTransformationTests(unittest.TestCase):
         chans = {'a', 'b'}
         self.assertIs(IdentityTransformation().get_output_channels(chans), chans)
 
+    def test_input_channels(self):
+        chans = {'a', 'b'}
+        self.assertIs(IdentityTransformation().get_input_channels(chans), chans)
+
     def test_chain(self):
         trafo = TransformationStub()
         self.assertIs(IdentityTransformation().chain(trafo), trafo)
@@ -163,6 +167,22 @@ class ChainedTransformationTests(unittest.TestCase):
             get_output_channels_0.assert_called_once_with({0})
             get_output_channels_1.assert_called_once_with({1})
             get_output_channels_2.assert_called_once_with({2})
+
+    def test_get_input_channels(self):
+        trafos = TransformationStub(), TransformationStub(), TransformationStub()
+        chained = ChainedTransformation(*trafos)
+        chans = {1}, {2}, {3}
+
+        # note reverse trafos order
+        with mock.patch.object(trafos[2], 'get_input_channels', return_value=chans[0]) as get_input_channels_0,\
+                mock.patch.object(trafos[1], 'get_input_channels', return_value=chans[1]) as get_input_channels_1,\
+                mock.patch.object(trafos[0], 'get_input_channels', return_value=chans[2]) as get_input_channels_2:
+            outs = chained.get_input_channels({0})
+
+            self.assertIs(outs, chans[2])
+            get_input_channels_0.assert_called_once_with({0})
+            get_input_channels_1.assert_called_once_with({1})
+            get_input_channels_2.assert_called_once_with({2})
 
     def test_call(self):
         trafos = TransformationStub(), TransformationStub(), TransformationStub()
@@ -211,6 +231,15 @@ class TestChaining(unittest.TestCase):
 
         self.assertIs(chain_transformations(trafo), trafo)
         self.assertIs(chain_transformations(trafo, IdentityTransformation()), trafo)
+
+    def test_denesting(self):
+        trafo = TransformationStub()
+        chained = ChainedTransformation(TransformationStub(), TransformationStub())
+
+        expected = ChainedTransformation(trafo, *chained.transformations, trafo)
+        result = chain_transformations(trafo, chained, trafo)
+
+        self.assertEqual(expected, result)
 
     def test_chaining(self):
         trafo = TransformationStub()
