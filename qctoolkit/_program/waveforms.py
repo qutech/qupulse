@@ -523,24 +523,23 @@ class TransformingWaveform(Waveform):
                       sample_times: np.ndarray,
                       output_array: Union[np.ndarray, None] = None) -> np.ndarray:
         if self._cached_times() is not sample_times:
-            inner_channels = tuple(self.inner_waveform.defined_channels)
-            inner_data = np.empty((len(inner_channels), sample_times.size))
-
-            for idx, inner_channel in enumerate(inner_channels):
-                self.inner_waveform.unsafe_sample(inner_channel, sample_times,
-                                                  output_array=inner_data[idx, :])
-
-            inner_data = pd.DataFrame(inner_data, index=inner_channels)
-
-            outer_data = self.transformation(sample_times, inner_data)
-
-            self._cached_data = outer_data
+            self._cached_data = dict()
             self._cached_times = ref(sample_times)
 
+        if channel not in self._cached_data:
+
+            inner_channels = self.transformation.get_input_channels({channel})
+
+            inner_data = {inner_channel: self.inner_waveform.unsafe_sample(inner_channel, sample_times)
+                          for inner_channel in inner_channels}
+
+            outer_data = self.transformation(sample_times, inner_data)
+            self._cached_data.update(outer_data)
+
         if output_array is None:
-            output_array = self._cached_data.loc[channel].values
+            output_array = self._cached_data[channel]
         else:
-            output_array[:] = self._cached_data.loc[channel].values
+            output_array[:] = self._cached_data[channel]
 
         return output_array
 
