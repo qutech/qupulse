@@ -93,6 +93,15 @@ class LinearTransformationTests(unittest.TestCase):
         with self.assertRaisesRegex(KeyError, 'Is input channel'):
             self.assertEqual(trafo.get_input_channels({'transformed_a', 'a'}), {'a', 'b', 'c', 'd'})
 
+        in_chs = ('a', 'b', 'c')
+        out_chs = ('a', 'b', 'c')
+        matrix = np.eye(3)
+
+        trafo = LinearTransformation(matrix, in_chs, out_chs)
+        in_set = {'transformed_a'}
+        self.assertIs(trafo.get_input_channels(in_set), in_set)
+        self.assertEqual(trafo.get_input_channels({'transformed_a', 'a'}), {'transformed_a', 'a', 'b', 'c'})
+
     def test_call(self):
         in_chs = ('a', 'b', 'c')
         out_chs = ('transformed_a', 'transformed_b')

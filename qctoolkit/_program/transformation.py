@@ -30,7 +30,7 @@ class Transformation(Comparable):
 
     @abstractmethod
     def get_input_channels(self, output_channels: Set[ChannelID]) -> Set[ChannelID]:
-        """Channels that are required for getting data for the requuested output channel"""
+        """Channels that are required for getting data for the requested output channel"""
 
     def chain(self, next_transformation: 'Transformation') -> 'Transformation':
         if next_transformation is IdentityTransformation():
@@ -137,12 +137,13 @@ class LinearTransformation(Transformation):
         return input_channels.difference(self._input_channels).union(self._output_channels)
 
     def get_input_channels(self, output_channels: Set[ChannelID]) -> Set[ChannelID]:
-        if not output_channels.isdisjoint(self._input_channels):
-            raise KeyError('Is input channel', output_channels.union(self._input_channels))
+        forwarded = output_channels.difference(self._output_channels)
+        if not forwarded.isdisjoint(self._input_channels):
+            raise KeyError('Is input channel', forwarded.intersection(self._input_channels))
         elif output_channels.isdisjoint(self._output_channels):
             return output_channels
         else:
-            return output_channels.difference(self._output_channels).union(self._input_channels)
+            return forwarded.union(self._input_channels)
 
     @property
     def compare_key(self) -> Tuple[Tuple[ChannelID], Tuple[ChannelID], bytes]:
