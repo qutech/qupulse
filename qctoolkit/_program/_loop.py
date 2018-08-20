@@ -286,6 +286,37 @@ class Loop(Node):
                     pass
         self[:] = new_children
 
+    def cleanup(self):
+        """Remove empty loops and merge nested loops with single child"""
+        new_children = []
+        for child in self:
+            if child.is_leaf():
+                if child.waveform is None:
+                    if child._measurements:
+                        warnings.warn("Dropping measurement since there is no waveform attached")
+                else:
+                    new_children.append(child)
+
+            else:
+                child.cleanup()
+                if child.waveform or not child.is_leaf():
+                    new_children.append(child)
+
+                elif child._measurements:
+                    warnings.warn("Dropping measurement since there is no waveform in children")
+
+        if len(new_children) == 1 and not self._measurements:
+            assert not self._waveform
+            only_child = new_children[0]
+
+            self._measurements = only_child._measurements
+            self.waveform = only_child.waveform
+            self.repetition_count = self.repetition_count * only_child.repetition_count
+            self[:] = only_child[:]
+
+        elif len(self) != len(new_children):
+            self[:] = new_children
+
 
 class ChannelSplit(Exception):
     def __init__(self, channel_sets):
@@ -304,22 +335,8 @@ class MultiChannelProgram:
         else:
             raise TypeError('Invalid program type', type(instruction_block), instruction_block)
 
-        for channels, program in self._programs.items():
-            iterable = program.get_breadth_first_iterator()
-            try:
-                while True:
-                    loop = next(iterable)
-                    if len(loop) == 1 and not loop._measurements:
-                        loop._measurements = loop[0]._measurements
-                        loop.waveform = loop[0].waveform
-                        loop.repetition_count = loop.repetition_count * loop[0].repetition_count
-                        loop[:] = loop[0][:]
-                        if len(loop):
-                            iterable = itertools.chain((loop,), iterable)
-            except StopIteration:
-                pass
         for program in self.programs.values():
-            program.remove_empty_loops()
+            program.cleanup()
 
     def _init_from_loop(self, loop: Loop):
         first_waveform = next(loop.get_depth_first_iterator()).waveform

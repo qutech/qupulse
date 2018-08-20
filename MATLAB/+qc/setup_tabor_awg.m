@@ -21,6 +21,7 @@ function setup_tabor_awg(varargin)
 	plsdata.awg.maxPulseWait = args.maxPulseWait;
 	plsdata.awg.minSamples = 192;
 	plsdata.awg.sampleQuantum = 16;
+	plsdata.awg.globalTransformation = [];
 	
 	for smChannels = args.smChannels		
 		if ~(smdata.channels(smchanlookup(smChannels{1})).instchan(1) == sminstlookup(args.taborName))

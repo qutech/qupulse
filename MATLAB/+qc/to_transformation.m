@@ -12,9 +12,8 @@ if istable(mat_trafo)
     kwargs = pyargs('columns', mat_trafo.Properties.VariableNames,...
                     'index', mat_trafo.Properties.RowNames');
     data = util.py.mat2py(mat_trafo{:,:});
-    df = py.pandas.DataFrame(data, kwargs);
     
-    transformation = trafo_module.LinearTransformation(df);
+    transformation = trafo_module.LinearTransformation(data, mat_trafo.Properties.RowNames', mat_trafo.Properties.VariableNames);
 else
     error('invalid trafo type');
 end
