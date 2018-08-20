@@ -49,6 +49,14 @@ class DummySerializable(Serializable):
 
 
 class SerializableTests(metaclass=ABCMeta):
+    def assertEqual(self, first, second, msg=None):
+        # We use the id based hashing and comparison in other places. For easy testing, we patch the __eq__ here
+        # temporarily.
+        def dummy_pulse_template_equal(lhs, rhs):
+            return lhs.compare_key == rhs.compare_key
+
+        with mock.patch.object(DummyPulseTemplate, '__eq__', dummy_pulse_template_equal):
+            unittest.TestCase.assertEqual(self, first, second, msg=msg)
 
     @property
     @abstractmethod

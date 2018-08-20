@@ -10,6 +10,7 @@ from qctoolkit.pulses.parameters import Parameter, MappedParameter, ParameterNot
 from qctoolkit.pulses.sequencing import Sequencer
 from qctoolkit._program.instructions import InstructionBlock
 from qctoolkit._program.waveforms import Waveform
+from qctoolkit._program._loop import Loop
 from qctoolkit.pulses.conditions import Condition
 from qctoolkit.serialization import Serializer, PulseRegistryType
 
@@ -266,6 +267,21 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                                      channel_mapping=self.get_updated_channel_mapping(channel_mapping),
                                      instruction_block=instruction_block)
 
+    def _internal_create_program(self, *,
+                                 parameters: Dict[str, Parameter],
+                                 measurement_mapping: Dict[str, Optional[str]],
+                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]],
+                                 global_transformation: Optional['Transformation'],
+                                 to_single_waveform: Set[Union[str, 'PulseTemplate']],
+                                 parent_loop: Loop) -> None:
+        # parameters are validated in map_parameters() call, no need to do it here again explicitly
+        self.template._create_program(parameters=self.map_parameters(parameters),
+                                      measurement_mapping=self.get_updated_measurement_mapping(measurement_mapping),
+                                      channel_mapping=self.get_updated_channel_mapping(channel_mapping),
+                                      global_transformation=global_transformation,
+                                      to_single_waveform=to_single_waveform,
+                                      parent_loop=parent_loop)
+
     def build_waveform(self,
                        parameters: Dict[str, numbers.Real],
                        channel_mapping: Dict[ChannelID, ChannelID]) -> Waveform:
@@ -273,6 +289,14 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         return self.template.build_waveform(
             parameters=self.map_parameters(parameters),
             channel_mapping=self.get_updated_channel_mapping(channel_mapping))
+
+    def get_measurement_windows(self,
+                                parameters: Dict[str, numbers.Real],
+                                measurement_mapping: Dict[str, Optional[str]]) -> List:
+        return self.template.get_measurement_windows(
+            parameters=self.map_parameters(parameters=parameters),
+            measurement_mapping=self.get_updated_measurement_mapping(measurement_mapping=measurement_mapping)
+        )
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],

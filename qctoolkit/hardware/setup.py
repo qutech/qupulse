@@ -4,7 +4,8 @@ import warnings
 
 from qctoolkit.hardware.awgs.base import AWG
 from qctoolkit.hardware.dacs import DAC
-from qctoolkit._program._loop import MultiChannelProgram
+from qctoolkit._program._loop import MultiChannelProgram, Loop
+from qctoolkit._program.instructions import AbstractInstructionBlock
 
 from qctoolkit.utils.types import ChannelID
 
@@ -89,7 +90,9 @@ class HardwareSetup:
 
         self._registered_programs = dict()  # type: Dict[str, RegisteredProgram]
 
-    def register_program(self, name: str, instruction_block, run_callback=lambda: None, update=False) -> None:
+    def register_program(self, name: str,
+                         instruction_block: Union[AbstractInstructionBlock, Loop],
+                         run_callback=lambda: None, update=False) -> None:
         if not callable(run_callback):
             raise TypeError('The provided run_callback is not callable')
 

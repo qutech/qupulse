@@ -8,10 +8,11 @@ import functools
 import warnings
 
 from qctoolkit.serialization import Serializer, PulseRegistryType
+from qctoolkit._program._loop import Loop
 
 from qctoolkit.utils.types import MeasurementWindow, ChannelID, TimeType
 from qctoolkit.pulses.pulse_template import PulseTemplate
-from qctoolkit.pulses.parameters import Parameter, ParameterConstrainer
+from qctoolkit.pulses.parameters import Parameter, ParameterConstrainer, ParameterNotProvidedException
 from qctoolkit.pulses.sequencing import InstructionBlock, Sequencer
 from qctoolkit.pulses.conditions import Condition
 from qctoolkit.pulses.mapping_pulse_template import MappingPulseTemplate, MappingTuple
@@ -20,9 +21,6 @@ from qctoolkit.pulses.measurement import MeasurementDeclaration, MeasurementDefi
 from qctoolkit.expressions import Expression, ExpressionScalar
 
 __all__ = ["SequencePulseTemplate"]
-
-
-
 
 
 class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefiner):
@@ -165,6 +163,36 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                            window_mapping=measurement_mapping,
                            channel_mapping=channel_mapping,
                            target_block=instruction_block)
+
+    def _internal_create_program(self, *,
+                                 parameters: Dict[str, Parameter],
+                                 measurement_mapping: Dict[str, Optional[str]],
+                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]],
+                                 global_transformation: Optional['Transformation'],
+                                 to_single_waveform: Set[Union[str, 'PulseTemplate']],
+                                 parent_loop: Loop) -> None:
+        self.validate_parameter_constraints(parameters=parameters)
+
+        try:
+            measurement_parameters = {parameter_name: parameters[parameter_name].get_value()
+                                      for parameter_name in self.measurement_parameters}
+            duration_parameters = {parameter_name: parameters[parameter_name].get_value()
+                                   for parameter_name in self.duration.variables}
+        except KeyError as e:
+            raise ParameterNotProvidedException(e) from e
+
+        if self.duration.evaluate_numeric(**duration_parameters) > 0:
+            measurements = self.get_measurement_windows(measurement_parameters, measurement_mapping)
+            if measurements:
+                parent_loop.add_measurements(measurements)
+
+            for subtemplate in self.subtemplates:
+                subtemplate._create_program(parameters=parameters,
+                                            measurement_mapping=measurement_mapping,
+                                            channel_mapping=channel_mapping,
+                                            global_transformation=global_transformation,
+                                            to_single_waveform=to_single_waveform,
+                                            parent_loop=parent_loop)
 
     def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
         data = super().get_serialization_data(serializer)
