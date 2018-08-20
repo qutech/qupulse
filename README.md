@@ -13,7 +13,7 @@ Additionally, all pulses are parameterizable allowing users to fine-tune and ada
 ## Status
 Note that the project is still in development and thus not feature-complete.
 
-The qc-toolkit library is already used productively by the Bluhm research group at the 2nd Institute of Physics at the RWTH Aachen University. As such, some features - such as pulse definition - are mostly complete and tested and interfaces are expected to remain largely stable (or changes to be backward compatible).
+The qc-toolkit library is already used productively by the Quantum Technology Group at the 2nd Institute of Physics at the RWTH Aachen University. As such, some features - such as pulse definition - are mostly complete and tested and interfaces are expected to remain largely stable (or changes to be backward compatible).
 However, it is still possible for existing portions of the code base to be redesigned if this will increase the usability long-term.
  
 The current feature list is as follows:
@@ -23,7 +23,7 @@ The current feature list is as follows:
 - Serialization of pulses (to allow storing into permanent storage)
 - Hardware model representation (prototype, work in progress)
 - High-level pulse to hardware configuration and waveform translation routines 
-- Hardware drivers for Tabor 200 AWG and AlazarTech DAC
+- Hardware drivers for Tabor Electronics AWGs and AlazarTech Digitizers
 - MATLAB interface to access qc-toolkit functionality
 
 ## Installation
@@ -48,7 +48,7 @@ The repository primarily consists of the folders `qctoolkit` (toolkit core code)
 
 `qctoolkit` contains the entire Python source code of the project and is further partitioned the following packages of related modules 
 
-- `pulses` which contains all modules related to pulse representation).
+- `pulses` which contains all modules related to pulse representation.
 - `hardware` containing classes for hardware representation as well as hardware drivers
 - `utils` containing miscellaneous utility modules or wrapping code for external libraries
 
