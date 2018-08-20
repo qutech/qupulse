@@ -115,13 +115,17 @@ class LinearTransformation(Transformation):
         return cls(transformation.values, transformation.columns, transformation.index)
 
     def __call__(self, time: np.ndarray, data: Mapping[ChannelID, np.ndarray]) -> Mapping[ChannelID, np.ndarray]:
+        data_out = {forwarded_channel: data[forwarded_channel]
+                    for forwarded_channel in set(data.keys()).difference(self._input_channels)}
+
+        if len(data_out) == len(data):
+            # only forwarded data
+            return data_out
+
         try:
             data_in = np.stack(data[in_channel] for in_channel in self._input_channels)
         except KeyError as error:
             raise KeyError('Invalid input channels', set(data.keys()), set(self._input_channels)) from error
-
-        data_out = {forwarded_channel: data[forwarded_channel]
-                    for forwarded_channel in set(data.keys()).difference(self._input_channels)}
 
         transformed_data = self._matrix @ data_in
 

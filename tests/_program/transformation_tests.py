@@ -126,6 +126,16 @@ class LinearTransformationTests(unittest.TestCase):
 
             trafo(np.full(4, np.NaN), data)
 
+        in_chs = ('a', 'b', 'c')
+        out_chs = ('a', 'b', 'c')
+        matrix = np.eye(3)
+        trafo = LinearTransformation(matrix, in_chs, out_chs)
+
+        data_in = {'ignored': np.arange(116., 120.)}
+        transformed = trafo(np.full(4, np.NaN), data_in)
+        np.testing.assert_equal(transformed, data_in)
+        self.assertIs(data_in['ignored'], transformed['ignored'])
+
 
 class IdentityTransformationTests(unittest.TestCase):
     def test_compare_key(self):
