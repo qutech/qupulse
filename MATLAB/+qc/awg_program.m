@@ -23,11 +23,6 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 		);
 	a = util.parse_varargin(varargin, default_args);
 	
-	% Since can not save py.None in .mat files
-	if isempty(a.global_transformation)
-		a.global_transformation = py.None;
-	end
-	
 	% --- add ---------------------------------------------------------------
 	if strcmp(ctrl, 'add')
 		[~, bool, msg] = qc.awg_program('fresh', qc.change_field(a, 'verbosity', 0));
