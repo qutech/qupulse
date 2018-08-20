@@ -314,7 +314,7 @@ class Loop(Node):
             self.repetition_count = self.repetition_count * only_child.repetition_count
             self[:] = only_child[:]
 
-        else:
+        elif len(self) != len(new_children):
             self[:] = new_children
 
 
