@@ -3,7 +3,6 @@ from unittest import mock
 
 import numpy
 import numpy as np
-import pandas as pd
 
 from qctoolkit.utils.types import time_from_float
 from qctoolkit.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy,\
@@ -13,6 +12,7 @@ from qctoolkit._program.waveforms import MultiChannelWaveform, RepetitionWavefor
 from qctoolkit._program.transformation import Transformation
 
 from tests.pulses.sequencing_dummies import DummyWaveform, DummyInterpolationStrategy
+from tests._program.transformation_tests import TransformationStub
 
 
 class WaveformTest(unittest.TestCase):
@@ -419,22 +419,16 @@ class WaveformEntryTest(unittest.TestCase):
             TableWaveformEntry(1, 2, 3)
 
 
-class TransformationDummy(Transformation):
-    def __init__(self, output_channels=None, transformed=None):
+class TransformationDummy(TransformationStub):
+    def __init__(self, output_channels=None, transformed=None, input_channels=None):
         if output_channels:
             self.get_output_channels = mock.MagicMock(return_value=output_channels)
 
+        if input_channels:
+            self.get_input_channels = mock.MagicMock(return_value=input_channels)
+
         if transformed is not None:
             type(self).__call__ = mock.MagicMock(return_value=transformed)
-
-    def __call__(self, *args, **kwargs):
-        raise NotImplementedError()
-
-    get_output_channels = ()
-
-    @property
-    def compare_key(self):
-        return id(self)
 
 
 class TransformingWaveformTest(unittest.TestCase):
@@ -475,16 +469,17 @@ class TransformingWaveformTest(unittest.TestCase):
         ch_e = np.arctan(time)
 
         sample_output = {'a': ch_a, 'b': ch_b}
-        expected_call_data = pd.DataFrame(sample_output).T
+        expected_call_data = sample_output
 
-        transformed = pd.DataFrame({'c': ch_c, 'd': ch_d, 'e': ch_e}).T
+        transformed = {'c': ch_c, 'd': ch_d, 'e': ch_e}
 
-        trafo = TransformationDummy(transformed=transformed)
+        trafo = TransformationDummy(transformed=transformed, input_channels={'a', 'b'})
         inner_wf = DummyWaveform(duration=1.5, defined_channels={'a', 'b'}, sample_output=sample_output)
         trafo_wf = TransformingWaveform(inner_waveform=inner_wf, transformation=trafo)
 
-        ch_d_out = trafo_wf.unsafe_sample('d', time)
-        np.testing.assert_equal(ch_d_out, ch_d)
+        np.testing.assert_equal(ch_c, trafo_wf.unsafe_sample('c', time))
+        np.testing.assert_equal(ch_d, trafo_wf.unsafe_sample('d', time))
+        np.testing.assert_equal(ch_e, trafo_wf.unsafe_sample('e', time))
 
         output = np.empty_like(time)
         ch_d_out = trafo_wf.unsafe_sample('d', time, output_array=output)
@@ -495,11 +490,10 @@ class TransformingWaveformTest(unittest.TestCase):
         self.assertEqual(len(call_list), 1)
 
         (pos_args, kw_args), = call_list
-        self.assertEqual(len(kw_args), 0)
+        self.assertEqual(kw_args, {})
 
         c_time, c_data = pos_args
-        np.testing.assert_equal(time, c_time)
-        pd.testing.assert_frame_equal(expected_call_data.sort_index(), c_data.sort_index())
+        np.testing.assert_equal((time, expected_call_data), pos_args)
 
 
 class SubsetWaveformTest(unittest.TestCase):

@@ -304,6 +304,23 @@ class MultiChannelProgram:
         else:
             raise TypeError('Invalid program type', type(instruction_block), instruction_block)
 
+        for channels, program in self._programs.items():
+            iterable = program.get_breadth_first_iterator()
+            try:
+                while True:
+                    loop = next(iterable)
+                    if len(loop) == 1 and not loop._measurements:
+                        loop._measurements = loop[0]._measurements
+                        loop.waveform = loop[0].waveform
+                        loop.repetition_count = loop.repetition_count * loop[0].repetition_count
+                        loop[:] = loop[0][:]
+                        if len(loop):
+                            iterable = itertools.chain((loop,), iterable)
+            except StopIteration:
+                pass
+        for program in self.programs.values():
+            program.remove_empty_loops()
+
     def _init_from_loop(self, loop: Loop):
         first_waveform = next(loop.get_depth_first_iterator()).waveform
 
@@ -360,22 +377,6 @@ class MultiChannelProgram:
                 for r in range(rep_count):
                     for name, begin, length in child_loop._measurements:
                         yield (name, begin+r*duration_float, length)
-        for channels, program in self._programs.items():
-            iterable = program.get_breadth_first_iterator()
-            try:
-                while True:
-                    loop = next(iterable)
-                    if len(loop) == 1 and not loop._measurements:
-                        loop._measurements = loop[0]._measurements
-                        loop.waveform = loop[0].waveform
-                        loop.repetition_count = loop.repetition_count * loop[0].repetition_count
-                        loop[:] = loop[0][:]
-                        if len(loop):
-                            iterable = itertools.chain((loop,), iterable)
-            except StopIteration:
-                pass
-        for program in self.programs.values():
-            program.remove_empty_loops()
 
     @property
     def programs(self) -> Dict[FrozenSet[ChannelID], Loop]:
