@@ -1,4 +1,5 @@
 from typing import Tuple, Callable, Optional, Sequence, Union, Dict, Mapping, Set
+from types import MappingProxyType
 import numpy as np
 import contextlib
 import itertools
@@ -16,7 +17,7 @@ except ImportError:
 from qctoolkit.hardware.awgs.base import AWG
 from qctoolkit import ChannelID
 from qctoolkit._program._loop import Loop, make_compatible
-from qctoolkit.utils.types import TimeType, ConstantDictView
+from qctoolkit.utils.types import TimeType
 from qctoolkit.hardware.util import voltage_to_uint16
 from qctoolkit.utils import pairwise
 
@@ -35,10 +36,10 @@ class WaveformEntry:
 class WaveformStorage:
     def __init__(self, waveforms: Sequence[WaveformEntry]=()):
         self._waveforms_by_name = {wf.name: wf for wf in waveforms}
-        self._by_name = ConstantDictView(self._waveforms_by_name)
+        self._by_name = MappingProxyType(self._waveforms_by_name)
 
         self._waveforms_by_data = {wf.waveform: wf for wf in waveforms}
-        self._by_data = ConstantDictView(self._waveforms_by_data)
+        self._by_data = MappingProxyType(self._waveforms_by_data)
 
     @property
     def by_name(self) -> Mapping[str, WaveformEntry]:
