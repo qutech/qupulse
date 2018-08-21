@@ -49,6 +49,14 @@ class DummySerializable(Serializable):
 
 
 class SerializableTests(metaclass=ABCMeta):
+    def assertEqual(self, first, second, msg=None):
+        # We use the id based hashing and comparison in other places. For easy testing, we patch the __eq__ here
+        # temporarily.
+        def dummy_pulse_template_equal(lhs, rhs):
+            return lhs.compare_key == rhs.compare_key
+
+        with mock.patch.object(DummyPulseTemplate, '__eq__', dummy_pulse_template_equal):
+            unittest.TestCase.assertEqual(self, first, second, msg=msg)
 
     @property
     @abstractmethod
@@ -723,7 +731,7 @@ class PulseStorageTests(unittest.TestCase):
     def test_write_through(self):
         instance_1 = DummySerializable(identifier='my_id_1', registry=dict())
         inner_instance = DummySerializable(identifier='my_id_2', registry=dict())
-        outer_instance = NestedDummySerializable(inner_instance, identifier='my_id_3', registry=dict())
+        outer_instance = DummySerializable(inner=inner_instance, identifier='my_id_3', registry=dict())
 
         def get_expected():
             return {identifier: serialized
@@ -737,7 +745,7 @@ class PulseStorageTests(unittest.TestCase):
     def test_write_through_does_not_overwrite_subpulses(self) -> None:
         previous_inner = DummySerializable(identifier='my_id_1', data='hey', registry=dict())
         inner_instance = DummySerializable(identifier='my_id_1', data='ho', registry=dict())
-        outer_instance = NestedDummySerializable(inner_instance, identifier='my_id_2', registry=dict())
+        outer_instance = DummySerializable(inner=inner_instance, identifier='my_id_2', registry=dict())
 
         self.storage['my_id_1'] = previous_inner
         with self.assertRaises(RuntimeError):

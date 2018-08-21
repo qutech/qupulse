@@ -25,6 +25,7 @@ from qctoolkit.pulses.interpolation import InterpolationStrategy, LinearInterpol
 from qctoolkit._program.waveforms import TableWaveform, TableWaveformEntry
 from qctoolkit.expressions import ExpressionScalar, Expression
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
+from qctoolkit.pulses.conditions import Condition
 
 __all__ = ["TablePulseTemplate", "concatenate"]
 
@@ -248,7 +249,8 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
 
     def build_waveform(self,
                        parameters: Dict[str, numbers.Real],
-                       channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional['Waveform']:
+                       channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Union[TableWaveform,
+                                                                                                MultiChannelWaveform]]:
         self.validate_parameter_constraints(parameters)
 
         if all(channel_mapping[channel] is None

@@ -10,6 +10,12 @@ from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate as Se
 from qctoolkit.pulses.table_pulse_template import TablePulseTemplate as TablePT
 from qctoolkit.pulses.point_pulse_template import PointPulseTemplate as PointPT
 
+import warnings
+with warnings.catch_warnings():
+    warnings.simplefilter('ignore')
+    # ensure this is included.. it adds a deserialization handler for pulse_template_parameter_mapping.MappingPT which is not present otherwise
+    import qctoolkit.pulses.pulse_template_parameter_mapping
+
 from qctoolkit.pulses.sequencing import Sequencer
 
 __all__ = ["FunctionPT", "ForLoopPT", "AtomicMultiChannelPT", "MappingPT", "RepetitionPT", "SequencePT", "TablePT",

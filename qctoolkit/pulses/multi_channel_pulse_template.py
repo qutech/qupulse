@@ -16,6 +16,7 @@ import numpy
 
 from qctoolkit.serialization import Serializer, PulseRegistryType
 
+from qctoolkit.pulses.conditions import Condition
 from qctoolkit.utils.types import ChannelID, TimeType
 from qctoolkit._program.waveforms import MultiChannelWaveform
 from qctoolkit.pulses.pulse_template import PulseTemplate, AtomicPulseTemplate

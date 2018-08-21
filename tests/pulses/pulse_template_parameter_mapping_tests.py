@@ -15,7 +15,6 @@ class TestPulseTemplateParameterMappingFileTests(unittest.TestCase):
             from qctoolkit.pulses.pulse_template_parameter_mapping import MappingPulseTemplate
             dummy_t = DummyPulseTemplate()
             map_t = MappingPulseTemplate(dummy_t)
-            serializer = Serializer(DummyStorageBackend())
-            type_str = serializer.get_type_identifier(map_t)
+            type_str = map_t.get_type_identifier()
             self.assertEqual("qctoolkit.pulses.mapping_pulse_template.MappingPulseTemplate", type_str)
 

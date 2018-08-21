@@ -16,6 +16,7 @@ import sympy
 from qctoolkit.expressions import ExpressionScalar
 from qctoolkit.serialization import Serializer, PulseRegistryType
 
+from qctoolkit.pulses.conditions import Condition
 from qctoolkit.utils.types import ChannelID, TimeType, time_from_float
 from qctoolkit.pulses.parameters import Parameter, ParameterConstrainer, ParameterConstraint
 from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration

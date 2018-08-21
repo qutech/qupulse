@@ -10,7 +10,7 @@ from collections.abc import Mapping as ABCMapping
 import numpy
 
 __all__ = ["MeasurementWindow", "ChannelID", "HashableNumpyArray", "TimeType", "time_from_float", "DocStringABCMeta",
-           "OrderedSet", "ConstantDictView"]
+           "OrderedSet", "ConstantDictView", "SingletonABCMeta"]
 
 MeasurementWindow = typing.Tuple[str, numbers.Real, numbers.Real]
 ChannelID = typing.Union[str, int]
@@ -22,6 +22,7 @@ def time_from_float(time: float, absolute_error: float=1e-12) -> TimeType:
 
 
 class DocStringABCMeta(abc.ABCMeta):
+    """Metaclass that copies/refers to docstrings of the super class."""
     def __new__(mcls, classname, bases, cls_dict):
         cls = super().__new__(mcls, classname, bases, cls_dict)
 
@@ -47,6 +48,19 @@ class DocStringABCMeta(abc.ABCMeta):
                         member.__doc__ = 'Implements {}`~{}`.'.format(member_type, base_member_name)
                         break
         return cls
+
+
+T = typing.TypeVar('T')
+
+
+class SingletonABCMeta(DocStringABCMeta):
+    """Metaclass that enforces singletons"""
+    def __call__(cls: typing.Type[T]) -> T:
+        return cls._instance
+
+    def __init__(cls, name, bases, dct):
+        super().__init__(name, bases, dct)
+        cls._instance = super(SingletonABCMeta, cls).__call__()
 
 
 class HashableNumpyArray(numpy.ndarray):

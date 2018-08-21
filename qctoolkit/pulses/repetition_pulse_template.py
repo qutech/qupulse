@@ -8,6 +8,7 @@ from warnings import warn
 import numpy as np
 
 from qctoolkit.serialization import Serializer, PulseRegistryType
+from qctoolkit._program._loop import Loop
 
 from qctoolkit.utils.types import ChannelID
 from qctoolkit.expressions import ExpressionScalar
@@ -126,6 +127,39 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
             instruction_block.add_instruction_repj(repetition_count, body_block)
             sequencer.push(self.body, parameters=parameters, conditions=conditions,
                            window_mapping=measurement_mapping, channel_mapping=channel_mapping, target_block=body_block)
+
+    def _internal_create_program(self, *,
+                                 parameters: Dict[str, Parameter],
+                                 measurement_mapping: Dict[str, Optional[str]],
+                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]],
+                                 global_transformation: Optional['Transformation'],
+                                 to_single_waveform: Set[Union[str, 'PulseTemplate']],
+                                 parent_loop: Loop) -> None:
+        self.validate_parameter_constraints(parameters=parameters)
+        relevant_params = set(self._repetition_count.variables).union(self.measurement_parameters)
+        try:
+            real_parameters = {v: parameters[v].get_value() for v in relevant_params}
+        except KeyError as e:
+            raise ParameterNotProvidedException(str(e)) from e
+
+        repetition_count = max(0, self.get_repetition_count_value(real_parameters))
+
+        # todo (2018-07-19): could in some circumstances possibly just multiply subprogram repetition count?
+        # could be tricky if any repetition count is volatile ? check later and optimize if necessary
+        if repetition_count > 0:
+            repj_loop = Loop(repetition_count=repetition_count)
+            self.body._create_program(parameters=parameters,
+                                      measurement_mapping=measurement_mapping,
+                                      channel_mapping=channel_mapping,
+                                      global_transformation=global_transformation,
+                                      to_single_waveform=to_single_waveform,
+                                      parent_loop=repj_loop)
+            if repj_loop.waveform is not None or len(repj_loop.children) > 0:
+                measurements = self.get_measurement_windows(real_parameters, measurement_mapping)
+                if measurements:
+                    parent_loop.add_measurements(measurements)
+
+                parent_loop.append_child(loop=repj_loop)
 
     def requires_stop(self,
                       parameters: Dict[str, Parameter],
