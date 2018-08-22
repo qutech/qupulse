@@ -1,4 +1,32 @@
 function seq_table = get_sequence_table_from_simulator(program_name, advanced_seq_table_flag, awg_channel_pair_identifiers, verbosity, return_python_list)
+% GET_SEQUENCE_TABLE Get sequence table of program on Tabor AWG Simulator
+% PLEASE NOTE: the program gets armed by the function
+%
+% --- Outputs -------------------------------------------------------------
+% seq_table				             : Cell of sequence tables for each Tabor
+%                                channel pair
+%
+% --- Inputs --------------------------------------------------------------
+% program_name						     : Program name for which sequence table is 
+%                                returned
+% advanced_seq_table_flag      : Get advanced sequence table if true.
+%                                Default is false.
+% awg_channel_pair_identifiers : Some substring in the channel pair 
+%                                identifiers to be matched. Sequence tables
+%                                are sorted in the same order as channel
+%                                pair identifiers substrings passed in this
+%																 variable. Default is {'AB', 'CD'}. 
+% verbosity                    : Print sequence table to command line.
+%                                Default is 0.
+% return_python_list           : Returns a python list object instead of a
+%                                matlab cell. This makes the function 
+%                                faster as the conversion is slow.
+%                                Dafault is false.
+%
+% -------------------------------------------------------------------------
+% 2018/08 Marcel Meyer
+% based on qc.get_sequence_table by Pascal Cerfontaine and Marcel Meyer
+% (marcel.meyer1@rwth-aachen.de)
 
   global plsdata
   hws = plsdata.awg.hardwareSetup;
