@@ -1,3 +1,4 @@
+function AWGwatch()
 % starts a matlab (vers 2018a) app to DISPLAY SEQUENCER TABLES AND
 % WAFEFORMS in qctoolkit and on the Tabor AWG simulatar
 % -------------------------------------------------------------------------
@@ -7,8 +8,6 @@
 % -------------------------------------------------------------------------
 % App written by Marcel Meyer 08|2018          marcel.meyer1@rwth-aachen.de
 
-
-function AWGwatch()
   disp('AWGwatch - app is started');
   
   % the app is not on path because matlab then has problems debugging it,
