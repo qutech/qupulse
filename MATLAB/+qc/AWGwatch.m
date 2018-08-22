@@ -10,12 +10,12 @@ function AWGwatch()
 
   disp('AWGwatch - app is started');
   
-  % the app is not on path because matlab then has problems debugging it,
-  % therefore the path is changes and after app start changed back
-  currentPath = cd;
+  % the app is not on path +qc because matlab then one has problems debugging it
   pathOfApp = which('qc.AWGwatch');
   pathOfApp = pathOfApp(1:end-10);
-  cd(pathOfApp);
+	pathOfApp = [pathOfApp 'AWGwatch'];
+	addpath(pathOfApp);
+	
   awgdisp_app();
-  cd(currentPath);
+	
 end
