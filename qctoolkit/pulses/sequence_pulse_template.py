@@ -7,6 +7,8 @@ from numbers import Real
 import functools
 import warnings
 
+from cached_property import cached_property
+
 from qctoolkit.serialization import Serializer, PulseRegistryType
 from qctoolkit._program._loop import Loop
 
@@ -117,7 +119,7 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
     def is_interruptable(self) -> bool:
         return any(st.is_interruptable for st in self.subtemplates)
 
-    @property
+    @cached_property
     def duration(self) -> Expression:
         return sum(sub.duration for sub in self.__subtemplates)
 
