@@ -6,6 +6,7 @@ from typing import Dict, Set, Optional, Any, Union, Tuple, Generator, Sequence, 
 import warnings
 
 import sympy
+from cached_property import cached_property
 
 from qctoolkit.serialization import Serializer, PulseRegistryType
 from qctoolkit._program._loop import Loop
@@ -166,7 +167,7 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
     def measurement_names(self) -> Set[str]:
         return LoopPulseTemplate.measurement_names.fget(self) | MeasurementDefiner.measurement_names.fget(self)
 
-    @property
+    @cached_property
     def duration(self) -> ExpressionScalar:
         step_size = self._loop_range.step.sympified_expression
         loop_index = sympy.symbols(self._loop_index)
