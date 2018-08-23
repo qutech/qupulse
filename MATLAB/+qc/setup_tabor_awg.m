@@ -60,7 +60,7 @@ function setup_tabor_awg(varargin)
 	end
 	
 	plsdata.awg.inst = smdata.inst(sminstlookup(args.taborName)).data.tawg;
-	if args.realAWG
+	if args.realAWG && exist('awgctrl.m', 'file')
 		awgctrl('off');
 	end
 	

@@ -8,3 +8,4 @@ build/*
 dist/*
 doc/source/examples/.ipynb_checkpoints/*
 **.asv
+*.orig
