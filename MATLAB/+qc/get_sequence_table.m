@@ -1,5 +1,6 @@
 function seq_table = get_sequence_table(program_name, advanced_seq_table_flag, awg_channel_pair_identifiers, verbosity, return_python_list)
 % GET_SEQUENCE_TABLE Get sequence table of program on Tabor AWG
+% (not actually from AWG but from the qctoolkit Tabor Driver instance)
 %
 % --- Outputs -------------------------------------------------------------
 % seq_table				             : Cell of sequence tables for each Tabor
@@ -17,9 +18,14 @@ function seq_table = get_sequence_table(program_name, advanced_seq_table_flag, a
 %																 variable. Default is {'AB', 'CD'}. 
 % verbosity                    : Print sequence table to command line.
 %                                Default is 0.
+% return_python_list           : Returns a python list object instead of a
+%                                matlab cell. This makes the function 
+%                                faster as the conversion is slow.
+%                                Dafault is false.
 %
 % -------------------------------------------------------------------------
-% (c) 2018/06 Pascal Cerfontaine and Marcel Meyer (cerfontaine@physik.rwth-aachen.de)
+% (c) 2018/06 Pascal Cerfontaine and Marcel Meyer
+% (cerfontaine@physik.rwth-aachen.de)
 
 global plsdata
 hws = plsdata.awg.hardwareSetup;

@@ -351,6 +351,41 @@ LOOP 1 times:
         with self.assertWarnsRegex(UserWarning, 'Dropping measurement'):
             root.remove_empty_loops()
 
+    def test_cleanup(self):
+        wfs = [DummyWaveform(duration=i) for i in range(3)]
+
+        root = Loop(children=[
+            Loop(waveform=wfs[0]),
+            Loop(waveform=None),
+            Loop(children=[Loop(waveform=None)]),
+            Loop(children=[Loop(waveform=wfs[1], repetition_count=2, measurements=[('m', 0, 1)])], repetition_count=3),
+            Loop(children=[Loop(waveform=wfs[2], repetition_count=2)], repetition_count=3, measurements=[('n', 0, 1)])
+        ])
+
+        expected = Loop(children=[
+            Loop(waveform=wfs[0]),
+            Loop(waveform=wfs[1], repetition_count=6, measurements=[('m', 0, 1)]),
+            Loop(children=[Loop(waveform=wfs[2], repetition_count=2)], repetition_count=3, measurements=[('n', 0, 1)])
+        ])
+
+        root.cleanup()
+
+        self.assertEqual(expected, root)
+
+    def test_cleanup_warnings(self):
+        root = Loop(children=[
+            Loop(measurements=[('m', 0, 1)])
+        ])
+
+        with self.assertWarnsRegex(UserWarning, 'Dropping measurement'):
+            root.cleanup()
+
+        root = Loop(children=[
+            Loop(measurements=[('m', 0, 1)], children=[Loop()])
+        ])
+        with self.assertWarnsRegex(UserWarning, 'Dropping measurement since there is no waveform in children'):
+            root.cleanup()
+
 
 class MultiChannelTests(unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -487,6 +522,15 @@ LOOP 1 times:
                                            for loop in root_loopB.get_depth_first_iterator() if loop.is_leaf()))
         self.assertEqual(root_loopA.__repr__(), reprA)
         self.assertEqual(root_loopB.__repr__(), reprB)
+
+    def test_init_from_loop(self):
+        program = Loop(waveform=DummyWaveform(defined_channels={'A', 'B'}))
+
+        mcp = MultiChannelProgram(program)
+        self.assertEqual(mcp.programs, {frozenset('AB'): program})
+
+        with self.assertRaises(TypeError):
+            MultiChannelProgram(mcp)
 
 
 class ProgramWaveformCompatibilityTest(unittest.TestCase):

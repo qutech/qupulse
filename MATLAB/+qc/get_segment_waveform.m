@@ -1,4 +1,30 @@
 function [wf1, wf2] = get_segment_waveform(program_name, channel_pair_index, memory_index, awg_channel_pair_identifiers)
+% Get Wafeform of Sequencer Table Element
+% PLEASE NOTE: works only for the Tabor AWG SIMULATOR
+% PLEASE NOTE: program gets armed by calling this function
+%
+% --- Outputs -------------------------------------------------------------
+% wf1                          : first channel y-values of AWG channelpair
+% wf2                          : second channel y-values of AWG channelpair
+%
+% --- Inputs --------------------------------------------------------------
+% program_name						     : Program name for which wafeform is 
+%                                returned
+% channel_pair_index           : 1 for channelpair AB and 2 for channelpair
+%                                CD. Also see awg_channel_pair_identifier
+%                                input
+% memory_index                 : identifier number of element at the Tabor 
+%                                AWG (corresponds to second column in 
+%                                Sequencer Table 
+% awg_channel_pair_identifiers : Some substring in the channel pair 
+%                                identifiers to be matched. Sequence tables
+%                                are sorted in the same order as channel
+%                                pair identifiers substrings passed in this
+%																 variable. Default is {'AB', 'CD'}.
+%
+% -------------------------------------------------------------------------
+% 2018/08 Marcel Meyer
+% (marcel.meyer1@rwth-aachen.de)
 
 global plsdata
   hws = plsdata.awg.hardwareSetup;

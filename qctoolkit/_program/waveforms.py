@@ -392,8 +392,8 @@ class MultiChannelWaveform(Waveform):
             return tuple(sorted(tuple('{}_stringified_numeric_channel'.format(ch) if isinstance(ch, int) else ch
                                       for ch in waveform.defined_channels)))
 
-        self._sub_waveforms = sorted(flatten_sub_waveforms(sub_waveforms),
-                                     key=get_sub_waveform_sort_key)
+        self._sub_waveforms = tuple(sorted(flatten_sub_waveforms(sub_waveforms),
+                                           key=get_sub_waveform_sort_key))
 
         if not all(waveform.duration == self._sub_waveforms[0].duration for waveform in self._sub_waveforms[1:]):
             raise ValueError(
@@ -423,7 +423,7 @@ class MultiChannelWaveform(Waveform):
     @property
     def compare_key(self) -> Any:
         # sort with channels
-        return tuple(sub_waveform.compare_key for sub_waveform in self._sub_waveforms)
+        return self._sub_waveforms
 
     def unsafe_sample(self,
                       channel: ChannelID,
@@ -523,24 +523,23 @@ class TransformingWaveform(Waveform):
                       sample_times: np.ndarray,
                       output_array: Union[np.ndarray, None] = None) -> np.ndarray:
         if self._cached_times() is not sample_times:
-            inner_channels = tuple(self.inner_waveform.defined_channels)
-            inner_data = np.empty((len(inner_channels), sample_times.size))
-
-            for idx, inner_channel in enumerate(inner_channels):
-                self.inner_waveform.unsafe_sample(inner_channel, sample_times,
-                                                  output_array=inner_data[idx, :])
-
-            inner_data = pd.DataFrame(inner_data, index=inner_channels)
-
-            outer_data = self.transformation(sample_times, inner_data)
-
-            self._cached_data = outer_data
+            self._cached_data = dict()
             self._cached_times = ref(sample_times)
 
+        if channel not in self._cached_data:
+
+            inner_channels = self.transformation.get_input_channels({channel})
+
+            inner_data = {inner_channel: self.inner_waveform.unsafe_sample(inner_channel, sample_times)
+                          for inner_channel in inner_channels}
+
+            outer_data = self.transformation(sample_times, inner_data)
+            self._cached_data.update(outer_data)
+
         if output_array is None:
-            output_array = self._cached_data.loc[channel].values
+            output_array = self._cached_data[channel]
         else:
-            output_array[:] = self._cached_data.loc[channel].values
+            output_array[:] = self._cached_data[channel]
 
         return output_array
 

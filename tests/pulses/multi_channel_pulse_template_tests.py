@@ -5,15 +5,14 @@ import numpy
 
 from qctoolkit.utils.types import time_from_float
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform, MappingPulseTemplate, ChannelMappingException, AtomicMultiChannelPulseTemplate
-from qctoolkit.pulses.parameters import ParameterConstraint, ParameterConstraintViolation
+from qctoolkit.pulses.parameters import ParameterConstraint, ParameterConstraintViolation, ConstantParameter
 from qctoolkit.expressions import ExpressionScalar, Expression
+from qctoolkit._program.instructions import InstructionBlock
 
 from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummyWaveform
 from tests.serialization_dummies import DummySerializer
 from tests.pulses.pulse_template_tests import PulseTemplateStub
 from tests.serialization_tests import SerializableTests
-
-
 
 
 class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
@@ -84,6 +83,11 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
 
         self.assertEqual(template.duration, 't1')
 
+    def test_parameter_names(self) -> None:
+        template = AtomicMultiChannelPulseTemplate(*zip(self.subtemplates, self.param_maps, self.chan_maps),
+                                                   parameter_constraints={'pp1 > hugo'}, measurements={('meas', 'd', 1)})
+        self.assertEqual({'pp1', 'pp2', 'pp3', 'hugo', 'd'}, template.parameter_names)
+
     def test_mapping_template_pure_conversion(self):
         template = AtomicMultiChannelPulseTemplate(*zip(self.subtemplates, self.param_maps, self.chan_maps))
 
@@ -118,7 +122,19 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
         sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'}, parameter_names={'a', 'b'}, measurement_names={'A', 'C'}),
                DummyPulseTemplate(duration='t1', defined_channels={'B'}, parameter_names={'a', 'c'}, measurement_names={'A', 'B'})]
 
-        self.assertEqual(AtomicMultiChannelPulseTemplate(*sts).measurement_names, {'A', 'B', 'C'})
+        self.assertEqual(AtomicMultiChannelPulseTemplate(*sts, measurements=[('D', 1, 2)]).measurement_names,
+                         {'A', 'B', 'C', 'D'})
+
+    def test_parameter_names(self):
+        sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'}, parameter_names={'a', 'b'},
+                                  measurement_names={'A', 'C'}),
+               DummyPulseTemplate(duration='t1', defined_channels={'B'}, parameter_names={'a', 'c'},
+                                  measurement_names={'A', 'B'})]
+        pt = AtomicMultiChannelPulseTemplate(*sts, measurements=[('D', 'd', 2)], parameter_constraints=['d < e'])
+
+        self.assertEqual(pt.parameter_names,
+                         {'a', 'b', 'c', 'd', 'e'})
+
 
     def test_integral(self) -> None:
         sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'},
@@ -197,6 +213,46 @@ class MultiChannelPulseTemplateSequencingTests(unittest.TestCase):
         sts[0].waveform = None
         wf = pt.build_waveform(parameters, channel_mapping=channel_mapping)
         self.assertIsNone(wf)
+
+    def test_build_sequence(self):
+        wfs = [DummyWaveform(duration=1.1, defined_channels={'A'}), DummyWaveform(duration=1.1, defined_channels={'B'})]
+        sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'}, waveform=wfs[0], measurements=[('m', 0, 1)]),
+               DummyPulseTemplate(duration='t1', defined_channels={'B'}, waveform=wfs[1]),
+               DummyPulseTemplate(duration='t1', defined_channels={'C'}, waveform=None)]
+
+        pt = AtomicMultiChannelPulseTemplate(*sts, parameter_constraints=['a < b'], measurements=[('n', .1, .2)])
+
+        params = dict(a=ConstantParameter(1.0), b=ConstantParameter(1.1))
+        measurement_mapping = dict(m='foo', n='bar')
+        channel_mapping = {'A': 'A', 'B': 'B', 'C': None}
+
+        block = InstructionBlock()
+        pt.build_sequence(None, parameters=params, conditions={}, measurement_mapping=measurement_mapping,
+                          channel_mapping=channel_mapping, instruction_block=block)
+
+        expected_waveform = MultiChannelWaveform(wfs)
+
+        expected_block = InstructionBlock()
+        measurements = [('bar', .1, .2), ('foo', 0, 1)]
+        expected_block.add_instruction_meas(measurements)
+        expected_block.add_instruction_exec(waveform=expected_waveform)
+
+        self.assertEqual(len(block.instructions), len(expected_block.instructions))
+        self.assertEqual(block.instructions[0].compare_key, expected_block.instructions[0].compare_key)
+        self.assertEqual(block.instructions[1].compare_key, expected_block.instructions[1].compare_key)
+
+    def test_get_measurement_windows(self):
+        wfs = [DummyWaveform(duration=1.1, defined_channels={'A'}), DummyWaveform(duration=1.1, defined_channels={'B'})]
+        sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'}, waveform=wfs[0], measurements=[('m', 0, 1),
+                                                                                                        ('n', 0.3, 0.4)]),
+               DummyPulseTemplate(duration='t1', defined_channels={'B'}, waveform=wfs[1], measurements=[('m', 0.1, .2)])]
+
+        pt = AtomicMultiChannelPulseTemplate(*sts, parameter_constraints=['a < b'], measurements=[('n', .1, .2)])
+
+        measurement_mapping = dict(m='foo', n='bar')
+        expected = [('bar', .1, .2), ('foo', 0, 1), ('bar', .3, .4), ('foo', .1, .2)]
+        meas_windows = pt.get_measurement_windows({}, measurement_mapping)
+        self.assertEqual(expected, meas_windows)
 
 
 class AtomicMultiChannelPulseTemplateSerializationTests(SerializableTests, unittest.TestCase):
