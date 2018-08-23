@@ -6,7 +6,7 @@ function [t, channels, measurements, instantiatedPulse] = plot_pulse(pulse, vara
 		'sample_rate',         plsdata.awg.sampleRate, ... % in 1/s, converted to 1/ns below
 		'channel_names',       {{}}, ... % names of channels to plot, all if empty
 		'parameters',          struct(), ...
-		'channel_mapping',     py.None, ...
+		'channel_mapping',     [], ...
 		'window_mapping' ,     py.None, ...
 		'fig_id',              plsdata.qc.figId, ...
 		'subplots',            [121 122], ...
@@ -22,6 +22,10 @@ function [t, channels, measurements, instantiatedPulse] = plot_pulse(pulse, vara
 		);
 	
 	args = util.parse_varargin(varargin, defaultArgs);
+	
+	if isempty(args.channel_mapping)
+		args.channel_mapping = py.dict(py.zip(pulse.defined_channels, pulse.defined_channels));
+	end
 	
 	args.sample_rate = args.sample_rate * 1e-9; % convert to 1/ns
 	instantiatedPulse = qc.instantiate_pulse(pulse, 'parameters', args.parameters, 'channel_mapping', args.channel_mapping, 'window_mapping', args.window_mapping);
