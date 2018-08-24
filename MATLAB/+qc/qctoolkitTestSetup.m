@@ -10,7 +10,7 @@ plsdata = struct( ...
 plsdata.daq.instSmName = 'ATS9440Python';
 plsdata.qc.backend = py.qctoolkit.serialization.FilesystemBackend(plsdata.path);
 plsdata.qc.serializer = py.qctoolkit.serialization.Serializer(plsdata.qc.backend);
-disp('second script [done]');
+disp('third script [done]');
 % -------------------------------------------------------------------------
 
 %% --- Test setup replicating the Triton 200 measurement setup ------------
