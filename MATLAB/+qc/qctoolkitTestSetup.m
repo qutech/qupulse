@@ -1,15 +1,16 @@
 %% --- Test setup without AWG and Alazar (only qctoolkit) -----------------
 global plsdata
 plsdata = struct( ...
-	'path', 'X:\meyer\code\qc-toolkit-pulses', ...
+	'path', 'C:\Users\meyer\Documents\_meyer_local_\code\qc-toolkit-pulses', ...
 	'awg', struct('inst', [], 'hardwareSetup', [], 'sampleRate', 2e9, 'currentProgam', '', 'registeredPrograms', struct(), 'defaultChannelMapping', struct(), 'defaultWindowMapping', struct(), 'defaultParametersAndDicts', {{}}, 'defaultAddMarker', {{}}), ...
-  'dict', struct('cache', [], 'path', 'X:\meyer\code\qc-toolkit-dicts'), ...
+  'dict', struct('cache', [], 'path', 'C:\Users\meyer\Documents\_meyer_local_\code\qc-toolkit-dicts'), ...
 	'qc', struct('figId', 801), ...
 	'daq', struct('inst', [], 'defaultOperations', {{}}, 'reuseOperations', false) ...
 	);
 plsdata.daq.instSmName = 'ATS9440Python';
 plsdata.qc.backend = py.qctoolkit.serialization.FilesystemBackend(plsdata.path);
 plsdata.qc.serializer = py.qctoolkit.serialization.Serializer(plsdata.qc.backend);
+disp('second script [done]');
 % -------------------------------------------------------------------------
 
 %% --- Test setup replicating the Triton 200 measurement setup ------------
@@ -20,7 +21,7 @@ plsdata.qc.serializer = py.qctoolkit.serialization.Serializer(plsdata.qc.backend
 loadPath = 'X:\Common\GaAs\Triton 200\Backup\DATA\workspace';
 pulsePath = plsdata.path;
 dictPath = plsdata.dict.path;
-tunePath = 'Z:\DATA';
+tunePath = 'X:\meyer\DATA';
 
 % Loading
 try
@@ -66,7 +67,7 @@ plsdata.daq.inst = py.qctoolkit.hardware.dacs.alazar.AlazarCard([]);
 % Initializes hardware setup
 % Can also be used for deleting all programs/resetting but then also need to setup Alazar again, i.e. the cell above and the three cells below )
 plsdata.awg.hardwareSetup = [];
-qc.setup_tabor_awg('realAWG', false, 'simulateAWG', true, 'taborDriverPath', 'X:\meyer\code\python-TaborDriver');
+qc.setup_tabor_awg('realAWG', false, 'simulateAWG', true, 'taborDriverPath', 'C:\Users\meyer\Documents\_meyer_local_\code\python-TaborDriver');
 
 % AWG default settings
 awgctrl('default');
@@ -88,5 +89,5 @@ tunedata.run{tunedata.runIndex}.opts.path = tunePath;
 
 
 import tune.tune
-disp('done');
+disp('[done]');
 % -------------------------------------------------------------------------
