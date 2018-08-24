@@ -153,7 +153,7 @@ class Loop(Node):
         self._measurements = None
         self.assert_tree_integrity()
 
-    def _get_repr(self, first_prefix, other_prefixes) -> Generator[str]:
+    def _get_repr(self, first_prefix, other_prefixes) -> Generator[str, None, None]:
         if self.is_leaf():
             yield '%sEXEC %r %d times' % (first_prefix, self._waveform, self.repetition_count)
         else:
