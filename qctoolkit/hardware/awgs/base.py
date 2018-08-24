@@ -7,13 +7,13 @@ Classes:
     - OutOfWaveformMemoryException
 """
 
-from abc import abstractmethod, abstractproperty
-from typing import Set, Tuple, List, Callable, Optional
+from abc import abstractmethod
+from typing import Set, Tuple, Callable, Optional
 
 from qctoolkit.utils.types import ChannelID
-from qctoolkit.hardware.program import Loop
+from qctoolkit._program._loop import Loop
 from qctoolkit.comparable import Comparable
-from qctoolkit.pulses.instructions import InstructionSequence
+from qctoolkit._program.instructions import InstructionSequence
 
 __all__ = ["AWG", "Program", "ProgramOverwriteException",
            "OutOfWaveformMemoryException"]

@@ -9,20 +9,18 @@ import warnings
 import numpy as np
 
 from qctoolkit.utils.types import ChannelID, TimeType
-from qctoolkit.pulses.instructions import AbstractInstructionBlock, EXECInstruction, REPJInstruction, GOTOInstruction,\
+from qctoolkit._program.instructions import AbstractInstructionBlock, EXECInstruction, REPJInstruction, GOTOInstruction,\
     STOPInstruction, CHANInstruction, Waveform, MEASInstruction, Instruction
-from qctoolkit.comparable import Comparable
 from qctoolkit.utils.tree import Node, is_tree_circular
 from qctoolkit.utils.types import MeasurementWindow
-from qctoolkit.utils import checked_int_cast, is_integer
+from qctoolkit.utils import is_integer
 
-from qctoolkit.pulses.sequence_pulse_template import SequenceWaveform
-from qctoolkit.pulses.repetition_pulse_template import RepetitionWaveform
+from qctoolkit._program.waveforms import SequenceWaveform, RepetitionWaveform
 
 __all__ = ['Loop', 'MultiChannelProgram', 'make_compatible']
 
 
-class Loop(Comparable, Node):
+class Loop(Node):
     """Build a loop tree. The leaves of the tree are loops with one element."""
     def __init__(self,
                  parent: Union['Loop', None]=None,
@@ -45,11 +43,18 @@ class Loop(Comparable, Node):
 
     @property
     def compare_key(self) -> Tuple:
-        return self._waveform, self.repetition_count, tuple(c.compare_key for c in self)
+        return self._waveform, self.repetition_count, self._measurements if self._measurements else None,\
+               super().compare_key
 
-    def append_child(self, **kwargs) -> None:
+    def append_child(self, loop: Optional['Loop']=None, **kwargs) -> None:
         # do not invalidate but update cached duration
-        super().__setitem__(slice(len(self), len(self)), (kwargs, ))
+        if loop is not None:
+            if kwargs:
+                raise ValueError("Cannot pass a Loop object and Loop constructor arguments at the same time in append_child")
+            arg = (loop,)
+        else:
+            arg = (kwargs,)
+        super().__setitem__(slice(len(self), len(self)), arg)
         self._invalidate_duration(body_duration_increment=self[-1].duration)
 
     def _invalidate_duration(self, body_duration_increment=None):
@@ -260,6 +265,7 @@ class Loop(Comparable, Node):
                 sub_program.unroll()
 
             else:
+                # we land in this case if the function gets called with depth == 0 and the current subprogram is a leaf
                 i += 1
 
     def remove_empty_loops(self):
@@ -273,8 +279,43 @@ class Loop(Comparable, Node):
                     new_children.append(child)
             else:
                 child.remove_empty_loops()
-                new_children.append(child)
+                if not child.is_leaf():
+                    new_children.append(child)
+                else:
+                    # all children of child were empty
+                    pass
         self[:] = new_children
+
+    def cleanup(self):
+        """Remove empty loops and merge nested loops with single child"""
+        new_children = []
+        for child in self:
+            if child.is_leaf():
+                if child.waveform is None:
+                    if child._measurements:
+                        warnings.warn("Dropping measurement since there is no waveform attached")
+                else:
+                    new_children.append(child)
+
+            else:
+                child.cleanup()
+                if child.waveform or not child.is_leaf():
+                    new_children.append(child)
+
+                elif child._measurements:
+                    warnings.warn("Dropping measurement since there is no waveform in children")
+
+        if len(new_children) == 1 and not self._measurements:
+            assert not self._waveform
+            only_child = new_children[0]
+
+            self._measurements = only_child._measurements
+            self.waveform = only_child.waveform
+            self.repetition_count = self.repetition_count * only_child.repetition_count
+            self[:] = only_child[:]
+
+        elif len(self) != len(new_children):
+            self[:] = new_children
 
 
 class ChannelSplit(Exception):
@@ -283,8 +324,28 @@ class ChannelSplit(Exception):
 
 
 class MultiChannelProgram:
-    def __init__(self, instruction_block: AbstractInstructionBlock, channels: Iterable[ChannelID] = None):
+    def __init__(self, instruction_block: Union[AbstractInstructionBlock, Loop], channels: Iterable[ChannelID] = None):
         """Channels with identifier None are ignored."""
+        self._programs = dict()
+        if isinstance(instruction_block, AbstractInstructionBlock):
+            self._init_from_instruction_block(instruction_block, channels)
+        elif isinstance(instruction_block, Loop):
+            assert channels is None
+            self._init_from_loop(loop=instruction_block)
+        else:
+            raise TypeError('Invalid program type', type(instruction_block), instruction_block)
+
+        for program in self.programs.values():
+            program.cleanup()
+
+    def _init_from_loop(self, loop: Loop):
+        first_waveform = next(loop.get_depth_first_iterator()).waveform
+
+        assert first_waveform is not None
+
+        self._programs[frozenset(first_waveform.defined_channels)] = loop
+
+    def _init_from_instruction_block(self, instruction_block, channels):
         if channels is None:
             def find_defined_channels(instruction_list):
                 for instruction in instruction_list:
@@ -315,7 +376,6 @@ class MultiChannelProgram:
 
         root = Loop()
         stacks = {channels: (root, [((), deque(instruction_block.instructions))])}
-        self._programs = dict()
 
         while len(stacks) > 0:
             chans, (root_loop, stack) = stacks.popitem()
@@ -334,22 +394,6 @@ class MultiChannelProgram:
                 for r in range(rep_count):
                     for name, begin, length in child_loop._measurements:
                         yield (name, begin+r*duration_float, length)
-        for channels, program in self._programs.items():
-            iterable = program.get_breadth_first_iterator()
-            try:
-                while True:
-                    loop = next(iterable)
-                    if len(loop) == 1 and not loop._measurements:
-                        loop._measurements = loop[0]._measurements
-                        loop.waveform = loop[0].waveform
-                        loop.repetition_count = loop.repetition_count * loop[0].repetition_count
-                        loop[:] = loop[0][:]
-                        if len(loop):
-                            iterable = itertools.chain((loop,), iterable)
-            except StopIteration:
-                pass
-        for program in self.programs.values():
-            program.remove_empty_loops()
 
     @property
     def programs(self) -> Dict[FrozenSet[ChannelID], Loop]:

@@ -11,119 +11,23 @@ from typing import Union, Dict, List, Set, Optional, Any, Tuple, Sequence, Named
 import numbers
 import itertools
 import warnings
-import copy
 
 import numpy as np
 import sympy
 
-from qctoolkit.utils.types import ChannelID, TimeType, time_from_float
-from qctoolkit.serialization import Serializer
+from qctoolkit.utils.types import ChannelID
+from qctoolkit.serialization import Serializer, PulseRegistryType
 from qctoolkit.pulses.parameters import Parameter, \
     ParameterNotProvidedException, ParameterConstraint, ParameterConstrainer
 from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration
 from qctoolkit.pulses.interpolation import InterpolationStrategy, LinearInterpolationStrategy, \
     HoldInterpolationStrategy, JumpInterpolationStrategy
-from qctoolkit.pulses.instructions import Waveform
+from qctoolkit._program.waveforms import TableWaveform, TableWaveformEntry
 from qctoolkit.expressions import ExpressionScalar, Expression
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
+from qctoolkit.pulses.conditions import Condition
 
-__all__ = ["TablePulseTemplate", "TableWaveform", "TableWaveformEntry", "concatenate"]
-
-
-class TableWaveformEntry(NamedTuple('TableWaveformEntry', [('t', float),
-                                                           ('v', float),
-                                                           ('interp', InterpolationStrategy)])):
-    def __init__(self, t: float, v: float, interp: InterpolationStrategy):
-        if not callable(interp):
-            raise TypeError('{} is neither callable nor of type InterpolationStrategy'.format(interp))
-
-
-TableWaveformEntryInInit = Union[TableWaveformEntry, Tuple[float, float, InterpolationStrategy]]
-
-
-class TableWaveform(Waveform):
-    """Waveform obtained from instantiating a TablePulseTemplate."""
-    def __init__(self,
-                 channel: ChannelID,
-                 waveform_table: Sequence[TableWaveformEntryInInit]) -> None:
-        """Create a new TableWaveform instance.
-
-        Args:
-            waveform_table (ImmutableList(WaveformTableEntry)): A list of instantiated table
-                entries of the form (time as float, voltage as float, interpolation strategy).
-        """
-        super().__init__()
-
-        self._table = self._validate_input(waveform_table)
-        self._channel_id = channel
-
-    @staticmethod
-    def _validate_input(input_waveform_table: Sequence[TableWaveformEntryInInit]) -> Tuple[TableWaveformEntry, ...]:
-        """ Checks that:
-         - the time is increasing,
-         - there are at least two entries
-        and removes subsequent entries with same time or voltage values.
-
-        :param input_waveform_table:
-        :return:
-        """
-        if len(input_waveform_table) < 2:
-            raise ValueError("Waveform table has less than two entries.")
-
-        if input_waveform_table[0][0] != 0:
-            raise ValueError('First time entry is not zero.')
-
-        if input_waveform_table[-1][0] == 0:
-            raise ValueError('Last time entry is zero.')
-
-        output_waveform_table = []
-
-        previous_t = 0
-        previous_v = None
-        for (t, v, interp), (next_t, next_v, _) in itertools.zip_longest(input_waveform_table,
-                                                                         input_waveform_table[1:],
-                                                                         fillvalue=(float('inf'), None, None)):
-            if next_t < t:
-                if next_t < 0:
-                    raise ValueError('Negative time values are not allowed.')
-                else:
-                    raise ValueError('Times are not increasing.')
-
-            if (previous_t != t or t != next_t) and (previous_v != v or v != next_v):
-                previous_t = t
-                previous_v = v
-                output_waveform_table.append(TableWaveformEntry(t, v, interp))
-
-        return tuple(output_waveform_table)
-
-    @property
-    def compare_key(self) -> Any:
-        return self._channel_id, self._table
-
-    @property
-    def duration(self) -> TimeType:
-        return time_from_float(self._table[-1].t)
-
-    def unsafe_sample(self,
-                      channel: ChannelID,
-                      sample_times: np.ndarray,
-                      output_array: Union[np.ndarray, None]=None) -> np.ndarray:
-        if output_array is None:
-            output_array = np.empty_like(sample_times)
-
-        for entry1, entry2 in zip(self._table[:-1], self._table[1:]):
-            indices = slice(np.searchsorted(sample_times, entry1.t, 'left'),
-                            np.searchsorted(sample_times, entry2.t, 'right'))
-            output_array[indices] = \
-                entry2.interp((entry1.t, entry1.v), (entry2.t, entry2.v), sample_times[indices])
-        return output_array
-
-    @property
-    def defined_channels(self) -> Set[ChannelID]:
-        return {self._channel_id}
-
-    def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> 'Waveform':
-        return self
+__all__ = ["TablePulseTemplate", "concatenate"]
 
 
 ValueInInit = Union[ExpressionScalar, str, numbers.Real]
@@ -173,7 +77,8 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
                  *,
                  parameter_constraints: Optional[List[Union[str, ParameterConstraint]]]=None,
                  measurements: Optional[List[MeasurementDeclaration]]=None,
-                 consistency_check=True):
+                 consistency_check: bool=True,
+                 registry: PulseRegistryType=None) -> None:
         """
         Construct a `TablePulseTemplate` from a dict which maps channels to their entries. By default the consistency
         of the provided entries is checked. There are two static functions for convenience construction: from_array and
@@ -229,6 +134,8 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
             inequalities = [eq for eq in inequalities if isinstance(eq, sympy.Rel) and len(eq.free_symbols) == 1]
             if not sympy.reduce_inequalities(inequalities):
                 raise ValueError('Table pulse template has impossible parametrization')
+
+        self._register(registry=registry)
 
     def _add_entry(self, channel, new_entry: TableEntry) -> None:
 
@@ -292,7 +199,7 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
 
     @property
     def parameter_names(self) -> Set[str]:
-        return self.table_parameters | self.measurement_parameters
+        return self.table_parameters | self.measurement_parameters | self.constrained_parameters
 
     @property
     def is_interruptable(self) -> bool:
@@ -322,8 +229,13 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
         except KeyError as key_error:
             raise ParameterNotProvidedException(str(key_error)) from key_error
 
-    def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
-        return dict(
+    def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
+        data = super().get_serialization_data(serializer)
+
+        if serializer: # compatibility to old serialization routines, deprecated
+            data = dict()
+
+        local_data = dict(
             entries=dict(
                 (channel, [entry.get_serialization_data()
                            for entry in channel_entries])
@@ -332,22 +244,13 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
             parameter_constraints=[str(c) for c in self.parameter_constraints],
             measurements=self.measurement_declarations
         )
-
-    @staticmethod
-    def deserialize(serializer: Serializer,
-                    entries: Dict[ChannelID, List[EntryInInit]],
-                    parameter_constraints: List[str],
-                    measurements: List[MeasurementDeclaration],
-                    identifier: Optional[str]=None) -> 'TablePulseTemplate':
-        return TablePulseTemplate(entries=entries,
-                                  identifier=identifier,
-                                  parameter_constraints=parameter_constraints,
-                                  measurements=measurements,
-                                  consistency_check=False)
+        data.update(**local_data)
+        return data
 
     def build_waveform(self,
                        parameters: Dict[str, numbers.Real],
-                       channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional['Waveform']:
+                       channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Union[TableWaveform,
+                                                                                                MultiChannelWaveform]]:
         self.validate_parameter_constraints(parameters)
 
         if all(channel_mapping[channel] is None

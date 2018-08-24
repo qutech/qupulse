@@ -10,9 +10,12 @@ Classes:
 from abc import ABCMeta, abstractmethod
 from typing import Tuple, Dict, Union, Optional
 
-from qctoolkit.utils.types import ChannelID
+# solve circular dependence of type hints
+from . import conditions
 
-from qctoolkit.pulses.instructions import InstructionBlock, ImmutableInstructionBlock, Waveform
+from qctoolkit.utils.types import ChannelID
+from qctoolkit._program.instructions import InstructionBlock, ImmutableInstructionBlock
+from qctoolkit._program.waveforms import Waveform
 from qctoolkit.pulses.parameters import Parameter, ConstantParameter
 
 
@@ -37,7 +40,7 @@ class SequencingElement(metaclass=ABCMeta):
     def build_sequence(self,
                        sequencer: 'Sequencer',
                        parameters: Dict[str, Parameter],
-                       conditions: Dict[str, 'Condition'],
+                       conditions: Dict[str, 'conditions.Condition'],
                        measurement_mapping: Dict[str, Optional[str]],
                        channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                        instruction_block: InstructionBlock) -> None:
@@ -60,7 +63,7 @@ class SequencingElement(metaclass=ABCMeta):
     @abstractmethod
     def requires_stop(self,
                       parameters: Dict[str, Parameter],
-                      conditions: Dict[str, 'Condition']) -> bool:
+                      conditions: Dict[str, 'conditions.Condition']) -> bool:
         """Return True if this SequencingElement cannot be translated yet.
 
         Sequencer will check requires_stop() before calling build_sequence(). If requires_stop()
@@ -102,7 +105,7 @@ class Sequencer:
         SequencingElement
     """
 
-    StackElement = Tuple[SequencingElement, Dict[str, Parameter], Dict[str, 'Condition'], Dict[str,str]]
+    StackElement = Tuple[SequencingElement, Dict[str, Parameter], Dict[str, 'conditions.Condition'], Dict[str,str]]
 
     def __init__(self) -> None:
         """Create a Sequencer."""
@@ -115,7 +118,7 @@ class Sequencer:
     def push(self,
              sequencing_element: SequencingElement,
              parameters: Optional[Dict[str, Union[Parameter, float]]]=None,
-             conditions: Optional[Dict[str, 'Condition']]=None,
+             conditions: Optional[Dict[str, 'conditions.Condition']]=None,
              *,
              window_mapping: Optional[Dict[str, Optional[str]]]=None,
              channel_mapping: Optional[Dict[ChannelID, Optional[ChannelID]]]=None,

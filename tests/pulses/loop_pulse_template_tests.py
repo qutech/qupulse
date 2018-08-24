@@ -1,22 +1,28 @@
 import unittest
-
-from sympy import Sum
+from unittest import mock
 
 from qctoolkit.expressions import Expression, ExpressionScalar
 from qctoolkit.pulses.loop_pulse_template import ForLoopPulseTemplate, WhileLoopPulseTemplate,\
     ConditionMissingException, ParametrizedRange, LoopIndexNotUsedException, LoopPulseTemplate
 from qctoolkit.pulses.parameters import ConstantParameter, InvalidParameterNameException, ParameterConstraintViolation,\
-    ParameterNotProvidedException
-from qctoolkit.pulses.instructions import MEASInstruction
+    ParameterNotProvidedException, ParameterConstraint
+from qctoolkit._program.instructions import MEASInstruction
+from qctoolkit._program._loop import Loop
+
+from qctoolkit._program._loop import MultiChannelProgram
+from qctoolkit.pulses.sequencing import Sequencer
 
 from tests.pulses.sequencing_dummies import DummyCondition, DummyPulseTemplate, DummySequencer, DummyInstructionBlock,\
-    DummyParameter
+    DummyParameter, MeasurementWindowTestCase, DummyWaveform
 from tests.serialization_dummies import DummySerializer
+from tests.serialization_tests import SerializableTests
+from tests._program.transformation_tests import TransformationStub
 
 
 class DummyLoopPulseTemplate(LoopPulseTemplate):
     pass
 DummyLoopPulseTemplate.__abstractmethods__ = set()
+DummyLoopPulseTemplate.__init__ = lambda self, body: LoopPulseTemplate.__init__(self, body, identifier=None)
 
 
 class LoopPulseTemplateTests(unittest.TestCase):
@@ -31,7 +37,7 @@ class LoopPulseTemplateTests(unittest.TestCase):
     def test_defined_channels(self):
         body = DummyPulseTemplate(defined_channels={'A'})
         tpl = DummyLoopPulseTemplate(body)
-        self.assertIs(tpl.defined_channels, body.defined_channels)
+        self.assertEqual(tpl.defined_channels, body.defined_channels)
 
     def test_measurement_names(self):
         body = DummyPulseTemplate(measurement_names={'A'})
@@ -145,14 +151,280 @@ class ForLoopPulseTemplateTest(unittest.TestCase):
 
     def test_parameter_names(self):
         dt = DummyPulseTemplate(parameter_names={'i', 'k'})
-        flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=('a', 'b', 'c'))
-
-        self.assertEqual(flt.parameter_names, {'k', 'a', 'b', 'c'})
+        flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=('a', 'b', 'c'),
+                                   parameter_constraints={'c > hugo'}, measurements=[('meas', 'd', 1)])
+        self.assertEqual({'k', 'a', 'b', 'c', 'd', 'hugo'}, flt.parameter_names)
 
     def test_parameter_names_param_only_in_constraint(self) -> None:
         flt = ForLoopPulseTemplate(body=DummyPulseTemplate(parameter_names={'k', 'i'}), loop_index='i',
                                    loop_range=('a', 'b', 'c',), parameter_constraints=['k<=f'])
         self.assertEqual(flt.parameter_names, {'k', 'a', 'b', 'c', 'f'})
+
+    def test_integral(self) -> None:
+        dummy = DummyPulseTemplate(defined_channels={'A', 'B'},
+                                   parameter_names={'t1', 'i'},
+                                   integrals={'A': ExpressionScalar('t1-i*3.1'), 'B': ExpressionScalar('i')})
+
+        pulse = ForLoopPulseTemplate(dummy, 'i', (1, 8, 2))
+
+        expected = {'A': ExpressionScalar('Sum(t1-3.1*(1+2*i), (i, 0, 3))'),
+                    'B': ExpressionScalar('Sum((1+2*i), (i, 0, 3))') }
+        self.assertEqual(expected, pulse.integral)
+
+
+class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
+
+    def test_create_program_constraint_on_loop_var_exception(self):
+        """This test is to assure the status-quo behavior of ForLoopPT handling parameter constraints affecting the loop index
+        variable. Please see https://github.com/qutech/qc-toolkit/issues/232 ."""
+
+        with self.assertWarnsRegex(UserWarning, "constraint on a variable shadowing the loop index",
+                                   msg="ForLoopPT did not issue a warning when constraining the loop index"):
+            flt = ForLoopPulseTemplate(body=DummyPulseTemplate(parameter_names={'k', 'i'}), loop_index='i',
+                                       loop_range=('a', 'b', 'c',), parameter_constraints=['k<=f', 'k>i'])
+
+        # loop index showing up in parameter_names because it appears in consraints
+        self.assertEqual(flt.parameter_names, {'f', 'k', 'a', 'b', 'c', 'i'})
+
+        parameters = {'k': ConstantParameter(1), 'a': ConstantParameter(0), 'b': ConstantParameter(2),
+                      'c': ConstantParameter(1), 'f': ConstantParameter(2)}
+
+        # loop index not accessible in current build_sequence -> Exception
+        children = [Loop(waveform=DummyWaveform(duration=2.0))]
+        program = Loop(children=children)
+
+        with self.assertRaises(ParameterNotProvidedException):
+            flt._internal_create_program(parameters=parameters,
+                                         measurement_mapping=dict(),
+                                         channel_mapping=dict(),
+                                         parent_loop=program,
+                                         to_single_waveform=set(),
+                                         global_transformation=None)
+        self.assertEqual(children, program.children)
+        self.assertEqual(1, program.repetition_count)
+        self.assertIsNone(program._measurements)
+        self.assert_measurement_windows_equal({}, program.get_measurement_windows())
+
+    def test_create_program_invalid_params(self) -> None:
+        dt = DummyPulseTemplate(parameter_names={'i'}, waveform=DummyWaveform(duration=4.0), duration=4, measurements=[('b', 2, 1)])
+        flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=('a', 'b', 'c'),
+                                   measurements=[('A', 0, 1)], parameter_constraints=['c > 1'])
+
+        invalid_parameters = {'a': ConstantParameter(1), 'b': ConstantParameter(4), 'c': ConstantParameter(1)}
+        measurement_mapping = dict(A='B')
+        channel_mapping = dict(C='D')
+
+        children = [Loop(waveform=DummyWaveform(duration=2.0))]
+        program = Loop(children=children)
+        with self.assertRaises(ParameterConstraintViolation):
+            flt._internal_create_program(parameters=invalid_parameters,
+                                         measurement_mapping=measurement_mapping,
+                                         channel_mapping=channel_mapping,
+                                         parent_loop=program,
+                                         to_single_waveform=set(),
+                                         global_transformation=None)
+
+        self.assertEqual(children, program.children)
+        self.assertEqual(1, program.repetition_count)
+        self.assertIsNone(program._measurements)
+        self.assert_measurement_windows_equal({}, program.get_measurement_windows())
+
+    def test_create_program_invalid_measurement_mapping(self) -> None:
+        dt = DummyPulseTemplate(parameter_names={'i'}, waveform=DummyWaveform(duration=4.0), duration=4,
+                                measurements=[('b', 2, 1)])
+        flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=('a', 'b', 'c'),
+                                   measurements=[('A', 0, 1)], parameter_constraints=['c > 1'])
+
+        invalid_parameters = {'a': ConstantParameter(1), 'b': ConstantParameter(4), 'c': ConstantParameter(2)}
+        measurement_mapping = dict()
+        channel_mapping = dict(C='D')
+
+        children = [Loop(waveform=DummyWaveform(duration=2.0))]
+        program = Loop(children=children)
+        with self.assertRaises(KeyError):
+            flt._internal_create_program(parameters=invalid_parameters,
+                                         measurement_mapping=measurement_mapping,
+                                         channel_mapping=channel_mapping,
+                                         parent_loop=program,
+                                         to_single_waveform=set(),
+                                         global_transformation=None)
+
+        self.assertEqual(children, program.children)
+        self.assertEqual(1, program.repetition_count)
+        self.assertIsNone(program._measurements)
+        self.assert_measurement_windows_equal({}, program.get_measurement_windows())
+
+        # test for broken mapping on child level. no guarantee that parent_loop is not changed, only check for exception
+        measurement_mapping = dict(A='B')
+        with self.assertRaises(KeyError):
+            flt._internal_create_program(parameters=invalid_parameters,
+                                         measurement_mapping=measurement_mapping,
+                                         channel_mapping=channel_mapping,
+                                         parent_loop=program,
+                                         to_single_waveform=set(),
+                                         global_transformation=None)
+
+    def test_create_program_missing_params(self) -> None:
+        dt = DummyPulseTemplate(parameter_names={'i'}, waveform=DummyWaveform(duration=4.0), duration='t', measurements=[('b', 2, 1)])
+        flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=('a', 'b', 'c'),
+                                   measurements=[('A', 'alph', 1)], parameter_constraints=['c > 1'])
+
+        parameters = {'a': ConstantParameter(1), 'b': ConstantParameter(4)}
+        measurement_mapping = dict(A='B')
+        channel_mapping = dict(C='D')
+
+        children = [Loop(waveform=DummyWaveform(duration=2.0))]
+        program = Loop(children=children)
+
+        # test parameter in constraints
+        with self.assertRaises(ParameterNotProvidedException):
+            flt._internal_create_program(parameters=parameters,
+                                         measurement_mapping=measurement_mapping,
+                                         channel_mapping=channel_mapping,
+                                         parent_loop=program,
+                                         to_single_waveform=set(),
+                                         global_transformation=None)
+
+        # test parameter in measurement mappings
+        parameters = {'a': ConstantParameter(1), 'b': ConstantParameter(4), 'c': ConstantParameter(2)}
+        with self.assertRaises(ParameterNotProvidedException):
+            flt._internal_create_program(parameters=parameters,
+                                         measurement_mapping=measurement_mapping,
+                                         channel_mapping=channel_mapping,
+                                         parent_loop=program,
+                                         to_single_waveform=set(),
+                                         global_transformation=None)
+
+        # test parameter in duration
+        parameters = {'a': ConstantParameter(1), 'b': ConstantParameter(4), 'c': ConstantParameter(2), 'alph': ConstantParameter(0)}
+        with self.assertRaises(ParameterNotProvidedException):
+            flt._internal_create_program(parameters=parameters,
+                                         measurement_mapping=measurement_mapping,
+                                         channel_mapping=channel_mapping,
+                                         parent_loop=program,
+                                         to_single_waveform=set(),
+                                         global_transformation=None)
+
+        self.assertEqual(children, program.children)
+        self.assertEqual(1, program.repetition_count)
+        self.assertIsNone(program._measurements)
+        self.assert_measurement_windows_equal({}, program.get_measurement_windows())
+
+    def test_create_program_body_none(self) -> None:
+        dt = DummyPulseTemplate(parameter_names={'i'}, waveform=None, duration=0,
+                                measurements=[('b', 2, 1)])
+        flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=('a', 'b', 'c'),
+                                   measurements=[('A', 0, 1)], parameter_constraints=['c > 1'])
+
+        parameters = {'a': ConstantParameter(1), 'b': ConstantParameter(4), 'c': ConstantParameter(2)}
+        measurement_mapping = dict(A='B', b='b')
+        channel_mapping = dict(C='D')
+
+        program = Loop()
+        flt._internal_create_program(parameters=parameters,
+                                     measurement_mapping=measurement_mapping,
+                                     channel_mapping=channel_mapping,
+                                     parent_loop=program,
+                                     to_single_waveform=set(),
+                                     global_transformation=None)
+
+        self.assertEqual(0, len(program.children))
+        self.assertEqual(1, program.repetition_count)
+        self.assertEqual([], program.children)
+
+        # ensure same result as from Sequencer
+        sequencer = Sequencer()
+        sequencer.push(flt, parameters=parameters, conditions={}, window_mapping=measurement_mapping,
+                       channel_mapping=channel_mapping)
+        block = sequencer.build()
+        program_old = MultiChannelProgram(block, channels={'A'}).programs[frozenset({'A'})]
+        self.assertEqual(program_old.repetition_count, program.repetition_count)
+        self.assertEqual(program_old.children, program.children)
+        self.assertEqual(program_old.waveform, program.waveform)
+        # program_old defines measurements while program does not
+
+    def test_create_program(self) -> None:
+        dt = DummyPulseTemplate(parameter_names={'i'},
+                                waveform=DummyWaveform(duration=4.0, defined_channels={'A'}),
+                                duration=4,
+                                measurements=[('b', .2, .3)])
+        flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=('a', 'b', 'c'),
+                                   measurements=[('A', 'meas_param', 1)], parameter_constraints=['c > 1'])
+
+        parameters = {'a': ConstantParameter(1), 'b': ConstantParameter(4), 'c': ConstantParameter(2),
+                      'meas_param': ConstantParameter(.1)}
+        measurement_mapping = dict(A='B', b='b')
+        channel_mapping = dict(C='D')
+
+        to_single_waveform = {'tom', 'jerry'}
+        global_transformation = TransformationStub()
+
+        expected_meas_params = {'meas_param': .1}
+
+        program = Loop()
+
+        # inner _create_program does nothing
+        expected_program = Loop(measurements=[('B', .1, 1)])
+
+        expected_create_program_kwargs = dict(measurement_mapping=measurement_mapping,
+                                              channel_mapping=channel_mapping,
+                                              global_transformation=global_transformation,
+                                              to_single_waveform=to_single_waveform,
+                                              parent_loop=program)
+        expected_create_program_calls = [mock.call(**expected_create_program_kwargs,
+                                                   parameters=dict(i=ConstantParameter(i)))
+                                         for i in (1, 3)]
+
+        with mock.patch.object(flt, 'validate_parameter_constraints') as validate_parameter_constraints:
+            with mock.patch.object(dt, '_create_program') as body_create_program:
+                with mock.patch.object(flt, 'get_measurement_windows',
+                                       wraps=flt.get_measurement_windows) as get_measurement_windows:
+                    flt._internal_create_program(parameters=parameters,
+                                                 measurement_mapping=measurement_mapping,
+                                                 channel_mapping=channel_mapping,
+                                                 parent_loop=program,
+                                                 to_single_waveform=to_single_waveform,
+                                                 global_transformation=global_transformation)
+
+                    validate_parameter_constraints.assert_called_once_with(parameters=parameters)
+                    get_measurement_windows.assert_called_once_with(expected_meas_params, measurement_mapping)
+                    self.assertEqual(body_create_program.call_args_list, expected_create_program_calls)
+
+        self.assertEqual(expected_program, program)
+
+    def test_create_program_append(self) -> None:
+        dt = DummyPulseTemplate(parameter_names={'i'}, waveform=DummyWaveform(duration=4.0), duration=4,
+                                measurements=[('b', 2, 1)])
+        flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=('a', 'b', 'c'),
+                                   measurements=[('A', 0, 1)], parameter_constraints=['c > 1'])
+
+        parameters = {'a': ConstantParameter(1), 'b': ConstantParameter(4), 'c': ConstantParameter(2)}
+        measurement_mapping = dict(A='B', b='b')
+        channel_mapping = dict(C='D')
+
+        children = [Loop(waveform=DummyWaveform(duration=2.0))]
+        program = Loop(children=children)
+        flt._internal_create_program(parameters=parameters,
+                                     measurement_mapping=measurement_mapping,
+                                     channel_mapping=channel_mapping,
+                                     parent_loop=program,
+                                     to_single_waveform=set(),
+                                     global_transformation=None)
+
+        self.assertEqual(3, len(program.children))
+        self.assertIs(children[0], program.children[0])
+        self.assertEqual(dt.waveform, program.children[1].waveform)
+        self.assertEqual(dt.waveform, program.children[2].waveform)
+        self.assertEqual(1, program.children[1].repetition_count)
+        self.assertEqual(1, program.children[2].repetition_count)
+        self.assertEqual(1, program.repetition_count)
+        self.assert_measurement_windows_equal({'b': ([4, 8], [1, 1]), 'B': ([2], [1])}, program.get_measurement_windows())
+
+        # not ensure same result as from Sequencer here - we're testing appending to an already existing parent loop
+        # which is a use case that does not immediately arise from using Sequencer
+
+
+class ForLoopTemplateOldSequencingTests(unittest.TestCase):
 
     def test_build_sequence_constraint_on_loop_var_exception(self):
         """This test is to assure the status-quo behavior of ForLoopPT handling parameter constraints affecting the loop index
@@ -212,106 +484,134 @@ class ForLoopPulseTemplateTest(unittest.TestCase):
         parameters['A'] = DummyParameter(requires_stop=True)
         self.assertTrue(flt.requires_stop(parameters, dict()))
 
-    def test_get_serialization_data_minimal(self):
 
-        dt = DummyPulseTemplate(parameter_names={'i'})
-        flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=('A', 'B'))
+class ForLoopPulseTemplateSerializationTests(SerializableTests, unittest.TestCase):
 
-        def check_dt(to_dictify) -> str:
-            self.assertIs(to_dictify, dt)
-            return 'dt'
+    @property
+    def class_to_test(self):
+        return ForLoopPulseTemplate
 
-        serializer = DummySerializer(serialize_callback=check_dt)
+    def make_kwargs(self):
+        return {
+            'body': DummyPulseTemplate(parameter_names={'i'}),
+            'loop_index': 'i',
+            'loop_range': ('A', 'B', 1),
+            'parameter_constraints': [str(ParameterConstraint('foo < 3'))],
+            'measurements': [('a', 0, 1), ('b', 1, 1)]
+        }
 
-        data = flt.get_serialization_data(serializer)
-        expected_data = dict(body='dt',
-                             loop_range=('A', 'B', 1),
-                             loop_index='i')
-        self.assertEqual(data, expected_data)
+    def assert_equal_instance_except_id(self, lhs: ForLoopPulseTemplate, rhs: ForLoopPulseTemplate):
+        self.assertIsInstance(lhs, ForLoopPulseTemplate)
+        self.assertIsInstance(rhs, ForLoopPulseTemplate)
+        self.assertEqual(lhs.body, rhs.body)
+        self.assertEqual(lhs.loop_index, rhs.loop_index)
+        self.assertEqual(lhs.loop_range.to_tuple(), rhs.loop_range.to_tuple())
+        self.assertEqual(lhs.parameter_constraints, rhs.parameter_constraints)
+        self.assertEqual(lhs.measurement_declarations, rhs.measurement_declarations)
 
-    def test_get_serialization_data_all_features(self):
-        measurements = [('a', 0, 1), ('b', 1, 1)]
-        parameter_constraints = ['foo < 3']
 
-        dt = DummyPulseTemplate(parameter_names={'i'})
-        flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=('A', 'B'),
-                                   measurements=measurements, parameter_constraints=parameter_constraints)
+class ForLoopPulseTemplateOldSerializationTests(unittest.TestCase):
 
-        def check_dt(to_dictify) -> str:
-            self.assertIs(to_dictify, dt)
-            return 'dt'
+    def test_get_serialization_data_minimal_old(self) -> None:
+        # test for deprecated version during transition period, remove after final switch
+        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
+                                   msg="ForLoopPT does not issue warning for old serialization routines."):
+            dt = DummyPulseTemplate(parameter_names={'i'})
+            flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=('A', 'B'))
 
-        serializer = DummySerializer(serialize_callback=check_dt)
+            def check_dt(to_dictify) -> str:
+                self.assertIs(to_dictify, dt)
+                return 'dt'
 
-        data = flt.get_serialization_data(serializer)
-        expected_data = dict(body='dt',
-                             loop_range=('A', 'B', 1),
-                             loop_index='i',
-                             measurements=measurements,
-                             parameter_constraints=parameter_constraints)
-        self.assertEqual(data, expected_data)
+            serializer = DummySerializer(serialize_callback=check_dt)
 
-    def test_deserialize_minimal(self):
-        body_str = 'dt'
-        dt = DummyPulseTemplate(parameter_names={'i'})
+            data = flt.get_serialization_data(serializer)
+            expected_data = dict(body='dt',
+                                 loop_range=('A', 'B', 1),
+                                 loop_index='i')
+            self.assertEqual(data, expected_data)
 
-        def make_dt(ident: str):
-            self.assertEqual(body_str, ident)
-            return ident
+    def test_get_serialization_data_all_features_old(self) -> None:
+        # test for deprecated version during transition period, remove after final switch
+        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
+                                   msg="ForLoopPT does not issue warning for old serialization routines."):
+            measurements = [('a', 0, 1), ('b', 1, 1)]
+            parameter_constraints = ['foo < 3']
 
-        data = dict(body=body_str,
-                    loop_range=('A', 'B', 1),
-                    loop_index='i',
-                    identifier='meh')
+            dt = DummyPulseTemplate(parameter_names={'i'})
+            flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=('A', 'B'),
+                                       measurements=measurements, parameter_constraints=parameter_constraints)
 
-        serializer = DummySerializer(deserialize_callback=make_dt)
-        serializer.subelements['dt'] = dt
+            def check_dt(to_dictify) -> str:
+                self.assertIs(to_dictify, dt)
+                return 'dt'
 
-        flt = ForLoopPulseTemplate.deserialize(serializer, **data)
-        self.assertEqual(flt.identifier, 'meh')
-        self.assertEqual(flt.body, dt)
-        self.assertEqual(flt.loop_index, 'i')
-        self.assertEqual(flt.loop_range.to_tuple(), ('A', 'B', 1))
+            serializer = DummySerializer(serialize_callback=check_dt)
 
-    def test_deserialize_all_features(self):
-        body_str = 'dt'
-        dt = DummyPulseTemplate(parameter_names={'i'})
+            data = flt.get_serialization_data(serializer)
+            expected_data = dict(body='dt',
+                                 loop_range=('A', 'B', 1),
+                                 loop_index='i',
+                                 measurements=measurements,
+                                 parameter_constraints=parameter_constraints)
+            self.assertEqual(data, expected_data)
 
-        measurements = [('a', 0, 1), ('b', 1, 1)]
-        parameter_constraints = ['foo < 3']
+    def test_deserialize_minimal_old(self) -> None:
+        # test for deprecated version during transition period, remove after final switch
+        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
+                                   msg="ForLoopPT does not issue warning for old serialization routines."):
+            body_str = 'dt'
+            dt = DummyPulseTemplate(parameter_names={'i'})
 
-        def make_dt(ident: str):
-            self.assertEqual(body_str, ident)
-            return ident
+            def make_dt(ident: str):
+                self.assertEqual(body_str, ident)
+                return ident
 
-        data = dict(body=body_str,
-                    loop_range=('A', 'B', 1),
-                    loop_index='i',
-                    identifier='meh',
-                    measurements=measurements,
-                    parameter_constraints=parameter_constraints)
+            data = dict(body=body_str,
+                        loop_range=('A', 'B', 1),
+                        loop_index='i',
+                        identifier='meh')
 
-        serializer = DummySerializer(deserialize_callback=make_dt)
-        serializer.subelements['dt'] = dt
+            serializer = DummySerializer(deserialize_callback=make_dt)
+            serializer.subelements['dt'] = dt
 
-        flt = ForLoopPulseTemplate.deserialize(serializer, **data)
-        self.assertEqual(flt.identifier, 'meh')
-        self.assertIs(flt.body, dt)
-        self.assertEqual(flt.loop_index, 'i')
-        self.assertEqual(flt.loop_range.to_tuple(), ('A', 'B', 1))
-        self.assertEqual(flt.measurement_declarations, measurements)
-        self.assertEqual([str(c) for c in flt.parameter_constraints], parameter_constraints)
+            flt = ForLoopPulseTemplate.deserialize(serializer, **data)
+            self.assertEqual(flt.identifier, 'meh')
+            self.assertEqual(flt.body, dt)
+            self.assertEqual(flt.loop_index, 'i')
+            self.assertEqual(flt.loop_range.to_tuple(), ('A', 'B', 1))
 
-    def test_integral(self) -> None:
-        dummy = DummyPulseTemplate(defined_channels={'A', 'B'},
-                                   parameter_names={'t1', 'i'},
-                                   integrals={'A': ExpressionScalar('t1-i*3.1'), 'B': ExpressionScalar('i')})
+    def test_deserialize_all_features_old(self) -> None:
+        # test for deprecated version during transition period, remove after final switch
+        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
+                                   msg="ForLoopPT does not issue warning for old serialization routines."):
+            body_str = 'dt'
+            dt = DummyPulseTemplate(parameter_names={'i'})
 
-        pulse = ForLoopPulseTemplate(dummy, 'i', (1, 8, 2))
+            measurements = [('a', 0, 1), ('b', 1, 1)]
+            parameter_constraints = ['foo < 3']
 
-        expected = {'A': ExpressionScalar('Sum(t1-3.1*(1+2*i), (i, 0, 3))'),
-                    'B': ExpressionScalar('Sum((1+2*i), (i, 0, 3))') }
-        self.assertEqual(expected, pulse.integral)
+            def make_dt(ident: str):
+                self.assertEqual(body_str, ident)
+                return ident
+
+            data = dict(body=body_str,
+                        loop_range=('A', 'B', 1),
+                        loop_index='i',
+                        identifier='meh',
+                        measurements=measurements,
+                        parameter_constraints=parameter_constraints)
+
+            serializer = DummySerializer(deserialize_callback=make_dt)
+            serializer.subelements['dt'] = dt
+
+            flt = ForLoopPulseTemplate.deserialize(serializer, **data)
+            self.assertEqual(flt.identifier, 'meh')
+            self.assertIs(flt.body, dt)
+            self.assertEqual(flt.loop_index, 'i')
+            self.assertEqual(flt.loop_range.to_tuple(), ('A', 'B', 1))
+            self.assertEqual(flt.measurement_declarations, measurements)
+            self.assertEqual([str(c) for c in flt.parameter_constraints], parameter_constraints)
 
 
 class WhileLoopPulseTemplateTest(unittest.TestCase):
@@ -349,7 +649,7 @@ class WhileLoopPulseTemplateTest(unittest.TestCase):
                          pulse.integral)
 
 
-class LoopPulseTemplateSequencingTests(unittest.TestCase):
+class WhileLoopPulseTemplateSequencingTests(unittest.TestCase):
 
     def test_requires_stop(self) -> None:
         condition = DummyCondition(requires_stop=False)
@@ -400,40 +700,64 @@ class LoopPulseTemplateSequencingTests(unittest.TestCase):
             t.build_sequence(sequencer, {}, {}, {}, block)
 
 
-class LoopPulseTemplateSerializationTests(unittest.TestCase):
+class WhileLoopPulseTemplateSerializationTests(SerializableTests, unittest.TestCase):
 
-    def test_get_serialization_data(self) -> None:
-        body = DummyPulseTemplate()
-        condition_name = 'foo_cond'
-        identifier = 'foo_loop'
-        t = WhileLoopPulseTemplate(condition_name, body, identifier=identifier)
+    @property
+    def class_to_test(self):
+        return WhileLoopPulseTemplate
 
-        serializer = DummySerializer()
-        expected_data = dict(type=serializer.get_type_identifier(t),
-                             body=str(id(body)),
-                             condition=condition_name)
+    def make_kwargs(self):
+        return {
+            'body': DummyPulseTemplate(),
+            'condition': 'foo_cond'
+        }
 
-        data = t.get_serialization_data(serializer)
-        self.assertEqual(expected_data, data)
+    def assert_equal_instance_except_id(self, lhs: WhileLoopPulseTemplate, rhs: WhileLoopPulseTemplate):
+        self.assertIsInstance(lhs, WhileLoopPulseTemplate)
+        self.assertIsInstance(rhs, WhileLoopPulseTemplate)
+        self.assertEqual(lhs.body, rhs.body)
+        self.assertEqual(lhs.condition, rhs.condition)
+
+
+class WhileLoopPulseTemplateOldSerializationTests(unittest.TestCase):
+
+    def test_get_serialization_data_old(self) -> None:
+        # test for deprecated version during transition period, remove after final switch
+        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
+                                   msg="WhileLoopPT does not issue warning for old serialization routines."):
+            body = DummyPulseTemplate()
+            condition_name = 'foo_cond'
+            identifier = 'foo_loop'
+            t = WhileLoopPulseTemplate(condition_name, body, identifier=identifier)
+
+            serializer = DummySerializer()
+            expected_data = dict(body=str(id(body)),
+                                 condition=condition_name)
+
+            data = t.get_serialization_data(serializer)
+            self.assertEqual(expected_data, data)
 
     def test_deserialize(self) -> None:
-        data = dict(
-            identifier='foo_loop',
-            condition='foo_cond',
-            body='bodyDummyPulse'
-        )
+        # test for deprecated version during transition period, remove after final switch
+        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
+                                   msg="WhileLoopPT does not issue warning for old serialization routines."):
+            data = dict(
+                identifier='foo_loop',
+                condition='foo_cond',
+                body='bodyDummyPulse'
+            )
 
-        # prepare dependencies for deserialization
-        serializer = DummySerializer()
-        serializer.subelements[data['body']] = DummyPulseTemplate()
+            # prepare dependencies for deserialization
+            serializer = DummySerializer()
+            serializer.subelements[data['body']] = DummyPulseTemplate()
 
-        # deserialize
-        result = WhileLoopPulseTemplate.deserialize(serializer, **data)
+            # deserialize
+            result = WhileLoopPulseTemplate.deserialize(serializer, **data)
 
-        # compare
-        self.assertIs(serializer.subelements[data['body']], result.body)
-        self.assertEqual(data['condition'], result.condition)
-        self.assertEqual(data['identifier'], result.identifier)
+            # compare
+            self.assertIs(serializer.subelements[data['body']], result.body)
+            self.assertEqual(data['condition'], result.condition)
+            self.assertEqual(data['identifier'], result.identifier)
 
 
 class ConditionMissingExceptionTest(unittest.TestCase):

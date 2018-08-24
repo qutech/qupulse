@@ -1,11 +1,12 @@
 import unittest
 import numpy
 
-from qctoolkit.pulses.plotting import PlottingNotPossibleException, render, iter_waveforms, iter_instruction_block, plot
-from qctoolkit.pulses.instructions import InstructionBlock
+from qctoolkit.pulses.plotting import PlottingNotPossibleException, render, iter_waveforms, iter_instruction_block,plot, _render_instruction_block
+from qctoolkit._program.instructions import InstructionBlock
 from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
 from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
 from qctoolkit.pulses.sequencing import Sequencer
+from qctoolkit._program._loop import Loop, MultiChannelProgram
 
 from tests.pulses.sequencing_dummies import DummyWaveform, DummyInstruction, DummyPulseTemplate
 
@@ -173,6 +174,30 @@ class PlotterTests(unittest.TestCase):
         self.assertEqual(expected_result.shape, voltages['A'].shape)
 
         self.assertEqual(measurements, [('asd', 19, 1)])
+
+    def test_render_loop_compare(self):
+        wf1 = DummyWaveform(duration=19)
+        wf2 = DummyWaveform(duration=21)
+
+        block = InstructionBlock()
+        block.add_instruction_exec(wf1)
+        block.add_instruction_meas([('asd', 0, 1), ('asd', 1, 1)])
+        block.add_instruction_exec(wf2)
+
+        mcp = MultiChannelProgram(block)
+        loop = next(iter(mcp.programs.values()))
+
+        block_times, block_voltages = render(block, sample_rate=0.5)
+        loop_times, loop_voltages = render(loop, sample_rate=0.5)
+
+        numpy.testing.assert_equal(block_times, loop_times)
+        numpy.testing.assert_equal(block_voltages, loop_voltages)
+
+        block_times, block_voltages, block_measurements = render(block, sample_rate=0.5, render_measurements=True)
+        loop_times, loop_voltages, loop_measurements = render(loop, sample_rate=0.5, render_measurements=True)
+        numpy.testing.assert_equal(block_times, loop_times)
+        numpy.testing.assert_equal(block_voltages, loop_voltages)
+        self.assertEqual(block_measurements, loop_measurements)
 
     def test_render_warning(self):
         wf1 = DummyWaveform(duration=19)

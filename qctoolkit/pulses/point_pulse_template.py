@@ -1,4 +1,4 @@
-from typing import Optional, List, Union, Set, Dict, Sequence
+from typing import Optional, List, Union, Set, Dict, Sequence, Any
 from numbers import Real
 import itertools
 import numbers
@@ -8,12 +8,13 @@ import numpy as np
 from qctoolkit.utils.types import ChannelID
 from qctoolkit.expressions import Expression, ExpressionScalar
 from qctoolkit.pulses.conditions import Condition
-from qctoolkit.pulses.instructions import Waveform
+from qctoolkit._program.waveforms import TableWaveform, TableWaveformEntry
 from qctoolkit.pulses.parameters import Parameter, ParameterNotProvidedException, ParameterConstraint,\
     ParameterConstrainer
 from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration
-from qctoolkit.pulses.table_pulse_template import TableEntry, EntryInInit, TableWaveform, TableWaveformEntry
+from qctoolkit.pulses.table_pulse_template import TableEntry, EntryInInit
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
+from qctoolkit.serialization import Serializer, PulseRegistryType
 
 
 __all__ = ["PointWaveform", "PointPulseTemplate", "PointPulseEntry", "PointWaveformEntry", "InvalidPointDimension"]
@@ -44,7 +45,8 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
                  *,
                  parameter_constraints: Optional[List[Union[str, ParameterConstraint]]]=None,
                  measurements: Optional[List[MeasurementDeclaration]]=None,
-                 identifier=None):
+                 identifier: Optional[str]=None,
+                 registry: PulseRegistryType=None) -> None:
 
         AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
@@ -53,13 +55,15 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
         self._entries = [PointPulseEntry(*tpt)
                          for tpt in time_point_tuple_list]
 
+        self._register(registry=registry)
+
     @property
     def defined_channels(self) -> Set[ChannelID]:
         return set(self._channels)
 
     def build_waveform(self,
                        parameters: Dict[str, Real],
-                       channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Waveform]:
+                       channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[TableWaveform]:
         self.validate_parameter_constraints(parameters)
 
         if all(channel_mapping[channel] is None
@@ -99,19 +103,19 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
     def point_pulse_entries(self) -> Sequence[PointPulseEntry]:
         return self._entries
 
-    def get_serialization_data(self, serializer) -> Dict:
-        data = {'time_point_tuple_list': [entry.get_serialization_data()
-                                          for entry in self._entries],
-                'channel_names':       self._channels}
+    def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
+        data = super().get_serialization_data(serializer)
+
+        if serializer: # compatibility to old serialization routines, deprecated
+            data = dict()
+
+        data['time_point_tuple_list'] = [entry.get_serialization_data() for entry in self._entries]
+        data['channel_names'] = self._channels
         if self.parameter_constraints:
             data['parameter_constraints'] = [str(c) for c in self.parameter_constraints]
         if self.measurement_declarations:
             data['measurements'] = self.measurement_declarations
         return data
-
-    @staticmethod
-    def deserialize(serializer, **kwargs) -> 'PointPulseTemplate':
-        return PointPulseTemplate(**kwargs)
 
     @property
     def duration(self) -> Expression:

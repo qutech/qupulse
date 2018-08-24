@@ -6,17 +6,19 @@ from typing import Dict, Set, Optional, Any, Union, Tuple, Generator, Sequence, 
 import warnings
 
 import sympy
+from cached_property import cached_property
 
-from qctoolkit.serialization import Serializer
+from qctoolkit.serialization import Serializer, PulseRegistryType
+from qctoolkit._program._loop import Loop
 
 from qctoolkit.expressions import ExpressionScalar
 from qctoolkit.utils import checked_int_cast
-from qctoolkit.pulses.parameters import Parameter, ConstantParameter, InvalidParameterNameException, ParameterConstrainer
+from qctoolkit.pulses.parameters import Parameter, ConstantParameter, InvalidParameterNameException, ParameterConstrainer, ParameterNotProvidedException
 from qctoolkit.pulses.pulse_template import PulseTemplate, ChannelID
 from qctoolkit.pulses.conditions import Condition, ConditionMissingException
-from qctoolkit.pulses.instructions import InstructionBlock
+from qctoolkit._program.instructions import InstructionBlock
 from qctoolkit.pulses.sequencing import Sequencer
-from qctoolkit.pulses.sequence_pulse_template import SequenceWaveform as ForLoopWaveform
+from qctoolkit._program.waveforms import SequenceWaveform as ForLoopWaveform
 from qctoolkit.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
 
 __all__ = ['ForLoopPulseTemplate', 'LoopPulseTemplate', 'LoopIndexNotUsedException']
@@ -24,7 +26,8 @@ __all__ = ['ForLoopPulseTemplate', 'LoopPulseTemplate', 'LoopIndexNotUsedExcepti
 
 class LoopPulseTemplate(PulseTemplate):
     """Base class for loop based pulse templates. This class is still abstract and cannot be instantiated."""
-    def __init__(self, body: PulseTemplate, identifier: Optional[str]=None):
+    def __init__(self, body: PulseTemplate,
+                 identifier: Optional[str]):
         super().__init__(identifier=identifier)
         self.__body = body
 
@@ -109,7 +112,8 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
                  identifier: Optional[str]=None,
                  *,
                  measurements: Optional[Sequence[MeasurementDeclaration]]=None,
-                 parameter_constraints: Optional[Sequence]=None):
+                 parameter_constraints: Optional[Sequence]=None,
+                 registry: PulseRegistryType=None) -> None:
         """
         Args:
             body: The loop body. It is expected to have `loop_index` as an parameter
@@ -149,6 +153,8 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
                           "To constrain the loop index, put the constraint in the body subtemplate.\n" \
                           "Loop index is {} and offending constraints are: {}".format(self._loop_index, constraints))
 
+        self._register(registry=registry)
+
     @property
     def loop_index(self) -> str:
         return self._loop_index
@@ -161,7 +167,7 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
     def measurement_names(self) -> Set[str]:
         return LoopPulseTemplate.measurement_names.fget(self) | MeasurementDefiner.measurement_names.fget(self)
 
-    @property
+    @cached_property
     def duration(self) -> ExpressionScalar:
         step_size = self._loop_range.step.sympified_expression
         loop_index = sympy.symbols(self._loop_index)
@@ -187,7 +193,7 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
     def parameter_names(self) -> Set[str]:
         parameter_names = self.body.parameter_names.copy()
         parameter_names.remove(self._loop_index)
-        return parameter_names | self._loop_range.parameter_names | self.constrained_parameters
+        return parameter_names | self._loop_range.parameter_names | self.constrained_parameters | self.measurement_parameters
 
     def _body_parameter_generator(self, parameters: Dict[str, Parameter], forward=True) -> Generator:
         loop_range_parameters = dict((parameter_name, parameters[parameter_name].get_value())
@@ -223,6 +229,36 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
                            channel_mapping=channel_mapping,
                            target_block=instruction_block)
 
+    def _internal_create_program(self, *,
+                                 parameters: Dict[str, Parameter],
+                                 measurement_mapping: Dict[str, Optional[str]],
+                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]],
+                                 global_transformation: Optional['Transformation'],
+                                 to_single_waveform: Set[Union[str, 'PulseTemplate']],
+                                 parent_loop: Loop) -> None:
+        self.validate_parameter_constraints(parameters=parameters)
+
+        try:
+            measurement_parameters = {parameter_name: parameters[parameter_name].get_value()
+                                      for parameter_name in self.measurement_parameters}
+            duration_parameters = {parameter_name: parameters[parameter_name].get_value()
+                                      for parameter_name in self.duration.variables}
+        except KeyError as e:
+            raise ParameterNotProvidedException(str(e)) from e
+
+        if self.duration.evaluate_numeric(**duration_parameters) > 0:
+            measurements = self.get_measurement_windows(measurement_parameters, measurement_mapping)
+            if measurements:
+                parent_loop.add_measurements(measurements)
+
+            for local_parameters in self._body_parameter_generator(parameters, forward=True):
+                self.body._create_program(parameters=local_parameters,
+                                          measurement_mapping=measurement_mapping,
+                                          channel_mapping=channel_mapping,
+                                          global_transformation=global_transformation,
+                                          to_single_waveform=to_single_waveform,
+                                          parent_loop=parent_loop)
+
     def build_waveform(self, parameters: Dict[str, Parameter]) -> ForLoopWaveform:
         return ForLoopWaveform([self.body.build_waveform(local_parameters)
                                 for local_parameters in self._body_parameter_generator(parameters, forward=True)])
@@ -232,34 +268,30 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
                       conditions: Dict[str, 'Condition']) -> bool:
         return any(parameters[parameter_name].requires_stop for parameter_name in self._loop_range.parameter_names)
 
-    def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
-        data = dict(
-            body=serializer.dictify(self.body),
-            loop_range=self._loop_range.to_tuple(),
-            loop_index=self._loop_index,
-        )
+    def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
+        data = super().get_serialization_data(serializer)
+
+        data['body'] = self.body
+
+        if serializer: # compatibility to old serialization routines, deprecated
+            data = dict()
+            data['body'] = serializer.dictify(self.body)
+
+        data['loop_range'] = self._loop_range.to_tuple()
+        data['loop_index'] = self._loop_index
+
         if self.parameter_constraints:
             data['parameter_constraints'] = [str(c) for c in self.parameter_constraints]
         if self.measurement_declarations:
             data['measurements'] = self.measurement_declarations
+
         return data
 
-    @staticmethod
-    def deserialize(serializer: Serializer,
-                    body: Dict[str, Any],
-                    loop_range: Tuple,
-                    loop_index: str,
-                    identifier: Optional[str]=None,
-                    measurements: Optional[Sequence[str]]=None,
-                    parameter_constraints: Optional[Sequence[str]]=None) -> 'ForLoopPulseTemplate':
-        body = cast(PulseTemplate, serializer.deserialize(body))
-        return ForLoopPulseTemplate(body=body,
-                                    identifier=identifier,
-                                    loop_range=loop_range,
-                                    loop_index=loop_index,
-                                    measurements=measurements,
-                                    parameter_constraints=parameter_constraints
-                                    )
+    @classmethod
+    def deserialize(cls, serializer: Optional[Serializer]=None, **kwargs) -> 'ForLoopPulseTemplate':
+        if serializer: # compatibility to old serialization routines, deprecated
+            kwargs['body'] = cast(PulseTemplate, serializer.deserialize(kwargs['body']))
+        return super().deserialize(None, **kwargs)
 
     @property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
@@ -288,7 +320,6 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
         return body_integrals
 
 
-
 class WhileLoopPulseTemplate(LoopPulseTemplate):
     """Conditional looping in a pulse.
     
@@ -296,7 +327,10 @@ class WhileLoopPulseTemplate(LoopPulseTemplate):
     during execution as long as a certain condition holds.
     """
     
-    def __init__(self, condition: str, body: PulseTemplate, identifier: Optional[str]=None) -> None:
+    def __init__(self, condition: str,
+                 body: PulseTemplate,
+                 identifier: Optional[str]=None,
+                 registry: PulseRegistryType=None) -> None:
         """Create a new LoopPulseTemplate instance.
 
         Args:
@@ -308,6 +342,7 @@ class WhileLoopPulseTemplate(LoopPulseTemplate):
         """
         super().__init__(body=body, identifier=identifier)
         self._condition = condition
+        self._register(registry=registry)
 
     def __str__(self) -> str:
         return "LoopPulseTemplate: Condition <{}>, Body <{}>".format(self._condition, self.body)
@@ -347,29 +382,37 @@ class WhileLoopPulseTemplate(LoopPulseTemplate):
                                                                        channel_mapping,
                                                                        instruction_block)
 
+    def _internal_create_program(self, *, # pragma: no cover
+                                 parameters: Dict[str, Parameter],
+                                 measurement_mapping: Dict[str, Optional[str]],
+                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]],
+                                 parent_loop: Loop) -> None:
+        raise NotImplementedError("create_program() does not handle conditions/triggers right now and cannot "
+                                  "be meaningfully implemented for a WhileLoopPulseTemplate")
+
     def requires_stop(self,
                       parameters: Dict[str, Parameter],
                       conditions: Dict[str, Condition]) -> bool:
         return self.__obtain_condition_object(conditions).requires_stop()
 
-    def get_serialization_data(self, serializer: Serializer) -> Dict[str, Any]:
-        data = dict(
-            type=serializer.get_type_identifier(self),
-            condition=self._condition,
-            body=serializer.dictify(self.body)
-        )
+    def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
+        data = super().get_serialization_data(serializer)
+        data['body'] = self.body
+
+        if serializer: # compatibility to old serialization routines, deprecated
+            data = dict()
+            data['body'] = serializer.dictify(self.body)
+
+        data['condition'] = self._condition
+
         return data
 
-    @staticmethod
-    def deserialize(serializer: Serializer,
-                    condition: str,
-                    body: Dict[str, Any],
-                    identifier: Optional[str]=None) -> 'WhileLoopPulseTemplate':
-        body = serializer.deserialize(body)
-        result = WhileLoopPulseTemplate(condition=condition,
-                                        body=body,
-                                        identifier=identifier)
-        return result
+    @classmethod
+    def deserialize(cls, serializer: Optional[Serializer]=None, **kwargs) -> 'WhileLoopPulseTemplate':
+        if serializer: # compatibility to old serialization routines, deprecated
+            kwargs['body'] = serializer.deserialize(kwargs['body'])
+
+        return super().deserialize(**kwargs)
 
     @property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:

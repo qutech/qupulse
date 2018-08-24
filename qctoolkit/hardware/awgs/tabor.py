@@ -3,6 +3,7 @@ import sys
 import functools
 import weakref
 import itertools
+import operator
 from typing import List, Tuple, Set, NamedTuple, Callable, Optional, Any, Sequence, cast, Generator, Union, Dict
 from enum import Enum
 from collections import OrderedDict
@@ -15,7 +16,7 @@ import numpy as np
 
 from qctoolkit.utils.types import ChannelID
 from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
-from qctoolkit.hardware.program import Loop, make_compatible
+from qctoolkit._program._loop import Loop, make_compatible
 from qctoolkit.hardware.util import voltage_to_uint16, make_combined_wave, find_positions
 from qctoolkit.hardware.awgs.base import AWG
 
@@ -41,8 +42,8 @@ class TaborSegment:
         if ch_a is not None and ch_b is not None and len(ch_a) != len(ch_b):
             raise TaborException('Channel entries to have to have the same length')
 
-        self.ch_a = ch_a
-        self.ch_b = ch_b
+        self.ch_a = None if ch_a is None else np.asarray(ch_a, dtype=np.uint16)
+        self.ch_b = None if ch_b is None else np.asarray(ch_b, dtype=np.uint16)
 
         self.marker_a = None if marker_a is None else np.asarray(marker_a, dtype=bool)
         self.marker_b = None if marker_b is None else np.asarray(marker_b, dtype=bool)
@@ -52,9 +53,40 @@ class TaborSegment:
         if marker_b is not None and len(marker_b)*2 != self.num_points:
             raise TaborException('Marker A has to have half of the channels length')
 
+    @classmethod
+    def from_binary_segment(cls, segment_data: np.ndarray) -> 'TaborSegment':
+        data_a = segment_data.reshape((-1, 16))[1::2, :].reshape((-1, ))
+        data_b = segment_data.reshape((-1, 16))[0::2, :].ravel()
+        return cls.from_binary_data(data_a, data_b)
+
+    @classmethod
+    def from_binary_data(cls, data_a: np.ndarray, data_b: np.ndarray) -> 'TaborSegment':
+        ch_b = data_b
+
+        channel_mask = np.uint16(2**14 - 1)
+        ch_a = np.bitwise_and(data_a, channel_mask)
+
+        marker_a_mask = np.uint16(2**14)
+        marker_b_mask = np.uint16(2**15)
+        marker_data = data_a.reshape(-1, 8)[1::2, :].reshape((-1, ))
+
+        marker_a = np.bitwise_and(marker_data, marker_a_mask)
+        marker_b = np.bitwise_and(marker_data, marker_b_mask)
+
+        return cls(ch_a=ch_a,
+                   ch_b=ch_b,
+                   marker_a=marker_a,
+                   marker_b=marker_b)
+
     def __hash__(self) -> int:
         return hash(tuple(0 if data is None else bytes(data)
                           for data in (self.ch_a, self.ch_b, self.marker_a, self.marker_b)))
+
+    def __eq__(self, other: 'TaborSegment'):
+        return (np.array_equal(self.ch_a, other.ch_a) and
+                np.array_equal(self.ch_b, other.ch_b) and
+                np.array_equal(self.marker_a, other.marker_a) and
+                np.array_equal(self.marker_b, other.marker_b))
 
     @property
     def data_a(self) -> np.ndarray:
@@ -604,18 +636,10 @@ class PlottableProgram:
                                            ('jump_flag', int)])
 
     def __init__(self,
-                 waveforms: Tuple[Tuple[np.ndarray, ...], Tuple[np.ndarray, ...]],
+                 segments: List[TaborSegment],
                  sequence_tables: List[List[Tuple[int, int, int]]],
                  advanced_sequence_table: List[Tuple[int, int, int]]):
-        waveforms_0, waveforms_1 = waveforms
-        if len(waveforms_0) != len(waveforms_1):
-            raise ValueError('Different number of waveforms on channels')
-
-        for wf_0, wf_1 in zip(waveforms_0, waveforms_1):
-            if len(wf_0) != len(wf_1):
-                raise ValueError('Not all waveforms have the same length')
-
-        self._waveforms = (waveforms_0, waveforms_1)
+        self._segments = segments
         self._sequence_tables = [[self.TableEntry(*sequence_table_entry)
                                   for sequence_table_entry in sequence_table]
                                  for sequence_table in sequence_tables]
@@ -626,15 +650,9 @@ class PlottableProgram:
     def from_read_data(cls, waveforms: List[np.ndarray],
                        sequence_tables: List[Tuple[np.ndarray, np.ndarray, np.ndarray]],
                        advanced_sequence_table: Tuple[np.ndarray, np.ndarray, np.ndarray]) -> 'PlottableProgram':
-        return cls(cls._reformat_waveforms(waveforms),
+        return cls([TaborSegment.from_binary_segment(wf) for wf in waveforms],
                    [cls._reformat_rep_seg_jump(seq_table) for seq_table in sequence_tables],
                    cls._reformat_rep_seg_jump(advanced_sequence_table))
-
-    @staticmethod
-    def _reformat_waveforms(waveforms: List[np.ndarray]) -> Tuple[Tuple[np.ndarray], Tuple[np.ndarray]]:
-        """De-interleave the individual channels' waveform data"""
-        return tuple(zip(*((waveform.reshape((-1, 16))[1::2, :].ravel(), waveform.reshape((-1, 16))[0::2, :].ravel())
-                           for waveform in waveforms)))
 
     @classmethod
     def _reformat_rep_seg_jump(cls, rep_seg_jump_tuple: Tuple[np.ndarray, np.ndarray, np.ndarray]) -> List[TableEntry]:
@@ -666,9 +684,9 @@ class PlottableProgram:
                                        channel: int,
                                        with_first_idle=False,
                                        with_last_idles=False) -> Generator[Tuple[np.ndarray, int], None, None]:
-        ch_waveforms = self._waveforms[channel]
+        ch_getter = (operator.attrgetter('ch_a'), operator.attrgetter('ch_b'))[channel]
         for segment_repeat, segment_no, _ in self._iter_segment_table_entry(with_first_idle, with_last_idles):
-            yield ch_waveforms[segment_no - 1], segment_repeat
+            yield ch_getter(self._segments[segment_no - 1]), segment_repeat
 
     def iter_samples(self, channel: int,
                      with_first_idle=False,
@@ -678,7 +696,7 @@ class PlottableProgram:
             for _ in range(repetition):
                 yield from waveform
 
-    def get_as_single_waveform(self, channel: int, max_total_length: int=10**9) -> np.ndarray:
+    def get_as_single_waveform(self, channel: int, max_total_length: int=10**9) -> Optional[np.ndarray]:
         waveforms = self.get_waveforms(channel)
         repetitions = self.get_repetitions()
         waveform_lengths = np.fromiter((wf.size for wf in waveforms), count=len(waveforms), dtype=np.uint64)
@@ -699,8 +717,13 @@ class PlottableProgram:
         return result
 
     def get_waveforms(self, channel: int) -> List[np.ndarray]:
-        return [self._waveforms[channel][segment_no - 1]
+        ch_getter = (operator.attrgetter('ch_a'), operator.attrgetter('ch_b'))[channel]
+        return [ch_getter(self._segments[segment_no - 1])
                 for _, segment_no, _ in self._iter_segment_table_entry()]
+
+    def get_segment_waveform(self, channel: int, segment_no: int) -> np.ndarray:
+        ch_getter = (operator.attrgetter('ch_a'), operator.attrgetter('ch_b'))[channel]
+        return [ch_getter(self._segments[segment_no - 1])]
 
     def get_repetitions(self) -> np.ndarray:
         return np.fromiter((segment_repeat
@@ -715,8 +738,8 @@ class PlottableProgram:
         return True
 
     def to_builtin(self) -> dict:
-        waveforms = [[wf.tolist() for wf in self._waveforms[0]],
-                     [wf.tolist() for wf in self._waveforms[1]]]
+        waveforms = [[wf.data_a.tolist() for wf in self._segments],
+                     [wf.data_b.tolist() for wf in self._segments]]
         return {'waveforms': waveforms,
                 'seq_tables': self._sequence_tables,
                 'adv_seq_table': self._advanced_sequence_table}
@@ -724,8 +747,8 @@ class PlottableProgram:
     @classmethod
     def from_builtin(cls, data: dict) -> 'PlottableProgram':
         waveforms = data['waveforms']
-        waveforms = (tuple(np.array(wf, dtype=np.uint16) for wf in waveforms[0]),
-                     tuple(np.array(wf, dtype=np.uint16) for wf in waveforms[1]))
+        waveforms = [TaborSegment.from_binary_data(np.array(data_a, dtype=np.uint16), np.array(data_b, dtype=np.uint16))
+                     for data_a, data_b in zip(*waveforms)]
         return cls(waveforms, data['seq_tables'], data['adv_seq_table'])
 
 
@@ -1190,9 +1213,8 @@ class TaborChannelPair(AWG):
 
         # download all sequence tables
         for i, sequencer_table in enumerate(sequencer_tables):
-            if i >= len(self._sequencer_tables) or self._sequencer_tables[i] != sequencer_table:
-                self.device.send_cmd('SEQ:SEL {}'.format(i+1))
-                self.device.download_sequencer_table(sequencer_table)
+            self.device.send_cmd('SEQ:SEL {}'.format(i+1))
+            self.device.download_sequencer_table(sequencer_table)
         self._sequencer_tables = sequencer_tables
         self.device.send_cmd('SEQ:SEL 1')
 

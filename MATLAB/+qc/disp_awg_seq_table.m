@@ -1,16 +1,31 @@
+% function to display the sequence table hold by qctoolkit Tabor instance 
+% or given in the varargins
+% -------------------------------------------------------------------------
+% Notes:
+%   - if varargin.seq_table is empty the sequence table saved in the qctoolkit 
+%   Tabor object is plotted -> function uses qc.get_sequence_table internaly
+% -------------------------------------------------------------------------
+% written by Marcel Meyer 08|2018
+
+
 function disp_awg_seq_table(varargin)
 
   global plsdata
 
   defaultArgs = struct(...
+    'seq_table', {{}}, ...
     'programName', plsdata.awg.currentProgam, ...
     'advancedSeqTableFlag', false ...
     );
   args = util.parse_varargin(varargin, defaultArgs);
 
 
-
-  seq_table = qc.get_sequence_table(args.programName, args.advancedSeqTableFlag);
+  if isempty(args.seq_table)
+    seq_table = qc.get_sequence_table(args.programName, args.advancedSeqTableFlag);
+  else
+    assert(iscell(args.seq_table), 'wrong format sequence table')
+    seq_table = args.seq_table;
+  end
 
   disp('   ');
   disp('[i] Table 1 is for channel pair AB and table 2 for channel pair CD.');
@@ -21,7 +36,7 @@ function disp_awg_seq_table(varargin)
 
   for k = 1:2
     if isempty(seq_table{k})
-      warning('-- empty sequence table or no program with this name --');
+      warning('-- empty sequence table at channel nr %i -- \n', k);
     else
       if ~args.advancedSeqTableFlag
 
