@@ -1,5 +1,5 @@
 import itertools
-from typing import Union, Dict, Set, Iterable, FrozenSet, Tuple, cast, List, Optional, DefaultDict, Deque
+from typing import Union, Dict, Set, Iterable, FrozenSet, Tuple, cast, List, Optional, DefaultDict, Deque, Generator
 from collections import defaultdict, deque
 from copy import deepcopy
 from enum import Enum
@@ -21,6 +21,8 @@ __all__ = ['Loop', 'MultiChannelProgram', 'make_compatible']
 
 
 class Loop(Node):
+    MAX_REPR_SIZE = 2000
+
     """Build a loop tree. The leaves of the tree are loops with one element."""
     def __init__(self,
                  parent: Union['Loop', None]=None,
@@ -151,20 +153,30 @@ class Loop(Node):
         self._measurements = None
         self.assert_tree_integrity()
 
+    def _get_repr(self, first_prefix, other_prefixes) -> Generator[str]:
+        if self.is_leaf():
+            yield '%sEXEC %r %d times' % (first_prefix, self._waveform, self.repetition_count)
+        else:
+            yield '%sLOOP %d times:' % (first_prefix, self.repetition_count)
+
+            for elem in self:
+                yield from cast(Loop, elem)._get_repr(other_prefixes + '  ->', other_prefixes + '    ')
+
     def __repr__(self) -> str:
         is_circular = is_tree_circular(self)
         if is_circular:
             return '{}: Circ {}'.format(id(self), is_circular)
 
-        if self.is_leaf():
-            return 'EXEC {} {} times'.format(self._waveform, self.repetition_count)
-        else:
-            repr = ['LOOP {} times:'.format(self.repetition_count)]
-            for elem in self:
-                sub_repr = elem.__repr__().splitlines()
-                sub_repr = ['  ->' + sub_repr[0]] + ['    ' + line for line in sub_repr[1:]]
-                repr += sub_repr
-            return '\n'.join(repr)
+        str_len = 0
+        repr_list = []
+        for sub_repr in self._get_repr('', ''):
+            repr_list.append(sub_repr)
+            str_len += len(sub_repr)
+
+            if self.MAX_REPR_SIZE and str_len > self.MAX_REPR_SIZE:
+                repr_list.append('...')
+                break
+        return '\n'.join(repr_list)
 
     def copy_tree_structure(self, new_parent: Union['Loop', bool]=False) -> 'Loop':
         return type(self)(parent=self.parent if new_parent is False else new_parent,

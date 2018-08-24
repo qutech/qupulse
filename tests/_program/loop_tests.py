@@ -93,6 +93,7 @@ def get_two_chan_test_block(wfg=WaveformGenerator(2)):
     return root_block
 
 
+@mock.patch.object(Loop, 'MAX_REPR_SIZE', 10000)
 class LoopTests(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
