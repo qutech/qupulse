@@ -1,4 +1,4 @@
-function check_pulse_4chan_parameter_dependency(pulse, check_parameter, check_values, varargin)
+function check_pulse_parameter_dependency(pulse, check_parameter, check_values, varargin)
 % plot function to visualize the influence of one pulse parameter on the
 % pulse shape:
 % ----------------------------------------------------------------------
@@ -25,12 +25,14 @@ defaultArgs = struct(...
 args = util.parse_varargin(varargin, defaultArgs);
 
 if isempty(args.channel_mapping) || args.channel_mapping == py.None
-		args.channel_mapping = py.dict(py.zip(pulse.defined_channels, pulse.defined_channels));
+
+  args.channel_mapping = py.dict(py.zip(pulse.defined_channels, pulse.defined_channels));
 end
 
 args.sample_rate = args.sample_rate * 1e-9; % convert to 1/ns
 
 figure(args.figID);
+clf;
 
 for k = 1:numel(check_values)
   args.parameters.(check_parameter) = check_values(k);
@@ -56,7 +58,7 @@ for k = 1:numel(check_values)
   hold off;
   legend(channelNames);
   xlabel('t(s)');
-  title(sprintf('%s = %.2d', check_parameter, check_values(k)));
+  title(sprintf('%s = %.2d', check_parameter, check_values(k)), 'interpreter', 'none');
 end
 
 end
