@@ -184,6 +184,9 @@ LOOP 1 times:
 
         self.assertEqual(repr(tree), expected)
 
+        with mock.patch.object(Loop, 'MAX_REPR_SIZE', 1):
+            self.assertEqual(repr(tree), '...')
+
     def test_is_leaf(self):
         root_loop = self.get_test_loop(waveform_generator=WaveformGenerator(1))
 

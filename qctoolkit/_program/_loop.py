@@ -170,12 +170,13 @@ class Loop(Node):
         str_len = 0
         repr_list = []
         for sub_repr in self._get_repr('', ''):
-            repr_list.append(sub_repr)
             str_len += len(sub_repr)
 
             if self.MAX_REPR_SIZE and str_len > self.MAX_REPR_SIZE:
                 repr_list.append('...')
                 break
+            else:
+                repr_list.append(sub_repr)
         return '\n'.join(repr_list)
 
     def copy_tree_structure(self, new_parent: Union['Loop', bool]=False) -> 'Loop':
