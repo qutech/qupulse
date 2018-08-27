@@ -251,7 +251,7 @@ function [pulse_template, channel_mapping] = add_marker_if_not_empty(pulse_templ
 	
 	if ~isempty(add_marker)
 		marker_pulse = py.qctoolkit.pulses.PointPT({{0, 1},...
-			{pulse_template.duration, 1}}, add_marker);
+			{py.getattr(pulse_template, 'duration'), 1}}, add_marker);
 		pulse_template = py.qctoolkit.pulses.AtomicMultiChannelPT(pulse_template, marker_pulse);
 		
 		for ii = 1:numel(add_marker)
