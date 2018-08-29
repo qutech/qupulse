@@ -166,7 +166,7 @@ class PulseTemplateTest(unittest.TestCase):
         template = PulseTemplateStub(defined_channels={'A'}, parameter_names={'foo'})
         parameters = {'foo': ConstantParameter(2.126), 'bar': -26.2, 'hugo': '2*x+b', 'append_a_child': '1'}
         measurement_mapping = {'M': 'N'}
-        channel_mapping = {'B': 'A'}
+        channel_mapping = {'A': 'B'}
 
         expected_parameters = {'foo': ConstantParameter(2.126), 'bar': ConstantParameter(-26.2),
                                'hugo': ConstantParameter('2*x+b'), 'append_a_child': ConstantParameter('1')}
@@ -273,11 +273,11 @@ class PulseTemplateTest(unittest.TestCase):
                         self.assertEqual(expected_program, parent_loop)
 
     def test_create_program_defaults(self) -> None:
-        template = PulseTemplateStub(defined_channels={'A'}, parameter_names={'foo'}, measurement_names={'hugo', 'foo'})
+        template = PulseTemplateStub(defined_channels={'A', 'B'}, parameter_names={'foo'}, measurement_names={'hugo', 'foo'})
 
         expected_internal_kwargs = dict(parameters=dict(),
                                         measurement_mapping={'hugo': 'hugo', 'foo': 'foo'},
-                                        channel_mapping=dict(),
+                                        channel_mapping={'A': 'A', 'B': 'B'},
                                         global_transformation=None,
                                         to_single_waveform=set())
 
@@ -291,11 +291,26 @@ class PulseTemplateTest(unittest.TestCase):
             _internal_create_program.assert_called_once_with(**expected_internal_kwargs, parent_loop=program)
         self.assertEqual(expected_program, program)
 
+    def test_create_program_channel_mapping(self):
+        template = PulseTemplateStub(defined_channels={'A', 'B'})
+
+        expected_internal_kwargs = dict(parameters=dict(),
+                                        measurement_mapping=dict(),
+                                        channel_mapping={'A': 'C', 'B': 'B'},
+                                        global_transformation=None,
+                                        to_single_waveform=set())
+
+        with mock.patch.object(template, '_internal_create_program') as _internal_create_program:
+            template.create_program(channel_mapping={'A': 'C'})
+
+            _internal_create_program.assert_called_once_with(**expected_internal_kwargs, parent_loop=Loop())
+
+
     def test_create_program_none(self) -> None:
         template = PulseTemplateStub(defined_channels={'A'}, parameter_names={'foo'})
         parameters = {'foo': ConstantParameter(2.126), 'bar': -26.2, 'hugo': '2*x+b'}
         measurement_mapping = {'M': 'N'}
-        channel_mapping = {'B': 'A'}
+        channel_mapping = {'A': 'B'}
         expected_parameters = {'foo': ConstantParameter(2.126), 'bar': ConstantParameter(-26.2),
                                'hugo': ConstantParameter('2*x+b')}
         expected_internal_kwargs = dict(parameters=expected_parameters,
