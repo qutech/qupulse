@@ -10,9 +10,9 @@ All examples are provided as static text in this documentation and, additionally
     01AdvancedTablePulse
     02FunctionPulse
     03PointPulse
-    04Serialization
+    04PulseStorage
     05MappingTemplate
-    06SequencePulse
+    06CreatePrograms
     07MultiChannelTemplates
     08Measurements
     09ParameterConstraints
