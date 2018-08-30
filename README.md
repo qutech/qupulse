@@ -4,11 +4,27 @@
 [![Documentation Status](https://readthedocs.org/projects/qc-toolkit/badge/?version=latest)](http://qc-toolkit.readthedocs.org/en/latest/?badge=latest)
 
 The qc-toolkit project aims to produce a software toolkit facilitating experiments involving pulse driven state manipulation of physical qubits.
-It will provide a hardware independent object representation of pulses and pulse templates as well as means to translate this representation to hardware instructions, execute these instructions and perform corresponding measurements.
-Pulses may be as complex as specifying conditional branching/looping and the object representation features easy reuse of previously defined pulse templates.
+
+It provides a high-level hardware-independent representation of pulses as well as means to translate this representation to hardware-specific device instructions and waveforms, execute these instructions and perform corresponding measurements.
+
+Pulses can be assembled from previously defined subpulses, allowing easy construction of high-level from low-level pulses and re-use of previous work.
+Additionally, all pulses are parameterizable allowing users to fine-tune and adapt pulse templates to specific hardware or functionality without redefining an entire pulse sequence. To ensure meaningful parameter values, constraints can be put on parameters on a per-pulse basis.  
 
 ## Status
-Note that the project is in early development and thus neither feature-complete nor necessarily bug free. Additionally, interfaces and design decisions are subject to change.
+Note that the project is still in development and thus not feature-complete.
+
+The qc-toolkit library is already used productively by the Quantum Technology Group at the 2nd Institute of Physics at the RWTH Aachen University. As such, some features - such as pulse definition - are mostly complete and tested and interfaces are expected to remain largely stable (or changes to be backward compatible).
+However, it is still possible for existing portions of the code base to be redesigned if this will increase the usability long-term.
+ 
+The current feature list is as follows:
+
+- Definition of complex (arbitrarily deep nested and looped pulses) parameterized pulses in Python (including measurement windows)
+- Mathematical expression evaluation (based on sympy) for parameter values and parameter constraints
+- Serialization of pulses (to allow storing into permanent storage)
+- Hardware model representation (prototype, work in progress)
+- High-level pulse to hardware configuration and waveform translation routines 
+- Hardware drivers for Tabor Electronics AWGs and AlazarTech Digitizers
+- MATLAB interface to access qc-toolkit functionality
 
 ## Installation
 qc-toolkit is developed using Python 3.5 but should also run on previous 3.3+ versions.
@@ -28,9 +44,14 @@ The optional script *tests/utils/syntax_check.py* invokes pyflakes to perform a 
 You can find documentation on how to use this library on [readthedocs](http://qc-toolkit.readthedocs.io/en/latest/) and [IPython notebooks with examples in this repo](doc/source/examples)
 
 ## Folder Structure
-The repository primarily consists of the folders `qctoolkit` and `tests`.
+The repository primarily consists of the folders `qctoolkit` (toolkit core code) and `tests` (toolkit core tests). Additional parts of the project reside in `MATLAB` (MATLAB interface) and `doc` (configuration and source files to build documentation)  
 
-`qctoolkit` contains the entire source code of the project and is further partitioned into packages of related modules (i.e. a package folder `pulses` which contains all modules related to pulse representation and translation).
+`qctoolkit` contains the entire Python source code of the project and is further partitioned the following packages of related modules 
+
+- `pulses` which contains all modules related to pulse representation.
+- `hardware` containing classes for hardware representation as well as hardware drivers
+- `utils` containing miscellaneous utility modules or wrapping code for external libraries
+
 
 Contents of `tests` mirror the structure of `qctoolkit`. For every `<module>` somewhere in `qctoolkit` there should exist a `<module>Tests.py` in the corresponding subdirectory of `tests`.
 

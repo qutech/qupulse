@@ -93,6 +93,7 @@ def get_two_chan_test_block(wfg=WaveformGenerator(2)):
     return root_block
 
 
+@mock.patch.object(Loop, 'MAX_REPR_SIZE', 10000)
 class LoopTests(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -182,6 +183,9 @@ LOOP 1 times:
         self.assertEqual(len(wfs), 0)
 
         self.assertEqual(repr(tree), expected)
+
+        with mock.patch.object(Loop, 'MAX_REPR_SIZE', 1):
+            self.assertEqual(repr(tree), '...')
 
     def test_is_leaf(self):
         root_loop = self.get_test_loop(waveform_generator=WaveformGenerator(1))
@@ -350,6 +354,41 @@ LOOP 1 times:
 
         with self.assertWarnsRegex(UserWarning, 'Dropping measurement'):
             root.remove_empty_loops()
+
+    def test_cleanup(self):
+        wfs = [DummyWaveform(duration=i) for i in range(3)]
+
+        root = Loop(children=[
+            Loop(waveform=wfs[0]),
+            Loop(waveform=None),
+            Loop(children=[Loop(waveform=None)]),
+            Loop(children=[Loop(waveform=wfs[1], repetition_count=2, measurements=[('m', 0, 1)])], repetition_count=3),
+            Loop(children=[Loop(waveform=wfs[2], repetition_count=2)], repetition_count=3, measurements=[('n', 0, 1)])
+        ])
+
+        expected = Loop(children=[
+            Loop(waveform=wfs[0]),
+            Loop(waveform=wfs[1], repetition_count=6, measurements=[('m', 0, 1)]),
+            Loop(children=[Loop(waveform=wfs[2], repetition_count=2)], repetition_count=3, measurements=[('n', 0, 1)])
+        ])
+
+        root.cleanup()
+
+        self.assertEqual(expected, root)
+
+    def test_cleanup_warnings(self):
+        root = Loop(children=[
+            Loop(measurements=[('m', 0, 1)])
+        ])
+
+        with self.assertWarnsRegex(UserWarning, 'Dropping measurement'):
+            root.cleanup()
+
+        root = Loop(children=[
+            Loop(measurements=[('m', 0, 1)], children=[Loop()])
+        ])
+        with self.assertWarnsRegex(UserWarning, 'Dropping measurement since there is no waveform in children'):
+            root.cleanup()
 
 
 class MultiChannelTests(unittest.TestCase):

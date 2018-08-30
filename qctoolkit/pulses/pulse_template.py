@@ -9,7 +9,7 @@ Classes:
 from abc import abstractmethod
 from typing import Dict, Tuple, Set, Optional, Union, List, Callable, Any, Generic, TypeVar, Mapping
 import itertools
-from contextlib import contextmanager
+import collections
 from numbers import Real
 
 from qctoolkit.utils.types import ChannelID, DocStringABCMeta
@@ -125,6 +125,16 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
             channel_mapping = dict()
         if to_single_waveform is None:
             to_single_waveform = set()
+
+        for channel in self.defined_channels:
+            if channel not in channel_mapping:
+                channel_mapping[channel] = channel
+
+        non_unique_targets = {channel
+                              for channel, count in collections.Counter(channel_mapping.values()).items()
+                              if count > 1 and channel is not None}
+        if non_unique_targets:
+            raise ValueError('The following channels are mapped to twice', non_unique_targets)
 
         # make sure all values in the parameters dict are of type Parameter
         for (key, value) in parameters.items():

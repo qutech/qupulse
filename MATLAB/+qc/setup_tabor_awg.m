@@ -9,6 +9,7 @@ function setup_tabor_awg(varargin)
 		'simulateAWG', true, ...
 		'smChannels', {{'RFA', 'RFB', 'RFC', 'RFD'}}, ...
 		'taborName', 'TaborAWG2184C', ...
+		'globalTransformation', [], ...
 		'ip', '169.254.40.2', ...
 		'dcMode', false, ...
 		'maxPulseWait', 60, ... % Maximum waiting time in s in qc.awg_program before arming DAQ again
@@ -21,6 +22,7 @@ function setup_tabor_awg(varargin)
 	plsdata.awg.maxPulseWait = args.maxPulseWait;
 	plsdata.awg.minSamples = 192;
 	plsdata.awg.sampleQuantum = 16;
+	plsdata.awg.globalTransformation = args.globalTransformation;
 	
 	for smChannels = args.smChannels		
 		if ~(smdata.channels(smchanlookup(smChannels{1})).instchan(1) == sminstlookup(args.taborName))
@@ -58,7 +60,7 @@ function setup_tabor_awg(varargin)
 	end
 	
 	plsdata.awg.inst = smdata.inst(sminstlookup(args.taborName)).data.tawg;
-	if args.realAWG
+	if args.realAWG && exist('awgctrl.m', 'file')
 		awgctrl('off');
 	end
 	
