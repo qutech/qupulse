@@ -203,6 +203,14 @@ class SerializableTests(metaclass=ABCMeta):
         registry = dict()
         instance = self.make_instance('hugo', registry=registry)
         renamed_instance = instance.renamed('ilse', registry=registry)
+        self.assertEqual(renamed_instance.identifier, 'ilse')
+        self.assert_equal_instance_except_id(instance, renamed_instance)
+
+    def test_renamed_of_anonymous(self):
+        registry = dict()
+        instance = self.make_instance(None, registry=registry)
+        renamed_instance = instance.renamed('ilse', registry=registry)
+        self.assertEqual(renamed_instance.identifier, 'ilse')
         self.assert_equal_instance_except_id(instance, renamed_instance)
         
     def test_conversion(self):
