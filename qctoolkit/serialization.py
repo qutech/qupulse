@@ -503,7 +503,7 @@ class Serializable(metaclass=SerializableMeta):
         """Returns a copy of the Serializable with its identifier set to new_identifier."""
         data = self.get_serialization_data()
         data.pop(Serializable.type_identifier_name)
-        data.pop(Serializable.identifier_name)
+        data.pop(Serializable.identifier_name, None)
         return self.deserialize(registry=registry, identifier=new_identifier, **data)
 
 
