@@ -118,6 +118,31 @@ class TaborSegmentTests(unittest.TestCase):
 
         self.assertEqual(segment, reconstructed)
 
+    def test_eq(self):
+        ch_a = np.asarray(100 + np.arange(32), dtype=np.uint16)
+        ch_b = np.asarray(1000 + np.arange(32), dtype=np.uint16)
+
+        marker_ones = np.ones(16, dtype=bool)
+        marker_random = np.asarray(list(range(5)) + list(range(6)) + list(range(5)), dtype=np.uint16)
+        marker_zeros = np.zeros(16, dtype=bool)
+
+        segment_1 = TaborSegment(ch_a=ch_a, ch_b=ch_b, marker_a=marker_ones, marker_b=marker_random)
+        segment_2 = TaborSegment(ch_a=ch_a, ch_b=ch_a, marker_a=marker_ones, marker_b=marker_random)
+
+        segment_a0 = TaborSegment(ch_a=ch_a, ch_b=ch_b, marker_a=marker_zeros, marker_b=marker_random)
+        segment_anone = TaborSegment(ch_a=ch_a, ch_b=ch_b, marker_a=None, marker_b=marker_random)
+        segment_none = TaborSegment(ch_a=ch_a, ch_b=ch_b, marker_a=None, marker_b=None)
+
+        self.assertEqual(segment_1, segment_1)
+        self.assertNotEqual(segment_1, segment_2)
+
+        self.assertEqual(segment_a0, segment_anone)
+        self.assertEqual(segment_anone, segment_a0)
+        self.assertEqual(segment_anone, segment_anone)
+        self.assertNotEqual(segment_anone, segment_none)
+        self.assertEqual(segment_none, segment_none)
+        self.assertNotEqual(segment_a0, segment_1)
+
 
 class TaborProgramTests(unittest.TestCase):
     def __init__(self, *args, **kwargs):
