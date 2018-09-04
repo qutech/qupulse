@@ -111,7 +111,7 @@ class TaborAWGRepresentationTests(TaborSimulatorBasedTest):
         with self.assertRaises(TaborException):
             self.instrument.sample_rate(0)
 
-        self.instrument.send_cmd(':INST:SEL 1;')
+        self.instrument.send_cmd(':INST:SEL 1')
         self.instrument.send_cmd(':FREQ:RAST 2.3e9')
 
         self.assertEqual(2300000000, self.instrument.sample_rate(1))
