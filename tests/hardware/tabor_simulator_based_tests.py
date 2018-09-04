@@ -196,13 +196,18 @@ class TaborMemoryReadTests(TaborSimulatorBasedTest):
 
         waveforms = self.channel_pair.read_waveforms()
 
-        reformated = PlottableProgram._reformat_waveforms(waveforms)
+        segments = [TaborSegment.from_binary_segment(waveform)
+                    for waveform in waveforms]
 
         expected = [self.zero_segment, *self.segments]
-        for ex, r1, r2 in zip(expected, *reformated):
+
+        for ex, r in zip(expected, segments):
             ex1, ex2 = ex.data_a, ex.data_b
+            r1, r2 = r.data_a, r.data_b
             np.testing.assert_equal(ex1, r1)
             np.testing.assert_equal(ex2, r2)
+
+        self.assertEqual(expected, segments)
 
     def test_read_sequence_tables(self):
         self.channel_pair._amend_segments(self.segments)
