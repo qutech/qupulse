@@ -696,8 +696,10 @@ class PlottableProgram:
             for _ in range(repetition):
                 yield from waveform
 
-    def get_as_single_waveform(self, channel: int, max_total_length: int=10**9) -> Optional[np.ndarray]:
-        waveforms = self.get_waveforms(channel)
+    def get_as_single_waveform(self, channel: int,
+                               max_total_length: int=10**9,
+                               with_marker: bool=False) -> Optional[np.ndarray]:
+        waveforms = self.get_waveforms(channel, with_marker=with_marker)
         repetitions = self.get_repetitions()
         waveform_lengths = np.fromiter((wf.size for wf in waveforms), count=len(waveforms), dtype=np.uint64)
 
@@ -716,8 +718,11 @@ class PlottableProgram:
             c_idx += mem
         return result
 
-    def get_waveforms(self, channel: int) -> List[np.ndarray]:
-        ch_getter = (operator.attrgetter('ch_a'), operator.attrgetter('ch_b'))[channel]
+    def get_waveforms(self, channel: int, with_marker: bool=False) -> List[np.ndarray]:
+        if with_marker:
+            ch_getter = (operator.attrgetter('data_a'), operator.attrgetter('data_b'))[channel]
+        else:
+            ch_getter = (operator.attrgetter('ch_a'), operator.attrgetter('ch_b'))[channel]
         return [ch_getter(self._segments[segment_no - 1])
                 for _, segment_no, _ in self._iter_segment_table_entry()]
 
