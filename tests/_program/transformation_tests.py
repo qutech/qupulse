@@ -145,9 +145,7 @@ class IdentityTransformationTests(unittest.TestCase):
 
     def test_call(self):
         time = np.arange(12)
-        data = (np.arange(12.) + 1).reshape((3, 4))
-        data = pd.DataFrame(data, index=list('abc'))
-
+        data = dict(zip('abc',(np.arange(12.) + 1).reshape((3, 4))))
         self.assertIs(IdentityTransformation()(time, data), data)
 
     def test_output_channels(self):
@@ -209,10 +207,10 @@ class ChainedTransformationTests(unittest.TestCase):
         time = np.arange(12)
         data = (np.arange(12.) + 1).reshape((3, 4))
 
-        data_in = pd.DataFrame(data, index=list('abc'))
-        data_0 = data_in + 42
-        data_1 = data_0 + 42
-        data_2 = data_1 + 42
+        data_in = dict(zip('abc', data))
+        data_0 = dict(zip('abc', data + 42))
+        data_1 = dict(zip('abc', data + 2*42))
+        data_2 = dict(zip('abc', data + 3*42))
         with mock.patch('tests._program.transformation_tests.TransformationStub.__call__',
                         side_effect=[data_0, data_1, data_2]) as call:
             outs = chained(time, data_in)
