@@ -122,14 +122,12 @@ class Loop(Node):
     def unroll(self) -> None:
         if self.is_leaf():
             raise RuntimeError('Leaves cannot be unrolled')
-        for i, e in enumerate(self.parent):
-            if id(e) == id(self):
-                self.parent[i:i+1] = (child.copy_tree_structure(new_parent=self.parent)
-                                      for _ in range(self.repetition_count)
-                                      for child in self)
-                self.parent.assert_tree_integrity()
-                return
-        raise Exception('self not found in parent')
+
+        i = self.parent_index
+        self.parent[i:i+1] = (child.copy_tree_structure(new_parent=self.parent)
+                              for _ in range(self.repetition_count)
+                              for child in self)
+        self.parent.assert_tree_integrity()
 
     def __setitem__(self, idx, value):
         super().__setitem__(idx, value)
