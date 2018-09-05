@@ -1,7 +1,6 @@
 import unittest
 from unittest import mock
 
-import pandas as pd
 import numpy as np
 
 from qctoolkit._program.transformation import LinearTransformation, Transformation, IdentityTransformation,\
