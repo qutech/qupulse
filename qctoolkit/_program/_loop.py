@@ -3,7 +3,6 @@ from typing import Union, Dict, Set, Iterable, FrozenSet, Tuple, cast, List, Opt
 from collections import defaultdict, deque
 from copy import deepcopy
 from enum import Enum
-from fractions import Fraction
 import warnings
 
 import numpy as np
@@ -520,7 +519,7 @@ def _is_compatible(program: Loop, min_len: int, quantum: int, sample_rate: TimeT
             return _CompatibilityLevel.action_required
 
 
-def _make_compatible(program: Loop, min_len: int, quantum: int, sample_rate: Fraction) -> None:
+def _make_compatible(program: Loop, min_len: int, quantum: int, sample_rate: TimeType) -> None:
 
     if program.is_leaf():
         program.waveform = to_waveform(program.copy_tree_structure())
@@ -547,7 +546,7 @@ def _make_compatible(program: Loop, min_len: int, quantum: int, sample_rate: Fra
                     _make_compatible(sub_program, min_len, quantum, sample_rate)
 
 
-def make_compatible(program: Loop, minimal_waveform_length: int, waveform_quantum: int, sample_rate: Fraction):
+def make_compatible(program: Loop, minimal_waveform_length: int, waveform_quantum: int, sample_rate: TimeType):
     comp_level = _is_compatible(program,
                                 min_len=minimal_waveform_length,
                                 quantum=waveform_quantum,
