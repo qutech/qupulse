@@ -397,23 +397,20 @@ class ConfigurationGuardTest(unittest.TestCase):
 
 class PlottableProgramTests(unittest.TestCase):
     def setUp(self):
-        def make_read_waveform(data):
-            assert len(data) % 16 == 0
+        self.ch_a = [np.arange(16, dtype=np.uint16),      np.arange(32, 64, dtype=np.uint16)]
+        self.ch_b = [1000 + np.arange(16, dtype=np.uint16),  1000 + np.arange(32, 64, dtype=np.uint16)]
 
-            ch_0 = []
-            ch_1 = []
-            for i, x in enumerate(data):
-                ch_0.append(x+1000)
-                ch_1.append(x)
+        self.marker_a = [np.ones(8, bool), np.array([0, 1]*8, dtype=bool)]
+        self.marker_b = [np.array([0, 0, 0, 1]*2, bool), np.array([1, 0, 1, 1] * 4, dtype=bool)]
 
-            #ch_0.extend(ch_0[-1:]*16)
-            #ch_1.extend(ch_1[-1:]*16)
+        self.segments = [TaborSegment(ch_a, ch_b, marker_a, marker_b)
+                         for ch_a, ch_b, marker_a, marker_b in zip(self.ch_a, self.ch_b, self.marker_a, self.marker_b)]
 
-            ch_0 = np.array(ch_0, dtype=np.uint16)
-            ch_1 = np.array(ch_1, dtype=np.uint16)
-            return np.concatenate((ch_0.reshape((-1, 16)), ch_1.reshape((-1, 16))), 1).ravel()
+        self.sequencer_tables = [[(1, 1, 0), (1, 2, 0)],
+                                 [(1, 1, 0), (2, 2, 0), (1, 1, 0)]]
+        self.adv_sequencer_table = [(1, 1, 0), (1, 2, 0), (2, 1, 0)]
 
-        self.read_waveforms = [make_read_waveform(np.arange(32)), make_read_waveform(np.arange(32, 48))]
+        self.read_segments = [segment.get_as_binary() for segment in self.segments]
         self.read_sequencer_tables = [(np.array([1, 1]),
                                        np.array([1, 2]),
                                        np.array([0, 0])),
@@ -425,12 +422,12 @@ class PlottableProgramTests(unittest.TestCase):
                                          np.array([1, 2, 1]),
                                          np.array([0, 0, 0]))
 
-        self.waveforms = ((np.arange(32, dtype=np.uint16), np.arange(32, 48, dtype=np.uint16)),
-                          (1000+np.arange(32, dtype=np.uint16), 1000+np.arange(32, 48, dtype=np.uint16)))
-        self.segments = [TaborSegment.from_binary_data(a, b) for a, b in zip(*self.waveforms)]
-        self.sequencer_tables = [[(1, 1, 0), (1, 2, 0)],
-                                 [(1, 1, 0), (2, 2, 0), (1, 1, 0)]]
-        self.adv_sequencer_table = [(1, 1, 0), (1, 2, 0), (2, 1, 0)]
+        self.selection_order = [0, 1,
+                                0, 1, 1, 0,
+                                0, 1, 0, 1]
+        self.selection_order_without_repetition = [0, 1,
+                                                   0, 1, 0,
+                                                   0, 1, 0, 1]
 
     def test_init(self):
         prog = PlottableProgram(self.segments, self.sequencer_tables, self.adv_sequencer_table)
@@ -439,7 +436,7 @@ class PlottableProgramTests(unittest.TestCase):
         self.assertEqual(self.adv_sequencer_table, prog._advanced_sequence_table)
 
     def test_from_read_data(self):
-        prog = PlottableProgram.from_read_data(self.read_waveforms,
+        prog = PlottableProgram.from_read_data(self.read_segments,
                                                self.read_sequencer_tables,
                                                self.read_adv_sequencer_table)
         self.assertEqual(self.segments, prog._segments)
@@ -449,9 +446,7 @@ class PlottableProgramTests(unittest.TestCase):
     def test_iter(self):
         prog = PlottableProgram(self.segments, self.sequencer_tables, self.adv_sequencer_table)
 
-        ch = itertools.chain(range(32), range(32, 48),
-                             range(32), range(32, 48), range(32, 48), range(32),
-                             range(32), range(32, 48), range(32), range(32, 48))
+        ch = itertools.chain.from_iterable(self.ch_a[idx] for idx in self.selection_order)
         ch_0 = np.fromiter(ch, dtype=np.uint16)
         ch_1 = ch_0 + 1000
 
@@ -491,14 +486,18 @@ class PlottableProgramTests(unittest.TestCase):
     def test_get_waveforms(self):
         prog = PlottableProgram(self.segments, self.sequencer_tables, self.adv_sequencer_table)
 
-        expected_waveforms_0 = [np.arange(32), np.arange(32, 48), np.arange(32),
-                                np.arange(32, 48), np.arange(32), np.arange(32),
-                                np.arange(32, 48), np.arange(32), np.arange(32, 48)]
+        # omit first wave
+        expected_waveforms_0 = [self.ch_a[idx] for idx in self.selection_order_without_repetition]
+        expected_waveforms_1 = [self.ch_b[idx] for idx in self.selection_order_without_repetition]
 
         np.testing.assert_equal(expected_waveforms_0, prog.get_waveforms(0))
-
-        expected_waveforms_1 = [wf + 1000 for wf in expected_waveforms_0]
         np.testing.assert_equal(expected_waveforms_1, prog.get_waveforms(1))
+
+        expected_waveforms_0_marker = [self.segments[idx].data_a for idx in self.selection_order_without_repetition]
+        expected_waveforms_1_marker = [self.segments[idx].data_b for idx in self.selection_order_without_repetition]
+
+        np.testing.assert_equal(expected_waveforms_0_marker, prog.get_waveforms(0, with_marker=True))
+        np.testing.assert_equal(expected_waveforms_1_marker, prog.get_waveforms(1, with_marker=True))
 
     def test_get_repetitions(self):
         prog = PlottableProgram(self.segments, self.sequencer_tables, self.adv_sequencer_table)
