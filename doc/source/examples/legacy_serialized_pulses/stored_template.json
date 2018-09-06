@@ -15,5 +15,5 @@
     },
     "measurements": [],
     "parameter_constraints": [],
-    "type": "qctoolkit.pulses.table_pulse_template.TablePulseTemplate"
+    "type": "qupulse.pulses.table_pulse_template.TablePulseTemplate"
 }
