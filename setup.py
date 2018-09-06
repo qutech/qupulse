@@ -26,7 +26,7 @@ setup(name='qupulse',
       author='Quantum Technology Group and Chair of Software Engineering, RWTH Aachen University',
       package_dir={'qupulse': 'qupulse', 'qctoolkit': 'qctoolkit'},
       packages=packages,
-      python_requires='=>3.3',
+      python_requires='>=3.3',
       tests_require=['pytest'],
       install_requires=['sympy>=1.1.1', 'numpy', 'cached_property', 'gmpy2'] + requires_typing,
       extras_require={
