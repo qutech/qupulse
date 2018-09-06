@@ -16,8 +16,8 @@ packages = [package for package in find_packages()
 
 setup(name='qupulse',
       version='0.1',
-      description='Quantum Computing Toolkit',
-      author='qutech',
+      description='A Quantum compUting PULse parametrization and SEquencing framework',
+      author='Quantum Technology Group and Chair of Software Engineering, RWTH Aachen University',
       package_dir={'qupulse': 'qupulse', 'qctoolkit': 'qctoolkit'},
       packages=packages,
       tests_require=['pytest'],
