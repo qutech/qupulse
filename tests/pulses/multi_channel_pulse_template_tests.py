@@ -3,11 +3,11 @@ import warnings
 
 import numpy
 
-from qctoolkit.utils.types import time_from_float
-from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform, MappingPulseTemplate, ChannelMappingException, AtomicMultiChannelPulseTemplate
-from qctoolkit.pulses.parameters import ParameterConstraint, ParameterConstraintViolation, ConstantParameter
-from qctoolkit.expressions import ExpressionScalar, Expression
-from qctoolkit._program.instructions import InstructionBlock
+from qupulse.utils.types import time_from_float
+from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform, MappingPulseTemplate, ChannelMappingException, AtomicMultiChannelPulseTemplate
+from qupulse.pulses.parameters import ParameterConstraint, ParameterConstraintViolation, ConstantParameter
+from qupulse.expressions import ExpressionScalar, Expression
+from qupulse._program.instructions import InstructionBlock
 
 from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummyWaveform
 from tests.serialization_dummies import DummySerializer

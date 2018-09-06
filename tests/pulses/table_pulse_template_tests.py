@@ -3,12 +3,12 @@ import warnings
 
 import numpy
 
-from qctoolkit.expressions import Expression
-from qctoolkit.serialization import Serializer
-from qctoolkit.pulses.table_pulse_template import TablePulseTemplate, TableWaveform, TableEntry, TableWaveformEntry, ZeroDurationTablePulseTemplate, AmbiguousTablePulseEntry, concatenate
-from qctoolkit.pulses.parameters import ParameterNotProvidedException, ParameterConstraintViolation, ParameterConstraint
-from qctoolkit.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy, JumpInterpolationStrategy
-from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
+from qupulse.expressions import Expression
+from qupulse.serialization import Serializer
+from qupulse.pulses.table_pulse_template import TablePulseTemplate, TableWaveform, TableEntry, TableWaveformEntry, ZeroDurationTablePulseTemplate, AmbiguousTablePulseEntry, concatenate
+from qupulse.pulses.parameters import ParameterNotProvidedException, ParameterConstraintViolation, ParameterConstraint
+from qupulse.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy, JumpInterpolationStrategy
+from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
 
 from tests.pulses.sequencing_dummies import DummyInterpolationStrategy, DummyParameter, DummyCondition,\
     DummyPulseTemplate

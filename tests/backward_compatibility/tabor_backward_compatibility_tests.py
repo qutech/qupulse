@@ -8,11 +8,11 @@ import sys
 from tests.hardware.tabor_simulator_based_tests import TaborSimulatorManager
 from tests.hardware.dummy_devices import DummyDAC
 
-from qctoolkit.serialization import Serializer, FilesystemBackend, PulseStorage
-from qctoolkit.pulses.sequencing import Sequencer
-from qctoolkit.pulses.pulse_template import PulseTemplate
-from qctoolkit.hardware.setup import HardwareSetup, PlaybackChannel, MarkerChannel, MeasurementMask
-from qctoolkit.hardware.awgs.tabor import PlottableProgram
+from qupulse.serialization import Serializer, FilesystemBackend, PulseStorage
+from qupulse.pulses.sequencing import Sequencer
+from qupulse.pulses.pulse_template import PulseTemplate
+from qupulse.hardware.setup import HardwareSetup, PlaybackChannel, MarkerChannel, MeasurementMask
+from qupulse.hardware.awgs.tabor import PlottableProgram
 
 
 

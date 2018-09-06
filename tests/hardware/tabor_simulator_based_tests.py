@@ -7,7 +7,7 @@ import os
 import pytabor
 import numpy as np
 
-from qctoolkit.hardware.awgs.tabor import TaborAWGRepresentation, TaborException, TaborSegment, TaborChannelPair, PlottableProgram
+from qupulse.hardware.awgs.tabor import TaborAWGRepresentation, TaborException, TaborSegment, TaborChannelPair, PlottableProgram
 
 
 class TaborSimulatorManager:

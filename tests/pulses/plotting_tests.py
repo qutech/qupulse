@@ -1,12 +1,12 @@
 import unittest
 import numpy
 
-from qctoolkit.pulses.plotting import PlottingNotPossibleException, render, iter_waveforms, iter_instruction_block,plot, _render_instruction_block
-from qctoolkit._program.instructions import InstructionBlock
-from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
-from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
-from qctoolkit.pulses.sequencing import Sequencer
-from qctoolkit._program._loop import Loop, MultiChannelProgram
+from qupulse.pulses.plotting import PlottingNotPossibleException, render, iter_waveforms, iter_instruction_block,plot, _render_instruction_block
+from qupulse._program.instructions import InstructionBlock
+from qupulse.pulses.table_pulse_template import TablePulseTemplate
+from qupulse.pulses.sequence_pulse_template import SequencePulseTemplate
+from qupulse.pulses.sequencing import Sequencer
+from qupulse._program._loop import Loop, MultiChannelProgram
 
 from tests.pulses.sequencing_dummies import DummyWaveform, DummyInstruction, DummyPulseTemplate
 

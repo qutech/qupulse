@@ -4,11 +4,11 @@ import numpy as np
 
 from teawg import model_properties_dict
 
-from qctoolkit.hardware.awgs.tabor import TaborException, TaborProgram, \
+from qupulse.hardware.awgs.tabor import TaborException, TaborProgram, \
     TaborSegment, TaborSequencing, with_configuration_guard, PlottableProgram
-from qctoolkit._program._loop import MultiChannelProgram, Loop
-from qctoolkit._program.instructions import InstructionBlock
-from qctoolkit.hardware.util import voltage_to_uint16
+from qupulse._program._loop import MultiChannelProgram, Loop
+from qupulse._program.instructions import InstructionBlock
+from qupulse.hardware.util import voltage_to_uint16
 
 from tests.pulses.sequencing_dummies import DummyWaveform
 from tests._program.loop_tests import LoopTests, WaveformGenerator, MultiChannelTests

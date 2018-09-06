@@ -1,6 +1,6 @@
 from typing import Union, Dict, Any, Callable, Set
 
-from qctoolkit.serialization import Serializer, Serializable, StorageBackend
+from qupulse.serialization import Serializer, Serializable, StorageBackend
 
 
 class DummyStorageBackend(StorageBackend):

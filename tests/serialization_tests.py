@@ -1,6 +1,6 @@
 import unittest
 import os
-import json
+import sys
 import zipfile
 import typing
 import json
@@ -11,12 +11,12 @@ from abc import ABCMeta, abstractmethod
 from tempfile import TemporaryDirectory, TemporaryFile
 from typing import Optional, Any, Dict, Tuple
 
-from qctoolkit.serialization import FilesystemBackend, CachingBackend, Serializable, JSONSerializableEncoder,\
+from qupulse.serialization import FilesystemBackend, CachingBackend, Serializable, JSONSerializableEncoder,\
     ZipFileBackend, AnonymousSerializable, DictBackend, PulseStorage, JSONSerializableDecoder, Serializer,\
     get_default_pulse_registry, set_default_pulse_registry, new_default_pulse_registry, SerializableMeta, \
-    PulseRegistryType
+    PulseRegistryType, DeserializationCallbackFinder
 
-from qctoolkit.expressions import ExpressionScalar
+from qupulse.expressions import ExpressionScalar
 
 from tests.serialization_dummies import DummyStorageBackend
 from tests.pulses.sequencing_dummies import DummyPulseTemplate
@@ -167,7 +167,7 @@ class SerializableTests(metaclass=ABCMeta):
 
             del inst
             del temp
-            with mock.patch('qctoolkit.serialization.gc.collect', mock.MagicMock(side_effect=gc.collect)) as mocked_gc:
+            with mock.patch('qupulse.serialization.gc.collect', mock.MagicMock(side_effect=gc.collect)) as mocked_gc:
                 self.make_instance('blub', registry=registry)
                 mocked_gc.assert_called_once_with(2)
         finally:
@@ -620,6 +620,47 @@ class DictBackendTests(unittest.TestCase):
         self.assertEqual(expected, contents)
 
 
+class DeserializationCallbackFinderTests(unittest.TestCase):
+    def test_set_item(self):
+        finder = DeserializationCallbackFinder()
+
+        def my_callable():
+            pass
+
+        finder['asd'] = my_callable
+
+        self.assertIn('asd', finder)
+
+    def test_auto_import(self):
+        finder = DeserializationCallbackFinder()
+
+        sys.modules.pop('qupulse.pulses.table_pulse_template', None)
+
+        with mock.patch('importlib.import_module') as import_module, mock.patch.dict(sys.modules, clear=True):
+            with self.assertRaises(KeyError):
+                _ = finder['qupulse.pulses.table_pulse_template.TablePulseTemplate']
+            import_module.assert_called_once_with('qupulse.pulses.table_pulse_template')
+
+        finder.auto_import = False
+        with mock.patch('importlib.import_module') as import_module, mock.patch.dict(sys.modules, clear=True):
+            with self.assertRaises(KeyError):
+                finder['qupulse.pulses.table_pulse_template.TablePulseTemplate']
+            import_module.assert_not_called()
+
+    def test_qctoolkit_import(self):
+        def my_callable():
+            pass
+
+        finder = DeserializationCallbackFinder()
+
+        finder['qupulse.asd'] = my_callable
+        self.assertIs(finder['qctoolkit.asd'], my_callable)
+
+        finder.qctoolkit_alias = False
+        with self.assertRaises(KeyError):
+            finder['qctoolkit.asd']
+
+
 class SerializableMetaTests(unittest.TestCase):
     def test_native_deserializable(self):
 
@@ -907,7 +948,7 @@ class PulseStorageTests(unittest.TestCase):
         deserialized = pulse_storage['peter']
         self.assertEqual(deserialized, serializable)
 
-    @unittest.mock.patch('qctoolkit.serialization.default_pulse_registry', dict())
+    @unittest.mock.patch('qupulse.serialization.default_pulse_registry', dict())
     def test_deserialize_storage_is_not_default_registry_id_occupied(self) -> None:
         backend = DummyStorageBackend()
 
@@ -938,7 +979,7 @@ class PulseStorageTests(unittest.TestCase):
             self.assertIs(deserialized_1, deserialized_2)
             self.assertEqual(deserialized_1, serializable)
 
-    @unittest.mock.patch('qctoolkit.serialization.default_pulse_registry', None)
+    @unittest.mock.patch('qupulse.serialization.default_pulse_registry', None)
     def test_consistent_over_instances(self) -> None:
         # tests that PulseStorage behaves consistently over several instance (especially with regards to duplicate test)
         # demonstrates issue #273
@@ -1113,9 +1154,9 @@ class JSONSerializableEncoderTest(unittest.TestCase):
 
 import warnings
 from typing import Dict
-from qctoolkit.serialization import ExtendedJSONEncoder, Serializer
-from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
-from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
+from qupulse.serialization import ExtendedJSONEncoder, Serializer
+from qupulse.pulses.table_pulse_template import TablePulseTemplate
+from qupulse.pulses.sequence_pulse_template import SequencePulseTemplate
 
 
 class NestedDummySerializable(Serializable):
@@ -1346,7 +1387,7 @@ class TriviallyRepresentableEncoderTest(unittest.TestCase):
 # the following are tests for the routines that convert pulses from old to new serialization formats
 # can be removed after transition period
 # todo (218-06-14): remove ConversionTests after finalizing transition period from old to new serialization routines
-from qctoolkit.serialization import convert_stored_pulse_in_storage, convert_pulses_in_storage
+from qupulse.serialization import convert_stored_pulse_in_storage, convert_pulses_in_storage
 
 
 class ConversionTests(unittest.TestCase):
