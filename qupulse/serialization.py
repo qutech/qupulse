@@ -350,6 +350,9 @@ class DeserializationCallbackFinder:
 
         return self._storage[type_name]
 
+    def __contains__(self, type_name) -> bool:
+        return type_name in self._storage
+
 
 class SerializableMeta(DocStringABCMeta):
     deserialization_callbacks = DeserializationCallbackFinder()

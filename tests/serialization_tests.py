@@ -1,6 +1,6 @@
 import unittest
 import os
-import json
+import sys
 import zipfile
 import typing
 import json
@@ -14,7 +14,7 @@ from typing import Optional, Any, Dict, Tuple
 from qupulse.serialization import FilesystemBackend, CachingBackend, Serializable, JSONSerializableEncoder,\
     ZipFileBackend, AnonymousSerializable, DictBackend, PulseStorage, JSONSerializableDecoder, Serializer,\
     get_default_pulse_registry, set_default_pulse_registry, new_default_pulse_registry, SerializableMeta, \
-    PulseRegistryType
+    PulseRegistryType, DeserializationCallbackFinder
 
 from qupulse.expressions import ExpressionScalar
 
@@ -618,6 +618,47 @@ class DictBackendTests(unittest.TestCase):
         contents = self.backend.list_contents()
 
         self.assertEqual(expected, contents)
+
+
+class DeserializationCallbackFinderTests(unittest.TestCase):
+    def test_set_item(self):
+        finder = DeserializationCallbackFinder()
+
+        def my_callable():
+            pass
+
+        finder['asd'] = my_callable
+
+        self.assertIn('asd', finder)
+
+    def test_auto_import(self):
+        finder = DeserializationCallbackFinder()
+
+        sys.modules.pop('qupulse.pulses.table_pulse_template', None)
+
+        with mock.patch('importlib.import_module') as import_module, mock.patch.dict(sys.modules, clear=True):
+            with self.assertRaises(KeyError):
+                _ = finder['qupulse.pulses.table_pulse_template.TablePulseTemplate']
+            import_module.assert_called_once_with('qupulse.pulses.table_pulse_template')
+
+        finder.auto_import = False
+        with mock.patch('importlib.import_module') as import_module, mock.patch.dict(sys.modules, clear=True):
+            with self.assertRaises(KeyError):
+                finder['qupulse.pulses.table_pulse_template.TablePulseTemplate']
+            import_module.assert_not_called()
+
+    def test_qctoolkit_import(self):
+        def my_callable():
+            pass
+
+        finder = DeserializationCallbackFinder()
+
+        finder['qupulse.asd'] = my_callable
+        self.assertIs(finder['qctoolkit.asd'], my_callable)
+
+        finder.qctoolkit_alias = False
+        with self.assertRaises(KeyError):
+            finder['qctoolkit.asd']
 
 
 class SerializableMetaTests(unittest.TestCase):
