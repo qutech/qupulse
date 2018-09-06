@@ -6,7 +6,17 @@ Classes:
     - ZipFileBackend: Like FilesystemBackend but inside a single zip file instead of a directory
     - CachingBackend: A caching decorator for StorageBackends.
     - Serializable: An interface for serializable objects.
+    - PulseStorage: High-level management object for loading and storing and transparently (de)serializing serializable objects.
+
+Deprecated Classes:
     - Serializer: Converts Serializables to a serial representation as a string and vice-versa.
+
+Functions:
+    - get_default_pulse_registry: Returns the default pulse registry
+    - set_default_pulse_registry: Set the default pulse registry
+    - new_default_pulse_registry: Reset the default pulse registry with an empty mapping
+    - convert_stored_pulse_in_storage: Converts a single Serializable stored using the deprecated Serializer class format into the PulseStorage format.
+    - convert_pulses_in_storage: Converts all Serializables stored in a StorageBackend using the deprecated Serializer class format into the PulseStorage format.
 """
 
 from abc import ABCMeta, abstractmethod
@@ -23,8 +33,9 @@ from contextlib import contextmanager
 from qctoolkit.utils.types import DocStringABCMeta
 
 __all__ = ["StorageBackend", "FilesystemBackend", "ZipFileBackend", "CachingBackend", "Serializable", "Serializer",
-           "AnonymousSerializable", "DictBackend", "JSONSerializableEncoder", "JSONSerializableDecoder", "PulseStorage",
-           "convert_pulses_in_storage", "convert_stored_pulse_in_storage", "PulseRegistryType"]
+           "AnonymousSerializable", "DictBackend", "PulseStorage",
+           "convert_pulses_in_storage", "convert_stored_pulse_in_storage", "PulseRegistryType", "get_default_pulse_registry",
+           "set_default_pulse_registry", "new_default_pulse_registry"]
 
 
 class StorageBackend(metaclass=ABCMeta):
@@ -35,7 +46,7 @@ class StorageBackend(metaclass=ABCMeta):
 
     @abstractmethod
     def put(self, identifier: str, data: str, overwrite: bool=False) -> None:
-        """Store the data string identified by identifier.
+        """Stores the data string identified by identifier.
 
         Args:
             identifier (str): A unique identifier/name for the data to be stored.
@@ -52,7 +63,7 @@ class StorageBackend(metaclass=ABCMeta):
 
     @abstractmethod
     def get(self, identifier: str) -> str:
-        """Retrieve the data string with the given identifier.
+        """Retrieves the data string with the given identifier.
 
         Args:
             identifier (str): The identifier of the data to be retrieved.
@@ -67,7 +78,7 @@ class StorageBackend(metaclass=ABCMeta):
 
     @abstractmethod
     def exists(self, identifier: str) -> bool:
-        """Check if data is stored for the given identifier.
+        """Checks if data is stored for the given identifier.
 
         Args:
             identifier (str): The identifier for which presence of data shall be checked.
@@ -80,7 +91,7 @@ class StorageBackend(metaclass=ABCMeta):
 
     @abstractmethod
     def delete(self, identifier: str) -> None:
-        """Delete a data of the given identifier.
+        """Deletes data of the given identifier.
 
         Args:
             identifier: identifier of the data to be deleted
@@ -94,7 +105,7 @@ class StorageBackend(metaclass=ABCMeta):
 
     @abstractmethod
     def list_contents(self) -> Set[str]:
-        """Return a listing of all available identifiers.
+        """Returns a listing of all available identifiers.
 
         Returns:
             List of all available identifiers.
@@ -111,7 +122,7 @@ class FilesystemBackend(StorageBackend):
     """
 
     def __init__(self, root: str='.', create_if_missing: bool=False) -> None:
-        """Create a new FilesystemBackend.
+        """Creates a new FilesystemBackend.
 
         Args:
             root: The path of the directory in which all data files are located. (default: ".",
@@ -182,7 +193,7 @@ class ZipFileBackend(StorageBackend):
     complete recompression (it's not too bad)."""
 
     def __init__(self, root: str='./storage.zip') -> None:
-        """Create a new FilesystemBackend.
+        """Creates a new FilesystemBackend.
 
         Args:
             root (str): The path of the zip file in which all data files are stored. (default: "./storage.zip",
@@ -271,7 +282,7 @@ class CachingBackend(StorageBackend):
     """
 
     def __init__(self, backend: StorageBackend) -> None:
-        """Create a new CachingBackend.
+        """Creates a new CachingBackend.
 
         Args:
             backend (StorageBackend): A StorageBackend that provides data
@@ -352,10 +363,17 @@ default_pulse_registry = None # type: PulseRegistryType
 
 
 def get_default_pulse_registry() -> PulseRegistryType:
+    """Returns the current default pulse registry."""
     return default_pulse_registry
 
 
 def set_default_pulse_registry(new_default_registry: PulseRegistryType) -> None:
+    """Sets the default pulse registry.
+
+    Args:
+        new_default_registry: Any PulseRegistryType  object (i.e., mutable mapping) which will become the new default
+            pulse registry.
+    """
     global default_pulse_registry
     default_pulse_registry = new_default_registry
 
@@ -381,6 +399,12 @@ class Serializable(metaclass=SerializableMeta):
     the PulseStorage that this object should be stored as a separate data item and accessed by
     reference instead of possibly embedding it into a containing Serializable's representation.
 
+    All Serializables MUST automatically register themselves with the default pulse registry on
+    construction unless an explicit other registry is provided to them as construction argument.
+    This MUST be implemented by all subclasses of Serializable by calling `Serializable._register` at some point
+    in their __init__ method.
+    This is intended to prevent accidental duplicate usage of identifiers by failing early.
+
     See also:
         PulseStorage
     """
@@ -389,7 +413,7 @@ class Serializable(metaclass=SerializableMeta):
     identifier_name = '#identifier'
 
     def __init__(self, identifier: Optional[str]=None) -> None:
-        """Initialize a Serializable.
+        """Initializes a Serializable.
 
         Args:
             identifier: An optional, non-empty identifier for this Serializable.
@@ -404,13 +428,13 @@ class Serializable(metaclass=SerializableMeta):
             raise ValueError("Identifier must not be empty.")
         self.__identifier = identifier
 
-    def _register(self, registry: PulseRegistryType=None) -> None:
+    def _register(self, registry: Optional[PulseRegistryType]=None) -> None:
         """Registers the Serializable in the global registry.
 
         This method MUST be called by subclasses at some point during init.
         Args:
-            registry: An optional dict where the Serializable is registered. If None, it gets registered in the
-                default_pulse_registry.
+            registry: An optional mutable mapping where the Serializable is registered. If None, it gets registered in
+                the default_pulse_registry.
         Raises:
             RuntimeError: If a Serializable with the same name is already registered.
         """
@@ -433,7 +457,7 @@ class Serializable(metaclass=SerializableMeta):
         return self.__identifier
 
     def get_serialization_data(self, serializer: Optional['Serializer']=None) -> Dict[str, Any]:
-        """Return all data relevant for serialization as a dictionary containing only base types.
+        """Returns all data relevant for serialization as a dictionary containing only base types.
 
         Implementation hint:
         In the old serialization routines, if the Serializable contains complex objects which are itself
@@ -470,37 +494,43 @@ class Serializable(metaclass=SerializableMeta):
 
     @classmethod
     def deserialize(cls, serializer: Optional['Serializer']=None, **kwargs) -> 'Serializable':
-        """Reconstruct the Serializable object from a dictionary.
+        """Reconstructs the Serializable object from a dictionary.
 
         Implementation hint:
-            For greater clarity, implementations of this method should be precise in their return value,
-            i.e., give their exact class name, and also replace the **kwargs argument by a list of
-            arguments required, i.e., those returned by get_serialization_data.
-            Using old serialization routines, if this Serializable contains complex objects which are itself
-            of type Serializable, their dictionary representations MUST be converted into objects using
-            serializers deserialize() method. This is DEPRECATED behavior.
-            Using the new routines, a serializable is only responsible to decode it's own dictionary,
-            not those of nested objects (i.e., all incoming arguments are already processed by the
-            serialization routines).
-            For the transition time where both variants are
-            available, implementations of this method should support the old and new routines, using
-            the presence of the serializer argument to differentiate between both. For the new routines,
-            just call this base class function.
-            After the transition period, subclasses likely need not implement deserialize separately anymore at all.
+        For greater clarity, implementations of this method should be precise in their return value,
+        i.e., give their exact class name, and also replace the kwargs argument by a list of
+        arguments required, i.e., those returned by get_serialization_data.
+        Using old serialization routines, if this Serializable contains complex objects which are itself
+        of type Serializable, their dictionary representations MUST be converted into objects using
+        serializers deserialize() method. This is DEPRECATED behavior.
+        Using the new routines, a serializable is only responsible to decode it's own dictionary,
+        not those of nested objects (i.e., all incoming arguments are already processed by the
+        serialization routines).
+        For the transition time where both variants are
+        available, implementations of this method should support the old and new routines, using
+        the presence of the serializer argument to differentiate between both. For the new routines,
+        just call this base class function.
+        After the transition period, subclasses likely need not implement deserialize separately anymore at all.
 
-         Args:
-             serializer: DEPRECATED (May 2018). A serializer instance used when deserializing subelements.
-             <property_name>: All relevant properties of the object as keyword arguments. For every
-                (key,value) pair returned by get_serialization_data, the same pair is given as
-                keyword argument as input to this method.
+        Args:
+            serializer: DEPRECATED (May 2018). A serializer instance used when deserializing subelements.
+            **kwargs: All relevant properties of the object as keyword arguments. For every (key,value)
+                pair returned by get_serialization_data, the same pair is given as keyword argument as input
+                to this method.
          """
         if serializer:
             warnings.warn("{c}.deserialize(*) was called with a serializer argument, indicating deprecated behavior. Please switch to the new serialization routines.".format(c=cls.__name__), DeprecationWarning)
 
         return cls(**kwargs)
 
-    def renamed(self, new_identifier: str, registry: PulseRegistryType=None) -> 'Serializable':
-        """Returns a copy of the Serializable with its identifier set to new_identifier."""
+    def renamed(self, new_identifier: str, registry: Optional[PulseRegistryType]=None) -> 'Serializable':
+        """Returns a copy of the Serializable with its identifier set to new_identifier.
+
+        Args:
+            new_identifier: The identifier of the new copy of this Serializable.
+            registry: The pulse registry the copy of this Serializable will register in. If None, the default pulse
+                registry will be used. Optional.
+        """
         data = self.get_serialization_data()
         data.pop(Serializable.type_identifier_name)
         data.pop(Serializable.identifier_name, None)
@@ -546,7 +576,7 @@ class Serializer(object):
     __FileEntry = NamedTuple("FileEntry", [('serialization', str), ('serializable', Serializable)])
 
     def __init__(self, storage_backend: StorageBackend) -> None:
-        """Create a Serializer.
+        """Creates a Serializer.
 
         Args:
             storage_backend (StorageBackend): The StorageBackend all objects will be stored in.
@@ -557,7 +587,7 @@ class Serializer(object):
         warnings.warn("Serializer is deprecated. Please switch to the new serialization routines.", DeprecationWarning)
 
     def dictify(self, serializable: Serializable) -> Union[str, Dict[str, Any]]:
-        """Convert a Serializable into a dictionary representation.
+        """Converts a Serializable into a dictionary representation.
 
         The Serializable is converted by calling its get_serialization_data() method. If it contains
         nested Serializables, these are also converted into dictionarys (or references), yielding
@@ -591,7 +621,7 @@ class Serializer(object):
             return identifier
 
     def __collect_dictionaries(self, serializable: Serializable) -> Dict[str, Dict[str, Any]]:
-        """Convert a Serializable into a collection of dictionary representations.
+        """Converts a Serializable into a collection of dictionary representations.
 
         The Serializable is converted by calling its get_serialization_data() method. If it contains
         nested Serializables, these are also converted into dictionarys (or references), yielding
@@ -620,7 +650,7 @@ class Serializer(object):
 
     @staticmethod
     def get_type_identifier(obj: Any) -> str:
-        """Return a unique type identifier for any object.
+        """Returns a unique type identifier for any object.
 
         Args:
             obj: The object for which to obtain a type identifier.
@@ -630,7 +660,7 @@ class Serializer(object):
         return "{}.{}".format(obj.__module__, obj.__class__.__name__)
 
     def serialize(self, serializable: Serializable, overwrite=False) -> None:
-        """Serialize and store a Serializable.
+        """Serializes and stores a Serializable.
 
         The given Serializable and all nested Serializables that are to be stored separately will be
         converted into a serial string representation by obtaining their dictionary representation,
@@ -653,7 +683,7 @@ class Serializer(object):
             self.__storage_backend.put(storage_identifier, json_str, overwrite)
 
     def deserialize(self, representation: Union[str, Dict[str, Any]]) -> Serializable:
-        """Load a stored Serializable object or convert dictionary representation back to the
+        """Loads a stored Serializable object or converts a dictionary representation back to the
             corresponding Serializable.
 
         Args:
@@ -691,10 +721,44 @@ class Serializer(object):
 
 
 class PulseStorage(MutableMapping[str, Serializable]):
+    """The central storage management for pulses.
+
+    Provides a dictionary interface for loading and storing pulses based on any StorageBackend implementation.
+    Takes care of serialization and deserialization of pulses/Serializables in the process. Every Serializable
+    with an identifier will be stored as a separate entity, even if it is nested in another Serializable that is stored.
+    Serializables containing named Serializables will just store a reference to those which will be transparently
+    resolved by PulseStorage during loading.
+
+    PulseStorage employs caching, i.e., once a Serializable/pulse is loaded, it will be kept in memory and subsequent
+    fetches will be instantaneous. At the same time, all changes to Serializables known to PulseStorage will immediately
+    be flushed to the storage backend.
+
+    Note that it is currently not possible to store a Serializable under a different identifier than the one it holds,
+    i.e. you cannot store a Serializable `serializable` with identifier 'foo' under identifier 'bar' by calling
+    `pulse_storage['bar'] = serializable`. This will currently result in a ValueError.
+
+    It is also not possible to overwrite a Serializable using the dictionary interface. To explicitly overwrite a
+    Serializable in the storage, use the `overwrite` method.
+
+    PulseStorage can be used as the default pulse registry.
+    All Serializables (and thus pulses) will automatically register themselves with the default pulse registry on
+    construction unless an explicit other registry is provided to them as construction argument.
+    This is intended to prevent accidental duplicate usage of identifiers by failing early. Setting
+    a PulseStorage as pulse default registry also implies that all created Serializables are automatically stored
+    in the storage backend.
+    See Also:
+        PulseStorage.set_to_default_registry
+        PulseStorage.as_default_registry
+    """
     StorageEntry = NamedTuple('StorageEntry', [('serialization', str), ('serializable', Serializable)])
 
     def __init__(self,
                  storage_backend: StorageBackend) -> None:
+        """Create a PulseStorage instance.
+        Args:
+            storage_backend: The StorageBackend representing the permanent storage of the PulseStorage. Serializables
+                are stored to and read from here.
+        """
         self._storage_backend = storage_backend
 
         self._temporary_storage = dict() # type: Dict[str, StorageEntry]
@@ -714,17 +778,43 @@ class PulseStorage(MutableMapping[str, Serializable]):
 
     @property
     def temporary_storage(self) -> Dict[str, StorageEntry]:
+        """The in-memory temporary storage.
+
+        Contains all Serializables that have been loaded during the lifetime of this PulseStorage object."""
         return self._temporary_storage
 
     def __contains__(self, identifier) -> bool:
         return identifier in self._temporary_storage or identifier in self._storage_backend
 
     def __getitem__(self, identifier: str) -> Serializable:
+        """Fetch a Serializable.
+
+        If the Serializable is not present in temporary storage, it will be loaded and deserialized from the storage
+        backend.
+
+        Args:
+            identifier: The identifier of the Serializable to load.
+        """
         if identifier not in self._temporary_storage:
             self._load_and_deserialize(identifier)
         return self._temporary_storage[identifier].serializable
 
     def __setitem__(self, identifier: str, serializable: Serializable) -> None:
+        """Store a Serializable in the PulseStorage.
+
+        Note that it is currently not possible to store a Serializable under a different identifier than the one it holds,
+        i.e. you cannot store a Serializable `serializable` with identifier 'foo' under identifier 'bar' by calling
+        `pulse_storage['bar'] = serializable`. This will currently result in a ValueError.
+
+        It is also not possible to overwrite a Serializable using the dictionary interface. To explicitly overwrite a
+        Serializable in the storage, use the `overwrite` method.
+
+        Args:
+            identifier: The identifier to store the Serializable under. Has to be identical to `serialziable.identifier`.
+            serializable: The Serializable object to be stored.
+        Raises:
+            ValueError: if the given identifier argument does not match the identifier of the serializable
+        """
         if identifier != serializable.identifier: # address issue #272: https://github.com/qutech/qc-toolkit/issues/272
             raise ValueError("Storing a Serializable under a different than its own internal identifier is currently"
                              " not supported! If you want to rename the serializable, please use the "
@@ -747,6 +837,8 @@ class PulseStorage(MutableMapping[str, Serializable]):
 
         Does not raise an error if the deleted pulse is only in the storage backend. Assumes that all pulses
         contained in temporary storage are always also contained in the storage backend.
+        Args:
+            identifier: Identifier of the Serializable to delete
         """
         del self._storage_backend[identifier]
         try:
@@ -765,7 +857,16 @@ class PulseStorage(MutableMapping[str, Serializable]):
                                   "https://github.com/qutech/qc-toolkit/issues/new")
 
     def overwrite(self, identifier: str, serializable: Serializable) -> None:
-        """Use this method actively change a pulse"""
+        """Explicitly overwrites a pulse.
+
+        Calling this method will overwrite the entity currently stored under the given identifier by the
+        provided serializable. It does _not_ overwrite nested Serializable objects contained in serializable. If you
+        want to overwrite those as well, do that explicitely.
+
+        Args:
+              identifier: The identifier to store serializable under.
+            serializable: The Serializable object to be stored.
+        """
 
         is_transaction_begin = (self._transaction_storage is None)
         try:
@@ -788,10 +889,14 @@ class PulseStorage(MutableMapping[str, Serializable]):
                 self._transaction_storage = None
 
     def clear(self) -> None:
+        """Clears the temporary storage.
+
+        Does not affect the storage backend."""
         self._temporary_storage.clear()
 
     @contextmanager
     def as_default_registry(self) -> Any:
+        """Returns context manager to use this PulseStorage as the default pulse registry only within a with-statement."""
         global default_pulse_registry
         previous_registry = default_pulse_registry
         default_pulse_registry = self
@@ -801,13 +906,33 @@ class PulseStorage(MutableMapping[str, Serializable]):
             default_pulse_registry = previous_registry
 
     def set_to_default_registry(self) -> None:
+        """Promotes this PulseStorage object to be the default pulse registry.
+
+        All Serializables (and thus pulses) will automatically register themselves with the default pulse registry on
+        construction unless an explicit other registry is provided to them as construction argument.
+        This is intended to prevent accidental duplicate usage of identifiers by failing early. Setting
+        a PulseStorage as pulse default registry also implies that all created Serializables are automatically stored
+        in the storage backend."""
         global default_pulse_registry
         default_pulse_registry = self
 
 
 class JSONSerializableDecoder(json.JSONDecoder):
+    """JSONDecoder for Serializables.
+
+    Automatically follows references to nested Serializables during deserializing."""
 
     def __init__(self, storage: Mapping, *args, **kwargs) -> None:
+        """Creates a new JSONSerialzableDecoder object.
+
+        Args:
+            storage: Any mapping of identifier to Serializable objects. Will be used to resolve references to nested
+                Serializables. Usually a PulseStorage object.
+            *args: Any other positional argument will be passed on to JSONDecoder constructor.
+            **kwargs: Any keyword argument will be passed on to JSONDecoder.
+        See Also:
+            JSONDecoder
+        """
         super().__init__(*args, object_hook=self.filter_serializables, **kwargs)
 
         self.storage = storage
@@ -842,9 +967,22 @@ class JSONSerializableDecoder(json.JSONDecoder):
 
 
 class JSONSerializableEncoder(json.JSONEncoder):
-    """"""
+    """JSONEncoder for Serializables.
+
+    Ensures that nested Serializables are stored as separate entities and embedded in the parent Serializable's
+    serialization by reference."""
 
     def __init__(self, storage: MutableMapping, *args, **kwargs) -> None:
+        """Creates a new JSONSerialzableDecoder object.
+
+            Args:
+                storage: Any mapping of identifier to Serializable objects. Will be used to store nested
+                    Serializables. Usually a PulseStorage object.
+                *args: Any other positional argument will be passed on to JSONEncoder constructor.
+                **kwargs: Any keyword argument will be passed on to JSONEncoder.
+            See Also:
+                JSONEncoder
+        """
         super().__init__(*args, **kwargs)
 
         self.storage = storage
@@ -875,6 +1013,8 @@ class JSONSerializableEncoder(json.JSONEncoder):
 
 class ExtendedJSONEncoder(json.JSONEncoder):
     """Encodes AnonymousSerializable and sets as lists.
+
+    Used by Serializer.
 
     Deprecated as of May 2018. To be replaced by JSONSerializableEncoder."""
 
