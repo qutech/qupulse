@@ -3,16 +3,16 @@ from typing import Optional, Set, Dict, Union, List, Any, Tuple
 import itertools
 import numbers
 
-from qctoolkit.utils.types import ChannelID
-from qctoolkit.expressions import Expression, ExpressionScalar
-from qctoolkit.pulses.pulse_template import PulseTemplate, MappingTuple
-from qctoolkit.pulses.parameters import Parameter, MappedParameter, ParameterNotProvidedException, ParameterConstrainer
-from qctoolkit.pulses.sequencing import Sequencer
-from qctoolkit._program.instructions import InstructionBlock
-from qctoolkit._program.waveforms import Waveform
-from qctoolkit._program._loop import Loop
-from qctoolkit.pulses.conditions import Condition
-from qctoolkit.serialization import Serializer, PulseRegistryType
+from qupulse.utils.types import ChannelID
+from qupulse.expressions import Expression, ExpressionScalar
+from qupulse.pulses.pulse_template import PulseTemplate, MappingTuple
+from qupulse.pulses.parameters import Parameter, MappedParameter, ParameterNotProvidedException, ParameterConstrainer
+from qupulse.pulses.sequencing import Sequencer
+from qupulse._program.instructions import InstructionBlock
+from qupulse._program.waveforms import Waveform
+from qupulse._program._loop import Loop
+from qupulse.pulses.conditions import Condition
+from qupulse.serialization import Serializer, PulseRegistryType
 
 __all__ = [
     "MappingPulseTemplate",

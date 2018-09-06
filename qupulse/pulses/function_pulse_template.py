@@ -13,14 +13,14 @@ import numbers
 import numpy as np
 import sympy
 
-from qctoolkit.expressions import ExpressionScalar
-from qctoolkit.serialization import Serializer, PulseRegistryType
+from qupulse.expressions import ExpressionScalar
+from qupulse.serialization import Serializer, PulseRegistryType
 
-from qctoolkit.pulses.conditions import Condition
-from qctoolkit.utils.types import ChannelID, TimeType, time_from_float
-from qctoolkit.pulses.parameters import Parameter, ParameterConstrainer, ParameterConstraint
-from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration
-from qctoolkit._program.waveforms import FunctionWaveform
+from qupulse.pulses.conditions import Condition
+from qupulse.utils.types import ChannelID, TimeType, time_from_float
+from qupulse.pulses.parameters import Parameter, ParameterConstrainer, ParameterConstraint
+from qupulse.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration
+from qupulse._program.waveforms import FunctionWaveform
 
 
 __all__ = ["FunctionPulseTemplate"]
@@ -58,9 +58,9 @@ class FunctionPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
             channel: The channel this pulse template is defined on.
             identifier: A unique identifier for use in serialization.
             measurements: A list of measurement declarations forwarded to the
-                :class:`~qctoolkit.pulses.measurement.MeasurementDefiner` superclass
+                :class:`~qupulse.pulses.measurement.MeasurementDefiner` superclass
             parameter_constraints: A list of parameter constraints forwarded to the
-                :class:`~`qctoolkit.pulses.measurement.ParameterConstrainer superclass
+                :class:`~`qupulse.pulses.measurement.ParameterConstrainer superclass
         """
         AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)

@@ -1,6 +1,6 @@
-from qctoolkit.hardware.setup import HardwareSetup
+from qupulse.hardware.setup import HardwareSetup
 
-from qctoolkit.hardware import awgs
-from qctoolkit.hardware import dacs
+from qupulse.hardware import awgs
+from qupulse.hardware import dacs
 
 __all__ = ["HardwareSetup", "awgs", "dacs"]

@@ -15,14 +15,14 @@ import warnings
 import operator
 import itertools
 
-from qctoolkit.utils.types import ChannelID, MeasurementWindow
-from qctoolkit.pulses.pulse_template import PulseTemplate
-from qctoolkit.pulses.parameters import Parameter
-from qctoolkit.pulses.sequencing import Sequencer
-from qctoolkit._program.waveforms import Waveform
-from qctoolkit._program.instructions import EXECInstruction, STOPInstruction, AbstractInstructionBlock, \
+from qupulse.utils.types import ChannelID, MeasurementWindow
+from qupulse.pulses.pulse_template import PulseTemplate
+from qupulse.pulses.parameters import Parameter
+from qupulse.pulses.sequencing import Sequencer
+from qupulse._program.waveforms import Waveform
+from qupulse._program.instructions import EXECInstruction, STOPInstruction, AbstractInstructionBlock, \
     REPJInstruction, MEASInstruction, GOTOInstruction, InstructionPointer
-from qctoolkit._program._loop import Loop, to_waveform
+from qupulse._program._loop import Loop, to_waveform
 
 
 __all__ = ["render", "plot", "PlottingNotPossibleException"]

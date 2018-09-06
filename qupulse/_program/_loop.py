@@ -8,14 +8,14 @@ import warnings
 
 import numpy as np
 
-from qctoolkit.utils.types import ChannelID, TimeType
-from qctoolkit._program.instructions import AbstractInstructionBlock, EXECInstruction, REPJInstruction, GOTOInstruction,\
+from qupulse.utils.types import ChannelID, TimeType
+from qupulse._program.instructions import AbstractInstructionBlock, EXECInstruction, REPJInstruction, GOTOInstruction,\
     STOPInstruction, CHANInstruction, Waveform, MEASInstruction, Instruction
-from qctoolkit.utils.tree import Node, is_tree_circular
-from qctoolkit.utils.types import MeasurementWindow
-from qctoolkit.utils import is_integer
+from qupulse.utils.tree import Node, is_tree_circular
+from qupulse.utils.types import MeasurementWindow
+from qupulse.utils import is_integer
 
-from qctoolkit._program.waveforms import SequenceWaveform, RepetitionWaveform
+from qupulse._program.waveforms import SequenceWaveform, RepetitionWaveform
 
 __all__ = ['Loop', 'MultiChannelProgram', 'make_compatible']
 

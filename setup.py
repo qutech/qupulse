@@ -3,7 +3,7 @@ import sys
 
 if sys.version_info < (3, 3):
     sys.stderr.write('ERROR: You need Python 3.3 or later '
-                     'to install the qctoolkit package.\n')
+                     'to install the qupulse package.\n')
     exit(1)
 
 if sys.version_info < (3, 5):
@@ -12,13 +12,13 @@ else:
     requires_typing = []
 
 subpackages = ['pulses', 'utils', 'hardware']
-packages = ['qctoolkit'] + ['qctoolkit.' + subpackage for subpackage in subpackages]
+packages = ['qupulse'] + ['qupulse.' + subpackage for subpackage in subpackages]
 
-setup(name='qctoolkit',
+setup(name='qupulse',
       version='0.1',
       description='Quantum Computing Toolkit',
       author='qutech',
-      package_dir={'qctoolkit': 'qctoolkit'},
+      package_dir={'qupulse': 'qupulse'},
       packages=packages,
       tests_require=['pytest'],
       install_requires=['sympy>=1.1.1', 'numpy', 'pandas', 'cached_property'] + requires_typing,

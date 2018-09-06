@@ -1,6 +1,6 @@
-from qctoolkit.hardware.dacs.dac_base import *
+from qupulse.hardware.dacs.dac_base import *
 
 try:
-    from qctoolkit.hardware.dacs.alazar import *
+    from qupulse.hardware.dacs.alazar import *
 except ImportError:
     pass

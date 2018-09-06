@@ -13,10 +13,10 @@ from typing import Tuple, Dict, Union, Optional
 # solve circular dependence of type hints
 from . import conditions
 
-from qctoolkit.utils.types import ChannelID
-from qctoolkit._program.instructions import InstructionBlock, ImmutableInstructionBlock
-from qctoolkit._program.waveforms import Waveform
-from qctoolkit.pulses.parameters import Parameter, ConstantParameter
+from qupulse.utils.types import ChannelID
+from qupulse._program.instructions import InstructionBlock, ImmutableInstructionBlock
+from qupulse._program.waveforms import Waveform
+from qupulse.pulses.parameters import Parameter, ConstantParameter
 
 
 __all__ = ["SequencingElement", "Sequencer"]

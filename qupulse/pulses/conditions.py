@@ -11,10 +11,10 @@ Classes:
 from abc import ABCMeta, abstractmethod
 from typing import Dict, Optional, Callable
 
-from qctoolkit.utils.types import ChannelID
-from qctoolkit.pulses.parameters import Parameter
-from qctoolkit.pulses.sequencing import SequencingElement, Sequencer
-from qctoolkit._program.instructions import InstructionBlock, InstructionPointer, Trigger
+from qupulse.utils.types import ChannelID
+from qupulse.pulses.parameters import Parameter
+from qupulse.pulses.sequencing import SequencingElement, Sequencer
+from qupulse._program.instructions import InstructionBlock, InstructionPointer, Trigger
 
 __all__ = ["Condition", "ConditionEvaluationException", "ConditionMissingException",
            "SoftwareCondition", "HardwareCondition"]

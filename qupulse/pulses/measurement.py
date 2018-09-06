@@ -2,9 +2,9 @@ from typing import Optional, List, Tuple, Union, Dict, Set
 from numbers import Real
 import itertools
 
-from qctoolkit.expressions import Expression
-from qctoolkit.utils.types import MeasurementWindow
-from qctoolkit.pulses.parameters import Parameter
+from qupulse.expressions import Expression
+from qupulse.utils.types import MeasurementWindow
+from qupulse.pulses.parameters import Parameter
 
 MeasurementDeclaration = Tuple[str, Union[Expression, str, Real], Union[Expression, str, Real]]
 

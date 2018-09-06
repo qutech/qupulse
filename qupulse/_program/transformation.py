@@ -3,9 +3,9 @@ from abc import abstractmethod
 
 import numpy as np
 
-from qctoolkit import ChannelID
-from qctoolkit.comparable import Comparable
-from qctoolkit.utils.types import SingletonABCMeta
+from qupulse import ChannelID
+from qupulse.comparable import Comparable
+from qupulse.utils.types import SingletonABCMeta
 
 
 class Transformation(Comparable):

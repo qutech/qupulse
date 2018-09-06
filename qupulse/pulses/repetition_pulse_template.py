@@ -7,20 +7,20 @@ from warnings import warn
 
 import numpy as np
 
-from qctoolkit.serialization import Serializer, PulseRegistryType
-from qctoolkit._program._loop import Loop
+from qupulse.serialization import Serializer, PulseRegistryType
+from qupulse._program._loop import Loop
 
-from qctoolkit.utils.types import ChannelID
-from qctoolkit.expressions import ExpressionScalar
-from qctoolkit.utils import checked_int_cast
-from qctoolkit.pulses.pulse_template import PulseTemplate
-from qctoolkit.pulses.loop_pulse_template import LoopPulseTemplate
-from qctoolkit.pulses.sequencing import Sequencer
-from qctoolkit._program.instructions import InstructionBlock, InstructionPointer
-from qctoolkit._program.waveforms import RepetitionWaveform
-from qctoolkit.pulses.parameters import Parameter, ParameterConstrainer, ParameterNotProvidedException
-from qctoolkit.pulses.conditions import Condition
-from qctoolkit.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
+from qupulse.utils.types import ChannelID
+from qupulse.expressions import ExpressionScalar
+from qupulse.utils import checked_int_cast
+from qupulse.pulses.pulse_template import PulseTemplate
+from qupulse.pulses.loop_pulse_template import LoopPulseTemplate
+from qupulse.pulses.sequencing import Sequencer
+from qupulse._program.instructions import InstructionBlock, InstructionPointer
+from qupulse._program.waveforms import RepetitionWaveform
+from qupulse.pulses.parameters import Parameter, ParameterConstrainer, ParameterNotProvidedException
+from qupulse.pulses.conditions import Condition
+from qupulse.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
 
 
 __all__ = ["RepetitionPulseTemplate", "ParameterNotIntegerException"]
@@ -32,7 +32,7 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
     RepetitionPulseTemplate simply repeats the given body PulseTemplate with the same parameter set for the
     specified number of times. It does not provide a loop index to the subtemplate. If you need to loop over an integer
     range and provide an index to the repeated template (at the cost of sequencing performance), use
-    :class:`~qctoolkit.pulses.loop_pulse_template.ForLoopPulseTemplate`.
+    :class:`~qupulse.pulses.loop_pulse_template.ForLoopPulseTemplate`.
     """
 
     def __init__(self,

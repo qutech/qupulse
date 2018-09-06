@@ -15,9 +15,9 @@ from numbers import Real
 import sympy
 import numpy
 
-from qctoolkit.serialization import AnonymousSerializable
-from qctoolkit.expressions import Expression
-from qctoolkit.utils.types import HashableNumpyArray, DocStringABCMeta
+from qupulse.serialization import AnonymousSerializable
+from qupulse.expressions import Expression
+from qupulse.utils.types import HashableNumpyArray, DocStringABCMeta
 
 __all__ = ["Parameter", "ConstantParameter",
            "ParameterNotProvidedException", "ParameterConstraintViolation"]

@@ -9,18 +9,18 @@ import warnings
 
 from cached_property import cached_property
 
-from qctoolkit.serialization import Serializer, PulseRegistryType
-from qctoolkit._program._loop import Loop
+from qupulse.serialization import Serializer, PulseRegistryType
+from qupulse._program._loop import Loop
 
-from qctoolkit.utils.types import MeasurementWindow, ChannelID, TimeType
-from qctoolkit.pulses.pulse_template import PulseTemplate
-from qctoolkit.pulses.parameters import Parameter, ParameterConstrainer, ParameterNotProvidedException
-from qctoolkit.pulses.sequencing import InstructionBlock, Sequencer
-from qctoolkit.pulses.conditions import Condition
-from qctoolkit.pulses.mapping_pulse_template import MappingPulseTemplate, MappingTuple
-from qctoolkit._program.waveforms import SequenceWaveform
-from qctoolkit.pulses.measurement import MeasurementDeclaration, MeasurementDefiner
-from qctoolkit.expressions import Expression, ExpressionScalar
+from qupulse.utils.types import MeasurementWindow, ChannelID, TimeType
+from qupulse.pulses.pulse_template import PulseTemplate
+from qupulse.pulses.parameters import Parameter, ParameterConstrainer, ParameterNotProvidedException
+from qupulse.pulses.sequencing import InstructionBlock, Sequencer
+from qupulse.pulses.conditions import Condition
+from qupulse.pulses.mapping_pulse_template import MappingPulseTemplate, MappingTuple
+from qupulse._program.waveforms import SequenceWaveform
+from qupulse.pulses.measurement import MeasurementDeclaration, MeasurementDefiner
+from qupulse.expressions import Expression, ExpressionScalar
 
 __all__ = ["SequencePulseTemplate"]
 

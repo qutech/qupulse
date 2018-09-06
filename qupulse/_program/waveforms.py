@@ -12,13 +12,13 @@ from typing import Union, Set, Sequence, NamedTuple, Tuple, Any, Iterable, Froze
 import numpy as np
 import pandas as pd
 
-from qctoolkit import ChannelID
-from qctoolkit.utils import checked_int_cast
-from qctoolkit.utils.types import TimeType, time_from_float
-from qctoolkit.comparable import Comparable
-from qctoolkit.expressions import ExpressionScalar
-from qctoolkit.pulses.interpolation import InterpolationStrategy
-from qctoolkit._program.transformation import Transformation
+from qupulse import ChannelID
+from qupulse.utils import checked_int_cast
+from qupulse.utils.types import TimeType, time_from_float
+from qupulse.comparable import Comparable
+from qupulse.expressions import ExpressionScalar
+from qupulse.pulses.interpolation import InterpolationStrategy
+from qupulse._program.transformation import Transformation
 
 
 __all__ = ["Waveform", "TableWaveform", "TableWaveformEntry", "FunctionWaveform", "SequenceWaveform",
@@ -105,11 +105,11 @@ class Waveform(Comparable, metaclass=ABCMeta):
     @abstractmethod
     def defined_channels(self) -> Set[ChannelID]:
         """The channels this waveform should played on. Use
-            :func:`~qctoolkit.pulses.instructions.get_measurement_windows` to get a waveform for a subset of these."""
+            :func:`~qupulse.pulses.instructions.get_measurement_windows` to get a waveform for a subset of these."""
 
     @abstractmethod
     def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> 'Waveform':
-        """Unsafe version of :func:`~qctoolkit.pulses.instructions.get_measurement_windows`."""
+        """Unsafe version of :func:`~qupulse.pulses.instructions.get_measurement_windows`."""
 
     def get_subset_for_channels(self, channels: Set[ChannelID]) -> 'Waveform':
         """Get a waveform that only describes the channels contained in `channels`.

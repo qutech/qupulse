@@ -1,5 +1,5 @@
 """This module defines the abstract PulseTemplate class which is the basis of any
-pulse model in the qctoolkit.
+pulse model in the qupulse.
 
 Classes:
     - PulseTemplate: Represents the parametrized general structure of a pulse.
@@ -12,18 +12,18 @@ import itertools
 import collections
 from numbers import Real
 
-from qctoolkit.utils.types import ChannelID, DocStringABCMeta
-from qctoolkit.serialization import Serializable
-from qctoolkit.expressions import ExpressionScalar
-from qctoolkit._program._loop import Loop, to_waveform
-from qctoolkit._program.transformation import Transformation, IdentityTransformation, ChainedTransformation, chain_transformations
+from qupulse.utils.types import ChannelID, DocStringABCMeta
+from qupulse.serialization import Serializable
+from qupulse.expressions import ExpressionScalar
+from qupulse._program._loop import Loop, to_waveform
+from qupulse._program.transformation import Transformation, IdentityTransformation, ChainedTransformation, chain_transformations
 
 
-from qctoolkit.pulses.conditions import Condition
-from qctoolkit.pulses.parameters import Parameter, ConstantParameter, ParameterNotProvidedException
-from qctoolkit.pulses.sequencing import Sequencer, SequencingElement, InstructionBlock
-from qctoolkit._program.waveforms import Waveform, TransformingWaveform
-from qctoolkit.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
+from qupulse.pulses.conditions import Condition
+from qupulse.pulses.parameters import Parameter, ConstantParameter, ParameterNotProvidedException
+from qupulse.pulses.sequencing import Sequencer, SequencingElement, InstructionBlock
+from qupulse._program.waveforms import Waveform, TransformingWaveform
+from qupulse.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
 
 __all__ = ["PulseTemplate", "AtomicPulseTemplate", "DoubleParameterNameException", "MappingTuple"]
 
@@ -83,12 +83,12 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
     def __matmul__(self, other: Union['PulseTemplate', MappingTuple]) -> 'SequencePulseTemplate':
         """This method enables using the @-operator (intended for matrix multiplication) for
          concatenating pulses. If one of the pulses is a SequencePulseTemplate the other pulse gets merged into it"""
-        from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
+        from qupulse.pulses.sequence_pulse_template import SequencePulseTemplate
 
         return SequencePulseTemplate.concatenate(self, other)
 
     def __rmatmul__(self, other: MappingTuple) -> 'SequencePulseTemplate':
-        from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
+        from qupulse.pulses.sequence_pulse_template import SequencePulseTemplate
 
         return SequencePulseTemplate.concatenate(other, self)
 

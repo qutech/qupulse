@@ -2,12 +2,12 @@ from typing import NamedTuple, Set, Callable, Dict, Tuple, Union, Iterable, Any
 from collections import defaultdict
 import warnings
 
-from qctoolkit.hardware.awgs.base import AWG
-from qctoolkit.hardware.dacs import DAC
-from qctoolkit._program._loop import MultiChannelProgram, Loop
-from qctoolkit._program.instructions import AbstractInstructionBlock
+from qupulse.hardware.awgs.base import AWG
+from qupulse.hardware.dacs import DAC
+from qupulse._program._loop import MultiChannelProgram, Loop
+from qupulse._program.instructions import AbstractInstructionBlock
 
-from qctoolkit.utils.types import ChannelID
+from qupulse.utils.types import ChannelID
 
 import numpy as np
 

@@ -3,7 +3,7 @@ from collections import deque, namedtuple
 from copy import copy as shallow_copy
 import weakref
 
-from qctoolkit.comparable import Comparable
+from qupulse.comparable import Comparable
 
 
 __all__ = ['Node']

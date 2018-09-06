@@ -15,17 +15,17 @@ import warnings
 import numpy as np
 import sympy
 
-from qctoolkit.utils.types import ChannelID
-from qctoolkit.serialization import Serializer, PulseRegistryType
-from qctoolkit.pulses.parameters import Parameter, \
+from qupulse.utils.types import ChannelID
+from qupulse.serialization import Serializer, PulseRegistryType
+from qupulse.pulses.parameters import Parameter, \
     ParameterNotProvidedException, ParameterConstraint, ParameterConstrainer
-from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration
-from qctoolkit.pulses.interpolation import InterpolationStrategy, LinearInterpolationStrategy, \
+from qupulse.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration
+from qupulse.pulses.interpolation import InterpolationStrategy, LinearInterpolationStrategy, \
     HoldInterpolationStrategy, JumpInterpolationStrategy
-from qctoolkit._program.waveforms import TableWaveform, TableWaveformEntry
-from qctoolkit.expressions import ExpressionScalar, Expression
-from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
-from qctoolkit.pulses.conditions import Condition
+from qupulse._program.waveforms import TableWaveform, TableWaveformEntry
+from qupulse.expressions import ExpressionScalar, Expression
+from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
+from qupulse.pulses.conditions import Condition
 
 __all__ = ["TablePulseTemplate", "concatenate"]
 

@@ -8,18 +8,18 @@ import warnings
 import sympy
 from cached_property import cached_property
 
-from qctoolkit.serialization import Serializer, PulseRegistryType
-from qctoolkit._program._loop import Loop
+from qupulse.serialization import Serializer, PulseRegistryType
+from qupulse._program._loop import Loop
 
-from qctoolkit.expressions import ExpressionScalar
-from qctoolkit.utils import checked_int_cast
-from qctoolkit.pulses.parameters import Parameter, ConstantParameter, InvalidParameterNameException, ParameterConstrainer, ParameterNotProvidedException
-from qctoolkit.pulses.pulse_template import PulseTemplate, ChannelID
-from qctoolkit.pulses.conditions import Condition, ConditionMissingException
-from qctoolkit._program.instructions import InstructionBlock
-from qctoolkit.pulses.sequencing import Sequencer
-from qctoolkit._program.waveforms import SequenceWaveform as ForLoopWaveform
-from qctoolkit.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
+from qupulse.expressions import ExpressionScalar
+from qupulse.utils import checked_int_cast
+from qupulse.pulses.parameters import Parameter, ConstantParameter, InvalidParameterNameException, ParameterConstrainer, ParameterNotProvidedException
+from qupulse.pulses.pulse_template import PulseTemplate, ChannelID
+from qupulse.pulses.conditions import Condition, ConditionMissingException
+from qupulse._program.instructions import InstructionBlock
+from qupulse.pulses.sequencing import Sequencer
+from qupulse._program.waveforms import SequenceWaveform as ForLoopWaveform
+from qupulse.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
 
 __all__ = ['ForLoopPulseTemplate', 'LoopPulseTemplate', 'LoopIndexNotUsedException']
 
@@ -99,7 +99,7 @@ class ParametrizedRange:
 class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConstrainer):
     """This pulse template allows looping through an parametrized integer range and provides the loop index as a
     parameter to the body. If you do not need the index in the pulse template, consider using
-    :class:`~qctoolkit.pulses.repetition_pulse_template.RepetitionPulseTemplate`"""
+    :class:`~qupulse.pulses.repetition_pulse_template.RepetitionPulseTemplate`"""
     def __init__(self,
                  body: PulseTemplate,
                  loop_index: str,

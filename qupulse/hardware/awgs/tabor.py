@@ -14,11 +14,11 @@ from collections import OrderedDict
 import teawg
 import numpy as np
 
-from qctoolkit.utils.types import ChannelID
-from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
-from qctoolkit._program._loop import Loop, make_compatible
-from qctoolkit.hardware.util import voltage_to_uint16, make_combined_wave, find_positions
-from qctoolkit.hardware.awgs.base import AWG
+from qupulse.utils.types import ChannelID
+from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
+from qupulse._program._loop import Loop, make_compatible
+from qupulse.hardware.util import voltage_to_uint16, make_combined_wave, find_positions
+from qupulse.hardware.awgs.base import AWG
 
 
 assert(sys.byteorder == 'little')

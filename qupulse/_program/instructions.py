@@ -21,9 +21,9 @@ from weakref import WeakValueDictionary
 
 import numpy
 
-from qctoolkit.utils.types import ChannelID, MeasurementWindow, TimeType
-from qctoolkit.comparable import Comparable
-from qctoolkit._program.waveforms import Waveform
+from qupulse.utils.types import ChannelID, MeasurementWindow, TimeType
+from qupulse.comparable import Comparable
+from qupulse._program.waveforms import Waveform
 
 __all__ = ["Trigger",
            "InstructionPointer", "Instruction", "CJMPInstruction", "EXECInstruction",

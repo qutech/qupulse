@@ -5,16 +5,16 @@ import numbers
 
 import numpy as np
 
-from qctoolkit.utils.types import ChannelID
-from qctoolkit.expressions import Expression, ExpressionScalar
-from qctoolkit.pulses.conditions import Condition
-from qctoolkit._program.waveforms import TableWaveform, TableWaveformEntry
-from qctoolkit.pulses.parameters import Parameter, ParameterNotProvidedException, ParameterConstraint,\
+from qupulse.utils.types import ChannelID
+from qupulse.expressions import Expression, ExpressionScalar
+from qupulse.pulses.conditions import Condition
+from qupulse._program.waveforms import TableWaveform, TableWaveformEntry
+from qupulse.pulses.parameters import Parameter, ParameterNotProvidedException, ParameterConstraint,\
     ParameterConstrainer
-from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration
-from qctoolkit.pulses.table_pulse_template import TableEntry, EntryInInit
-from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
-from qctoolkit.serialization import Serializer, PulseRegistryType
+from qupulse.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration
+from qupulse.pulses.table_pulse_template import TableEntry, EntryInInit
+from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
+from qupulse.serialization import Serializer, PulseRegistryType
 
 
 __all__ = ["PointWaveform", "PointPulseTemplate", "PointPulseEntry", "PointWaveformEntry", "InvalidPointDimension"]

@@ -14,16 +14,16 @@ import warnings
 import numpy
 
 
-from qctoolkit.serialization import Serializer, PulseRegistryType
+from qupulse.serialization import Serializer, PulseRegistryType
 
-from qctoolkit.pulses.conditions import Condition
-from qctoolkit.utils.types import ChannelID, TimeType
-from qctoolkit._program.waveforms import MultiChannelWaveform
-from qctoolkit.pulses.pulse_template import PulseTemplate, AtomicPulseTemplate
-from qctoolkit.pulses.mapping_pulse_template import MappingPulseTemplate, MappingTuple
-from qctoolkit.pulses.parameters import Parameter, ParameterConstrainer
-from qctoolkit.pulses.measurement import MeasurementDeclaration, MeasurementWindow
-from qctoolkit.expressions import Expression, ExpressionScalar
+from qupulse.pulses.conditions import Condition
+from qupulse.utils.types import ChannelID, TimeType
+from qupulse._program.waveforms import MultiChannelWaveform
+from qupulse.pulses.pulse_template import PulseTemplate, AtomicPulseTemplate
+from qupulse.pulses.mapping_pulse_template import MappingPulseTemplate, MappingTuple
+from qupulse.pulses.parameters import Parameter, ParameterConstrainer
+from qupulse.pulses.measurement import MeasurementDeclaration, MeasurementWindow
+from qupulse.expressions import Expression, ExpressionScalar
 
 __all__ = ["AtomicMultiChannelPulseTemplate"]
 

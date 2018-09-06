@@ -12,7 +12,7 @@ from abc import ABCMeta, abstractmethod
 from typing import Any, Tuple
 import numpy as np
 
-from qctoolkit.expressions import ExpressionScalar
+from qupulse.expressions import ExpressionScalar
 
 
 __all__ = ["InterpolationStrategy", "HoldInterpolationStrategy",

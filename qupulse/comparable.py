@@ -2,7 +2,7 @@
 from abc import abstractmethod
 from typing import Any
 
-from qctoolkit.utils.types import DocStringABCMeta
+from qupulse.utils.types import DocStringABCMeta
 
 
 __all__ = ["Comparable"]

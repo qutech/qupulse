@@ -20,7 +20,7 @@ import warnings
 import gc
 from contextlib import contextmanager
 
-from qctoolkit.utils.types import DocStringABCMeta
+from qupulse.utils.types import DocStringABCMeta
 
 __all__ = ["StorageBackend", "FilesystemBackend", "ZipFileBackend", "CachingBackend", "Serializable", "Serializer",
            "AnonymousSerializable", "DictBackend", "JSONSerializableEncoder", "JSONSerializableDecoder", "PulseStorage",
