@@ -124,6 +124,10 @@ class Node(Comparable):
     def parent(self: _NodeType) -> Union[None, _NodeType]:
         return self.__parent()
 
+    @property
+    def parent_index(self) -> int:
+        return self.__parent_index
+
     def get_root(self: _NodeType) -> _NodeType:
         if self.parent:
             return self.parent.get_root()

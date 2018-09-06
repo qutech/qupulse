@@ -28,7 +28,7 @@ setup(name='qupulse',
       packages=packages,
       python_requires='=>3.3',
       tests_require=['pytest'],
-      install_requires=['sympy>=1.1.1', 'numpy', 'pandas', 'cached_property'] + requires_typing,
+      install_requires=['sympy>=1.1.1', 'numpy', 'cached_property', 'gmpy2'] + requires_typing,
       extras_require={
           'testing': ['pytest'],
           'plotting': ['matplotlib'],

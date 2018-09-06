@@ -3,7 +3,6 @@ from typing import Union, Dict, Set, Iterable, FrozenSet, Tuple, cast, List, Opt
 from collections import defaultdict, deque
 from copy import deepcopy
 from enum import Enum
-from fractions import Fraction
 import warnings
 
 import numpy as np
@@ -122,14 +121,12 @@ class Loop(Node):
     def unroll(self) -> None:
         if self.is_leaf():
             raise RuntimeError('Leaves cannot be unrolled')
-        for i, e in enumerate(self.parent):
-            if id(e) == id(self):
-                self.parent[i:i+1] = (child.copy_tree_structure(new_parent=self.parent)
-                                      for _ in range(self.repetition_count)
-                                      for child in self)
-                self.parent.assert_tree_integrity()
-                return
-        raise Exception('self not found in parent')
+
+        i = self.parent_index
+        self.parent[i:i+1] = (child.copy_tree_structure(new_parent=self.parent)
+                              for _ in range(self.repetition_count)
+                              for child in self)
+        self.parent.assert_tree_integrity()
 
     def __setitem__(self, idx, value):
         super().__setitem__(idx, value)
@@ -522,7 +519,7 @@ def _is_compatible(program: Loop, min_len: int, quantum: int, sample_rate: TimeT
             return _CompatibilityLevel.action_required
 
 
-def _make_compatible(program: Loop, min_len: int, quantum: int, sample_rate: Fraction) -> None:
+def _make_compatible(program: Loop, min_len: int, quantum: int, sample_rate: TimeType) -> None:
 
     if program.is_leaf():
         program.waveform = to_waveform(program.copy_tree_structure())
@@ -549,7 +546,7 @@ def _make_compatible(program: Loop, min_len: int, quantum: int, sample_rate: Fra
                     _make_compatible(sub_program, min_len, quantum, sample_rate)
 
 
-def make_compatible(program: Loop, minimal_waveform_length: int, waveform_quantum: int, sample_rate: Fraction):
+def make_compatible(program: Loop, minimal_waveform_length: int, waveform_quantum: int, sample_rate: TimeType):
     comp_level = _is_compatible(program,
                                 min_len=minimal_waveform_length,
                                 quantum=waveform_quantum,
