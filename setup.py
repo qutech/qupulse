@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 import sys
 
 if sys.version_info < (3, 3):
@@ -11,15 +11,12 @@ if sys.version_info < (3, 5):
 else:
     requires_typing = []
 
-subpackages = ['pulses', 'utils', 'hardware', '_program']
-packages = ['qctoolkit'] + ['qctoolkit.' + subpackage for subpackage in subpackages]
-
 setup(name='qctoolkit',
       version='0.1',
       description='Quantum Computing Toolkit',
       author='qutech',
       package_dir={'qctoolkit': 'qctoolkit'},
-      packages=packages,
+      packages=find_packages,
       tests_require=['pytest'],
       install_requires=['sympy>=1.1.1', 'numpy', 'pandas', 'cached_property'] + requires_typing,
       extras_require={
