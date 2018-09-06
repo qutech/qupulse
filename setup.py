@@ -18,7 +18,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setup(name='qupulse',
-      version='0.1',
+      version='0.1.2',
       description='A Quantum compUting PULse parametrization and SEquencing framework',
       long_description=long_description,
       long_description_content_type="text/markdown",
@@ -42,5 +42,5 @@ setup(name='qupulse',
           "License :: OSI Approved :: MIT License",
           "Operating System :: OS Independent",
       ],
-      url="https://github.com/pypa/sampleproject",
+      url="https://github.com/qutech/qupulse",
 )
