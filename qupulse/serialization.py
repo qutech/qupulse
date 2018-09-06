@@ -10,7 +10,7 @@ Classes:
 """
 
 from abc import ABCMeta, abstractmethod
-from typing import Dict, Any, Optional, NamedTuple, Union, Mapping, MutableMapping, Set
+from typing import Dict, Any, Optional, NamedTuple, Union, Mapping, MutableMapping, Set, Callable
 import os
 import zipfile
 import tempfile
@@ -18,6 +18,7 @@ import json
 import weakref
 import warnings
 import gc
+import importlib
 from contextlib import contextmanager
 
 from qupulse.utils.types import DocStringABCMeta
@@ -330,8 +331,28 @@ class DictBackend(StorageBackend):
         return set(self._cache.keys())
 
 
+class DeserializationCallbackFinder:
+    def __init__(self):
+        self._storage = {}
+        self.auto_import = True
+        self.qctoolkit_alias = True
+
+    def __setitem__(self, type_name: str, callback: Callable):
+        self._storage[type_name] = callback
+
+    def __getitem__(self, type_name: str) -> Callable:
+        if self.qctoolkit_alias and type_name.startswith('qctoolkit.'):
+            type_name = type_name.replace('qctoolkit.', 'qupulse.')
+
+        if self.auto_import and type_name not in self._storage:
+            module_name = '.'.join(type_name.split('.')[:-1])
+            importlib.import_module(module_name)
+
+        return self._storage[type_name]
+
+
 class SerializableMeta(DocStringABCMeta):
-    deserialization_callbacks = dict()
+    deserialization_callbacks = DeserializationCallbackFinder()
 
     def __new__(mcs, name, bases, dct):
         cls = super().__new__(mcs, name, bases, dct)
