@@ -634,8 +634,6 @@ class DeserializationCallbackFinderTests(unittest.TestCase):
     def test_auto_import(self):
         finder = DeserializationCallbackFinder()
 
-        sys.modules.pop('qupulse.pulses.table_pulse_template', None)
-
         with mock.patch('importlib.import_module') as import_module, mock.patch.dict(sys.modules, clear=True):
             with self.assertRaises(KeyError):
                 _ = finder['qupulse.pulses.table_pulse_template.TablePulseTemplate']

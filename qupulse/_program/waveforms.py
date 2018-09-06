@@ -10,7 +10,6 @@ from weakref import WeakValueDictionary, ref
 from typing import Union, Set, Sequence, NamedTuple, Tuple, Any, Iterable, FrozenSet, Optional
 
 import numpy as np
-import pandas as pd
 
 from qupulse import ChannelID
 from qupulse.utils import checked_int_cast

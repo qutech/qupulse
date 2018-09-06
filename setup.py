@@ -21,7 +21,7 @@ setup(name='qupulse',
       package_dir={'qupulse': 'qupulse', 'qctoolkit': 'qctoolkit'},
       packages=packages,
       tests_require=['pytest'],
-      install_requires=['sympy>=1.1.1', 'numpy', 'pandas', 'cached_property'] + requires_typing,
+      install_requires=['sympy>=1.1.1', 'numpy', 'cached_property', 'gmpy2'] + requires_typing,
       extras_require={
           'testing': ['pytest'],
           'plotting': ['matplotlib'],
