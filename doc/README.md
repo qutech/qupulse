@@ -1,4 +1,4 @@
-# qc-toolkit: Quantum Computing Toolkit - Documentation
+# qupulse: Quantum Computing Toolkit - Documentation
 
 This folder contains texts, configuration and scripts which are used to compile the documentation using [sphinx](http://www.sphinx-doc.org/en/stable/). It also contains usage examples for the qctoolkit.
 You may either build the documentation yourself or read it on [readthedocs](http://qc-toolkit.readthedocs.org/).[![Documentation Status](https://readthedocs.org/projects/qc-toolkit/badge/?version=latest)](http://qc-toolkit.readthedocs.org/en/latest/?badge=latest)

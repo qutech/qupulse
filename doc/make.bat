@@ -71,7 +71,7 @@ if errorlevel 9009 (
 
 :sphinx_ok
 
-sphinx-apidoc --no-toc -o source ../qctoolkit
+sphinx-apidoc --no-toc -o source ../qupulse
 
 if "%1" == "html" (
 	%SPHINXBUILD% -b html %ALLSPHINXOPTS% %BUILDDIR%/html
@@ -128,9 +128,9 @@ if "%1" == "qthelp" (
 	echo.
 	echo.Build finished; now you can run "qcollectiongenerator" with the ^
 .qhcp project file in %BUILDDIR%/qthelp, like this:
-	echo.^> qcollectiongenerator %BUILDDIR%\qthelp\qc-toolkit.qhcp
+	echo.^> qcollectiongenerator %BUILDDIR%\qthelp\qupulse.qhcp
 	echo.To view the help file:
-	echo.^> assistant -collectionFile %BUILDDIR%\qthelp\qc-toolkit.ghc
+	echo.^> assistant -collectionFile %BUILDDIR%\qthelp\qupulse.ghc
 	goto end
 )
 

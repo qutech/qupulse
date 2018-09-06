@@ -1,5 +1,7 @@
 .. _branching:
 
+CAUTION! Branching is currently not supported but will hopefully be back in the future. So long, this section provides outdated information.
+
 Conditional Branching
 ---------------------
 

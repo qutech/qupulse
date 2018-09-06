@@ -1,13 +1,13 @@
-qctoolkit\.hardware\.dacs package
+qupulse\.hardware\.dacs package
 =================================
 
 Submodules
 ----------
 
-qctoolkit\.hardware\.dacs\.alazar module
+qupulse\.hardware\.dacs\.alazar module
 ----------------------------------------
 
-.. automodule:: qctoolkit.hardware.dacs.alazar
+.. automodule:: qupulse.hardware.dacs.alazar
     :members:
     :undoc-members:
     :show-inheritance:
@@ -16,7 +16,7 @@ qctoolkit\.hardware\.dacs\.alazar module
 Module contents
 ---------------
 
-.. automodule:: qctoolkit.hardware.dacs
+.. automodule:: qupulse.hardware.dacs
     :members:
     :undoc-members:
     :show-inheritance:

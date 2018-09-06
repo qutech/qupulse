@@ -1,21 +1,21 @@
-qctoolkit\.hardware\.awgs package
+qupulse\.hardware\.awgs package
 =================================
 
 Submodules
 ----------
 
-qctoolkit\.hardware\.awgs\.base module
+qupulse\.hardware\.awgs\.base module
 --------------------------------------
 
-.. automodule:: qctoolkit.hardware.awgs.base
+.. automodule:: qupulse.hardware.awgs.base
     :members:
     :undoc-members:
     :show-inheritance:
 
-qctoolkit\.hardware\.awgs\.tabor module
+qupulse\.hardware\.awgs\.tabor module
 ---------------------------------------
 
-.. automodule:: qctoolkit.hardware.awgs.tabor
+.. automodule:: qupulse.hardware.awgs.tabor
     :members:
     :undoc-members:
     :show-inheritance:
@@ -24,7 +24,7 @@ qctoolkit\.hardware\.awgs\.tabor module
 Module contents
 ---------------
 
-.. automodule:: qctoolkit.hardware.awgs
+.. automodule:: qupulse.hardware.awgs
     :members:
     :undoc-members:
     :show-inheritance:
