@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 import sys
 
 if sys.version_info < (3, 3):
@@ -11,14 +11,14 @@ if sys.version_info < (3, 5):
 else:
     requires_typing = []
 
-subpackages = ['pulses', 'utils', 'hardware']
-packages = ['qupulse'] + ['qupulse.' + subpackage for subpackage in subpackages]
+packages = [package for package in find_packages()
+            if package.startswith('qupulse')] + ['qctoolkit']
 
 setup(name='qupulse',
       version='0.1',
       description='Quantum Computing Toolkit',
       author='qutech',
-      package_dir={'qupulse': 'qupulse'},
+      package_dir={'qupulse': 'qupulse', 'qctoolkit': 'qctoolkit'},
       packages=packages,
       tests_require=['pytest'],
       install_requires=['sympy>=1.1.1', 'numpy', 'pandas', 'cached_property'] + requires_typing,
