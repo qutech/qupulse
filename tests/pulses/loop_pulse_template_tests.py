@@ -1,16 +1,16 @@
 import unittest
 from unittest import mock
 
-from qctoolkit.expressions import Expression, ExpressionScalar
-from qctoolkit.pulses.loop_pulse_template import ForLoopPulseTemplate, WhileLoopPulseTemplate,\
+from qupulse.expressions import Expression, ExpressionScalar
+from qupulse.pulses.loop_pulse_template import ForLoopPulseTemplate, WhileLoopPulseTemplate,\
     ConditionMissingException, ParametrizedRange, LoopIndexNotUsedException, LoopPulseTemplate
-from qctoolkit.pulses.parameters import ConstantParameter, InvalidParameterNameException, ParameterConstraintViolation,\
+from qupulse.pulses.parameters import ConstantParameter, InvalidParameterNameException, ParameterConstraintViolation,\
     ParameterNotProvidedException, ParameterConstraint
-from qctoolkit._program.instructions import MEASInstruction
-from qctoolkit._program._loop import Loop
+from qupulse._program.instructions import MEASInstruction
+from qupulse._program._loop import Loop
 
-from qctoolkit._program._loop import MultiChannelProgram
-from qctoolkit.pulses.sequencing import Sequencer
+from qupulse._program._loop import MultiChannelProgram
+from qupulse.pulses.sequencing import Sequencer
 
 from tests.pulses.sequencing_dummies import DummyCondition, DummyPulseTemplate, DummySequencer, DummyInstructionBlock,\
     DummyParameter, MeasurementWindowTestCase, DummyWaveform

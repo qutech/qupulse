@@ -1,12 +1,12 @@
 import unittest
 
-from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
-from qctoolkit.pulses.function_pulse_template import FunctionPulseTemplate
-from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
-from qctoolkit.pulses.repetition_pulse_template import RepetitionPulseTemplate
-from qctoolkit.pulses.multi_channel_pulse_template import AtomicMultiChannelPulseTemplate
+from qupulse.pulses.table_pulse_template import TablePulseTemplate
+from qupulse.pulses.function_pulse_template import FunctionPulseTemplate
+from qupulse.pulses.sequence_pulse_template import SequencePulseTemplate
+from qupulse.pulses.repetition_pulse_template import RepetitionPulseTemplate
+from qupulse.pulses.multi_channel_pulse_template import AtomicMultiChannelPulseTemplate
 
-from qctoolkit.pulses.plotting import plot
+from qupulse.pulses.plotting import plot
 
 
 class BugTests(unittest.TestCase):

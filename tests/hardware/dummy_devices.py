@@ -1,7 +1,7 @@
 from typing import Tuple, Set, Dict
 
-from qctoolkit.hardware.awgs.base import AWG, ProgramOverwriteException
-from qctoolkit.hardware.dacs import DAC
+from qupulse.hardware.awgs.base import AWG, ProgramOverwriteException
+from qupulse.hardware.dacs import DAC
 
 class DummyDAC(DAC):
     def __init__(self):

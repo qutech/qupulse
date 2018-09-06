@@ -4,7 +4,7 @@ import unittest
 with_alazar = True
 
 def get_pulse():
-    from qctoolkit.pulses import TablePulseTemplate as TPT, SequencePulseTemplate as SPT, RepetitionPulseTemplate as RPT
+    from qupulse.pulses import TablePulseTemplate as TPT, SequencePulseTemplate as SPT, RepetitionPulseTemplate as RPT
 
     ramp = TPT(identifier='ramp', channels={'out', 'trigger'})
     ramp.add_entry(0, 'start', channel='out')
@@ -72,7 +72,7 @@ def get_window(card):
 class TaborTests(unittest.TestCase):
     @unittest.skip
     def test_all(self):
-        from qctoolkit.hardware.awgs.tabor import TaborChannelPair, TaborAWGRepresentation
+        from qupulse.hardware.awgs.tabor import TaborChannelPair, TaborAWGRepresentation
         #import warnings
         tawg = TaborAWGRepresentation(r'USB0::0x168C::0x2184::0000216488::INSTR')
         tchannelpair = TaborChannelPair(tawg, (1, 2), 'TABOR_AB')
@@ -80,7 +80,7 @@ class TaborTests(unittest.TestCase):
 
         #warnings.simplefilter('error', Warning)
 
-        from qctoolkit.hardware.setup import HardwareSetup, PlaybackChannel, MarkerChannel
+        from qupulse.hardware.setup import HardwareSetup, PlaybackChannel, MarkerChannel
         hardware_setup = HardwareSetup()
 
         hardware_setup.set_channel('TABOR_A', PlaybackChannel(tchannelpair, 0))
@@ -89,7 +89,7 @@ class TaborTests(unittest.TestCase):
         hardware_setup.set_channel('TABOR_B_MARKER', MarkerChannel(tchannelpair, 1))
 
         if with_alazar:
-            from qctoolkit.hardware.dacs.alazar import AlazarCard
+            from qupulse.hardware.dacs.alazar import AlazarCard
             import atsaverage.server
 
             if not atsaverage.server.Server.default_instance.running:
@@ -109,7 +109,7 @@ class TaborTests(unittest.TestCase):
 
         repeated = get_pulse()
 
-        from qctoolkit.pulses.sequencing import Sequencer
+        from qupulse.pulses.sequencing import Sequencer
 
         sequencer = Sequencer()
         sequencer.push(repeated,

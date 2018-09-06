@@ -28,7 +28,7 @@ before_install:
 install:
   - python setup.py install
 script:
-  - "coverage run --source=qctoolkit --rcfile=coverage.ini setup.py test"
+  - "coverage run --source=qupulse --rcfile=coverage.ini setup.py test"
 after_success:
     - coveralls
 

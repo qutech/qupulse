@@ -2,14 +2,14 @@ import unittest
 import warnings
 from unittest import mock
 
-from qctoolkit._program._loop import Loop, MultiChannelProgram
-from qctoolkit.expressions import Expression
-from qctoolkit.pulses.repetition_pulse_template import RepetitionPulseTemplate,ParameterNotIntegerException, RepetitionWaveform
-from qctoolkit.pulses.parameters import ParameterNotProvidedException, ParameterConstraintViolation, ConstantParameter, \
+from qupulse._program._loop import Loop, MultiChannelProgram
+from qupulse.expressions import Expression
+from qupulse.pulses.repetition_pulse_template import RepetitionPulseTemplate,ParameterNotIntegerException, RepetitionWaveform
+from qupulse.pulses.parameters import ParameterNotProvidedException, ParameterConstraintViolation, ConstantParameter, \
     ParameterConstraint
-from qctoolkit._program.instructions import REPJInstruction, InstructionPointer
+from qupulse._program.instructions import REPJInstruction, InstructionPointer
 
-from qctoolkit.pulses.sequencing import Sequencer
+from qupulse.pulses.sequencing import Sequencer
 
 from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummySequencer, DummyInstructionBlock, DummyParameter,\
     DummyCondition, DummyWaveform, MeasurementWindowTestCase

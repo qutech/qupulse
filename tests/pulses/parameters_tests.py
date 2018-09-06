@@ -1,7 +1,7 @@
 import unittest
 
-from qctoolkit.expressions import Expression
-from qctoolkit.pulses.parameters import ConstantParameter, MappedParameter, ParameterNotProvidedException,\
+from qupulse.expressions import Expression
+from qupulse.pulses.parameters import ConstantParameter, MappedParameter, ParameterNotProvidedException,\
     ParameterConstraint, InvalidParameterNameException
 
 from tests.pulses.sequencing_dummies import DummyParameter

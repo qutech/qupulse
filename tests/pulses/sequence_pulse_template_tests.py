@@ -1,15 +1,15 @@
 import unittest
 from unittest import mock
 
-from qctoolkit.expressions import Expression, ExpressionScalar
-from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
-from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate, SequenceWaveform
-from qctoolkit.pulses.mapping_pulse_template import MappingPulseTemplate
-from qctoolkit.pulses.parameters import ConstantParameter, ParameterConstraint, ParameterConstraintViolation, ParameterNotProvidedException
-from qctoolkit._program.instructions import MEASInstruction
-from qctoolkit._program._loop import Loop, MultiChannelProgram
+from qupulse.expressions import Expression, ExpressionScalar
+from qupulse.pulses.table_pulse_template import TablePulseTemplate
+from qupulse.pulses.sequence_pulse_template import SequencePulseTemplate, SequenceWaveform
+from qupulse.pulses.mapping_pulse_template import MappingPulseTemplate
+from qupulse.pulses.parameters import ConstantParameter, ParameterConstraint, ParameterConstraintViolation, ParameterNotProvidedException
+from qupulse._program.instructions import MEASInstruction
+from qupulse._program._loop import Loop, MultiChannelProgram
 
-from qctoolkit.pulses.sequencing import Sequencer
+from qupulse.pulses.sequencing import Sequencer
 
 from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyPulseTemplate,\
     DummyNoValueParameter, DummyWaveform, MeasurementWindowTestCase
@@ -558,7 +558,7 @@ class SequencePulseTemplateOldSequencingTests(SequencePulseTemplateTest):
                                 measurement_mapping={},
                                 channel_mapping={'default': 'default'},
                                 instruction_block=block)
-        from qctoolkit.pulses.sequencing import Sequencer
+        from qupulse.pulses.sequencing import Sequencer
         s = Sequencer()
         s.push(sequence, parameters, channel_mapping={'default': 'EXAMPLE_A'})
 

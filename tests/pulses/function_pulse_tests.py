@@ -2,12 +2,12 @@ import unittest
 import sympy
 import numpy as np
 
-from qctoolkit.utils.types import time_from_float
-from qctoolkit.pulses.function_pulse_template import FunctionPulseTemplate,\
+from qupulse.utils.types import time_from_float
+from qupulse.pulses.function_pulse_template import FunctionPulseTemplate,\
     FunctionWaveform
-from qctoolkit.serialization import Serializer, Serializable, PulseStorage
-from qctoolkit.expressions import Expression
-from qctoolkit.pulses.parameters import ParameterConstraintViolation, ParameterConstraint
+from qupulse.serialization import Serializer, Serializable, PulseStorage
+from qupulse.expressions import Expression
+from qupulse.pulses.parameters import ParameterConstraintViolation, ParameterConstraint
 
 from tests.serialization_dummies import DummySerializer, DummyStorageBackend
 from tests.pulses.sequencing_dummies import DummyParameter

@@ -3,8 +3,8 @@ import itertools
 
 import numpy as np
 
-from qctoolkit._program.instructions import InstructionBlock, MEASInstruction
-from qctoolkit.hardware.setup import HardwareSetup, PlaybackChannel, MarkerChannel, MeasurementMask
+from qupulse._program.instructions import InstructionBlock, MEASInstruction
+from qupulse.hardware.setup import HardwareSetup, PlaybackChannel, MarkerChannel, MeasurementMask
 
 from tests.pulses.sequencing_dummies import DummyWaveform
 
