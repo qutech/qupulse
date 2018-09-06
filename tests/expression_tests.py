@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 from sympy import sympify, Eq
 
-from qctoolkit.expressions import Expression, ExpressionVariableMissingException, NonNumericEvaluation, ExpressionScalar, ExpressionVector
+from qupulse.expressions import Expression, ExpressionVariableMissingException, NonNumericEvaluation, ExpressionScalar, ExpressionVector
 
 
 class ExpressionTests(unittest.TestCase):

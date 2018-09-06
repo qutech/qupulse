@@ -21,7 +21,7 @@ def validate_programs(program_AB, program_CD, loaded_data: dict, parameters):
 
     expected_samples_A = np.tile(for_A, (meas_time_multiplier * 192, 1, rep_count)).T.ravel()
     set_ignored_marker_data_to_zero(expected_samples_A)
-    samples_A = program_AB.get_as_single_waveform(0, expected_samples_A.size)
+    samples_A = program_AB.get_as_single_waveform(0, expected_samples_A.size, with_marker=True)
     np.testing.assert_equal(samples_A, expected_samples_A)
 
     del samples_A

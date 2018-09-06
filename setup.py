@@ -1,9 +1,9 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 import sys
 
 if sys.version_info < (3, 3):
     sys.stderr.write('ERROR: You need Python 3.3 or later '
-                     'to install the qctoolkit package.\n')
+                     'to install the qupulse package.\n')
     exit(1)
 
 if sys.version_info < (3, 5):
@@ -11,14 +11,14 @@ if sys.version_info < (3, 5):
 else:
     requires_typing = []
 
-subpackages = ['pulses', 'utils', 'hardware']
-packages = ['qctoolkit'] + ['qctoolkit.' + subpackage for subpackage in subpackages]
+packages = [package for package in find_packages()
+            if package.startswith('qupulse')] + ['qctoolkit']
 
-setup(name='qctoolkit',
+setup(name='qupulse',
       version='0.1',
-      description='Quantum Computing Toolkit',
-      author='qutech',
-      package_dir={'qctoolkit': 'qctoolkit'},
+      description='A Quantum compUting PULse parametrization and SEquencing framework',
+      author='Quantum Technology Group and Chair of Software Engineering, RWTH Aachen University',
+      package_dir={'qupulse': 'qupulse', 'qctoolkit': 'qctoolkit'},
       packages=packages,
       tests_require=['pytest'],
       install_requires=['sympy>=1.1.1', 'numpy', 'cached_property', 'gmpy2'] + requires_typing,
