@@ -10,6 +10,7 @@ All examples are provided as static text in this documentation and, additionally
     01AdvancedTablePulse
     02FunctionPulse
     03PointPulse
+    03xComposedPulses
     04PulseStorage
     05MappingTemplate
     06CreatePrograms
