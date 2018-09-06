@@ -29,9 +29,9 @@ The current feature list is as follows:
 ## Installation
 qc-toolkit is developed using Python 3.5 but should also run on previous 3.3+ versions.
 
-The package is installed with:
+The package is installed by executing in the cloned repository root folder:
 ```
-python3 setup.py install
+pip3 install .
 ```
 
 The backend for TaborAWGs requires packages that can be found [here](https://git.rwth-aachen.de/qutech/python-TaborDriver).
