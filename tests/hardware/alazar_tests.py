@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 
 from ..hardware import *
-from qctoolkit.hardware.dacs.alazar import AlazarCard, AlazarProgram
+from qupulse.hardware.dacs.alazar import AlazarCard, AlazarProgram
 
 
 class AlazarProgramTest(unittest.TestCase):

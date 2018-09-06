@@ -3,17 +3,17 @@ from unittest import mock
 
 from typing import Optional, Dict, Set, Any, Union
 
-from qctoolkit.utils.types import ChannelID
-from qctoolkit.expressions import Expression, ExpressionScalar
-from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, PulseTemplate
-from qctoolkit._program.instructions import Waveform, EXECInstruction, MEASInstruction
-from qctoolkit.pulses.parameters import Parameter, ConstantParameter, ParameterNotProvidedException
-from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
-from qctoolkit._program._loop import Loop, MultiChannelProgram
+from qupulse.utils.types import ChannelID
+from qupulse.expressions import Expression, ExpressionScalar
+from qupulse.pulses.pulse_template import AtomicPulseTemplate, PulseTemplate
+from qupulse._program.instructions import Waveform, EXECInstruction, MEASInstruction
+from qupulse.pulses.parameters import Parameter, ConstantParameter, ParameterNotProvidedException
+from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
+from qupulse._program._loop import Loop, MultiChannelProgram
 
-from qctoolkit._program.transformation import Transformation
-from qctoolkit._program.waveforms import TransformingWaveform
-from qctoolkit.pulses.sequencing import Sequencer
+from qupulse._program.transformation import Transformation
+from qupulse._program.waveforms import TransformingWaveform
+from qupulse.pulses.sequencing import Sequencer
 
 from tests.pulses.sequencing_dummies import DummyWaveform, DummySequencer, DummyInstructionBlock
 from tests._program.transformation_tests import TransformationStub
@@ -249,7 +249,7 @@ class PulseTemplateTest(unittest.TestCase):
 
                 with mock.patch.object(template, '_internal_create_program',
                                        wraps=appending_create_program) as _internal_create_program:
-                    with mock.patch('qctoolkit.pulses.pulse_template.to_waveform',
+                    with mock.patch('qupulse.pulses.pulse_template.to_waveform',
                                     return_value=single_waveform) as to_waveform:
                         template._create_program(parameters=parameters,
                                                  measurement_mapping=measurement_mapping,
@@ -331,7 +331,7 @@ class PulseTemplateTest(unittest.TestCase):
         a = PulseTemplateStub()
         b = PulseTemplateStub()
 
-        from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
+        from qupulse.pulses.sequence_pulse_template import SequencePulseTemplate
         with mock.patch.object(SequencePulseTemplate, 'concatenate', return_value='concat') as mock_concatenate:
             self.assertEqual(a @ b, 'concat')
             mock_concatenate.assert_called_once_with(a, b)
@@ -340,7 +340,7 @@ class PulseTemplateTest(unittest.TestCase):
         a = PulseTemplateStub()
         b = (1, 2, 3)
 
-        from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
+        from qupulse.pulses.sequence_pulse_template import SequencePulseTemplate
         with mock.patch.object(SequencePulseTemplate, 'concatenate', return_value='concat') as mock_concatenate:
             self.assertEqual(b @ a, 'concat')
             mock_concatenate.assert_called_once_with(b, a)

@@ -4,12 +4,12 @@ from unittest import mock
 import numpy
 import numpy as np
 
-from qctoolkit.utils.types import time_from_float
-from qctoolkit.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy,\
+from qupulse.utils.types import time_from_float
+from qupulse.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy,\
     JumpInterpolationStrategy
-from qctoolkit._program.waveforms import MultiChannelWaveform, RepetitionWaveform, SequenceWaveform,\
+from qupulse._program.waveforms import MultiChannelWaveform, RepetitionWaveform, SequenceWaveform,\
     TableWaveformEntry, TableWaveform, TransformingWaveform, SubsetWaveform
-from qctoolkit._program.transformation import Transformation
+from qupulse._program.transformation import Transformation
 
 from tests.pulses.sequencing_dummies import DummyWaveform, DummyInterpolationStrategy
 from tests._program.transformation_tests import TransformationStub

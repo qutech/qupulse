@@ -2,11 +2,11 @@ import unittest
 from unittest import mock
 from typing import Dict, Union
 
-from qctoolkit.pulses.pulse_template import PulseTemplate
-from qctoolkit.pulses.sequencing import Sequencer
-from qctoolkit.pulses import TablePT, FunctionPT, AtomicMultiChannelPT, ForLoopPT, RepetitionPT, SequencePT, MappingPT
+from qupulse.pulses.pulse_template import PulseTemplate
+from qupulse.pulses.sequencing import Sequencer
+from qupulse.pulses import TablePT, FunctionPT, AtomicMultiChannelPT, ForLoopPT, RepetitionPT, SequencePT, MappingPT
 
-from qctoolkit._program._loop import Loop, MultiChannelProgram
+from qupulse._program._loop import Loop, MultiChannelProgram
 
 
 class SequencingCompatibilityTest:

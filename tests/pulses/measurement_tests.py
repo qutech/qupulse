@@ -1,10 +1,10 @@
 import unittest
 
-from qctoolkit.pulses.parameters import ParameterConstraint, ParameterConstraintViolation,\
+from qupulse.pulses.parameters import ParameterConstraint, ParameterConstraintViolation,\
     ParameterNotProvidedException, ParameterConstrainer, ConstantParameter
-from qctoolkit.pulses.measurement import MeasurementDefiner
+from qupulse.pulses.measurement import MeasurementDefiner
 
-from qctoolkit._program.instructions import InstructionBlock, MEASInstruction
+from qupulse._program.instructions import InstructionBlock, MEASInstruction
 
 
 class MeasurementDefinerTest(unittest.TestCase):
