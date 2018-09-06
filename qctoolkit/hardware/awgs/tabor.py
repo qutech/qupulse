@@ -83,10 +83,23 @@ class TaborSegment:
                           for data in (self.ch_a, self.ch_b, self.marker_a, self.marker_b)))
 
     def __eq__(self, other: 'TaborSegment'):
+        def compare_markers(marker_1, marker_2):
+            if marker_1 is None:
+                if marker_2 is None:
+                    return True
+                else:
+                    return not np.any(marker_2)
+
+            elif marker_2 is None:
+                return not np.any(marker_1)
+
+            else:
+                return np.array_equal(marker_1, marker_2)
+
         return (np.array_equal(self.ch_a, other.ch_a) and
                 np.array_equal(self.ch_b, other.ch_b) and
-                np.array_equal(self.marker_a, other.marker_a) and
-                np.array_equal(self.marker_b, other.marker_b))
+                compare_markers(self.marker_a, other.marker_a) and
+                compare_markers(self.marker_b, other.marker_b))
 
     @property
     def data_a(self) -> np.ndarray:
@@ -696,8 +709,10 @@ class PlottableProgram:
             for _ in range(repetition):
                 yield from waveform
 
-    def get_as_single_waveform(self, channel: int, max_total_length: int=10**9) -> Optional[np.ndarray]:
-        waveforms = self.get_waveforms(channel)
+    def get_as_single_waveform(self, channel: int,
+                               max_total_length: int=10**9,
+                               with_marker: bool=False) -> Optional[np.ndarray]:
+        waveforms = self.get_waveforms(channel, with_marker=with_marker)
         repetitions = self.get_repetitions()
         waveform_lengths = np.fromiter((wf.size for wf in waveforms), count=len(waveforms), dtype=np.uint64)
 
@@ -716,8 +731,11 @@ class PlottableProgram:
             c_idx += mem
         return result
 
-    def get_waveforms(self, channel: int) -> List[np.ndarray]:
-        ch_getter = (operator.attrgetter('ch_a'), operator.attrgetter('ch_b'))[channel]
+    def get_waveforms(self, channel: int, with_marker: bool=False) -> List[np.ndarray]:
+        if with_marker:
+            ch_getter = (operator.attrgetter('data_a'), operator.attrgetter('data_b'))[channel]
+        else:
+            ch_getter = (operator.attrgetter('ch_a'), operator.attrgetter('ch_b'))[channel]
         return [ch_getter(self._segments[segment_no - 1])
                 for _, segment_no, _ in self._iter_segment_table_entry()]
 

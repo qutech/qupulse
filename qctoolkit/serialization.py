@@ -106,18 +106,22 @@ class FilesystemBackend(StorageBackend):
 
     Data will be stored in plain text files in a directory. The directory is given in the
     constructor of this FilesystemBackend. For each data item, a separate file is created an named
-    after the corresponding identifier.
+    after the corresponding identifier. If the directory does not exist, it is not created unless the create_if_missing
+    argument is explicitly set to True.
     """
 
-    def __init__(self, root: str='.') -> None:
+    def __init__(self, root: str='.', create_if_missing: bool=False) -> None:
         """Create a new FilesystemBackend.
 
         Args:
             root: The path of the directory in which all data files are located. (default: ".",
                 i.e. the current directory)
+            create_if_missing: If False, do not create the specified directory if it does not exist. (default: False)
         Raises:
             NotADirectoryError: if root is not a valid directory path.
         """
+        if not os.path.exists(root) and create_if_missing:
+            os.makedirs(root)
         if not os.path.isdir(root):
             raise NotADirectoryError()
         self._root = os.path.abspath(root)
@@ -499,7 +503,7 @@ class Serializable(metaclass=SerializableMeta):
         """Returns a copy of the Serializable with its identifier set to new_identifier."""
         data = self.get_serialization_data()
         data.pop(Serializable.type_identifier_name)
-        data.pop(Serializable.identifier_name)
+        data.pop(Serializable.identifier_name, None)
         return self.deserialize(registry=registry, identifier=new_identifier, **data)
 
 

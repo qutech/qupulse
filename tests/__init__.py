@@ -1,3 +1,6 @@
+import matplotlib
+matplotlib.use('Agg')
+
 __all__ = [
     'pulses',
     'qcmatlab',
@@ -7,6 +10,5 @@ __all__ = [
     'pyflakes_syntax_tests',
     'serialization_dummies',
     'serialization_tests',
-    'coverage_tests',
     'backward_compatibility'
 ]

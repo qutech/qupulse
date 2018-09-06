@@ -286,6 +286,23 @@ class SequenceWaveformTest(unittest.TestCase):
 
         self.assertEqual(len(swf2.compare_key), 3)
 
+    def test_sample_times_type(self) -> None:
+        with mock.patch.object(DummyWaveform, 'unsafe_sample') as unsafe_sample_patch:
+            dwfs = (DummyWaveform(duration=1.),
+                    DummyWaveform(duration=3.),
+                    DummyWaveform(duration=2.))
+
+            swf = SequenceWaveform(dwfs)
+
+            sample_times = np.arange(0, 60) * 0.1
+            expected_output = np.concatenate((sample_times[:10], sample_times[10:40] - 1, sample_times[40:] - 4))
+            expected_inputs = sample_times[0:10], sample_times[10:40] - 1, sample_times[40:] - 4
+
+            swf.unsafe_sample('A', sample_times=sample_times)
+            inputs = [call_args[1]['sample_times'] for call_args in unsafe_sample_patch.call_args_list] # type: List[np.ndarray]
+            np.testing.assert_equal(expected_inputs, inputs)
+            self.assertEqual([input.dtype for input in inputs], [np.float64 for _ in inputs])
+
     def test_unsafe_sample(self):
         dwfs = (DummyWaveform(duration=1.),
                 DummyWaveform(duration=3.),

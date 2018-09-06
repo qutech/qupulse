@@ -8,7 +8,7 @@ import json
 from unittest import mock
 from abc import ABCMeta, abstractmethod
 
-from tempfile import TemporaryDirectory
+from tempfile import TemporaryDirectory, TemporaryFile
 from typing import Optional, Any, Dict, Tuple
 
 from qctoolkit.serialization import FilesystemBackend, CachingBackend, Serializable, JSONSerializableEncoder,\
@@ -203,6 +203,14 @@ class SerializableTests(metaclass=ABCMeta):
         registry = dict()
         instance = self.make_instance('hugo', registry=registry)
         renamed_instance = instance.renamed('ilse', registry=registry)
+        self.assertEqual(renamed_instance.identifier, 'ilse')
+        self.assert_equal_instance_except_id(instance, renamed_instance)
+
+    def test_renamed_of_anonymous(self):
+        registry = dict()
+        instance = self.make_instance(None, registry=registry)
+        renamed_instance = instance.renamed('ilse', registry=registry)
+        self.assertEqual(renamed_instance.identifier, 'ilse')
         self.assert_equal_instance_except_id(instance, renamed_instance)
         
     def test_conversion(self):
@@ -264,6 +272,21 @@ class FileSystemBackendTest(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.tmp_dir.cleanup()
+
+    def test_init_create_dir(self) -> None:
+        path = self.tmp_dir.name + "/inner_dir"
+        self.assertFalse(os.path.isdir(path))
+        with self.assertRaises(NotADirectoryError):
+            FilesystemBackend(path)
+            FilesystemBackend(path, create_if_missing=False)
+        self.assertFalse(os.path.isdir(path))
+        FilesystemBackend(path, create_if_missing=True)
+        self.assertTrue(os.path.isdir(path))
+
+    def test_init_file_path(self) -> None:
+        with TemporaryFile() as tmp_file:
+            with self.assertRaises(NotADirectoryError):
+                FilesystemBackend(tmp_file.name)
 
     def test_put_and_get_normal(self) -> None:
         # first put the data

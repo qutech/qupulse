@@ -318,7 +318,7 @@ class SequenceWaveform(Waveform):
 
             indices = slice(*np.searchsorted(sample_times, (float(time), float(end)), 'left'))
             subwaveform.unsafe_sample(channel=channel,
-                                      sample_times=sample_times[indices]-time,
+                                      sample_times=sample_times[indices]-np.float64(time),
                                       output_array=output_array[indices])
             time = end
         return output_array
