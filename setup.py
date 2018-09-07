@@ -1,5 +1,16 @@
 from setuptools import setup, find_packages
 import sys
+import os
+import re
+
+
+def extract_version(version_file):
+    version_match = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]",
+                              version_file, re.M)
+    if version_match:
+        return version_match.group(1)
+    raise RuntimeError("Unable to find version string.")
+
 
 if sys.version_info < (3, 3):
     sys.stderr.write('ERROR: You need Python 3.3 or later '
@@ -17,8 +28,11 @@ packages = [package for package in find_packages()
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
+with open(os.path.join('qupulse', '__init__.py'), 'r') as init_file:
+    init_file_content = init_file.read()
+
 setup(name='qupulse',
-      version='0.1.2',
+      version=extract_version(init_file_content),
       description='A Quantum compUting PULse parametrization and SEquencing framework',
       long_description=long_description,
       long_description_content_type="text/markdown",
