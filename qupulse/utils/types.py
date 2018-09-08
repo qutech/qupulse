@@ -2,7 +2,12 @@ import typing
 import abc
 import inspect
 import numbers
-import gmpy2
+import fractions
+
+try:
+    import gmpy2
+except ImportError:
+    gmpy2 = None
 
 import numpy
 
@@ -11,12 +16,19 @@ __all__ = ["MeasurementWindow", "ChannelID", "HashableNumpyArray", "TimeType", "
 
 MeasurementWindow = typing.Tuple[str, numbers.Real, numbers.Real]
 ChannelID = typing.Union[str, int]
-TimeType = gmpy2.mpq
 
 
-def time_from_float(time: float, absolute_error: float=1e-12) -> TimeType:
-    # gmpy2 is at least an order of magnitude faster than fractions.Fraction
-    return gmpy2.mpq(gmpy2.f2q(time, absolute_error))
+if gmpy2:
+    TimeType = gmpy2.mpq
+
+    def time_from_float(time: float, absolute_error: float=1e-12) -> TimeType:
+        # gmpy2 is at least an order of magnitude faster than fractions.Fraction
+        return gmpy2.mpq(gmpy2.f2q(time, absolute_error))
+else:
+    TimeType = fractions.Fraction
+
+    def time_from_float(time: float, absolute_error: float = 1e-12) -> TimeType:
+        return fractions.Fraction(time).limit_denominator(int(1/absolute_error))
 
 
 class DocStringABCMeta(abc.ABCMeta):
