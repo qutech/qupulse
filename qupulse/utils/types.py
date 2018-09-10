@@ -3,6 +3,7 @@ import abc
 import inspect
 import numbers
 import fractions
+import warnings
 
 try:
     import gmpy2
@@ -25,6 +26,8 @@ if gmpy2:
         # gmpy2 is at least an order of magnitude faster than fractions.Fraction
         return gmpy2.mpq(gmpy2.f2q(time, absolute_error))
 else:
+    warnings.warn('gmpy2 not found. Using fractions.Fraction as fallback. Install gmpy2 for better performance.')
+
     TimeType = fractions.Fraction
 
     def time_from_float(time: float, absolute_error: float = 1e-12) -> TimeType:
