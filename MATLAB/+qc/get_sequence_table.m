@@ -3,11 +3,11 @@ function seq_table = get_sequence_table(program_name, advanced_seq_table_flag, a
 % (not actually from AWG but from the qctoolkit Tabor Driver instance)
 %
 % --- Outputs -------------------------------------------------------------
-% seq_table				             : Cell of sequence tables for each Tabor
+% seq_table				       : Cell of sequence tables for each Tabor
 %                                channel pair
 %
 % --- Inputs --------------------------------------------------------------
-% program_name						     : Program name for which sequence table is 
+% program_name				   : Program name for which sequence table is 
 %                                returned
 % advanced_seq_table_flag      : Get advanced sequence table if true.
 %                                Default is false.

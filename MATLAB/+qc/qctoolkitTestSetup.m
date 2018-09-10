@@ -1,15 +1,16 @@
 %% --- Test setup without AWG and Alazar (only qctoolkit) -----------------
 global plsdata
 plsdata = struct( ...
-	'path', 'C:\Users\meyer\Documents\_meyer_local_\code\qc-toolkit-pulses', ...
+	'path', 'C:\Users\Marcel Meyer\Documents\__Wissenschaft__\Master_Projekt\code\qctk_pulses', ...
 	'awg', struct('inst', [], 'hardwareSetup', [], 'sampleRate', 2e9, 'currentProgam', '', 'registeredPrograms', struct(), 'defaultChannelMapping', struct(), 'defaultWindowMapping', struct(), 'defaultParametersAndDicts', {{}}, 'defaultAddMarker', {{}}), ...
-  'dict', struct('cache', [], 'path', 'C:\Users\meyer\Documents\_meyer_local_\code\qc-toolkit-dicts'), ...
+  'dict', struct('cache', [], 'path', 'C:\Users\Marcel Meyer\Documents\__Wissenschaft__\Master_Projekt\code\qctk_dicts'), ...
 	'qc', struct('figId', 801), ...
 	'daq', struct('inst', [], 'defaultOperations', {{}}, 'reuseOperations', false) ...
 	);
 plsdata.daq.instSmName = 'ATS9440Python';
 plsdata.qc.backend = py.qctoolkit.serialization.FilesystemBackend(plsdata.path);
 plsdata.qc.serializer = py.qctoolkit.serialization.Serializer(plsdata.qc.backend);
+disp('[second script (plsdata) done]');
 % -------------------------------------------------------------------------
 
 %% --- Test setup replicating the Triton 200 measurement setup ------------
@@ -17,10 +18,10 @@ plsdata.qc.serializer = py.qctoolkit.serialization.Serializer(plsdata.qc.backend
 % Need the triton_200 repo on the path (for awgctrl)
 
 % Path for Triton 200 backups
-loadPath = 'X:\Common\GaAs\Triton 200\Backup\DATA\workspace';
+loadPath = 'C:\Users\Marcel Meyer\Documents\__Wissenschaft__\Master_Projekt\copy_from_trition200_backup\DATA\workspace';
 pulsePath = plsdata.path;
 dictPath = plsdata.dict.path;
-tunePath = 'Z:\DATA';
+tunePath = 'C:\Users\Marcel Meyer\Documents\__Wissenschaft__\Master_Projekt\DATA\workspace';
 
 % Loading
 try
@@ -66,7 +67,7 @@ plsdata.daq.inst = py.qctoolkit.hardware.dacs.alazar.AlazarCard([]);
 % Initializes hardware setup
 % Can also be used for deleting all programs/resetting but then also need to setup Alazar again, i.e. the cell above and the three cells below )
 plsdata.awg.hardwareSetup = [];
-qc.setup_tabor_awg('realAWG', false, 'simulateAWG', true, 'taborDriverPath', 'C:\Users\meyer\Documents\_meyer_local_\code\python-TaborDriver');
+qc.setup_tabor_awg('realAWG', false, 'simulateAWG', true, 'taborDriverPath', 'C:\Users\"Marcel Meyer"\Documents\__Wissenschaft__\Master_Projekt\code\python-TaborDriver');
 
 % AWG default settings
 awgctrl('default');
@@ -88,5 +89,5 @@ tunedata.run{tunedata.runIndex}.opts.path = tunePath;
 
 
 import tune.tune
-disp('done');
+disp('[third script (awg, tunedata etc) done]');
 % -------------------------------------------------------------------------
