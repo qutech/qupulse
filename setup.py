@@ -42,13 +42,13 @@ setup(name='qupulse',
       packages=packages,
       python_requires='>=3.3',
       tests_require=['pytest'],
-      install_requires=['sympy>=1.1.1', 'numpy', 'cached_property', 'gmpy2'] + requires_typing,
+      install_requires=['sympy>=1.1.1', 'numpy', 'cached_property'] + requires_typing,
       extras_require={
           'testing': ['pytest'],
           'plotting': ['matplotlib'],
-          'faster expressions': ['numexpr'],
           'VISA': ['pyvisa'],
-          'tabor instruments': ['pytabor>=1.0.1', 'teawg']
+          'tabor instruments': ['pytabor>=1.0.1', 'teawg'],
+          'Faster fractions': ['gmpy2']
       },
       test_suite="tests",
       classifiers=[
