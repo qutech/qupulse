@@ -58,7 +58,7 @@ class TestTimeType(unittest.TestCase):
 
     @unittest.skipIf(gmpy2 is None, "gmpy2 not available.")
     def test_default_time_from_float(self):
-        self.assertEqual(qutypes.time_from_float(123/931), gmpy2.mpq(123, 932))
+        self.assertEqual(qutypes.time_from_float(123/931), gmpy2.mpq(123, 931))
 
         self.assertEqual(qutypes.time_from_float(1000000/1000001, 1e-5), gmpy2.mpq(1))
 
