@@ -1,4 +1,4 @@
-function set_sequence_table(program_name, seq_table, advanced_seq_table_flag, awg_channel_pair_identifiers, verbosity)
+function set_sequence_table(program_name, seq_table, advanced_seq_table_flag, awg_channel_pair_identifiers, verbosity, input_python_list)
 % SET_SEQUENCE_TABLE Manually override sequence table of program on Tabor AWG
 %
 % This only changes the sequence table in the associated Tabor channel
@@ -25,8 +25,10 @@ function set_sequence_table(program_name, seq_table, advanced_seq_table_flag, aw
 	global plsdata
 	hws = plsdata.awg.hardwareSetup;
 
+  if ~input_python_list
 	seq_table = int_typecast(seq_table);
-	
+  end
+  
 	if nargin < 3 || isempty(advanced_seq_table_flag)
 		advanced_seq_table_flag = false;
 	end
@@ -35,7 +37,10 @@ function set_sequence_table(program_name, seq_table, advanced_seq_table_flag, aw
 	end	
 	if nargin < 5 || isempty(verbosity)
 		verbosity = 0;
-	end	
+  end	
+  if nargin <6 || isempty(input_python_list)
+    input_python_list = false;
+  end
 
 	known_awgs = util.py.py2mat(hws.known_awgs);
 	sort_indices = cellfun(@(x)(find(  cellfun(@(y)(~isempty(strfind(char(x.identifier), y))), awg_channel_pair_identifiers)  )), known_awgs);
@@ -47,14 +52,23 @@ function set_sequence_table(program_name, seq_table, advanced_seq_table_flag, aw
 		known_programs{k} = util.py.py2mat(py.getattr(known_awgs{k}, '_known_programs'));
 
 		if isfield(known_programs{k}, program_name) && ~isempty(seq_table{k})
-
-			if advanced_seq_table_flag
-				known_awgs{k}.set_program_advanced_sequence_table(program_name, py.list(seq_table{k}));
-				% known_awgs{k}.set_program_advanced_sequence_table(program_name, seq_table{k});
-			else
-				known_awgs{k}.set_program_sequence_table(program_name, py.list(seq_table{k})); % Since it has to be a list inside a list, but this list if list is only trivial if advanced seq table is trivial, otherwiese each entry can be called by advanced seq table
-				% known_awgs{k}.set_program_sequence_table(program_name,seq_table{k});
-			end
+      if input_python_list
+        if advanced_seq_table_flag
+          known_awgs{k}.set_program_advanced_sequence_table(program_name, seq_table{k});
+          % known_awgs{k}.set_program_advanced_sequence_table(program_name, seq_table{k});
+        else
+          known_awgs{k}.set_program_sequence_table(program_name, seq_table{k}); % Since it has to be a list inside a list, but this list if list is only trivial if advanced seq table is trivial, otherwiese each entry can be called by advanced seq table
+          % known_awgs{k}.set_program_sequence_table(program_name,seq_table{k});
+        end
+      else
+        if advanced_seq_table_flag
+          known_awgs{k}.set_program_advanced_sequence_table(program_name, py.list(seq_table{k}));
+          % known_awgs{k}.set_program_advanced_sequence_table(program_name, seq_table{k});
+        else
+          known_awgs{k}.set_program_sequence_table(program_name, py.list(seq_table{k})); % Since it has to be a list inside a list, but this list if list is only trivial if advanced seq table is trivial, otherwiese each entry can be called by advanced seq table
+          % known_awgs{k}.set_program_sequence_table(program_name,seq_table{k});
+        end
+      end
 
 		end			
 	end	
