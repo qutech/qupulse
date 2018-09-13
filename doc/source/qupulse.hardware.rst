@@ -1,5 +1,5 @@
 qupulse\.hardware package
-===========================
+=========================
 
 Subpackages
 -----------
@@ -12,16 +12,8 @@ Subpackages
 Submodules
 ----------
 
-qupulse\.hardware\.program module
------------------------------------
-
-.. automodule:: qupulse.hardware.program
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
 qupulse\.hardware\.setup module
----------------------------------
+-------------------------------
 
 .. automodule:: qupulse.hardware.setup
     :members:
@@ -29,7 +21,7 @@ qupulse\.hardware\.setup module
     :show-inheritance:
 
 qupulse\.hardware\.util module
---------------------------------
+------------------------------
 
 .. automodule:: qupulse.hardware.util
     :members:

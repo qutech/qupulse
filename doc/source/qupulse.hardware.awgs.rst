@@ -1,11 +1,11 @@
 qupulse\.hardware\.awgs package
-=================================
+===============================
 
 Submodules
 ----------
 
 qupulse\.hardware\.awgs\.base module
---------------------------------------
+------------------------------------
 
 .. automodule:: qupulse.hardware.awgs.base
     :members:
@@ -13,7 +13,7 @@ qupulse\.hardware\.awgs\.base module
     :show-inheritance:
 
 qupulse\.hardware\.awgs\.tabor module
----------------------------------------
+-------------------------------------
 
 .. automodule:: qupulse.hardware.awgs.tabor
     :members:

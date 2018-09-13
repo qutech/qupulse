@@ -5,7 +5,7 @@ Submodules
 ----------
 
 qupulse\.utils\.tree module
------------------------------
+---------------------------
 
 .. automodule:: qupulse.utils.tree
     :members:
@@ -13,7 +13,7 @@ qupulse\.utils\.tree module
     :show-inheritance:
 
 qupulse\.utils\.types module
-------------------------------
+----------------------------
 
 .. automodule:: qupulse.utils.types
     :members:

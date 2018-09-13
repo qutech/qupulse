@@ -1,11 +1,11 @@
 qupulse\.hardware\.dacs package
-=================================
+===============================
 
 Submodules
 ----------
 
 qupulse\.hardware\.dacs\.alazar module
-----------------------------------------
+--------------------------------------
 
 .. automodule:: qupulse.hardware.dacs.alazar
     :members:

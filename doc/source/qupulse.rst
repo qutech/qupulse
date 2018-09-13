@@ -1,5 +1,5 @@
 qupulse package
-=================
+===============
 
 Subpackages
 -----------
@@ -7,6 +7,7 @@ Subpackages
 .. toctree::
 
     qupulse.hardware
+    qupulse._program
     qupulse.pulses
     qupulse.utils
 
@@ -14,7 +15,7 @@ Submodules
 ----------
 
 qupulse\.comparable module
-----------------------------
+--------------------------
 
 .. automodule:: qupulse.comparable
     :members:
@@ -22,7 +23,7 @@ qupulse\.comparable module
     :show-inheritance:
 
 qupulse\.expressions module
------------------------------
+---------------------------
 
 .. automodule:: qupulse.expressions
     :members:
@@ -30,7 +31,7 @@ qupulse\.expressions module
     :show-inheritance:
 
 qupulse\.serialization module
--------------------------------
+-----------------------------
 
 .. automodule:: qupulse.serialization
     :members:
