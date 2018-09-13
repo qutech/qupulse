@@ -22,7 +22,7 @@ but all parameters (including repetition counts) have been substituted by the co
 See :ref:`/examples/06CreatePrograms.ipynb` for an example on usage of :meth:`.PulseTemplate.create_program`.
 
 The second step of the instantiation is performed by the hardware backend and transparent to the user. Upon registering
-the pulse with the hardware backend via :meth:`.HardwareSetup.register_program`, the backend will determine which
+the pulse with the hardware backend via :meth:`qupulse.hardware.HardwareSetup.register_program`, the backend will determine which
 hardware device is responsible for the channels defined in the pulse and delegate the :class:`.Loop` object to the
 corresponding device driver. The driver will then sample the pulse waveforms with its configured sample rate, flatten
 the program tree if required by the device and, finally, program the device and upload the sampled waveforms.
