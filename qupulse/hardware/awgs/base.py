@@ -87,7 +87,7 @@ class AWG(Comparable):
     def clear(self) -> None:
         """Removes all programs and waveforms from the AWG.
 
-        Caution: This affects all programs and waveforms on the AWG, not only those uploaded using qc-toolkit!
+        Caution: This affects all programs and waveforms on the AWG, not only those uploaded using qupulse!
         """
 
     @abstractmethod

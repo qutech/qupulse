@@ -1,4 +1,4 @@
-"""This module defines the abstract hardware instruction model of the qc-toolkit.
+"""This module defines the abstract hardware instruction model of qupulse.
 
 Classes:
     - Trigger: Representation of a hardware trigger.

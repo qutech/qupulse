@@ -840,14 +840,14 @@ class PulseStorage(MutableMapping[str, Serializable]):
         Raises:
             ValueError: if the given identifier argument does not match the identifier of the serializable
         """
-        if identifier != serializable.identifier: # address issue #272: https://github.com/qutech/qc-toolkit/issues/272
+        if identifier != serializable.identifier: # address issue #272: https://github.com/qutech/qupulse/issues/272
             raise ValueError("Storing a Serializable under a different than its own internal identifier is currently"
                              " not supported! If you want to rename the serializable, please use the "
                              "Serializable.renamed() method to obtain a renamed copy which can then be stored with "
                              "the new identifier.\n"
                              "If you think that storing under a different identifier without explicit renaming should"
                              "a supported feature, please contribute to our ongoing discussion about this on:\n"
-                             "https://github.com/qutech/qc-toolkit/issues/272")
+                             "https://github.com/qutech/qupulse/issues/272")
         if identifier in self._temporary_storage:
             if self.temporary_storage[identifier].serializable is serializable:
                 return
@@ -874,12 +874,12 @@ class PulseStorage(MutableMapping[str, Serializable]):
     def __len__(self) -> None:
         raise NotImplementedError("len(PulseStorage) has currently no meaningful semantics and is not implemented."
                                   " If you require this feature, please create a feature request at \n"
-                                  "https://github.com/qutech/qc-toolkit/issues/new")
+                                  "https://github.com/qutech/qupulse/issues/new")
 
     def __iter__(self) -> None:
         raise NotImplementedError("iter(PulseStorage) has currently no meaningful semantics and is not implemented."
                                   " If you require this feature, please create a feature request at \n"
-                                  "https://github.com/qutech/qc-toolkit/issues/new")
+                                  "https://github.com/qutech/qupulse/issues/new")
 
     def overwrite(self, identifier: str, serializable: Serializable) -> None:
         """Explicitly overwrites a pulse.
@@ -982,7 +982,7 @@ class JSONSerializableDecoder(json.JSONDecoder):
                 # if the storage is the default registry, we would get conflicts when the Serializable tries to register
                 # itself on construction. Pass an empty dict as registry keyword argument in this case.
                 # calling PulseStorage objects will take care of registering.
-                # (solution to issue #301: https://github.com/qutech/qc-toolkit/issues/301 )
+                # (solution to issue #301: https://github.com/qutech/qupulse/issues/301 )
                 registry = None
                 if get_default_pulse_registry() is self.storage:
                     registry = dict()

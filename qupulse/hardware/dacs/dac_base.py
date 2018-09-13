@@ -30,5 +30,5 @@ class DAC(metaclass=ABCMeta):
     def clear(self) -> None:
         """Clears all registered programs.
 
-        Caution: This affects all programs and waveforms on the AWG, not only those uploaded using qc-toolkit!
+        Caution: This affects all programs and waveforms on the AWG, not only those uploaded using qupulse!
         """
