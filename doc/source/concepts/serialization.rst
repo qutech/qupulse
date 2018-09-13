@@ -73,6 +73,7 @@ The following code snippet may serve as an example for a simple implementation o
                      mapping: Dict[str, int],
                      identifier: Optional[str]=None, registry:
                      PulseRegistryType=None) -> None:
+
             super().__init__(identifier=identifier)
             self.__template = template
             self.__mapping = mapping

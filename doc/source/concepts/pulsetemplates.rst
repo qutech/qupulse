@@ -47,6 +47,8 @@ In order to translate the object structures that encode the pulse template in th
 
 First, the :meth:`.PulseTemplate.create_program` checks parameter consistency with parameter constraints and translates the pulse template into an instantiated program object, which is then further interpreted and sequenced by the hardware backend code (in :py:mod:`~qupulse.hardware`).
 
+See :ref:`instantiating` for a more in-depth explanation of instantiating pulses.
+
 Relevant Examples
 ^^^^^^^^^^^^^^^^^
 
@@ -54,9 +56,9 @@ Examples demonstrating the construction of pulse templates and parameters from v
 
 * :ref:`/examples/00SimpleTablePulse.ipynb`
 * :ref:`/examples/01AdvancedTablePulse.ipynb`
-* :ref:`/examples/02FunctionPulses.ipynb`
+* :ref:`/examples/02FunctionPulse.ipynb`
 * :ref:`/examples/03PointPulse.ipynb`
-* :ref:`/examples/03xComposedPulse.ipynb`
+* :ref:`/examples/03xComposedPulses.ipynb`
 * :ref:`/examples/05MappingTemplate.ipynb`
 * :ref:`/examples/07MultiChannelTemplates.ipynb`
 
