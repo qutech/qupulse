@@ -779,6 +779,7 @@ class PulseStorage(MutableMapping[str, Serializable]):
     def __init__(self,
                  storage_backend: StorageBackend) -> None:
         """Create a PulseStorage instance.
+
         Args:
             storage_backend: The StorageBackend representing the permanent storage of the PulseStorage. Serializables
                 are stored to and read from here.

@@ -25,6 +25,9 @@ __all__ = ["SequencingElement", "Sequencer"]
 class SequencingElement(metaclass=ABCMeta):
     """An entity which can be sequenced using Sequencer.
 
+    DEPRECATED (September 2018). This is outdated code. For obtaining pulses for execution from pulse templates, refer
+    to :meth:`.PulseTemplate.create_program`.
+
     See also:
         Sequencer
     """
@@ -50,14 +53,14 @@ class SequencingElement(metaclass=ABCMeta):
         Implementation guide: Use instruction_block methods to add instructions or create new InstructionBlocks. Use
         sequencer to push child elements to the translation stack.
 
-        :param sequencer: The Sequencer object coordinating the current sequencing process.
-        :param parameters: A mapping of parameter names to Parameter objects.
-        :param conditions: A mapping of condition identifiers to Condition
-        :param measurement_mapping: A mapping of measurement window names. Windows that are mapped to None are omitted.
-        :param channel_mapping: A mapping of channel names. Channels that are mapped to None are omitted.
-        :param instruction_block: The instruction block into which instructions resulting from the translation of this
-        SequencingElement will be placed.
-        :return:
+        Args:
+            sequencer: The Sequencer object coordinating the current sequencing process.
+            parameters: A mapping of parameter names to Parameter objects.
+            conditions: A mapping of condition identifiers to Condition
+            measurement_mapping: A mapping of measurement window names. Windows that are mapped to None are omitted.
+            channel_mapping: A mapping of channel names. Channels that are mapped to None are omitted.
+            instruction_block: The instruction block into which instructions resulting from the translation of this
+                SequencingElement will be placed.
         """
 
     @abstractmethod
@@ -78,9 +81,8 @@ class SequencingElement(metaclass=ABCMeta):
         will be regarded during translation of that element.
 
         Args:
-            parameters (Dict(str -> Parameter)): A mapping of parameter names to Parameter objects.
-            conditions (Dict(str -> Condition)): A mapping of condition identifiers to Condition
-                objects.
+            parameters: A mapping of parameter names to Parameter objects.
+            conditions: A mapping of condition identifiers to Condition objects.
         Returns:
             True, if this SequencingElement cannot be translated yet. False, otherwise.
         """
@@ -88,6 +90,9 @@ class SequencingElement(metaclass=ABCMeta):
 
 class Sequencer:
     """Translates tree structures of SequencingElement objects to linear instruction sequences.
+
+    DEPRECATED (September 2018). This is outdated code. For obtaining pulses for execution from pulse templates, refer
+    to :meth:`.PulseTemplate.create_program`.
 
     The concept of the sequencing process itself is described in detail in Section 1.4 of the
     documentation. Sequencer controls the process and invokes the translation functions of
