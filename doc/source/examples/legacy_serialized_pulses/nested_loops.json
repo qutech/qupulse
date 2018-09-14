@@ -16,17 +16,17 @@
                     },
                     "measurements": [],
                     "parameter_constraints": [],
-                    "type": "qctoolkit.pulses.table_pulse_template.TablePulseTemplate"
+                    "type": "qupulse.pulses.table_pulse_template.TablePulseTemplate"
                 },
                 {
                     "channel": "A",
                     "duration_expression": {
                         "expression": "T",
-                        "type": "qctoolkit.expressions.Expression"
+                        "type": "qupulse.expressions.Expression"
                     },
                     "expression": {
                         "expression": "sin(t/T*2*pi)",
-                        "type": "qctoolkit.expressions.Expression"
+                        "type": "qupulse.expressions.Expression"
                     },
                     "measurement_declarations": [
                         [
@@ -36,10 +36,10 @@
                         ]
                     ],
                     "parameter_constraints": [],
-                    "type": "qctoolkit.pulses.function_pulse_template.FunctionPulseTemplate"
+                    "type": "qupulse.pulses.function_pulse_template.FunctionPulseTemplate"
                 }
             ],
-            "type": "qctoolkit.pulses.multi_channel_pulse_template.AtomicMultiChannelPulseTemplate"
+            "type": "qupulse.pulses.multi_channel_pulse_template.AtomicMultiChannelPulseTemplate"
         },
         {
             "body": {
@@ -68,17 +68,17 @@
                             },
                             "measurements": [],
                             "parameter_constraints": [],
-                            "type": "qctoolkit.pulses.table_pulse_template.TablePulseTemplate"
+                            "type": "qupulse.pulses.table_pulse_template.TablePulseTemplate"
                         },
                         {
                             "channel": "A",
                             "duration_expression": {
                                 "expression": "T",
-                                "type": "qctoolkit.expressions.Expression"
+                                "type": "qupulse.expressions.Expression"
                             },
                             "expression": {
                                 "expression": "sin(t/T*2*pi)",
-                                "type": "qctoolkit.expressions.Expression"
+                                "type": "qupulse.expressions.Expression"
                             },
                             "measurement_declarations": [
                                 [
@@ -88,12 +88,12 @@
                                 ]
                             ],
                             "parameter_constraints": [],
-                            "type": "qctoolkit.pulses.function_pulse_template.FunctionPulseTemplate"
+                            "type": "qupulse.pulses.function_pulse_template.FunctionPulseTemplate"
                         }
                     ],
-                    "type": "qctoolkit.pulses.multi_channel_pulse_template.AtomicMultiChannelPulseTemplate"
+                    "type": "qupulse.pulses.multi_channel_pulse_template.AtomicMultiChannelPulseTemplate"
                 },
-                "type": "qctoolkit.pulses.pulse_template_parameter_mapping.MappingTemplate"
+                "type": "qupulse.pulses.pulse_template_parameter_mapping.MappingTemplate"
             },
             "loop_index": "i_T",
             "loop_range": [
@@ -101,7 +101,7 @@
                 "N_T",
                 1
             ],
-            "type": "qctoolkit.pulses.loop_pulse_template.ForLoopPulseTemplate"
+            "type": "qupulse.pulses.loop_pulse_template.ForLoopPulseTemplate"
         },
         {
             "body": {
@@ -144,17 +144,17 @@
                                     },
                                     "measurements": [],
                                     "parameter_constraints": [],
-                                    "type": "qctoolkit.pulses.table_pulse_template.TablePulseTemplate"
+                                    "type": "qupulse.pulses.table_pulse_template.TablePulseTemplate"
                                 },
                                 {
                                     "channel": "A",
                                     "duration_expression": {
                                         "expression": "T",
-                                        "type": "qctoolkit.expressions.Expression"
+                                        "type": "qupulse.expressions.Expression"
                                     },
                                     "expression": {
                                         "expression": "sin(t/T*2*pi)",
-                                        "type": "qctoolkit.expressions.Expression"
+                                        "type": "qupulse.expressions.Expression"
                                     },
                                     "measurement_declarations": [
                                         [
@@ -164,12 +164,12 @@
                                         ]
                                     ],
                                     "parameter_constraints": [],
-                                    "type": "qctoolkit.pulses.function_pulse_template.FunctionPulseTemplate"
+                                    "type": "qupulse.pulses.function_pulse_template.FunctionPulseTemplate"
                                 }
                             ],
-                            "type": "qctoolkit.pulses.multi_channel_pulse_template.AtomicMultiChannelPulseTemplate"
+                            "type": "qupulse.pulses.multi_channel_pulse_template.AtomicMultiChannelPulseTemplate"
                         },
-                        "type": "qctoolkit.pulses.pulse_template_parameter_mapping.MappingTemplate"
+                        "type": "qupulse.pulses.pulse_template_parameter_mapping.MappingTemplate"
                     },
                     "loop_index": "i_T",
                     "loop_range": [
@@ -177,13 +177,13 @@
                         "N_T",
                         1
                     ],
-                    "type": "qctoolkit.pulses.loop_pulse_template.ForLoopPulseTemplate"
+                    "type": "qupulse.pulses.loop_pulse_template.ForLoopPulseTemplate"
                 },
-                "type": "qctoolkit.pulses.pulse_template_parameter_mapping.MappingTemplate"
+                "type": "qupulse.pulses.pulse_template_parameter_mapping.MappingTemplate"
             },
             "parameter_constraints": [],
             "repetition_count": "N_rep",
-            "type": "qctoolkit.pulses.repetition_pulse_template.RepetitionPulseTemplate"
+            "type": "qupulse.pulses.repetition_pulse_template.RepetitionPulseTemplate"
         },
         {
             "body": {
@@ -212,17 +212,17 @@
                             },
                             "measurements": [],
                             "parameter_constraints": [],
-                            "type": "qctoolkit.pulses.table_pulse_template.TablePulseTemplate"
+                            "type": "qupulse.pulses.table_pulse_template.TablePulseTemplate"
                         },
                         {
                             "channel": "A",
                             "duration_expression": {
                                 "expression": "T",
-                                "type": "qctoolkit.expressions.Expression"
+                                "type": "qupulse.expressions.Expression"
                             },
                             "expression": {
                                 "expression": "sin(t/T*2*pi)",
-                                "type": "qctoolkit.expressions.Expression"
+                                "type": "qupulse.expressions.Expression"
                             },
                             "measurement_declarations": [
                                 [
@@ -232,12 +232,12 @@
                                 ]
                             ],
                             "parameter_constraints": [],
-                            "type": "qctoolkit.pulses.function_pulse_template.FunctionPulseTemplate"
+                            "type": "qupulse.pulses.function_pulse_template.FunctionPulseTemplate"
                         }
                     ],
-                    "type": "qctoolkit.pulses.multi_channel_pulse_template.AtomicMultiChannelPulseTemplate"
+                    "type": "qupulse.pulses.multi_channel_pulse_template.AtomicMultiChannelPulseTemplate"
                 },
-                "type": "qctoolkit.pulses.pulse_template_parameter_mapping.MappingTemplate"
+                "type": "qupulse.pulses.pulse_template_parameter_mapping.MappingTemplate"
             },
             "loop_index": "i_T",
             "loop_range": [
@@ -245,8 +245,8 @@
                 "N_T",
                 1
             ],
-            "type": "qctoolkit.pulses.loop_pulse_template.ForLoopPulseTemplate"
+            "type": "qupulse.pulses.loop_pulse_template.ForLoopPulseTemplate"
         }
     ],
-    "type": "qctoolkit.pulses.sequence_pulse_template.SequencePulseTemplate"
+    "type": "qupulse.pulses.sequence_pulse_template.SequencePulseTemplate"
 }

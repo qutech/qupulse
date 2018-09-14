@@ -14,7 +14,7 @@ from numbers import Real
 
 from qupulse.utils.types import ChannelID, DocStringABCMeta
 from qupulse.serialization import Serializable
-from qupulse.expressions import ExpressionScalar
+from qupulse.expressions import ExpressionScalar, Expression
 from qupulse._program._loop import Loop, to_waveform
 from qupulse._program.transformation import Transformation, IdentityTransformation, ChainedTransformation, chain_transformations
 
@@ -98,7 +98,7 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
         """Returns an expression giving the integral over the pulse."""
 
     def create_program(self, *,
-                       parameters: Optional[Dict[str, Parameter]]=None,
+                       parameters: Optional[Dict[str, Union[Parameter, float, Expression, str, Real]]]=None,
                        measurement_mapping: Optional[Dict[str, Optional[str]]]=None,
                        channel_mapping: Optional[Dict[ChannelID, Optional[ChannelID]]]=None,
                        global_transformation: Optional[Transformation]=None,
@@ -109,13 +109,15 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
         the parameters argument. Optionally, channels and measurements defined in the PulseTemplate can be renamed/mapped
         via the channel_mapping and measurement_mapping arguments.
 
-        :param parameters: A mapping of parameter names to Parameter objects.
-        :param measurement_mapping: A mapping of measurement window names. Windows that are mapped to None are omitted.
-        :param channel_mapping: A mapping of channel names. Channels that are mapped to None are omitted.
-        :param global_transformation: This transformation is applied to every waveform
-        :param to_single_waveform: A set of pulse templates (or identifiers) which are directly translated to a
-        waveform. This might change how transformations are applied. TODO: clarify
-        :return: A Loop object corresponding to this PulseTemplate.
+        Args:
+            parameters: A mapping of parameter names to Parameter objects.
+            measurement_mapping: A mapping of measurement window names. Windows that are mapped to None are omitted.
+            channel_mapping: A mapping of channel names. Channels that are mapped to None are omitted.
+            global_transformation: This transformation is applied to every waveform
+            to_single_waveform: A set of pulse templates (or identifiers) which are directly translated to a
+                waveform. This might change how transformations are applied. TODO: clarify
+        Returns:
+             A Loop object corresponding to this PulseTemplate.
         """
         if parameters is None:
             parameters = dict()

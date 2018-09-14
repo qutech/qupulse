@@ -20,7 +20,7 @@ from qupulse.expressions import Expression
 from qupulse.utils.types import HashableNumpyArray, DocStringABCMeta
 
 __all__ = ["Parameter", "ConstantParameter",
-           "ParameterNotProvidedException", "ParameterConstraintViolation"]
+           "ParameterNotProvidedException", "ParameterConstraintViolation", "ParameterConstraint"]
 
 
 class Parameter(metaclass=DocStringABCMeta):

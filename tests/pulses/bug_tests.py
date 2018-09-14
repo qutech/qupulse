@@ -5,6 +5,7 @@ from qupulse.pulses.function_pulse_template import FunctionPulseTemplate
 from qupulse.pulses.sequence_pulse_template import SequencePulseTemplate
 from qupulse.pulses.repetition_pulse_template import RepetitionPulseTemplate
 from qupulse.pulses.multi_channel_pulse_template import AtomicMultiChannelPulseTemplate
+from qupulse.pulses.mapping_pulse_template import MappingPulseTemplate
 
 from qupulse.pulses.plotting import plot
 
@@ -47,3 +48,23 @@ class BugTests(unittest.TestCase):
         sequence_parameters['sin_b'] = 2
 
         _ = plot(sequence_template, parameters=sequence_parameters, sample_rate=100, show=False)
+
+    @unittest.expectedFailure
+    def test_plot_with_parameter_value_being_expression_string(self) -> None:
+        """This is currently not supported but probably should be?"""
+        sine_measurements = [('M', 't_duration/2', 't_duration')]
+        sine = FunctionPulseTemplate('a*sin(omega*t)', 't_duration', measurements=sine_measurements)
+        sine_channel_mapping = dict(default='sin_channel')
+        sine_measurement_mapping = dict(M='M_sin')
+        remapped_sine = MappingPulseTemplate(sine, measurement_mapping=sine_measurement_mapping,
+                                             channel_mapping=sine_channel_mapping)
+        cos_measurements = [('M', 0, 't_duration/2')]
+        cos = FunctionPulseTemplate('a*cos(omega*t)', 't_duration', measurements=cos_measurements)
+        cos_channel_mapping = dict(default='cos_channel')
+        cos_measurement_mapping = dict(M='M_cos')
+        remapped_cos = MappingPulseTemplate(cos, channel_mapping=cos_channel_mapping, measurement_mapping=cos_measurement_mapping)
+        both = AtomicMultiChannelPulseTemplate(remapped_sine, remapped_cos)
+
+        parameter_values = dict(omega=1.0, a=1.0, t_duration="2*pi")
+
+        _ = plot(both, parameters=parameter_values, sample_rate=100)

@@ -110,10 +110,6 @@ class LinearTransformation(Transformation):
         self._input_channels = tuple(sorted(input_channels))
         self._output_channels = tuple(sorted(output_channels))
 
-    @classmethod
-    def from_pandas(cls, transformation: 'pandas.DataFrame') -> 'LinearTransformation':
-        return cls(transformation.values, transformation.columns, transformation.index)
-
     def __call__(self, time: np.ndarray, data: Mapping[ChannelID, np.ndarray]) -> Mapping[ChannelID, np.ndarray]:
         data_out = {forwarded_channel: data[forwarded_channel]
                     for forwarded_channel in set(data.keys()).difference(self._input_channels)}
@@ -152,6 +148,25 @@ class LinearTransformation(Transformation):
     @property
     def compare_key(self) -> Tuple[Tuple[ChannelID], Tuple[ChannelID], bytes]:
         return self._input_channels, self._output_channels, self._matrix.tobytes()
+
+
+try:
+    import pandas
+
+    def linear_transformation_from_pandas(transformation: pandas.DataFrame) -> LinearTransformation:
+        """ Creates a LinearTransformation object out of a pandas data frame.
+
+        Args:
+            transformation (pandas.DataFrame): The pandas.DataFrame object out of which a LinearTransformation will be formed.
+
+        Returns:
+            the created LinearTransformation instance
+        """
+        return LinearTransformation(transformation.values, transformation.columns, transformation.index)
+
+    LinearTransformation.from_pandas = linear_transformation_from_pandas
+except ImportError:
+    pass
 
 
 def chain_transformations(*transformations: Transformation) -> Transformation:

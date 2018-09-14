@@ -146,7 +146,7 @@ class PlotterTests(unittest.TestCase):
         expected_times = numpy.arange(start=0, stop=42, step=2)
         expected_result = numpy.concatenate((wf1.sample_output, wf2.sample_output))
 
-        times, voltages = render(block, sample_rate=0.5)
+        times, voltages, _ = render(block, sample_rate=0.5)
 
         self.assertEqual(len(wf1.sample_calls), 1)
         self.assertEqual(len(wf2.sample_calls), 1)
@@ -187,8 +187,8 @@ class PlotterTests(unittest.TestCase):
         mcp = MultiChannelProgram(block)
         loop = next(iter(mcp.programs.values()))
 
-        block_times, block_voltages = render(block, sample_rate=0.5)
-        loop_times, loop_voltages = render(loop, sample_rate=0.5)
+        block_times, block_voltages, _ = render(block, sample_rate=0.5)
+        loop_times, loop_voltages, _ = render(loop, sample_rate=0.5)
 
         numpy.testing.assert_equal(block_times, loop_times)
         numpy.testing.assert_equal(block_voltages, loop_voltages)

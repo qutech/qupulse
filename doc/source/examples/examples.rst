@@ -10,10 +10,15 @@ All examples are provided as static text in this documentation and, additionally
     01AdvancedTablePulse
     02FunctionPulse
     03PointPulse
-    04Serialization
+    03xComposedPulses
+    04PulseStorage
     05MappingTemplate
-    06SequencePulse
+    06CreatePrograms
     07MultiChannelTemplates
     08Measurements
     09ParameterConstraints
     10FreeInductionDecayExample
+    11GateConfigurationExample
+
+The `/doc/source/examples` directory also contains some outdated examples for features and functionality that has been changed. These examples start with the number nine and are currently left only for reference purposes.
+If you are just learning how to get around in qupulse please ignore them.

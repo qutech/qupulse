@@ -16,8 +16,6 @@ with warnings.catch_warnings():
     # ensure this is included.. it adds a deserialization handler for pulse_template_parameter_mapping.MappingPT which is not present otherwise
     import qupulse.pulses.pulse_template_parameter_mapping
 
-from qupulse.pulses.sequencing import Sequencer
-
 __all__ = ["FunctionPT", "ForLoopPT", "AtomicMultiChannelPT", "MappingPT", "RepetitionPT", "SequencePT", "TablePT",
-           "Sequencer", "PointPT"]
+           "PointPT"]
 

@@ -1,6 +1,6 @@
 # qupulse: A Quantum compUting PULse parametrization and SEquencing framework
 [![Coverage Status](https://coveralls.io/repos/qutech/qc-toolkit/badge.svg?branch=master&service=github)](https://coveralls.io/github/qutech/qc-toolkit?branch=master)
-[![Build Status](https://travis-ci.org/qutech/qc-toolkit.svg?branch=master)](https://travis-ci.org/qutech/qc-toolkit)
+[![Build Status](https://travis-ci.org/qutech/qupulse.svg?branch=master)](https://travis-ci.org/qutech/qupulse)
 [![Documentation Status](https://readthedocs.org/projects/qc-toolkit/badge/?version=latest)](http://qc-toolkit.readthedocs.org/en/latest/?badge=latest)
 
 The qupulse project aims to produce a software toolkit facilitating experiments involving pulse driven state manipulation of physical qubits.
@@ -29,9 +29,9 @@ The current feature list is as follows:
 ## Installation
 qupulse is developed using Python 3.5 but should also run on previous 3.3+ versions.
 
-The package is installed with:
+The package is installed by executing in the cloned repository root folder:
 ```
-python3 setup.py install
+pip3 install .
 ```
 
 The backend for TaborAWGs requires packages that can be found [here](https://git.rwth-aachen.de/qutech/python-TaborDriver).

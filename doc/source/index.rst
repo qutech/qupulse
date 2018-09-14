@@ -3,7 +3,7 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to qc-toolkit's documentation!
+Welcome to qupulse's documentation!
 ======================================
 
 Contents:
@@ -14,7 +14,7 @@ Contents:
 
    concepts/concepts
    examples/examples
-   qctoolkit API Documentation <qctoolkit>
+   qupulse API Documentation <qupulse>
 
 Indices and tables
 ==================

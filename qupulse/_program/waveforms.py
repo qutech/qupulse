@@ -64,8 +64,9 @@ class Waveform(Comparable, metaclass=ABCMeta):
         Args/Result:
             sample_times: Times at which this Waveform will be sampled.
             output_array: Has to be either None or an array of the same size and type as sample_times.
-                 - If None, a new array will be created and cached to save memory.
-                 - If not None, the sampled values will be written here and this array will be returned.
+                If an array is given, the sampled values will be written into the given array and it will be returned.
+                Otherwise, a new array will be created and cached to save memory.
+
         Result:
             The sampled values of this Waveform at the provided sample times.
         """

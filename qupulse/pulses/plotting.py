@@ -1,7 +1,6 @@
 """This module defines plotting functionality for instantiated PulseTemplates using matplotlib.
 
 Classes:
-    - Plotter: Converts an InstructionSequence into plottable time and value sample arrays.
     - PlottingNotPossibleException.
 Functions:
     - plot: Plot a pulse using matplotlib.
@@ -18,7 +17,6 @@ import itertools
 from qupulse.utils.types import ChannelID, MeasurementWindow
 from qupulse.pulses.pulse_template import PulseTemplate
 from qupulse.pulses.parameters import Parameter
-from qupulse.pulses.sequencing import Sequencer
 from qupulse._program.waveforms import Waveform
 from qupulse._program.instructions import EXECInstruction, STOPInstruction, AbstractInstructionBlock, \
     REPJInstruction, MEASInstruction, GOTOInstruction, InstructionPointer
@@ -30,6 +28,7 @@ __all__ = ["render", "plot", "PlottingNotPossibleException"]
 
 def iter_waveforms(instruction_block: AbstractInstructionBlock,
                    expected_return: Optional[InstructionPointer]=None) -> Generator[Waveform, None, None]:
+    # todo [2018-08-30]: seems to be unused.. remove?
     for i, instruction in enumerate(instruction_block):
         if isinstance(instruction, EXECInstruction):
             yield instruction.waveform
@@ -52,6 +51,24 @@ def iter_waveforms(instruction_block: AbstractInstructionBlock,
 
 def iter_instruction_block(instruction_block: AbstractInstructionBlock,
                            extract_measurements: bool) -> Tuple[list, list, Real]:
+    """Iterates over the instructions contained in an InstructionBlock (thus simulating execution).
+
+    In effect, this function simulates the execution of the control flow represented by the passed InstructionBlock
+    and returns all waveforms in the order they would be executed on the hardware, along with all measurements that
+    would be made during that execution (if the extract_measurement argument is True). The waveforms are passed back
+    as Waveform objects (and are not sampled at anytime during the execution of this function).
+
+    Args:
+        instruction_block: The InstructionBlock to iterate over.
+        extract_measurements: If True, a list of all measurement simulated during block iteration will be returned.
+
+    Returns:
+        A tuple (waveforms, measurements, time) where waveforms is a sequence of Waveform objects in the order they
+        would be executed according to the given InstructionBlock, measurements is a similar sequence of measurements
+        that would be made (where each measurement is represented by a tuple (name, start_time, duration)) and time is
+        the total execution duration of the block (i.e. the accumulated duration of all waveforms).
+        measurements is an empty list if extract_measurements is not True.
+    """
     block_stack = [(enumerate(instruction_block), None)]
     waveforms = []
     measurements = []
@@ -89,27 +106,32 @@ def iter_instruction_block(instruction_block: AbstractInstructionBlock,
     return waveforms, measurements, time
 
 
-def render(sequence: Union[AbstractInstructionBlock, Loop],
+def render(program: Union[AbstractInstructionBlock, Loop],
            sample_rate: Real=10.0,
            render_measurements=False) -> Union[Tuple[np.ndarray, Dict[ChannelID, np.ndarray]],
                                                Tuple[np.ndarray, Dict[ChannelID, np.ndarray], List[MeasurementWindow]]]:
-    """'Render' an instruction sequence (sample all contained waveforms into an array).
-        TODO: update docstring
+    """'Renders' a pulse program.
+
+        Samples all contained waveforms into an array according to the control flow of the program.
+
         Args:
-            sequence (AbstractInstructionBlock): block of instructions representing a (sub)sequence
-                in the control flow of a pulse template instantiation.
-            sample_rate (float): The sample rate in GHz.
+            program: The pulse (sub)program to render. Can be represented either by a Loop object or the more
+                old-fashioned InstructionBlock.
+            sample_rate: The sample rate in GHz.
             render_measurements: If True, the third return value is a list of measurement windows
 
         Returns:
-            a tuple (times, values) of numpy.ndarrays of similar size. times contains the time value
-            of all sample times and values the corresponding sampled value.
+            A tuple (times, values, measurements). times is a numpy.ndarray of dimensions sample_count where
+            containing the time values. voltages is a dictionary of one numpy.ndarray of dimensions sample_count per
+            defined channel containing corresponding sampled voltage values for that channel.
+            measurements is a sequence of all measurements where each measurement is represented by a tuple
+            (name, start_time, duration).
         """
 
-    if isinstance(sequence, AbstractInstructionBlock):
-        return _render_instruction_block(sequence, sample_rate=sample_rate, render_measurements=render_measurements)
-    elif isinstance(sequence, Loop):
-        return _render_loop(sequence, sample_rate=sample_rate, render_measurements=render_measurements)
+    if isinstance(program, AbstractInstructionBlock):
+        return _render_instruction_block(program, sample_rate=sample_rate, render_measurements=render_measurements)
+    elif isinstance(program, Loop):
+        return _render_loop(program, sample_rate=sample_rate, render_measurements=render_measurements)
 
 
 def _render_instruction_block(sequence: AbstractInstructionBlock,
@@ -117,6 +139,7 @@ def _render_instruction_block(sequence: AbstractInstructionBlock,
                               render_measurements=False) -> Union[Tuple[np.ndarray, Dict[ChannelID, np.ndarray]],
                                                                   Tuple[np.ndarray, Dict[ChannelID, np.ndarray],
                                                                         List[MeasurementWindow]]]:
+    """The specific implementation of render for InstructionBlock arguments."""
 
     waveforms, measurements, total_time = iter_instruction_block(sequence, render_measurements)
     if not waveforms:
@@ -145,10 +168,7 @@ def _render_instruction_block(sequence: AbstractInstructionBlock,
                                  output_array=output_array)
         assert(output_array.shape == sample_times.shape)
         offset = wf_end
-    if render_measurements:
-        return times, voltages, measurements
-    else:
-        return times, voltages
+    return times, voltages, measurements
 
 
 def _render_loop(loop: Loop,
@@ -156,6 +176,7 @@ def _render_loop(loop: Loop,
                  render_measurements: bool) -> Union[Tuple[np.ndarray, Dict[ChannelID, np.ndarray]],
                                                      Tuple[np.ndarray, Dict[ChannelID, np.ndarray],
                                                            List[MeasurementWindow]]]:
+    """The specific implementation of render for Loop arguments."""
     waveform = to_waveform(loop)
     channels = waveform.defined_channels
 
@@ -174,10 +195,10 @@ def _render_loop(loop: Loop,
         for name, (begins, lengths) in measurement_dict.items():
             measurement_list.extend(zip(itertools.repeat(name), begins, lengths))
         measurements = sorted(measurement_list, key=operator.itemgetter(1))
-
-        return times, voltages, measurements
     else:
-        return times, voltages
+        measurements = []
+
+    return times, voltages, measurements
 
 
 def plot(pulse: PulseTemplate,
@@ -190,11 +211,11 @@ def plot(pulse: PulseTemplate,
          stepped: bool=True,
          maximum_points: int=10**6,
          **kwargs) -> Any:  # pragma: no cover
-    """Plot a pulse using matplotlib.
+    """Plots a pulse using matplotlib.
 
-    The given pulse will first be sequenced using the Sequencer class. The resulting
-    InstructionSequence will be converted into sampled value arrays using the Plotter class. These
-    arrays are then plotted in a matplotlib figure.
+    The given pulse template will first be turned into a pulse program (represented by a Loop object) with the provided
+    parameters. The render() function is then invoked to obtain voltage samples over the entire duration of the pulse which
+    are then plotted in a matplotlib figure.
 
     Args:
         pulse: The pulse to be plotted.
@@ -222,19 +243,15 @@ def plot(pulse: PulseTemplate,
 
     if parameters is None:
         parameters = dict()
-    sequencer = Sequencer()
-    sequencer.push(pulse,
-                   parameters,
-                   channel_mapping={ch: ch for ch in channels},
-                   window_mapping={w: w for w in pulse.measurement_names})
-    sequence = sequencer.build()
-    if not sequencer.has_finished():
-        raise PlottingNotPossibleException(pulse)
 
-    if plot_measurements:
-        times, voltages, measurements = render(sequence, sample_rate, render_measurements=True)
+    program = pulse.create_program(parameters=parameters,
+                                   channel_mapping={ch: ch for ch in channels},
+                                   measurement_mapping={w: w for w in pulse.measurement_names})
+
+    if program is not None:
+        times, voltages, measurements = render(program, sample_rate, render_measurements=plot_measurements)
     else:
-        times, voltages = render(sequence, sample_rate)
+        times, voltages, measurements = np.array([]), dict(), []
 
     duration = 0
     if times.size == 0:

@@ -1,5 +1,4 @@
 {
-    "parameter_constraints": [],
     "subtemplates": [
         {
             "channel_mapping": {
@@ -14,8 +13,8 @@
                 "vb": "0"
             },
             "template": "table_template",
-            "type": "qctoolkit.pulses.pulse_template_parameter_mapping.MappingTemplate"
+            "type": "qupulse.pulses.mapping_pulse_template.MappingPulseTemplate"
         }
     ],
-    "type": "qctoolkit.pulses.sequence_pulse_template.SequencePulseTemplate"
+    "type": "qupulse.pulses.sequence_pulse_template.SequencePulseTemplate"
 }
