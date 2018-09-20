@@ -17,12 +17,16 @@ Sympifyable = Union[str, Number, sympy.Expr, numpy.str_]
 
 
 class IndexedBasedFinder:
+    """Acts as a symbol lookup and determines which symbols in an expression a subscripted."""
+
     def __init__(self):
         self.symbols = set()
         self.indexed_base = set()
         self.indices = set()
 
         class SubscriptionChecker(sympy.Symbol):
+            """A symbol stand-in which detects whether the symbol is subscripted."""
+
             def __getitem__(s, k):
                 self.indexed_base.add(str(s))
                 self.indices.add(k)
@@ -33,6 +37,17 @@ class IndexedBasedFinder:
         self.SubscriptionChecker = SubscriptionChecker
 
     def __getitem__(self, k) -> sympy.Expr:
+        """Return an instance of the internal SubscriptionChecker class for each symbol to determine which symbols are
+        indexed/subscripted.
+
+        __getitem__ is (apparently) called by symbol for each token and gets either symbol names or type names such as
+        'Integer', 'Float', etc. We have to take care of returning correct types for symbols (-> SubscriptionChecker)
+        and the base types (-> Integer, Float, etc).
+        """
+        if hasattr(sympy, k): # if k is a sympy base type identifier, return the base type
+            return getattr(sympy, k)
+
+        # otherwise track the symbol name and return a SubscriptionChecker instance
         self.symbols.add(k)
         return self.SubscriptionChecker(k)
 

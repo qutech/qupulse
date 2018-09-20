@@ -140,7 +140,14 @@ class ExpressionScalarTests(unittest.TestCase):
         params['a'] = np.array([[1, 2, 3], [4, 5, 6]])
         np.testing.assert_equal(e.evaluate_numeric(**params), 2 * np.array([4, 5, 6]))
 
-    def test_partial_evaluation(self):
+    def test_partial_evaluation(self) -> None:
+        e = ExpressionScalar('a * c')
+        params = {'c': 5.5}
+        evaluated = e.evaluate_symbolic(params)
+        expected = ExpressionScalar('a * 5.5')
+        self.assertEqual(expected.underlying_expression, evaluated.underlying_expression)
+
+    def test_partial_evaluation_vectorized(self) -> None:
         e = ExpressionScalar('a[i] * c')
 
         params = {
@@ -151,7 +158,6 @@ class ExpressionScalarTests(unittest.TestCase):
         expected = ExpressionVector([['a[i] * 1', 'a[i] * 2'], ['a[i] * 3', 'a[i] * 4']])
 
         np.testing.assert_equal(evaluated.underlying_expression, expected.underlying_expression)
-
 
     def test_evaluate_numeric_without_numpy(self):
         e = Expression('a * b + c')
