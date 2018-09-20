@@ -1,4 +1,4 @@
-from typing import Union, Dict, Any, Callable, Set
+from typing import Union, Dict, Any, Callable, Iterator
 
 from qupulse.serialization import Serializer, Serializable, StorageBackend
 
@@ -30,8 +30,8 @@ class DummyStorageBackend(StorageBackend):
     def delete(self, identifier: str) -> None:
         del self.stored_items[identifier]
 
-    def list_contents(self) -> Set[str]:
-        return set(self.stored_items.keys())
+    def __iter__(self) -> Iterator[str]:
+        return iter(self.stored_items)
 
 
 class DummySerializer(Serializer):
