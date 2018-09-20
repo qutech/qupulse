@@ -960,15 +960,28 @@ class PulseStorageTests(unittest.TestCase):
         self.assertEqual({}, backend.stored_items)
         self.assertEqual(pulse_storage.temporary_storage, {})
 
+    @mock.patch.multiple(StorageBackend, __abstractmethods__=set())
     def test_len(self) -> None:
-        pulse_storage = PulseStorage(DummyStorageBackend())
-        with self.assertRaisesRegex(NotImplementedError, "request"):
-            len(pulse_storage)
+        with mock.patch.object(StorageBackend, '__len__', return_value=5) as len_mock:
+            pulse_storage = PulseStorage(StorageBackend())
+            self.assertEqual(5, len(pulse_storage))
+            self.assertEqual(1, len_mock.call_count)
 
+    @mock.patch.multiple(StorageBackend, __abstractmethods__=set())
     def test_iter(self) -> None:
-        pulse_storage = PulseStorage(DummyStorageBackend())
-        with self.assertRaisesRegex(NotImplementedError, "request"):
-            iter(pulse_storage)
+        data = ['hugo', 'ilse', 'foo.bar']
+        with mock.patch.object(StorageBackend, '__iter__', return_value=iter(data)) as iter_mock:
+            pulse_storage = PulseStorage(StorageBackend())
+            self.assertEqual(set(data), set(iter(pulse_storage)))
+            self.assertEqual(1, iter_mock.call_count)
+
+    @mock.patch.multiple(StorageBackend, __abstractmethods__=set())
+    def test_contents(self) -> None:
+        data = ['hugo', 'ilse', 'foo.bar']
+        with mock.patch.object(StorageBackend, 'list_contents', return_value=data) as lc_mock:
+            pulse_storage = PulseStorage(StorageBackend())
+            self.assertEqual(set(data), set(iter(pulse_storage)))
+            self.assertEqual(1, lc_mock.call_count)
 
     def test_deserialize_storage_is_default_registry(self) -> None:
         backend = DummyStorageBackend()

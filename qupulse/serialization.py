@@ -902,15 +902,15 @@ class PulseStorage(MutableMapping[str, Serializable]):
         except KeyError:
             pass
 
-    def __len__(self) -> None:
-        raise NotImplementedError("len(PulseStorage) has currently no meaningful semantics and is not implemented."
-                                  " If you require this feature, please create a feature request at \n"
-                                  "https://github.com/qutech/qupulse/issues/new")
+    @property
+    def contents(self) -> Iterable[str]:
+        return self._storage_backend.list_contents()
 
-    def __iter__(self) -> None:
-        raise NotImplementedError("iter(PulseStorage) has currently no meaningful semantics and is not implemented."
-                                  " If you require this feature, please create a feature request at \n"
-                                  "https://github.com/qutech/qupulse/issues/new")
+    def __len__(self) -> int:
+        return len(self._storage_backend)
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._storage_backend)
 
     def overwrite(self, identifier: str, serializable: Serializable) -> None:
         """Explicitly overwrites a pulse.
