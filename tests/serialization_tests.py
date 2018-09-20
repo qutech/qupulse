@@ -8,8 +8,8 @@ import json
 from unittest import mock
 from abc import ABCMeta, abstractmethod
 
-from tempfile import TemporaryDirectory, TemporaryFile
-from typing import Optional, Any, Dict, Tuple, Iterable
+from tempfile import TemporaryDirectory, NamedTemporaryFile, TemporaryFile
+from typing import Optional, Any, Tuple
 
 from qupulse.serialization import FilesystemBackend, CachingBackend, Serializable, JSONSerializableEncoder,\
     ZipFileBackend, AnonymousSerializable, DictBackend, PulseStorage, JSONSerializableDecoder, Serializer,\
@@ -442,7 +442,7 @@ class ZipFileBackendTests(unittest.TestCase):
             ZipFileBackend(invalid_path)
 
     def test_init_file_exists_not_zip(self):
-        with TemporaryFile() as tmp_file:
+        with NamedTemporaryFile() as tmp_file:
             with self.assertRaises(FileExistsError):
                 ZipFileBackend(tmp_file.name)
 
