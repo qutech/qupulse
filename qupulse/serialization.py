@@ -29,6 +29,7 @@ import weakref
 import warnings
 import gc
 import importlib
+import warnings
 from contextlib import contextmanager
 
 from qupulse.utils.types import DocStringABCMeta
@@ -104,19 +105,29 @@ class StorageBackend(metaclass=ABCMeta):
     def __delitem__(self, identifier: str) -> None:
         self.delete(identifier)
 
-    @abstractmethod
     def list_contents(self) -> Iterable[str]:
         """Returns a listing of all available identifiers.
+
+        DEPRECATED (2018-09-20): Use property contents instead.
 
         Returns:
             List of all available identifiers.
         """
+        warnings.warn("list_contents is deprecated. Use the property contents instead", DeprecationWarning)
+        return self.contents
 
+    @property
+    def contents(self) -> Iterable[str]:
+        """The identifiers of all Serializables currently stored in this StorageBackend."""
+        return set(iter(self))
+
+    @abstractmethod
     def __iter__(self) -> Iterator[str]:
-        return iter(self.list_contents())
+        """Iterator over all identifiers of Serializables currently stored in this StorageBackend."""
+        pass
 
     def __len__(self) -> int:
-        return len(self.list_contents())
+        return len(self.contents)
 
 
 class FilesystemBackend(StorageBackend):
@@ -175,21 +186,6 @@ class FilesystemBackend(StorageBackend):
     def __iter__(self) -> Iterator[str]:
         for dirpath, dirs, files in os.walk(self._root):
             return (filename for filename, ext in (os.path.splitext(file) for file in files) if ext == '.json')
-
-    def list_contents(self) -> Iterable[str]:
-        contents = set()
-        for dirpath, dirs, files in os.walk(self._root):
-            contents = contents | {filename
-                                   for filename, ext in (os.path.splitext(file) for file in files)
-                                   if ext == '.json'}
-            break # abort after first iteration; FileSystemBackend doesn't allow for subdirectories anyway right now, so this is a safeguard
-
-            # pref = os.path.commonprefix((dirpath, self._root))
-            # dir_rel_path = dirpath[len(pref):]
-            # contents = contents | {os.path.join(dir_rel_path, filename)
-            #                        for filename, ext in (os.path.splitext(file) for file in files)
-            #                        if ext == '.json'}
-        return contents
 
 
 class ZipFileBackend(StorageBackend):
@@ -290,12 +286,6 @@ class ZipFileBackend(StorageBackend):
                     for filename, ext in (os.path.splitext(file) for file in myzip.namelist())
                     if ext == '.json')
 
-    def list_contents(self) -> Iterable[str]:
-        with zipfile.ZipFile(self._root, 'r') as myzip:
-            return set(filename
-                       for filename, ext in (os.path.splitext(file) for file in myzip.namelist())
-                       if ext == '.json')
-
 
 class CachingBackend(StorageBackend):
     """Adds naive memory caching functionality to another StorageBackend.
@@ -303,9 +293,10 @@ class CachingBackend(StorageBackend):
     CachingBackend relies on another StorageBackend to provide real data IO functionality which
     it extends by caching already opened files in memory for faster subsequent access.
 
-    Note that it does not flush the cache at any time and may thus not be suitable for long-time
-    usage as it may consume increasing amounts of memory.
+    Note that it does not automatically clear the cache at any time and thus will consume increasing amounts of memory
+    over time. Use the :meth:`clear_cache` method to clear the cache manually.
     """
+    #todo (2018-09-20): PulseStorage now provides caching. Does this make CachingBackend obsolete? if so -> deprecate and remove
 
     def __init__(self, backend: StorageBackend) -> None:
         """Creates a new CachingBackend.
@@ -336,15 +327,18 @@ class CachingBackend(StorageBackend):
         if identifier in self._cache:
             del self._cache[identifier]
 
-    def list_contents(self) -> Iterable[str]:
-        return self._backend.list_contents()
-
     def __iter__(self) -> Iterator[str]:
         return iter(self._backend)
 
+    def clear_cache(self) -> None:
+        self._cache = dict()
+
 
 class DictBackend(StorageBackend):
-    """DictBackend uses a dictionary to store the data for convenience serialization."""
+    """DictBackend uses a dictionary to store Serializables in memory.
+
+    Doing so, it does not provide any persistent storage functionality.
+    """
     def __init__(self) -> None:
         self._cache = {}
 
@@ -365,9 +359,6 @@ class DictBackend(StorageBackend):
 
     def delete(self, identifier: str) -> None:
         del self._cache[identifier]
-
-    def list_contents(self) -> Iterable[str]:
-        return set(self._cache.keys())
 
     def __iter__(self) -> Iterator[str]:
         return iter(self._cache)

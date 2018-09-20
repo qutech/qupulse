@@ -262,6 +262,8 @@ class DummyPulseTemplateSerializationTests(SerializableTests, unittest.TestCase)
 
 @mock.patch.multiple(StorageBackend, __abstractmethods__=set())
 class StorageBackendTest(unittest.TestCase):
+    """Testing common methods implemented in StorageBackend base class based on the abstract methods implemented
+    by subclasses."""
 
     def test_setitem(self) -> None:
         with mock.patch.object(StorageBackend, 'put') as put_mock:
@@ -312,19 +314,28 @@ class StorageBackendTest(unittest.TestCase):
                 del(storage['foo'])
             self.assertEqual(mock.call('foo'), delete_mock.call_args)
 
-    def test_iter(self) -> None:
+    def test_list_contents(self) -> None:
         expected = {'hugo', 'ilse', 'foo.bar'}
-        with mock.patch.object(StorageBackend, 'list_contents', return_value=expected) as lc_mock:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', DeprecationWarning)
+            with mock.patch.object(StorageBackend, '__iter__', return_value=iter(expected)) as iter_mock:
+                storage = StorageBackend()
+                self.assertEqual(expected, storage.list_contents())
+                self.assertEqual(1, iter_mock.call_count)
+
+    def test_contents(self) -> None:
+        expected = {'hugo', 'ilse', 'foo.bar'}
+        with mock.patch.object(StorageBackend, '__iter__', return_value=iter(expected)) as iter_mock:
             storage = StorageBackend()
-            self.assertEqual(expected, set(iter(storage)))
-            self.assertEqual(1, lc_mock.call_count)
+            self.assertEqual(expected, storage.contents)
+            self.assertEqual(1, iter_mock.call_count)
 
     def test_len(self) -> None:
         expected = {'hugo', 'ilse', 'foo.bar'}
-        with mock.patch.object(StorageBackend, 'list_contents', return_value=expected) as lc_mock:
+        with mock.patch.object(StorageBackend, '__iter__', return_value=iter(expected)) as iter_mock:
             storage = StorageBackend()
             self.assertEqual(3, len(storage))
-            self.assertEqual(1, lc_mock.call_count)
+            self.assertEqual(1, iter_mock.call_count)
 
 
 class FileSystemBackendTest(unittest.TestCase):
@@ -978,10 +989,10 @@ class PulseStorageTests(unittest.TestCase):
     @mock.patch.multiple(StorageBackend, __abstractmethods__=set())
     def test_contents(self) -> None:
         data = ['hugo', 'ilse', 'foo.bar']
-        with mock.patch.object(StorageBackend, 'list_contents', return_value=data) as lc_mock:
+        with mock.patch.object(StorageBackend, '__iter__', return_value=iter(data)) as iter_mock:
             pulse_storage = PulseStorage(StorageBackend())
             self.assertEqual(set(data), set(iter(pulse_storage)))
-            self.assertEqual(1, lc_mock.call_count)
+            self.assertEqual(1, iter_mock.call_count)
 
     def test_deserialize_storage_is_default_registry(self) -> None:
         backend = DummyStorageBackend()
