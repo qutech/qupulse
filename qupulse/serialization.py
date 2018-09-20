@@ -20,7 +20,7 @@ Functions:
 """
 
 from abc import ABCMeta, abstractmethod
-from typing import Dict, Any, Optional, NamedTuple, Union, Mapping, MutableMapping, Set, Callable
+from typing import Dict, Any, Optional, NamedTuple, Union, Mapping, MutableMapping, Set, Callable, Iterator, Iterable
 import os
 import zipfile
 import tempfile
@@ -105,12 +105,18 @@ class StorageBackend(metaclass=ABCMeta):
         self.delete(identifier)
 
     @abstractmethod
-    def list_contents(self) -> Set[str]:
+    def list_contents(self) -> Iterable[str]:
         """Returns a listing of all available identifiers.
 
         Returns:
             List of all available identifiers.
         """
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self.list_contents())
+
+    def __len__(self) -> int:
+        return len(self.list_contents())
 
 
 class FilesystemBackend(StorageBackend):
@@ -166,7 +172,11 @@ class FilesystemBackend(StorageBackend):
         except FileNotFoundError as fnf:
             raise KeyError(identifier) from fnf
 
-    def list_contents(self) -> Set[str]:
+    def __iter__(self) -> Iterator[str]:
+        for dirpath, dirs, files in os.walk(self._root):
+            return (filename for filename, ext in (os.path.splitext(file) for file in files) if ext == '.json')
+
+    def list_contents(self) -> Iterable[str]:
         contents = set()
         for dirpath, dirs, files in os.walk(self._root):
             contents = contents | {filename
@@ -193,29 +203,38 @@ class ZipFileBackend(StorageBackend):
     network devices, but takes longer to update because every write causes a
     complete recompression (it's not too bad)."""
 
-    def __init__(self, root: str='./storage.zip') -> None:
+    def __init__(self, root: str='./storage.zip', compression_method: int=zipfile.ZIP_DEFLATED) -> None:
         """Creates a new FilesystemBackend.
 
         Args:
-            root (str): The path of the zip file in which all data files are stored. (default: "./storage.zip",
+            root: The path of the zip file in which all data files are stored. (default: "./storage.zip",
                 i.e. the current directory)
+            compression_method: The compression method/algorithm used to compress data in the zipfile. Accepts
+                all values handled by the zipfile module (ZIP_STORED, ZIP_DEFLATED, ZIP_BZIP2, ZIP_LZMA). Please refer
+                to the `zipfile docs <https://docs.python.org/3/library/zipfile.html#zipfile.ZIP_STORED>` for more
+                information. (default: zipfile.ZIP_DEFLATED)
         Raises:
             NotADirectoryError if root is not a valid path.
         """
         parent, fname = os.path.split(root)
-        if not os.path.isdir(parent):
-            raise NotADirectoryError()
         if not os.path.isfile(root):
+            if not os.path.isdir(parent):
+                raise NotADirectoryError(
+                    "Cannot create a ZipStorageBackend. The parent path {} is not valid.".format(parent)
+                )
             z = zipfile.ZipFile(root, "w")
             z.close()
+        elif not zipfile.is_zipfile(root):
+            raise FileExistsError("Cannot open a ZipStorageBackend. The file {} is not a zip archive.".format(root))
         self._root = root
+        self._compression_method = compression_method
 
     def _path(self, identifier) -> str:
         return os.path.join(identifier + '.json')
 
     def put(self, identifier: str, data: str, overwrite: bool=False) -> None:
         if not self.exists(identifier):
-            with zipfile.ZipFile(self._root, mode='a', compression=zipfile.ZIP_DEFLATED) as myzip:
+            with zipfile.ZipFile(self._root, mode='a', compression=self._compression_method) as myzip:
                 path = self._path(identifier)
                 myzip.writestr(path, data)
         else:
@@ -262,10 +281,16 @@ class ZipFileBackend(StorageBackend):
 
         # now add filename with its new data
         if data is not None:
-            with zipfile.ZipFile(self._root, mode='a', compression=zipfile.ZIP_DEFLATED) as zf:
+            with zipfile.ZipFile(self._root, mode='a', compression=self._compression_method) as zf:
                 zf.writestr(filename, data)
 
-    def list_contents(self) -> Set[str]:
+    def __iter__(self) -> Iterator[str]:
+        with zipfile.ZipFile(self._root, 'r') as myzip:
+            return (filename
+                    for filename, ext in (os.path.splitext(file) for file in myzip.namelist())
+                    if ext == '.json')
+
+    def list_contents(self) -> Iterable[str]:
         with zipfile.ZipFile(self._root, 'r') as myzip:
             return set(filename
                        for filename, ext in (os.path.splitext(file) for file in myzip.namelist())
@@ -311,8 +336,11 @@ class CachingBackend(StorageBackend):
         if identifier in self._cache:
             del self._cache[identifier]
 
-    def list_contents(self) -> Set[str]:
+    def list_contents(self) -> Iterable[str]:
         return self._backend.list_contents()
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._backend)
 
 
 class DictBackend(StorageBackend):
@@ -338,8 +366,11 @@ class DictBackend(StorageBackend):
     def delete(self, identifier: str) -> None:
         del self._cache[identifier]
 
-    def list_contents(self) -> Set[str]:
+    def list_contents(self) -> Iterable[str]:
         return set(self._cache.keys())
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._cache)
 
 
 class DeserializationCallbackFinder:
