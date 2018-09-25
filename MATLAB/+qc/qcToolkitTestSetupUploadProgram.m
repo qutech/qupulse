@@ -4,8 +4,8 @@
 % upload_pulse = 's_pumping_AB_4chan';
 % upload_pulse = 'pumping_s_stp';
 % upload_pulse = 'pumping_s';
-% upload_scan = 'dnp_decay_dbz_fid_4chan';
-upload_scan = 'line';
+upload_scan = 'dnp_decay_dbz_fid_4chan';
+% upload_scan = 'line';
 % upload_scan = 'lead';
 % upload_scan = 'tl';
 
