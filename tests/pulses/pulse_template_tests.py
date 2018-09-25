@@ -3,17 +3,17 @@ from unittest import mock
 
 from typing import Optional, Dict, Set, Any, Union
 
-from qctoolkit.utils.types import ChannelID
-from qctoolkit.expressions import Expression, ExpressionScalar
-from qctoolkit.pulses.pulse_template import AtomicPulseTemplate, PulseTemplate
-from qctoolkit._program.instructions import Waveform, EXECInstruction, MEASInstruction
-from qctoolkit.pulses.parameters import Parameter, ConstantParameter, ParameterNotProvidedException
-from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
-from qctoolkit._program._loop import Loop, MultiChannelProgram
+from qupulse.utils.types import ChannelID
+from qupulse.expressions import Expression, ExpressionScalar
+from qupulse.pulses.pulse_template import AtomicPulseTemplate, PulseTemplate
+from qupulse._program.instructions import Waveform, EXECInstruction, MEASInstruction
+from qupulse.pulses.parameters import Parameter, ConstantParameter, ParameterNotProvidedException
+from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
+from qupulse._program._loop import Loop, MultiChannelProgram
 
-from qctoolkit._program.transformation import Transformation
-from qctoolkit._program.waveforms import TransformingWaveform
-from qctoolkit.pulses.sequencing import Sequencer
+from qupulse._program.transformation import Transformation
+from qupulse._program.waveforms import TransformingWaveform
+from qupulse.pulses.sequencing import Sequencer
 
 from tests.pulses.sequencing_dummies import DummyWaveform, DummySequencer, DummyInstructionBlock
 from tests._program.transformation_tests import TransformationStub
@@ -166,7 +166,7 @@ class PulseTemplateTest(unittest.TestCase):
         template = PulseTemplateStub(defined_channels={'A'}, parameter_names={'foo'})
         parameters = {'foo': ConstantParameter(2.126), 'bar': -26.2, 'hugo': '2*x+b', 'append_a_child': '1'}
         measurement_mapping = {'M': 'N'}
-        channel_mapping = {'B': 'A'}
+        channel_mapping = {'A': 'B'}
 
         expected_parameters = {'foo': ConstantParameter(2.126), 'bar': ConstantParameter(-26.2),
                                'hugo': ConstantParameter('2*x+b'), 'append_a_child': ConstantParameter('1')}
@@ -249,7 +249,7 @@ class PulseTemplateTest(unittest.TestCase):
 
                 with mock.patch.object(template, '_internal_create_program',
                                        wraps=appending_create_program) as _internal_create_program:
-                    with mock.patch('qctoolkit.pulses.pulse_template.to_waveform',
+                    with mock.patch('qupulse.pulses.pulse_template.to_waveform',
                                     return_value=single_waveform) as to_waveform:
                         template._create_program(parameters=parameters,
                                                  measurement_mapping=measurement_mapping,
@@ -273,11 +273,11 @@ class PulseTemplateTest(unittest.TestCase):
                         self.assertEqual(expected_program, parent_loop)
 
     def test_create_program_defaults(self) -> None:
-        template = PulseTemplateStub(defined_channels={'A'}, parameter_names={'foo'}, measurement_names={'hugo', 'foo'})
+        template = PulseTemplateStub(defined_channels={'A', 'B'}, parameter_names={'foo'}, measurement_names={'hugo', 'foo'})
 
         expected_internal_kwargs = dict(parameters=dict(),
                                         measurement_mapping={'hugo': 'hugo', 'foo': 'foo'},
-                                        channel_mapping=dict(),
+                                        channel_mapping={'A': 'A', 'B': 'B'},
                                         global_transformation=None,
                                         to_single_waveform=set())
 
@@ -291,11 +291,26 @@ class PulseTemplateTest(unittest.TestCase):
             _internal_create_program.assert_called_once_with(**expected_internal_kwargs, parent_loop=program)
         self.assertEqual(expected_program, program)
 
+    def test_create_program_channel_mapping(self):
+        template = PulseTemplateStub(defined_channels={'A', 'B'})
+
+        expected_internal_kwargs = dict(parameters=dict(),
+                                        measurement_mapping=dict(),
+                                        channel_mapping={'A': 'C', 'B': 'B'},
+                                        global_transformation=None,
+                                        to_single_waveform=set())
+
+        with mock.patch.object(template, '_internal_create_program') as _internal_create_program:
+            template.create_program(channel_mapping={'A': 'C'})
+
+            _internal_create_program.assert_called_once_with(**expected_internal_kwargs, parent_loop=Loop())
+
+
     def test_create_program_none(self) -> None:
         template = PulseTemplateStub(defined_channels={'A'}, parameter_names={'foo'})
         parameters = {'foo': ConstantParameter(2.126), 'bar': -26.2, 'hugo': '2*x+b'}
         measurement_mapping = {'M': 'N'}
-        channel_mapping = {'B': 'A'}
+        channel_mapping = {'A': 'B'}
         expected_parameters = {'foo': ConstantParameter(2.126), 'bar': ConstantParameter(-26.2),
                                'hugo': ConstantParameter('2*x+b')}
         expected_internal_kwargs = dict(parameters=expected_parameters,
@@ -316,7 +331,7 @@ class PulseTemplateTest(unittest.TestCase):
         a = PulseTemplateStub()
         b = PulseTemplateStub()
 
-        from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
+        from qupulse.pulses.sequence_pulse_template import SequencePulseTemplate
         with mock.patch.object(SequencePulseTemplate, 'concatenate', return_value='concat') as mock_concatenate:
             self.assertEqual(a @ b, 'concat')
             mock_concatenate.assert_called_once_with(a, b)
@@ -325,7 +340,7 @@ class PulseTemplateTest(unittest.TestCase):
         a = PulseTemplateStub()
         b = (1, 2, 3)
 
-        from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
+        from qupulse.pulses.sequence_pulse_template import SequencePulseTemplate
         with mock.patch.object(SequencePulseTemplate, 'concatenate', return_value='concat') as mock_concatenate:
             self.assertEqual(b @ a, 'concat')
             mock_concatenate.assert_called_once_with(b, a)

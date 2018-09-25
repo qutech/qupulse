@@ -6,17 +6,17 @@ import numpy
 import unittest
 
 """LOCAL IMPORTS"""
-from qctoolkit._program._loop import Loop
-from qctoolkit.utils.types import MeasurementWindow, ChannelID, TimeType, time_from_float
-from qctoolkit.serialization import Serializer
-from qctoolkit._program.waveforms import Waveform
-from qctoolkit._program.instructions import Instruction, CJMPInstruction, GOTOInstruction, REPJInstruction
-from qctoolkit.pulses.sequencing import Sequencer, InstructionBlock, SequencingElement
-from qctoolkit.pulses.parameters import Parameter
-from qctoolkit.pulses.pulse_template import AtomicPulseTemplate
-from qctoolkit.pulses.interpolation import InterpolationStrategy
-from qctoolkit.pulses.conditions import Condition
-from qctoolkit.expressions import Expression, ExpressionScalar
+from qupulse._program._loop import Loop
+from qupulse.utils.types import MeasurementWindow, ChannelID, TimeType, time_from_float
+from qupulse.serialization import Serializer
+from qupulse._program.waveforms import Waveform
+from qupulse._program.instructions import Instruction, CJMPInstruction, GOTOInstruction, REPJInstruction
+from qupulse.pulses.sequencing import Sequencer, InstructionBlock, SequencingElement
+from qupulse.pulses.parameters import Parameter
+from qupulse.pulses.pulse_template import AtomicPulseTemplate
+from qupulse.pulses.interpolation import InterpolationStrategy
+from qupulse.pulses.conditions import Condition
+from qupulse.expressions import Expression, ExpressionScalar
 
 
 class MeasurementWindowTestCase(unittest.TestCase):

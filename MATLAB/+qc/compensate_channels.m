@@ -20,7 +20,7 @@ function [W, X, Y, Z] = compensate_channels(t, W, X, Y, Z, interpolation, comp_p
 % W, X           : Qubit 1 channel values (cell)
 % Y, Z           : Qubit 2 channel values (cell)
 % interpolation  : Interpolation strategies, use ‘hold’ for default
-%                  qc-toolkit behaviour
+%                  qupulse behaviour
 %                  One row:   Applied to all channels
 %                  *Two rows:  Row 1 applied to W, X and row 2 to Y, Z
 %                  *Four rows: One row for each channel

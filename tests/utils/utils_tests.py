@@ -1,5 +1,5 @@
 import unittest
-from qctoolkit.utils import checked_int_cast
+from qupulse.utils import checked_int_cast
 
 
 class CheckedIntCastTest(unittest.TestCase):

@@ -1,7 +1,7 @@
 import unittest
 from typing import Any
 
-from qctoolkit.comparable import Comparable
+from qupulse.comparable import Comparable
 
 class DummyComparable(Comparable):
 

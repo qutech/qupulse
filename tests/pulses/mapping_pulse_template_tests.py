@@ -2,13 +2,13 @@ import unittest
 from unittest import mock
 import itertools
 
-from qctoolkit.pulses.mapping_pulse_template import MissingMappingException,\
+from qupulse.pulses.mapping_pulse_template import MissingMappingException,\
     UnnecessaryMappingException, MappingPulseTemplate,\
     AmbiguousMappingException, MappingCollisionException
-from qctoolkit.pulses.parameters import ConstantParameter, ParameterConstraintViolation, ParameterConstraint, ParameterNotProvidedException
-from qctoolkit.expressions import Expression
-from qctoolkit._program._loop import Loop, MultiChannelProgram
-from qctoolkit.pulses.sequencing import Sequencer
+from qupulse.pulses.parameters import ConstantParameter, ParameterConstraintViolation, ParameterConstraint, ParameterNotProvidedException
+from qupulse.expressions import Expression
+from qupulse._program._loop import Loop, MultiChannelProgram
+from qupulse.pulses.sequencing import Sequencer
 
 from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummySequencer, DummyInstructionBlock, MeasurementWindowTestCase, DummyWaveform
 from tests.serialization_tests import SerializableTests

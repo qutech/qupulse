@@ -4,7 +4,7 @@ import pathlib
 import unittest
 
 
-src_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'qctoolkit')
+src_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'qupulse')
 
 ignored_functions = ["__init__", "__new__", "__str__", "__repr__", "__hash__", "__len__", "__eq__", "__iter__",
                      "__float__", "__int__", "__bool__"]

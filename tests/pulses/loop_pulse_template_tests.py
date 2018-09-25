@@ -1,16 +1,16 @@
 import unittest
 from unittest import mock
 
-from qctoolkit.expressions import Expression, ExpressionScalar
-from qctoolkit.pulses.loop_pulse_template import ForLoopPulseTemplate, WhileLoopPulseTemplate,\
+from qupulse.expressions import Expression, ExpressionScalar
+from qupulse.pulses.loop_pulse_template import ForLoopPulseTemplate, WhileLoopPulseTemplate,\
     ConditionMissingException, ParametrizedRange, LoopIndexNotUsedException, LoopPulseTemplate
-from qctoolkit.pulses.parameters import ConstantParameter, InvalidParameterNameException, ParameterConstraintViolation,\
+from qupulse.pulses.parameters import ConstantParameter, InvalidParameterNameException, ParameterConstraintViolation,\
     ParameterNotProvidedException, ParameterConstraint
-from qctoolkit._program.instructions import MEASInstruction
-from qctoolkit._program._loop import Loop
+from qupulse._program.instructions import MEASInstruction
+from qupulse._program._loop import Loop
 
-from qctoolkit._program._loop import MultiChannelProgram
-from qctoolkit.pulses.sequencing import Sequencer
+from qupulse._program._loop import MultiChannelProgram
+from qupulse.pulses.sequencing import Sequencer
 
 from tests.pulses.sequencing_dummies import DummyCondition, DummyPulseTemplate, DummySequencer, DummyInstructionBlock,\
     DummyParameter, MeasurementWindowTestCase, DummyWaveform
@@ -176,7 +176,7 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
 
     def test_create_program_constraint_on_loop_var_exception(self):
         """This test is to assure the status-quo behavior of ForLoopPT handling parameter constraints affecting the loop index
-        variable. Please see https://github.com/qutech/qc-toolkit/issues/232 ."""
+        variable. Please see https://github.com/qutech/qupulse/issues/232 ."""
 
         with self.assertWarnsRegex(UserWarning, "constraint on a variable shadowing the loop index",
                                    msg="ForLoopPT did not issue a warning when constraining the loop index"):
@@ -428,7 +428,7 @@ class ForLoopTemplateOldSequencingTests(unittest.TestCase):
 
     def test_build_sequence_constraint_on_loop_var_exception(self):
         """This test is to assure the status-quo behavior of ForLoopPT handling parameter constraints affecting the loop index
-        variable. Please see https://github.com/qutech/qc-toolkit/issues/232 ."""
+        variable. Please see https://github.com/qutech/qupulse/issues/232 ."""
 
         with self.assertWarnsRegex(UserWarning, "constraint on a variable shadowing the loop index",
                                    msg="ForLoopPT did not issue a warning when constraining the loop index"):

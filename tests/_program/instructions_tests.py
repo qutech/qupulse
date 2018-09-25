@@ -2,7 +2,7 @@ import unittest
 import numpy
 from typing import Dict, Any, List
 
-from qctoolkit._program.instructions import InstructionBlock, InstructionPointer,\
+from qupulse._program.instructions import InstructionBlock, InstructionPointer,\
     Trigger, CJMPInstruction, REPJInstruction, GOTOInstruction, EXECInstruction, STOPInstruction,\
     InstructionSequence, AbstractInstructionBlock, ImmutableInstructionBlock, Instruction, CHANInstruction
 

@@ -2,7 +2,7 @@ import unittest
 import os
 import sys
 
-srcPath = os.path.dirname(os.path.abspath(__file__)).rsplit('tests', 1)[0] + 'qctoolkit'
+srcPath = os.path.dirname(os.path.abspath(__file__)).rsplit('tests', 1)[0] + 'qupulse'
 sys.path.insert(0, srcPath)
 
 class TabTest(unittest.TestCase):

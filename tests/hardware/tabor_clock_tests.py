@@ -10,7 +10,7 @@ with_alazar = True
 
 
 def get_pulse():
-    from qctoolkit.pulses import TablePulseTemplate as TPT, SequencePulseTemplate as SPT, \
+    from qupulse.pulses import TablePulseTemplate as TPT, SequencePulseTemplate as SPT, \
         RepetitionPulseTemplate as RPT, FunctionPulseTemplate as FPT, MultiChannelPulseTemplate as MPT
 
     sine = FPT('U*sin(2*pi*t/tau)', 'tau', channel='out')
@@ -90,7 +90,7 @@ def exec_test():
         t.append(time.time())
         names.append(name)
 
-    from qctoolkit.hardware.awgs.tabor import TaborChannelPair, TaborAWGRepresentation
+    from qupulse.hardware.awgs.tabor import TaborChannelPair, TaborAWGRepresentation
     tawg = TaborAWGRepresentation(r'USB0::0x168C::0x2184::0000216488::INSTR', reset=True)
 
     tchannelpair = TaborChannelPair(tawg, (1, 2), 'TABOR_AB')
@@ -98,7 +98,7 @@ def exec_test():
 
     # warnings.simplefilter('error', Warning)
 
-    from qctoolkit.hardware.setup import HardwareSetup, PlaybackChannel, MarkerChannel
+    from qupulse.hardware.setup import HardwareSetup, PlaybackChannel, MarkerChannel
     hardware_setup = HardwareSetup()
 
     hardware_setup.set_channel('TABOR_A', PlaybackChannel(tchannelpair, 0))
@@ -107,7 +107,7 @@ def exec_test():
     hardware_setup.set_channel('TABOR_B_MARKER', MarkerChannel(tchannelpair, 1))
 
     if with_alazar:
-        from qctoolkit.hardware.dacs.alazar import AlazarCard
+        from qupulse.hardware.dacs.alazar import AlazarCard
         import atsaverage.server
 
         if not atsaverage.server.Server.default_instance.running:
@@ -127,7 +127,7 @@ def exec_test():
 
     repeated = get_pulse()
 
-    from qctoolkit.pulses.sequencing import Sequencer
+    from qupulse.pulses.sequencing import Sequencer
 
     tic('init')
     sequencer = Sequencer()
