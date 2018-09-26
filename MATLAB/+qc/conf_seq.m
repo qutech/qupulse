@@ -282,9 +282,11 @@ function scan = conf_seq(varargin)
 				opInd = a.procfn_ops{a.disp_ops(l)-nOperations}{4};
 			end
 			
-			if opInd <= numel(a.operations)
+			% added new condition "numel(opInd) == 1" to check for several
+			% inchans, later they should get a proper title (marcel)
+			if numel(opInd) == 1 && opInd <= numel(a.operations)
 				scan.disp(end).title = prepare_title(sprintf(['%s: '], a.operations{opInd}{:}));
-			elseif length(a.procfn_ops{opInd - nOperations}) > 4
+			elseif numel(opInd) == 1 && length(a.procfn_ops{opInd - nOperations}) > 4
 				scan.disp(end).title = prepare_title(sprintf(['%s: '], a.procfn_ops{opInd - nOperations}{5}));
 			else
 				scan.disp(end).title = '';
