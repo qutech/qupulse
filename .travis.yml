@@ -30,7 +30,7 @@ before_install:
   - conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION pip
   - conda install -q -n test-environment gmpy2
   - source activate test-environment
-  - pip install coverage coveralls pyflakes
+  - pip install coverage coveralls
 install:
   - pip install .$INSTALL_EXTRAS
 script:
