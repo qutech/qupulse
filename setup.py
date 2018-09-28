@@ -12,8 +12,8 @@ def extract_version(version_file):
     raise RuntimeError("Unable to find version string.")
 
 
-if sys.version_info < (3, 3):
-    sys.stderr.write('ERROR: You need Python 3.3 or later '
+if sys.version_info < (3, 4):
+    sys.stderr.write('ERROR: You need Python 3.4 or later '
                      'to install the qupulse package.\n')
     exit(1)
 
@@ -40,7 +40,7 @@ setup(name='qupulse',
       author='Quantum Technology Group and Chair of Software Engineering, RWTH Aachen University',
       package_dir={'qupulse': 'qupulse', 'qctoolkit': 'qctoolkit'},
       packages=packages,
-      python_requires='>=3.3',
+      python_requires='>=3.4',
       tests_require=['pytest'],
       install_requires=['sympy>=1.1.1', 'numpy', 'cached_property'] + requires_typing,
       extras_require={
