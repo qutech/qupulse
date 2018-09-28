@@ -41,7 +41,6 @@ setup(name='qupulse',
       package_dir={'qupulse': 'qupulse', 'qctoolkit': 'qctoolkit'},
       packages=packages,
       python_requires='>=3.4',
-      tests_require=['pytest'],
       install_requires=['sympy>=1.1.1', 'numpy', 'cached_property'] + requires_typing,
       extras_require={
           'plotting': ['matplotlib'],
