@@ -537,7 +537,9 @@ class ZipFileBackendTests(unittest.TestCase):
 class CachingBackendTests(unittest.TestCase):
     def setUp(self) -> None:
         self.dummy_backend = DummyStorageBackend()
-        self.caching_backend = CachingBackend(self.dummy_backend)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', DeprecationWarning)
+            self.caching_backend = CachingBackend(self.dummy_backend)
         self.identifier = 'foo'
         self.testdata = 'foodata'
         self.alternative_testdata = 'atadoof'
