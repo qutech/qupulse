@@ -5,11 +5,6 @@ import numbers
 import fractions
 import warnings
 
-try:
-    import gmpy2
-except ImportError:
-    gmpy2 = None
-
 import numpy
 
 __all__ = ["MeasurementWindow", "ChannelID", "HashableNumpyArray", "TimeType", "time_from_float", "DocStringABCMeta",
@@ -19,13 +14,14 @@ MeasurementWindow = typing.Tuple[str, numbers.Real, numbers.Real]
 ChannelID = typing.Union[str, int]
 
 
-if gmpy2:
+try:
+    import gmpy2
     TimeType = gmpy2.mpq
 
     def time_from_float(time: float, absolute_error: float=1e-12) -> TimeType:
         # gmpy2 is at least an order of magnitude faster than fractions.Fraction
         return gmpy2.mpq(gmpy2.f2q(time, absolute_error))
-else:
+except ImportError:
     warnings.warn('gmpy2 not found. Using fractions.Fraction as fallback. Install gmpy2 for better performance.')
 
     TimeType = fractions.Fraction
