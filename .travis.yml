@@ -27,9 +27,9 @@ before_install:
   - conda update -q conda
   - conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION pip
   - source activate test-environment
-  - pip install pyflakes coverage coveralls sympy
+  - pip install coverage coveralls pyflakes
 install:
-  - pip install .[VISA,plotting,Faster fractions]
+  - pip install .[VISA,plotting,Faster-fractions]
 script:
   - "coverage run --source=qupulse --rcfile=coverage.ini setup.py test"
 after_success:
