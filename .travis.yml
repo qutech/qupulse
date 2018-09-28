@@ -1,6 +1,11 @@
 language: python
 python:
+  - "3.4"
   - "3.5"
+  - "3.6"
+env:
+  - INSTALL_EXTRAS=[VISA,plotting]
+  - INSTALL_EXTRAS=[VISA,plotting,Faster-fractions]
 
 #use container based infrastructure
 sudo: false
@@ -22,15 +27,16 @@ before_install:
   - hash -r
   - conda config --set always_yes yes --set changeps1 no
   - conda update -q conda
-  - conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION pip atlas numpy matplotlib gmpy2
+  - conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION pip
+  - conda install -q -n test-environment gmpy2
   - source activate test-environment
-  - pip install pyflakes coverage coveralls sympy
+  - pip install coverage coveralls
 install:
-  - python setup.py install
+  - pip install .$INSTALL_EXTRAS
 script:
   - "coverage run --source=qupulse --rcfile=coverage.ini setup.py test"
 after_success:
-    - coveralls
+  - coveralls
 
 notifications:
   email: false
