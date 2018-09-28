@@ -1,11 +1,11 @@
 import unittest
 
-from qctoolkit.pulses.multi_channel_pulse_template import MappingPulseTemplate
-from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
-from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate
-from qctoolkit.pulses.parameters import ParameterNotProvidedException
-from qctoolkit.pulses.sequencing import Sequencer
-from qctoolkit._program.instructions import EXECInstruction, AbstractInstructionBlock, MEASInstruction
+from qupulse.pulses.multi_channel_pulse_template import MappingPulseTemplate
+from qupulse.pulses.table_pulse_template import TablePulseTemplate
+from qupulse.pulses.sequence_pulse_template import SequencePulseTemplate
+from qupulse.pulses.parameters import ParameterNotProvidedException
+from qupulse.pulses.sequencing import Sequencer
+from qupulse._program.instructions import EXECInstruction, AbstractInstructionBlock, MEASInstruction
 
 from tests.pulses.sequencing_dummies import DummyParameter, DummyNoValueParameter
 

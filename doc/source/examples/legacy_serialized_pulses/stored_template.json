@@ -1,0 +1,19 @@
+{
+    "entries": {
+        "A": [
+            [
+                0,
+                0,
+                "hold"
+            ],
+            [
+                4,
+                20,
+                "linear"
+            ]
+        ]
+    },
+    "measurements": [],
+    "parameter_constraints": [],
+    "type": "qupulse.pulses.table_pulse_template.TablePulseTemplate"
+}

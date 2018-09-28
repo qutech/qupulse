@@ -5,8 +5,8 @@ import pytabor
 
 import numpy as np
 
-from qctoolkit.hardware.awgs.tabor import TaborSegment
-from qctoolkit.hardware.util import voltage_to_uint16, make_combined_wave, find_positions
+from qupulse.hardware.awgs.tabor import TaborSegment
+from qupulse.hardware.util import voltage_to_uint16, make_combined_wave, find_positions
 
 
 from . import dummy_modules

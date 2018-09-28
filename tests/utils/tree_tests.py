@@ -1,7 +1,7 @@
 import unittest
 import weakref
 
-from qctoolkit.utils.tree import Node
+from qupulse.utils.tree import Node
 
 
 class SpecialNode(Node):

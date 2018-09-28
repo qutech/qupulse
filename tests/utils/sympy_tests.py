@@ -13,7 +13,7 @@ from sympy import sin, Sum, IndexedBase
 a_ = IndexedBase(a)
 b_ = IndexedBase(b)
 
-from qctoolkit.utils.sympy import sympify as qc_sympify, substitute_with_eval, recursive_substitution, Len,\
+from qupulse.utils.sympy import sympify as qc_sympify, substitute_with_eval, recursive_substitution, Len,\
     evaluate_lambdified, evaluate_compiled, get_most_simple_representation, get_variables, get_free_symbols
 
 

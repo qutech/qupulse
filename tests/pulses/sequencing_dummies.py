@@ -3,18 +3,30 @@ from typing import Tuple, List, Dict, Optional, Set, Any, Union
 import copy
 
 import numpy
+import unittest
 
 """LOCAL IMPORTS"""
-from qctoolkit.utils.types import MeasurementWindow, ChannelID, TimeType, time_from_float
-from qctoolkit.serialization import Serializer
-from qctoolkit._program.waveforms import Waveform
-from qctoolkit._program.instructions import Instruction, CJMPInstruction, GOTOInstruction, REPJInstruction
-from qctoolkit.pulses.sequencing import Sequencer, InstructionBlock, SequencingElement
-from qctoolkit.pulses.parameters import Parameter
-from qctoolkit.pulses.pulse_template import AtomicPulseTemplate
-from qctoolkit.pulses.interpolation import InterpolationStrategy
-from qctoolkit.pulses.conditions import Condition
-from qctoolkit.expressions import Expression, ExpressionScalar
+from qupulse._program._loop import Loop
+from qupulse.utils.types import MeasurementWindow, ChannelID, TimeType, time_from_float
+from qupulse.serialization import Serializer
+from qupulse._program.waveforms import Waveform
+from qupulse._program.instructions import Instruction, CJMPInstruction, GOTOInstruction, REPJInstruction
+from qupulse.pulses.sequencing import Sequencer, InstructionBlock, SequencingElement
+from qupulse.pulses.parameters import Parameter
+from qupulse.pulses.pulse_template import AtomicPulseTemplate
+from qupulse.pulses.interpolation import InterpolationStrategy
+from qupulse.pulses.conditions import Condition
+from qupulse.expressions import Expression, ExpressionScalar
+
+
+class MeasurementWindowTestCase(unittest.TestCase):
+
+    def assert_measurement_windows_equal(self, expected, actual) -> bool:
+        self.assertEqual(expected.keys(), actual.keys())
+        for k in expected:
+            self.assertEqual(list(expected[k][0]), list(actual[k][0]))
+            self.assertEqual(list(expected[k][1]), list(actual[k][1]))
+
 
 class DummyParameter(Parameter):
 
@@ -302,6 +314,7 @@ class DummyPulseTemplate(AtomicPulseTemplate):
                  measurement_names: Set[str] = set(),
                  measurements: list=list(),
                  integrals: Dict[ChannelID, ExpressionScalar]={'default': ExpressionScalar(0)},
+                 program: Optional[Loop]=None,
                  identifier=None,
                  registry=None) -> None:
         super().__init__(identifier=identifier, measurements=measurements)
@@ -317,6 +330,8 @@ class DummyPulseTemplate(AtomicPulseTemplate):
         self.build_waveform_calls = []
         self.measurement_names_ = set(measurement_names)
         self._integrals = integrals
+        self.create_program_calls = []
+        self._program = program
         self._register(registry=registry)
 
     @property
@@ -351,6 +366,33 @@ class DummyPulseTemplate(AtomicPulseTemplate):
                        channel_mapping: Dict['ChannelID', 'ChannelID'],
                        instruction_block: InstructionBlock):
         self.build_sequence_arguments.append((sequencer,parameters,conditions, measurement_mapping, channel_mapping, instruction_block))
+        measurements = self.get_measurement_windows(parameters, measurement_mapping)
+        if self.waveform:
+            instruction_block.add_instruction_meas(measurements)
+            instruction_block.add_instruction_exec(waveform=self.waveform)
+
+    # def create_program(self, *,
+    #                    parameters: Dict[str, Parameter],
+    #                    measurement_mapping: Dict[str, Optional[str]],
+    #                    channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Loop]:
+    #     self.create_program_calls.append((parameters, measurement_mapping, channel_mapping))
+    #     return self._program
+
+    def _internal_create_program(self, *,
+                                 parameters: Dict[str, Parameter],
+                                 measurement_mapping: Dict[str, Optional[str]],
+                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]],
+                                 global_transformation: Optional['Transformation'],
+                                 to_single_waveform: Set[Union[str, 'PulseTemplate']],
+                                 parent_loop: Loop) -> None:
+        measurements = self.get_measurement_windows(parameters, measurement_mapping)
+        self.create_program_calls.append((parameters, measurement_mapping, channel_mapping, parent_loop))
+        if self._program:
+            parent_loop.add_measurements(measurements)
+            parent_loop.append_child(waveform=self._program.waveform, children=self._program.children)
+        elif self.waveform:
+            parent_loop.add_measurements(measurements)
+            parent_loop.append_child(waveform=self.waveform)
 
     def build_waveform(self,
                        parameters: Dict[str, Parameter],
@@ -358,7 +400,7 @@ class DummyPulseTemplate(AtomicPulseTemplate):
         self.build_waveform_calls.append((parameters, channel_mapping))
         if self.waveform or self.waveform is None:
             return self.waveform
-        return DummyWaveform(duration=self.duration, defined_channels=self.defined_channels)
+        return DummyWaveform(duration=self.duration.evaluate_numeric(**parameters), defined_channels=self.defined_channels)
 
     def requires_stop(self, parameters: Dict[str, Parameter], conditions: Dict[str, Condition]) -> bool:
         self.requires_stop_arguments.append((parameters,conditions))
@@ -382,11 +424,6 @@ class DummyPulseTemplate(AtomicPulseTemplate):
         return self._integrals
 
     @property
-    def compare_key(self) -> Tuple[Any]:
+    def compare_key(self) -> Tuple[Any, ...]:
         return (self.requires_stop_, self.is_interruptable, self.parameter_names,
                 self.defined_channels, self.duration, self.waveform, self.measurement_names, self.integral)
-
-    def __eq__(self, other) -> bool:
-        if not isinstance(other, DummyPulseTemplate):
-            return False
-        return self.compare_key == other.compare_key

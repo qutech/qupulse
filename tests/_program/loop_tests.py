@@ -4,11 +4,11 @@ import itertools
 
 from string import ascii_uppercase
 
-from qctoolkit.utils.types import time_from_float
-from qctoolkit._program._loop import Loop, MultiChannelProgram, _make_compatible, _is_compatible, _CompatibilityLevel, RepetitionWaveform, SequenceWaveform, make_compatible
-from qctoolkit._program.instructions import InstructionBlock, ImmutableInstructionBlock
+from qupulse.utils.types import time_from_float
+from qupulse._program._loop import Loop, MultiChannelProgram, _make_compatible, _is_compatible, _CompatibilityLevel, RepetitionWaveform, SequenceWaveform, make_compatible
+from qupulse._program.instructions import InstructionBlock, ImmutableInstructionBlock
 from tests.pulses.sequencing_dummies import DummyWaveform
-from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
+from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
 
 
 class WaveformGenerator:
@@ -93,6 +93,7 @@ def get_two_chan_test_block(wfg=WaveformGenerator(2)):
     return root_block
 
 
+@mock.patch.object(Loop, 'MAX_REPR_SIZE', 10000)
 class LoopTests(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -182,6 +183,9 @@ LOOP 1 times:
         self.assertEqual(len(wfs), 0)
 
         self.assertEqual(repr(tree), expected)
+
+        with mock.patch.object(Loop, 'MAX_REPR_SIZE', 1):
+            self.assertEqual(repr(tree), '...')
 
     def test_is_leaf(self):
         root_loop = self.get_test_loop(waveform_generator=WaveformGenerator(1))
@@ -351,6 +355,41 @@ LOOP 1 times:
         with self.assertWarnsRegex(UserWarning, 'Dropping measurement'):
             root.remove_empty_loops()
 
+    def test_cleanup(self):
+        wfs = [DummyWaveform(duration=i) for i in range(3)]
+
+        root = Loop(children=[
+            Loop(waveform=wfs[0]),
+            Loop(waveform=None),
+            Loop(children=[Loop(waveform=None)]),
+            Loop(children=[Loop(waveform=wfs[1], repetition_count=2, measurements=[('m', 0, 1)])], repetition_count=3),
+            Loop(children=[Loop(waveform=wfs[2], repetition_count=2)], repetition_count=3, measurements=[('n', 0, 1)])
+        ])
+
+        expected = Loop(children=[
+            Loop(waveform=wfs[0]),
+            Loop(waveform=wfs[1], repetition_count=6, measurements=[('m', 0, 1)]),
+            Loop(children=[Loop(waveform=wfs[2], repetition_count=2)], repetition_count=3, measurements=[('n', 0, 1)])
+        ])
+
+        root.cleanup()
+
+        self.assertEqual(expected, root)
+
+    def test_cleanup_warnings(self):
+        root = Loop(children=[
+            Loop(measurements=[('m', 0, 1)])
+        ])
+
+        with self.assertWarnsRegex(UserWarning, 'Dropping measurement'):
+            root.cleanup()
+
+        root = Loop(children=[
+            Loop(measurements=[('m', 0, 1)], children=[Loop()])
+        ])
+        with self.assertWarnsRegex(UserWarning, 'Dropping measurement since there is no waveform in children'):
+            root.cleanup()
+
 
 class MultiChannelTests(unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -488,6 +527,15 @@ LOOP 1 times:
         self.assertEqual(root_loopA.__repr__(), reprA)
         self.assertEqual(root_loopB.__repr__(), reprB)
 
+    def test_init_from_loop(self):
+        program = Loop(waveform=DummyWaveform(defined_channels={'A', 'B'}))
+
+        mcp = MultiChannelProgram(program)
+        self.assertEqual(mcp.programs, {frozenset('AB'): program})
+
+        with self.assertRaises(TypeError):
+            MultiChannelProgram(mcp)
+
 
 class ProgramWaveformCompatibilityTest(unittest.TestCase):
     def test_is_compatible_incompatible(self):
@@ -581,15 +629,15 @@ class ProgramWaveformCompatibilityTest(unittest.TestCase):
                           sample_rate=time_from_float(1.))
         priv_kwargs = dict(min_len=5, quantum=10, sample_rate=time_from_float(1.))
 
-        with mock.patch('qctoolkit._program._loop._is_compatible',
+        with mock.patch('qupulse._program._loop._is_compatible',
                         return_value=_CompatibilityLevel.incompatible) as mocked:
             with self.assertRaisesRegex(ValueError, 'cannot be made compatible'):
                 make_compatible(program, **pub_kwargs)
             mocked.assert_called_once_with(program, **priv_kwargs)
 
-        with mock.patch('qctoolkit._program._loop._is_compatible',
+        with mock.patch('qupulse._program._loop._is_compatible',
                         return_value=_CompatibilityLevel.action_required) as is_compat:
-            with mock.patch('qctoolkit._program._loop._make_compatible') as make_compat:
+            with mock.patch('qupulse._program._loop._make_compatible') as make_compat:
                 make_compatible(program, **pub_kwargs)
 
                 is_compat.assert_called_once_with(program, **priv_kwargs)

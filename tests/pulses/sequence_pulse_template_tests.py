@@ -1,19 +1,22 @@
 import unittest
+from unittest import mock
 
-import numpy as np
+from qupulse.expressions import Expression, ExpressionScalar
+from qupulse.pulses.table_pulse_template import TablePulseTemplate
+from qupulse.pulses.sequence_pulse_template import SequencePulseTemplate, SequenceWaveform
+from qupulse.pulses.mapping_pulse_template import MappingPulseTemplate
+from qupulse.pulses.parameters import ConstantParameter, ParameterConstraint, ParameterConstraintViolation, ParameterNotProvidedException
+from qupulse._program.instructions import MEASInstruction
+from qupulse._program._loop import Loop, MultiChannelProgram
 
-from qctoolkit.utils.types import time_from_float
-from qctoolkit.expressions import Expression, ExpressionScalar
-from qctoolkit.pulses.table_pulse_template import TablePulseTemplate
-from qctoolkit.pulses.sequence_pulse_template import SequencePulseTemplate, SequenceWaveform
-from qctoolkit.pulses.mapping_pulse_template import MappingPulseTemplate
-from qctoolkit.pulses.parameters import ConstantParameter, ParameterConstraint, ParameterConstraintViolation
-from qctoolkit._program.instructions import MEASInstruction
+from qupulse.pulses.sequencing import Sequencer
 
 from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyPulseTemplate,\
-    DummyNoValueParameter, DummyWaveform
+    DummyNoValueParameter, DummyWaveform, MeasurementWindowTestCase
 from tests.serialization_dummies import DummySerializer
 from tests.serialization_tests import SerializableTests
+from tests._program.transformation_tests import TransformationStub
+from tests.pulses.pulse_template_tests import get_appending_internal_create_program, PulseTemplateStub
 
 
 class SequencePulseTemplateTest(unittest.TestCase):
@@ -218,7 +221,261 @@ class SequencePulseTemplateOldSerializationTests(unittest.TestCase):
             self.assertEqual(template.measurement_declarations, [('m', 0, 1)])
 
 
-class SequencePulseTemplateSequencingTests(SequencePulseTemplateTest):
+class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
+    def test_internal_create_program(self):
+        sub_templates = PulseTemplateStub(defined_channels={'a'}, duration=ExpressionScalar('t1')),\
+                        PulseTemplateStub(defined_channels={'a'}, duration=ExpressionScalar('t2'))
+
+        wfs = DummyWaveform(duration=1), DummyWaveform(duration=2)
+
+        spt = SequencePulseTemplate(*sub_templates, measurements=[('m', 'a', 'b')])
+
+        kwargs = dict(parameters=dict(t1=ConstantParameter(.4),
+                                      t2=ConstantParameter(.5),
+                                      a=ConstantParameter(.1), b=ConstantParameter(.2),
+                                      irrelevant=ConstantParameter(42)),
+                      measurement_mapping={'m': 'l'},
+                      channel_mapping={'g': 'h'},
+                      global_transformation=TransformationStub(),
+                      to_single_waveform={'to', 'single', 'waveform'})
+
+        program = Loop()
+
+        expected_program = Loop(children=[Loop(waveform=wfs[0]),
+                                          Loop(waveform=wfs[1])],
+                                measurements=[('l', .1, .2)])
+
+        with mock.patch.object(spt, 'validate_parameter_constraints') as validate_parameter_constraints:
+            with mock.patch.object(spt, 'get_measurement_windows',
+                                   return_value=[('l', .1, .2)]) as get_measurement_windows:
+                with mock.patch.object(sub_templates[0], '_create_program',
+                                       wraps=get_appending_internal_create_program(wfs[0], True)) as create_0,\
+                    mock.patch.object(sub_templates[1], '_create_program',
+                                       wraps=get_appending_internal_create_program(wfs[1], True)) as create_1:
+
+                    spt._internal_create_program(**kwargs, parent_loop=program)
+
+                    self.assertEqual(expected_program, program)
+
+                    validate_parameter_constraints.assert_called_once_with(parameters=kwargs['parameters'])
+                    get_measurement_windows.assert_called_once_with(dict(a=.1, b=.2), kwargs['measurement_mapping'])
+                    create_0.assert_called_once_with(**kwargs, parent_loop=program)
+                    create_1.assert_called_once_with(**kwargs, parent_loop=program)
+
+    def test_create_program_internal(self) -> None:
+        sub1 = DummyPulseTemplate(duration=3, waveform=DummyWaveform(duration=3), measurements=[('b', 1, 2)], defined_channels={'A'})
+        sub2 = DummyPulseTemplate(duration=2, waveform=DummyWaveform(duration=2), parameter_names={'foo'}, defined_channels={'A'})
+        parameters = {'foo': DummyNoValueParameter()}
+        measurement_mapping = {'a': 'a', 'b': 'b'}
+        channel_mapping = dict()
+        seq = SequencePulseTemplate(sub1, sub2, measurements=[('a', 0, 1)])
+        loop = Loop()
+        seq._internal_create_program(parameters=parameters,
+                                     measurement_mapping=measurement_mapping,
+                                     channel_mapping=channel_mapping,
+                                     global_transformation=None,
+                                     to_single_waveform=set(),
+                                     parent_loop=loop)
+        self.assertEqual(1, loop.repetition_count)
+        self.assertIsNone(loop.waveform)
+        self.assertEqual([Loop(repetition_count=1, waveform=sub1.waveform),
+                          Loop(repetition_count=1, waveform=sub2.waveform)],
+                         loop.children)
+        self.assert_measurement_windows_equal({'a': ([0], [1]), 'b': ([1], [2])}, loop.get_measurement_windows())
+
+        # ensure same result as from Sequencer
+        sequencer = Sequencer()
+        sequencer.push(seq, parameters=parameters, conditions={}, window_mapping=measurement_mapping, channel_mapping=channel_mapping)
+        block = sequencer.build()
+        old_program = MultiChannelProgram(block, channels={'A'})
+        self.assertEqual(old_program.programs[frozenset({'A'})], loop)
+
+        ### test again with inverted sequence
+        seq = SequencePulseTemplate(sub2, sub1, measurements=[('a', 0, 1)])
+        loop = Loop()
+        seq._internal_create_program(parameters=parameters,
+                                     measurement_mapping=measurement_mapping,
+                                     channel_mapping=channel_mapping,
+                                     global_transformation=None,
+                                     to_single_waveform=set(),
+                                     parent_loop=loop)
+        self.assertEqual(1, loop.repetition_count)
+        self.assertIsNone(loop.waveform)
+        self.assertEqual([Loop(repetition_count=1, waveform=sub2.waveform),
+                          Loop(repetition_count=1, waveform=sub1.waveform)],
+                         loop.children)
+        self.assert_measurement_windows_equal({'a': ([0], [1]), 'b': ([3], [2])}, loop.get_measurement_windows())
+
+        # ensure same result as from Sequencer
+        sequencer = Sequencer()
+        sequencer.push(seq, parameters=parameters, conditions={}, window_mapping=measurement_mapping, channel_mapping=channel_mapping)
+        block = sequencer.build()
+        old_program = MultiChannelProgram(block, channels={'A'})
+        self.assertEqual(old_program.programs[frozenset({'A'})], loop)
+
+    def test_internal_create_program_no_measurement_mapping(self) -> None:
+        sub1 = DummyPulseTemplate(duration=3, waveform=DummyWaveform(duration=3), measurements=[('b', 1, 2)])
+        sub2 = DummyPulseTemplate(duration=2, waveform=DummyWaveform(duration=2), parameter_names={'foo'})
+        parameters = {'foo': DummyNoValueParameter()}
+        seq = SequencePulseTemplate(sub1, sub2, measurements=[('a', 0, 1)])
+        children = [Loop(waveform=DummyWaveform())]
+        loop = Loop(measurements=[], children=children)
+
+        with self.assertRaises(KeyError):
+            seq._internal_create_program(parameters=parameters,
+                                         measurement_mapping=dict(),
+                                         channel_mapping=dict(),
+                                         global_transformation=None,
+                                         to_single_waveform=set(),
+                                         parent_loop=loop)
+
+        self.assertFalse(sub1.create_program_calls)
+        self.assertFalse(sub2.create_program_calls)
+        self.assertEqual(children, loop.children)
+        self.assertEqual(1, loop.repetition_count)
+        self.assertIsNone(loop.waveform)
+        self.assert_measurement_windows_equal({}, loop.get_measurement_windows())
+
+        # test for child level measurements (does not guarantee to leave parent_loop unchanged in this case)
+        with self.assertRaises(KeyError):
+            seq._internal_create_program(parameters=parameters,
+                                         measurement_mapping=dict(a='a'),
+                                         channel_mapping=dict(),
+                                     global_transformation=None,
+                                     to_single_waveform=set(),
+                                         parent_loop=loop)
+
+    def test_internal_create_program_one_child_no_duration(self) -> None:
+        sub1 = DummyPulseTemplate(duration=0, waveform=None, measurements=[('b', 1, 2)], defined_channels={'A'})
+        sub2 = DummyPulseTemplate(duration=2, waveform=DummyWaveform(duration=2), parameter_names={'foo'}, defined_channels={'A'})
+        parameters = {'foo': DummyNoValueParameter()}
+        measurement_mapping = {'a': 'a', 'b': 'b'}
+        channel_mapping = dict()
+        seq = SequencePulseTemplate(sub1, sub2, measurements=[('a', 0, 1)])
+        loop = Loop()
+        seq._internal_create_program(parameters=parameters,
+                                     measurement_mapping=measurement_mapping,
+                                     channel_mapping=channel_mapping,
+                                     global_transformation=None,
+                                     to_single_waveform=set(),
+                                     parent_loop=loop)
+        self.assertEqual(1, loop.repetition_count)
+        self.assertIsNone(loop.waveform)
+        self.assertEqual([Loop(repetition_count=1, waveform=sub2.waveform)],
+                         loop.children)
+        self.assert_measurement_windows_equal({'a': ([0], [1])}, loop.get_measurement_windows())
+
+        # ensure same result as from Sequencer
+        sequencer = Sequencer()
+        sequencer.push(seq, parameters=parameters, conditions={}, window_mapping=measurement_mapping, channel_mapping=channel_mapping)
+        block = sequencer.build()
+        old_program = MultiChannelProgram(block, channels={'A'})
+        self.assertEqual(old_program.programs[frozenset({'A'})], loop)
+
+        ### test again with inverted sequence
+        seq = SequencePulseTemplate(sub2, sub1, measurements=[('a', 0, 1)])
+        loop = Loop()
+        seq._internal_create_program(parameters=parameters,
+                                     measurement_mapping=measurement_mapping,
+                                     channel_mapping=channel_mapping,
+                                     global_transformation=None,
+                                     to_single_waveform=set(),
+                                     parent_loop=loop)
+        self.assertEqual(1, loop.repetition_count)
+        self.assertIsNone(loop.waveform)
+        self.assertEqual([Loop(repetition_count=1, waveform=sub2.waveform)],
+                         loop.children)
+        self.assert_measurement_windows_equal({'a': ([0], [1])}, loop.get_measurement_windows())
+
+        # ensure same result as from Sequencer
+        sequencer = Sequencer()
+        sequencer.push(seq, parameters=parameters, conditions={}, window_mapping=measurement_mapping, channel_mapping=channel_mapping)
+        block = sequencer.build()
+        old_program = MultiChannelProgram(block, channels={'A'})
+        self.assertEqual(old_program.programs[frozenset({'A'})], loop)
+
+    def test_internal_create_program_both_children_no_duration(self) -> None:
+        sub1 = DummyPulseTemplate(duration=0, waveform=None, measurements=[('b', 1, 2)], defined_channels={'A'})
+        sub2 = DummyPulseTemplate(duration=0, waveform=None, parameter_names={'foo'}, defined_channels={'A'})
+        parameters = {'foo': DummyNoValueParameter()}
+        measurement_mapping = {'a': 'a', 'b': 'b'}
+        channel_mapping = dict()
+
+        seq = SequencePulseTemplate(sub1, sub2, measurements=[('a', 0, 1)])
+        loop = Loop(measurements=None)
+        seq._internal_create_program(parameters=parameters,
+                                     measurement_mapping=measurement_mapping,
+                                     channel_mapping=channel_mapping,
+                                     global_transformation=None,
+                                     to_single_waveform=set(),
+                                     parent_loop=loop)
+        self.assertEqual(1, loop.repetition_count)
+        self.assertIsNone(loop.waveform)
+        self.assertEqual([], loop.children)
+        self.assertIsNone(loop._measurements)
+
+        # ensure same result as from Sequencer
+        sequencer = Sequencer()
+        sequencer.push(seq, parameters=parameters, conditions={}, window_mapping=measurement_mapping, channel_mapping=channel_mapping)
+        block = sequencer.build()
+        old_program = MultiChannelProgram(block, channels={'A'})
+        old_loop = old_program.programs[frozenset({'A'})]
+        self.assertEqual(old_loop.waveform, loop.waveform)
+        self.assertEqual(old_loop.children, loop.children)
+        # new loop will have no measurements. old_loop still defines SequencePT measurements
+
+    def test_internal_create_program_parameter_constraint_violations(self) -> None:
+        sub1 = DummyPulseTemplate(duration=3, waveform=DummyWaveform(duration=3), measurements=[('b', 1, 2)])
+        sub2 = DummyPulseTemplate(duration=2, waveform=DummyWaveform(duration=2), parameter_names={'foo'})
+        parameters = {'foo': ConstantParameter(7)}
+        seq = SequencePulseTemplate(sub1, sub2, measurements=[('a', 0, 1)], parameter_constraints={'foo < 2'})
+        loop = Loop()
+        with self.assertRaises(ParameterConstraintViolation):
+            seq._internal_create_program(parameters=parameters,
+                                         measurement_mapping={'a': 'a', 'b': 'b'},
+                                         channel_mapping=dict(),
+                                         global_transformation=None,
+                                         to_single_waveform=set(),
+                                         parent_loop=loop)
+
+    def test_internal_create_program_parameter_missing(self) -> None:
+        sub1 = DummyPulseTemplate(duration=3, waveform=DummyWaveform(duration=3), measurements=[('b', 1, 2)])
+        sub2 = DummyPulseTemplate(duration='d', waveform=DummyWaveform(duration=2), parameter_names={'foo'})
+        seq = SequencePulseTemplate(sub1, sub2, measurements=[('a', 'bar', 1)], parameter_constraints={'foo < 2'})
+        loop = Loop()
+
+        # test parameter from constraints
+        parameters = {}
+        with self.assertRaises(ParameterNotProvidedException):
+            seq._internal_create_program(parameters=parameters,
+                                         measurement_mapping={'a': 'a', 'b': 'b'},
+                                         channel_mapping=dict(),
+                                         global_transformation=None,
+                                         to_single_waveform=set(),
+                                         parent_loop=loop)
+
+        # test parameter from measurements
+        parameters = {'foo': ConstantParameter(1)}
+        with self.assertRaises(ParameterNotProvidedException):
+            seq._internal_create_program(parameters=parameters,
+                                         measurement_mapping={'a': 'a', 'b': 'b'},
+                                         channel_mapping=dict(),
+                                         global_transformation=None,
+                                         to_single_waveform=set(),
+                                         parent_loop=loop)
+
+        # test parameter from duration
+        parameters = {'foo': ConstantParameter(1), 'bar': ConstantParameter(0)}
+        with self.assertRaises(ParameterNotProvidedException):
+            seq._internal_create_program(parameters=parameters,
+                                         measurement_mapping={'a': 'a', 'b': 'b'},
+                                         channel_mapping=dict(),
+                                         global_transformation=None,
+                                         to_single_waveform=set(),
+                                         parent_loop=loop)
+
+
+class SequencePulseTemplateOldSequencingTests(SequencePulseTemplateTest):
     def test_build_sequence(self) -> None:
         sub1 = DummyPulseTemplate(requires_stop=False)
         sub2 = DummyPulseTemplate(requires_stop=True, parameter_names={'foo'})
@@ -301,7 +558,7 @@ class SequencePulseTemplateSequencingTests(SequencePulseTemplateTest):
                                 measurement_mapping={},
                                 channel_mapping={'default': 'default'},
                                 instruction_block=block)
-        from qctoolkit.pulses.sequencing import Sequencer
+        from qupulse.pulses.sequencing import Sequencer
         s = Sequencer()
         s.push(sequence, parameters, channel_mapping={'default': 'EXAMPLE_A'})
 

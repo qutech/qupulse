@@ -1,0 +1,20 @@
+{
+    "subtemplates": [
+        {
+            "channel_mapping": {
+                "A": "A"
+            },
+            "measurement_mapping": {},
+            "parameter_mapping": {
+                "ta": "1",
+                "tb": "2",
+                "tend": "5",
+                "va": "5",
+                "vb": "0"
+            },
+            "template": "table_template",
+            "type": "qupulse.pulses.mapping_pulse_template.MappingPulseTemplate"
+        }
+    ],
+    "type": "qupulse.pulses.sequence_pulse_template.SequencePulseTemplate"
+}

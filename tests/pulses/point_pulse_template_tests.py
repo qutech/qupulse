@@ -2,16 +2,16 @@ import unittest
 
 import numpy as np
 
-from qctoolkit.pulses.parameters import ParameterNotProvidedException
+from qupulse.pulses.parameters import ParameterNotProvidedException
 
-from qctoolkit.pulses.point_pulse_template import PointPulseTemplate, PointWaveform, InvalidPointDimension, PointPulseEntry, PointWaveformEntry
+from qupulse.pulses.point_pulse_template import PointPulseTemplate, PointWaveform, InvalidPointDimension, PointPulseEntry, PointWaveformEntry
 from tests.pulses.measurement_tests import ParameterConstrainerTest, MeasurementDefinerTest
 from tests.pulses.sequencing_dummies import DummyParameter, DummyCondition
-from qctoolkit.pulses.multi_channel_pulse_template import MultiChannelWaveform
-from qctoolkit.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy
-from qctoolkit.expressions import Expression, ExpressionScalar
-from qctoolkit.serialization import Serializer
-from qctoolkit.pulses.parameters import ParameterConstraint
+from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
+from qupulse.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy
+from qupulse.expressions import Expression, ExpressionScalar
+from qupulse.serialization import Serializer
+from qupulse.pulses.parameters import ParameterConstraint
 
 from tests.serialization_dummies import DummySerializer, DummyStorageBackend
 from tests.serialization_tests import SerializableTests

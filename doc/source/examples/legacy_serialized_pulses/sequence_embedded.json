@@ -1,0 +1,43 @@
+{
+    "subtemplates": [
+        {
+            "channel_mapping": {
+                "A": "A"
+            },
+            "measurement_mapping": {},
+            "parameter_mapping": {
+                "ta": "1",
+                "tb": "2",
+                "tend": "5",
+                "va": "5",
+                "vb": "0"
+            },
+            "template": {
+                "entries": {
+                    "A": [
+                        [
+                            "ta",
+                            "va",
+                            "hold"
+                        ],
+                        [
+                            "tb",
+                            "vb",
+                            "linear"
+                        ],
+                        [
+                            "tend",
+                            0,
+                            "jump"
+                        ]
+                    ]
+                },
+                "measurements": [],
+                "parameter_constraints": [],
+                "type": "qupulse.pulses.table_pulse_template.TablePulseTemplate"
+            },
+            "type": "qupulse.pulses.mapping_pulse_template.MappingPulseTemplate"
+        }
+    ],
+    "type": "qupulse.pulses.sequence_pulse_template.SequencePulseTemplate"
+}

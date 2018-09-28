@@ -1,0 +1,11 @@
+## pending/current ##
+
+- Serialization / Storage:
+
+    - Added functionality to easily access available content/identifiers in `PulseStorage` and `StorageBackend`.
+    - DEPRECATED `list_contents()`` of `StorageBackend` (use `contents property` instead).
+
+- Expressions:
+    - Fixed bug in `Expression.evaluate_numeric` if result is array of numeric sympy objects
+
+## 0.1.2 ##

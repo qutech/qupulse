@@ -1,0 +1,24 @@
+{
+    "entries": {
+        "A": [
+            [
+                "ta",
+                "va",
+                "hold"
+            ],
+            [
+                "tb",
+                "vb",
+                "linear"
+            ],
+            [
+                "tend",
+                0,
+                "jump"
+            ]
+        ]
+    },
+    "measurements": [],
+    "parameter_constraints": [],
+    "type": "qupulse.pulses.table_pulse_template.TablePulseTemplate"
+}

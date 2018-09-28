@@ -1,0 +1,252 @@
+{
+    "parameter_constraints": [],
+    "subtemplates": [
+        {
+            "parameter_constraints": [],
+            "subtemplates": [
+                {
+                    "entries": {
+                        "marker": [
+                            [
+                                "T",
+                                0,
+                                "hold"
+                            ]
+                        ]
+                    },
+                    "measurements": [],
+                    "parameter_constraints": [],
+                    "type": "qupulse.pulses.table_pulse_template.TablePulseTemplate"
+                },
+                {
+                    "channel": "A",
+                    "duration_expression": {
+                        "expression": "T",
+                        "type": "qupulse.expressions.Expression"
+                    },
+                    "expression": {
+                        "expression": "sin(t/T*2*pi)",
+                        "type": "qupulse.expressions.Expression"
+                    },
+                    "measurement_declarations": [
+                        [
+                            "M",
+                            0,
+                            "T"
+                        ]
+                    ],
+                    "parameter_constraints": [],
+                    "type": "qupulse.pulses.function_pulse_template.FunctionPulseTemplate"
+                }
+            ],
+            "type": "qupulse.pulses.multi_channel_pulse_template.AtomicMultiChannelPulseTemplate"
+        },
+        {
+            "body": {
+                "channel_mapping": {
+                    "A": "A",
+                    "marker": "marker"
+                },
+                "measurement_mapping": {
+                    "M": "M"
+                },
+                "parameter_mapping": {
+                    "T": "T_start + T_step*i_T"
+                },
+                "template": {
+                    "parameter_constraints": [],
+                    "subtemplates": [
+                        {
+                            "entries": {
+                                "marker": [
+                                    [
+                                        "T",
+                                        1,
+                                        "hold"
+                                    ]
+                                ]
+                            },
+                            "measurements": [],
+                            "parameter_constraints": [],
+                            "type": "qupulse.pulses.table_pulse_template.TablePulseTemplate"
+                        },
+                        {
+                            "channel": "A",
+                            "duration_expression": {
+                                "expression": "T",
+                                "type": "qupulse.expressions.Expression"
+                            },
+                            "expression": {
+                                "expression": "sin(t/T*2*pi)",
+                                "type": "qupulse.expressions.Expression"
+                            },
+                            "measurement_declarations": [
+                                [
+                                    "M",
+                                    0,
+                                    "T"
+                                ]
+                            ],
+                            "parameter_constraints": [],
+                            "type": "qupulse.pulses.function_pulse_template.FunctionPulseTemplate"
+                        }
+                    ],
+                    "type": "qupulse.pulses.multi_channel_pulse_template.AtomicMultiChannelPulseTemplate"
+                },
+                "type": "qupulse.pulses.pulse_template_parameter_mapping.MappingTemplate"
+            },
+            "loop_index": "i_T",
+            "loop_range": [
+                0,
+                "N_T",
+                1
+            ],
+            "type": "qupulse.pulses.loop_pulse_template.ForLoopPulseTemplate"
+        },
+        {
+            "body": {
+                "channel_mapping": {
+                    "A": "A",
+                    "marker": "marker"
+                },
+                "measurement_mapping": {
+                    "M": "M"
+                },
+                "parameter_mapping": {
+                    "N_T": "N_T_rep",
+                    "T_start": "192",
+                    "T_step": "16"
+                },
+                "template": {
+                    "body": {
+                        "channel_mapping": {
+                            "A": "A",
+                            "marker": "marker"
+                        },
+                        "measurement_mapping": {
+                            "M": "M"
+                        },
+                        "parameter_mapping": {
+                            "T": "T_start + T_step*i_T"
+                        },
+                        "template": {
+                            "parameter_constraints": [],
+                            "subtemplates": [
+                                {
+                                    "entries": {
+                                        "marker": [
+                                            [
+                                                "T",
+                                                1,
+                                                "hold"
+                                            ]
+                                        ]
+                                    },
+                                    "measurements": [],
+                                    "parameter_constraints": [],
+                                    "type": "qupulse.pulses.table_pulse_template.TablePulseTemplate"
+                                },
+                                {
+                                    "channel": "A",
+                                    "duration_expression": {
+                                        "expression": "T",
+                                        "type": "qupulse.expressions.Expression"
+                                    },
+                                    "expression": {
+                                        "expression": "sin(t/T*2*pi)",
+                                        "type": "qupulse.expressions.Expression"
+                                    },
+                                    "measurement_declarations": [
+                                        [
+                                            "M",
+                                            0,
+                                            "T"
+                                        ]
+                                    ],
+                                    "parameter_constraints": [],
+                                    "type": "qupulse.pulses.function_pulse_template.FunctionPulseTemplate"
+                                }
+                            ],
+                            "type": "qupulse.pulses.multi_channel_pulse_template.AtomicMultiChannelPulseTemplate"
+                        },
+                        "type": "qupulse.pulses.pulse_template_parameter_mapping.MappingTemplate"
+                    },
+                    "loop_index": "i_T",
+                    "loop_range": [
+                        0,
+                        "N_T",
+                        1
+                    ],
+                    "type": "qupulse.pulses.loop_pulse_template.ForLoopPulseTemplate"
+                },
+                "type": "qupulse.pulses.pulse_template_parameter_mapping.MappingTemplate"
+            },
+            "parameter_constraints": [],
+            "repetition_count": "N_rep",
+            "type": "qupulse.pulses.repetition_pulse_template.RepetitionPulseTemplate"
+        },
+        {
+            "body": {
+                "channel_mapping": {
+                    "A": "A",
+                    "marker": "marker"
+                },
+                "measurement_mapping": {
+                    "M": "M"
+                },
+                "parameter_mapping": {
+                    "T": "T_start + T_step*i_T"
+                },
+                "template": {
+                    "parameter_constraints": [],
+                    "subtemplates": [
+                        {
+                            "entries": {
+                                "marker": [
+                                    [
+                                        "T",
+                                        1,
+                                        "hold"
+                                    ]
+                                ]
+                            },
+                            "measurements": [],
+                            "parameter_constraints": [],
+                            "type": "qupulse.pulses.table_pulse_template.TablePulseTemplate"
+                        },
+                        {
+                            "channel": "A",
+                            "duration_expression": {
+                                "expression": "T",
+                                "type": "qupulse.expressions.Expression"
+                            },
+                            "expression": {
+                                "expression": "sin(t/T*2*pi)",
+                                "type": "qupulse.expressions.Expression"
+                            },
+                            "measurement_declarations": [
+                                [
+                                    "M",
+                                    0,
+                                    "T"
+                                ]
+                            ],
+                            "parameter_constraints": [],
+                            "type": "qupulse.pulses.function_pulse_template.FunctionPulseTemplate"
+                        }
+                    ],
+                    "type": "qupulse.pulses.multi_channel_pulse_template.AtomicMultiChannelPulseTemplate"
+                },
+                "type": "qupulse.pulses.pulse_template_parameter_mapping.MappingTemplate"
+            },
+            "loop_index": "i_T",
+            "loop_range": [
+                0,
+                "N_T",
+                1
+            ],
+            "type": "qupulse.pulses.loop_pulse_template.ForLoopPulseTemplate"
+        }
+    ],
+    "type": "qupulse.pulses.sequence_pulse_template.SequencePulseTemplate"
+}
