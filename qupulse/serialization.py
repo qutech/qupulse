@@ -295,8 +295,10 @@ class CachingBackend(StorageBackend):
 
     Note that it does not automatically clear the cache at any time and thus will consume increasing amounts of memory
     over time. Use the :meth:`clear_cache` method to clear the cache manually.
+
+    DEPRECATED (2018-09-20): PulseStorage now already provides chaching around StorageBackends, rendering CachingBackend
+    obsolete.
     """
-    #todo (2018-09-20): PulseStorage now provides caching. Does this make CachingBackend obsolete? if so -> deprecate and remove
 
     def __init__(self, backend: StorageBackend) -> None:
         """Creates a new CachingBackend.
@@ -305,6 +307,8 @@ class CachingBackend(StorageBackend):
             backend (StorageBackend): A StorageBackend that provides data
                 IO functionality.
         """
+        warnings.warn("CachingBackend is obsolete due to PulseStorage already offering caching functionality.",
+                      DeprecationWarning)
         self._backend = backend
         self._cache = {}
 
