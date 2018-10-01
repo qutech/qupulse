@@ -25,10 +25,7 @@ function set_sequence_table(program_name, seq_table, advanced_seq_table_flag, aw
 	global plsdata
 	hws = plsdata.awg.hardwareSetup;
 
-  if ~input_python_list
-	seq_table = int_typecast(seq_table);
-  end
-  
+
 	if nargin < 3 || isempty(advanced_seq_table_flag)
 		advanced_seq_table_flag = false;
 	end
@@ -40,7 +37,11 @@ function set_sequence_table(program_name, seq_table, advanced_seq_table_flag, aw
   end	
   if nargin <6 || isempty(input_python_list)
     input_python_list = false;
-  end
+	end
+	
+	if ~input_python_list
+		seq_table = int_typecast(seq_table);
+	end
 
 	known_awgs = util.py.py2mat(hws.known_awgs);
 	sort_indices = cellfun(@(x)(find(  cellfun(@(y)(~isempty(strfind(char(x.identifier), y))), awg_channel_pair_identifiers)  )), known_awgs);
