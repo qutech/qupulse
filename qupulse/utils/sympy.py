@@ -1,4 +1,4 @@
-from typing import Union, Dict, Tuple, Any, Sequence, Optional
+from typing import Union, Dict, Tuple, Any, Sequence, Optional, Mapping
 from numbers import Number
 from types import CodeType
 
@@ -25,7 +25,11 @@ Sympifyable = Union[str, Number, sympy.Expr, numpy.str_]
 
 ## Custom auto_symbol transformation that deals with namespace dot notation (e.g. "foo.bar")
 
-def custom_auto_symbol_transform(tokens, local_dict, global_dict):
+
+sympy_internal_namespace_seperator = '___'
+
+
+def custom_auto_symbol_transform(tokens: Sequence[Tuple[int, str]], local_dict: Mapping[str, Any], global_dict: Mapping[str, Any]) -> None:
     """Inserts calls to ``Symbol``/``Function`` for undefined variables."""
     result = []
     prev_tok = (None, None)
@@ -40,7 +44,7 @@ def custom_auto_symbol_transform(tokens, local_dict, global_dict):
             if tok_val != '.' and tok_num != NAME:
                 raise SyntaxError("Not a valid namespaced sympy.symbol name")
             if tok_val == '.':
-                symbol_string += '___'
+                symbol_string += sympy_internal_namespace_seperator
             elif tok_num == NAME:
                 symbol_string += tok_val
             if tok_val == '.' or (tok_num == NAME and next_tok_val == '.'):
@@ -73,9 +77,10 @@ def custom_auto_symbol_transform(tokens, local_dict, global_dict):
                 if isinstance(obj, (Basic, type)) or callable(obj):
                     result.append((NAME, name))
                     continue
-            elif next_tok_val == '.':  # symbol, not a function
+
+            if next_tok_val == '.': # start of a namespaced symbol
                 symbol_string = str(name)
-            else:
+            else: # single symbol/fct or end of a namespaced symbol
                 result.extend([
                     (NAME, 'Symbol' if next_tok_val != '(' else 'Function'),
                     (OP, '('),
@@ -291,6 +296,7 @@ _sympy_environment = {**_base_environment, **sympy.__dict__}
 def evaluate_compiled(expression: sympy.Expr,
              parameters: Dict[str, Union[numpy.ndarray, Number]],
              compiled: CodeType=None, mode=None) -> Tuple[any, CodeType]:
+    parameters = {k.replace('.', sympy_internal_namespace_seperator): v for k, v in parameters.items()}
     with mock.patch.object(sympy.parsing.sympy_parser, 'standard_transformations', sympy_transformations):
         if compiled is None:
             compiled = compile(sympy.printing.lambdarepr.lambdarepr(expression),
@@ -310,6 +316,8 @@ def evaluate_lambdified(expression: Union[sympy.Expr, numpy.ndarray],
                         variables: Sequence[str],
                         parameters: Dict[str, Union[numpy.ndarray, Number]],
                         lambdified) -> Tuple[Any, Any]:
+    variables = {v.replace('.', sympy_internal_namespace_seperator) for v in variables}
+    parameters = {k.replace('.', sympy_internal_namespace_seperator):v for k,v in parameters.items()}
     with mock.patch.object(sympy.parsing.sympy_parser, 'standard_transformations', sympy_transformations):
         lambdified = lambdified or sympy.lambdify(variables, expression,
                                                   [{'ceiling': numpy_compatible_ceiling}, 'numpy'])
