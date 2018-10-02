@@ -15,6 +15,9 @@ __all__ = ["sympify", "substitute_with_eval", "to_numpy", "get_variables", "get_
 
 Sympifyable = Union[str, Number, sympy.Expr, numpy.str_]
 
+##############################################################################
+### Utilities to automatically detect usage of indexed/subscripted symbols ###
+##############################################################################
 
 class IndexedBasedFinder:
     """Acts as a symbol lookup and determines which symbols in an expression a subscripted."""
@@ -55,6 +58,17 @@ class IndexedBasedFinder:
         return True
 
 
+def get_subscripted_symbols(expression: str) -> set:
+    # track all symbols that are subscipted in here
+    indexed_base_finder = IndexedBasedFinder()
+    sympy.sympify(expression, locals=indexed_base_finder)
+
+    return indexed_base_finder.indexed_base
+
+#############################################################
+### "Built-in" length function for expressions in qupulse ###
+#############################################################
+
 class Len(sympy.Function):
     nargs = 1
 
@@ -70,6 +84,9 @@ Len.__name__ = 'len'
 sympify_namespace = {'len': Len,
                      'Len': Len}
 
+#########################################
+### Functions for numpy compatability ###
+#########################################
 
 def numpy_compatible_mul(*args) -> Union[sympy.Mul, sympy.Array]:
     if any(isinstance(a, sympy.NDimArray) for a in args):
@@ -96,14 +113,9 @@ def to_numpy(sympy_array: sympy.NDimArray) -> numpy.ndarray:
             return numpy.asarray(sympy_array)
     return numpy.array(sympy_array.tolist())
 
-
-def get_subscripted_symbols(expression: str) -> set:
-    # track all symbols that are subscipted in here
-    indexed_base_finder = IndexedBasedFinder()
-    sympy.sympify(expression, locals=indexed_base_finder)
-
-    return indexed_base_finder.indexed_base
-
+#######################################################################################################
+### Custom sympify method (which introduces all utility methods defined above into the sympy world) ###
+#######################################################################################################
 
 def sympify(expr: Union[str, Number, sympy.Expr, numpy.str_], **kwargs) -> sympy.Expr:
     if isinstance(expr, numpy.str_):
@@ -123,6 +135,10 @@ def sympify(expr: Union[str, Number, sympy.Expr, numpy.str_], **kwargs) -> sympy
         else:
             raise
 
+
+###############################################################################
+### Utility functions for expression manipulation/simplification/evaluation ###
+###############################################################################
 
 def get_most_simple_representation(expression: sympy.Expr) -> Union[str, int, float]:
     if expression.free_symbols:
