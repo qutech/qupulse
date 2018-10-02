@@ -6,7 +6,11 @@ import builtins
 import math
 
 import sympy
+from sympy.parsing.sympy_parser import NAME, OP, iskeyword, Basic, Symbol, lambda_notation, repeated_decimals, \
+    auto_number, factorial_notation
 import numpy
+
+from unittest import mock
 
 
 __all__ = ["sympify", "substitute_with_eval", "to_numpy", "get_variables", "get_free_symbols", "recursive_substitution",
@@ -18,6 +22,75 @@ Sympifyable = Union[str, Number, sympy.Expr, numpy.str_]
 ##############################################################################
 ### Utilities to automatically detect usage of indexed/subscripted symbols ###
 ##############################################################################
+
+## Custom auto_symbol transformation that deals with namespace dot notation (e.g. "foo.bar")
+
+def custom_auto_symbol_transform(tokens, local_dict, global_dict):
+    """Inserts calls to ``Symbol``/``Function`` for undefined variables."""
+    result = []
+    prev_tok = (None, None)
+    symbol_string = None
+
+    tokens.append((None, None))  # so zip traverses all tokens
+    for tok, next_tok in zip(tokens, tokens[1:]):
+        tok_num, tok_val = tok
+        next_tok_num, next_tok_val = next_tok
+
+        if symbol_string:
+            assert (tok_val == '.' or tok_num == NAME)
+            if tok_val == '.' or tok_num == NAME:
+                symbol_string += tok_val
+            if tok_val == '.' or (tok_num == NAME and next_tok_val == '.'):
+                continue
+            tok_num = NAME
+            tok_val = symbol_string
+            symbol_string = None
+
+        if tok_num == NAME:
+            name = tok_val
+
+            if (name in ['True', 'False', 'None']
+                    or iskeyword(name)
+                    # Don't convert keyword arguments
+                    or (prev_tok[0] == OP and prev_tok[1] in ('(', ',')
+                        and next_tok_num == OP and next_tok_val == '=')):
+                result.append((NAME, name))
+                continue
+            elif name in local_dict:
+                if isinstance(local_dict[name], Symbol) and next_tok_val == '(':
+                    result.extend([(NAME, 'Function'),
+                                   (OP, '('),
+                                   (NAME, repr(str(local_dict[name]))),
+                                   (OP, ')')])
+                else:
+                    result.append((NAME, name))
+                continue
+            elif name in global_dict:
+                obj = global_dict[name]
+                if isinstance(obj, (Basic, type)) or callable(obj):
+                    result.append((NAME, name))
+                    continue
+            elif next_tok_val == '.':  # symbol, not a function
+                symbol_string = str(name)
+            else:
+                result.extend([
+                    (NAME, 'Symbol' if next_tok_val != '(' else 'Function'),
+                    (OP, '('),
+                    (NAME, repr(str(name))),
+                    (OP, ')'),
+                ])
+        else:
+            result.append((tok_num, tok_val))
+
+        prev_tok = (tok_num, tok_val)
+
+    return result
+
+sympy_transformations = (lambda_notation, custom_auto_symbol_transform,
+                         repeated_decimals, auto_number, factorial_notation)
+
+
+## Utilities to automatically detect usage of indexed/subscripted symbols
 
 class IndexedBasedFinder:
     """Acts as a symbol lookup and determines which symbols in an expression a subscripted."""
@@ -88,6 +161,8 @@ sympify_namespace = {'len': Len,
 ### Functions for numpy compatability ###
 #########################################
 
+## Functions for numpy compatability
+
 def numpy_compatible_mul(*args) -> Union[sympy.Mul, sympy.Array]:
     if any(isinstance(a, sympy.NDimArray) for a in args):
         result = 1
@@ -117,23 +192,27 @@ def to_numpy(sympy_array: sympy.NDimArray) -> numpy.ndarray:
 ### Custom sympify method (which introduces all utility methods defined above into the sympy world) ###
 #######################################################################################################
 
+
+## Custom sympify method (which introduces all utility methods defined above into the sympy world)
+
 def sympify(expr: Union[str, Number, sympy.Expr, numpy.str_], **kwargs) -> sympy.Expr:
     if isinstance(expr, numpy.str_):
         # putting numpy.str_ in sympy.sympify behaves unexpected in version 1.1.1
         # It seems to ignore the locals argument
         expr = str(expr)
-    try:
-        return sympy.sympify(expr, **kwargs, locals=sympify_namespace)
-    except TypeError as err:
-        if True:#err.args[0] == "'Symbol' object is not subscriptable":
+    with mock.patch.object(sympy.parsing.sympy_parser, 'standard_transformations', sympy_transformations):
+        try:
+            return sympy.sympify(expr, **kwargs, locals=sympify_namespace)
+        except TypeError as err:
+            if True:#err.args[0] == "'Symbol' object is not subscriptable":
 
-            indexed_base = get_subscripted_symbols(expr)
-            return sympy.sympify(expr, **kwargs, locals={**{k: sympy.IndexedBase(k)
-                                                            for k in indexed_base},
-                                                         **sympify_namespace})
+                indexed_base = get_subscripted_symbols(expr)
+                return sympy.sympify(expr, **kwargs, locals={**{k: sympy.IndexedBase(k)
+                                                                for k in indexed_base},
+                                                             **sympify_namespace})
 
-        else:
-            raise
+            else:
+                raise
 
 
 ###############################################################################
@@ -209,25 +288,27 @@ _sympy_environment = {**_base_environment, **sympy.__dict__}
 def evaluate_compiled(expression: sympy.Expr,
              parameters: Dict[str, Union[numpy.ndarray, Number]],
              compiled: CodeType=None, mode=None) -> Tuple[any, CodeType]:
-    if compiled is None:
-        compiled = compile(sympy.printing.lambdarepr.lambdarepr(expression),
-                           '<string>', 'eval')
+    with mock.patch.object(sympy.parsing.sympy_parser, 'standard_transformations', sympy_transformations):
+        if compiled is None:
+            compiled = compile(sympy.printing.lambdarepr.lambdarepr(expression),
+                               '<string>', 'eval')
 
-    if mode == 'numeric' or mode is None:
-        result = eval(compiled, parameters.copy(), _numpy_environment)
-    elif mode == 'exact':
-        result = eval(compiled, parameters.copy(), _sympy_environment)
-    else:
-        raise ValueError("Unknown mode: '{}'".format(mode))
+        if mode == 'numeric' or mode is None:
+            result = eval(compiled, parameters.copy(), _numpy_environment)
+        elif mode == 'exact':
+            result = eval(compiled, parameters.copy(), _sympy_environment)
+        else:
+            raise ValueError("Unknown mode: '{}'".format(mode))
 
-    return result, compiled
+        return result, compiled
 
 
 def evaluate_lambdified(expression: Union[sympy.Expr, numpy.ndarray],
                         variables: Sequence[str],
                         parameters: Dict[str, Union[numpy.ndarray, Number]],
                         lambdified) -> Tuple[Any, Any]:
-    lambdified = lambdified or sympy.lambdify(variables, expression,
-                                              [{'ceiling': numpy_compatible_ceiling}, 'numpy'])
+    with mock.patch.object(sympy.parsing.sympy_parser, 'standard_transformations', sympy_transformations):
+        lambdified = lambdified or sympy.lambdify(variables, expression,
+                                                  [{'ceiling': numpy_compatible_ceiling}, 'numpy'])
 
-    return lambdified(**parameters), lambdified
+        return lambdified(**parameters), lambdified
