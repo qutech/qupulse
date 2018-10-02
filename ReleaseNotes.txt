@@ -1,5 +1,7 @@
 ## pending/current ##
 
+## 0.2 ##
+
 - General:
 
     - officially removed support for Python 3.3 (qupulse and dependencies are not compatible anymore)
