@@ -27,12 +27,22 @@ The current feature list is as follows:
 - MATLAB interface to access qupulse functionality
 
 ## Installation
-qupulse is developed using Python 3.5 but should also run on previous 3.3+ versions.
+qupulse is available on [PyPi](https://pypi.org/project/qupulse/) and the latest release can be installed by executing:
+```
+pip3 install qupulse
+```
+qupulse version numbers follow the [Semantic Versioning](https://semver.org/) conventions.
 
-The package is installed by executing in the cloned repository root folder:
+Alternatively, the current development version of qupulse can be installed by executing in the cloned repository root folder: 
 ```
 pip3 install .
 ```
+
+qupulse is developed using Python 3.6 and tested on 3.4 - 3.6. It relies on some external Python packages as dependencies; 
+`requirements.txt` lists the versions of these qupulse is developed against and tested with. 
+We intentionally did not restrict versions of dependencies in the install scripts to not unnecessarily prevent usage of
+newer releases of dependencies that might be compatible. However, if qupulse does encounter problems with a particular dependency version,
+try installing the version listed in `requirements.txt`.   
 
 The backend for TaborAWGs requires packages that can be found [here](https://git.rwth-aachen.de/qutech/python-TaborDriver).
 
