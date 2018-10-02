@@ -35,25 +35,34 @@ simple_substitution_cases = [
 
 elem_func_substitution_cases = [
     (a*b + sin(c), {'a': b, 'c': sympy.pi/2}, b**2 + 1),
+    (a*scope_n + sin(foo_bar), {'a': scope_n, 'foo.bar': sympy.pi/2}, scope_n**2 + 1)
 ]
 
 sum_substitution_cases = [
     (a*b + Sum(c * k, (k, 0, n)), {'a': b, 'b': 2, 'k': 1, 'n': 2}, b*2 + c*(1 + 2)),
+    (a*foo_bar + Sum(c * scope_n, (scope_n, 0, n)), {'a': foo_bar, 'foo.bar': 2, 'scope.n': 1, 'n': 2}, foo_bar*2 + c*(1 + 2)),
 ]
 
 indexed_substitution_cases = [
-    (a_[i]*b, {'b': 3}, a_[i]*3),
-    (a_[i]*b, {'a': sympy.Array([1, 2, 3])}, sympy.Array([1, 2, 3])[i]*b),
-    (sympy.Array([1, 2, 3])[i]*b, {'i': 1}, 2*b)
+    (a_[i] * b, {'b': 3}, a_[i] * 3),
+    (a_[i] * b, {'a': sympy.Array([1, 2, 3])}, sympy.Array([1, 2, 3])[i] * b),
+    (sympy.Array([1, 2, 3])[i] * b, {'i': 1}, 2 * b),
+    (foo_bar_[i]*scope_n, {'scope.n': 3}, foo_bar_[i]*3),
+    (foo_bar_[i]*scope_n, {'foo.bar': sympy.Array([1, 2, 3])}, sympy.Array([1, 2, 3])[i]*scope_n),
+    (sympy.Array([1, 2, 3])[foo_bar]*b, {'foo.bar': 1}, 2*b),
 ]
 
 vector_valued_cases = [
     (a*b, {'a': sympy.Array([1, 2, 3])}, sympy.Array([1, 2, 3])*b),
     (a*b, {'a': sympy.Array([1, 2, 3]), 'b': sympy.Array([4, 5, 6])}, sympy.Array([4, 10, 18])),
+    (foo_bar*b, {'foo.bar': sympy.Array([1, 2, 3])}, sympy.Array([1, 2, 3])*b),
+    (foo_bar*b, {'foo.bar': sympy.Array([1, 2, 3]), 'b': sympy.Array([4, 5, 6])}, sympy.Array([4, 10, 18])),
+    (foo_bar*scope_n, {'foo.bar': sympy.Array([1, 2, 3]), 'scope.n': sympy.Array([4, 5, 6])}, sympy.Array([4, 10, 18])),
 ]
 
 full_featured_cases = [
     (Sum(a_[i], (i, 0, Len(a) - 1)), {'a': sympy.Array([1, 2, 3])}, 6),
+    (Sum(foo_bar_[i], (i, 0, Len(foo_bar) - 1)), {'foo.bar': sympy.Array([1, 2, 3])}, 6),
 ]
 
 
@@ -143,22 +152,22 @@ class SympifyTests(TestCase):
     def test_simple_sympify(self) -> None:
         for s, expected in simple_sympify:
             result = self.sympify(s)
-            self.assertEqual(result, expected)
+            self.assertEqual(expected, result)
 
     def test_complex_sympify(self) -> None:
         for s, expected in complex_sympify:
             result = self.sympify(s)
-            self.assertEqual(result, expected)
+            self.assertEqual(expected, result)
 
     def test_len_sympify(self) -> None:
         for s, expected in len_sympify:
             result = self.sympify(s)
-            self.assertEqual(result, expected)
+            self.assertEqual(expected, result)
 
     def test_index_sympify(self) -> None:
         for s, expected in index_sympify:
             result = self.sympify(s)
-            self.assertEqual(result, expected)
+            self.assertEqual(expected, result)
 
 
 class SubstitutionTests(TestCase):
@@ -166,8 +175,7 @@ class SubstitutionTests(TestCase):
         for key, value in substitutions.items():
             if not isinstance(value, sympy.Expr):
                 substitutions[key] = qc_sympify(value)
-        return recursive_substitution(expression, substitutions)
-        #return expression.subs(substitutions, simultaneous=True).doit()
+        return recursive_substitution(expression, substitutions).doit()
 
     def test_simple_substitution_cases(self):
         for expr, subs, expected in simple_substitution_cases:
@@ -177,36 +185,27 @@ class SubstitutionTests(TestCase):
     def test_elem_func_substitution_cases(self):
         for expr, subs, expected in elem_func_substitution_cases:
             result = self.substitute(expr, subs)
-            self.assertEqual(result, expected)
+            self.assertEqual(expected, result)
 
     def test_sum_substitution_cases(self):
         for expr, subs, expected in sum_substitution_cases:
             result = self.substitute(expr, subs)
-            self.assertEqual(result, expected)
+            self.assertEqual(expected, result)
 
     def test_indexed_substitution_cases(self):
-        if type(self) is SubstitutionTests:
-            raise unittest.SkipTest('sympy.Expr.subs does not handle simultaneous substitutions of indexed entities.')
-
         for expr, subs, expected in indexed_substitution_cases:
             result = self.substitute(expr, subs)
-            self.assertEqual(result, expected)
+            self.assertEqual(expected, result)
 
     def test_vector_valued_cases(self):
-        if type(self) is SubstitutionTests:
-            raise unittest.SkipTest('sympy.Expr.subs does not handle simultaneous substitutions of indexed entities.')
-
         for expr, subs, expected in vector_valued_cases:
             result = self.substitute(expr, subs)
-            self.assertEqual(result, expected)
+            self.assertEqual(expected, result, msg="test: {}".format((expr, subs, expected)))
 
     def test_full_featured_cases(self):
-        if type(self) is SubstitutionTests:
-            raise unittest.SkipTest('sympy.Expr.subs does not handle simultaneous substitutions of indexed entities.')
-
         for expr, subs, expected in full_featured_cases:
             result = self.substitute(expr, subs)
-            self.assertEqual(result, expected)
+            self.assertEqual(expected, result)
 
 
 class SubstituteWithEvalTests(SubstitutionTests):
@@ -220,11 +219,6 @@ class SubstituteWithEvalTests(SubstitutionTests):
     @unittest.expectedFailure
     def test_full_featured_cases(self):
         super().test_full_featured_cases()
-
-
-class RecursiveSubstitutionTests(SubstitutionTests):
-    def substitute(self, expression: sympy.Expr, substitutions: dict):
-        return recursive_substitution(expression, substitutions).doit()
 
 
 class GetFreeSymbolsTests(TestCase):
@@ -260,33 +254,33 @@ class EvaluationTests(TestCase):
     def test_eval_simple(self):
         for expr, parameters, expected in eval_simple:
             result = self.evaluate(expr, parameters)
-            self.assertEqual(result, expected)
+            self.assertEqual(expected, result)
 
     def test_eval_many_arguments(self, expected_exception=SyntaxError):
         with self.assertRaises(expected_exception):
             for expr, parameters, expected in eval_many_arguments:
                 result = self.evaluate(expr, parameters)
-                self.assertEqual(result, expected)
+                self.assertEqual(expected, result)
 
     def test_eval_simple_functions(self):
         for expr, parameters, expected in eval_simple_functions:
             result = self.evaluate(expr, parameters)
-            self.assertEqual(result, expected)
+            self.assertEqual(expected, result)
 
     def test_eval_array_values(self):
         for expr, parameters, expected in eval_array_values:
             result = self.evaluate(expr, parameters)
-            np.testing.assert_equal(result, expected)
+            np.testing.assert_equal(expected, result)
 
     def test_eval_sum(self):
         for expr, parameters, expected in eval_sum:
             result = self.evaluate(expr, parameters)
-            self.assertEqual(result, expected)
+            self.assertEqual(expected, result)
 
     def test_eval_array_expression(self):
         for expr, parameters, expected in eval_array_expression:
             result = self.evaluate(expr, parameters)
-            np.testing.assert_equal(result, expected)
+            np.testing.assert_equal(expected, result)
 
 
 class CompiledEvaluationTest(EvaluationTests):
