@@ -190,12 +190,12 @@ class MappingTemplateTests(unittest.TestCase):
         self.assertEqual({'default': Expression('2*f'), 'other': Expression('-3.2*f+2.3')}, pulse.integral)
 
     def test_mapping_namespace(self) -> None:
-        template = DummyPulseTemplate(parameter_names={'foo', 'bar', 'outer___inner___hugo'})
+        template = DummyPulseTemplate(parameter_names={'foo', 'bar', 'outer.inner.hugo'})
         st = MappingPulseTemplate(template, mapping_namespace='scope')
-        self.assertEqual({'scope___foo', 'scope___bar', 'scope___hugo'}, st.parameter_names)
+        self.assertEqual({'scope.foo', 'scope.bar', 'scope.hugo'}, st.parameter_names)
 
-        st = MappingPulseTemplate(template, parameter_mapping={'foo': 'alpha+scope___beta'}, mapping_namespace='scope')
-        self.assertEqual({'alpha', 'scope___beta', 'scope___bar', 'scope___hugo'}, st.parameter_names)
+        st = MappingPulseTemplate(template, parameter_mapping={'foo': 'alpha+scope.beta'}, mapping_namespace='scope')
+        self.assertEqual({'alpha', 'scope.beta', 'scope.bar', 'scope.hugo'}, st.parameter_names)
 
 
 class MappingPulseTemplateSequencingTest(MeasurementWindowTestCase):

@@ -67,8 +67,8 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
             if not mapping_namespace:
                 mapping_namespace = ""
             else:
-                mapping_namespace += "___" # namespace - parameter delimiter
-            parameter_mapping.update({p: mapping_namespace+p.rpartition('___')[2] for p in missing_parameter_mappings})
+                mapping_namespace += "." # namespace - parameter delimiter
+            parameter_mapping.update({p: mapping_namespace+p.rpartition('.')[2] for p in missing_parameter_mappings})
         parameter_mapping = dict((k, Expression(v)) for k, v in parameter_mapping.items())
 
         measurement_mapping = dict() if measurement_mapping is None else measurement_mapping
