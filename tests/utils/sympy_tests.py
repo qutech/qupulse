@@ -12,6 +12,10 @@ from sympy import sin, Sum, IndexedBase
 
 a_ = IndexedBase(a)
 b_ = IndexedBase(b)
+foo_bar = sympy.Symbol('foo____bar')
+foo_bar_ = IndexedBase('foo____bar')
+scope_n = sympy.Symbol('scope____n')
+
 
 from qupulse.utils.sympy import sympify as qc_sympify, substitute_with_eval, recursive_substitution, Len,\
     evaluate_lambdified, evaluate_compiled, get_most_simple_representation, get_variables, get_free_symbols
@@ -22,6 +26,11 @@ simple_substitution_cases = [
     (a*b, {'a': c}, b*c),
     (a*b, {'a': b, 'b': a}, a*b),
     (a*b, {'a': 1, 'b': 2}, 2),
+    (foo_bar*b, {'foo.bar': c}, b*c),
+    (foo_bar*b, {'b': scope_n}, scope_n*foo_bar),
+    (foo_bar*b, {'b': foo_bar, 'foo.bar': b}, foo_bar*b),
+    (foo_bar*scope_n, {'foo.bar': scope_n, 'scope.n': foo_bar}, foo_bar*scope_n),
+    (foo_bar*b, {'foo.bar': 5, 'b': 0.2}, 0.2*5)
 ]
 
 elem_func_substitution_cases = [
@@ -52,11 +61,14 @@ full_featured_cases = [
 simple_sympify = [
     ('a*b', a*b),
     ('a*6', a*6),
-    ('sin(a)', sin(a))
+    ('sin(a)', sin(a)),
+    ('foo.bar*6', foo_bar*6),
+    ('sin(foo.bar)', sin(foo_bar))
 ]
 
 complex_sympify = [
     ('Sum(a, (i, 0, n))', Sum(a, (i, 0, n))),
+    ('Sum(foo.bar, (i, 0, scope.n))', Sum(foo_bar, (i, 0, scope_n)))
 ]
 
 len_sympify = [
@@ -65,7 +77,8 @@ len_sympify = [
 ]
 
 index_sympify = [
-    ('a[i]', a_[i])
+    ('a[i]', a_[i]),
+    ('foo.bar[i]', foo_bar_[i])
 ]
 
 
@@ -73,29 +86,39 @@ index_sympify = [
 eval_simple = [
     (a*b, {'a': 2, 'b': 3}, 6),
     (a*b, {'a': 2, 'b': np.float32(3.5)}, 2*np.float32(3.5)),
-    (a+b, {'a': 3.4, 'b': 76.7}, 3.4+76.7)
+    (a+b, {'a': 3.4, 'b': 76.7}, 3.4+76.7),
+    (foo_bar+scope_n, {'foo.bar': 1.2, 'scope.n': 3.3}, 1.2+3.3),
+    (foo_bar*scope_n, {'foo.bar': 1.2, 'scope.n': np.float32(3.3)}, 1.2*np.float32(3.3)),
+    (foo_bar*scope_n, {'foo.bar': 1.2, 'scope.n': 3.3}, 1.2*3.3)
 ]
 
 eval_many_arguments = [
-    (sum(sympy.symbols(list('a_' + str(i) for i in range(300)))), {'a_' + str(i): 1 for i in range(300)}, 300)
+    (sum(sympy.symbols(list('a_' + str(i) for i in range(300)))), {'a_' + str(i): 1 for i in range(300)}, 300),
+    (sum(sympy.symbols(list('scope____a_' + str(i) for i in range(300)))), {'scope.a_' + str(i): 1 for i in range(300)}, 300)
 ]
 
 eval_simple_functions = [
-    (a*sin(b), {'a': 3.5, 'b': 1.2}, 3.5*math.sin(1.2))
+    (a*sin(b), {'a': 3.5, 'b': 1.2}, 3.5*math.sin(1.2)),
+    (a*sin(foo_bar), {'a': 3.5, 'foo.bar': 1.2}, 3.5*math.sin(1.2)),
 ]
 
 eval_array_values = [
-    (a*b, {'a': 2, 'b': np.array([3])}, np.array([6])),
-    (a*b, {'a': 2, 'b': np.array([3, 4, 5])}, np.array([6, 8, 10])),
-    (a*b, {'a': np.array([2, 3]), 'b': np.array([100, 200])}, np.array([200, 600]))
+    (a * b, {'a': 2, 'b': np.array([3])}, np.array([6])),
+    (a * b, {'a': 2, 'b': np.array([3, 4, 5])}, np.array([6, 8, 10])),
+    (a * b, {'a': np.array([2, 3]), 'b': np.array([100, 200])}, np.array([200, 600])),
+    (a * foo_bar, {'a': 2, 'foo.bar': np.array([3])}, np.array([6])),
+    (a * foo_bar, {'a': 2, 'foo.bar': np.array([3, 4, 5])}, np.array([6, 8, 10])),
+    (a * foo_bar, {'a': np.array([2, 3]), 'foo.bar': np.array([100, 200])}, np.array([200, 600])),
 ]
 
 eval_sum = [
     (Sum(a_[i], (i, 0, Len(a) - 1)), {'a': np.array([1, 2, 3])}, 6),
+    (Sum(foo_bar_[i], (i, 0, Len(foo_bar) - 1)), {'foo.bar': np.array([1, 2, 3])}, 6),
 ]
 
 eval_array_expression = [
-    (np.array([a*c, b*c]), {'a': 2, 'b': 3, 'c': 4}, np.array([8, 12]))
+    (np.array([a*c, b*c]), {'a': 2, 'b': 3, 'c': 4}, np.array([8, 12])),
+    (np.array([a*foo_bar, scope_n*foo_bar]), {'a': 2, 'scope.n': 3, 'foo.bar': 4}, np.array([8, 12]))
 ]
 
 
@@ -108,59 +131,48 @@ class TestCase(unittest.TestCase):
 
 
 class SympifyTests(TestCase):
-    def sympify(self, expression):
-        return sympy.sympify(expression)
+
+    def sympify(self, expression) -> sympy.Expr:
+        return qc_sympify(expression)
 
     def assertEqual1(self, first, second, msg=None):
         if sympy.Eq(first, second):
             return
         raise self.failureException(msg=msg)
 
-    def test_simple_sympify(self):
+    def test_simple_sympify(self) -> None:
         for s, expected in simple_sympify:
             result = self.sympify(s)
             self.assertEqual(result, expected)
 
-    def test_complex_sympify(self):
+    def test_complex_sympify(self) -> None:
         for s, expected in complex_sympify:
             result = self.sympify(s)
             self.assertEqual(result, expected)
 
-    def test_len_sympify(self, expected_exception=AssertionError, msg="sympy.sympify does not know len"):
-        with self.assertRaises(expected_exception=expected_exception, msg=msg):
-            for s, expected in len_sympify:
-                result = self.sympify(s)
-                self.assertEqual(result, expected)
+    def test_len_sympify(self) -> None:
+        for s, expected in len_sympify:
+            result = self.sympify(s)
+            self.assertEqual(result, expected)
 
-    def test_index_sympify(self, expected_exception=TypeError):
-        with self.assertRaises(expected_exception=expected_exception):
-            for s, expected in index_sympify:
-                result = self.sympify(s)
-                self.assertEqual(result, expected)
-
-
-class SympifyWrapperTests(SympifyTests):
-    def sympify(self, expression):
-        return qc_sympify(expression)
-
-    def test_len_sympify(self):
-        super().test_len_sympify(None)
-
-    def test_index_sympify(self):
-        super().test_index_sympify(None)
+    def test_index_sympify(self) -> None:
+        for s, expected in index_sympify:
+            result = self.sympify(s)
+            self.assertEqual(result, expected)
 
 
 class SubstitutionTests(TestCase):
     def substitute(self, expression: sympy.Expr, substitutions: dict):
         for key, value in substitutions.items():
             if not isinstance(value, sympy.Expr):
-                substitutions[key] = sympy.sympify(value)
-        return expression.subs(substitutions, simultaneous=True).doit()
+                substitutions[key] = qc_sympify(value)
+        return recursive_substitution(expression, substitutions)
+        #return expression.subs(substitutions, simultaneous=True).doit()
 
     def test_simple_substitution_cases(self):
         for expr, subs, expected in simple_substitution_cases:
             result = self.substitute(expr, subs)
-            self.assertEqual(result, expected)
+            self.assertEqual(expected, result, msg=str((expr, subs, expected)))
 
     def test_elem_func_substitution_cases(self):
         for expr, subs, expected in elem_func_substitution_cases:
@@ -311,12 +323,16 @@ class RepresentationTest(unittest.TestCase):
         self.assertIsInstance(st, str)
         self.assertEqual(st, 'a + b')
 
+        sym = get_most_simple_representation(qc_sympify('b + foo.bar.test'))
+        self.assertIsInstance(sym, str)
+        self.assertEqual('b + foo.bar.test', sym)
+
 
 class NamespaceTests(unittest.TestCase):
 
     def test_sympify_dot_namespace_notations(self) -> None:
         expr = qc_sympify("qubit.a + qubit.spec2.a * 1.3")
-        expected = sympy.Add(sympy.Symbol('qubit___a'), sympy.Mul(sympy.Symbol('qubit___spec2___a'), sympy.RealNumber(1.3)))
+        expected = sympy.Add(sympy.Symbol('qubit____a'), sympy.Mul(sympy.Symbol('qubit____spec2____a'), sympy.RealNumber(1.3)))
         self.assertEqual(expected, expr)
 
     def test_evaluate_lambdified_dot_namespace_notation(self) -> None:

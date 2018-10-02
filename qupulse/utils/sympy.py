@@ -26,11 +26,16 @@ Sympifyable = Union[str, Number, sympy.Expr, numpy.str_]
 ## Custom auto_symbol transformation that deals with namespace dot notation (e.g. "foo.bar")
 
 
-sympy_internal_namespace_seperator = '___'
+sympy_internal_namespace_seperator = '____'
 
 
 def custom_auto_symbol_transform(tokens: Sequence[Tuple[int, str]], local_dict: Mapping[str, Any], global_dict: Mapping[str, Any]) -> None:
-    """Inserts calls to ``Symbol``/``Function`` for undefined variables."""
+    """Inserts calls to ``Symbol``/``Function`` for undefined variables and deals with symbol namespaces.
+
+    Original code taken from sympy and tweaked to allow for namespaced parameters following dot notation, e.g., ``foo.bar``.
+    A string ``foo.bar`` will be treated as a single symbol. To allow internal handling, dots are replaced by '____'
+    (4 underscores).
+    """
     result = []
     prev_tok = (None, None)
     symbol_string = None
@@ -63,6 +68,9 @@ def custom_auto_symbol_transform(tokens: Sequence[Tuple[int, str]], local_dict: 
                         and next_tok_num == OP and next_tok_val == '=')):
                 result.append((NAME, name))
                 continue
+            elif next_tok_val == '.':
+                symbol_string = str(name)
+                continue
             elif name in local_dict:
                 if isinstance(local_dict[name], Symbol) and next_tok_val == '(':
                     result.extend([(NAME, 'Function'),
@@ -78,15 +86,12 @@ def custom_auto_symbol_transform(tokens: Sequence[Tuple[int, str]], local_dict: 
                     result.append((NAME, name))
                     continue
 
-            if next_tok_val == '.': # start of a namespaced symbol
-                symbol_string = str(name)
-            else: # single symbol/fct or end of a namespaced symbol
-                result.extend([
-                    (NAME, 'Symbol' if next_tok_val != '(' else 'Function'),
-                    (OP, '('),
-                    (NAME, repr(str(name))),
-                    (OP, ')'),
-                ])
+            result.extend([
+                (NAME, 'Symbol' if next_tok_val != '(' else 'Function'),
+                (OP, '('),
+                (NAME, repr(str(name))),
+                (OP, ')'),
+            ])
         else:
             result.append((tok_num, tok_val))
 
@@ -142,7 +147,8 @@ class IndexedBasedFinder:
 def get_subscripted_symbols(expression: str) -> set:
     # track all symbols that are subscipted in here
     indexed_base_finder = IndexedBasedFinder()
-    sympy.sympify(expression, locals=indexed_base_finder)
+    with mock.patch.object(sympy.parsing.sympy_parser, 'standard_transformations', sympy_transformations):
+        sympy.sympify(expression, locals=indexed_base_finder)
 
     return indexed_base_finder.indexed_base
 
@@ -229,7 +235,7 @@ def sympify(expr: Union[str, Number, sympy.Expr, numpy.str_], **kwargs) -> sympy
 
 def get_most_simple_representation(expression: sympy.Expr) -> Union[str, int, float]:
     if expression.free_symbols:
-        return str(expression)
+        return str(expression).replace(sympy_internal_namespace_seperator, '.')
     elif expression.is_Integer:
         return int(expression)
     elif expression.is_Float:
@@ -239,19 +245,29 @@ def get_most_simple_representation(expression: sympy.Expr) -> Union[str, int, fl
 
 
 def get_free_symbols(expression: sympy.Expr) -> Sequence[sympy.Symbol]:
+    """Returns all free smybols in a sympy expression.
+
+    Since these are sympy Symbol objects, possibly namespaced symbols will follow the underscore namespace notation,
+    i.e., `foo___bar`.
+    """
     return tuple(symbol
                  for symbol in expression.free_symbols
                  if not isinstance(symbol, sympy.Indexed))
 
 
 def get_variables(expression: sympy.Expr) -> Sequence[str]:
-    return tuple(map(str, get_free_symbols(expression)))
+    """Returns all free variables in a sympy expression.
+
+    Returned are the names of the variables. Namespaced variables will follow the dot namespace notation, i.e.
+    `foo.bar`.
+    """
+    return tuple(map(lambda x: str(x).replace(sympy_internal_namespace_seperator, '.'), get_free_symbols(expression)))
 
 
 def substitute_with_eval(expression: sympy.Expr,
                          substitutions: Dict[str, Union[sympy.Expr, numpy.ndarray, str]]) -> sympy.Expr:
     """Substitutes only sympy.Symbols. Workaround for numpy like array behaviour. ~Factor 3 slower compared to subs"""
-    substitutions = {k: v if isinstance(v, sympy.Expr) else sympify(v)
+    substitutions = {k.replace('.', sympy_internal_namespace_seperator): v if isinstance(v, sympy.Expr) else sympify(v)
                      for k, v in substitutions.items()}
 
     for symbol in get_free_symbols(expression):
@@ -281,7 +297,7 @@ def _recursive_substitution(expression: sympy.Expr,
 
 def recursive_substitution(expression: sympy.Expr,
                            substitutions: Dict[str, Union[sympy.Expr, numpy.ndarray, str]]) -> sympy.Expr:
-    substitutions = {sympy.Symbol(k): sympify(v) for k, v in substitutions.items()}
+    substitutions = {sympy.Symbol(k.replace('.',sympy_internal_namespace_seperator)): sympify(v) for k, v in substitutions.items()}
     for s in get_free_symbols(expression):
         substitutions.setdefault(s, s)
     return _recursive_substitution(expression, substitutions)
