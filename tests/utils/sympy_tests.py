@@ -316,13 +316,13 @@ class NamespaceTests(unittest.TestCase):
 
     def test_sympify_dot_namespace_notations(self) -> None:
         expr = qc_sympify("qubit.a + qubit.spec2.a * 1.3")
-        expected = sympy.Add(sympy.Symbol('qubit.a'), sympy.Mul(sympy.Symbol('qubit.spec2.a'), sympy.RealNumber(1.3)))
+        expected = sympy.Add(sympy.Symbol('qubit___a'), sympy.Mul(sympy.Symbol('qubit___spec2___a'), sympy.RealNumber(1.3)))
         self.assertEqual(expected, expr)
 
     def test_evaluate_lambdified_dot_namespace_notation(self) -> None:
-        res = evaluate_lambdified("qubit.a + qubit.spec2.a * 1.3", ["qubit.a", "qubit_spec2_a"], {"qubit_a": 2.1, "qubit_spec2_a": .1}, lambdified=None)
-        self.assertEqual(2.23, res)
+        res = evaluate_lambdified("qubit.a + qubit.spec2.a * 1.3", ["qubit___a", "qubit___spec2___a"], {"qubit___a": 2.1, "qubit___spec2___a": .1}, lambdified=None)
+        self.assertEqual(2.23, res[0])
 
     def test_evaluate_compiled_dot_namespace_notation(self) -> None:
-        res = evaluate_compiled("qubit.a + qubit.spec2.a * 1.3", {"qubit.a": 2.1, "qubit.spec2.a": .1})
-        self.assertEqual(2.23, res)
+        res = evaluate_compiled("qubit.a + qubit.spec2.a * 1.3", {"qubit___a": 2.1, "qubit___spec2___a": .1})
+        self.assertEqual(2.23, res[0])

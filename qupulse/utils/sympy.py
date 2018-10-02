@@ -37,8 +37,11 @@ def custom_auto_symbol_transform(tokens, local_dict, global_dict):
         next_tok_num, next_tok_val = next_tok
 
         if symbol_string:
-            assert (tok_val == '.' or tok_num == NAME)
-            if tok_val == '.' or tok_num == NAME:
+            if tok_val != '.' and tok_num != NAME:
+                raise SyntaxError("Not a valid namespaced sympy.symbol name")
+            if tok_val == '.':
+                symbol_string += '___'
+            elif tok_num == NAME:
                 symbol_string += tok_val
             if tok_val == '.' or (tok_num == NAME and next_tok_val == '.'):
                 continue
