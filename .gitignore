@@ -9,3 +9,4 @@ dist/*
 doc/source/examples/.ipynb_checkpoints/*
 **.asv
 *.orig
+MATLAB/+qc/personalPaths.mat
