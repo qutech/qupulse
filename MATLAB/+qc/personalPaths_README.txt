@@ -17,6 +17,6 @@ a.taborDriverPath = '';
 
 quPulsePath = '...\qc-toolkit\MATLAB\+qc';
 
-personalPathesStruct = a;
-save([pathFile_save_path '\personalPaths'], personalPathesStruct);
+personalPathsStruct = a;
+save([pathFile_save_path '\personalPaths'], personalPathsStruct);
 %% -----------------------------

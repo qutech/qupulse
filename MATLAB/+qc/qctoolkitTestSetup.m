@@ -3,9 +3,9 @@ quPulsePath = fileparts(which('qc.qctoolkitTestSetup'));
 load([quPulsePath '\personalPaths.mat']);
 global plsdata
 plsdata = struct( ...
-	'path', personalPathesStruct.pulses_repo, ...
+	'path', personalPathsStruct.pulses_repo, ...
 	'awg', struct('inst', [], 'hardwareSetup', [], 'sampleRate', 2e9, 'currentProgam', '', 'registeredPrograms', struct(), 'defaultChannelMapping', struct(), 'defaultWindowMapping', struct(), 'defaultParametersAndDicts', {{}}, 'defaultAddMarker', {{}}), ...
-  'dict', struct('cache', [], 'path', personalPathesStruct.dicts_repo), ...
+  'dict', struct('cache', [], 'path', personalPathsStruct.dicts_repo), ...
 	'qc', struct('figId', 801), ...
 	'daq', struct('inst', [], 'defaultOperations', {{}}, 'reuseOperations', false) ...
 	);
@@ -19,10 +19,10 @@ plsdata.qc.serializer = py.qctoolkit.serialization.Serializer(plsdata.qc.backend
 % Need the triton_200 repo on the path (for awgctrl)
 
 % Path for Triton 200 backups
-loadPath = personalPathesStruct.loadPath;
+loadPath = personalPathsStruct.loadPath;
 pulsePath = plsdata.path;
 dictPath = plsdata.dict.path;
-tunePath = personalPathesStruct.tunePath;
+tunePath = personalPathsStruct.tunePath;
 
 % Loading
 try
@@ -54,7 +54,7 @@ fprintf('Loaded plsdata from %s\n', datestr(info.datenum));
 
 global tunedata
 global plsdata
-tunedata.run{tunedata.runIndex}.opts.loadFile = personalPathesStruct.loadPath;
+tunedata.run{tunedata.runIndex}.opts.loadFile = personalPathsStruct.loadPath;
 import tune.tune
 
 plsdata.path = pulsePath;
@@ -68,7 +68,7 @@ plsdata.daq.inst = py.qctoolkit.hardware.dacs.alazar.AlazarCard([]);
 % Initializes hardware setup
 % Can also be used for deleting all programs/resetting but then also need to setup Alazar again, i.e. the cell above and the three cells below )
 plsdata.awg.hardwareSetup = [];
-qc.setup_tabor_awg('realAWG', false, 'simulateAWG', true, 'taborDriverPath', personalPathesStruct.taborDriverPath);
+qc.setup_tabor_awg('realAWG', false, 'simulateAWG', true, 'taborDriverPath', personalPathsStruct.taborDriverPath);
 
 % AWG default settings
 awgctrl('default');
