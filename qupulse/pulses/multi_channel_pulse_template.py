@@ -35,7 +35,8 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
                  identifier: Optional[str]=None,
                  parameter_constraints: Optional[List]=None,
                  measurements: Optional[List[MeasurementDeclaration]]=None,
-                 registry: PulseRegistryType=None) -> None:
+                 registry: PulseRegistryType=None,
+                 duration: Union[str, Expression, bool]=False) -> None:
         AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 
@@ -70,19 +71,28 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
             warnings.warn("external_parameters is an obsolete argument and will be removed in the future.",
                           category=DeprecationWarning)
 
-        duration = self._subtemplates[0].duration
-        for subtemplate in self._subtemplates[1:]:
-            if (duration == subtemplate.duration) is True:
-                continue
-            else:
-                raise ValueError('Could not assert duration equality of {} and {}'.format(duration,
-                                                                                          subtemplate.duration))
+        if not duration:
+            duration = self._subtemplates[0].duration
+            for subtemplate in self._subtemplates[1:]:
+                if (duration == subtemplate.duration) is True:
+                    continue
+                else:
+                    raise ValueError('Could not assert duration equality of {} and {}'.format(duration,
+                                                                                              subtemplate.duration))
+            self._duration = False
+        elif duration is True:
+            self._duration = self._subtemplates[0].duration
+        else:
+            self._duration = ExpressionScalar(duration)
 
         self._register(registry=registry)
 
     @property
     def duration(self) -> Expression:
-        return self._subtemplates[0].duration
+        if self._duration:
+            return self._duration
+        else:
+            return self._subtemplates[0].duration
 
     @property
     def parameter_names(self) -> Set[str]:
@@ -112,6 +122,15 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
                                                       channel_mapping=channel_mapping)
             if sub_waveform is not None:
                 sub_waveforms.append(sub_waveform)
+
+        if self._duration and sub_waveforms:
+            expected_duration = self._duration.evaluate_numeric(**parameters)
+
+            for sub_waveform in sub_waveforms:
+                if sub_waveform.duration != expected_duration:
+                    raise ValueError('The duration of channel(s) {} does not '
+                                     'equal the expected duration'.format(sub_waveform.defined_channels),
+                                     expected_duration, sub_waveform.duration)
 
         if len(sub_waveforms) == 0:
             return None
