@@ -17,6 +17,7 @@ import numpy
 from qupulse.serialization import Serializer, PulseRegistryType
 
 from qupulse.pulses.conditions import Condition
+from qupulse.utils.sympy import almost_equal
 from qupulse.utils.types import ChannelID, TimeType
 from qupulse._program.waveforms import MultiChannelWaveform, Waveform
 from qupulse.pulses.pulse_template import PulseTemplate, AtomicPulseTemplate
@@ -89,7 +90,7 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
         if not duration:
             duration = self._subtemplates[0].duration
             for subtemplate in self._subtemplates[1:]:
-                if (duration == subtemplate.duration) is True:
+                if almost_equal(duration.sympified_expression, subtemplate.duration.sympified_expression):
                     continue
                 else:
                     raise ValueError('Could not assert duration equality of {} and {}'.format(duration,

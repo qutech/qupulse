@@ -14,7 +14,8 @@ a_ = IndexedBase(a)
 b_ = IndexedBase(b)
 
 from qupulse.utils.sympy import sympify as qc_sympify, substitute_with_eval, recursive_substitution, Len,\
-    evaluate_lambdified, evaluate_compiled, get_most_simple_representation, get_variables, get_free_symbols
+    evaluate_lambdified, evaluate_compiled, get_most_simple_representation, get_variables, get_free_symbols,\
+    almost_equal
 
 
 ################################################### SUBSTITUTION #######################################################
@@ -310,3 +311,12 @@ class RepresentationTest(unittest.TestCase):
         st = get_most_simple_representation(qc_sympify('a + b'))
         self.assertIsInstance(st, str)
         self.assertEqual(st, 'a + b')
+
+
+class AlmostEqualTests(unittest.TestCase):
+    def test_almost_equal(self):
+        self.assertTrue(almost_equal(sympy.sin(a) * 0.5, sympy.sin(a) / 2))
+        self.assertIsNone(almost_equal(sympy.sin(a) * 0.5, sympy.sin(b) / 2))
+        self.assertFalse(almost_equal(sympy.sin(a), sympy.sin(a) + 1e-14))
+
+        self.assertTrue(almost_equal(sympy.sin(a), sympy.sin(a) + 1e-14, epsilon=1e-13))

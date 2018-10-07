@@ -215,3 +215,16 @@ def evaluate_lambdified(expression: Union[sympy.Expr, numpy.ndarray],
                                               [{'ceiling': numpy_compatible_ceiling}, 'numpy'])
 
     return lambdified(**parameters), lambdified
+
+
+def almost_equal(lhs: sympy.Expr, rhs: sympy.Expr, epsilon: float=1e-15) -> Optional[bool]:
+    """Returns True (or False) if the two expressions are almost equal (or not). Returns None if this cannot be
+    determined."""
+    relation = sympy.simplify(sympy.Abs(lhs - rhs) <= epsilon)
+
+    if relation is sympy.true:
+        return True
+    elif relation is sympy.false:
+        return False
+    else:
+        return None
