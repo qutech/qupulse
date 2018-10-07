@@ -18,7 +18,7 @@ from qupulse.serialization import Serializer, PulseRegistryType
 
 from qupulse.pulses.conditions import Condition
 from qupulse.utils.types import ChannelID, TimeType
-from qupulse._program.waveforms import MultiChannelWaveform
+from qupulse._program.waveforms import MultiChannelWaveform, Waveform
 from qupulse.pulses.pulse_template import PulseTemplate, AtomicPulseTemplate
 from qupulse.pulses.mapping_pulse_template import MappingPulseTemplate, MappingTuple
 from qupulse.pulses.parameters import Parameter, ParameterConstrainer
@@ -29,6 +29,7 @@ __all__ = ["AtomicMultiChannelPulseTemplate"]
 
 
 class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
+    """Combines multiple PulseTemplates that are defined on different channels into an AtomicPulseTemplate."""
     def __init__(self,
                  *subtemplates: Union[AtomicPulseTemplate, MappingTuple, MappingPulseTemplate],
                  external_parameters: Optional[Set[str]]=None,
@@ -37,6 +38,20 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
                  measurements: Optional[List[MeasurementDeclaration]]=None,
                  registry: PulseRegistryType=None,
                  duration: Union[str, Expression, bool]=False) -> None:
+        """Parallels multiple AtomicPulseTemplates of the same duration. The duration equality check is performed on
+        construction by default. If the duration keyword argument is given the check is performed on instantiation
+        (when build_waveform is called). duration can be a Expression to enforce a certain duration or True for an
+        unspecified duration.
+
+        Args:
+            *subtemplates: Positional arguments are subtemplates to combine.
+            identifier: Forwarded to AtomicPulseTemplate.__init__
+            parameter_constraints: Forwarded to ParameterConstrainer.__init__
+            measurements: Forwarded to AtomicPulseTemplate.__init__
+            duration: Enforced duration of the pulse template on instantiation. build_waveform checks all sub-waveforms
+            have this duration.
+            external_parameters: No functionality. (Deprecated)
+        """
         AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 
@@ -101,7 +116,7 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
                          *(st.parameter_names for st in self._subtemplates))
 
     @property
-    def subtemplates(self) -> Sequence[AtomicPulseTemplate]:
+    def subtemplates(self) -> Sequence[Union[AtomicPulseTemplate, MappingPulseTemplate]]:
         return self._subtemplates
 
     @property
@@ -113,7 +128,7 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
         return super().measurement_names.union(*(st.measurement_names for st in self._subtemplates))
 
     def build_waveform(self, parameters: Dict[str, numbers.Real],
-                       channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional['MultiChannelWaveform']:
+                       channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Waveform]:
         self.validate_parameter_constraints(parameters=parameters)
 
         sub_waveforms = []
