@@ -16,7 +16,7 @@ from qupulse.serialization import AnonymousSerializable
 from qupulse.utils.sympy import sympify, to_numpy, recursive_substitution, evaluate_lambdified,\
     get_most_simple_representation, get_variables
 
-__all__ = ["Expression", "ExpressionVariableMissingException", "ExpressionScalar", "ExpressionVector"]
+__all__ = ["Expression", "ExpressionVariableMissingException", "ExpressionScalar", "ExpressionVector", "ExpressionLike"]
 
 
 _ExpressionType = TypeVar('_ExpressionType', bound='Expression')
@@ -355,3 +355,6 @@ class NonNumericEvaluation(Exception):
             dtype = type(self.non_numeric_result)
         return "The result of evaluate_numeric is of type {} " \
                "which is not a number".format(dtype)
+
+
+ExpressionLike = TypeVar('ExpressionLike', str, Number, sympy.Expr, ExpressionScalar)
