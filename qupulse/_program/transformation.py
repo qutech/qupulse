@@ -1,5 +1,6 @@
 from typing import Mapping, Set, Tuple, Sequence
 from abc import abstractmethod
+from numbers import Real
 
 import numpy as np
 
@@ -148,6 +149,45 @@ class LinearTransformation(Transformation):
     @property
     def compare_key(self) -> Tuple[Tuple[ChannelID], Tuple[ChannelID], bytes]:
         return self._input_channels, self._output_channels, self._matrix.tobytes()
+
+
+class OffsetTransformation(Transformation):
+    def __init__(self, offsets: Mapping[ChannelID, Real]):
+        self._offsets = offsets
+
+    def __call__(self, time: np.ndarray, data: Mapping[ChannelID, np.ndarray]) -> Mapping[ChannelID, np.ndarray]:
+        return {channel: channel_values + self._offsets[channel] if channel in self._offsets else channel_values
+                for channel, channel_values in data.items()}
+
+    def get_input_channels(self, output_channels: Set[ChannelID]):
+        return output_channels
+
+    def get_output_channels(self, input_channels: Set[ChannelID]):
+        return input_channels
+
+    @property
+    def compare_key(self):
+        return self._offsets
+
+
+class ScalingTransformation(Transformation):
+    def __init__(self, factors: Mapping[ChannelID, Real]):
+        self._factors = factors
+
+    def __call__(self, time: np.ndarray, data: Mapping[ChannelID, np.ndarray]) -> Mapping[ChannelID, np.ndarray]:
+        return {channel: channel_values * self._factors[channel] if channel in self._factors else channel_values
+                for channel, channel_values in data.items()}
+
+    def get_input_channels(self, output_channels: Set[ChannelID]):
+        return output_channels
+
+    def get_output_channels(self, input_channels: Set[ChannelID]):
+        return input_channels
+
+    @property
+    def compare_key(self):
+        return self._factors
+
 
 
 try:
