@@ -655,3 +655,32 @@ class ArithmeticWaveform(Waveform):
     def compare_key(self) -> Tuple[str, Waveform, Waveform]:
         return self._arithmetic_operator, self._lhs, self._rhs
 
+
+class FunctorWaveform(Waveform):
+    """Apply a channel wise functor that works inplace to all results"""
+    def __init__(self, inner_waveform: Waveform, functor: Mapping[ChannelID, 'Callable']):
+        self._inner_waveform = inner_waveform
+        self._functor = functor.copy()
+
+        assert set(functor.keys()) == inner_waveform.defined_channels
+
+    @property
+    def duration(self) -> TimeType:
+        return self._inner_waveform.duration
+
+    @property
+    def defined_channels(self) -> Set[ChannelID]:
+        return self._inner_waveform.defined_channels
+
+    def unsafe_sample(self,
+                      channel: ChannelID,
+                      sample_times: np.ndarray,
+                      output_array: Union[np.ndarray, None] = None) -> np.ndarray:
+        return self._functor[channel](self._inner_waveform.unsafe_sample(channel, sample_times, output_array))
+
+    def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> Waveform:
+        return SubsetWaveform(self, channels)
+
+    @property
+    def compare_key(self) -> Tuple[Waveform, FrozenSet]:
+        return self._inner_waveform, frozenset(self._functor.items())
