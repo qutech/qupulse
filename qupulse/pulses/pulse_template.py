@@ -14,7 +14,7 @@ from numbers import Real
 
 from qupulse.utils.types import ChannelID, DocStringABCMeta
 from qupulse.serialization import Serializable
-from qupulse.expressions import ExpressionScalar, Expression
+from qupulse.expressions import ExpressionScalar, Expression, ExpressionLike
 from qupulse._program._loop import Loop, to_waveform
 from qupulse._program.transformation import Transformation, IdentityTransformation, ChainedTransformation, chain_transformations
 
@@ -219,6 +219,14 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
                                           global_transformation=global_transformation,
                                           parent_loop=parent_loop)
 
+    def __add__(self, other: ExpressionLike):
+        from qupulse.pulses.arithmetic_pulse_template import ArithmeticPulseTemplate
+        return ArithmeticPulseTemplate(self, '+', other)
+
+    def __sub__(self, other):
+        from qupulse.pulses.arithmetic_pulse_template import ArithmeticPulseTemplate
+        return ArithmeticPulseTemplate(self, '-', other)
+
 
 class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
     """A PulseTemplate that does not imply any control flow disruptions and can be directly
@@ -257,6 +265,17 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
             measurements = self.get_measurement_windows(parameters=parameters, measurement_mapping=measurement_mapping)
             instruction_block.add_instruction_meas(measurements)
             instruction_block.add_instruction_exec(waveform)
+
+    def __add__(self, other: 'AtomicPulseTemplate'):
+        from qupulse.pulses.arithmetic_pulse_template import ArithmeticAtomicPulseTemplate
+        if isinstance(other, AtomicPulseTemplate):
+            return ArithmeticAtomicPulseTemplate(self, '+', other)
+        else:
+            return super().__add__(other)
+
+    def __sub__(self, other: 'AtomicPulseTemplate'):
+        from qupulse.pulses.arithmetic_pulse_template import ArithmeticAtomicPulseTemplate
+        return ArithmeticAtomicPulseTemplate(self, '-', other)
 
     def _internal_create_program(self, *,
                                  parameters: Dict[str, Parameter],
