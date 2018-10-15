@@ -7,7 +7,7 @@ Classes:
 import itertools
 from abc import ABCMeta, abstractmethod
 from weakref import WeakValueDictionary, ref
-from typing import Union, Set, Sequence, NamedTuple, Tuple, Any, Iterable, FrozenSet, Optional
+from typing import Union, Set, Sequence, NamedTuple, Tuple, Any, Iterable, FrozenSet, Optional, Mapping
 import operator
 
 import numpy as np
