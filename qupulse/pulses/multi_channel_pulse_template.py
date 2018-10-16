@@ -115,7 +115,7 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
         return set.union(self.measurement_parameters,
                          self.constrained_parameters,
                          *(st.parameter_names for st in self._subtemplates),
-                         self._duration if self._duration else ())
+                         self._duration.variables if self._duration else ())
 
     @property
     def subtemplates(self) -> Sequence[Union[AtomicPulseTemplate, MappingPulseTemplate]]:

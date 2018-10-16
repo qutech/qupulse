@@ -121,13 +121,6 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
 
         self.assertEqual(template.duration, 't1')
 
-    def test_parameter_names(self) -> None:
-        template = AtomicMultiChannelPulseTemplate(*zip(self.subtemplates, self.param_maps, self.chan_maps),
-                                                   parameter_constraints={'pp1 > hugo'},
-                                                   measurements={('meas', 'd', 1)},
-                                                   duration='my_duration')
-        self.assertEqual({'pp1', 'pp2', 'pp3', 'hugo', 'd', 'my_duration'}, template.parameter_names)
-
     def test_mapping_template_pure_conversion(self):
         template = AtomicMultiChannelPulseTemplate(*zip(self.subtemplates, self.param_maps, self.chan_maps))
 
@@ -175,6 +168,12 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
         self.assertEqual(pt.parameter_names,
                          {'a', 'b', 'c', 'd', 'e'})
 
+    def test_parameter_names_2(self):
+        template = AtomicMultiChannelPulseTemplate(*zip(self.subtemplates, self.param_maps, self.chan_maps),
+                                                   parameter_constraints={'pp1 > hugo'},
+                                                   measurements={('meas', 'd', 1)},
+                                                   duration='my_duration')
+        self.assertEqual({'pp1', 'pp2', 'pp3', 'hugo', 'd', 'my_duration'}, template.parameter_names)
 
     def test_integral(self) -> None:
         sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'},
