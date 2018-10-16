@@ -235,6 +235,11 @@ class ExpressionScalarTests(unittest.TestCase):
         s = 'a    *    b'
         self.assertEqual(ExpressionScalar(s).original_expression, s)
 
+    def test_hash(self):
+        expected = {ExpressionScalar(2), ExpressionScalar('a')}
+        sequence = [ExpressionScalar(2), ExpressionScalar('a'), ExpressionScalar(2), ExpressionScalar('a')]
+        self.assertEqual(expected, set(sequence))
+
     def test_undefined_comparison(self):
         valued = ExpressionScalar(2)
         unknown = ExpressionScalar('a')

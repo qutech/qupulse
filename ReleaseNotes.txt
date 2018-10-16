@@ -1,5 +1,8 @@
 ## pending/current ##
 
+- Expressions:
+    - Make ExpressionScalar hashable
+
 ## 0.2 ##
 
 - General:

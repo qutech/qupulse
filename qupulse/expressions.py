@@ -268,6 +268,9 @@ class ExpressionScalar(Expression):
         """Enable comparisons with Numbers"""
         return self._sympified_expression == self._sympify(other)
 
+    def __hash__(self) -> int:
+        return hash(self._sympified_expression)
+
     def __add__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> 'ExpressionScalar':
         return self.make(self._sympified_expression.__add__(self._sympify(other)))
 
