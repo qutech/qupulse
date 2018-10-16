@@ -132,42 +132,29 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
         self.validate_parameter_constraints(parameters=parameters)
 
         sub_waveforms = []
-        waveform_durations = []
         for subtemplate in self.subtemplates:
             sub_waveform = subtemplate.build_waveform(parameters,
                                                       channel_mapping=channel_mapping)
             if sub_waveform is not None:
                 sub_waveforms.append(sub_waveform)
-                sub_waveform_duration = sub_waveform.duration
-
-                for existing_duration in waveform_durations:
-                    if isclose(existing_duration, sub_waveform_duration):
-                        break
-                else:
-                    waveform_durations.append(sub_waveform_duration)
 
         if len(sub_waveforms) == 0:
             return None
 
-        if len(waveform_durations) != 1:
-            raise ValueError('The durations are not all equal.', {ch: sub_waveform.duration
-                                                                  for sub_waveform in sub_waveforms
-                                                                  for ch in sub_waveform.defined_channels})
+        if len(sub_waveforms) == 1:
+            waveform = sub_waveforms[0]
         else:
-            waveform_duration, = waveform_durations
+            waveform = MultiChannelWaveform(sub_waveforms)
 
         if self._duration:
             expected_duration = self._duration.evaluate_numeric(**parameters)
 
-            if not isclose(expected_duration, waveform_duration):
+            if not isclose(expected_duration, waveform.duration):
                 raise ValueError('The duration does not '
                                  'equal the expected duration',
-                                 expected_duration, waveform_duration)
+                                 expected_duration, waveform.duration)
 
-        if len(sub_waveforms) == 1:
-            return sub_waveforms[0]
-        else:
-            return MultiChannelWaveform(sub_waveforms)
+        return waveform
 
     def get_measurement_windows(self,
                                 parameters: Dict[str, numbers.Real],
