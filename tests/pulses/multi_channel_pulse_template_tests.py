@@ -100,7 +100,12 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'duration'):
             amcpt.build_waveform(parameters=dict(t_1=3, t_2=3, t_3=3, t_0=4),
                                  channel_mapping={ch: ch for ch in 'c1 c2 c3'.split()})
+        with self.assertRaisesRegex(ValueError, 'duration'):
+            amcpt.build_waveform(parameters=dict(t_1=3+1e-9, t_2=3, t_3=3, t_0=4),
+                                 channel_mapping={ch: ch for ch in 'c1 c2 c3'.split()})
         amcpt.build_waveform(parameters=dict(t_1=3, t_2=3, t_3=3, t_0=3),
+                             channel_mapping={ch: ch for ch in 'c1 c2 c3'.split()})
+        amcpt.build_waveform(parameters=dict(t_1=3+1e-11, t_2=3, t_3=3, t_0=3),
                              channel_mapping={ch: ch for ch in 'c1 c2 c3'.split()})
 
     def test_external_parameters_warning(self):
