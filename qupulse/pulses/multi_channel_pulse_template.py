@@ -10,14 +10,11 @@ Classes:
 from typing import Dict, List, Optional, Any, Iterable, Union, Set, Sequence
 import numbers
 import warnings
-import math
-
-import numpy
-
 
 from qupulse.serialization import Serializer, PulseRegistryType
 
 from qupulse.pulses.conditions import Condition
+from qupulse.utils import isclose
 from qupulse.utils.sympy import almost_equal
 from qupulse.utils.types import ChannelID, TimeType
 from qupulse._program.waveforms import MultiChannelWaveform, Waveform
@@ -144,7 +141,7 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
                 sub_waveform_duration = sub_waveform.duration
 
                 for existing_duration in waveform_durations:
-                    if math.isclose(existing_duration, sub_waveform_duration):
+                    if isclose(existing_duration, sub_waveform_duration):
                         break
                 else:
                     waveform_durations.append(sub_waveform_duration)
@@ -162,7 +159,7 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
         if self._duration:
             expected_duration = self._duration.evaluate_numeric(**parameters)
 
-            if not math.isclose(expected_duration, waveform_duration):
+            if not isclose(expected_duration, waveform_duration):
                 raise ValueError('The duration does not '
                                  'equal the expected duration',
                                  expected_duration, waveform_duration)
