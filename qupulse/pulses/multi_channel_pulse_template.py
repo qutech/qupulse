@@ -51,7 +51,7 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
             parameter_constraints: Forwarded to ParameterConstrainer.__init__
             measurements: Forwarded to AtomicPulseTemplate.__init__
             duration: Enforced duration of the pulse template on instantiation. build_waveform checks all sub-waveforms
-            have this duration.
+            have this duration. If True the equality of durations is only checked durtin instantiation not construction.
             external_parameters: No functionality. (Deprecated)
         """
         AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements)
