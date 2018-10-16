@@ -10,6 +10,7 @@ Classes:
 from typing import Dict, List, Optional, Any, Iterable, Union, Set, Sequence
 import numbers
 import warnings
+import math
 
 import numpy
 
@@ -95,16 +96,16 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
                 else:
                     raise ValueError('Could not assert duration equality of {} and {}'.format(duration,
                                                                                               subtemplate.duration))
-            self._duration = False
+            self._duration = None
         elif duration is True:
-            self._duration = self._subtemplates[0].duration
+            self._duration = None
         else:
             self._duration = ExpressionScalar(duration)
 
         self._register(registry=registry)
 
     @property
-    def duration(self) -> Expression:
+    def duration(self) -> ExpressionScalar:
         if self._duration:
             return self._duration
         else:
@@ -134,23 +135,38 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
         self.validate_parameter_constraints(parameters=parameters)
 
         sub_waveforms = []
+        waveform_durations = []
         for subtemplate in self.subtemplates:
             sub_waveform = subtemplate.build_waveform(parameters,
                                                       channel_mapping=channel_mapping)
             if sub_waveform is not None:
                 sub_waveforms.append(sub_waveform)
+                sub_waveform_duration = sub_waveform.duration
 
-        if self._duration and sub_waveforms:
-            expected_duration = self._duration.evaluate_numeric(**parameters)
-
-            for sub_waveform in sub_waveforms:
-                if sub_waveform.duration != expected_duration:
-                    raise ValueError('The duration of channel(s) {} does not '
-                                     'equal the expected duration'.format(sub_waveform.defined_channels),
-                                     expected_duration, sub_waveform.duration)
+                for existing_duration in waveform_durations:
+                    if math.isclose(existing_duration, sub_waveform_duration):
+                        break
+                else:
+                    waveform_durations.append(sub_waveform_duration)
 
         if len(sub_waveforms) == 0:
             return None
+
+        if len(waveform_durations) != 1:
+            raise ValueError('The durations are not all equal.', {ch: sub_waveform.duration
+                                                                  for sub_waveform in sub_waveforms
+                                                                  for ch in sub_waveform.defined_channels})
+        else:
+            waveform_duration, = waveform_durations
+
+        if self._duration:
+            expected_duration = self._duration.evaluate_numeric(**parameters)
+
+            if not math.isclose(expected_duration, waveform_duration):
+                raise ValueError('The duration does not '
+                                 'equal the expected duration',
+                                 expected_duration, waveform_duration)
+
         if len(sub_waveforms) == 1:
             return sub_waveforms[0]
         else:
