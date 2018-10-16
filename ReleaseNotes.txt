@@ -1,5 +1,13 @@
 ## pending/current ##
 
+- General:
+    - Introduce qupulse.utils.isclose (an alias for math.isclose if available)
+
+- Pulse Templates:
+    - `AtomicMultichannelPulseTemplate`:
+        - Add duration keyword argument & example (see MultiChannelTemplates notebook)
+        - Make duration equality check approximate (numeric tolerance)
+
 - Expressions:
     - Make ExpressionScalar hashable
 
