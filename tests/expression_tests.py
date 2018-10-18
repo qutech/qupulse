@@ -348,6 +348,14 @@ class ExpressionScalarTests(unittest.TestCase):
 
         self.assertFalse(ExpressionScalar(456).is_nan())
 
+    def test_special_function_numeric_evaluation(self):
+        expr = Expression('erfc(t)')
+        data = [-1., 0., 1.]
+        expected = np.array([1.84270079, 1., 0.15729921])
+        result = expr.evaluate_numeric(t=data)
+
+        np.testing.assert_allclose(expected, result)
+
 
 class ExpressionExceptionTests(unittest.TestCase):
     def test_expression_variable_missing(self):
