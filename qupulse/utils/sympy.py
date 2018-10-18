@@ -201,6 +201,7 @@ _sympy_environment = {**_base_environment, **sympy.__dict__}
 
 _lambdify_modules = [{'ceiling': numpy_compatible_ceiling}, 'numpy', _special_functions]
 
+
 def evaluate_compiled(expression: sympy.Expr,
              parameters: Dict[str, Union[numpy.ndarray, Number]],
              compiled: CodeType=None, mode=None) -> Tuple[any, CodeType]:
@@ -222,7 +223,6 @@ def evaluate_lambdified(expression: Union[sympy.Expr, numpy.ndarray],
                         variables: Sequence[str],
                         parameters: Dict[str, Union[numpy.ndarray, Number]],
                         lambdified) -> Tuple[Any, Any]:
-    import scipy.special
     lambdified = lambdified or sympy.lambdify(variables, expression, _lambdify_modules)
 
     return lambdified(**parameters), lambdified
