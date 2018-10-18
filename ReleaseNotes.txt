@@ -10,6 +10,7 @@
 
 - Expressions:
     - Make ExpressionScalar hashable
+    - Fix bug that prevented evaluation of expressions containing some special functions (`erfc`, `factorial`, etc.)
 
 ## 0.2 ##
 
