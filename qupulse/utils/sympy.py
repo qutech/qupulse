@@ -1,12 +1,22 @@
 from typing import Union, Dict, Tuple, Any, Sequence, Optional
 from numbers import Number
 from types import CodeType
+import warnings
 
 import builtins
 import math
 
 import sympy
 import numpy
+
+try:
+    import scipy.special as _special_functions
+except ImportError:
+    _special_functions = {fname: numpy.vectorize(fobject)
+                          for fname, fobject in math.__dict__.items()
+                          if not fname.startswith('_') and fname not in numpy.__dict__}
+    warnings.warn('scipy is not installed. This reduces the set of available functions to those present in numpy + '
+                  'manually vectorized functions in math.')
 
 
 __all__ = ["sympify", "substitute_with_eval", "to_numpy", "get_variables", "get_free_symbols", "recursive_substitution",
@@ -189,6 +199,7 @@ _math_environment = {**_base_environment, **math.__dict__}
 _numpy_environment = {**_base_environment, **numpy.__dict__}
 _sympy_environment = {**_base_environment, **sympy.__dict__}
 
+_lambdify_modules = [{'ceiling': numpy_compatible_ceiling}, 'numpy', _special_functions]
 
 def evaluate_compiled(expression: sympy.Expr,
              parameters: Dict[str, Union[numpy.ndarray, Number]],
@@ -211,7 +222,7 @@ def evaluate_lambdified(expression: Union[sympy.Expr, numpy.ndarray],
                         variables: Sequence[str],
                         parameters: Dict[str, Union[numpy.ndarray, Number]],
                         lambdified) -> Tuple[Any, Any]:
-    lambdified = lambdified or sympy.lambdify(variables, expression,
-                                              [{'ceiling': numpy_compatible_ceiling}, 'numpy'])
+    import scipy.special
+    lambdified = lambdified or sympy.lambdify(variables, expression, _lambdify_modules)
 
     return lambdified(**parameters), lambdified
