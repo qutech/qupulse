@@ -79,7 +79,7 @@ class PointPulseTemplateTests(unittest.TestCase):
             [(1, (2, 'b'), 'linear'), (3, (0, 0), 'jump'), (4, (2, 'c'), 'hold'), (5, (8, 'd'), 'hold')],
             [0, 'other_channel']
         )
-        self.assertEqual({0: ExpressionScalar(6),
+        self.assertEqual({0: ExpressionScalar(6.0),
                           'other_channel': ExpressionScalar('1.0*b + 2.0*c')},
                          pulse.integral)
 
@@ -89,6 +89,16 @@ class PointPulseTemplateTests(unittest.TestCase):
         )
         self.assertEqual({'symbolic': ExpressionScalar('2.0*g - t0 - 1.0'),
                           1: ExpressionScalar('b*(0.5*t0 - 0.5) + c*(g - 4.0) + c*(-t0 + 4.0)')},
+                         pulse.integral)
+
+    def test_integral_namespaced_params(self) -> None:
+        pulse = PointPulseTemplate(
+            [(1, ('2', 'foo.b'), 'linear'), ('time.t0', (0, 0), 'jump'), (4, (2, 'foo.c'), 'hold'), ('time.g', (8, 'foo.d'), 'hold')],
+            ['namespaced', 1]
+        )
+
+        self.assertEqual({'namespaced': ExpressionScalar('2.0*time.g - time.t0 - 1.0'),
+                          1: ExpressionScalar('foo.b*(0.5*time.t0 - 0.5) + foo.c*(time.g - 4.0) + foo.c*(-time.t0 + 4.0)')},
                          pulse.integral)
 
 

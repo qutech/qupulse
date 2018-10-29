@@ -428,6 +428,14 @@ class TablePulseTemplateTest(unittest.TestCase):
                                           'other_channel': Expression(7),
                                           'symbolic': Expression('(b-3)*a + 0.5 * (c-b)*(d+4)')})
 
+    def test_integral_namespaced_params(self) -> None:
+        pulse = TablePulseTemplate(entries={'namespaced': [(3, 'foo.bar', 'hold'), ('hugo.ilse', 4, 'linear'),
+                                                         ('foo.foo.bar', Expression('hugo.ilse.herbert'), 'hold')]})
+        self.assertEqual(pulse.integral, {'namespaced':
+                                              Expression('foo.bar*(hugo.ilse - 3.0) + '
+                                                         '(0.5*foo.foo.bar - 0.5*hugo.ilse)*(hugo.ilse.herbert + 4.0)')
+                                          })
+
 
 class TablePulseTemplateConstraintTest(ParameterConstrainerTest):
     def __init__(self, *args, **kwargs):

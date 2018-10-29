@@ -362,11 +362,11 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
 
             expr = 0
             for first_entry, second_entry in zip(channel_entries[:-1], channel_entries[1:]):
-                substitutions = {'t0': ExpressionScalar(first_entry.t).sympified_expression, 'v0': ExpressionScalar(first_entry.v).sympified_expression,
-                                 't1': ExpressionScalar(second_entry.t).sympified_expression, 'v1': ExpressionScalar(second_entry.v).sympified_expression}
+                substitutions = {'t0': first_entry.t, 'v0': first_entry.v,
+                                 't1': second_entry.t, 'v1': second_entry.v}
 
-                expr += first_entry.interp.integral.sympified_expression.subs(substitutions)
-            expressions[channel] = ExpressionScalar(expr)
+                expr += first_entry.interp.integral.subs(substitutions)
+            expressions[channel] = expr
 
         return expressions
 

@@ -168,7 +168,18 @@ class ForLoopPulseTemplateTest(unittest.TestCase):
         pulse = ForLoopPulseTemplate(dummy, 'i', (1, 8, 2))
 
         expected = {'A': ExpressionScalar('Sum(t1-3.1*(1+2*i), (i, 0, 3))'),
-                    'B': ExpressionScalar('Sum((1+2*i), (i, 0, 3))') }
+                    'B': ExpressionScalar('Sum((1+2*i), (i, 0, 3))')}
+        self.assertEqual(expected, pulse.integral)
+
+    def test_integral_namespaced_params(self) -> None:
+        dummy = DummyPulseTemplate(defined_channels={'A', 'B'},
+                                   parameter_names={'time.t1', 'i'},
+                                   integrals={'A': ExpressionScalar('time.t1-i*3.1+foo.c'), 'B': ExpressionScalar('i')})
+
+        pulse = ForLoopPulseTemplate(dummy, 'i', (1, 8, 2))
+
+        expected = {'A': ExpressionScalar('Sum(time.t1-3.1*(1+2*i)+foo.c, (i, 0, 3))'),
+                    'B': ExpressionScalar('Sum((1+2*i), (i, 0, 3))')}
         self.assertEqual(expected, pulse.integral)
 
 

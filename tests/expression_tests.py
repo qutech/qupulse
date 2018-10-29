@@ -1,7 +1,7 @@
 import unittest
 
 import numpy as np
-from sympy import sympify, Eq
+from sympy import sympify, Eq, Symbol
 
 from qupulse.expressions import Expression, ExpressionVariableMissingException, NonNumericEvaluation, ExpressionScalar, ExpressionVector
 
@@ -213,6 +213,12 @@ class ExpressionScalarTests(unittest.TestCase):
         received = sorted(e.variables)
         self.assertEqual(expected, received)
 
+    def test_namespaced_variables(self) -> None:
+        e = ExpressionScalar('foo.bar[foo.index] * foo.hugo.ilse')
+        expected = sorted(['foo.bar', 'foo.index', 'foo.hugo.ilse'])
+        received = sorted(e.variables)
+        self.assertEqual(expected, received)
+
     def test_evaluate_variable_missing(self) -> None:
         e = ExpressionScalar('a * b + c')
         params = {
@@ -355,6 +361,17 @@ class ExpressionScalarTests(unittest.TestCase):
         result = expr.evaluate_numeric(t=data)
 
         np.testing.assert_allclose(expected, result)
+
+    def test_subs(self) -> None:
+        expr = Expression('a + b * c - 0.07')
+        subs = {
+            Symbol('a'): '3.7',
+            'b': '2/d',
+            'c': Expression('1/d')
+        }
+        result = expr.subs(subs)
+        expected = Expression('3.7 + 2/(d*d) - 0.07')
+        self.assertEqual(expected, result)
 
 
 class ExpressionExceptionTests(unittest.TestCase):

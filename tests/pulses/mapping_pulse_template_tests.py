@@ -189,6 +189,15 @@ class MappingTemplateTests(unittest.TestCase):
 
         self.assertEqual({'default': Expression('2*f'), 'other': Expression('-3.2*f+2.3')}, pulse.integral)
 
+    def test_integral_namespaced_params(self) -> None:
+        dummy = DummyPulseTemplate(defined_channels={'A', 'B'},
+                                   parameter_names={'foo.k', 'foo.f', 'foo.b'},
+                                   integrals={'A': Expression('2*foo.k'), 'other': Expression('-3.2*foo.f+foo.b')})
+        pulse = MappingPulseTemplate(dummy, parameter_mapping={'foo.k': 'foo.f', 'foo.b': 2.3}, channel_mapping={'A': 'default'},
+                                     mapping_namespace='pirate.arrr')
+
+        self.assertEqual({'default': Expression('2*foo.f'), 'other': Expression('-3.2*pirate.arrr.f+2.3')}, pulse.integral)
+
     def test_mapping_namespace(self) -> None:
         template = DummyPulseTemplate(parameter_names={'foo', 'bar', 'outer.inner.hugo'})
         st = MappingPulseTemplate(template, mapping_namespace='scope')

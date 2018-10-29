@@ -314,18 +314,8 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         internal_integral = self.__template.integral
         expressions = dict()
 
-        # sympy.subs() does not work if one of the mappings in the provided dict is an Expression object
-        # the following is an ugly workaround
-        # todo: make Expressions compatible with sympy.subs()
-        parameter_mapping = self.__parameter_mapping.copy()
-        for i in parameter_mapping:
-            if isinstance(parameter_mapping[i], ExpressionScalar):
-                parameter_mapping[i] = parameter_mapping[i].sympified_expression
-
-        for channel in internal_integral:
-            expr = ExpressionScalar(
-                internal_integral[channel].sympified_expression.subs(parameter_mapping)
-            )
+        for channel, channel_integral in internal_integral.items():
+            expr = channel_integral.subs(self.__parameter_mapping)
             channel_out = channel
             if channel in self.__channel_mapping:
                 channel_out = self.__channel_mapping[channel]

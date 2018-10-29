@@ -174,7 +174,9 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
         sum_index = sympy.symbols(self._loop_index)
 
         # replace loop_index with sum_index dependable expression
-        body_duration = self.body.duration.sympified_expression.subs({loop_index: self._loop_range.start.sympified_expression + sum_index*step_size})
+        body_duration = self.body.duration.sympified_expression.subs(
+            {loop_index: self._loop_range.start.sympified_expression + sum_index*step_size}
+        )
 
         # number of sum contributions
         step_count = sympy.ceiling((self._loop_range.stop.sympified_expression-self._loop_range.start.sympified_expression) / step_size)

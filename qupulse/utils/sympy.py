@@ -23,7 +23,7 @@ except ImportError:
 
 
 __all__ = ["sympify", "substitute_with_eval", "to_numpy", "get_variables", "get_free_symbols", "recursive_substitution",
-           "evaluate_lambdified", "get_most_simple_representation"]
+           "evaluate_lambdified", "get_most_simple_representation", 'substitute']
 
 
 Sympifyable = Union[str, Number, sympy.Expr, numpy.str_]
@@ -271,6 +271,18 @@ def get_variables(expression: sympy.Expr) -> Sequence[str]:
     `foo.bar`.
     """
     return tuple(map(lambda x: str(x).replace(sympy_internal_namespace_seperator, '.'), get_free_symbols(expression)))
+
+
+def substitute(expression: sympy.Expr, substitutions: Dict[str, Union[sympy.Expr, str, Number]]) -> sympy.Expr:
+    inner_subs = dict()
+    for k, v in substitutions.items():
+        if isinstance(k, sympy.Symbol):
+            k = k.name
+        k = k.replace('.', sympy_internal_namespace_seperator)
+        v = v if isinstance(v, sympy.Expr) else sympify(v)
+        inner_subs[k] = v
+
+    return expression.subs(inner_subs)
 
 
 def substitute_with_eval(expression: sympy.Expr,

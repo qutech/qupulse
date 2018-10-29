@@ -14,7 +14,7 @@ import numpy
 
 from qupulse.serialization import AnonymousSerializable
 from qupulse.utils.sympy import sympify, to_numpy, recursive_substitution, evaluate_lambdified,\
-    get_most_simple_representation, get_variables
+    get_most_simple_representation, get_variables, substitute, almost_equal
 
 __all__ = ["Expression", "ExpressionVariableMissingException", "ExpressionScalar", "ExpressionVector"]
 
@@ -266,7 +266,10 @@ class ExpressionScalar(Expression):
 
     def __eq__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> bool:
         """Enable comparisons with Numbers"""
-        return self._sympified_expression == self._sympify(other)
+        sympified_other = self._sympify(other)
+        if self._sympified_expression == sympified_other:
+            return True
+        return almost_equal(self._sympified_expression, sympified_other)
 
     def __hash__(self) -> int:
         return hash(self._sympified_expression)
@@ -315,6 +318,14 @@ class ExpressionScalar(Expression):
 
     def is_nan(self) -> bool:
         return sympy.sympify('nan') == self._sympified_expression
+
+    def subs(self, substitutions: Dict[str, Union[str, 'ExpressionScalar', sympy.Expr, sympy.Symbol, Number]]) -> 'ExpressionScalar':
+        substitutions = substitutions.copy()
+        for p, e in substitutions.items():
+            if isinstance(e, Expression):
+                substitutions[p] = e.underlying_expression
+
+        return Expression(substitute(self.sympified_expression, substitutions))
 
 
 class ExpressionVariableMissingException(Exception):

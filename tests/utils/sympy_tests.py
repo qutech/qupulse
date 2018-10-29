@@ -19,7 +19,7 @@ scope_n = sympy.Symbol('scope____n')
 
 from qupulse.utils.sympy import sympify as qc_sympify, substitute_with_eval, recursive_substitution, Len,\
     evaluate_lambdified, evaluate_compiled, get_most_simple_representation, get_variables, get_free_symbols,\
-    almost_equal
+    almost_equal, substitute
 
 
 ################################################### SUBSTITUTION #######################################################
@@ -346,3 +346,29 @@ class NamespaceTests(unittest.TestCase):
     def test_evaluate_compiled_dot_namespace_notation(self) -> None:
         res = evaluate_compiled("qubit.a + qubit.spec2.a * 1.3", {"qubit.a": 2.1, "qubit.spec2.a": .1})
         self.assertEqual(2.23, res[0])
+
+
+class SubstituteFunctionTests(unittest.TestCase):
+
+    def test_substitute(self) -> None:
+        expr = qc_sympify('a + b * c - 0.07')
+        subs = {
+            a: '3.7',
+            b: qc_sympify('2/d'),
+            'c': '1/d'
+        }
+        result = substitute(expr, subs)
+        expected = qc_sympify('3.7 + 2/(d*d) - 0.07')
+        self.assertEqual(expected, result)
+
+    def test_substitute_namespaced(self) -> None:
+        expr = qc_sympify('foo.a + foo.b * foo.c - 0.07')
+        subs = {
+            sympy.Symbol('foo.a'): '3.7',
+            sympy.Symbol('foo____b'): qc_sympify('2/foo.d'),
+            'foo.c': '1/foo.d'
+        }
+        result = substitute(expr, subs)
+        expected = qc_sympify('3.7 + 2/(foo.d*foo.d) - 0.07')
+        self.assertEqual(expected, result)
+
