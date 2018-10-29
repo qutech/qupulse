@@ -7,10 +7,19 @@
     - `AtomicMultichannelPulseTemplate`:
         - Add duration keyword argument & example (see MultiChannelTemplates notebook)
         - Make duration equality check approximate (numeric tolerance)
+    - `MappingPulseTemplate`:
+        - Add `mapping_namespace` keyword argument to allow mapping all subtemplate parameters into a namespace easily
+        - DEPRECATED: `allow_partial_parameter_mapping` argument. MappingPulseTemplate now always allows partial mapping.
 
 - Expressions:
     - Make ExpressionScalar hashable
     - Fix bug that prevented evaluation of expressions containing some special functions (`erfc`, `factorial`, etc.)
+    - ExpressionScalar equality operator now also returns true in case of numerical almost-equality
+    - Add method subs() to ExpressionScalar which wraps ExpressionScalar.sympified_expression.subs()
+
+- Utils/sympy:
+    - Add custom expression parsing step which allows usage of '.' in variable/symbol names to allow namespace notation
+    - Add method substitute() which wraps sympy.Expr.subs() but handles '.' in variable/symbol names gracefully
 
 ## 0.2 ##
 
