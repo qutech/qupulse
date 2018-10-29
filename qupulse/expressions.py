@@ -319,13 +319,15 @@ class ExpressionScalar(Expression):
     def is_nan(self) -> bool:
         return sympy.sympify('nan') == self._sympified_expression
 
-    def subs(self, substitutions: Dict[str, Union[str, 'ExpressionScalar', sympy.Expr, sympy.Symbol, Number]]) -> 'ExpressionScalar':
+    def subs(self,
+             substitutions: Dict[str, Union[str, 'ExpressionScalar', sympy.Expr, sympy.Symbol, Number]],
+             **kwargs) -> 'ExpressionScalar':
         substitutions = substitutions.copy()
         for p, e in substitutions.items():
             if isinstance(e, Expression):
                 substitutions[p] = e.underlying_expression
 
-        return Expression(substitute(self.sympified_expression, substitutions))
+        return Expression(substitute(self.sympified_expression, substitutions), **kwargs)
 
 
 class ExpressionVariableMissingException(Exception):

@@ -176,7 +176,7 @@ class SubstitutionTests(TestCase):
         for key, value in substitutions.items():
             if not isinstance(value, sympy.Expr):
                 substitutions[key] = qc_sympify(value)
-        return recursive_substitution(expression, substitutions).doit()
+        return substitute(expression, substitutions, simultaneous=True).doit()
 
     def test_simple_substitution_cases(self):
         for expr, subs, expected in simple_substitution_cases:
@@ -194,16 +194,25 @@ class SubstitutionTests(TestCase):
             self.assertEqual(expected, result)
 
     def test_indexed_substitution_cases(self):
+        if type(self) is SubstitutionTests:
+            raise unittest.SkipTest('sympy.Expr.subs does not handle simultaneous substitutions of indexed entities.')
+
         for expr, subs, expected in indexed_substitution_cases:
             result = self.substitute(expr, subs)
             self.assertEqual(expected, result)
 
     def test_vector_valued_cases(self):
+        if type(self) is SubstitutionTests:
+            raise unittest.SkipTest('sympy.Expr.subs does not handle simultaneous substitutions of indexed entities.')
+
         for expr, subs, expected in vector_valued_cases:
             result = self.substitute(expr, subs)
             self.assertEqual(expected, result, msg="test: {}".format((expr, subs, expected)))
 
     def test_full_featured_cases(self):
+        if type(self) is SubstitutionTests:
+            raise unittest.SkipTest('sympy.Expr.subs does not handle simultaneous substitutions of indexed entities.')
+
         for expr, subs, expected in full_featured_cases:
             result = self.substitute(expr, subs)
             self.assertEqual(expected, result)
@@ -346,29 +355,3 @@ class NamespaceTests(unittest.TestCase):
     def test_evaluate_compiled_dot_namespace_notation(self) -> None:
         res = evaluate_compiled("qubit.a + qubit.spec2.a * 1.3", {"qubit.a": 2.1, "qubit.spec2.a": .1})
         self.assertEqual(2.23, res[0])
-
-
-class SubstituteFunctionTests(unittest.TestCase):
-
-    def test_substitute(self) -> None:
-        expr = qc_sympify('a + b * c - 0.07')
-        subs = {
-            a: '3.7',
-            b: qc_sympify('2/d'),
-            'c': '1/d'
-        }
-        result = substitute(expr, subs)
-        expected = qc_sympify('3.7 + 2/(d*d) - 0.07')
-        self.assertEqual(expected, result)
-
-    def test_substitute_namespaced(self) -> None:
-        expr = qc_sympify('foo.a + foo.b * foo.c - 0.07')
-        subs = {
-            sympy.Symbol('foo.a'): '3.7',
-            sympy.Symbol('foo____b'): qc_sympify('2/foo.d'),
-            'foo.c': '1/foo.d'
-        }
-        result = substitute(expr, subs)
-        expected = qc_sympify('3.7 + 2/(foo.d*foo.d) - 0.07')
-        self.assertEqual(expected, result)
-

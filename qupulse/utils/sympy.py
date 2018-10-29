@@ -55,8 +55,7 @@ def custom_auto_symbol_transform(tokens: Sequence[Tuple[int, str]], local_dict: 
         next_tok_num, next_tok_val = next_tok
 
         if symbol_string:
-            if tok_val != '.' and tok_num != NAME:
-                raise SyntaxError("Not a valid namespaced sympy.symbol name")
+            assert(tok_val == '.' or tok_num == NAME)
             if tok_val == '.':
                 symbol_string += sympy_internal_namespace_seperator
             elif tok_num == NAME:
@@ -273,7 +272,7 @@ def get_variables(expression: sympy.Expr) -> Sequence[str]:
     return tuple(map(lambda x: str(x).replace(sympy_internal_namespace_seperator, '.'), get_free_symbols(expression)))
 
 
-def substitute(expression: sympy.Expr, substitutions: Dict[str, Union[sympy.Expr, str, Number]]) -> sympy.Expr:
+def substitute(expression: sympy.Expr, substitutions: Dict[str, Union[sympy.Expr, str, Number]], **kwargs) -> sympy.Expr:
     inner_subs = dict()
     for k, v in substitutions.items():
         if isinstance(k, sympy.Symbol):
@@ -282,7 +281,7 @@ def substitute(expression: sympy.Expr, substitutions: Dict[str, Union[sympy.Expr
         v = v if isinstance(v, sympy.Expr) else sympify(v)
         inner_subs[k] = v
 
-    return expression.subs(inner_subs)
+    return expression.subs(inner_subs, **kwargs)
 
 
 def substitute_with_eval(expression: sympy.Expr,
