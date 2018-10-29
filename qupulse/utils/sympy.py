@@ -1,6 +1,7 @@
 from typing import Union, Dict, Tuple, Any, Sequence, Optional, Mapping
 from numbers import Number
 from types import CodeType
+import warnings
 
 import builtins
 import math
@@ -9,8 +10,16 @@ import sympy
 from sympy.parsing.sympy_parser import NAME, OP, iskeyword, Basic, Symbol, lambda_notation, repeated_decimals, \
     auto_number, factorial_notation
 import numpy
-
 from unittest import mock
+
+try:
+    import scipy.special as _special_functions
+except ImportError:
+    _special_functions = {fname: numpy.vectorize(fobject)
+                          for fname, fobject in math.__dict__.items()
+                          if not fname.startswith('_') and fname not in numpy.__dict__}
+    warnings.warn('scipy is not installed. This reduces the set of available functions to those present in numpy + '
+                  'manually vectorized functions in math.')
 
 
 __all__ = ["sympify", "substitute_with_eval", "to_numpy", "get_variables", "get_free_symbols", "recursive_substitution",
@@ -308,6 +317,8 @@ _math_environment = {**_base_environment, **math.__dict__}
 _numpy_environment = {**_base_environment, **numpy.__dict__}
 _sympy_environment = {**_base_environment, **sympy.__dict__}
 
+_lambdify_modules = [{'ceiling': numpy_compatible_ceiling}, 'numpy', _special_functions]
+
 
 def evaluate_compiled(expression: sympy.Expr,
              parameters: Dict[str, Union[numpy.ndarray, Number]],
@@ -335,7 +346,19 @@ def evaluate_lambdified(expression: Union[sympy.Expr, numpy.ndarray],
     variables = {v.replace('.', sympy_internal_namespace_seperator) for v in variables}
     parameters = {k.replace('.', sympy_internal_namespace_seperator):v for k,v in parameters.items()}
     with mock.patch.object(sympy.parsing.sympy_parser, 'standard_transformations', sympy_transformations):
-        lambdified = lambdified or sympy.lambdify(variables, expression,
-                                                  [{'ceiling': numpy_compatible_ceiling}, 'numpy'])
+        lambdified = lambdified or sympy.lambdify(variables, expression, _lambdify_modules)
 
         return lambdified(**parameters), lambdified
+
+
+def almost_equal(lhs: sympy.Expr, rhs: sympy.Expr, epsilon: float=1e-15) -> Optional[bool]:
+    """Returns True (or False) if the two expressions are almost equal (or not). Returns None if this cannot be
+    determined."""
+    relation = sympy.simplify(sympy.Abs(lhs - rhs) <= epsilon)
+
+    if relation is sympy.true:
+        return True
+    elif relation is sympy.false:
+        return False
+    else:
+        return None

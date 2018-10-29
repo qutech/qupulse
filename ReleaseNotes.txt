@@ -1,9 +1,28 @@
 ## pending/current ##
 
+- General:
+    - Introduce qupulse.utils.isclose (an alias for math.isclose if available)
+
+- Pulse Templates:
+    - `AtomicMultichannelPulseTemplate`:
+        - Add duration keyword argument & example (see MultiChannelTemplates notebook)
+        - Make duration equality check approximate (numeric tolerance)
+
+- Expressions:
+    - Make ExpressionScalar hashable
+    - Fix bug that prevented evaluation of expressions containing some special functions (`erfc`, `factorial`, etc.)
+
+## 0.2 ##
+
+- General:
+
+    - officially removed support for Python 3.3 (qupulse and dependencies are not compatible anymore)
+
 - Serialization / Storage:
 
     - Added functionality to easily access available content/identifiers in `PulseStorage` and `StorageBackend`.
-    - DEPRECATED `list_contents()`` of `StorageBackend` (use `contents property` instead).
+    - DEPRECATED `list_contents()` of `StorageBackend` (use `contents property` instead).
+    - DEPRECATED: `CachingBackend` because its functionality is a subset of `PulseStorage`.
 
 - Expressions:
     - Fixed bug in `Expression.evaluate_numeric` if result is array of numeric sympy objects

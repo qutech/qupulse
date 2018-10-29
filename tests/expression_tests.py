@@ -235,6 +235,11 @@ class ExpressionScalarTests(unittest.TestCase):
         s = 'a    *    b'
         self.assertEqual(ExpressionScalar(s).original_expression, s)
 
+    def test_hash(self):
+        expected = {ExpressionScalar(2), ExpressionScalar('a')}
+        sequence = [ExpressionScalar(2), ExpressionScalar('a'), ExpressionScalar(2), ExpressionScalar('a')]
+        self.assertEqual(expected, set(sequence))
+
     def test_undefined_comparison(self):
         valued = ExpressionScalar(2)
         unknown = ExpressionScalar('a')
@@ -342,6 +347,14 @@ class ExpressionScalarTests(unittest.TestCase):
         self.assertTrue(ExpressionScalar('0./0.').is_nan())
 
         self.assertFalse(ExpressionScalar(456).is_nan())
+
+    def test_special_function_numeric_evaluation(self):
+        expr = Expression('erfc(t)')
+        data = [-1., 0., 1.]
+        expected = np.array([1.84270079, 1., 0.15729921])
+        result = expr.evaluate_numeric(t=data)
+
+        np.testing.assert_allclose(expected, result)
 
 
 class ExpressionExceptionTests(unittest.TestCase):
