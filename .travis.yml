@@ -1,10 +1,21 @@
 language: python
 python:
-  - "3.5"
-  - "3.6"
+  - 3.5
+  - 3.6
 env:
   - INSTALL_EXTRAS=[VISA,plotting]
   - INSTALL_EXTRAS=[VISA,plotting,Faster-fractions]
+
+matrix:
+  include:
+    - python: 3.7
+      dist: xenial
+      sudo: true
+      env: INSTALL_EXTRAS=[VISA,plotting]
+    - python: 3.7
+      dist: xenial
+      sudo: true
+      env: INSTALL_EXTRAS=[VISA,plotting,Faster-fractions]
 
 #use container based infrastructure
 sudo: false
