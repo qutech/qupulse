@@ -2,6 +2,8 @@
 
 - General:
     - Introduce qupulse.utils.isclose (an alias for math.isclose if available)
+    - Dropped support for Python 3.4 in setup.py due to incompatible syntax in qupulse.
+    - Official support for Python 3.7 has begun.
 
 - Pulse Templates:
     - `AtomicMultichannelPulseTemplate`:
