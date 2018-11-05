@@ -6,11 +6,7 @@ import builtins
 import math
 
 import sympy
-from sympy.parsing.sympy_parser import NAME, OP, iskeyword, Basic, Symbol, lambda_notation, repeated_decimals, \
-    auto_number, factorial_notation
 import numpy
-
-from unittest import mock
 
 
 __all__ = ["sympify", "substitute_with_eval", "to_numpy", "get_variables", "get_free_symbols", "recursive_substitution",
@@ -19,96 +15,92 @@ __all__ = ["sympify", "substitute_with_eval", "to_numpy", "get_variables", "get_
 
 Sympifyable = Union[str, Number, sympy.Expr, numpy.str_]
 
+namespace_separator = '.'
+
+
+class NamespaceSymbol(sympy.Symbol):
+    """A sympy.Symbol that acts as a namespace.
+
+    Grants attribute access to all known members of that namespace, as given during initialization to the
+    namespace_member parameter.
+    """
+
+    def __init__(self, *args, namespace_members: Sequence[sympy.Symbol], **kwargs):
+        sympy.Symbol.__init__(*args, **kwargs)
+        self._namespace_members = namespace_members
+        self._namespace, self._inner_name = self._split_namespaced_name(self.name)
+
+    def _split_namespaced_name(self, name: str) -> Tuple[str, str]:
+        split = name.rsplit(namespace_separator, maxsplit=1)
+        if len(split) > 1:
+            namespace, inner_name = split
+        else:
+            inner_name = split[0]
+            namespace = ''
+        return namespace, inner_name
+
+    @property
+    def inner_name(self) -> str:
+        return self._inner_name
+
+    @property
+    def namespace(self) -> str:
+        return self._namespace
+
+    def __getattr__(self, k: str) -> 'Symbol':
+        try:
+            return self._namespace_members[k]
+        except KeyError:
+            raise AttributeError(k)
+
+    def __repr__(self) -> str:
+        return "NamespaceSymbol({})".format(self.name)
+
+    def __str__(self) -> str:
+        return str(self.name)
+
+
 ##############################################################################
 ### Utilities to automatically detect usage of indexed/subscripted symbols ###
 ##############################################################################
-
-## Custom auto_symbol transformation that deals with namespace dot notation (e.g. "foo.bar")
-
-def custom_auto_symbol_transform(tokens, local_dict, global_dict):
-    """Inserts calls to ``Symbol``/``Function`` for undefined variables."""
-    result = []
-    prev_tok = (None, None)
-    symbol_string = None
-
-    tokens.append((None, None))  # so zip traverses all tokens
-    for tok, next_tok in zip(tokens, tokens[1:]):
-        tok_num, tok_val = tok
-        next_tok_num, next_tok_val = next_tok
-
-        if symbol_string:
-            assert (tok_val == '.' or tok_num == NAME)
-            if tok_val == '.' or tok_num == NAME:
-                symbol_string += tok_val
-            if tok_val == '.' or (tok_num == NAME and next_tok_val == '.'):
-                continue
-            tok_num = NAME
-            tok_val = symbol_string
-            symbol_string = None
-
-        if tok_num == NAME:
-            name = tok_val
-
-            if (name in ['True', 'False', 'None']
-                    or iskeyword(name)
-                    # Don't convert keyword arguments
-                    or (prev_tok[0] == OP and prev_tok[1] in ('(', ',')
-                        and next_tok_num == OP and next_tok_val == '=')):
-                result.append((NAME, name))
-                continue
-            elif name in local_dict:
-                if isinstance(local_dict[name], Symbol) and next_tok_val == '(':
-                    result.extend([(NAME, 'Function'),
-                                   (OP, '('),
-                                   (NAME, repr(str(local_dict[name]))),
-                                   (OP, ')')])
-                else:
-                    result.append((NAME, name))
-                continue
-            elif name in global_dict:
-                obj = global_dict[name]
-                if isinstance(obj, (Basic, type)) or callable(obj):
-                    result.append((NAME, name))
-                    continue
-            elif next_tok_val == '.':  # symbol, not a function
-                symbol_string = str(name)
-            else:
-                result.extend([
-                    (NAME, 'Symbol' if next_tok_val != '(' else 'Function'),
-                    (OP, '('),
-                    (NAME, repr(str(name))),
-                    (OP, ')'),
-                ])
-        else:
-            result.append((tok_num, tok_val))
-
-        prev_tok = (tok_num, tok_val)
-
-    return result
-
-sympy_transformations = (lambda_notation, custom_auto_symbol_transform,
-                         repeated_decimals, auto_number, factorial_notation)
-
-
-## Utilities to automatically detect usage of indexed/subscripted symbols
 
 class IndexedBasedFinder:
     """Acts as a symbol lookup and determines which symbols in an expression a subscripted."""
 
     def __init__(self):
-        self.symbols = set()
+        self.symbols = dict()
         self.indexed_base = set()
         self.indices = set()
 
         class SubscriptionChecker(sympy.Symbol):
             """A symbol stand-in which detects whether the symbol is subscripted."""
 
+            def __init__(s, *args, **kwargs) -> None:
+                sympy.Symbol.__init__(*args, **kwargs)
+                s._symbols = dict()
+                s._is_index_base = False
+
             def __getitem__(s, k):
                 self.indexed_base.add(str(s))
                 self.indices.add(k)
+                s._is_index_base = True
                 if isinstance(k, SubscriptionChecker):
                     k = sympy.Symbol(str(k))
                 return sympy.IndexedBase(str(s))[k]
+
+            def __getattr__(s, k: str):
+                if k.startswith('_'):
+                    raise AttributeError(k)
+                if k not in s._symbols:
+                    s._symbols[k] = self.SubscriptionChecker(s.name + namespace_separator + k)
+                return s._symbols[k]
+
+            def get_symbol(s) -> sympy.Symbol:
+                if s._is_index_base:
+                    return sympy.IndexedBase(s.name)
+                elif not s._symbols:
+                    return sympy.Symbol(s.name)
+                return NamespaceSymbol(s.name, namespace_members={n: s.get_symbol() for n, s in s._symbols.items()})
 
         self.SubscriptionChecker = SubscriptionChecker
 
@@ -124,11 +116,19 @@ class IndexedBasedFinder:
             return getattr(sympy, k)
 
         # otherwise track the symbol name and return a SubscriptionChecker instance
-        self.symbols.add(k)
-        return self.SubscriptionChecker(k)
+        if k not in self.symbols:
+            self.symbols[k] = self.SubscriptionChecker(k)
+        return self.symbols[k]
 
     def __contains__(self, k) -> bool:
         return True
+
+    def get_symbols(self) -> Dict[str, sympy.Symbol]:
+        namespace_symbols = dict()
+        for symbol in self.symbols.values():
+            namespace_symbol = symbol.get_symbol()
+            namespace_symbols[namespace_symbol.name] = namespace_symbol
+        return namespace_symbols
 
 
 def get_subscripted_symbols(expression: str) -> set:
@@ -136,7 +136,10 @@ def get_subscripted_symbols(expression: str) -> set:
     indexed_base_finder = IndexedBasedFinder()
     sympy.sympify(expression, locals=indexed_base_finder)
 
-    return indexed_base_finder.indexed_base
+    indexed_bases = indexed_base_finder.indexed_base
+    namespace_symbols = indexed_base_finder.get_symbols()
+
+    return indexed_bases, namespace_symbols
 
 #############################################################
 ### "Built-in" length function for expressions in qupulse ###
@@ -160,8 +163,6 @@ sympify_namespace = {'len': Len,
 #########################################
 ### Functions for numpy compatability ###
 #########################################
-
-## Functions for numpy compatability
 
 def numpy_compatible_mul(*args) -> Union[sympy.Mul, sympy.Array]:
     if any(isinstance(a, sympy.NDimArray) for a in args):
@@ -192,27 +193,24 @@ def to_numpy(sympy_array: sympy.NDimArray) -> numpy.ndarray:
 ### Custom sympify method (which introduces all utility methods defined above into the sympy world) ###
 #######################################################################################################
 
-
-## Custom sympify method (which introduces all utility methods defined above into the sympy world)
-
 def sympify(expr: Union[str, Number, sympy.Expr, numpy.str_], **kwargs) -> sympy.Expr:
     if isinstance(expr, numpy.str_):
         # putting numpy.str_ in sympy.sympify behaves unexpected in version 1.1.1
         # It seems to ignore the locals argument
         expr = str(expr)
-    with mock.patch.object(sympy.parsing.sympy_parser, 'standard_transformations', sympy_transformations):
-        try:
-            return sympy.sympify(expr, **kwargs, locals=sympify_namespace)
-        except TypeError as err:
-            if True:#err.args[0] == "'Symbol' object is not subscriptable":
+    try:
+        return sympy.sympify(expr, **kwargs, locals=sympify_namespace)
+    except (TypeError, AttributeError) as err:
+        if True:#err.args[0] == "'Symbol' object is not subscriptable":
 
-                indexed_base = get_subscripted_symbols(expr)
-                return sympy.sympify(expr, **kwargs, locals={**{k: sympy.IndexedBase(k)
-                                                                for k in indexed_base},
-                                                             **sympify_namespace})
+            indexed_base, namespace_symbols = get_subscripted_symbols(expr)
+            locals = {**{k: sympy.IndexedBase(k) for k in indexed_base},
+                      **namespace_symbols,
+                      **sympify_namespace}
+            return sympy.sympify(expr, **kwargs, locals=locals)
 
-            else:
-                raise
+        else:
+            raise
 
 
 ###############################################################################
@@ -288,27 +286,25 @@ _sympy_environment = {**_base_environment, **sympy.__dict__}
 def evaluate_compiled(expression: sympy.Expr,
              parameters: Dict[str, Union[numpy.ndarray, Number]],
              compiled: CodeType=None, mode=None) -> Tuple[any, CodeType]:
-    with mock.patch.object(sympy.parsing.sympy_parser, 'standard_transformations', sympy_transformations):
-        if compiled is None:
-            compiled = compile(sympy.printing.lambdarepr.lambdarepr(expression),
-                               '<string>', 'eval')
+    if compiled is None:
+        compiled = compile(sympy.printing.lambdarepr.lambdarepr(expression),
+                           '<string>', 'eval')
 
-        if mode == 'numeric' or mode is None:
-            result = eval(compiled, parameters.copy(), _numpy_environment)
-        elif mode == 'exact':
-            result = eval(compiled, parameters.copy(), _sympy_environment)
-        else:
-            raise ValueError("Unknown mode: '{}'".format(mode))
+    if mode == 'numeric' or mode is None:
+        result = eval(compiled, parameters.copy(), _numpy_environment)
+    elif mode == 'exact':
+        result = eval(compiled, parameters.copy(), _sympy_environment)
+    else:
+        raise ValueError("Unknown mode: '{}'".format(mode))
 
-        return result, compiled
+    return result, compiled
 
 
 def evaluate_lambdified(expression: Union[sympy.Expr, numpy.ndarray],
                         variables: Sequence[str],
                         parameters: Dict[str, Union[numpy.ndarray, Number]],
                         lambdified) -> Tuple[Any, Any]:
-    with mock.patch.object(sympy.parsing.sympy_parser, 'standard_transformations', sympy_transformations):
-        lambdified = lambdified or sympy.lambdify(variables, expression,
-                                                  [{'ceiling': numpy_compatible_ceiling}, 'numpy'])
+    lambdified = lambdified or sympy.lambdify(variables, expression,
+                                              [{'ceiling': numpy_compatible_ceiling}, 'numpy'])
 
-        return lambdified(**parameters), lambdified
+    return lambdified(**parameters), lambdified

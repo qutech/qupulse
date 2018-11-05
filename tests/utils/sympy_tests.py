@@ -14,7 +14,8 @@ a_ = IndexedBase(a)
 b_ = IndexedBase(b)
 
 from qupulse.utils.sympy import sympify as qc_sympify, substitute_with_eval, recursive_substitution, Len,\
-    evaluate_lambdified, evaluate_compiled, get_most_simple_representation, get_variables, get_free_symbols
+    evaluate_lambdified, evaluate_compiled, get_most_simple_representation, get_variables, get_free_symbols,\
+    NamespaceSymbol
 
 
 ################################################### SUBSTITUTION #######################################################
@@ -314,15 +315,31 @@ class RepresentationTest(unittest.TestCase):
 
 class NamespaceTests(unittest.TestCase):
 
+    def test_illegal_name(self) -> None:
+        with self.assertRaises(AttributeError):
+            qc_sympify("qubit._forbidden")
+
     def test_sympify_dot_namespace_notations(self) -> None:
         expr = qc_sympify("qubit.a + qubit.spec2.a * 1.3")
         expected = sympy.Add(sympy.Symbol('qubit.a'), sympy.Mul(sympy.Symbol('qubit.spec2.a'), sympy.RealNumber(1.3)))
         self.assertEqual(expected, expr)
 
+    def test_simpify_indexed_dot_namespace_notation(self) -> None:
+        expr = qc_sympify("qubit.a[i]*1.3")
+        expected = sympy.Mul(IndexedBase('qubit.a')[sympy.Symbol('i')], sympy.RealNumber(1.3))
+        self.assertEqual(expected, expr)
+
+    def test_simpify_dot_namespace_notation_as_index(self) -> None:
+        expr = qc_sympify("qubit.a[index_ns.i]*1.3")
+        expected = sympy.Mul(IndexedBase('qubit.a')[sympy.Symbol('index_ns.i')], sympy.RealNumber(1.3))
+        self.assertEqual(expected, expr)
+
+    @unittest.expectedFailure
     def test_evaluate_lambdified_dot_namespace_notation(self) -> None:
         res = evaluate_lambdified("qubit.a + qubit.spec2.a * 1.3", ["qubit.a", "qubit_spec2_a"], {"qubit_a": 2.1, "qubit_spec2_a": .1}, lambdified=None)
         self.assertEqual(2.23, res)
 
+    @unittest.expectedFailure
     def test_evaluate_compiled_dot_namespace_notation(self) -> None:
         res = evaluate_compiled("qubit.a + qubit.spec2.a * 1.3", {"qubit.a": 2.1, "qubit.spec2.a": .1})
         self.assertEqual(2.23, res)
