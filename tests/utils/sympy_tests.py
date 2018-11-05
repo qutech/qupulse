@@ -324,15 +324,48 @@ class NamespaceTests(unittest.TestCase):
         expected = sympy.Add(sympy.Symbol('qubit.a'), sympy.Mul(sympy.Symbol('qubit.spec2.a'), sympy.RealNumber(1.3)))
         self.assertEqual(expected, expr)
 
-    def test_simpify_indexed_dot_namespace_notation(self) -> None:
+    def test_sympify_indexed_dot_namespace_notation(self) -> None:
         expr = qc_sympify("qubit.a[i]*1.3")
         expected = sympy.Mul(IndexedBase('qubit.a')[sympy.Symbol('i')], sympy.RealNumber(1.3))
         self.assertEqual(expected, expr)
 
-    def test_simpify_dot_namespace_notation_as_index(self) -> None:
+    def test_sympify_dot_namespace_notation_as_index(self) -> None:
         expr = qc_sympify("qubit.a[index_ns.i]*1.3")
         expected = sympy.Mul(IndexedBase('qubit.a')[sympy.Symbol('index_ns.i')], sympy.RealNumber(1.3))
         self.assertEqual(expected, expr)
+
+    def test_vanilla_sympify_compatability(self) -> None:
+        # taken from sympy test suite: sympy/parsing/tests/test_sympy_parser.py::test_sympy_parser()
+        x = sympy.Symbol("x")
+        inputs = {
+            '2*x': 2 * x,
+            '3.00': sympy.Float(3),
+            '22/7': sympy.Rational(22, 7),
+            '2+3j': 2 + 3 * sympy.I,
+            'exp(x)': sympy.exp(x),
+            'x!': sympy.factorial(x),
+            'x!!': sympy.factorial2(x),
+            '(x + 1)! - 1': sympy.factorial(x + 1) - 1,
+            '3.[3]': sympy.Rational(10, 3),
+            '.0[3]': sympy.Rational(1, 30),
+            '3.2[3]': sympy.Rational(97, 30),
+            '1.3[12]': sympy.Rational(433, 330),
+            '1 + 3.[3]': sympy.Rational(13, 3),
+            '1 + .0[3]': sympy.Rational(31, 30),
+            '1 + 3.2[3]': sympy.Rational(127, 30),
+            '.[0011]': sympy.Rational(1, 909),
+            '0.1[00102] + 1': sympy.Rational(366697, 333330),
+            '1.[0191]': sympy.Rational(10190, 9999),
+            '10!': 3628800,
+            '-(2)': -sympy.Integer(2),
+            '[-1, -2, 3]': [sympy.Integer(-1), sympy.Integer(-2), sympy.Integer(3)],
+            'Symbol("x").free_symbols': x.free_symbols,
+            "S('S(3).n(n=3)')": 3.00,
+            'factorint(12, visual=True)': sympy.Mul(sympy.Pow(2, 2, evaluate=False), sympy.Pow(3, 1, evaluate=False), evaluate=False),
+            'Limit(sin(x), x, 0, dir="-")': sympy.Limit(sin(x), x, 0, dir='-')
+        }
+        for text, result in inputs.items():
+            self.assertEqual(qc_sympify(text), result, msg="failed for {}".format(text))
 
     @unittest.expectedFailure
     def test_evaluate_lambdified_dot_namespace_notation(self) -> None:
