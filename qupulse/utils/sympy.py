@@ -64,16 +64,33 @@ class NamespaceSymbol(sympy.Symbol):
 ### Utilities to automatically detect usage of indexed/subscripted symbols ###
 ##############################################################################
 
-class IndexedBasedFinder:
-    """Acts as a symbol lookup and determines which symbols in an expression a subscripted."""
+class CustomSyntaxInterpreter:
+    """Acts as a symbol lookup for sympify and determines which symbols in an expression are subscripted/indexed or
+    form a namespace."""
 
     def __init__(self):
         self.symbols = dict()
-        self.indexed_base = set()
-        self.indices = set()
 
-        class SubscriptionChecker(sympy.Symbol):
-            """A symbol stand-in which detects whether the symbol is subscripted."""
+        class CheckingSymbol(sympy.Symbol):
+            """A symbol stand-in which detects whether the symbol is subscripted or a namespace and simulates proper
+            behavior.
+
+            Overloads __getattr__ to simulate namespace behavior: All attribute accesses to non-existent attributes of
+            sympy.Symbol are treated as Symbols nested in the namespace represented by this CheckingSymbol; returned
+            is another instance of CheckingSymbol.
+
+            Overloads __getitem__ to detect item accesses to determine whether this CheckingSymbol represents an indexed
+            symbol. Returns sympy.Indexed.
+
+            The method get_symbol() is used to return the proper class representation for use after detection.
+            It returns:
+                - sympy.IndexedBase if __getitem__ was called
+                - sympy.NamespaceSymbol if __getattr_ was called (i.e., CheckedSymbol is a namespace)
+                - sympy.Symbol if __getitem__, __getattr__ were never called (i.e., CheckedSymbol is neither namespace
+                    nor indexed symbol)
+
+            The case of detected calls to __getitem__ and __getattr__ (indexed symbol AND namespace) is unspecified.
+            """
 
             def __init__(s, *args, **kwargs) -> None:
                 sympy.Symbol.__init__(*args, **kwargs)
@@ -81,16 +98,20 @@ class IndexedBasedFinder:
                 s._is_index_base = False
 
             def __getitem__(s, k):
-                self.indexed_base.add(str(s))
-                self.indices.add(k)
                 s._is_index_base = True
-                if isinstance(k, SubscriptionChecker):
+                if isinstance(k, CheckingSymbol):
                     k = sympy.Symbol(str(k))
                 return sympy.IndexedBase(str(s))[k]
 
             def __getattr__(s, k: str):
+                # note: getattr only gets called once standard attribute lookup procedures fail, i.e., python cannot
+                # find a class attribute/function named k
+
+                # do not allow namespace members starting with '_' to ensure that
+                #  object attributes starting with '_' are not shadowed
                 if k.startswith('_'):
                     raise AttributeError(k)
+
                 if k not in s._symbols:
                     s._symbols[k] = self.SubscriptionChecker(s.name + namespace_separator + k)
                 return s._symbols[k]
@@ -102,7 +123,7 @@ class IndexedBasedFinder:
                     return sympy.Symbol(s.name)
                 return NamespaceSymbol(s.name, namespace_members={n: s.get_symbol() for n, s in s._symbols.items()})
 
-        self.SubscriptionChecker = SubscriptionChecker
+        self.SubscriptionChecker = CheckingSymbol
 
     def __getitem__(self, k) -> sympy.Expr:
         """Return an instance of the internal SubscriptionChecker class for each symbol to determine which symbols are
@@ -131,19 +152,17 @@ class IndexedBasedFinder:
         return namespace_symbols
 
 
-def get_subscripted_symbols(expression: str) -> set:
+def get_symbols_for_custom_syntax(expression: str) -> Dict[str, sympy.Symbol]:
     # track all symbols that are subscipted in here
-    indexed_base_finder = IndexedBasedFinder()
+    indexed_base_finder = CustomSyntaxInterpreter()
     sympy.sympify(expression, locals=indexed_base_finder)
 
-    indexed_bases = indexed_base_finder.indexed_base
-    namespace_symbols = indexed_base_finder.get_symbols()
-
-    return indexed_bases, namespace_symbols
+    return indexed_base_finder.get_symbols()
 
 #############################################################
 ### "Built-in" length function for expressions in qupulse ###
 #############################################################
+
 
 class Len(sympy.Function):
     nargs = 1
@@ -154,6 +173,8 @@ class Len(sympy.Function):
             return sympy.Integer(len(arg))
 
     is_Integer = True
+
+
 Len.__name__ = 'len'
 
 
@@ -199,18 +220,13 @@ def sympify(expr: Union[str, Number, sympy.Expr, numpy.str_], **kwargs) -> sympy
         # It seems to ignore the locals argument
         expr = str(expr)
     try:
+        # first try to use vanilla sympify for parsing -> faster for standard sympy syntax
         return sympy.sympify(expr, **kwargs, locals=sympify_namespace)
-    except (TypeError, AttributeError) as err:
-        if True:#err.args[0] == "'Symbol' object is not subscriptable":
-
-            indexed_base, namespace_symbols = get_subscripted_symbols(expr)
-            locals = {**{k: sympy.IndexedBase(k) for k in indexed_base},
-                      **namespace_symbols,
-                      **sympify_namespace}
-            return sympy.sympify(expr, **kwargs, locals=locals)
-
-        else:
-            raise
+    except (TypeError, AttributeError):
+        # expression contains custom syntax: subscripted or namcespace symbols, do custom symbol parsing
+        namespace_symbols = get_symbols_for_custom_syntax(expr)
+        locals = {**namespace_symbols, **sympify_namespace}
+        return sympy.sympify(expr, **kwargs, locals=locals) # todo [2018-11]: until here we invoke 3 times sympy, can we do this better?
 
 
 ###############################################################################
