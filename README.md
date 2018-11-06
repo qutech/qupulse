@@ -38,8 +38,8 @@ Alternatively, the current development version of qupulse can be installed by ex
 pip3 install .
 ```
 
-qupulse is developed using Python 3.6 and tested on 3.4 - 3.6. It relies on some external Python packages as dependencies; 
-`requirements.txt` lists the versions of these qupulse is developed against and tested with. 
+qupulse is developed using Python 3.6 and tested on 3.5 - 3.7 It relies on some external Python packages as dependencies; 
+`requirements.txt` lists the versions of these qupulse is developed against. 
 We intentionally did not restrict versions of dependencies in the install scripts to not unnecessarily prevent usage of
 newer releases of dependencies that might be compatible. However, if qupulse does encounter problems with a particular dependency version,
 try installing the version listed in `requirements.txt`.   

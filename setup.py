@@ -12,15 +12,10 @@ def extract_version(version_file):
     raise RuntimeError("Unable to find version string.")
 
 
-if sys.version_info < (3, 4):
-    sys.stderr.write('ERROR: You need Python 3.4 or later '
+if sys.version_info < (3, 5):
+    sys.stderr.write('ERROR: You need Python 3.5 or later '
                      'to install the qupulse package.\n')
     exit(1)
-
-if sys.version_info < (3, 5):
-    requires_typing = ['typing==3.5.0']
-else:
-    requires_typing = []
 
 packages = [package for package in find_packages()
             if package.startswith('qupulse')] + ['qctoolkit']
@@ -40,8 +35,8 @@ setup(name='qupulse',
       author='Quantum Technology Group and Chair of Software Engineering, RWTH Aachen University',
       package_dir={'qupulse': 'qupulse', 'qctoolkit': 'qctoolkit'},
       packages=packages,
-      python_requires='>=3.4',
-      install_requires=['sympy>=1.1.1', 'numpy', 'cached_property'] + requires_typing,
+      python_requires='>=3.5',
+      install_requires=['sympy>=1.1.1', 'numpy', 'cached_property'],
       extras_require={
           'plotting': ['matplotlib'],
           'VISA': ['pyvisa'],
