@@ -9,6 +9,8 @@
     - `AtomicMultichannelPulseTemplate`:
         - Add duration keyword argument & example (see MultiChannelTemplates notebook)
         - Make duration equality check approximate (numeric tolerance)
+    - Plotting:
+        - Add `time_slice` keyword argument to render() and plot()
 
 - Expressions:
     - Make ExpressionScalar hashable
