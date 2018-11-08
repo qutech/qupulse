@@ -126,6 +126,9 @@ function [t, channels, measurements, instantiatedPulse] = plot_pulse(pulse, vara
 		end
 		
 		if ~isempty(args.charge_diagram_data)
+			if numel(size(squeeze(args.charge_diagram_data{3}))) == 3
+				args.charge_diagram_data{3} = squeeze(nanmean(args.charge_diagram_data{3},1));
+			end
 			imagesc(args.charge_diagram_data{:});
 		end			
 	
