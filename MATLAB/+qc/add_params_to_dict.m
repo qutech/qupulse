@@ -8,7 +8,7 @@ function d = add_params_to_dict(d, parameters, pulse_name)
 	
 	fn = fieldnames(parameters)';
 
-	if util.str_contains(fn{1}, delim)
+	if ~isempty(fn) && util.str_contains(fn{1}, delim)
 		[parameters, extracted_pulse_name] = qc.params_rm_delim(parameters);
 
 		if isempty(pulse_name)

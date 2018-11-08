@@ -91,9 +91,9 @@ qthelp: extractapi
 	@echo
 	@echo "Build finished; now you can run "qcollectiongenerator" with the" \
 	      ".qhcp project file in $(BUILDDIR)/qthelp, like this:"
-	@echo "# qcollectiongenerator $(BUILDDIR)/qthelp/qc-toolkit.qhcp"
+	@echo "# qcollectiongenerator $(BUILDDIR)/qthelp/qupulse.qhcp"
 	@echo "To view the help file:"
-	@echo "# assistant -collectionFile $(BUILDDIR)/qthelp/qc-toolkit.qhc"
+	@echo "# assistant -collectionFile $(BUILDDIR)/qthelp/qupulse.qhc"
 
 applehelp: extractapi
 	$(SPHINXBUILD) -b applehelp $(ALLSPHINXOPTS) $(BUILDDIR)/applehelp
@@ -108,8 +108,8 @@ devhelp: extractapi
 	@echo
 	@echo "Build finished."
 	@echo "To view the help file:"
-	@echo "# mkdir -p $$HOME/.local/share/devhelp/qc-toolkit"
-	@echo "# ln -s $(BUILDDIR)/devhelp $$HOME/.local/share/devhelp/qc-toolkit"
+	@echo "# mkdir -p $$HOME/.local/share/devhelp/qupulse"
+	@echo "# ln -s $(BUILDDIR)/devhelp $$HOME/.local/share/devhelp/qupulse"
 	@echo "# devhelp"
 
 epub: extractapi

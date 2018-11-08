@@ -11,14 +11,15 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 	bool = false;
 	
 	default_args = struct(...
-		'program_name',         'default_program', ...
-		'pulse_template',       'default_pulse', ...
-		'parameters_and_dicts', {plsdata.awg.defaultParametersAndDicts}, ...
-		'channel_mapping',      plsdata.awg.defaultChannelMapping, ...
-		'window_mapping',       plsdata.awg.defaultWindowMapping, ...
-		'add_marker',           {plsdata.awg.defaultAddMarker}, ...
-		'force_update',         false, ...
-		'verbosity',            10 ...
+		'program_name',           'default_program', ...
+		'pulse_template',         'default_pulse', ...
+		'parameters_and_dicts',   {plsdata.awg.defaultParametersAndDicts}, ...
+		'channel_mapping',        plsdata.awg.defaultChannelMapping, ...
+		'window_mapping',         plsdata.awg.defaultWindowMapping, ...
+		'global_transformation',  plsdata.awg.globalTransformation, ...
+		'add_marker',             {plsdata.awg.defaultAddMarker}, ...
+		'force_update',           false, ...
+		'verbosity',              10 ...
 		);
 	a = util.parse_varargin(varargin, default_args);
 	
@@ -26,6 +27,7 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 	if strcmp(ctrl, 'add')
 		[~, bool, msg] = qc.awg_program('fresh', qc.change_field(a, 'verbosity', 0));
 		if ~bool || a.force_update
+			plsdata.awg.currentProgam = '';
 			
 			% Deleting old program should not be necessary. In practice however,
 			% updating an existing program seemed to crash Matlab sometimes.
@@ -34,21 +36,21 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 			a.pulse_template = pulse_to_python(a.pulse_template);
 			[a.pulse_template, a.channel_mapping] = add_marker_if_not_empty(a.pulse_template, a.add_marker, a.channel_mapping);
 			
-			program = qc.program_to_struct(a.program_name, a.pulse_template, a.parameters_and_dicts, a.channel_mapping, a.window_mapping);
+			program = qc.program_to_struct(a.program_name, a.pulse_template, a.parameters_and_dicts, a.channel_mapping, a.window_mapping, a.global_transformation);
 			plsdata.awg.registeredPrograms.(a.program_name) = program;
 			
 			if a.verbosity > 9
 				fprintf('Program ''%s'' is now being instantiated...', a.program_name);
 				tic;
 			end
-			instantiated_pulse = qc.instantiate_pulse(a.pulse_template, 'parameters', qc.join_params_and_dicts(program.parameters_and_dicts), 'channel_mapping', program.channel_mapping, 'window_mapping', program.window_mapping);
+			instantiated_pulse = qc.instantiate_pulse(a.pulse_template, 'parameters', qc.join_params_and_dicts(program.parameters_and_dicts), 'channel_mapping', program.channel_mapping, 'window_mapping', program.window_mapping, 'global_transformation', program.global_transformation);			
 			
 			if a.verbosity > 9
 				fprintf('took %.0fs\n', toc);
 				fprintf('Program ''%s'' is now being uploaded...', a.program_name);
 				tic
 			end
-			hws.register_program(program.program_name, instantiated_pulse, pyargs('update', py.True));
+			util.py.call_with_interrupt_check(py.getattr(hws, 'register_program'), program.program_name, instantiated_pulse, pyargs('update', py.True));			
 			
 			if a.verbosity > 9
 				fprintf('took %.0fs\n', toc);
@@ -68,11 +70,28 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 		
 	% --- arm ---------------------------------------------------------------
 	elseif strcmp(ctrl, 'arm')
+		% Call directly before trigger comes, otherwise you might encounter a
+		% trigger timeout. Also, call after daq_operations('add')!
 		[~, bool, msg] = qc.awg_program('present', qc.change_field(a, 'verbosity', 0));
-		if bool
-			% qc.workaround_alazar_single_buffer_acquisition();
+		if bool			
+			% Wait for AWG to stop playing pulse, otherwise this might lead to a
+			% trigger timeout since the DAQ is not necessarily configured for the
+			% whole pulse time and can return data before the AWG stops playing
+			% the pulse.			
+			if ~isempty(plsdata.awg.currentProgam)
+				waitingTime = min(max(plsdata.awg.registeredPrograms.(plsdata.awg.currentProgam).pulse_duration + plsdata.awg.registeredPrograms.(plsdata.awg.currentProgam).added_to_pulse_duration - (now() - plsdata.awg.triggerStartTime)*24*60*60, 0), plsdata.awg.maxPulseWait);
+				if waitingTime == plsdata.awg.maxPulseWait
+					warning('Maximum waiting time ''plsdata.awg.maxPulseWait'' = %g s reached.\nIncrease if you experience problems with the data acquistion.', plsdata.awg.maxPulseWait);
+				end
+				pause(waitingTime);
+				% fprintf('Waited for %.3fs for pulse to complete\n', waitingTime);				
+			end			
 			
-			hws.arm_program(a.program_name);
+			% No longer needed since bug has been fixed
+			% qc.workaround_4chan_program_errors(a);		
+			
+			hws.arm_program(a.program_name);	
+	
 			plsdata.awg.currentProgam = a.program_name;
 			bool = true;
 			msg = sprintf('Program ''%s'' armed', a.program_name);
@@ -86,7 +105,8 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 			globalProgram = plsdata.awg.armGlobalProgram{1};
 			plsdata.awg.armGlobalProgram = circshift(plsdata.awg.armGlobalProgram, -1);
 		else
-			error('plsdata.awg.armGlobalProgram must contain a char or a cell');
+		  globalProgram = a.program_name;
+			warning('Not using global program since plsdata.awg.armGlobalProgram must contain a char or a cell.');
 		end		
 		
 % 		This code outputs the wrong pulses and isn't even faster
@@ -101,7 +121,7 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 % 			dacToArm{1}.arm_program(plsdata.awg.currentProgam);
 % 		end
 		
-		qc.awg_program('arm', 'program_name', globalProgram, 'verbosity', a.verbosity);
+		qc.awg_program('arm', 'program_name', globalProgram, 'verbosity', a.verbosity, 'arm_global_for_workaround_4chan_program_errors', []);
 		
 	% --- remove ------------------------------------------------------------
 	elseif strcmp(ctrl, 'remove')		
@@ -131,7 +151,7 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 		end
 		
 	% --- clear all ---------------------------------------------------------
-	elseif strcmp(ctrl, 'clear all')
+	elseif strcmp(ctrl, 'clear all') % might take a long time
 		plsdata.awg.registeredPrograms = struct();
 		program_names = fieldnames(util.py.py2mat(py.getattr(hws, '_registered_programs')));
 		
@@ -146,6 +166,12 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 		else
 			msg = 'Error when trying to clear all progams';
 		end
+		
+	% --- clear all fast ----------------------------------------------------	
+	elseif strcmp(ctrl, 'clear all fast') % fast but need to clear awg manually
+		hws.registered_programs.clear();
+		py.getattr(daq, '_registered_programs').clear();
+
 	% --- present -----------------------------------------------------------
 	elseif strcmp(ctrl, 'present') % returns true if program is present
 		bool = py.list(hws.registered_programs.keys()).count(a.program_name) ~= 0;
@@ -164,11 +190,25 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 			a.pulse_template = pulse_to_python(a.pulse_template);
 			[a.pulse_template, a.channel_mapping] = add_marker_if_not_empty(a.pulse_template, a.add_marker, a.channel_mapping);
 			
-			newProgram = qc.program_to_struct(a.program_name, a.pulse_template, a.parameters_and_dicts, a.channel_mapping, a.window_mapping);
+			newProgram = qc.program_to_struct(a.program_name, a.pulse_template, a.parameters_and_dicts, a.channel_mapping, a.window_mapping, a.global_transformation);
 			newProgram = qc.get_minimal_program(newProgram);
+			% pulse_duration is just a helper field, can recognize whether
+			% program has changed without it. Removing it for the equality check
+			% below allows for changing the program duration dynamically on the
+			% AWG, e.g. for DNP.
+			if isfield(newProgram , 'added_to_pulse_duration')
+				newProgram  = rmfield(newProgram , 'added_to_pulse_duration');
+			end
 			
 			awgProgram = plsdata.awg.registeredPrograms.(a.program_name);
-			awgProgram = qc.get_minimal_program(awgProgram);			
+			awgProgram = qc.get_minimal_program(awgProgram);	
+			% pulse_duration is just a helper field, can recognize whether
+			% program has changed without it. Removing it for the equality check
+			% below allows for changing the program duration dynamically on the
+			% AWG, e.g. for DNP.
+			if isfield(awgProgram, 'added_to_pulse_duration')
+				awgProgram = rmfield(awgProgram, 'added_to_pulse_duration');
+			end
 			
 			bool = isequal(newProgram, awgProgram);
 			
@@ -211,7 +251,7 @@ function [pulse_template, channel_mapping] = add_marker_if_not_empty(pulse_templ
 	
 	if ~isempty(add_marker)
 		marker_pulse = py.qctoolkit.pulses.PointPT({{0, 1},...
-			{pulse_template.duration, 1}}, add_marker);
+			{py.getattr(pulse_template, 'duration'), 1}}, add_marker);
 		pulse_template = py.qctoolkit.pulses.AtomicMultiChannelPT(pulse_template, marker_pulse);
 		
 		for ii = 1:numel(add_marker)

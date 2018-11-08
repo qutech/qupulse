@@ -1,10 +1,9 @@
 Concepts
 ========
 
-This section will explain the fundamental design concepts of the qctoolkit.
+This section explains the fundamental design concepts of qupulse.
 
 .. toctree::
     pulsetemplates
     serialization
-    branching
-    sequencing
+    instantiating

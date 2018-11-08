@@ -1,7 +1,7 @@
 function pulse_group = convert_qctoolkit(qct_output)
 % pulse_group = convert_qctoolkit(qct_output)
 % 
-% Registers pulses and converts pulse group data obtained from the qc-toolkit.
+% Registers pulses and converts pulse group data obtained from qupulse.
 %
 % qct_output: The output tuple of the
 % PulseControlInterface.create_pulse_group() method.

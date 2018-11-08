@@ -1,8 +1,8 @@
 import unittest
 
-from qctoolkit.pulses.parameters import  ConstantParameter
-from qctoolkit.pulses.instructions import InstructionBlock, STOPInstruction
-from qctoolkit.pulses.sequencing import Sequencer
+from qupulse.pulses.parameters import  ConstantParameter
+from qupulse._program.instructions import InstructionBlock, STOPInstruction
+from qupulse.pulses.sequencing import Sequencer
 
 from tests.pulses.sequencing_dummies import DummySequencingElement, DummyCondition
 

@@ -1,0 +1,9 @@
+{
+    "#identifier": "my_other_pulse",
+    "#type": "qupulse.pulses.function_pulse_template.FunctionPulseTemplate",
+    "channel": "default",
+    "duration_expression": "2*pi/omega",
+    "expression": "sin(omega*t)",
+    "measurements": [],
+    "parameter_constraints": []
+}

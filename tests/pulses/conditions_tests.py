@@ -1,8 +1,8 @@
 import unittest
 from typing import Optional
 
-from qctoolkit.pulses.instructions import InstructionPointer, Trigger, CJMPInstruction, GOTOInstruction
-from qctoolkit.pulses.conditions import HardwareCondition, SoftwareCondition, ConditionEvaluationException
+from qupulse._program.instructions import InstructionPointer, Trigger, CJMPInstruction, GOTOInstruction
+from qupulse.pulses.conditions import HardwareCondition, SoftwareCondition, ConditionEvaluationException
 
 from tests.pulses.sequencing_dummies import DummySequencingElement, DummySequencer, DummyInstructionBlock, DummyInstruction
 

@@ -1,6 +1,5 @@
 import sys
 import unittest
-import importlib
 
 from typing import List
 from copy import copy, deepcopy
@@ -50,7 +49,7 @@ class DummyTaborProgramClass:
 
 
 class TaborDummyBasedTest(unittest.TestCase):
-    to_unload = ['pytabor', 'pyvisa', 'visa', 'teawg', 'qctoolkit', 'tests.pulses.sequencing_dummies']
+    to_unload = ['pytabor', 'pyvisa', 'visa', 'teawg', 'qupulse', 'tests.pulses.sequencing_dummies']
     backup_modules = dict()
 
     @classmethod
@@ -92,7 +91,7 @@ class TaborDummyBasedTest(unittest.TestCase):
         cls.restore_packages()
 
     def setUp(self):
-        from qctoolkit.hardware.awgs.tabor import TaborAWGRepresentation
+        from qupulse.hardware.awgs.tabor import TaborAWGRepresentation
         self.instrument = TaborAWGRepresentation('main_instrument',
                                                  reset=True,
                                                  paranoia_level=2,
@@ -161,14 +160,14 @@ class TaborChannelPairTests(TaborDummyBasedTest):
     def setUpClass(cls):
         super().setUpClass()
 
-        from qctoolkit.hardware.awgs.tabor import TaborChannelPair, TaborProgramMemory, TaborSegment, TaborSequencing
-        from qctoolkit.pulses.table_pulse_template import TableWaveform
-        from qctoolkit.pulses.interpolation import HoldInterpolationStrategy
-        from qctoolkit.hardware.program import Loop
+        from qupulse.hardware.awgs.tabor import TaborChannelPair, TaborProgramMemory, TaborSegment, TaborSequencing
+        from qupulse.pulses.table_pulse_template import TableWaveform
+        from qupulse.pulses.interpolation import HoldInterpolationStrategy
+        from qupulse._program._loop import Loop
 
         from tests.pulses.sequencing_dummies import DummyWaveform
 
-        from qctoolkit.hardware.util import make_combined_wave
+        from qupulse.hardware.util import make_combined_wave
 
         cls.DummyWaveform = DummyWaveform
         cls.TaborChannelPair = TaborChannelPair
@@ -235,9 +234,9 @@ class TaborChannelPairTests(TaborDummyBasedTest):
         ta = np.array([True, False, False, False, True])
         ti = np.array([-1, 3, -1, -1, -1])
 
-        to_restore = sys.modules['qctoolkit.hardware.awgs.tabor'].TaborProgram
+        to_restore = sys.modules['qupulse.hardware.awgs.tabor'].TaborProgram
         my_class = DummyTaborProgramClass(segments=segments, segment_lengths=segment_lengths)
-        sys.modules['qctoolkit.hardware.awgs.tabor'].TaborProgram = my_class
+        sys.modules['qupulse.hardware.awgs.tabor'].TaborProgram = my_class
         try:
             program = self.Loop(waveform=self.DummyWaveform(duration=192))
 
@@ -274,7 +273,7 @@ class TaborChannelPairTests(TaborDummyBasedTest):
             self.assertIs(channel_pair._known_programs['test'].program, my_class.created[0])
 
         finally:
-            sys.modules['qctoolkit.hardware.awgs.tabor'].TaborProgram = to_restore
+            sys.modules['qupulse.hardware.awgs.tabor'].TaborProgram = to_restore
 
     def test_find_place_for_segments_in_memory(self):
         def hash_based_on_dir(ch):
@@ -381,7 +380,7 @@ class TaborChannelPairTests(TaborDummyBasedTest):
         # prevent entering and exiting configuration mode
         channel_pair._configuration_guard_count = 2
 
-        segment = self.TaborSegment(np.ones(192+16, dtype=np.uint16), np.zeros(192+16, dtype=np.uint16))
+        segment = self.TaborSegment(np.ones(192+16, dtype=np.uint16), np.zeros(192+16, dtype=np.uint16), None, None)
         segment_binary = segment.get_as_binary()
         with self.assertRaises(ValueError):
             channel_pair._upload_segment(3, segment)
@@ -424,8 +423,8 @@ class TaborChannelPairTests(TaborDummyBasedTest):
         channel_pair._segment_hashes = np.array([1, 2, 3, 4], dtype=np.int64)
 
         data = np.ones(192, dtype=np.uint16)
-        segments = [self.TaborSegment(0*data, 1*data),
-                    self.TaborSegment(1*data, 2*data)]
+        segments = [self.TaborSegment(0*data, 1*data, None, None),
+                    self.TaborSegment(1*data, 2*data, None, None)]
 
         channel_pair._amend_segments(segments)
 
@@ -471,8 +470,8 @@ class TaborChannelPairTests(TaborDummyBasedTest):
         channel_pair._segment_hashes = np.array([1, 2, 3, 4], dtype=np.int64)
 
         data = np.ones(192, dtype=np.uint16)
-        segments = [self.TaborSegment(0*data, 1*data),
-                    self.TaborSegment(1*data, 2*data)]
+        segments = [self.TaborSegment(0*data, 1*data, None, None),
+                    self.TaborSegment(1*data, 2*data, None, None)]
 
         indices = channel_pair._amend_segments(segments)
 
@@ -571,7 +570,6 @@ class TaborChannelPairTests(TaborDummyBasedTest):
         w2s = np.array([2, 5, 3, 1])
 
         expected_sequencer_table = [(3, 3, 0), (2, 6, 0), (1, 3, 0), (1, 4, 0), (1, 2, 0)]
-        idle_sequencer_table = [(1, 1, 0), (1, 1, 0), (1, 1, 0)]
 
         program = DummyTaborProgramClass(advanced_sequencer_table=advanced_sequencer_table,
                                          sequencer_tables=sequencer_tables,
@@ -583,7 +581,8 @@ class TaborChannelPairTests(TaborDummyBasedTest):
 
         expected_adv_seq_table_log = [([(1, 1, 1), (2, 2, 0), (1, 1, 0)], ':ASEQ:DATA', None)]
         expected_sequencer_table_log = [((sequencer_table,), dict(pref=':SEQ:DATA', paranoia_level=None))
-                                        for sequencer_table in [expected_sequencer_table]]
+                                        for sequencer_table in [channel_pair._idle_sequence_table,
+                                                                expected_sequencer_table]]
 
         for device in self.instrument.all_devices:
             self.assertEqual(device._download_adv_seq_table_calls, expected_adv_seq_table_log)
@@ -604,7 +603,6 @@ class TaborChannelPairTests(TaborDummyBasedTest):
         w2s = np.array([4])
 
         expected_sequencer_table = [(10, 5, 0), (1, 1, 0), (1, 1, 0)]
-        idle_sequencer_table = [(1, 1, 0), (1, 1, 0), (1, 1, 0)]
 
         program = DummyTaborProgramClass(advanced_sequencer_table=advanced_sequencer_table,
                                          sequencer_tables=sequencer_tables,
@@ -616,7 +614,8 @@ class TaborChannelPairTests(TaborDummyBasedTest):
 
         expected_adv_seq_table_log = [([(1, 1, 1), (1, 2, 0), (1, 1, 0)], ':ASEQ:DATA', None)]
         expected_sequencer_table_log = [((sequencer_table,), dict(pref=':SEQ:DATA', paranoia_level=None))
-                                        for sequencer_table in [expected_sequencer_table]]
+                                        for sequencer_table in [channel_pair._idle_sequence_table,
+                                                                expected_sequencer_table]]
 
         for device in self.instrument.all_devices:
             self.assertEqual(device._download_adv_seq_table_calls, expected_adv_seq_table_log)
@@ -639,7 +638,6 @@ class TaborChannelPairTests(TaborDummyBasedTest):
                             [(4, 1, 0), (2, 1, 0), (1, 0, 0), (1, 2, 0), (1, 3, 0)]]
         wf_idx2seg_idx = np.array([2, 5, 3, 1])
 
-        idle_sequencer_table = [(1, 1, 0), (1, 1, 0), (1, 1, 0)]
         expected_sequencer_tables = [[(3, 3, 0), (2, 6, 0), (1, 3, 0), (1, 4, 0), (1, 2, 0)],
                                      [(4, 6, 0), (2, 6, 0), (1, 3, 0), (1, 4, 0), (1, 2, 0)]]
 
@@ -653,7 +651,8 @@ class TaborChannelPairTests(TaborDummyBasedTest):
 
         expected_adv_seq_table_log = [([(1, 1, 1), (2, 2, 0), (3, 3, 0)], ':ASEQ:DATA', None)]
         expected_sequencer_table_log = [((sequencer_table,), dict(pref=':SEQ:DATA', paranoia_level=None))
-                                        for sequencer_table in expected_sequencer_tables]
+                                        for sequencer_table in [channel_pair._idle_sequence_table] +
+                                        expected_sequencer_tables]
 
         for device in self.instrument.all_devices:
             self.assertEqual(device._download_adv_seq_table_calls, expected_adv_seq_table_log)

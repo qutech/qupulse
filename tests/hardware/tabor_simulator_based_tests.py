@@ -7,7 +7,7 @@ import os
 import pytabor
 import numpy as np
 
-from qctoolkit.hardware.awgs.tabor import TaborAWGRepresentation, TaborException, TaborSegment, TaborChannelPair, PlottableProgram
+from qupulse.hardware.awgs.tabor import TaborAWGRepresentation, TaborException, TaborSegment, TaborChannelPair, PlottableProgram
 
 
 class TaborSimulatorManager:
@@ -111,7 +111,7 @@ class TaborAWGRepresentationTests(TaborSimulatorBasedTest):
         with self.assertRaises(TaborException):
             self.instrument.sample_rate(0)
 
-        self.instrument.send_cmd(':INST:SEL 1;')
+        self.instrument.send_cmd(':INST:SEL 1')
         self.instrument.send_cmd(':FREQ:RAST 2.3e9')
 
         self.assertEqual(2300000000, self.instrument.sample_rate(1))
@@ -160,11 +160,11 @@ class TaborMemoryReadTests(TaborSimulatorBasedTest):
         zero = np.ones(192, dtype=np.uint16) * 2**13
         sine = ((np.sin(np.linspace(0, 2*np.pi, 192+64)) + 1) / 2 * (2**14 - 1)).astype(np.uint16)
 
-        self.segments = [TaborSegment(ramp_up, ramp_up),
-                         TaborSegment(ramp_down, zero),
-                         TaborSegment(sine, sine)]
+        self.segments = [TaborSegment(ramp_up, ramp_up, None, None),
+                         TaborSegment(ramp_down, zero, None, None),
+                         TaborSegment(sine, sine, None, None)]
 
-        self.zero_segment = TaborSegment(zero, zero)
+        self.zero_segment = TaborSegment(zero, zero, None, None)
 
         # program 1
         self.sequence_tables = [[(10, 0, 0), (10, 1, 0), (10, 0, 0), (10, 1, 0)],
@@ -196,12 +196,18 @@ class TaborMemoryReadTests(TaborSimulatorBasedTest):
 
         waveforms = self.channel_pair.read_waveforms()
 
-        reformated = PlottableProgram._reformat_waveforms(waveforms)
+        segments = [TaborSegment.from_binary_segment(waveform)
+                    for waveform in waveforms]
 
         expected = [self.zero_segment, *self.segments]
-        for (ex1, ex2), r1, r2 in zip(expected, *reformated):
+
+        for ex, r in zip(expected, segments):
+            ex1, ex2 = ex.data_a, ex.data_b
+            r1, r2 = r.data_a, r.data_b
             np.testing.assert_equal(ex1, r1)
             np.testing.assert_equal(ex2, r2)
+
+        self.assertEqual(expected, segments)
 
     def test_read_sequence_tables(self):
         self.channel_pair._amend_segments(self.segments)

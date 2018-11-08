@@ -1,19 +1,32 @@
 """STANDARD LIBRARY IMPORTS"""
-from typing import Tuple, List, Dict, Optional, Set, Any
+from typing import Tuple, List, Dict, Optional, Set, Any, Union
 import copy
 
 import numpy
+import unittest
 
 """LOCAL IMPORTS"""
-from qctoolkit.utils.types import MeasurementWindow, ChannelID, TimeType, time_from_float
-from qctoolkit.serialization import Serializer
-from qctoolkit.pulses.instructions import Waveform, Instruction, CJMPInstruction, GOTOInstruction, REPJInstruction
-from qctoolkit.pulses.sequencing import Sequencer, InstructionBlock, SequencingElement
-from qctoolkit.pulses.parameters import Parameter
-from qctoolkit.pulses.pulse_template import AtomicPulseTemplate
-from qctoolkit.pulses.interpolation import InterpolationStrategy
-from qctoolkit.pulses.conditions import Condition
-from qctoolkit.expressions import Expression
+from qupulse._program._loop import Loop
+from qupulse.utils.types import MeasurementWindow, ChannelID, TimeType, time_from_float
+from qupulse.serialization import Serializer
+from qupulse._program.waveforms import Waveform
+from qupulse._program.instructions import Instruction, CJMPInstruction, GOTOInstruction, REPJInstruction
+from qupulse.pulses.sequencing import Sequencer, InstructionBlock, SequencingElement
+from qupulse.pulses.parameters import Parameter
+from qupulse.pulses.pulse_template import AtomicPulseTemplate
+from qupulse.pulses.interpolation import InterpolationStrategy
+from qupulse.pulses.conditions import Condition
+from qupulse.expressions import Expression, ExpressionScalar
+
+
+class MeasurementWindowTestCase(unittest.TestCase):
+
+    def assert_measurement_windows_equal(self, expected, actual) -> bool:
+        self.assertEqual(expected.keys(), actual.keys())
+        for k in expected:
+            self.assertEqual(list(expected[k][0]), list(actual[k][0]))
+            self.assertEqual(list(expected[k][1]), list(actual[k][1]))
+
 
 class DummyParameter(Parameter):
 
@@ -32,11 +45,11 @@ class DummyParameter(Parameter):
     def __hash__(self):
         return hash(self.value)
 
-    def get_serialization_data(self, serializer: Serializer) -> None:
+    def get_serialization_data(self, serializer: Optional[Serializer]=None) -> None:
             raise NotImplementedError()
 
-    @staticmethod
-    def deserialize(serializer: Serializer) -> 'DummyParameter':
+    @classmethod
+    def deserialize(cls, serializer: Optional[Serializer]=None) -> 'DummyParameter':
         raise NotImplementedError()
 
 class DummyNoValueParameter(Parameter):
@@ -51,12 +64,15 @@ class DummyNoValueParameter(Parameter):
     def requires_stop(self) -> bool:
         return True
 
-    def get_serialization_data(self, serializer: Serializer) -> None:
+    def get_serialization_data(self, serializer: Optional[Serializer]=None) -> None:
             raise NotImplementedError()
 
-    @staticmethod
-    def deserialize(serializer: Serializer) -> 'DummyParameter':
+    @classmethod
+    def deserialize(cls, serializer: Optional[Serializer]=None) -> 'DummyParameter':
         raise NotImplementedError()
+
+    def __hash__(self):
+        return 0
 
 class DummySequencingElement(SequencingElement):
 
@@ -132,7 +148,7 @@ class DummyInstructionBlock(InstructionBlock):
 
 class DummyWaveform(Waveform):
 
-    def __init__(self, duration: float=0, sample_output: numpy.ndarray=None, defined_channels={'A'}) -> None:
+    def __init__(self, duration: float=0, sample_output: Union[numpy.ndarray, dict]=None, defined_channels={'A'}) -> None:
         super().__init__()
         self.duration_ = time_from_float(duration)
         self.sample_output = sample_output
@@ -162,7 +178,10 @@ class DummyWaveform(Waveform):
         if output_array is None:
             output_array = numpy.empty_like(sample_times)
         if self.sample_output is not None:
-            output_array[:] = self.sample_output
+            if isinstance(self.sample_output, dict):
+                output_array[:] = self.sample_output[channel]
+            else:
+                output_array[:] = self.sample_output
         else:
             output_array[:] = sample_times
         return output_array
@@ -219,6 +238,14 @@ class DummyInterpolationStrategy(InterpolationStrategy):
 
     def __repr__(self) -> str:
         return "DummyInterpolationStrategy {}".format(id(self))
+
+    @property
+    def integral(self) -> ExpressionScalar:
+        raise NotImplementedError()
+
+    @property
+    def expression(self) -> ExpressionScalar:
+        raise NotImplementedError()
 
 
 class DummyCondition(Condition):
@@ -286,7 +313,10 @@ class DummyPulseTemplate(AtomicPulseTemplate):
                  waveform: Waveform=tuple(),
                  measurement_names: Set[str] = set(),
                  measurements: list=list(),
-                 identifier=None) -> None:
+                 integrals: Dict[ChannelID, ExpressionScalar]={'default': ExpressionScalar(0)},
+                 program: Optional[Loop]=None,
+                 identifier=None,
+                 registry=None) -> None:
         super().__init__(identifier=identifier, measurements=measurements)
         self.requires_stop_ = requires_stop
         self.requires_stop_arguments = []
@@ -298,7 +328,11 @@ class DummyPulseTemplate(AtomicPulseTemplate):
         self._duration = Expression(duration)
         self.waveform = waveform
         self.build_waveform_calls = []
-        self.measurement_names_ = measurement_names
+        self.measurement_names_ = set(measurement_names)
+        self._integrals = integrals
+        self.create_program_calls = []
+        self._program = program
+        self._register(registry=registry)
 
     @property
     def duration(self):
@@ -307,10 +341,6 @@ class DummyPulseTemplate(AtomicPulseTemplate):
     @property
     def parameter_names(self) -> Set[str]:
         return set(self.parameter_names_)
-
-    def get_measurement_windows(self, parameters: Dict[str, Parameter] = None) -> List[MeasurementWindow]:
-        """Return all measurement windows defined in this PulseTemplate."""
-        raise NotImplementedError()
 
     @property
     def build_sequence_calls(self):
@@ -322,7 +352,7 @@ class DummyPulseTemplate(AtomicPulseTemplate):
 
     @property
     def defined_channels(self) -> Set[ChannelID]:
-        return self.defined_channels_
+        return set(self.defined_channels_)
 
     @property
     def measurement_names(self) -> Set[str]:
@@ -336,6 +366,33 @@ class DummyPulseTemplate(AtomicPulseTemplate):
                        channel_mapping: Dict['ChannelID', 'ChannelID'],
                        instruction_block: InstructionBlock):
         self.build_sequence_arguments.append((sequencer,parameters,conditions, measurement_mapping, channel_mapping, instruction_block))
+        measurements = self.get_measurement_windows(parameters, measurement_mapping)
+        if self.waveform:
+            instruction_block.add_instruction_meas(measurements)
+            instruction_block.add_instruction_exec(waveform=self.waveform)
+
+    # def create_program(self, *,
+    #                    parameters: Dict[str, Parameter],
+    #                    measurement_mapping: Dict[str, Optional[str]],
+    #                    channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Loop]:
+    #     self.create_program_calls.append((parameters, measurement_mapping, channel_mapping))
+    #     return self._program
+
+    def _internal_create_program(self, *,
+                                 parameters: Dict[str, Parameter],
+                                 measurement_mapping: Dict[str, Optional[str]],
+                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]],
+                                 global_transformation: Optional['Transformation'],
+                                 to_single_waveform: Set[Union[str, 'PulseTemplate']],
+                                 parent_loop: Loop) -> None:
+        measurements = self.get_measurement_windows(parameters, measurement_mapping)
+        self.create_program_calls.append((parameters, measurement_mapping, channel_mapping, parent_loop))
+        if self._program:
+            parent_loop.add_measurements(measurements)
+            parent_loop.append_child(waveform=self._program.waveform, children=self._program.children)
+        elif self.waveform:
+            parent_loop.add_measurements(measurements)
+            parent_loop.append_child(waveform=self.waveform)
 
     def build_waveform(self,
                        parameters: Dict[str, Parameter],
@@ -343,18 +400,30 @@ class DummyPulseTemplate(AtomicPulseTemplate):
         self.build_waveform_calls.append((parameters, channel_mapping))
         if self.waveform or self.waveform is None:
             return self.waveform
-        return DummyWaveform(duration=self.duration, defined_channels=self.defined_channels)
+        return DummyWaveform(duration=self.duration.evaluate_numeric(**parameters), defined_channels=self.defined_channels)
 
     def requires_stop(self, parameters: Dict[str, Parameter], conditions: Dict[str, Condition]) -> bool:
         self.requires_stop_arguments.append((parameters,conditions))
         return self.requires_stop_
 
-    def get_serialization_data(self, serializer: Serializer):
-        raise NotImplementedError()
+    def get_serialization_data(self, serializer: Optional['Serializer']=None) -> Dict[str, Any]:
+        data = super().get_serialization_data(serializer=serializer)
+        if serializer: # compatibility with old serialization routines
+            data = dict()
+        data['requires_stop'] = self.requires_stop_
+        data['is_interruptable'] = self.is_interruptable
+        data['parameter_names'] = self.parameter_names
+        data['defined_channels'] = self.defined_channels
+        data['duration'] = self.duration
+        data['measurement_names'] = self.measurement_names
+        data['integrals'] = self.integral
+        return data
 
-    @staticmethod
-    def deserialize(serializer: Serializer,
-                    condition: Dict[str, Any],
-                    body: Dict[str, Any],
-                    identifier: Optional[str]=None):
-        raise NotImplementedError()
+    @property
+    def integral(self) -> Dict[ChannelID, ExpressionScalar]:
+        return self._integrals
+
+    @property
+    def compare_key(self) -> Tuple[Any, ...]:
+        return (self.requires_stop_, self.is_interruptable, self.parameter_names,
+                self.defined_channels, self.duration, self.waveform, self.measurement_names, self.integral)

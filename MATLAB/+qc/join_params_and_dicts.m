@@ -41,6 +41,9 @@ function parameters = join_params_and_dicts(varargin)
 	for k = 1:numel(p)
 		parameters = join(parameters, p{k});
 	end
+	
+	parameters = qc.array2row(parameters);
+	parameters = orderfields(parameters);
 
 end
 

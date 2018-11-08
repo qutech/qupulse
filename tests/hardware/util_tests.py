@@ -5,8 +5,8 @@ import pytabor
 
 import numpy as np
 
-from qctoolkit.hardware.awgs.tabor import TaborSegment
-from qctoolkit.hardware.util import voltage_to_uint16, make_combined_wave, find_positions
+from qupulse.hardware.awgs.tabor import TaborSegment
+from qupulse.hardware.util import voltage_to_uint16, make_combined_wave, find_positions
 
 
 from . import dummy_modules
@@ -38,39 +38,39 @@ def validate_result(tabor_segments, result, fill_value=None):
     pos = 0
     for i, tabor_segment in enumerate(tabor_segments):
         if i > 0:
-            if tabor_segment[1] is None:
+            if tabor_segment.ch_b is None:
                 if fill_value:
                     np.testing.assert_equal(result[pos:pos + 16], np.full(16, fill_value=fill_value, dtype=np.uint16))
             else:
-                np.testing.assert_equal(result[pos:pos + 16], np.full(16, tabor_segment[1][0], dtype=np.uint16))
+                np.testing.assert_equal(result[pos:pos + 16], np.full(16, tabor_segment.ch_b[0], dtype=np.uint16))
             pos += 16
 
-            if tabor_segment[0] is None:
+            if tabor_segment.ch_a is None:
                 if fill_value:
                     np.testing.assert_equal(result[pos:pos + 16], np.full(16, fill_value=fill_value, dtype=np.uint16))
             else:
-                np.testing.assert_equal(result[pos:pos + 16], np.full(16, tabor_segment[0][0], dtype=np.uint16))
+                np.testing.assert_equal(result[pos:pos + 16], np.full(16, tabor_segment.ch_a[0], dtype=np.uint16))
             pos += 16
 
         for j in range(tabor_segment.num_points // 16):
-            if tabor_segment[1] is None:
+            if tabor_segment.ch_b is None:
                 if fill_value:
                     np.testing.assert_equal(result[pos:pos + 16], np.full(16, fill_value=fill_value, dtype=np.uint16))
             else:
-                np.testing.assert_equal(result[pos:pos + 16], tabor_segment[1][j * 16: (j + 1) * 16])
+                np.testing.assert_equal(result[pos:pos + 16], tabor_segment.ch_b[j * 16: (j + 1) * 16])
             pos += 16
 
-            if tabor_segment[0] is None:
+            if tabor_segment.ch_a is None:
                 if fill_value:
                     np.testing.assert_equal(result[pos:pos + 16], np.full(16, fill_value=fill_value, dtype=np.uint16))
             else:
-                np.testing.assert_equal(result[pos:pos + 16], tabor_segment[0][j * 16: (j + 1) * 16])
+                np.testing.assert_equal(result[pos:pos + 16], tabor_segment.ch_a[j * 16: (j + 1) * 16])
             pos += 16
 
 
 class TaborMakeCombinedTest(unittest.TestCase):
     def exec_general(self, data_1, data_2, fill_value=None):
-        tabor_segments = [TaborSegment(d1, d2) for d1, d2 in zip(data_1, data_2)]
+        tabor_segments = [TaborSegment(d1, d2, None, None) for d1, d2 in zip(data_1, data_2)]
         expected_length = (sum(segment.num_points for segment in tabor_segments) + 16 * (len(tabor_segments) - 1)) * 2
 
         result = make_combined_wave(tabor_segments, fill_value=fill_value)
@@ -129,11 +129,11 @@ class TaborMakeCombinedTest(unittest.TestCase):
                   np.fromiter(gen, count=16, dtype=np.uint16),
                   np.fromiter(gen, count=193, dtype=np.uint16)]
 
-        tabor_segments = [TaborSegment(d, d) for d in data_1]
+        tabor_segments = [TaborSegment(d, d, None, None) for d in data_1]
         with self.assertRaises(ValueError):
             make_combined_wave(tabor_segments)
 
-        tabor_segments = [TaborSegment(d, d) for d in data_2]
+        tabor_segments = [TaborSegment(d, d, None, None) for d in data_2]
         with self.assertRaises(ValueError):
             make_combined_wave(tabor_segments)
 
@@ -141,13 +141,13 @@ class TaborMakeCombinedTest(unittest.TestCase):
 @unittest.skipIf(pytabor is dummy_modules.dummy_pytabor, "Cannot compare to pytabor results")
 class TaborMakeCombinedPyTaborCompareTest(TaborMakeCombinedTest):
     def exec_general(self, data_1, data_2, fill_value=None):
-        tabor_segments = [TaborSegment(d1, d2) for d1, d2 in zip(data_1, data_2)]
+        tabor_segments = [TaborSegment(d1, d2, None, None) for d1, d2 in zip(data_1, data_2)]
         expected_length = (sum(segment.num_points for segment in tabor_segments) + 16 * (len(tabor_segments) - 1)) * 2
 
         offset = 0
         pyte_result = 15000*np.ones(expected_length, dtype=np.uint16)
         for i, segment in enumerate(tabor_segments):
-            offset = pytabor.make_combined_wave(segment[0], segment[1],
+            offset = pytabor.make_combined_wave(segment.ch_a, segment.ch_b,
                                                 dest_array=pyte_result, dest_array_offset=offset,
                                                 add_idle_pts=i > 0)
         self.assertEqual(expected_length, offset)

@@ -11,7 +11,7 @@ function [ file_written ] = save_pulse( pulse_template, overwrite )
 	try
 		plsdata.qc.serializer.serialize(pyargs('serializable', pulse_template, 'overwrite', overwrite));
 		file_written = true;
-		fprintf('File(s) written\n');
+% 		fprintf('File(s) written\n');
 	catch err
 		if util.str_contains(err.message, 'FileExistsError')
 			warning('%s\n', strrep(err.message, 'Python Error: ', ''));
