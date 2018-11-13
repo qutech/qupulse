@@ -2,6 +2,8 @@
 
 - General:
     - Introduce qupulse.utils.isclose (an alias for math.isclose if available)
+    - Dropped support for Python 3.4 in setup.py due to incompatible syntax in qupulse.
+    - Official support for Python 3.7 has begun.
 
 - Pulse Templates:
     - `AtomicMultichannelPulseTemplate`:
@@ -10,6 +12,8 @@
     - `MappingPulseTemplate`:
         - Add `mapping_namespace` keyword argument to allow mapping all subtemplate parameters into a namespace easily
         - DEPRECATED: `allow_partial_parameter_mapping` argument. MappingPulseTemplate now always allows partial mapping.
+    - Plotting:
+        - Add `time_slice` keyword argument to render() and plot()
 
 - Expressions:
     - Make ExpressionScalar hashable

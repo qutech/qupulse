@@ -1,6 +1,7 @@
 import unittest
 import contextlib
 import math
+import sys
 
 from typing import Union
 
@@ -253,24 +254,17 @@ class GetFreeSymbolsTests(TestCase):
         self.assertEqual({'a', 'b', 'i', 'j'}, set(get_variables(expr)))
 
 
-class EvaluationTests(TestCase):
-    def evaluate(self, expression: Union[sympy.Expr, np.ndarray], parameters):
-        if isinstance(expression, np.ndarray):
-            variables = set.union(*map(set, map(get_variables, expression.flat)))
-        else:
-            variables = get_variables(expression)
-        return evaluate_lambdified(expression, variables=list(variables), parameters=parameters, lambdified=None)[0]
+class EvaluationTestsBase:
 
     def test_eval_simple(self):
         for expr, parameters, expected in eval_simple:
             result = self.evaluate(expr, parameters)
             self.assertEqual(expected, result)
 
-    def test_eval_many_arguments(self, expected_exception=SyntaxError):
-        with self.assertRaises(expected_exception):
-            for expr, parameters, expected in eval_many_arguments:
-                result = self.evaluate(expr, parameters)
-                self.assertEqual(expected, result)
+    def test_eval_many_arguments(self):
+        for expr, parameters, expected in eval_many_arguments:
+            result = self.evaluate(expr, parameters)
+            self.assertEqual(result, expected)
 
     def test_eval_simple_functions(self):
         for expr, parameters, expected in eval_simple_functions:
@@ -293,7 +287,22 @@ class EvaluationTests(TestCase):
             np.testing.assert_equal(expected, result)
 
 
-class CompiledEvaluationTest(EvaluationTests):
+class LamdifiedEvaluationTest(EvaluationTestsBase, unittest.TestCase):
+
+    def evaluate(self, expression: Union[sympy.Expr, np.ndarray], parameters):
+        if isinstance(expression, np.ndarray):
+            variables = set.union(*map(set, map(get_variables, expression.flat)))
+        else:
+            variables = get_variables(expression)
+        return evaluate_lambdified(expression, variables=list(variables), parameters=parameters, lambdified=None)[0]
+
+    @unittest.skipIf(sys.version_info[0] == 3 and sys.version_info[1] < 7, "causes syntax error for python < 3.7")
+    def test_eval_many_arguments(self):
+        super().test_eval_many_arguments()
+
+
+class CompiledEvaluationTest(EvaluationTestsBase, unittest.TestCase):
+
     def evaluate(self, expression: Union[sympy.Expr, np.ndarray], parameters):
         if isinstance(expression, np.ndarray):
             return self.evaluate(sympy.Array(expression), parameters)
@@ -306,7 +315,7 @@ class CompiledEvaluationTest(EvaluationTests):
             return result
 
     def test_eval_many_arguments(self):
-        super().test_eval_many_arguments(None)
+        super().test_eval_many_arguments()
 
 
 class RepresentationTest(unittest.TestCase):
