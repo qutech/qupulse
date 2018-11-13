@@ -11,16 +11,15 @@ import numpy as np
 from sympy.abc import a, b, c, d, e, f, k, l, m, n, i, j
 from sympy import sin, Sum, IndexedBase
 
-a_ = IndexedBase(a)
-b_ = IndexedBase(b)
-foo_bar = sympy.Symbol('foo.bar')
-foo_bar_ = IndexedBase('foo.bar')
-scope_n = sympy.Symbol('scope.n') # problem: n is a method of Symbol -> scope.n evaluates to bound method in sympy -> error
-
-
 from qupulse.utils.sympy import sympify as qc_sympify, substitute_with_eval, recursive_substitution, Len,\
     evaluate_lambdified, evaluate_compiled, get_most_simple_representation, get_variables, get_free_symbols,\
-    almost_equal, NamespaceSymbol
+    almost_equal, SymbolNamespace, SubscriptableSymbol
+
+a_ = IndexedBase(a)
+b_ = IndexedBase(b)
+foo_bar = SubscriptableSymbol('bar', namespace=SymbolNamespace('foo'))
+foo_bar_ = IndexedBase('foo.bar')
+scope_n = SubscriptableSymbol('n', namespace=SymbolNamespace('scope'))
 
 
 ################################################### SUBSTITUTION #######################################################
@@ -73,13 +72,13 @@ simple_sympify = [
     ('a*b', a*b),
     ('a*6', a*6),
     ('sin(a)', sin(a)),
-    ('foo.bar*6', foo_bar*6),
-    ('sin(foo.bar)', sin(foo_bar))
+    ('SymbolNamespace(\'foo\').bar*6', foo_bar*6),
+    ('sin(SymbolNamespace(\'foo\').bar)', sin(foo_bar))
 ]
 
 complex_sympify = [
     ('Sum(a, (i, 0, n))', Sum(a, (i, 0, n))),
-    ('Sum(foo.bar, (i, 0, scope.n))', Sum(foo_bar, (i, 0, scope_n)))
+    ('Sum(SymbolNamespace("foo").bar, (i, 0, NS(scope).n))', Sum(foo_bar, (i, 0, scope_n)))
 ]
 
 len_sympify = [
@@ -89,7 +88,7 @@ len_sympify = [
 
 index_sympify = [
     ('a[i]', a_[i]),
-    ('foo.bar[i]', foo_bar_[i])
+    ('SymbolNamespace(foo).bar[i]', foo_bar_[i])
 ]
 
 
@@ -342,9 +341,9 @@ class RepresentationTest(unittest.TestCase):
         self.assertIsInstance(st, str)
         self.assertEqual(st, 'a + b')
 
-        sym = get_most_simple_representation(qc_sympify('b + foo.bar.test'))
+        sym = get_most_simple_representation(qc_sympify('b + SymbolNamespace("foo.bar").test'))
         self.assertIsInstance(sym, str)
-        self.assertEqual('b + foo.bar.test', sym)
+        self.assertEqual('b + SymbolNamespace("foo.bar").test', sym)
 
 
 class AlmostEqualTests(unittest.TestCase):
@@ -363,18 +362,18 @@ class NamespaceTests(unittest.TestCase):
             qc_sympify("qubit._forbidden")
 
     def test_sympify_dot_namespace_notations(self) -> None:
-        expr = qc_sympify("qubit.a + qubit.spec2.a * 1.3")
-        expected = sympy.Add(sympy.Symbol('qubit.a'), sympy.Mul(sympy.Symbol('qubit.spec2.a'), sympy.RealNumber(1.3)))
+        expr = qc_sympify("NS('qubit').a + NS('qubit.spec2').a * 1.3")
+        expected = sympy.Add(SubscriptableSymbol('qubit.a'), sympy.Mul(SubscriptableSymbol('qubit.spec2.a'), sympy.RealNumber(1.3)))
         self.assertEqual(expected, expr)
 
     def test_sympify_indexed_dot_namespace_notation(self) -> None:
-        expr = qc_sympify("qubit.a[i]*1.3")
-        expected = sympy.Mul(IndexedBase('qubit.a')[sympy.Symbol('i')], sympy.RealNumber(1.3))
+        expr = qc_sympify("NS(qubit).a[i]*1.3")
+        expected = sympy.Mul(SubscriptableSymbol('a', namespace=SymbolNamespace('qubit'))[sympy.Symbol('i')], sympy.RealNumber(1.3))
         self.assertEqual(expected, expr)
 
     def test_sympify_dot_namespace_notation_as_index(self) -> None:
-        expr = qc_sympify("qubit.a[index_ns.i]*1.3")
-        expected = sympy.Mul(IndexedBase('qubit.a')[sympy.Symbol('index_ns.i')], sympy.RealNumber(1.3))
+        expr = qc_sympify("NS(qubit).a[NS(index_ns).i]*1.3")
+        expected = sympy.Mul(SubscriptableSymbol('a', namespace=SymbolNamespace('qubit'))[SubscriptableSymbol('i', namespace=SymbolNamespace('index_ns'))], sympy.RealNumber(1.3))
         self.assertEqual(expected, expr)
 
     def test_vanilla_sympify_compatability(self) -> None:
@@ -412,10 +411,19 @@ class NamespaceTests(unittest.TestCase):
 
     @unittest.expectedFailure
     def test_evaluate_lambdified_dot_namespace_notation(self) -> None:
-        res = evaluate_lambdified("qubit.a + qubit.spec2.a * 1.3", ["qubit.a", "qubit_spec2_a"], {"qubit_a": 2.1, "qubit_spec2_a": .1}, lambdified=None)
+        res = evaluate_lambdified("NS(qubit).a + NS('qubit.spec2').a * 1.3", ["qubit.a", "qubit_spec2_a"], {"qubit_a": 2.1, "qubit_spec2_a": .1}, lambdified=None)
         self.assertEqual(2.23, res)
 
     @unittest.expectedFailure
     def test_evaluate_compiled_dot_namespace_notation(self) -> None:
-        res = evaluate_compiled("qubit.a + qubit.spec2.a * 1.3", {"qubit.a": 2.1, "qubit.spec2.a": .1})
+        res = evaluate_compiled("NS(qubit).a + NS('qubit.spec2').a * 1.3", {"qubit.a": 2.1, "qubit.spec2.a": .1})
         self.assertEqual(2.23, res)
+
+
+class Playground(unittest.TestCase):
+
+    def test(self) -> None:
+        expr = sympy.Add(SubscriptableSymbol('x', namespace=SymbolNamespace("hu")), sympy.Float(1.3))
+        res = expr.subs({'hu.x': sympy.Float(0.7), 'bla': sympy.Float(-0.3)})
+        print(res)
+        self.assertTrue(res - sympy.Float(2.0) == 0)
