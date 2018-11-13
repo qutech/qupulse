@@ -1,7 +1,7 @@
 # qupulse: A Quantum compUting PULse parametrization and SEquencing framework
-[![Coverage Status](https://coveralls.io/repos/qutech/qc-toolkit/badge.svg?branch=master&service=github)](https://coveralls.io/github/qutech/qc-toolkit?branch=master)
+[![Coverage Status](https://coveralls.io/repos/github/qutech/qupulse/badge.svg?branch=master)](https://coveralls.io/github/qutech/qupulse?branch=master)
 [![Build Status](https://travis-ci.org/qutech/qupulse.svg?branch=master)](https://travis-ci.org/qutech/qupulse)
-[![Documentation Status](https://readthedocs.org/projects/qc-toolkit/badge/?version=latest)](http://qc-toolkit.readthedocs.org/en/latest/?badge=latest)
+[![Documentation Status](https://readthedocs.org/projects/qupulse/badge/?version=latest)](http://qupulse.readthedocs.org/en/latest/?badge=latest)
 
 The qupulse project aims to produce a software toolkit facilitating experiments involving pulse driven state manipulation of physical qubits.
 
@@ -27,12 +27,22 @@ The current feature list is as follows:
 - MATLAB interface to access qupulse functionality
 
 ## Installation
-qupulse is developed using Python 3.5 but should also run on previous 3.3+ versions.
+qupulse is available on [PyPi](https://pypi.org/project/qupulse/) and the latest release can be installed by executing:
+```
+pip3 install qupulse
+```
+qupulse version numbers follow the [Semantic Versioning](https://semver.org/) conventions.
 
-The package is installed by executing in the cloned repository root folder:
+Alternatively, the current development version of qupulse can be installed by executing in the cloned repository root folder: 
 ```
 pip3 install .
 ```
+
+qupulse is developed using Python 3.6 and tested on 3.5 - 3.7 It relies on some external Python packages as dependencies; 
+`requirements.txt` lists the versions of these qupulse is developed against. 
+We intentionally did not restrict versions of dependencies in the install scripts to not unnecessarily prevent usage of
+newer releases of dependencies that might be compatible. However, if qupulse does encounter problems with a particular dependency version,
+try installing the version listed in `requirements.txt`.   
 
 The backend for TaborAWGs requires packages that can be found [here](https://git.rwth-aachen.de/qutech/python-TaborDriver).
 

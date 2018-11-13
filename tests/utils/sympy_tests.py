@@ -1,6 +1,7 @@
 import unittest
 import contextlib
 import math
+import sys
 
 from typing import Union
 
@@ -15,7 +16,7 @@ b_ = IndexedBase(b)
 
 from qupulse.utils.sympy import sympify as qc_sympify, substitute_with_eval, recursive_substitution, Len,\
     evaluate_lambdified, evaluate_compiled, get_most_simple_representation, get_variables, get_free_symbols,\
-    NamespaceSymbol
+    almost_equal, NamespaceSymbol
 
 
 ################################################### SUBSTITUTION #######################################################
@@ -238,24 +239,17 @@ class GetFreeSymbolsTests(TestCase):
         self.assertEqual({'a', 'b', 'i', 'j'}, set(get_variables(expr)))
 
 
-class EvaluationTests(TestCase):
-    def evaluate(self, expression: Union[sympy.Expr, np.ndarray], parameters):
-        if isinstance(expression, np.ndarray):
-            variables = set.union(*map(set, map(get_variables, expression.flat)))
-        else:
-            variables = get_variables(expression)
-        return evaluate_lambdified(expression, variables=list(variables), parameters=parameters, lambdified=None)[0]
+class EvaluationTestsBase:
 
     def test_eval_simple(self):
         for expr, parameters, expected in eval_simple:
             result = self.evaluate(expr, parameters)
             self.assertEqual(result, expected)
 
-    def test_eval_many_arguments(self, expected_exception=SyntaxError):
-        with self.assertRaises(expected_exception):
-            for expr, parameters, expected in eval_many_arguments:
-                result = self.evaluate(expr, parameters)
-                self.assertEqual(result, expected)
+    def test_eval_many_arguments(self):
+        for expr, parameters, expected in eval_many_arguments:
+            result = self.evaluate(expr, parameters)
+            self.assertEqual(result, expected)
 
     def test_eval_simple_functions(self):
         for expr, parameters, expected in eval_simple_functions:
@@ -278,7 +272,22 @@ class EvaluationTests(TestCase):
             np.testing.assert_equal(result, expected)
 
 
-class CompiledEvaluationTest(EvaluationTests):
+class LamdifiedEvaluationTest(EvaluationTestsBase, unittest.TestCase):
+
+    def evaluate(self, expression: Union[sympy.Expr, np.ndarray], parameters):
+        if isinstance(expression, np.ndarray):
+            variables = set.union(*map(set, map(get_variables, expression.flat)))
+        else:
+            variables = get_variables(expression)
+        return evaluate_lambdified(expression, variables=list(variables), parameters=parameters, lambdified=None)[0]
+
+    @unittest.skipIf(sys.version_info[0] == 3 and sys.version_info[1] < 7, "causes syntax error for python < 3.7")
+    def test_eval_many_arguments(self):
+        super().test_eval_many_arguments()
+
+
+class CompiledEvaluationTest(EvaluationTestsBase, unittest.TestCase):
+
     def evaluate(self, expression: Union[sympy.Expr, np.ndarray], parameters):
         if isinstance(expression, np.ndarray):
             return self.evaluate(sympy.Array(expression), parameters)
@@ -291,7 +300,7 @@ class CompiledEvaluationTest(EvaluationTests):
             return result
 
     def test_eval_many_arguments(self):
-        super().test_eval_many_arguments(None)
+        super().test_eval_many_arguments()
 
 
 class RepresentationTest(unittest.TestCase):
@@ -311,6 +320,15 @@ class RepresentationTest(unittest.TestCase):
         st = get_most_simple_representation(qc_sympify('a + b'))
         self.assertIsInstance(st, str)
         self.assertEqual(st, 'a + b')
+
+
+class AlmostEqualTests(unittest.TestCase):
+    def test_almost_equal(self):
+        self.assertTrue(almost_equal(sympy.sin(a) * 0.5, sympy.sin(a) / 2))
+        self.assertIsNone(almost_equal(sympy.sin(a) * 0.5, sympy.sin(b) / 2))
+        self.assertFalse(almost_equal(sympy.sin(a), sympy.sin(a) + 1e-14))
+
+        self.assertTrue(almost_equal(sympy.sin(a), sympy.sin(a) + 1e-14, epsilon=1e-13))
 
 
 class NamespaceTests(unittest.TestCase):
