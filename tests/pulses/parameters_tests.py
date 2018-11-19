@@ -39,6 +39,12 @@ class ConstantParameterTest(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             ConstantParameter(expression_obj)
 
+    def test_numpy_value(self) -> None:
+        import numpy as np
+        arr = np.array([6, 7, 8])
+        param = ConstantParameter(arr)
+        np.array_equal(arr, param.get_value())
+
 
 class MappedParameterTest(unittest.TestCase):
 

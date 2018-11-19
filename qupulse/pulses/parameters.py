@@ -49,7 +49,7 @@ class Parameter(metaclass=DocStringABCMeta):
 
     @abstractmethod
     def __hash__(self) -> int:
-        pass
+        """Returns a hash value of the parameter. Must be implemented."""
 
     def __eq__(self, other) -> bool:
         return type(self) is type(other) and hash(self) == hash(other)
