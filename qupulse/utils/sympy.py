@@ -55,7 +55,6 @@ def custom_auto_symbol_transform(tokens: Sequence[Tuple[int, str]], local_dict: 
         next_tok_num, next_tok_val = next_tok
 
         if symbol_string:
-            assert(tok_val == '.' or tok_num == NAME)
             if tok_val == '.':
                 symbol_string += sympy_internal_namespace_seperator
             elif tok_num == NAME:
@@ -70,14 +69,13 @@ def custom_auto_symbol_transform(tokens: Sequence[Tuple[int, str]], local_dict: 
             name = tok_val
 
             if (name in ['True', 'False', 'None']
-                    or iskeyword(name)
-                    # Don't convert keyword arguments
-                    or (prev_tok[0] == OP and prev_tok[1] in ('(', ',')
-                        and next_tok_num == OP and next_tok_val == '=')):
+                or iskeyword(name)
+                # # Don't convert attribute access
+                # or (prev_tok[0] == OP and prev_tok[1] == '.')
+                # Don't convert keyword arguments
+                or (prev_tok[0] == OP and prev_tok[1] in ('(', ',')
+                    and next_tok_num == OP and next_tok_val == '=')):
                 result.append((NAME, name))
-                continue
-            elif next_tok_val == '.':
-                symbol_string = str(name)
                 continue
             elif name in local_dict:
                 if isinstance(local_dict[name], Symbol) and next_tok_val == '(':
@@ -93,6 +91,9 @@ def custom_auto_symbol_transform(tokens: Sequence[Tuple[int, str]], local_dict: 
                 if isinstance(obj, (Basic, type)) or callable(obj):
                     result.append((NAME, name))
                     continue
+            elif next_tok_val == '.':
+                symbol_string = str(name)
+                continue
 
             result.extend([
                 (NAME, 'Symbol' if next_tok_val != '(' else 'Function'),
