@@ -25,6 +25,20 @@ class ConstantParameterTest(unittest.TestCase):
         constant_parameter = ConstantParameter(0.2)
         self.assertEqual("<ConstantParameter 0.2>", repr(constant_parameter))
 
+    def test_expression_value(self) -> None:
+        expression_str = "exp(4)*sin(pi/2)"
+        expression_obj = Expression(expression_str)
+        expression_val = expression_obj.evaluate_numeric()
+        param = ConstantParameter(expression_str)
+        self.assertEqual(expression_val, param.get_value())
+        param = ConstantParameter(expression_obj)
+        self.assertEqual(expression_val, param.get_value())
+
+    def test_invalid_expression_value(self) -> None:
+        expression_obj = Expression("sin(pi/2*t)")
+        with self.assertRaises(RuntimeError):
+            ConstantParameter(expression_obj)
+
 
 class MappedParameterTest(unittest.TestCase):
 
@@ -87,10 +101,12 @@ class ParameterConstraintTest(unittest.TestCase):
             ParameterConstraint('a*b')
         ParameterConstraint('1 < 2')
 
-    def test_str(self):
+    def test_str_and_serialization(self):
         self.assertEqual(str(ParameterConstraint('a < b')), 'a < b')
+        self.assertEqual(ParameterConstraint('a < b').get_serialization_data(), 'a < b')
 
         self.assertEqual(str(ParameterConstraint('a==b')), 'a==b')
+        self.assertEqual(ParameterConstraint('a==b').get_serialization_data(), 'a==b')
 
 
 class ParameterNotProvidedExceptionTests(unittest.TestCase):
