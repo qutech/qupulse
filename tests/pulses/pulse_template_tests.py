@@ -164,12 +164,12 @@ class PulseTemplateTest(unittest.TestCase):
 
     def test_create_program(self) -> None:
         template = PulseTemplateStub(defined_channels={'A'}, parameter_names={'foo'})
-        parameters = {'foo': ConstantParameter(2.126), 'bar': -26.2, 'hugo': '2*x+b', 'append_a_child': '1'}
+        parameters = {'foo': ConstantParameter(2.126), 'bar': -26.2, 'hugo': 'exp(sin(pi/2))', 'append_a_child': '1'}
         measurement_mapping = {'M': 'N'}
         channel_mapping = {'A': 'B'}
 
         expected_parameters = {'foo': ConstantParameter(2.126), 'bar': ConstantParameter(-26.2),
-                               'hugo': ConstantParameter('2*x+b'), 'append_a_child': ConstantParameter('1')}
+                               'hugo': ConstantParameter('exp(sin(pi/2))'), 'append_a_child': ConstantParameter('1')}
         to_single_waveform = {'voll', 'toggo'}
         global_transformation = TransformationStub()
 
@@ -308,11 +308,11 @@ class PulseTemplateTest(unittest.TestCase):
 
     def test_create_program_none(self) -> None:
         template = PulseTemplateStub(defined_channels={'A'}, parameter_names={'foo'})
-        parameters = {'foo': ConstantParameter(2.126), 'bar': -26.2, 'hugo': '2*x+b'}
+        parameters = {'foo': ConstantParameter(2.126), 'bar': -26.2, 'hugo': 'exp(sin(pi/2))'}
         measurement_mapping = {'M': 'N'}
         channel_mapping = {'A': 'B'}
         expected_parameters = {'foo': ConstantParameter(2.126), 'bar': ConstantParameter(-26.2),
-                               'hugo': ConstantParameter('2*x+b')}
+                               'hugo': ConstantParameter('exp(sin(pi/2))')}
         expected_internal_kwargs = dict(parameters=expected_parameters,
                                         measurement_mapping=measurement_mapping,
                                         channel_mapping=channel_mapping,
