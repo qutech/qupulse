@@ -16,6 +16,9 @@
     - Make ExpressionScalar hashable
     - Fix bug that prevented evaluation of expressions containing some special functions (`erfc`, `factorial`, etc.)
 
+- Parameters:
+    - `ConstantParameter` now accepts a `Expression` without free variables as value (given as `Expression` or string)
+
 ## 0.2 ##
 
 - General:
