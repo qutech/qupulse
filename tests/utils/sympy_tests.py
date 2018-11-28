@@ -8,7 +8,7 @@ from typing import Union
 import sympy
 import numpy as np
 
-from sympy.abc import a, b, c, d, e, f, k, l, m, n, i, j
+from sympy.abc import a, b, c, d, e, f, k, l, m, n, i, j, x, y, z
 from sympy import sin, Sum, IndexedBase
 
 from qupulse.utils.sympy import sympify as qc_sympify, substitute_with_eval, recursive_substitution, Len,\
@@ -235,7 +235,27 @@ class SubstituteWithEvalTests(SubstitutionTests):
 
 class RecursiveSubstitutionTests(SubstitutionTests):
     def substitute(self, expression: sympy.Expr, substitutions: dict):
-        return recursive_substitution(expression, substitutions).doit()
+        return recursive_substitution(expression, substitutions)#.doit()
+
+    def test_array_argument(self) -> None:
+        expr = np.array([a * c, b * c])
+        substitutions = {'a': x, 'b': a, 'c': y}
+        expected = np.array([x*y, a*y])
+        result = self.substitute(expr, substitutions)
+        np.testing.assert_equal(expected, result)
+
+        expr = np.array([a * foo_bar, scope_n * foo_bar])
+        substitutions = {'a': x, 'NS(scope).n': a, 'NS(foo).bar': scope_n}
+        expected = np.array([x * scope_n, a * scope_n])
+        result = self.substitute(expr, substitutions)
+        np.testing.assert_equal(expected, result)
+
+    def test_nested_array_argument(self) -> None:
+        expr = np.array([[a * c, b * c], [a * foo_bar, scope_n * foo_bar]])
+        substitutions = {'a': x, 'b': a, 'c': y, 'NS(scope).n': a, 'NS(foo).bar': scope_n}
+        expected = np.array([[x * y, a * y], [x * scope_n, a * scope_n]])
+        result = self.substitute(expr, substitutions)
+        np.testing.assert_equal(expected, result)
 
 
 class GetFreeSymbolsTests(TestCase):
