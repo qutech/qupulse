@@ -77,6 +77,9 @@ def custom_auto_symbol_transform(tokens: Sequence[Tuple[int, str]], local_dict: 
                     and next_tok_num == OP and next_tok_val == '=')):
                 result.append((NAME, name))
                 continue
+            elif next_tok_val == '.':
+                symbol_string = str(name)
+                continue
             elif name in local_dict:
                 if isinstance(local_dict[name], Symbol) and next_tok_val == '(':
                     result.extend([(NAME, 'Function'),
@@ -91,9 +94,6 @@ def custom_auto_symbol_transform(tokens: Sequence[Tuple[int, str]], local_dict: 
                 if isinstance(obj, (Basic, type)) or callable(obj):
                     result.append((NAME, name))
                     continue
-            elif next_tok_val == '.':
-                symbol_string = str(name)
-                continue
 
             result.extend([
                 (NAME, 'Symbol' if next_tok_val != '(' else 'Function'),
