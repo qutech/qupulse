@@ -312,7 +312,7 @@ class EvaluationTests(EvaluationTestsBase, unittest.TestCase):
     def test_eval_sum(self):
         super().test_eval_sum()
 
-@unittest.SkipTest
+
 class LamdifiedEvaluationTest(EvaluationTestsBase, unittest.TestCase):
 
     def evaluate(self, expression: Union[sympy.Expr, np.ndarray], parameters):
@@ -434,9 +434,13 @@ class NamespaceTests(unittest.TestCase):
         for text, result in inputs.items():
             self.assertEqual(qc_sympify(text), result, msg="failed for {}".format(text))
 
-    @unittest.expectedFailure
     def test_evaluate_lambdified_dot_namespace_notation(self) -> None:
-        res = evaluate_lambdified("NS(qubit).a + NS('qubit.spec2').a * 1.3", ["qubit.a", "qubit_spec2_a"], {"qubit_a": 2.1, "qubit_spec2_a": .1}, lambdified=None)
+        res, _ = evaluate_lambdified(
+            qc_sympify("NS(qubit).a + NS(qubit).NS(spec2).a * 1.3"),
+            ["NS(qubit).a", "NS(qubit).NS(spec2).a"],
+            {"NS(qubit).a": 2.1, "NS(qubit).NS(spec2).a": .1},
+            lambdified=None
+        )
         self.assertEqual(2.23, res)
 
     @unittest.expectedFailure

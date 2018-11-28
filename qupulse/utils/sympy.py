@@ -8,6 +8,7 @@ import math
 
 import sympy
 import numpy
+import re
 
 try:
     import scipy.special as _special_functions
@@ -74,11 +75,23 @@ class NamespacedSymbol(sympy.Symbol):
     def to_sympy_symbol(self) -> sympy.Symbol:
         return sympy.Symbol(self.name)
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(sympy.Symbol(self.name))
 
     def __eq__(self, other) -> bool:
         return sympy.Symbol(self.name) == other
+
+    def _pythoncode(self, settings=None) -> str:
+        prefix = ""
+        if self._namespace:
+            prefix = self._namespace._pythoncode(settings) + "____"
+        return prefix + self._inner_name
+
+    def _numpycode(self, settings=None) -> str:
+        return self._pythoncode(settings)
+
+    def _lambdacode(self, settings=None) -> str:
+        return self._pythoncode(settings)
 
 
 class NamespaceIndexedBase(NamespacedSymbol):
@@ -173,6 +186,18 @@ class SymbolNamespace:
 
     def members(self) -> Dict[Union[str, sympy.Symbol], Union[NamespacedSymbol, "SymbolNamespace"]]:
         return self._members
+
+    def _pythoncode(self, settings=None) -> str:
+        prefix = ""
+        if self._parent:
+            prefix = self._parent._pythoncode(settings) + "____"
+        return prefix + self._name
+
+    def _numpycode(self, settings=None) -> str:
+        return self._pythoncode(settings)
+
+    def _lambdacode(self, settings=None) -> str:
+        return self._pythoncode(settings)
 
 
 class SymbolNamespaceFactory:
@@ -507,10 +532,32 @@ def evaluate_compiled(expression: sympy.Expr,
     return result, compiled
 
 
+parameter_namespace_filter_regex = re.compile(r'(NS|SymbolNamespace)\(["\']?(\w+)["\']?\)\.')
+
+
 def evaluate_lambdified(expression: Union[sympy.Expr, numpy.ndarray],
                         variables: Sequence[str],
                         parameters: Dict[str, Union[numpy.ndarray, Number]],
                         lambdified) -> Tuple[Any, Any]:
+    # mapping namespaced parameter names to something that doesn't provoke syntax errors when used as argument for lamda
+    # NS(foo).bar -> foo____bar
+    name_map = {v:parameter_namespace_filter_regex.sub(r'\2____', v) for v in variables}
+    variables = name_map.values()
+    parameters = {name_map[k]: v for k, v in parameters.items()}
+    substitutions = {sympy.Symbol(k):sympy.Symbol(v) for k, v in name_map.items()}
+
+    # while I've overloaded the corresponding printing functions (_pythoncode, _lamdadcode, _numpycode) of
+    # NamespacedSymbol (and thus NamespacedIndexedBase) and SymbolNamespace to produce the above renamed identifier,
+    # these are not reliable called by the code printers when nested in numpy arrays, sums, etc..
+    # -> perform symbol substitution up front
+    if isinstance(expression, numpy.ndarray):
+        for i in range(expression.size):
+            #expression[i] = recursive_substitution(expression[i], substitutions)
+            expression[i] = expression[i].subs(substitutions)
+    else:
+        #expression = recursive_substitution(expression, substitutions)
+        expression = expression.subs(substitutions)
+
     lambdified = lambdified or sympy.lambdify(variables, expression, _lambdify_modules)
 
     return lambdified(**parameters), lambdified
