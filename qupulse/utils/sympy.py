@@ -518,18 +518,19 @@ _lambdify_modules = [{'ceiling': numpy_compatible_ceiling}, 'numpy', _special_fu
 def evaluate_compiled(expression: sympy.Expr,
              parameters: Dict[str, Union[numpy.ndarray, Number]],
              compiled: CodeType=None, mode=None) -> Tuple[any, CodeType]:
-    if compiled is None:
-        compiled = compile(sympy.printing.lambdarepr.lambdarepr(expression),
-                           '<string>', 'eval')
-
-    if mode == 'numeric' or mode is None:
-        result = eval(compiled, parameters.copy(), _numpy_environment)
-    elif mode == 'exact':
-        result = eval(compiled, parameters.copy(), _sympy_environment)
-    else:
-        raise ValueError("Unknown mode: '{}'".format(mode))
-
-    return result, compiled
+    raise NotImplementedError()
+    # if compiled is None:
+    #     compiled = compile(sympy.printing.lambdarepr.lambdarepr(expression),
+    #                        '<string>', 'eval')
+    #
+    # if mode == 'numeric' or mode is None:
+    #     result = eval(compiled, parameters.copy(), _numpy_environment)
+    # elif mode == 'exact':
+    #     result = eval(compiled, parameters.copy(), _sympy_environment)
+    # else:
+    #     raise ValueError("Unknown mode: '{}'".format(mode))
+    #
+    # return result, compiled
 
 
 parameter_namespace_filter_regex = re.compile(r'(NS|SymbolNamespace)\(["\']?(\w+)["\']?\)\.')
