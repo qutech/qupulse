@@ -35,9 +35,14 @@ class NamespacedSymbol(sympy.Symbol):
             name = name.name
         if "." in name:
             raise ValueError("namespace name may not contain a namespace separator \".\"!")
+        # prefix = ""
+        # if namespace:
+        #     prefix = namespace.name + "."
+        # name = prefix + name
         prefix = ""
         if namespace:
-            prefix = namespace.name + "."
+            #prefix = self._namespace._sympyrepr() + "."
+            prefix = namespace._sympystr() + "."
         name = prefix + name
         return super().__new__(cls, name)
 
@@ -53,23 +58,13 @@ class NamespacedSymbol(sympy.Symbol):
         return self.instantiate(name=self._inner_name, namespace=namespace)
 
     def _subs(self, old, new, **hints):
-        # print(self._inner_name)
-        # print(self.name)
-        # print(str(old) + " " + str(type(old)) + " " + self._sympystr())
-        # print(str(new) + " " + str(type(new)))
-        # print(hints)
-        if old.name == self._sympystr():
+        if old.name == self.name:
             return new
         return self
-
-    # @property
-    # def _iterable(self) -> bool:
-    #     return False
 
     def _sympystr(self, options=None):
         prefix = ""
         if self._namespace:
-            #prefix = self._namespace._sympyrepr() + "."
             prefix = self._namespace._sympystr(options) + "."
         return prefix + self._inner_name
 
@@ -79,19 +74,24 @@ class NamespacedSymbol(sympy.Symbol):
     def to_sympy_symbol(self) -> sympy.Symbol:
         return sympy.Symbol(self.name)
 
-    # def __eq__(self, other) -> bool:
-    #     #return sympy.Symbol(self.name) == other
-    #     return False
+    def __hash__(self):
+        return hash(sympy.Symbol(self.name))
+
+    def __eq__(self, other) -> bool:
+        return sympy.Symbol(self.name) == other
 
 
 class NamespaceIndexedBase(NamespacedSymbol):
 
     def __getitem__(self, item):
-        #print(str(self) + "[" + str(item) + "]")
         return sympy.IndexedBase(self.name)[item]
 
     def to_sympy_symbol(self) -> sympy.IndexedBase:
         return sympy.IndexedBase(self.name)
+
+    @property
+    def free_symbols(self):
+        return {NamespacedSymbol(self._inner_name, namespace=self._namespace)}
 
 
 class SymbolNamespace:
@@ -153,9 +153,9 @@ class SymbolNamespace:
         if k == "NS" or k == "SymbolNamespace":
             # return SymbolNamespaceFactory(parent=self)
             return SymbolNamespaceFactory(instances=self._members)
-        # if k not in self._members:
-        #     #self._members[k] = SubscriptableSymbol(self.name + "." + k)
-        #     self._members[k] = NamespacedSymbol(k, namespace=self)
+        if k not in self._members:
+            #self._members[k] = SubscriptableSymbol(self.name + "." + k)
+            self._members[k] = NamespacedSymbol(k, namespace=self)
         return self._members[k]
 
     def renamed(self, new_name: str) -> 'SymbolNamespace':
@@ -181,6 +181,8 @@ class SymbolNamespaceFactory:
         self._instances = instances
 
     def __call__(self, name: Union[str, sympy.Symbol]):
+        if str(name) not in self._instances:
+            self._instances[str(name)] = SymbolNamespace(name=name, parent=self._parent)
         return self._instances[str(name)]
 
     def get_instances(self):
@@ -406,7 +408,7 @@ def sympify(expr: Union[str, Number, sympy.Expr, numpy.str_], **kwargs) -> sympy
         expr = str(expr)
     try:
         # first try to use vanilla sympify for parsing -> faster for standard sympy syntax
-        return sympy.sympify(expr, **kwargs, locals=sympify_namespace)
+        return sympy.sympify(expr, **kwargs, locals={**sympify_namespace, **{k: SymbolNamespace for k in namespace_locals}})
     except (TypeError, AttributeError):
         # expression contains custom syntax: subscripted or namcespace symbols, do custom symbol parsing
         namespace_symbols = get_symbols_for_custom_syntax(expr)

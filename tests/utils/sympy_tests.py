@@ -56,9 +56,9 @@ indexed_substitution_cases = [
 vector_valued_cases = [
     (a*b, {'a': sympy.Array([1, 2, 3])}, sympy.Array([1, 2, 3])*b),
     (a*b, {'a': sympy.Array([1, 2, 3]), 'b': sympy.Array([4, 5, 6])}, sympy.Array([4, 10, 18])),
-    (foo_bar*b, {'foo.bar': sympy.Array([1, 2, 3])}, sympy.Array([1, 2, 3])*b),
-    (foo_bar*b, {'foo.bar': sympy.Array([1, 2, 3]), 'b': sympy.Array([4, 5, 6])}, sympy.Array([4, 10, 18])),
-    (foo_bar*scope_n, {'foo.bar': sympy.Array([1, 2, 3]), 'scope.n': sympy.Array([4, 5, 6])}, sympy.Array([4, 10, 18])),
+    (foo_bar*b, {'NS(foo).bar': sympy.Array([1, 2, 3])}, sympy.Array([1, 2, 3])*b),
+    (foo_bar*b, {'NS(foo).bar': sympy.Array([1, 2, 3]), 'b': sympy.Array([4, 5, 6])}, sympy.Array([4, 10, 18])),
+    (foo_bar*scope_n, {'NS(foo).bar': sympy.Array([1, 2, 3]), 'NS(scope).n': sympy.Array([4, 5, 6])}, sympy.Array([4, 10, 18])),
 ]
 
 full_featured_cases = [
@@ -78,7 +78,7 @@ simple_sympify = [
 
 complex_sympify = [
     ('Sum(a, (i, 0, n))', Sum(a, (i, 0, n))),
-    ('Sum(SymbolNamespace(foo).bar, (i, 0, NS(scope).n))', Sum(foo_bar, (i, 0, scope_n)))
+    ('Sum(NS(foo).bar, (i, 0, m))', Sum(foo_bar, (i, 0, m)))
 ]
 
 len_sympify = [
@@ -168,7 +168,6 @@ class SympifyTests(TestCase):
 
     def test_index_sympify(self) -> None:
         for s, expected in index_sympify:
-            print(s)
             result = self.sympify(s)
             self.assertEqual(expected, result)
 
@@ -297,7 +296,6 @@ class EvaluationTestsBase:
 class EvaluationTests(EvaluationTestsBase, unittest.TestCase):
 
     def evaluate(self, expression: Union[sympy.Expr, np.ndarray], parameters):
-        print(expression)
         if isinstance(expression, np.ndarray):
             return np.array(expr.evalf(subs=parameters) for expr in expression.flat)
         return expression.evalf(subs=parameters)
@@ -395,12 +393,12 @@ class NamespaceTests(unittest.TestCase):
 
     def test_sympify_indexed_dot_namespace_notation(self) -> None:
         expr = qc_sympify("NS(qubit).a[i]*1.3")
-        expected = sympy.Mul(NamespacedSymbol('a', namespace=SymbolNamespace('qubit'))[sympy.Symbol('i')], sympy.RealNumber(1.3))
+        expected = sympy.Mul(NamespaceIndexedBase('a', namespace=SymbolNamespace('qubit'))[sympy.Symbol('i')], sympy.RealNumber(1.3))
         self.assertEqual(expected, expr)
 
     def test_sympify_dot_namespace_notation_as_index(self) -> None:
         expr = qc_sympify("NS(qubit).a[NS(index_ns).i]*1.3")
-        expected = sympy.Mul(NamespacedSymbol('a', namespace=SymbolNamespace('qubit'))[NamespacedSymbol('i', namespace=SymbolNamespace('index_ns'))], sympy.RealNumber(1.3))
+        expected = sympy.Mul(NamespaceIndexedBase('a', namespace=SymbolNamespace('qubit'))[NamespacedSymbol('i', namespace=SymbolNamespace('index_ns'))], sympy.RealNumber(1.3))
         self.assertEqual(expected, expr)
 
     def test_vanilla_sympify_compatability(self) -> None:
@@ -445,12 +443,3 @@ class NamespaceTests(unittest.TestCase):
     def test_evaluate_compiled_dot_namespace_notation(self) -> None:
         res = evaluate_compiled("NS(qubit).a + NS('qubit.spec2').a * 1.3", {"qubit.a": 2.1, "qubit.spec2.a": .1})
         self.assertEqual(2.23, res)
-
-
-class Playground(unittest.TestCase):
-
-    def test(self) -> None:
-        expr = sympy.Add(NamespacedSymbol('x', namespace=SymbolNamespace("hu")), sympy.Float(1.3))
-        res = expr.subs({'NS(hu).x': sympy.Float(0.7), 'bla': sympy.Float(-0.3)})
-        print(res)
-        self.assertTrue(res - sympy.Float(2.0) == 0)
