@@ -55,10 +55,10 @@ class NamespacedSymbol(sympy.Symbol):
     def _subs(self, old, new, **hints):
         # print(self._inner_name)
         # print(self.name)
-        # print(str(old) + " " + str(type(old)))
+        # print(str(old) + " " + str(type(old)) + " " + self._sympystr())
         # print(str(new) + " " + str(type(new)))
         # print(hints)
-        if old.name == self.name:
+        if old.name == self._sympystr():
             return new
         return self
 
@@ -151,10 +151,11 @@ class SymbolNamespace:
 
     def __getattr__(self, k: str) -> sympy.Expr:
         if k == "NS" or k == "SymbolNamespace":
-            return SymbolNamespaceFactory(parent=self)
-        if k not in self._members:
-            #self._members[k] = SubscriptableSymbol(self.name + "." + k)
-            self._members[k] = NamespacedSymbol(k, namespace=self)
+            # return SymbolNamespaceFactory(parent=self)
+            return SymbolNamespaceFactory(instances=self._members)
+        # if k not in self._members:
+        #     #self._members[k] = SubscriptableSymbol(self.name + "." + k)
+        #     self._members[k] = NamespacedSymbol(k, namespace=self)
         return self._members[k]
 
     def renamed(self, new_name: str) -> 'SymbolNamespace':
@@ -170,27 +171,21 @@ class SymbolNamespace:
             prefix = self._parent._sympystr(options) + "."
         return prefix + "NS(" + self._name + ")"
 
-    # def __repr__(self) -> str:
-    #     return "SymbolNamespace({})".format(self.name)
-    #
-    # def __str__(self) -> str:
-    #     return str(self.name)
+    def members(self) -> Dict[Union[str, sympy.Symbol], Union[NamespacedSymbol, "SymbolNamespace"]]:
+        return self._members
 
 
 class SymbolNamespaceFactory:
 
-    def __init__(self, parent: "SymbolNamespace"=None, prototype=SymbolNamespace):
-        self._parent = parent
-        self._prototype = prototype
-        self._instances = dict()
+    def __init__(self, instances: Dict[Union[str, sympy.Symbol], SymbolNamespace]):
+        self._instances = instances
 
     def __call__(self, name: Union[str, sympy.Symbol]):
-        if name not in self._instances:
-            self._instances[str(name)] = self._prototype(name=str(name), parent=self._parent)
         return self._instances[str(name)]
 
     def get_instances(self):
         return self._instances
+
 
 
 ##############################################################################
@@ -203,20 +198,32 @@ class CustomSyntaxInterpreter:
 
     def __init__(self):
         self.symbols = dict()
-        self.bases = dict()
+        # self.bases = dict()
+
+        class CheckingNamespaceFactory:
+
+            def __init__(self, parent: "CheckingNamespace"=None):
+                self._parent = parent
+                self._instances = dict()
+
+            def __call__(self, name: Union[str, sympy.Symbol]):
+                if str(name) not in self._instances:
+                    self._instances[str(name)] = CheckingNamespace(name=name, parent=self._parent)
+                return self._instances[str(name)]
+
+            def get_instances(self):
+                return self._instances
 
         class CheckingNamespace(SymbolNamespace):
 
             def __init__(self, *args, **kwargs):
                 super().__init__(*args, **kwargs)
-                self._fac = SymbolNamespaceFactory(parent=self, prototype=CheckingNamespace)
+                self._fac = CheckingNamespaceFactory(parent=self)
 
             def __getattr__(self, k: str):
                 if k == "NS" or k == "SymbolNamespace":
                     return self._fac
                 if k not in self._members:
-                    # self._members[k] = SubscriptableSymbol(self.name + "." + k)
-                    #self._members[k] = CheckingSymbol(k, namespace=self)
                     self._members[k] = CheckingSymbol(k)
                 return self._members[k]
 
@@ -257,14 +264,12 @@ class CustomSyntaxInterpreter:
 
             def __init__(s, *args, **kwargs) -> None:
                 sympy.Symbol.__init__(*args, **kwargs)
-                #s._symbols = dict()
                 s._is_index_base = False
 
             def __getitem__(s, k):
                 s._is_index_base = True
                 if isinstance(k, CheckingSymbol):
                     k = sympy.Symbol(str(k))
-                #self.bases[str(s)] = sympy.IndexedBase(str(s))
                 return sympy.IndexedBase(str(s))[k]
 
             def get_symbol(s):
@@ -273,29 +278,8 @@ class CustomSyntaxInterpreter:
                 else:
                     return NamespacedSymbol(str(s))
 
-            # def __getattr__(s, k: str):
-            #     # note: getattr only gets called once standard attribute lookup procedures fail, i.e., python cannot
-            #     # find a class attribute/function named k
-            #
-            #     # do not allow namespace members starting with '_' to ensure that
-            #     #  object attributes starting with '_' are not shadowed
-            #     if k.startswith('_'):
-            #         raise AttributeError(k)
-            #
-            #     if k not in s._symbols:
-            #         s._symbols[k] = self.SubscriptionChecker(s.name + namespace_separator + k)
-            #     return s._symbols[k]
-            #
-            # def get_symbol(s) -> sympy.Symbol:
-            #     if s._is_index_base:
-            #         return sympy.IndexedBase(s.name)
-            #     elif not s._symbols:
-            #         return sympy.Symbol(s.name)
-            #     return NamespaceSymbol(s.name, namespace_members={n: s.get_symbol() for n, s in s._symbols.items()})
-
-        self.SubscriptionChecker = CheckingSymbol
-        #self.CheckingNamespace = CheckingNamespace
-        self.namespace_fac = SymbolNamespaceFactory(prototype=CheckingNamespace)
+        self.CheckingSymbol = CheckingSymbol
+        self.namespace_fac = CheckingNamespaceFactory()
 
     def __getitem__(self, k) -> sympy.Expr:
         """Return an instance of the internal SubscriptionChecker class for each symbol to determine which symbols are
@@ -306,15 +290,15 @@ class CustomSyntaxInterpreter:
         and the base types (-> Integer, Float, etc).
         """
         if k in sympify_namespace:
-            if k in namespace_locals:
-                return self.namespace_fac
             return sympify_namespace[k]
+        if k in namespace_locals:
+            return self.namespace_fac
         if hasattr(sympy, k): # if k is a sympy base type identifier, return the base type
             return getattr(sympy, k)
 
         # otherwise track the symbol name and return a SubscriptionChecker instance
         if k not in self.symbols:
-            self.symbols[k] = self.SubscriptionChecker(k)
+            self.symbols[k] = self.CheckingSymbol(k)
         return self.symbols[k]
 
     def __contains__(self, k) -> bool:
@@ -330,22 +314,29 @@ class CustomSyntaxInterpreter:
         symbols = dict()
         # convert all symbols
         for k, s in self.symbols.items():
-            assert (isinstance(s, self.SubscriptionChecker))
+            assert (isinstance(s, self.CheckingSymbol))
             symbols[k] = s.get_symbol().to_sympy_symbol()
 
         # convert all nested namespaces
+        nested = {k: s.get_symbol() for k, s in self.namespace_fac.get_instances().items()}
+        rootFac = SymbolNamespaceFactory(instances=nested)
         symbols.update(**{
-            k: s.get_symbol() for k, s in self.namespace_fac.get_instances().items()
+            k: rootFac for k in namespace_locals
         })
+
+        # symbols.update(**{
+        #     k: s.get_symbol() for k, s in self.namespace_fac.get_instances().items()
+        # })
+
         return symbols
 
 
 def get_symbols_for_custom_syntax(expression: str) -> Dict[str, sympy.Symbol]:
     # track all symbols that are subscipted in here
-    indexed_base_finder = CustomSyntaxInterpreter()
-    sympy.sympify(expression, locals=indexed_base_finder)
+    syntax_interpreter = CustomSyntaxInterpreter()
+    sympy.sympify(expression, locals=syntax_interpreter)
 
-    return indexed_base_finder.get_symbols()
+    return syntax_interpreter.get_symbols()
 
 #############################################################
 ### "Built-in" length function for expressions in qupulse ###
@@ -366,13 +357,14 @@ class Len(sympy.Function):
 Len.__name__ = 'len'
 
 
-namespace_locals = {'SymbolNamespace': SymbolNamespace,
-                    'NS': SymbolNamespace,
-                    'NamespacedSymbol': NamespacedSymbol}
+# namespace_locals = {'SymbolNamespace': SymbolNamespace,
+#                     'NS': SymbolNamespace,
+#                     'NamespacedSymbol': NamespacedSymbol}
+
+namespace_locals = {'SymbolNamespace', 'NS'}
 
 sympify_namespace = {'len': Len,
-                     'Len': Len,
-                     **namespace_locals}
+                     'Len': Len}
 
 #########################################
 ### Functions for numpy compatability ###
