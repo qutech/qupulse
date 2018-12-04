@@ -513,12 +513,11 @@ def evaluate_lambdified(expression: Union[sympy.Expr, numpy.ndarray],
     parameters = {name_map[k]: v for k, v in parameters.items()}
     substitutions = {sympy.Symbol(k):sympy.Symbol(v) for k, v in name_map.items()}
 
-    # while I've overloaded the corresponding printing functions (_pythoncode, _lambdacode, _numpycode) of
+    # while I've tried overloading the corresponding printing functions (_pythoncode, _lambdacode, _numpycode) of
     # NamespacedSymbol (and thus NamespacedIndexedBase) and SymbolNamespace to produce the above renamed identifier,
     # these are not reliable called by the code printers when nested in numpy arrays, sums, etc..
     # -> perform symbol substitution up front
     if isinstance(expression, numpy.ndarray):
-        #vecfun = numpy.vectorize(recursive_substitution, excluded=('substitutions'))
         expression = recursive_substitution(expression, substitutions)
     else:
         expression = expression.subs(substitutions)

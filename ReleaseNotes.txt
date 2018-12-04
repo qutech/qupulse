@@ -20,6 +20,13 @@
     - Fix bug that prevented evaluation of expressions containing some special functions (`erfc`, `factorial`, etc.)
     - ExpressionScalar equality operator now also returns true in case of numerical almost-equality
 
+- Utils/sympy:
+    - Add class `SymbolNamespace`, `NamespacedSymbol` to allow specifying parameter namespaces in expressions
+        - either by explicit python `SymbolNamespace(foo).bar` (returns symbol `bar` (as `NamespaceSymbol` in a namespace `foo`)
+        - or in an expression string ``"NS(foo).bar"` (same result after sympify)
+    - recursive_substitution now can handle numpy arrays of expressions as well
+    - (temporarily) removed incompatible substitute_with_eval and evaluate_compiled
+
 - Parameters:
     - `ConstantParameter` now accepts a `Expression` without free variables as value (given as `Expression` or string)
 
