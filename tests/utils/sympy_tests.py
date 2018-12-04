@@ -13,7 +13,7 @@ from sympy import sin, Sum, IndexedBase
 
 from qupulse.utils.sympy import sympify as qc_sympify, substitute_with_eval, recursive_substitution, Len,\
     evaluate_lambdified, evaluate_compiled, get_most_simple_representation, get_variables, get_free_symbols,\
-    almost_equal, SymbolNamespace, NamespacedSymbol, NamespaceIndexedBase
+    almost_equal, SymbolNamespace, NamespacedSymbol, NamespaceIndexedBase, subs_namespaces
 
 a_ = IndexedBase(a)
 b_ = IndexedBase(b)
@@ -396,6 +396,33 @@ class AlmostEqualTests(unittest.TestCase):
         self.assertTrue(almost_equal(sympy.sin(a), sympy.sin(a) + 1e-14, epsilon=1e-13))
 
 
+class TestSubsNamespaces(unittest.TestCase):
+
+    def test_subs_namespaces(self) -> None:
+        expr = SymbolNamespace('foo').bar * a
+        result = subs_namespaces(expr, {SymbolNamespace('foo'): SymbolNamespace('oof')})
+        self.assertEqual(SymbolNamespace('oof').bar * a, result)
+        self.assertEqual(SymbolNamespace('foo').bar * a, expr) # ensure original wasnt changed
+
+    def test_subs_namespaces_nested(self) -> None:
+        expr = SymbolNamespace('foo').SymbolNamespace('bar').x * a + SymbolNamespace('bar').x
+
+        # change only NS(foo)
+        result = subs_namespaces(expr, {SymbolNamespace('foo'): SymbolNamespace('oof')})
+        self.assertEqual(SymbolNamespace('oof').SymbolNamespace('bar').x * a + SymbolNamespace('bar').x, result)
+        self.assertEqual(SymbolNamespace('foo').SymbolNamespace('bar').x * a + SymbolNamespace('bar').x, expr)
+
+        # change unnested NS(bar)
+        result = subs_namespaces(expr, {SymbolNamespace('bar'): SymbolNamespace('rab')})
+        self.assertEqual(SymbolNamespace('foo').SymbolNamespace('bar').x * a + SymbolNamespace('rab').x, result)
+        self.assertEqual(SymbolNamespace('foo').SymbolNamespace('bar').x * a + SymbolNamespace('bar').x, expr)  # ensure original wasnt changed
+
+        # change nested NS(foo).NS(bar)
+        result = subs_namespaces(expr, {SymbolNamespace('foo').SymbolNamespace('bar'): SymbolNamespace('bar')})
+        self.assertEqual(SymbolNamespace('bar').x * a + SymbolNamespace('bar').x, result)
+        self.assertEqual(SymbolNamespace('foo').SymbolNamespace('bar').x * a + SymbolNamespace('bar').x, expr)  # ensure original wasnt changed
+
+
 class NamespaceSymbolTests(unittest.TestCase):
 
     def test_stringify_and_back(self) -> None:
@@ -420,8 +447,16 @@ class NamespaceSymbolTests(unittest.TestCase):
         result = expr.subs({NamespacedSymbol('bar', namespace=SymbolNamespace('foo')): a})
         self.assertEqual(a * a, result)
 
+    def test_subs_nested(self) -> None:
+        expr = SymbolNamespace('foo').SymbolNamespace('off').bar * a
+        result = expr.subs({'NS(foo).NS(off).bar': a})
+        self.assertEqual(a * a, result)
+
+    @unittest.expectedFailure
+    def test_subs_do_not_change_namespaces(self) -> None:
+        expr = SymbolNamespace('foo').bar * a
         result = expr.subs({'NS(foo)': 'NS(oof)'})
-        self.assertEqual(a * SymbolNamespace('oof').bar, result)
+        self.assertEqual(SymbolNamespace('oof').bar * a, result)
 
 
 class NamespaceTests(unittest.TestCase):

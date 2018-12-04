@@ -33,10 +33,11 @@ namespace_identifiers = {'SymbolNamespace', 'NS'}
 
 class NamespacedSymbol(sympy.Symbol):
 
-    def __new__(cls, name: Union[str, sympy.Symbol], namespace: "SymbolNamespace"=None):
+    def __new__(cls, inner_name: Union[str, sympy.Symbol], namespace: "SymbolNamespace"=None):
+        name = inner_name
         if isinstance(name, sympy.Symbol):
-            name = name.name
-        if "." in name:
+            name = str(name)
+        if namespace_separator in name:
             raise ValueError("namespace name may not contain a namespace separator \".\"!")
         prefix = ""
         if namespace:
@@ -44,13 +45,19 @@ class NamespacedSymbol(sympy.Symbol):
         name = prefix + name
         return super().__new__(cls, name)
 
-    def __init__(self, name: str, namespace: "SymbolNamespace"=None) -> None:
+    def __init__(self, inner_name: str, namespace: "SymbolNamespace"=None) -> None:
         self._namespace = namespace
-        self._inner_name = name
+        self._inner_name = inner_name
 
     @classmethod
     def instantiate(cls, name: str, namespace: "SymbolNamespace"=None):
         return cls(name, namespace=namespace)
+
+    def _subs_namespace(self, old, new):
+        if self._namespace:
+            new_namespace = self._namespace._subs_namespace(old, new)
+            return new_namespace._members[self._inner_name]
+        return self
 
     def change_namespace(self, namespace: "SymbolNamespace"=None) -> "NamespacedSymbol":
         return self.instantiate(name=self._inner_name, namespace=namespace)
@@ -103,29 +110,36 @@ class SymbolNamespace:
     NamespacedSymbol.
     """
 
-    def __init__(self, name: Union[str, sympy.Symbol, "SymbolNamespace"], members: Optional[Dict[str, NamespacedSymbol]]=None, parent: "SymbolNamespace"=None):
-        self._name = name
-        if isinstance(self._name, (sympy.Symbol, SymbolNamespace)):
-            self._name = self._name.name
-        if "." in self._name:
+    def __init__(self, name: Union[str, sympy.Symbol, "SymbolNamespace"], members: Optional[NamespacedSymbol]=None, parent: "SymbolNamespace"=None):
+        self._inner_name = name
+        if isinstance(self._inner_name, (SymbolNamespace, NamespacedSymbol)):
+            self._inner_name = self._inner_name._inner_name
+        elif isinstance(self._inner_name, sympy.Symbol):
+            self._inner_name = str(self._inner_name)
+        if namespace_separator in self._inner_name:
             raise ValueError("namespace name may not contain a namespace separator \".\"!")
-        self._members = members
         self._parent = parent
 
-        if not self._members:
-            self._members = dict()
-        else:
-            self._members = {k:s.change_namespace(self) for k,s in self._members.items()}
+        self._members = dict()
+        if members is not None:
+            self._add_members(members)
 
     def change_namespace(self, namespace: "SymbolNamespace") -> "SymbolNamespace":
-        return SymbolNamespace(self._name, members=self._members, parent=namespace)
+        return SymbolNamespace(self._inner_name, members=self._members.values(), parent=namespace)
+
+    def _add_members(self, new_members: Sequence[NamespacedSymbol]) -> None:
+        for m in new_members:
+            k = m._inner_name
+            if k not in self._members:
+                self._members[k] = m.change_namespace(self)
+
 
     @property
     def name(self) -> str:
         prefix = ""
         if self._parent:
             prefix = self._parent.name + namespace_separator
-        return prefix + "NS(" + self._name + ")"
+        return prefix + "NS(" + self._inner_name + ")"
 
     def __getattr__(self, k: str) -> sympy.Expr:
         if k in namespace_identifiers:
@@ -134,14 +148,14 @@ class SymbolNamespace:
             self._members[k] = NamespacedSymbol(k, namespace=self)
         return self._members[k]
 
-    def renamed(self, new_name: str) -> 'SymbolNamespace':
-        return SymbolNamespace(new_name, self._members)
-
-    # def _sympystr(self, options=None) -> str:
-    #     prefix = ""
-    #     if self._parent:
-    #         prefix = self._parent._sympystr(options) + namespace_separator
-    #     return prefix + "NS(" + self._name + ")"
+    def _subs_namespace(self, old, new):
+        if old.name == self.name:
+            new._add_members(self._members.values())
+            return new
+        if self._parent is not None:
+            new_namespace = self._parent._subs_namespace(old, new)
+            return new_namespace._members[self._inner_name]
+        return self
 
     def members(self) -> Dict[Union[str, sympy.Symbol], Union[NamespacedSymbol, "SymbolNamespace"]]:
         return self._members
@@ -158,6 +172,14 @@ class SymbolNamespace:
     def _lambdacode(self, settings=None) -> str:
         return self._pythoncode(settings)
 
+    def _sympy_(self):
+        return self
+
+    def __str__(self) -> str:
+        return self.name
+
+    def __repr__(self) -> str:
+        return str(self)
 
 NS = SymbolNamespace
 
@@ -178,6 +200,24 @@ class SymbolNamespaceFactory:
     def get_instances(self):
         return self._instances
 
+
+def subs_namespaces(expr: sympy.Expr, mapping: Dict[Union[str, SymbolNamespace], SymbolNamespace]) -> sympy.Expr:
+    """Substitutes namespaces
+
+    Coutnerpart to Expr.subs() which can only substitute namespaced symbols but not namespaces itself, i.e.,
+    `(NS(a).b * c).subs({NS(a).b: x} == x*c` but `(NS(a).b * c).subs({NS(a).b: NS(x)}) == NS(a).b * c` (no change).
+
+    subs_namespaces adds functionality to substitute namespaces and thus move all affected symbols in the expression
+    into the replacmenent namespace, i.e., `subs_namespaces(NS(a).b * c, {NS(a): NS(x)}) == NS(x).b * c` and
+    `subs_namespaces(NS(a).NS(b).d * c, {NS(a).NS(b): NS(x).NS(y)}) == NS(x).NS(y)d * c`
+    """
+    subs = dict()
+    for a in expr.atoms(NamespacedSymbol):
+        for old, new in mapping.items():
+            ret = a._subs_namespace(old, new)
+            if ret is not a:
+                subs[a] = ret
+    return expr.subs(subs)
 
 
 ##############################################################################
@@ -232,7 +272,7 @@ class CustomSyntaxInterpreter:
                 members.update(**{
                     k:s.get_symbol() for k,s in self._fac.get_instances().items()
                 })
-                return SymbolNamespace(self._name, members=members)
+                return SymbolNamespace(self._inner_name, members=members.values())
 
         class CheckingSymbol(sympy.Symbol):
             """A symbol stand-in which detects whether a symbol (in a namespace) is subscripted.

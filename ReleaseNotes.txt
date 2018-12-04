@@ -24,6 +24,7 @@
     - Add class `SymbolNamespace`, `NamespacedSymbol` to allow specifying parameter namespaces in expressions
         - either by explicit python `SymbolNamespace(foo).bar` (returns symbol `bar` (as `NamespaceSymbol` in a namespace `foo`)
         - or in an expression string ``"NS(foo).bar"` (same result after sympify)
+    - Add subs_namespaces method to substitute namespaces in sympy.Expr objects
     - recursive_substitution now can handle numpy arrays of expressions as well
     - (temporarily) removed incompatible substitute_with_eval and evaluate_compiled
 
