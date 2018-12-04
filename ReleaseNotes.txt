@@ -15,6 +15,7 @@
 - Expressions:
     - Make ExpressionScalar hashable
     - Fix bug that prevented evaluation of expressions containing some special functions (`erfc`, `factorial`, etc.)
+    - ExpressionScalar equality operator now also returns true in case of numerical almost-equality
 
 - Parameters:
     - `ConstantParameter` now accepts a `Expression` without free variables as value (given as `Expression` or string)
