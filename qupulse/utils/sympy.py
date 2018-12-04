@@ -27,6 +27,8 @@ __all__ = ["sympify", "substitute_with_eval", "to_numpy", "get_variables", "get_
 Sympifyable = Union[str, Number, sympy.Expr, numpy.str_]
 
 namespace_separator = '.'
+namespace_pythoncode_separator = '____'
+namespace_identifiers = {'SymbolNamespace', 'NS'}
 
 
 class NamespacedSymbol(sympy.Symbol):
@@ -38,7 +40,7 @@ class NamespacedSymbol(sympy.Symbol):
             raise ValueError("namespace name may not contain a namespace separator \".\"!")
         prefix = ""
         if namespace:
-            prefix = namespace.name + "."
+            prefix = namespace.name + namespace_separator
         name = prefix + name
         return super().__new__(cls, name)
 
@@ -58,15 +60,6 @@ class NamespacedSymbol(sympy.Symbol):
             return new
         return self
 
-    def _sympystr(self, options=None):
-        prefix = ""
-        if self._namespace:
-            prefix = self._namespace._sympystr(options) + "."
-        return prefix + self._inner_name
-
-    def __repr__(self) -> str:
-        return str(self)
-
     def to_sympy_symbol(self) -> sympy.Symbol:
         return sympy.Symbol(self.name)
 
@@ -79,7 +72,7 @@ class NamespacedSymbol(sympy.Symbol):
     def _pythoncode(self, settings=None) -> str:
         prefix = ""
         if self._namespace:
-            prefix = self._namespace._pythoncode(settings) + "____"
+            prefix = self._namespace._pythoncode(settings) + namespace_pythoncode_separator
         return prefix + self._inner_name
 
     def _numpycode(self, settings=None) -> str:
@@ -127,25 +120,15 @@ class SymbolNamespace:
     def change_namespace(self, namespace: "SymbolNamespace") -> "SymbolNamespace":
         return SymbolNamespace(self._name, members=self._members, parent=namespace)
 
-    @staticmethod
-    def split_namespaced_name(name: str) -> Tuple[str, str]:
-        split = name.rsplit(namespace_separator, maxsplit=1)
-        if len(split) > 1:
-            namespace, inner_name = split
-        else:
-            inner_name = split[0]
-            namespace = ''
-        return namespace, inner_name
-
     @property
     def name(self) -> str:
         prefix = ""
         if self._parent:
-            prefix = self._parent.name + "."
+            prefix = self._parent.name + namespace_separator
         return prefix + "NS(" + self._name + ")"
 
     def __getattr__(self, k: str) -> sympy.Expr:
-        if k == "NS" or k == "SymbolNamespace":
+        if k in namespace_identifiers:
             return SymbolNamespaceFactory(instances=self._members, parent=self)
         if k not in self._members:
             self._members[k] = NamespacedSymbol(k, namespace=self)
@@ -154,15 +137,11 @@ class SymbolNamespace:
     def renamed(self, new_name: str) -> 'SymbolNamespace':
         return SymbolNamespace(new_name, self._members)
 
-    def concat(self, next: 'SymbolNamespace') -> 'SymbolNamespace':
-        assert(not self._members)
-        return next.renamed(self.name + "." + next.name)
-
-    def _sympystr(self, options=None) -> str:
-        prefix = ""
-        if self._parent:
-            prefix = self._parent._sympystr(options) + "."
-        return prefix + "NS(" + self._name + ")"
+    # def _sympystr(self, options=None) -> str:
+    #     prefix = ""
+    #     if self._parent:
+    #         prefix = self._parent._sympystr(options) + namespace_separator
+    #     return prefix + "NS(" + self._name + ")"
 
     def members(self) -> Dict[Union[str, sympy.Symbol], Union[NamespacedSymbol, "SymbolNamespace"]]:
         return self._members
@@ -170,7 +149,7 @@ class SymbolNamespace:
     def _pythoncode(self, settings=None) -> str:
         prefix = ""
         if self._parent:
-            prefix = self._parent._pythoncode(settings) + "____"
+            prefix = self._parent._pythoncode(settings) + namespace_pythoncode_separator
         return prefix + self._name
 
     def _numpycode(self, settings=None) -> str:
@@ -178,6 +157,9 @@ class SymbolNamespace:
 
     def _lambdacode(self, settings=None) -> str:
         return self._pythoncode(settings)
+
+
+NS = SymbolNamespace
 
 
 class SymbolNamespaceFactory:
@@ -233,7 +215,7 @@ class CustomSyntaxInterpreter:
                 self._fac = CheckingNamespaceFactory(parent=self)
 
             def __getattr__(self, k: str):
-                if k == "NS" or k == "SymbolNamespace":
+                if k in namespace_identifiers:
                     return self._fac
                 if k not in self._members:
                     self._members[k] = CheckingSymbol(k)
@@ -349,8 +331,6 @@ class Len(sympy.Function):
 
 
 Len.__name__ = 'len'
-
-namespace_identifiers = {'SymbolNamespace', 'NS'}
 
 sympify_namespace = {'len': Len,
                      'Len': Len}

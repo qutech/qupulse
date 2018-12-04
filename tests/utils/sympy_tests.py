@@ -396,6 +396,34 @@ class AlmostEqualTests(unittest.TestCase):
         self.assertTrue(almost_equal(sympy.sin(a), sympy.sin(a) + 1e-14, epsilon=1e-13))
 
 
+class NamespaceSymbolTests(unittest.TestCase):
+
+    def test_stringify_and_back(self) -> None:
+        sym = NamespacedSymbol('bar', namespace=SymbolNamespace('foo', parent=SymbolNamespace('oof')))
+        sym_str = str(sym)
+        self.assertEqual("NS(oof).NS(foo).bar", sym_str)
+        sym_sympified = qc_sympify(sym_str)
+        self.assertEqual(sym, sym_sympified)
+
+    def test_atoms(self) -> None:
+        expr = SymbolNamespace('foo').bar * 3 + SymbolNamespace('foo').c
+        self.assertEqual({SymbolNamespace('foo').bar, SymbolNamespace('foo').c}, expr.atoms(NamespacedSymbol))
+
+    def test_subs(self) -> None:
+        expr = SymbolNamespace('foo').bar * a
+        result = expr.subs({'NS(foo).bar': a})
+        self.assertEqual(a*a, result)
+
+        result = expr.subs({SymbolNamespace('foo').bar: a})
+        self.assertEqual(a * a, result)
+
+        result = expr.subs({NamespacedSymbol('bar', namespace=SymbolNamespace('foo')): a})
+        self.assertEqual(a * a, result)
+
+        result = expr.subs({'NS(foo)': 'NS(oof)'})
+        self.assertEqual(a * SymbolNamespace('oof').bar, result)
+
+
 class NamespaceTests(unittest.TestCase):
 
     def test_illegal_name(self) -> None:
