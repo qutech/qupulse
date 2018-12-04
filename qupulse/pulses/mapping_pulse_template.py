@@ -40,8 +40,9 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         Mappings that are not specified are defaulted to identity mappings. F.i. if channel_mapping only contains one of
         two channels the other channel name is mapped to itself.
         All parameters that are not explicitly mapped in the parameter_mapping dictionary are mapped to themselves if
-        the mapping_namespace argument is not given or set to None. Otherwise, MappingPT maps these parameters are into
-        the namespace given by internal_namespace.
+        the mapping_namespace argument is not given or set to None. Otherwise, MappingPT maps these parameters into
+        the namespace given by mapping_namespace. All parameters that are already explicitely mapped in parameter_mapping
+        will not be affected in any way by the mapping_namespace argument.
         Furthermore parameter constrains can be specified.
         
         :param template: The encapsulated pulse template whose parameters, measurement names and channels are mapped
@@ -67,8 +68,8 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
             if not mapping_namespace:
                 mapping_namespace = ""
             else:
-                mapping_namespace += "___" # namespace - parameter delimiter
-            parameter_mapping.update({p: mapping_namespace+p.rpartition('___')[2] for p in missing_parameter_mappings})
+                mapping_namespace += "." # namespace - parameter delimiter
+            parameter_mapping.update({p: mapping_namespace+p.rpartition('.')[2] for p in missing_parameter_mappings})
         parameter_mapping = dict((k, Expression(v)) for k, v in parameter_mapping.items())
 
         measurement_mapping = dict() if measurement_mapping is None else measurement_mapping
