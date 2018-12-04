@@ -16,7 +16,7 @@ import sympy
 import numpy
 
 from qupulse.serialization import AnonymousSerializable
-from qupulse.expressions import Expression
+from qupulse.expressions import Expression, ExpressionVariableMissingException
 from qupulse.utils.types import HashableNumpyArray, DocStringABCMeta
 
 __all__ = ["Parameter", "ConstantParameter",
@@ -49,7 +49,7 @@ class Parameter(metaclass=DocStringABCMeta):
 
     @abstractmethod
     def __hash__(self) -> int:
-        pass
+        """Returns a hash value of the parameter. Must be implemented."""
 
     def __eq__(self, other) -> bool:
         return type(self) is type(other) and hash(self) == hash(other)
@@ -58,17 +58,22 @@ class Parameter(metaclass=DocStringABCMeta):
 class ConstantParameter(Parameter):
     """A pulse parameter with a constant value."""
     
-    def __init__(self, value: Union[Real, numpy.ndarray]) -> None:
+    def __init__(self, value: Union[Real, numpy.ndarray, Expression, str, sympy.Expr]) -> None:
         """Create a ConstantParameter instance.
 
         Args:
             value (Real): The value of the parameter
         """
         super().__init__()
-        if isinstance(value, Real):
-            self._value = value
-        else:
-            self._value = numpy.array(value).view(HashableNumpyArray)
+        try:
+            if isinstance(value, Real):
+                self._value = value
+            elif isinstance(value, (str, Expression, sympy.Expr)):
+                self._value = Expression(value).evaluate_numeric()
+            else:
+                self._value = numpy.array(value).view(HashableNumpyArray)
+        except ExpressionVariableMissingException:
+            raise RuntimeError("Expressions passed into ConstantParameter may not have free variables.")
         
     def get_value(self) -> Union[Real, numpy.ndarray]:
         return self._value
