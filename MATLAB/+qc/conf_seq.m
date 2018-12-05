@@ -279,7 +279,7 @@ function scan = conf_seq(varargin)
 			scan.disp(end).dim = d;
 			
 			if a.disp_ops(l) <= nOperations
-				opInd = a.disp_ops(l)
+				opInd = a.disp_ops(l);
 			else
 				opInd = a.procfn_ops{a.disp_ops(l)-nOperations}{4};
 			end
