@@ -14,7 +14,7 @@ import numpy
 
 from qupulse.serialization import AnonymousSerializable
 from qupulse.utils.sympy import sympify, to_numpy, recursive_substitution, evaluate_lambdified,\
-    get_most_simple_representation, get_variables, almost_equal
+    get_most_simple_representation, get_variables, almost_equal, subs_namespaces, SymbolNamespace
 
 __all__ = ["Expression", "ExpressionVariableMissingException", "ExpressionScalar", "ExpressionVector"]
 
@@ -120,6 +120,9 @@ class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
 
     @property
     def underlying_expression(self) -> Union[sympy.Expr, numpy.ndarray]:
+        raise NotImplementedError()
+
+    def subs_namespaces(self):
         raise NotImplementedError()
 
 
@@ -318,6 +321,9 @@ class ExpressionScalar(Expression):
 
     def is_nan(self) -> bool:
         return sympy.sympify('nan') == self._sympified_expression
+
+    def subs_namespaces(self, mapping: Dict[Union[str, SymbolNamespace], SymbolNamespace]):
+        return ExpressionScalar(subs_namespaces(self._sympified_expression, mapping))
 
 
 class ExpressionVariableMissingException(Exception):

@@ -189,13 +189,12 @@ class MappingTemplateTests(unittest.TestCase):
 
         self.assertEqual({'default': Expression('2*f'), 'other': Expression('-3.2*f+2.3')}, pulse.integral)
 
-    def test_mapping_namespace(self) -> None:
-        template = DummyPulseTemplate(parameter_names={'foo', 'bar', 'NS(outer).NS(inner).hugo'})
-        st = MappingPulseTemplate(template, mapping_namespace='NS(scope)')
-        self.assertEqual({'NS(scope).foo', 'NS(scope).bar', 'NS(scope).hugo'}, st.parameter_names)
-
-        st = MappingPulseTemplate(template, parameter_mapping={'foo': 'alpha+NS(scope).beta'}, mapping_namespace='NS(scope)')
-        self.assertEqual({'alpha', 'NS(scope).beta', 'NS(scope).bar', 'NS(scope).hugo'}, st.parameter_names)
+    def test_namespace_mapping(self) -> None:
+        template = DummyPulseTemplate(parameter_names={'foo', 'NS(outer).NS(inner).bar', 'NS(inner).bar', 'NS(outer).bar', 'NS(outer).NS(inner).foo'})
+        st = MappingPulseTemplate(template,
+                                  namespace_mapping={'NS(outer).NS(inner)': 'NS(combined)', 'NS(inner)': 'NS(bla)'},
+                                  parameter_mapping={'NS(outer).NS(inner).bar': 'NS(bla).a *c'})
+        self.assertEqual({'foo', 'NS(outer).bar', 'NS(bla).bar', 'NS(combined).foo', 'NS(bla).a', 'c'}, st.parameter_names)
 
 
 class MappingPulseTemplateSequencingTest(MeasurementWindowTestCase):

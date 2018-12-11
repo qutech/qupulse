@@ -10,7 +10,7 @@
         - Add duration keyword argument & example (see MultiChannelTemplates notebook)
         - Make duration equality check approximate (numeric tolerance)
     - `MappingPulseTemplate`:
-        - Add `mapping_namespace` keyword argument to allow mapping all subtemplate parameters into a namespace easily
+        - Added `namespace_mapping` argument to enable mapping of namespaces for parameters not explicitly mapped.
         - DEPRECATED: `allow_partial_parameter_mapping` argument. MappingPulseTemplate now always allows partial mapping.
     - Plotting:
         - Add `time_slice` keyword argument to render() and plot()
