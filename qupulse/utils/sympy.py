@@ -204,11 +204,11 @@ class SymbolNamespaceFactory:
 def subs_namespaces(expr: sympy.Expr, mapping: Dict[Union[str, SymbolNamespace], SymbolNamespace]) -> sympy.Expr:
     """Substitutes namespaces
 
-    Coutnerpart to Expr.subs() which can only substitute namespaced symbols but not namespaces itself, i.e.,
+    Counterpart to Expr.subs() which can only substitute namespaced symbols but not namespaces itself, i.e.,
     `(NS(a).b * c).subs({NS(a).b: x} == x*c` but `(NS(a).b * c).subs({NS(a).b: NS(x)}) == NS(a).b * c` (no change).
 
     subs_namespaces adds functionality to substitute namespaces and thus move all affected symbols in the expression
-    into the replacmenent namespace, i.e., `subs_namespaces(NS(a).b * c, {NS(a): NS(x)}) == NS(x).b * c` and
+    into the replacement namespace, i.e., `subs_namespaces(NS(a).b * c, {NS(a): NS(x)}) == NS(x).b * c` and
     `subs_namespaces(NS(a).NS(b).d * c, {NS(a).NS(b): NS(x).NS(y)}) == NS(x).NS(y)d * c`
     """
     subs = dict()
@@ -534,7 +534,7 @@ def evaluate_lambdified(expression: Union[sympy.Expr, numpy.ndarray],
                         variables: Sequence[str],
                         parameters: Dict[str, Union[numpy.ndarray, Number]],
                         lambdified) -> Tuple[Any, Any]:
-    # mapping namespaced parameter names to something that doesn't provoke syntax errors when used as argument for lamda
+    # mapping namespaced parameter names to something that doesn't provoke syntax errors when used as argument for lambda
     # NS(foo).bar -> foo____bar
     name_map = {v:parameter_namespace_filter_regex.sub(r'\2____', v) for v in variables}
     variables = name_map.values()
