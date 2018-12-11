@@ -88,6 +88,12 @@ class NamespacedSymbol(sympy.Symbol):
     def _lambdacode(self, settings=None) -> str:
         return self._pythoncode(settings)
 
+    @property
+    def _root_namespace(self) -> "SymbolNamespace":
+        if self._namespace:
+            return self._namespace._root_namespace
+        return None
+
 
 class NamespaceIndexedBase(NamespacedSymbol):
 
@@ -180,6 +186,12 @@ class SymbolNamespace:
 
     def __repr__(self) -> str:
         return str(self)
+
+    @property
+    def _root_namespace(self) -> "SymbolNamespace":
+        if self._parent is not None:
+            return self._parent._root_namespace
+        return self
 
 NS = SymbolNamespace
 
