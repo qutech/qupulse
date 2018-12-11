@@ -293,16 +293,16 @@ class PulseTemplateTest(unittest.TestCase):
 
 
     def test_create_program_namespaced_params(self):
-        template = PulseTemplateStub(defined_channels={'A'})
+        template = PulseTemplateStub(defined_channels={'A'}, parameter_names={'NS(foo).bar', 'k'})
 
-        expected_internal_kwargs = dict(parameters=dict(),
+        expected_internal_kwargs = dict(parameters={'NS(foo).bar': ConstantParameter(7), 'k': ConstantParameter(2)},
                                         measurement_mapping=dict(),
-                                        channel_mapping={'A': 'C', 'B': 'B'},
+                                        channel_mapping={'A': 'A'},
                                         global_transformation=None,
                                         to_single_waveform=set())
 
         with mock.patch.object(template, '_internal_create_program') as _internal_create_program:
-            template.create_program(channel_mapping={'A': 'C'})
+            template.create_program(parameters={'foo': {'bar': ConstantParameter(7)}, 'k': ConstantParameter(2)})
 
             _internal_create_program.assert_called_once_with(**expected_internal_kwargs, parent_loop=Loop())
 

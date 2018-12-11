@@ -141,7 +141,8 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
             raise ValueError('The following channels are mapped to twice', non_unique_targets)
 
         # make sure all values in the parameters dict are of type Parameter and the dict is not nested
-        for (key, value) in flatten_parameter_dict(parameters).items():
+        parameters = flatten_parameter_dict(parameters)
+        for (key, value) in parameters.items():
             if not isinstance(value, Parameter):
                 parameters[key] = ConstantParameter(value)
 
