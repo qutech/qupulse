@@ -15,7 +15,7 @@ from qupulse._program._loop import Loop
 from qupulse.pulses.conditions import Condition
 from qupulse.serialization import Serializer, PulseRegistryType
 
-from qupulse.utils.sympy import sympify
+from qupulse.utils.sympy import sympify, flatten_parameter_dict
 
 __all__ = [
     "MappingPulseTemplate",
@@ -247,6 +247,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
             A new dictionary which maps parameter names to parameter values which have been
             mapped according to the mappings defined for template.
         """
+        parameters = flatten_parameter_dict(parameters)
         missing = set(self.__external_parameters) - set(parameters.keys())
         if missing:
             raise ParameterNotProvidedException(missing.pop())

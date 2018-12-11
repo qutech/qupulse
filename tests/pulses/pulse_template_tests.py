@@ -291,8 +291,9 @@ class PulseTemplateTest(unittest.TestCase):
             _internal_create_program.assert_called_once_with(**expected_internal_kwargs, parent_loop=program)
         self.assertEqual(expected_program, program)
 
-    def test_create_program_channel_mapping(self):
-        template = PulseTemplateStub(defined_channels={'A', 'B'})
+
+    def test_create_program_namespaced_params(self):
+        template = PulseTemplateStub(defined_channels={'A'})
 
         expected_internal_kwargs = dict(parameters=dict(),
                                         measurement_mapping=dict(),
@@ -304,7 +305,6 @@ class PulseTemplateTest(unittest.TestCase):
             template.create_program(channel_mapping={'A': 'C'})
 
             _internal_create_program.assert_called_once_with(**expected_internal_kwargs, parent_loop=Loop())
-
 
     def test_create_program_none(self) -> None:
         template = PulseTemplateStub(defined_channels={'A'}, parameter_names={'foo'})
