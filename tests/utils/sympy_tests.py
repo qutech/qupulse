@@ -13,7 +13,7 @@ from sympy import sin, Sum, IndexedBase
 
 from qupulse.utils.sympy import sympify as qc_sympify, substitute_with_eval, recursive_substitution, Len,\
     evaluate_lambdified, evaluate_compiled, get_most_simple_representation, get_variables, get_free_symbols,\
-    almost_equal, SymbolNamespace, NamespacedSymbol, NamespaceIndexedBase, subs_namespaces
+    almost_equal, SymbolNamespace, NamespacedSymbol, NamespaceIndexedBase, subs_namespaces, get_root_level_namespace_ids
 
 a_ = IndexedBase(a)
 b_ = IndexedBase(b)
@@ -97,38 +97,38 @@ eval_simple = [
     (a*b, {'a': 2, 'b': 3}, 6),
     (a*b, {'a': 2, 'b': np.float32(3.5)}, 2*np.float32(3.5)),
     (a+b, {'a': 3.4, 'b': 76.7}, 3.4+76.7),
-    (foo_bar+scope_n, {'NS(foo).bar': 1.2, 'NS(scope).n': 3.3}, 1.2+3.3),
-    (foo_bar*scope_n, {'NS(foo).bar': 1.2, 'NS(scope).n': np.float32(3.3)}, 1.2*np.float32(3.3)),
-    (foo_bar*scope_n, {'NS(foo).bar': 1.2, 'NS(scope).n': 3.3}, 1.2*3.3)
+    (foo_bar+scope_n, {'foo': {'bar': 1.2}, 'scope': {'n': 3.3}}, 1.2+3.3),
+    (foo_bar*scope_n, {'foo': {'bar': 1.2}, 'scope': {'n': np.float32(3.3)}}, 1.2*np.float32(3.3)),
+    (foo_bar*scope_n, {'foo': {'bar': 1.2}, 'scope': {'n': 3.3}}, 1.2*3.3)
 ]
 
 eval_many_arguments = [
     (sum(sympy.symbols(list('a_' + str(i) for i in range(300)))), {'a_' + str(i): 1 for i in range(300)}, 300),
-    (sum(list(NamespacedSymbol('a_' + str(i), namespace=SymbolNamespace('scope')) for i in range(300))), {'NS(scope).a_' + str(i): 1 for i in range(300)}, 300)
+    (sum(list(NamespacedSymbol('a_' + str(i), namespace=SymbolNamespace('scope')) for i in range(300))), {'scope' : {'a_' + str(i): 1 for i in range(300)}}, 300)
 ]
 
 eval_simple_functions = [
     (a*sin(b), {'a': 3.5, 'b': 1.2}, 3.5*math.sin(1.2)),
-    (a*sin(foo_bar), {'a': 3.5, 'NS(foo).bar': 1.2}, 3.5*math.sin(1.2)),
+    (a*sin(foo_bar), {'a': 3.5, 'foo': {'bar': 1.2}}, 3.5*math.sin(1.2)),
 ]
 
 eval_array_values = [
     (a * b, {'a': 2, 'b': np.array([3])}, np.array([6])),
     (a * b, {'a': 2, 'b': np.array([3, 4, 5])}, np.array([6, 8, 10])),
     (a * b, {'a': np.array([2, 3]), 'b': np.array([100, 200])}, np.array([200, 600])),
-    (a * foo_bar, {'a': 2, 'NS(foo).bar': np.array([3])}, np.array([6])),
-    (a * foo_bar, {'a': 2, 'NS(foo).bar': np.array([3, 4, 5])}, np.array([6, 8, 10])),
-    (a * foo_bar, {'a': np.array([2, 3]), 'NS(foo).bar': np.array([100, 200])}, np.array([200, 600])),
+    (a * foo_bar, {'a': 2, 'foo': {'bar': np.array([3])}}, np.array([6])),
+    (a * foo_bar, {'a': 2, 'foo': {'bar': np.array([3, 4, 5])}}, np.array([6, 8, 10])),
+    (a * foo_bar, {'a': np.array([2, 3]), 'foo': {'bar': np.array([100, 200])}}, np.array([200, 600])),
 ]
 
 eval_sum = [
     (Sum(a_[i], (i, 0, Len(a) - 1)), {'a': np.array([1, 2, 3])}, 6),
-    (Sum(foo_bar_[i], (i, 0, Len(foo_bar) - 1)), {'NS(foo).bar': np.array([1, 2, 3])}, 6),
+    (Sum(foo_bar_[i], (i, 0, Len(foo_bar) - 1)), {'foo': {'bar': np.array([1, 2, 3])}}, 6),
 ]
 
 eval_array_expression = [
     (np.array([a*c, b*c]), {'a': 2, 'b': 3, 'c': 4}, np.array([8, 12])),
-    (np.array([a*foo_bar, scope_n*foo_bar]), {'a': 2, 'NS(scope).n': 3, 'NS(foo).bar': 4}, np.array([8, 12]))
+    (np.array([a*foo_bar, scope_n*foo_bar]), {'a': 2, 'scope': {'n': 3}, 'foo': {'bar': 4}}, np.array([8, 12]))
 ]
 
 
@@ -290,7 +290,7 @@ class EvaluationTestsBase:
     def test_eval_many_arguments(self):
         for expr, parameters, expected in eval_many_arguments:
             result = self.evaluate(expr, parameters)
-            self.assertEqual(result, expected)
+            self.assertEqual(expected, result)
 
     def test_eval_simple_functions(self):
         for expr, parameters, expected in eval_simple_functions:
@@ -337,9 +337,10 @@ class LamdifiedEvaluationTest(EvaluationTestsBase, unittest.TestCase):
 
     def evaluate(self, expression: Union[sympy.Expr, np.ndarray], parameters):
         if isinstance(expression, np.ndarray):
-            variables = set.union(*map(get_variables, expression.flat))
+            variables = set.union(*[get_variables(e).union(get_root_level_namespace_ids(e)) for e in expression.flat])
         else:
-            variables = get_variables(expression)
+            variables = get_variables(expression).union(get_root_level_namespace_ids(expression))
+        print(variables)
         return evaluate_lambdified(expression, variables=list(variables), parameters=parameters, lambdified=None)[0]
 
     @unittest.skipIf(sys.version_info[0] == 3 and sys.version_info[1] < 7, "causes syntax error for python < 3.7")

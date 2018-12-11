@@ -78,15 +78,20 @@ class NamespacedSymbol(sympy.Symbol):
 
     def _pythoncode(self, settings=None) -> str:
         prefix = ""
+        postfix = ""
         if self._namespace:
-            prefix = self._namespace._pythoncode(settings) + namespace_pythoncode_separator
-        return prefix + self._inner_name
+            prefix = self._namespace._pythoncode(settings) + "['"
+            postfix = "']"
+        return prefix + self._inner_name + postfix
 
     def _numpycode(self, settings=None) -> str:
         return self._pythoncode(settings)
 
     def _lambdacode(self, settings=None) -> str:
         return self._pythoncode(settings)
+
+    def _sympystr(self, settings=None) -> str:
+        return self.name
 
     @property
     def _root_namespace(self) -> "SymbolNamespace":
@@ -168,9 +173,11 @@ class SymbolNamespace:
 
     def _pythoncode(self, settings=None) -> str:
         prefix = ""
+        postfix = ""
         if self._parent:
-            prefix = self._parent._pythoncode(settings) + namespace_pythoncode_separator
-        return prefix + self._name
+            prefix = self._parent._pythoncode(settings) + "['"
+            postfix = "']"
+        return prefix + self._inner_name + postfix
 
     def _numpycode(self, settings=None) -> str:
         return self._pythoncode(settings)
@@ -180,6 +187,12 @@ class SymbolNamespace:
 
     def _sympy_(self):
         return self
+
+    def _sympystr(self, settings=None) -> str:
+        return str(self)
+
+    def _sympyrepr(self, settings=None) -> str:
+        return str(self)
 
     def __str__(self) -> str:
         return self.name
@@ -453,7 +466,7 @@ def get_most_simple_representation(expression: sympy.Expr) -> Union[str, int, fl
 def get_free_symbols(expression: sympy.Expr) -> Set[sympy.Symbol]:
     return set(symbol
                for symbol in expression.free_symbols
-               if not isinstance(symbol, sympy.Indexed))
+               if not isinstance(symbol, (sympy.Indexed, NamespacedSymbol)))
 
 def get_variables(expression: sympy.Expr) -> Set[str]:
     return set(map(str, get_free_symbols(expression)))
@@ -554,8 +567,9 @@ def flatten_parameter_dict(parameters: Dict[str, Union[numpy.ndarray, Number, Di
 
 
 lambdified_namespace_separator = '____'
-parameter_namespace_filter_regex = re.compile(r'(NS|SymbolNamespace)\(["\']?(\w+)["\']?\)\.')
 
+parameter_namespace_filter_regex = re.compile(r'(NS|SymbolNamespace)\(["\']?(\w+)["\']?\)')
+import unittest.mock
 
 def evaluate_lambdified(expression: Union[sympy.Expr, numpy.ndarray],
                         variables: Sequence[str],
@@ -563,21 +577,24 @@ def evaluate_lambdified(expression: Union[sympy.Expr, numpy.ndarray],
                         lambdified) -> Tuple[Any, Any]:
     # mapping namespaced parameter names to something that doesn't provoke syntax errors when used as argument for lambda
     # NS(foo).bar -> foo____bar
-    name_map = {v:parameter_namespace_filter_regex.sub(r'\2' + lambdified_namespace_separator, v) for v in variables}
-    variables = name_map.values()
-    parameters = {name_map[k]: v for k, v in parameters.items()}
-    substitutions = {sympy.Symbol(k):sympy.Symbol(v) for k, v in name_map.items()}
-
+    # name_map = {v:parameter_namespace_filter_regex.sub(r'\2', v) for v in variables}
+    # variables = name_map.values()
+    # parameters = {name_map[k]: v for k, v in parameters.items()}
+    # substitutions = {sympy.Symbol(k):sympy.Symbol(v) for k, v in name_map.items()}
+    #
     # while I've tried overloading the corresponding printing functions (_pythoncode, _lambdacode, _numpycode) of
     # NamespacedSymbol (and thus NamespacedIndexedBase) and SymbolNamespace to produce the above renamed identifier,
     # these are not reliable called by the code printers when nested in numpy arrays, sums, etc..
     # -> perform symbol substitution up front
-    if isinstance(expression, numpy.ndarray):
-        expression = recursive_substitution(expression, substitutions)
-    else:
-        expression = expression.subs(substitutions)
+    # if isinstance(expression, numpy.ndarray):
+    #     expression = recursive_substitution(expression, substitutions)
+    # else:
+    #     expression = expression.subs(substitutions)
 
-    lambdified = lambdified or sympy.lambdify(variables, expression, _lambdify_modules)
+    #with unittest.mock.patch(SymbolNamespace._sympystr, )
+    with unittest.mock.patch.object(SymbolNamespace, '_sympystr', SymbolNamespace._pythoncode):
+        with unittest.mock.patch.object(NamespacedSymbol, '_sympystr', NamespacedSymbol._pythoncode):
+            lambdified = lambdified or sympy.lambdify(variables, expression, _lambdify_modules)
 
     return lambdified(**parameters), lambdified
 
