@@ -337,7 +337,7 @@ class LamdifiedEvaluationTest(EvaluationTestsBase, unittest.TestCase):
 
     def evaluate(self, expression: Union[sympy.Expr, np.ndarray], parameters):
         if isinstance(expression, np.ndarray):
-            variables = set.union(*map(set, map(get_variables, expression.flat)))
+            variables = set.union(*map(get_variables, expression.flat))
         else:
             variables = get_variables(expression)
         return evaluate_lambdified(expression, variables=list(variables), parameters=parameters, lambdified=None)[0]

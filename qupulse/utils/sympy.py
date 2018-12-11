@@ -1,4 +1,4 @@
-from typing import Union, Dict, Tuple, Any, Sequence, Optional
+from typing import Union, Dict, Tuple, Any, Sequence, Optional, Set
 from numbers import Number
 from types import CodeType
 import warnings
@@ -438,14 +438,22 @@ def get_most_simple_representation(expression: sympy.Expr) -> Union[str, int, fl
         return str(expression)
 
 
-def get_free_symbols(expression: sympy.Expr) -> Sequence[sympy.Symbol]:
-    return tuple(symbol
-                 for symbol in expression.free_symbols
-                 if not isinstance(symbol, sympy.Indexed))
+def get_free_symbols(expression: sympy.Expr) -> Set[sympy.Symbol]:
+    return set(symbol
+               for symbol in expression.free_symbols
+               if not isinstance(symbol, sympy.Indexed))
 
 
-def get_variables(expression: sympy.Expr) -> Sequence[str]:
-    return tuple(map(str, get_free_symbols(expression)))
+def get_variables(expression: sympy.Expr) -> Set[str]:
+    return set(map(str, get_free_symbols(expression)))
+
+def get_root_level_namespaces(expression: sympy.Expr) -> Set[SymbolNamespace]:
+    return set(symbol._root_namespace
+               for symbol in expression.free_symbols
+               if isinstance(symbol, NamespacedSymbol))
+
+def get_root_level_namespace_ids(expression: sympy.Expr) -> Set[str]:
+    return set(n._inner_name for n in get_root_level_namespaces(expression))
 
 
 def substitute_with_eval(expression: sympy.Expr,
