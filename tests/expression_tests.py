@@ -49,6 +49,21 @@ class ExpressionVectorTests(unittest.TestCase):
             params['a'] = sympify('h')
             e.evaluate_numeric(**params)
 
+    def test_evaluate_numeric_namespaces(self) -> None:
+        e = ExpressionVector(['NS(foo).bar * NS(foo).NS(special).bar', 'NS(foo).b + c'])
+        params = {
+            'foo': {
+                'bar': 0.5,
+                'b': -1,
+                'special': {
+                    'bar': 0.5
+                }
+            },
+            'c': 2
+        }
+        np.testing.assert_equal(np.array([0.5*0.5,-1+2]),
+                                e.evaluate_numeric(**params))
+
     def test_partial_evaluation(self):
         e = ExpressionVector(['a * b + c', 'a + d'])
 
@@ -125,6 +140,34 @@ class ExpressionScalarTests(unittest.TestCase):
         }
         np.testing.assert_equal((2 * 1.5 - 7) * np.ones(4), e.evaluate_numeric(**params))
 
+    def test_evaluate_numeric_namespaces(self) -> None:
+        e = ExpressionScalar('NS(foo).bar * NS(foo).NS(special).bar + NS(foo).b + c')
+        params = {
+            'foo': {
+                'bar': 0.5,
+                'b': -1,
+                'special': {
+                    'bar': 0.5
+                }
+            },
+            'c': 2
+        }
+        self.assertEqual(0.5*0.5-1+2, e.evaluate_numeric(**params))
+
+    def test_evaluate_numeric_namespaces_numpy(self) -> None:
+        e = ExpressionScalar('NS(foo).bar * NS(foo).NS(special).bar + NS(foo).b + c')
+        params = {
+            'foo': {
+                'bar': 0.5*np.ones(4),
+                'b': -1*np.ones(4),
+                'special': {
+                    'bar': 0.5*np.ones(4)
+                }
+            },
+            'c': 2*np.ones(4)
+        }
+        np.testing.assert_equal((0.5*0.5-1+2) * np.ones(4), e.evaluate_numeric(**params))
+
     def test_indexing(self):
         e = ExpressionScalar('a[i] * c')
 
@@ -145,6 +188,13 @@ class ExpressionScalarTests(unittest.TestCase):
         params = {'c': 5.5}
         evaluated = e.evaluate_symbolic(params)
         expected = ExpressionScalar('a * 5.5')
+        self.assertEqual(expected.underlying_expression, evaluated.underlying_expression)
+
+    def test_partial_evaluation_namespaces(self) -> None:
+        e = ExpressionScalar('NS(foo).a * NS(foo).c')
+        params = {'foo': {'c': 5.5}}
+        evaluated = e.evaluate_symbolic(params)
+        expected = ExpressionScalar('NS(foo).a * 5.5')
         self.assertEqual(expected.underlying_expression, evaluated.underlying_expression)
 
     def test_partial_evaluation_vectorized(self) -> None:
@@ -199,6 +249,21 @@ class ExpressionScalarTests(unittest.TestCase):
         }
         result = e.evaluate_symbolic(params)
         expected = ExpressionScalar('d*b-7')
+        self.assertEqual(result, expected)
+
+    def test_evaluate_symbolic_namespaces(self):
+        e = ExpressionScalar('NS(foo).bar * NS(foo).NS(special).bar + NS(foo).b + c')
+        params = {
+            'foo': {
+                'bar': -7,
+                'special': {
+                    'bar': 'NS(foo).x'
+                },
+            },
+            'c': 'NS(foo).x'
+        }
+        result = e.evaluate_symbolic(params)
+        expected = ExpressionScalar('-7*NS(foo).x + NS(foo).b + NS(foo).x')
         self.assertEqual(result, expected)
 
     def test_variables(self) -> None:

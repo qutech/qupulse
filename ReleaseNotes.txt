@@ -19,6 +19,7 @@
     - Make ExpressionScalar hashable
     - Fix bug that prevented evaluation of expressions containing some special functions (`erfc`, `factorial`, etc.)
     - ExpressionScalar equality operator now also returns true in case of numerical almost-equality
+    - Expressions now accept nested parameter dictionary representing namespaces in evaluate methods
 
 - Utils/sympy:
     - Add class `SymbolNamespace`, `NamespacedSymbol` to allow specifying parameter namespaces in expressions

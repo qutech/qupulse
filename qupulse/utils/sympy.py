@@ -455,7 +455,6 @@ def get_free_symbols(expression: sympy.Expr) -> Set[sympy.Symbol]:
                for symbol in expression.free_symbols
                if not isinstance(symbol, sympy.Indexed))
 
-
 def get_variables(expression: sympy.Expr) -> Set[str]:
     return set(map(str, get_free_symbols(expression)))
 
@@ -539,16 +538,32 @@ def evaluate_compiled(expression: sympy.Expr,
     # return result, compiled
 
 
+def flatten_parameter_dict(parameters: Dict[str, Union[numpy.ndarray, Number, Dict]]) -> Dict[str, Union[numpy.ndarray, Number]]:
+    """ Transforms a nested parameter dictionary into a flat dictionary with namespace-qualified keys.
+
+    e.g. `{'foo': {'a': 3}, 'c': 7}` turns into `{'NS(foo).a': 3, 'c': 7}`
+    """
+    result = dict()
+    for k, v in parameters.items():
+        if isinstance(v, dict):
+            flat_v = flatten_parameter_dict(v)
+            result.update(**{'NS({}){}{}'.format(k, namespace_separator, ik):iv for ik, iv in flat_v.items()})
+        else:
+            result[k] = v
+    return result
+
+
+lambdified_namespace_separator = '____'
 parameter_namespace_filter_regex = re.compile(r'(NS|SymbolNamespace)\(["\']?(\w+)["\']?\)\.')
 
 
 def evaluate_lambdified(expression: Union[sympy.Expr, numpy.ndarray],
                         variables: Sequence[str],
-                        parameters: Dict[str, Union[numpy.ndarray, Number]],
+                        parameters: Dict[str, Union[numpy.ndarray, Number, Dict]],
                         lambdified) -> Tuple[Any, Any]:
     # mapping namespaced parameter names to something that doesn't provoke syntax errors when used as argument for lambda
     # NS(foo).bar -> foo____bar
-    name_map = {v:parameter_namespace_filter_regex.sub(r'\2____', v) for v in variables}
+    name_map = {v:parameter_namespace_filter_regex.sub(r'\2' + lambdified_namespace_separator, v) for v in variables}
     variables = name_map.values()
     parameters = {name_map[k]: v for k, v in parameters.items()}
     substitutions = {sympy.Symbol(k):sympy.Symbol(v) for k, v in name_map.items()}

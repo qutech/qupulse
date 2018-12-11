@@ -14,7 +14,8 @@ import numpy
 
 from qupulse.serialization import AnonymousSerializable
 from qupulse.utils.sympy import sympify, to_numpy, recursive_substitution, evaluate_lambdified,\
-    get_most_simple_representation, get_variables, almost_equal, subs_namespaces, SymbolNamespace
+    get_most_simple_representation, get_variables, almost_equal, subs_namespaces, SymbolNamespace, \
+    flatten_parameter_dict
 
 __all__ = ["Expression", "ExpressionVariableMissingException", "ExpressionScalar", "ExpressionVector"]
 
@@ -69,7 +70,8 @@ class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
             raise NonNumericEvaluation(self, result, call_arguments)
 
     def evaluate_numeric(self, **kwargs) -> Union[Number, numpy.ndarray]:
-        parsed_kwargs = self._parse_evaluate_numeric_arguments(kwargs)
+        flat_kwargs = flatten_parameter_dict(kwargs)
+        parsed_kwargs = self._parse_evaluate_numeric_arguments(flat_kwargs)
 
         result, self._expression_lambda = evaluate_lambdified(self.underlying_expression, self.variables,
                                                               parsed_kwargs, lambdified=self._expression_lambda)
@@ -84,6 +86,7 @@ class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
             return float(e)
     
     def evaluate_symbolic(self, substitutions: Dict[Any, Any]) -> 'Expression':
+        substitutions = flatten_parameter_dict(substitutions)
         return Expression.make(recursive_substitution(sympify(self.underlying_expression), substitutions))
 
     @property
@@ -164,7 +167,8 @@ class ExpressionVector(Expression):
         return self._variables
 
     def evaluate_numeric(self, **kwargs) -> Union[numpy.ndarray, Number]:
-        parsed_kwargs = self._parse_evaluate_numeric_arguments(kwargs)
+        flat_kwargs = flatten_parameter_dict(kwargs)
+        parsed_kwargs = self._parse_evaluate_numeric_arguments(flat_kwargs)
 
         result, self._expression_lambda = evaluate_lambdified(self.underlying_expression, self.variables,
                                                               parsed_kwargs, lambdified=self._expression_lambda)
