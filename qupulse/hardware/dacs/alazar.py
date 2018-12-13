@@ -1,4 +1,4 @@
-from typing import Dict, Any, Optional, Tuple, List
+from typing import Dict, Any, Optional, Tuple, List, Iterable
 from collections import defaultdict
 
 import numpy as np
@@ -146,7 +146,7 @@ class AlazarCard(DAC):
             raise NotImplementedError('Currently only can do cross buffer mask')
         self._mask_prototypes[mask_id] = (hw_channel, mask_type)
 
-    def measure_program(self) -> Dict[str, List[float]]:
+    def measure_program(self, channels: Iterable[str]) -> Dict[str, List[float]]:
         """
         Get all measurements at once and write them in a dictionary.
         """
@@ -155,11 +155,12 @@ class AlazarCard(DAC):
         scanline_data = self.__card.extractNextScanline()
         
         for op_name, meas_data in scanline_data.operationResults.items():
-            for op in self.__armed_program.operations:
-                # .name/.mask_name oder was anderes, dazu müsste ich einen Blick in die Downsample-Klasse werden
-                # op.name=DS_C, op.mask_name=C (siehe test_awg-orig.py)
-                if op.name == op_name:
-                    data[op.mask_name] = meas_data.getAsVoltage(self.__card.config.inputConfiguration[2].inputRange)
+            if op_name in channels:
+                for op in self.__armed_program.operations:
+                    # .name/.mask_name oder was anderes, dazu müsste ich einen Blick in die Downsample-Klasse werden
+                    # op.name=DS_C, op.mask_name=C (siehe test_awg-orig.py)
+                    if op.identifier == op_name:
+                        data[op.identifier] = list(meas_data.getAsVoltage(self.config.inputConfiguration[2].inputRange))
         
         del scanline_data
         
