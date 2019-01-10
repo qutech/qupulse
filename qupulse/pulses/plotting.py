@@ -194,6 +194,8 @@ def _render_loop(loop: Loop,
         raise ValueError("time_slice is not valid.")
 
     sample_count = (time_slice[1] - time_slice[0]) * sample_rate + 1
+    if sample_count<2:
+        raise PlottingNotPossibleException(pulse = None, description = 'cannot render sequence with less than 2 data points')
     times = np.linspace(float(time_slice[0]), float(time_slice[1]), num=int(sample_count), dtype=float)
     times[-1] = np.nextafter(times[-1], times[-2])
 
@@ -343,10 +345,14 @@ class PlottingNotPossibleException(Exception):
     """Indicates that plotting is not possible because the sequencing process did not translate
     the entire given PulseTemplate structure."""
 
-    def __init__(self, pulse) -> None:
+    def __init__(self, pulse, description = None) -> None:
         super().__init__()
         self.pulse = pulse
-
+        self.description = description
     def __str__(self) -> str:
-        return "Plotting is not possible. There are parameters which cannot be computed."
+        if self.description is None:
+            return "Plotting is not possible. There are parameters which cannot be computed."
+        else:
+            return "Plotting is not possible: %s." % self.description
+            
 
