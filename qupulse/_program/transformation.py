@@ -97,9 +97,12 @@ class LinearTransformation(Transformation):
         """
 
         Args:
-            transformation_matrix: columns are input and index are output channels
+            transformation_matrix: Matrix describing the transformation with shape (output_channels, input_channels)
+            input_channels: Channel ids of the columns
+            output_channels: Channel ids of the rows
         """
-        assert transformation_matrix.shape == (len(output_channels), len(input_channels))
+        if transformation_matrix.shape != (len(output_channels), len(input_channels)):
+            raise ValueError('Shape of transformation matrix does not match to the given channels')
 
         output_sorter = np.argsort(output_channels)
         transformation_matrix = transformation_matrix[output_sorter, :]
@@ -153,7 +156,7 @@ class LinearTransformation(Transformation):
 
 class OffsetTransformation(Transformation):
     def __init__(self, offsets: Mapping[ChannelID, Real]):
-        self._offsets = offsets
+        self._offsets = dict(offsets)
 
     def __call__(self, time: np.ndarray, data: Mapping[ChannelID, np.ndarray]) -> Mapping[ChannelID, np.ndarray]:
         return {channel: channel_values + self._offsets[channel] if channel in self._offsets else channel_values
@@ -166,13 +169,13 @@ class OffsetTransformation(Transformation):
         return input_channels
 
     @property
-    def compare_key(self):
+    def compare_key(self) -> Mapping[ChannelID, Real]:
         return self._offsets
 
 
 class ScalingTransformation(Transformation):
     def __init__(self, factors: Mapping[ChannelID, Real]):
-        self._factors = factors
+        self._factors = dict(factors)
 
     def __call__(self, time: np.ndarray, data: Mapping[ChannelID, np.ndarray]) -> Mapping[ChannelID, np.ndarray]:
         return {channel: channel_values * self._factors[channel] if channel in self._factors else channel_values
@@ -185,7 +188,7 @@ class ScalingTransformation(Transformation):
         return input_channels
 
     @property
-    def compare_key(self):
+    def compare_key(self) -> Mapping[ChannelID, Real]:
         return self._factors
 
 
