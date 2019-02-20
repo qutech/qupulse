@@ -14,7 +14,7 @@ from qupulse._program._loop import Loop
 from qupulse.expressions import ExpressionScalar
 from qupulse.utils import checked_int_cast
 from qupulse.pulses.parameters import Parameter, ConstantParameter, InvalidParameterNameException, ParameterConstrainer, ParameterNotProvidedException
-from qupulse.pulses.pulse_template import PulseTemplate, ChannelID
+from qupulse.pulses.pulse_template import PulseTemplate, ChannelID, AtomicPulseTemplate
 from qupulse.pulses.conditions import Condition, ConditionMissingException
 from qupulse._program.instructions import InstructionBlock
 from qupulse.pulses.sequencing import Sequencer
@@ -46,6 +46,16 @@ class LoopPulseTemplate(PulseTemplate):
     @property
     def is_interruptable(self):
         raise NotImplementedError()  # pragma: no cover
+
+    def __add__(self, other: AtomicPulseTemplate) -> 'LoopPulseTemplate':
+        serialized = self.get_serialization_data()
+        serialized['body'] = serialized['body'] + other
+        return type(self)(**serialized)
+
+    def __sub__(self, other: AtomicPulseTemplate) -> 'LoopPulseTemplate':
+        serialized = self.get_serialization_data()
+        serialized['body'] = serialized['body'] - other
+        return type(self)(**serialized)
 
 
 class ParametrizedRange:

@@ -13,7 +13,7 @@ from qupulse.serialization import Serializer, PulseRegistryType
 from qupulse._program._loop import Loop
 
 from qupulse.utils.types import MeasurementWindow, ChannelID, TimeType
-from qupulse.pulses.pulse_template import PulseTemplate
+from qupulse.pulses.pulse_template import PulseTemplate, AtomicPulseTemplate
 from qupulse.pulses.parameters import Parameter, ParameterConstrainer, ParameterNotProvidedException
 from qupulse.pulses.sequencing import InstructionBlock, Sequencer
 from qupulse.pulses.conditions import Condition
@@ -236,4 +236,12 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
 
         return functools.reduce(add_dicts, [sub.integral for sub in self.__subtemplates], expressions)
 
+    def __add__(self, other: AtomicPulseTemplate) -> 'SequencePulseTemplate':
+        serialized = self.get_serialization_data()
+        subtemplates = (subtemplate + other for subtemplate in serialized.pop('subtemplates'))
+        return type(self)(*subtemplates, **serialized)
 
+    def __sub__(self, other: AtomicPulseTemplate) -> 'SequencePulseTemplate':
+        serialized = self.get_serialization_data()
+        subtemplates = (subtemplate - other for subtemplate in serialized.pop('subtemplates'))
+        return type(self)(*subtemplates, **serialized)
