@@ -12,7 +12,7 @@ from qupulse.hardware.awgs.base import AWG
 __all__ = ['VirtualAWG']
 
 
-def _feed_into_callable(program: Loop, callback, channels, dt):
+def _feed_into_callable_fixed_sample_rate(program: Loop, callback, channels, dt, voltage_transformations):
     """Maybe there is already a function somewhere for this?"""
     binary_waveforms = {}
     reverse_lookup = {}
@@ -28,8 +28,9 @@ def _feed_into_callable(program: Loop, callback, channels, dt):
 
             sample_times = time_array[:n_samples]
             sampled = np.nan((len(channels), n_samples))
-            for idx, channel in enumerate(channels):
+            for idx, (channel, voltage_transformation) in enumerate(zip(channels, voltage_transformations)):
                 p.waveform.get_sampled(channel, sample_times, output_array=sampled[idx, :])
+                sampled[idx, :] = voltage_transformation(sampled[idx, :])
 
             result_hash = hash(sampled.tobytes())
             if result_hash in reverse_lookup:
@@ -54,7 +55,10 @@ def _feed_into_callable(program: Loop, callback, channels, dt):
 
 
 class VirtualAWG(AWG):
-    """This class allows registering callbacks the given program is fed into."""
+    """This class allows registering callbacks the given program is fed into.
+
+    TODO:
+     - adaptive sample rate (requires program analysis)"""
 
     def __init__(self, identifier: str, channels: int):
         super().__init__(identifier)
@@ -109,7 +113,7 @@ class VirtualAWG(AWG):
             self._fixed_sample_rate_callbacks[name] = (callback, TimeType(sample_rate))
 
     def run_current_program(self):
-        (program, channels, voltage_transformation) = self._programs[self._current_program]
+        (program, channels, voltage_transformations) = self._programs[self._current_program]
 
         for callback, sample_rate in self._fixed_sample_rate_callbacks.values():
             dt = 1/sample_rate
@@ -118,6 +122,6 @@ class VirtualAWG(AWG):
             # assert all waveforms have a length that is a multiple of the time per sample
             make_compatible(c_program, 0, dt, sample_rate)
 
-
-
+            _feed_into_callable_fixed_sample_rate(c_program, callback=callback, channels=channels, dt=dt,
+                                                  voltage_transformations=voltage_transformations)
 
