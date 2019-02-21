@@ -1,5 +1,6 @@
 from typing import Set, Optional, Dict, Any, cast
 from functools import partial, partialmethod
+import warnings
 
 from qupulse import ChannelID
 from qupulse.expressions import ExpressionScalar
@@ -67,7 +68,7 @@ class AbstractPulseTemplate(PulseTemplate):
 
     def link_to(self, target: PulseTemplate, serialize_linked: bool=None):
         if self._linked_target:
-            raise RuntimeError('Cannot is already linked. Cannot relink once linked AbstractPulseTemplate.')
+            raise RuntimeError('Cannot is already linked. If you REALLY need to relink call unlink() first.')
 
         for frozen_property in self._frozen_properties:
             if self._declared_properties[frozen_property] != getattr(target, frozen_property):
@@ -76,6 +77,14 @@ class AbstractPulseTemplate(PulseTemplate):
         if serialize_linked is not None:
             self.serialize_linked = serialize_linked
         self._linked_target = target
+
+    def unlink(self):
+        """Unlink a linked target. This might lead to unexpected behaviour as forwarded get attributes are not frozen"""
+        if self._linked_target:
+            warnings.warn("This might lead to unexpected behaviour as forwarded attributes are not frozen. Parent pulse"
+                          " templates might rely on certain properties to be constant (for example due to caching).",
+                          UnlinkWarning)
+        self._linked_target = None
 
     def __getattr__(self, item: str) -> Any:
         """Forward all unknown attribute accesses."""
@@ -99,7 +108,7 @@ class AbstractPulseTemplate(PulseTemplate):
             self._frozen_properties.add(property_name)
             return self._declared_properties[property_name]
         else:
-            raise NotSpecifiedError(property_name)
+            raise NotSpecifiedError(self.identifier, property_name)
 
     def _forward_if_linked(self, method_name: str, *args, **kwargs) -> Any:
         if self._linked_target:
@@ -123,4 +132,8 @@ class AbstractPulseTemplate(PulseTemplate):
 
 
 class NotSpecifiedError(RuntimeError):
+    pass
+
+
+class UnlinkWarning(UserWarning):
     pass
