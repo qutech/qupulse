@@ -8,6 +8,9 @@ from qupulse.serialization import PulseRegistryType
 from qupulse.pulses.pulse_template import PulseTemplate
 
 
+__all__ = ["AbstractPulseTemplate", "UnlinkWarning"]
+
+
 class AbstractPulseTemplate(PulseTemplate):
     def __init__(self, *,
                  identifier: str,
