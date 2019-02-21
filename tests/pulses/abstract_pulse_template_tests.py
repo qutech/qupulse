@@ -1,8 +1,9 @@
 import unittest
+import warnings
 from unittest import mock
 
 from qupulse.expressions import ExpressionScalar
-from qupulse.pulses.abstract_pulse_template import AbstractPulseTemplate, NotSpecifiedError
+from qupulse.pulses.abstract_pulse_template import AbstractPulseTemplate, NotSpecifiedError, UnlinkWarning
 
 from tests.pulses.sequencing_dummies import DummyPulseTemplate
 
@@ -25,12 +26,17 @@ class AbstractPulseTemplateTests(unittest.TestCase):
         self.assertEqual(apt._declared_properties, {})
         self.assertEqual(apt.identifier, 'my_apt')
 
+    def test_invalid_integral(self):
+        with self.assertRaisesRegex(ValueError, 'Integral'):
+            AbstractPulseTemplate(identifier='my_apt', integral={'X': 1}, defined_channels={'A'})
+
     def test_declaring(self):
-        apt = AbstractPulseTemplate(identifier='my_apt', defined_channels={'A'})
+        apt = AbstractPulseTemplate(identifier='my_apt', defined_channels={'A'}, is_interruptable=True)
 
         self.assertEqual(apt._frozen_properties, set())
-        self.assertEqual(apt._declared_properties, {'defined_channels': {'A'}})
+        self.assertEqual(apt._declared_properties, {'defined_channels': {'A'}, 'is_interruptable': True})
         self.assertEqual(apt.identifier, 'my_apt')
+        self.assertEqual(apt.is_interruptable, True)
 
     def test_freezing(self):
         apt = AbstractPulseTemplate(identifier='my_apt', defined_channels={'A'})
@@ -80,6 +86,9 @@ class AbstractPulseTemplateTests(unittest.TestCase):
 
         self.assertIs(linked, apt._linked_target)
 
+        with self.assertRaisesRegex(RuntimeError, 'already linked'):
+            apt.link_to(DummyPulseTemplate())
+
     def test_linking_wrong_frozen(self):
         apt = AbstractPulseTemplate(identifier='my_apt', defined_channels={'A'})
 
@@ -104,7 +113,7 @@ class AbstractPulseTemplateTests(unittest.TestCase):
         args = ([], {}, 'asd')
         kwargs = {'kw1': [], 'kw2': {}}
 
-        forwarded_methods = ['build_sequence', '_create_program', 'is_interruptable', 'requires_stop']
+        forwarded_methods = ['build_sequence', '_create_program', 'requires_stop']
 
         for method_name in forwarded_methods:
             method = getattr(apt, method_name)
@@ -133,3 +142,42 @@ class AbstractPulseTemplateTests(unittest.TestCase):
 
         self.assertTrue(hasattr(apt, 'test'))
         self.assertIs(apt.test, linked.test)
+
+    def test_serialization(self):
+        defined_channels = {'X', 'Y'}
+        properties = {'defined_channels': defined_channels, 'duration': 5}
+
+        apt = AbstractPulseTemplate(identifier='my_apt', **properties)
+        expected = {**properties,
+                    '#identifier': 'my_apt',
+                    '#type': 'qupulse.pulses.abstract_pulse_template.AbstractPulseTemplate'}
+        self.assertEqual(apt.get_serialization_data(), expected)
+
+        dummy = DummyPulseTemplate(**properties)
+        apt.link_to(dummy)
+
+        self.assertEqual(apt.get_serialization_data(), expected)
+        apt = AbstractPulseTemplate(identifier='my_apt', **properties)
+        apt.link_to(dummy, serialize_linked=True)
+        expected = dummy.get_serialization_data()
+        self.assertEqual(apt.get_serialization_data(), expected)
+
+        serializer = mock.MagicMock()
+        with self.assertRaisesRegex(RuntimeError, "not supported"):
+            apt.get_serialization_data(serializer=serializer)
+
+    def test_unlink(self):
+        apt = AbstractPulseTemplate(identifier='my_apt')
+        dummy = DummyPulseTemplate()
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            apt.unlink()
+
+            self.assertFalse(w)
+
+        apt.link_to(dummy)
+        with self.assertWarns(UnlinkWarning):
+            apt.unlink()
+
+        self.assertIsNone(apt._linked_target)

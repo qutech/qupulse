@@ -117,13 +117,13 @@ class AbstractPulseTemplate(PulseTemplate):
             raise RuntimeError('Cannot call "%s". No linked target to refer to', method_name)
 
     def _internal_create_program(self, **kwargs):
-        raise NotImplementedError('this should never be called as we overrode _create_program')
+        raise NotImplementedError('this should never be called as we overrode _create_program')  # pragma: no cover
 
     _create_program = partialmethod(_forward_if_linked, '_create_program')
     build_sequence = partialmethod(_forward_if_linked, 'build_sequence')
-    is_interruptable = partialmethod(_forward_if_linked, 'is_interruptable')
     requires_stop = partialmethod(_forward_if_linked, 'requires_stop')
 
+    is_interruptable = property(partial(_get_property, property_name='is_interruptable'))
     defined_channels = property(partial(_get_property, property_name='defined_channels'))
     duration = property(partial(_get_property, property_name='duration'))
     measurement_names = property(partial(_get_property, property_name='measurement_names'))
