@@ -148,12 +148,16 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
         expressions = {channel: 0 for channel in self._channels}
         for first_entry, second_entry in zip(self._entries[:-1], self._entries[1:]):
-            substitutions = {'t0': ExpressionScalar(first_entry.t).sympified_expression,
-                             't1': ExpressionScalar(second_entry.t).sympified_expression}
+            substitutions = {'t0': first_entry.t.sympified_expression,
+                             't1': second_entry.t.sympified_expression}
+
+            v0 = sympy.IndexedBase(Broadcast(first_entry.v.underlying_expression, (len(self.defined_channels),)))
+            v1 = sympy.IndexedBase(Broadcast(second_entry.v.underlying_expression, (len(self.defined_channels),)))
 
             for i, channel in enumerate(self._channels):
-                substitutions['v0'] = ExpressionScalar(first_entry.v[i]).sympified_expression
-                substitutions['v1'] = ExpressionScalar(second_entry.v[i]).sympified_expression
+                substitutions['v0'] = v0[i]
+                substitutions['v1'] = v1[i]
+
                 expressions[channel] += first_entry.interp.integral.sympified_expression.subs(substitutions)
 
         expressions = {c: ExpressionScalar(expressions[c]) for c in expressions}
