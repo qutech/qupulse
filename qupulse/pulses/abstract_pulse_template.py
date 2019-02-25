@@ -12,31 +12,40 @@ __all__ = ["AbstractPulseTemplate", "UnlinkWarning"]
 
 
 class AbstractPulseTemplate(PulseTemplate):
-    def __init__(self, *,
-                 identifier: str,
-
-                 defined_channels: Set[ChannelID]=None,
+    def __init__(self, identifier: str,
+                 *,
+                 defined_channels: Optional[Set[ChannelID]]=None,
                  parameter_names: Optional[Set[str]]=None,
                  measurement_names: Optional[Set[str]]=None,
                  integral: Optional[Dict[ChannelID, ExpressionScalar]]=None,
                  duration: Optional[ExpressionScalar]=None,
                  is_interruptable: Optional[bool]=None,
-
                  registry: Optional[PulseRegistryType]=None):
-        """
-        Guarantee:
-        A property whose get method was called always returns the same value
+        """This pulse template can be used as a place holder for a pulse template with a defined interface. Pulse
+        template properties like `defined_channels` can be passed on initialization to declare those properties who make
+        up the interface. Omitted properties raise an `NotSpecifiedError` exception if accessed. Properties which have
+        been accessed are marked as "frozen".
 
-        Mandatory properties:
-          - identifier
+        The abstract pulse template can be linked to another pulse template by calling the `link_to` member. The target
+        has to have the same properties for all properties marked as "frozen". This ensures a property always returns
+        the same value.
+
+        Example:
+            >>> abstract_readout = AbstractPulseTemplate('readout', defined_channels={'X', 'Y'})
+            >>> assert abstract_readout.defined_channels == {'X', 'Y'}
+
+            This will raise an exception
+            >>> print(abstract_readout.duration)
 
         Args:
-            defined_channels
-            identifier:
-            defined_channels:
-            measurement_names:
-            integral:
-            duration:
+            identifier: Mandatory property
+            defined_channels: Optional property
+            parameter_names: Optional property
+            measurement_names: Optional property
+            integral: Optional property
+            duration: Optional property
+            is_interruptable: Optional property
+            registry: Instance is registered here if specified
         """
         super().__init__(identifier=identifier)
 
@@ -70,6 +79,12 @@ class AbstractPulseTemplate(PulseTemplate):
         self._register(registry=registry)
 
     def link_to(self, target: PulseTemplate, serialize_linked: bool=None):
+        """Link to another pulse template.
+
+        Args:
+            target: Forward all getattr calls to this pulse template
+            serialize_linked: If true, serialization will be forwarded. Otherwise serialization will ignore the link
+        """
         if self._linked_target:
             raise RuntimeError('Cannot is already linked. If you REALLY need to relink call unlink() first.')
 

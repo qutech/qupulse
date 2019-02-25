@@ -11,6 +11,7 @@
         - Make duration equality check approximate (numeric tolerance)
     - Plotting:
         - Add `time_slice` keyword argument to render() and plot()
+    - Add `AbstractPulseTemplate` class
 
 - Expressions:
     - Make ExpressionScalar hashable
