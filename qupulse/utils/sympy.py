@@ -83,13 +83,6 @@ class Broadcast(sympy.Function):
         if hasattr(x, '__len__') or not x.free_symbols:
             return sympy.Array(numpy.broadcast_to(x, shape))
 
-    def doit(self, **kwargs) -> Union['Broadcast', sympy.Array]:
-        x, shape = self.args
-        if kwargs.get('deep', True):
-            x = x.doit()
-            shape = shape.doit()
-        return self.func(x, shape)
-
 
 class Len(sympy.Function):
     nargs = 1
