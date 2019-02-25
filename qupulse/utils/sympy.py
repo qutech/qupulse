@@ -104,7 +104,8 @@ Len.__name__ = 'len'
 
 
 sympify_namespace = {'len': Len,
-                     'Len': Len}
+                     'Len': Len,
+                     'Broadcast': Broadcast}
 
 
 def numpy_compatible_mul(*args) -> Union[sympy.Mul, sympy.Array]:

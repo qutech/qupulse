@@ -402,3 +402,13 @@ class BroadcastTests(unittest.TestCase):
         result, _ = evaluate_lambdified(symbolic, ['a', 'b'], arguments, None)
         np.testing.assert_array_equal(expected, result)
 
+    def test_sympification(self):
+        symbolic = Broadcast(a, (3,))
+        as_str = str(symbolic)
+
+        re_sympified = qc_sympify(as_str)
+        self.assertEqual(re_sympified, symbolic)
+
+        sympification = qc_sympify('Broadcast(a, (3,))')
+        self.assertEqual(sympification, symbolic)
+
