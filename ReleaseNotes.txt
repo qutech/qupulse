@@ -11,6 +11,8 @@
         - Make duration equality check approximate (numeric tolerance)
     - Plotting:
         - Add `time_slice` keyword argument to render() and plot()
+    - `PointPulseTemplate`:
+        - Fixed bug in integral evaluation
 
 - Expressions:
     - Make ExpressionScalar hashable
