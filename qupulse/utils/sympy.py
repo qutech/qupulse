@@ -225,7 +225,7 @@ _math_environment = {**_base_environment, **math.__dict__}
 _numpy_environment = {**_base_environment, **numpy.__dict__}
 _sympy_environment = {**_base_environment, **sympy.__dict__}
 
-_lambdify_modules = [{'ceiling': numpy_compatible_ceiling}, 'numpy', _special_functions]
+_lambdify_modules = [{'ceiling': numpy_compatible_ceiling, 'Broadcast': numpy.broadcast_to}, 'numpy', _special_functions]
 
 
 def evaluate_compiled(expression: sympy.Expr,

@@ -384,3 +384,21 @@ class BroadcastTests(unittest.TestCase):
         self.assertEqual(expected, Broadcast(list(expected), (4,)))
         self.assertEqual(expected, Broadcast(tuple(expected), (4,)))
         self.assertEqual(expected, Broadcast(expected, (4,)))
+
+    def test_numeric_evaluation(self):
+        symbolic = Broadcast(a, (b,))
+
+        arguments = {'a': (1, 2., 3), 'b': 3}
+        expected = np.asarray([1, 2., 3])
+        result, _ = evaluate_lambdified(symbolic, ['a', 'b'], arguments, None)
+        np.testing.assert_array_equal(expected, result)
+
+        with self.assertRaises(ValueError):
+            arguments = {'a': (1, 2., 3), 'b': 4}
+            evaluate_lambdified(symbolic, ['a', 'b'], arguments, None)
+
+        arguments = {'a': 1, 'b': 3}
+        expected = np.asarray([1, 1, 1])
+        result, _ = evaluate_lambdified(symbolic, ['a', 'b'], arguments, None)
+        np.testing.assert_array_equal(expected, result)
+
