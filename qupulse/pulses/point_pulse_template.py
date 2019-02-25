@@ -3,8 +3,10 @@ from numbers import Real
 import itertools
 import numbers
 
+import sympy
 import numpy as np
 
+from qupulse.utils.sympy import Broadcast
 from qupulse.utils.types import ChannelID
 from qupulse.expressions import Expression, ExpressionScalar
 from qupulse.pulses.conditions import Condition
