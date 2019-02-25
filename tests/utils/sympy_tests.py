@@ -16,7 +16,7 @@ b_ = IndexedBase(b)
 
 from qupulse.utils.sympy import sympify as qc_sympify, substitute_with_eval, recursive_substitution, Len,\
     evaluate_lambdified, evaluate_compiled, get_most_simple_representation, get_variables, get_free_symbols,\
-    almost_equal
+    almost_equal, Broadcast
 
 
 ################################################### SUBSTITUTION #######################################################
@@ -329,3 +329,58 @@ class AlmostEqualTests(unittest.TestCase):
         self.assertFalse(almost_equal(sympy.sin(a), sympy.sin(a) + 1e-14))
 
         self.assertTrue(almost_equal(sympy.sin(a), sympy.sin(a) + 1e-14, epsilon=1e-13))
+
+
+class BroadcastTests(unittest.TestCase):
+    def test_symbolic_shape(self):
+        symbolic = Broadcast(a, (b,))
+        self.assertIs(symbolic.func, Broadcast)
+        self.assertEqual(symbolic.args, (a, (b,)))
+
+        subs_b = symbolic.subs({b: 6})
+        self.assertIs(subs_b.func, Broadcast)
+        self.assertEqual(subs_b.args, (a, (6,)))
+
+        subs_a = symbolic.subs({a: 3})
+        self.assertIs(subs_a.func, Broadcast)
+        self.assertEqual(subs_a.args, (3, (b,)))
+
+        subs_both_scalar = symbolic.subs({a: 3, b: 6})
+        self.assertEqual(subs_both_scalar, sympy.Array([3, 3, 3, 3, 3, 3]))
+
+        subs_both_array = symbolic.subs({a: (1, 2, 3, 4, 5, 6), b: 6})
+        self.assertEqual(subs_both_array, sympy.Array([1, 2, 3, 4, 5, 6]))
+
+        with self.assertRaises(ValueError):
+            symbolic.subs({a: (1, 2, 3, 4, 5, 6), b: 7})
+
+    def test_scalar_broad_cast(self):
+        symbolic = Broadcast(a, (6,))
+        self.assertIs(symbolic.func, Broadcast)
+        self.assertEqual(symbolic.args, (a, (6,)))
+
+        subs_symbol = symbolic.subs({a: b})
+        self.assertIs(subs_symbol.func, Broadcast)
+        self.assertEqual(subs_symbol.args, (b, (6,)))
+
+        subs_scalar = symbolic.subs({a: 3.4})
+        self.assertEqual(subs_scalar, sympy.Array([3.4, 3.4, 3.4, 3.4, 3.4, 3.4]))
+
+        subs_symbol_vector = symbolic.subs({a: (b, 1, 2, 3, 4, 5)})
+        self.assertEqual(subs_symbol_vector, sympy.Array([b, 1, 2, 3, 4, 5]))
+
+        subs_numeric_vector = symbolic.subs({a: (0, 1, 2, 3, 4, 5)})
+        self.assertEqual(subs_numeric_vector, sympy.Array([0, 1, 2, 3, 4, 5]))
+
+        with self.assertRaises(ValueError):
+            symbolic.subs({a: (b, 4, 5)})
+
+        with self.assertRaises(ValueError):
+            symbolic.subs({a: (8, 5, 3, 5, 5, 4, 4, 5)})
+
+    def test_array_broadcast(self):
+        expected = sympy.Array([1, 2, a, b])
+
+        self.assertEqual(expected, Broadcast(list(expected), (4,)))
+        self.assertEqual(expected, Broadcast(tuple(expected), (4,)))
+        self.assertEqual(expected, Broadcast(expected, (4,)))

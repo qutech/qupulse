@@ -65,6 +65,32 @@ class IndexedBasedFinder:
         return True
 
 
+class Broadcast(sympy.Function):
+    """Broadcast x to the specified shape using numpy.broadcast_to
+
+    Examples:
+        >>> bc = Broadcast('a', (3,))
+        >>> assert bc.subs({'a': 2}) == sympy.Array([2, 2, 2])
+        >>> assert bc.subs({'a': (1, 2, 3)}) == sympy.Array([1, 2, 3])
+    """
+
+    @classmethod
+    def eval(cls, x, shape) -> Optional[sympy.Array]:
+        if hasattr(shape, 'free_symbols') and shape.free_symbols:
+            # cannot do anything
+            return None
+
+        if hasattr(x, '__len__') or not x.free_symbols:
+            return sympy.Array(numpy.broadcast_to(x, shape))
+
+    def doit(self, **kwargs) -> Union['Broadcast', sympy.Array]:
+        x, shape = self.args
+        if kwargs.get('deep', True):
+            x = x.doit()
+            shape = shape.doit()
+        return self.func(x, shape)
+
+
 class Len(sympy.Function):
     nargs = 1
 
