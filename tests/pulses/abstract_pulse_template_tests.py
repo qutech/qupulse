@@ -148,6 +148,11 @@ class AbstractPulseTemplateTests(unittest.TestCase):
         properties = {'defined_channels': defined_channels, 'duration': 5}
 
         apt = AbstractPulseTemplate(identifier='my_apt', **properties)
+
+        serializer = mock.MagicMock()
+        with self.assertRaisesRegex(RuntimeError, "not supported"):
+            apt.get_serialization_data(serializer=serializer)
+
         expected = {**properties,
                     '#identifier': 'my_apt',
                     '#type': 'qupulse.pulses.abstract_pulse_template.AbstractPulseTemplate'}
@@ -161,10 +166,6 @@ class AbstractPulseTemplateTests(unittest.TestCase):
         apt.link_to(dummy, serialize_linked=True)
         expected = dummy.get_serialization_data()
         self.assertEqual(apt.get_serialization_data(), expected)
-
-        serializer = mock.MagicMock()
-        with self.assertRaisesRegex(RuntimeError, "not supported"):
-            apt.get_serialization_data(serializer=serializer)
 
     def test_unlink(self):
         apt = AbstractPulseTemplate(identifier='my_apt')
