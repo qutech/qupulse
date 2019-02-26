@@ -25,7 +25,7 @@ from qupulse.pulses.parameters import Parameter, ParameterConstrainer
 from qupulse.pulses.measurement import MeasurementDeclaration, MeasurementWindow
 from qupulse.expressions import Expression, ExpressionScalar
 
-__all__ = ["AtomicMultiChannelPulseTemplate"]
+__all__ = ["AtomicMultiChannelPulseTemplate", "ParallelConstantChannelPulseTemplate"]
 
 
 class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
