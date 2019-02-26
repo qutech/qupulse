@@ -228,7 +228,7 @@ class ParallelConstantChannelPulseTemplate(PulseTemplate):
         return self._overwritten_channels
 
     def _get_overwritten_channels_values(self,
-                                         parameters: Dict[str, Union[Parameter, numbers.Real]]
+                                         parameters: Dict[str, Union[numbers.Real]]
                                          ) -> Dict[str, numbers.Real]:
         return {name: value.evaluate_numeric(**parameters)
                 for name, value in self.overwritten_channels.items()}
@@ -237,7 +237,8 @@ class ParallelConstantChannelPulseTemplate(PulseTemplate):
                                  parameters: Dict[str, Parameter],
                                  global_transformation: Optional[Transformation],
                                  **kwargs):
-        overwritten_channels = self._get_overwritten_channels_values(parameters=parameters)
+        real_parameters = {name: parameters[name].get_value() for name in self.transformation_parameters}
+        overwritten_channels = self._get_overwritten_channels_values(parameters=real_parameters)
         transformation = ParallelConstantChannelTransformation(overwritten_channels)
 
         if global_transformation is not None:
@@ -266,7 +267,7 @@ class ParallelConstantChannelPulseTemplate(PulseTemplate):
 
     @property
     def transformation_parameters(self) -> Set[str]:
-        return set.union(*(value.variables for value in self.overwritten_channels.values()))
+        return set.union(*(set(value.variables) for value in self.overwritten_channels.values()))
 
     @property
     def parameter_names(self):
