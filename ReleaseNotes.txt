@@ -1,4 +1,4 @@
-## pending/current ##
+## 0.3 ##
 
 - General:
     - Introduce qupulse.utils.isclose (an alias for math.isclose if available)
