@@ -1,0 +1,81 @@
+{
+    "#identifier": "free_induction_decay",
+    "#type": "qupulse.pulses.repetition_pulse_template.RepetitionPulseTemplate",
+    "body": {
+        "#type": "qupulse.pulses.loop_pulse_template.ForLoopPulseTemplate",
+        "body": {
+            "#type": "qupulse.pulses.sequence_pulse_template.SequencePulseTemplate",
+            "subtemplates": [
+                {
+                    "#identifier": "S_init",
+                    "#type": "reference"
+                },
+                {
+                    "#type": "qupulse.pulses.point_pulse_template.PointPulseTemplate",
+                    "channel_names": [
+                        "RFX",
+                        "RFY"
+                    ],
+                    "time_point_tuple_list": [
+                        [
+                            0,
+                            "meas",
+                            "hold"
+                        ],
+                        [
+                            "t_meas_wait",
+                            "meas",
+                            "hold"
+                        ]
+                    ]
+                },
+                {
+                    "#identifier": "adprep",
+                    "#type": "reference"
+                },
+                {
+                    "#type": "qupulse.pulses.mapping_pulse_template.MappingPulseTemplate",
+                    "channel_mapping": {
+                        "RFX": "RFX",
+                        "RFY": "RFY"
+                    },
+                    "parameter_mapping": {
+                        "eps_J": "eps_J",
+                        "op": "op",
+                        "t_fid": "t_start + i_fid*t_step"
+                    },
+                    "template": {
+                        "#type": "qupulse.pulses.point_pulse_template.PointPulseTemplate",
+                        "channel_names": [
+                            "RFX",
+                            "RFY"
+                        ],
+                        "time_point_tuple_list": [
+                            [
+                                0,
+                                "op-eps_J",
+                                "hold"
+                            ],
+                            [
+                                "t_fid",
+                                "op-eps_J",
+                                "hold"
+                            ]
+                        ]
+                    }
+                },
+                {
+                    "#identifier": "adread",
+                    "#type": "reference"
+                }
+            ]
+        },
+        "loop_index": "i_fid",
+        "loop_range": [
+            0,
+            "N_fid_steps",
+            1
+        ]
+    },
+    "repetition_count": "N_repetitions"
+}
