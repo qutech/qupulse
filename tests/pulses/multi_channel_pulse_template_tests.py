@@ -398,6 +398,35 @@ class ParallelConstantChannelPulseTemplateTests(unittest.TestCase):
         self.assertEqual({'a', 'c'}, pccpt.transformation_parameters)
         self.assertIs(template.duration, pccpt.duration)
 
+        template._is_interruptable = mock.Mock()
+        self.assertIs(pccpt.is_interruptable, template.is_interruptable)
+
+        rs_arg = object()
+        return_value = object()
+        template.requires_stop = mock.Mock(return_value=return_value)
+        self.assertIs(return_value, pccpt.requires_stop(rs_arg))
+        template.requires_stop.assert_called_once_with(rs_arg)
+
+    def test_missing_implementations(self):
+        pccpt = ParallelConstantChannelPulseTemplate(DummyPulseTemplate(), {})
+        with self.assertRaises(NotImplementedError):
+            pccpt.get_serialization_data(object())
+
+        with self.assertRaises(NotImplementedError):
+            pccpt.build_sequence()
+
+    def test_integral(self):
+        template = DummyPulseTemplate(duration='t1', defined_channels={'X', 'Y'}, parameter_names={'a', 'b'},
+                                      measurement_names={'M'},
+                                      integrals={'X': ExpressionScalar('a'), 'Y': ExpressionScalar(4)})
+        overwritten_channels = {'Y': 'c', 'Z': 'a'}
+        pccpt = ParallelConstantChannelPulseTemplate(template, overwritten_channels)
+
+        expected_integral = {'X': ExpressionScalar('a'),
+                             'Y': ExpressionScalar('c*t1'),
+                             'Z': ExpressionScalar('a*t1')}
+        self.assertEqual(expected_integral, pccpt.integral)
+
     def test_get_overwritten_channels_values(self):
         template = DummyPulseTemplate(duration='t1', defined_channels={'X', 'Y'}, parameter_names={'a', 'b'},
                                       measurement_names={'M'})
