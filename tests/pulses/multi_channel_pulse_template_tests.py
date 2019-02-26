@@ -4,7 +4,7 @@ import warnings
 import numpy
 
 from qupulse.utils.types import time_from_float
-from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform, MappingPulseTemplate, ChannelMappingException, AtomicMultiChannelPulseTemplate
+from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform, MappingPulseTemplate, ChannelMappingException, AtomicMultiChannelPulseTemplate, ParallelConstantChannelPulseTemplate
 from qupulse.pulses.parameters import ParameterConstraint, ParameterConstraintViolation, ConstantParameter
 from qupulse.expressions import ExpressionScalar, Expression
 from qupulse._program.instructions import InstructionBlock
@@ -375,3 +375,31 @@ class AtomicMultiChannelPulseTemplateOldSerializationTests(unittest.TestCase):
             data = template.get_serialization_data(serializer=serializer)
 
             self.assertEqual(expected_data, data)
+
+
+class ParallelConstantChannelPulseTemplateTests(unittest.TestCase):
+    def test_init(self):
+        pass
+
+
+class ParallelConstantChannelPulseTemplateSerializationTests(SerializableTests, unittest.TestCase):
+    @property
+    def class_to_test(self):
+        return ParallelConstantChannelPulseTemplate
+
+    @staticmethod
+    def make_kwargs(*args, **kwargs):
+        return {
+            'template': DummyPulseTemplate(duration='t1', defined_channels={'X', 'Y'}, parameter_names={'a', 'b'}),
+            'overwritten_channels': {'Y': 'c', 'Z': 'a'}
+        }
+
+    def assert_equal_instance_except_id(self, lhs: ParallelConstantChannelPulseTemplate, rhs: ParallelConstantChannelPulseTemplate):
+        self.assertIsInstance(lhs, ParallelConstantChannelPulseTemplate)
+        self.assertIsInstance(rhs, ParallelConstantChannelPulseTemplate)
+        self.assertEqual(lhs.template, rhs.template)
+        self.assertEqual(lhs.overwritten_channels, rhs.overwritten_channels)
+
+    @unittest.skip("Conversion not implemented for new type")
+    def test_conversion(self):
+        pass
