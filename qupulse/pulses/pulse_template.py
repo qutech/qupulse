@@ -98,9 +98,9 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
         """Returns an expression giving the integral over the pulse."""
 
     def create_program(self, *,
-                       parameters: Optional[Dict[str, Union[Parameter, float, Expression, str, Real]]]=None,
-                       measurement_mapping: Optional[Dict[str, Optional[str]]]=None,
-                       channel_mapping: Optional[Dict[ChannelID, Optional[ChannelID]]]=None,
+                       parameters: Optional[Mapping[str, Union[Parameter, float, Expression, str, Real]]]=None,
+                       measurement_mapping: Optional[Mapping[str, Optional[str]]]=None,
+                       channel_mapping: Optional[Mapping[ChannelID, Optional[ChannelID]]]=None,
                        global_transformation: Optional[Transformation]=None,
                        to_single_waveform: Set[Union[str, 'PulseTemplate']]=None) -> Optional['Loop']:
         """Translates this PulseTemplate into a program Loop.
@@ -128,9 +128,9 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
         if to_single_waveform is None:
             to_single_waveform = set()
 
-        for channel in self.defined_channels:
-            if channel not in channel_mapping:
-                channel_mapping[channel] = channel
+        # make sure all channels are mapped
+        complete_channel_mapping = {channel: channel for channel in self.defined_channels}
+        complete_channel_mapping.update(channel_mapping)
 
         non_unique_targets = {channel
                               for channel, count in collections.Counter(channel_mapping.values()).items()
@@ -139,21 +139,20 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
             raise ValueError('The following channels are mapped to twice', non_unique_targets)
 
         # make sure all values in the parameters dict are of type Parameter
-        for (key, value) in parameters.items():
-            if not isinstance(value, Parameter):
-                parameters[key] = ConstantParameter(value)
+        parameters = {key: value if isinstance(value, Parameter) else ConstantParameter(value)
+                      for key, value in parameters.items()}
 
         root_loop = Loop()
         # call subclass specific implementation
         self._create_program(parameters=parameters,
                              measurement_mapping=measurement_mapping,
-                             channel_mapping=channel_mapping,
+                             channel_mapping=complete_channel_mapping,
                              global_transformation=global_transformation,
                              to_single_waveform=to_single_waveform,
                              parent_loop=root_loop)
 
         if root_loop.waveform is None and len(root_loop.children) == 0:
-            return None # return None if no program
+            return None  # return None if no program
         return root_loop
 
     @abstractmethod
