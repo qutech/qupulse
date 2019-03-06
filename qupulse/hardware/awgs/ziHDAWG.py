@@ -7,14 +7,14 @@ assert(sys.byteorder == 'little')
 
 
 class HDAWGRepresentation:
-	"""docstring for HDAWGRepresentation"""
-	def __init__(self, device_id=None, data_server_addr=None, data_server_port=None, external_trigger=False, reset=False):
+    """docstring for HDAWGRepresentation"""
+    def __init__(self, device_id=None, data_server_addr=None, data_server_port=None, external_trigger=False, reset=False):
         """
         :param device_id:         Device id that uniquely identifies this device to the data server
         :param data_server_addr:  Data server address
         :param data_server_port:  Data server port
         :param external_trigger:  Not supported yet
-        :param reset:			  Reset device before initialization
+        :param reset:             Reset device before initialization
         """
         # TODO: initialize device here
         self._instr = None
@@ -23,11 +23,11 @@ class HDAWGRepresentation:
             raise NotImplementedError()  # pragma: no cover
 
        	if reset:
-            pass
+            raise NotImplementedError()  # pragma: no cover
 
-		self.initialize()
+        self.initialize()
 
-		self._channel_pair_AB = HDAWGChannelPair(self, (1, 2), str(device_id) + '_AB')
+        self._channel_pair_AB = HDAWGChannelPair(self, (1, 2), str(device_id) + '_AB')
         self._channel_pair_CD = HDAWGChannelPair(self, (3, 4), str(device_id) + '_CD')
         self._channel_pair_EF = HDAWGChannelPair(self, (5, 6), str(device_id) + '_EF')
         self._channel_pair_GH = HDAWGChannelPair(self, (7, 8), str(device_id) + '_GH')
@@ -40,38 +40,38 @@ class HDAWGRepresentation:
     def channel_pair_CD(self) -> 'HDAWGChannelPair':
         return self._channel_pair_CD
 
-	@property
+    @property
     def channel_pair_EF(self) -> 'HDAWGChannelPair':
         return self._channel_pair_EF
 
-	@property
+    @property
     def channel_pair_GH(self) -> 'HDAWGChannelPair':
-        return self._channel_pair_GH        
+        return self._channel_pair_GH
 
     # TODO: Correct device
     @property
-    def main_instrument(self) -> 'ziDAQ':
+    def main_instrument(self) -> None:
         return self._instr
 
     def initialize(self) -> None:
-    	pass
+        raise NotImplementedError()  # pragma: no cover
 
 
 
 class HDAWGChannelPair(AWG):
-	"""Represents a channel pair of the Zurich Instruments HDAWG as an independent AWG entity.
-	It represents a set of channels that have to have(hardware enforced) the same:
+    """Represents a channel pair of the Zurich Instruments HDAWG as an independent AWG entity.
+    It represents a set of channels that have to have(hardware enforced) the same:
         -control flow
         -sample rate
 
     It keeps track of the AWG state and manages waveforms and programs on the hardware.
     """
-	def __init__(self, hdawg_device: HDAWGRepresentation, channels: Tuple[int, int], identifier: str):
-		super().__init__(identifier)
-		# TODO: add ziDAQ reference of device here
-		self._device = None
+    def __init__(self, hdawg_device: HDAWGRepresentation, channels: Tuple[int, int], identifier: str):
+        super().__init__(identifier)
+        # TODO: add ziDAQ reference of device here
+        self._device = None
 
-		if channels not in ((1, 2), (3, 4), (5, 6), (7, 8)):
+        if channels not in ((1, 2), (3, 4), (5, 6), (7, 8)):
             raise ValueError('Invalid channel pair: {}'.format(channels))
         self._channels = channels
 
@@ -79,12 +79,12 @@ class HDAWGChannelPair(AWG):
 
     @property
     def num_channels(self) -> int:
-    	"""Number of channels"""
+        """Number of channels"""
         return 2
 
     @property
     def num_markers(self) -> int:
-    	"""Number of marker channels"""
+        """Number of marker channels"""
         return 2
 
     def upload(self, name: str,
@@ -110,29 +110,29 @@ class HDAWGChannelPair(AWG):
             force: If a different sequence is already present with the same name, it is
                 overwritten if force is set to True. (default = False)
         """
-        pass
+        raise NotImplementedError()  # pragma: no cover
 
     def remove(self, name: str) -> None:
-    	"""Remove a program from the AWG.
+        """Remove a program from the AWG.
 
         Also discards all waveforms referenced only by the program identified by name.
 
         Args:
             name: The name of the program to remove.
         """
-        pass
+        raise NotImplementedError()  # pragma: no cover
 
     def clear(self) -> None:
-    	"""Removes all programs and waveforms from the AWG.
+        """Removes all programs and waveforms from the AWG.
 
         Caution: This affects all programs and waveforms on the AWG, not only those uploaded using qupulse!
         """
-        pass
+        raise NotImplementedError()  # pragma: no cover
 
     def arm(self, name: str) -> None:
     	"""Load the program 'name' and arm the device for running it. If name is None the awg will "dearm" its current
         program."""
-        pass
+        raise NotImplementedError()  # pragma: no cover
 
     @property
     def programs(self) -> Set[str]:
@@ -141,9 +141,4 @@ class HDAWGChannelPair(AWG):
 
     def sample_rate(self) -> float:
         """The sample rate of the AWG."""
-        pass
-
-
-
-
-		
+        raise NotImplementedError()  # pragma: no cover
