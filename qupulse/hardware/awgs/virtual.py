@@ -1,15 +1,19 @@
 """This module contains the tools to setup a virtual AWG i.e. an AWG that forwards the program into a given callback.
 This is handy to setup a simulation to test qupulse pulses."""
-from typing import Union, Sequence, Tuple, Optional, Callable, Set
+from typing import Tuple, Optional, Callable, Set
 
 import numpy as np
 
 from qupulse.utils.types import ChannelID, TimeType
-from qupulse._program._loop import Loop, make_compatible
+from qupulse._program._loop import Loop, make_compatible, to_waveform
 from qupulse.hardware.awgs.base import AWG
 
 
 __all__ = ['VirtualAWG']
+
+
+SamplingCallback = Callable[[np.ndarray], np.ndarray]
+SamplingCallback.__doc__ = """Maps an array ov times to an array of voltages. The time array has to be ordered"""
 
 
 def _feed_into_callable_fixed_sample_rate(program: Loop, callback, channels, dt, voltage_transformations):
@@ -54,6 +58,25 @@ def _feed_into_callable_fixed_sample_rate(program: Loop, callback, channels, dt,
                 stack.extend(reversed(current))
 
 
+def _create_sampling_callbacks(program: Loop, channels, voltage_transformations):
+    waveform = to_waveform(program)
+
+    duration = float(waveform.duration)
+
+    def get_callback(channel: Optional[ChannelID], voltage_transformation):
+        if channel is None:
+            return None
+        else:
+            def sample_channel(time: np.ndarray):
+                return voltage_transformation(waveform.get_sampled(channel, time))
+
+            return sample_channel
+
+    callbacks = [get_callback(channel, voltage_transformation)
+                 for channel, voltage_transformation in zip(channels, voltage_transformations)]
+    return (duration, *callbacks)
+
+
 class VirtualAWG(AWG):
     """This class allows registering callbacks the given program is fed into.
 
@@ -68,6 +91,7 @@ class VirtualAWG(AWG):
         self._channels = tuple(range(channels))
 
         self._fixed_sample_rate_callbacks = {}
+        self._function_handle_callback = None
 
     @property
     def num_channels(self) -> int:
@@ -106,11 +130,17 @@ class VirtualAWG(AWG):
     def sample_rate(self) -> float:
         return float('nan')
 
-    def set_fixed_sample_rate_callback(self, name: str, callback: Callable[[np.ndarray], None], sample_rate):
+    def set_fixed_sample_rate_callback(self, name: str, callback: Callable[[np.ndarray], None], sample_rate: TimeType):
         if callback is None:
             self._fixed_sample_rate_callbacks.pop(name, None)
         else:
-            self._fixed_sample_rate_callbacks[name] = (callback, TimeType(sample_rate))
+            self._fixed_sample_rate_callbacks[name] = (callback, sample_rate)
+
+    def set_function_handle_callback(self,
+                                     callback: Optional[Callable[[float, SamplingCallback, ...], None]]):
+        """When run current program is called the given callback is called with the first positional argument being the
+        duration and following arguments being sampling callbacks as defined above."""
+        self._function_handle_callback = callback
 
     def run_current_program(self):
         (program, channels, voltage_transformations) = self._programs[self._current_program]
@@ -125,3 +155,6 @@ class VirtualAWG(AWG):
             _feed_into_callable_fixed_sample_rate(c_program, callback=callback, channels=channels, dt=dt,
                                                   voltage_transformations=voltage_transformations)
 
+        if self._function_handle_callback is not None:
+            duration, *sample_callbacks = _create_sampling_callbacks(program, channels, voltage_transformations)
+            self._function_handle_callback(duration, *sample_callbacks)
