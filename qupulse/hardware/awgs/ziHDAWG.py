@@ -7,9 +7,11 @@ from enum import Enum
 import zhinst.ziPython
 import zhinst.utils
 import numpy as np
+import textwrap
+import time
 
 from qupulse.utils.types import ChannelID
-from qupulse._program._loop import Loop
+from qupulse._program._loop import Loop, make_compatible
 from qupulse.hardware.awgs.base import AWG, ChannelNotFoundException
 
 assert (sys.byteorder == 'little')
@@ -22,7 +24,7 @@ def valid_channel(function_object):
         if len(args) < 1:
             raise TypeError('Channel is an required argument.')
         channel = args[1]  # Expect channel to be second positional argument after self.
-        if channel not in (1, 2, 3, 4, 5, 6, 7, 8):
+        if channel not in range(1, 8):
             raise ChannelNotFoundException(channel)
         value = function_object(*args, **kwargs)
         return value
@@ -96,7 +98,11 @@ class HDAWGRepresentation:
         settings = []
         settings.append(['/{}/system/awg/channelgrouping'.format(self.serial),
                          HDAWGChannelGrouping.CHAN_GROUP_4x2.value])
-        settings.append(['/{}/AWGS/*/TIME'.format(self.serial), HDAWGSamplingRate.AWG_RATE_2400MHZ.value])
+        settings.append(['/{}/awgs/*/time'.format(self.serial), HDAWGSamplingRate.AWG_RATE_2400MHZ.value])
+        settings.append(['/{}/sigouts/*/range'.format(self.serial), HDAWGVoltageRange.RNG_1V.value])
+        settings.append(['/{}/awgs/*/outputs/*/amplitude'.format(self.serial), 1.0])  # Default amplitude factor 1.0
+        settings.append(['/{}/awgs/*/outputs/*/modulation/mode'.format(self.serial), HDAWGModulationMode.OFF.value])
+        settings.append(['/{}/awgs/*/userregs/*'.format(self.serial), 0])  # Reset all user registers to 0.
 
         self.api_session.set(settings)
         self.api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
@@ -111,27 +117,31 @@ class HDAWGRepresentation:
         self.channel_pair_GH.clear()
 
     @valid_channel
-    def offset(self, channel:int, voltage=None) -> float:
+    def offset(self, channel: int, voltage: float = None) -> float:
         """Query channel offset voltage and optionally set it."""
-        node_path = '/{}/SIGOUTS/{}/OFFSET'.format(self.serial, channel-1)
+        node_path = '/{}/sigouts/{}/offset'.format(self.serial, channel-1)
         if voltage is not None:
             self.api_session.setDouble(node_path, voltage)
+            self.api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
         return self.api_session.getDouble(node_path)
 
     @valid_channel
-    def range(self, channel:int, voltage=None) -> float:
-        """Query channel voltage range and optinally set it. The instruments selects the next higher available range."""
-        node_path = '/{}/SIGOUTS/{}/RANGE'.format(self.serial, channel-1)
+    def range(self, channel: int, voltage: float = None) -> float:
+        """Query channel voltage range and optionally set it. The instruments selects the next higher available range.
+        This is the one-sided range Vp. Total range: -Vp...Vp"""
+        node_path = '/{}/sigouts/{}/range'.format(self.serial, channel-1)
         if voltage is not None:
             self.api_session.setDouble(node_path, voltage)
+            self.api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
         return self.api_session.getDouble(node_path)
 
     @valid_channel
-    def output(self, channel:int, status:bool=None) -> bool:
+    def output(self, channel: int, status: bool = None) -> bool:
         """Query channel signal output status (enabled/disabled) and optionally set it. Corresponds to front LED."""
-        node_path = '/{}/SIGOUTS/{}/ON'.format(self.serial, channel-1)
+        node_path = '/{}/sigouts/{}/on'.format(self.serial, channel-1)
         if status is not None:
             self.api_session.setDouble(node_path, int(status))
+            self.api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
         return bool(self.api_session.getDouble(node_path))
 
 
@@ -140,6 +150,29 @@ class HDAWGChannelGrouping(Enum):
     CHAN_GROUP_4x2 = 0  # 4x2 with HDAWG8; 2x2 with HDAWG4.  /dev.../awgs/0..3/
     CHAN_GROUP_2x4 = 1  # 2x4 with HDAWG8; 1x4 with HDAWG4.  /dev.../awgs/0 & 2/
     CHAN_GROUP_1x8 = 2  # 1x8 with HDAWG8.                   /dev.../awgs/0/
+
+
+class HDAWGVoltageRange(Enum):
+    """All available voltage ranges for the HDAWG wave outputs. Define maximum output voltage."""
+    RNG_5V = 5
+    RNG_4V = 4
+    RNG_3V = 3
+    RNG_2V = 2
+    RNG_1V = 1
+    RNG_800mV = 0.8
+    RNG_600mV = 0.6
+    RNG_400mV = 0.4
+    RNG_200mV = 0.2
+
+
+class HDAWGModulationMode(Enum):
+    """Modulation mode of waveform generator."""
+    OFF = 0  # AWG output goes directly to signal output.
+    SINE_1 = 1  # AWG output multiplied with sine generator signal 0.
+    SINE_2 = 2  # AWG output multiplied with sine generator signal 1.
+    FG_1 = 3  # AWG output multiplied with function generator signal 0. Requires FG option.
+    FG_2 = 4  # AWG output multiplied with function generator signal 1. Requires FG option.
+    ADVANCED = 5  # AWG output modulates corresponding sines from modulation carriers.
 
 
 class HDAWGSamplingRate(Enum):
@@ -176,11 +209,17 @@ class HDAWGChannelPair(AWG):
     def __init__(self, hdawg_device: HDAWGRepresentation, channels: Tuple[int, int], identifier: str):
         super().__init__(identifier)
         self._device = hdawg_device
-        self._awg_module = self.device.api_session.awgModule()
 
         if channels not in ((1, 2), (3, 4), (5, 6), (7, 8)):
             raise ValueError('Invalid channel pair: {}'.format(channels))
         self._channels = channels
+
+        self._awg_module = self.device.api_session.awgModule()
+        self.awg_module.set('awgModule/device', self.device.serial)
+        self.awg_module.set('awgModule/index', self.awg_group_index)
+        self.awg_module.execute()
+        # Seems creating AWG module sets SINGLE (single execution mode of sequence) to 0.
+        self.device.api_session.setInt('/{}/awgs/{}/single'.format(self.device.serial, self.awg_group_index), 1)
 
         self._known_programs = dict()  # type: Dict[str, TaborProgramMemory]
 
@@ -192,7 +231,7 @@ class HDAWGChannelPair(AWG):
     @property
     def num_markers(self) -> int:
         """Number of marker channels"""
-        return 2
+        return 2  # Actually 4 available.
 
     def upload(self, name: str,
                program: Loop,
@@ -219,7 +258,54 @@ class HDAWGChannelPair(AWG):
             force: If a different sequence is already present with the same name, it is
                 overwritten if force is set to True. (default = False)
         """
-        raise NotImplementedError()  # pragma: no cover
+        if len(channels) != self.num_channels:
+            raise ValueError('Channel ID not specified')
+        if len(markers) != self.num_markers:
+            raise ValueError('Markers not specified')
+        if len(voltage_transformation) != self.num_channels:
+            raise ValueError('Wrong number of voltage transformations')
+
+        # Adjust program to fit criteria.
+        make_compatible(program,
+                        minimal_waveform_length=16,
+                        waveform_quantum=16,
+                        sample_rate=self.sample_rate)
+
+        awg_program = textwrap.dedent("""\
+        const N = 4096;
+        wave gauss_pos = 1.0*gauss(N, N/2, N/8);
+        wave gauss_neg = -1.0*gauss(N, N/2, N/8);
+        while (true) {  
+            playWave(gauss_pos);
+            waitWave();
+            playWave(2, gauss_neg);
+            waitWave();
+        }
+        """)
+
+        # Transfer the AWG sequence program. Compilation starts automatically in case of sourcestring.
+        self.awg_module.set('awgModule/compiler/sourcestring', awg_program)
+
+        # Compilation started
+        while self.awg_module.getInt('awgModule/compiler/status') == -1:
+            time.sleep(0.1)
+
+        if self.awg_module.getInt('awgModule/compiler/status') == 1:
+            raise HDAWGCompilationException(self.awg_module.getString('awgModule/compiler/statusstring'))
+
+        if self.awg_module.getInt('awgModule/compiler/status') == 0:
+            pass  # Compilation successful
+        if self.awg_module.getInt('awgModule/compiler/status') == 2:
+            print("Compiler warning: ", self.awg_module.getString('awgModule/compiler/statusstring'))
+
+        while ((self.awg_module.getDouble('awgModule/progress') < 1.0) and
+               (self.awg_module.getInt('awgModule/elf/status') != 1)):
+            time.sleep(0.2)
+
+        if self.awg_module.getInt('awgModule/elf/status') == 0:
+            pass  # Upload to the instrument successful.
+        if self.awg_module.getInt('awgModule/elf/status') == 1:
+            raise HDAWGUploadException()
 
     def remove(self, name: str) -> None:
         """Remove a program from the AWG.
@@ -251,9 +337,14 @@ class HDAWGChannelPair(AWG):
     @property
     def sample_rate(self) -> float:
         """The default sample rate of the AWG."""
-        awg_index = int(np.ceil(self._channels[0]/2.0)-1)  # Assume 4x2 grouping. Then 0...3 will give appropriate rate.
-        sample_rate_num = self.device.api_session.getInt('/{}/AWGS/{}/TIME'.format(self.device.serial, awg_index))
+        node_path = '/{}/awgs/{}/time'.format(self.device.serial, self.awg_group_index)
+        sample_rate_num = self.device.api_session.getInt(node_path)
         return HDAWGSamplingRate(sample_rate_num).exact_rate()
+
+    @property
+    def awg_group_index(self) -> int:
+        """AWG node branch index assuming 4x2 channel grouping. Then 0...3 will give appropriate index of group."""
+        return int(np.ceil(self._channels[0]/2.0)-1)
 
     @property
     def device(self) -> HDAWGRepresentation:
@@ -265,5 +356,39 @@ class HDAWGChannelPair(AWG):
         """Each AWG entity has its own awg module to manage program compilation and upload."""
         return self._awg_module
 
-    def enable(self) -> None:
-        raise NotImplementedError()  # pragma: no cover
+    def enable(self, status: bool = None) -> bool:
+        """Start the AWG sequencer."""
+        # There is also 'awgModule/awg/enable', which seems to have the same functionality.
+        node_path = '/{}/awgs/{}/enable'.format(self.device.serial, self.awg_group_index)
+        if status is not None:
+            self.device.api_session.setInt(node_path, int(status))
+            self.device.api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
+        return bool(self.device.api_session.getInt(node_path))
+
+    def user_register(self, reg: int, value: int = None) -> int:
+        """Query user registers (1-16) and optionally set it."""
+        if reg not in range(1, 16):
+            raise ValueError('{} not a valid (1-16) register.'.format(reg))
+        node_path = '/{}/awgs/{}/userregs/{}'.format(self.device.serial, self.awg_group_index, reg)
+        if value is not None:
+            self.device.api_session.setInt(node_path, value)
+            self.device.api_session.sync()
+        return self.device.api_session.getInt(node_path)
+
+
+class HDAWGException(Exception):
+    """Base exception class for HDAWG errors."""
+    pass
+
+
+class HDAWGCompilationException(HDAWGException):
+    def __init__(self, msg):
+        self.msg = msg
+
+    def __str__(self) -> str:
+        return "Compilation failed: {}".format(self.msg)
+
+
+class HDAWGUploadException(HDAWGException):
+    def __str__(self) -> str:
+        return "Upload to the instrument failed."
