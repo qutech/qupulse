@@ -16,7 +16,8 @@ SamplingCallback = Callable[[np.ndarray], np.ndarray]
 SamplingCallback.__doc__ = """Maps an array ov times to an array of voltages. The time array has to be ordered"""
 
 
-def _create_sampling_callbacks(program: Loop, channels, voltage_transformations):
+def _create_sampling_callbacks(program: Loop, channels, voltage_transformations) -> Tuple[float,
+                                                                                          Tuple[SamplingCallback, ...]]:
     waveform = to_waveform(program)
 
     duration = float(waveform.duration)
@@ -32,7 +33,7 @@ def _create_sampling_callbacks(program: Loop, channels, voltage_transformations)
 
     callbacks = [get_callback(channel, voltage_transformation)
                  for channel, voltage_transformation in zip(channels, voltage_transformations)]
-    return (duration, *callbacks)
+    return duration, tuple(callbacks)
 
 
 class VirtualAWG(AWG):
@@ -88,7 +89,7 @@ class VirtualAWG(AWG):
         return float('nan')
 
     def set_function_handle_callback(self,
-                                     callback: Optional[Callable[[float, SamplingCallback, ...], None]]):
+                                     callback: Optional[Callable[[float, Tuple[SamplingCallback, ...]], None]]):
         """When run current program is called the given callback is called with the first positional argument being the
         duration and following arguments being sampling callbacks as defined above."""
         self._function_handle_callback = callback
@@ -97,5 +98,5 @@ class VirtualAWG(AWG):
         (program, channels, voltage_transformations) = self._programs[self._current_program]
 
         if self._function_handle_callback is not None:
-            duration, *sample_callbacks = _create_sampling_callbacks(program, channels, voltage_transformations)
-            self._function_handle_callback(duration, *sample_callbacks)
+            duration, sample_callbacks = _create_sampling_callbacks(program, channels, voltage_transformations)
+            self._function_handle_callback(duration, sample_callbacks)
