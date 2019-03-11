@@ -1,4 +1,5 @@
 import sys
+import warnings
 import subprocess
 
 __all__ = ["install_requirements"]
@@ -12,6 +13,8 @@ except ImportError:
 try:
     from qupulse.hardware.awgs.tektronix import TektronixAWG
     __all__.extend(["TektronixAWG"])
+    warnings.warn("The driver for TektronixAWG is not extensively tested. Please remove this warning if you think that "
+                  "the driver is reasonably stable.")
 except ImportError:
     pass
 
