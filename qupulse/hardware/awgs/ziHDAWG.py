@@ -17,12 +17,10 @@ import numpy as np
 import textwrap
 import time
 
-from qupulse.utils.types import ChannelID
+from qupulse.utils.types import ChannelID, TimeType
 from qupulse._program._loop import Loop, make_compatible
+from qupulse._program.waveforms import Waveform
 from qupulse.hardware.awgs.base import AWG, ChannelNotFoundException
-
-
-assert (sys.byteorder == 'little')
 
 
 def valid_channel(function_object):
@@ -37,6 +35,46 @@ def valid_channel(function_object):
         value = function_object(*args, **kwargs)
         return value
     return valid_fn
+
+
+class WaveformDatabase:
+    def get_name(self, waveform: Waveform, sample_rate):
+        raise NotImplementedError()
+
+
+def waveform_to_seqc(waveform: Waveform, channels: Tuple[Optional[ChannelID], Optional[ChannelID]], wf_database: WaveformDatabase, sample_rate: TimeType):
+    """return command that plays the waveform"""
+
+    sample_times = np.arange(waveform.duration / sample_rate) *
+
+    for ch in channels:
+        waveform.get_sampled(ch, )
+
+    wf_name = wf_database.get_name(waveform, sample_rate)
+
+    raise NotImplementedError()
+
+
+def program_to_seqc(program: Loop, channels: Tuple[Optional[ChannelID], Optional[ChannelID]], sample_rate, wf_database):
+    """This creates indentation by creating and destroying a lot of strings. Optimization would be to pass this as a
+    parameter"""
+    if program.repetition_count > 1:
+        template = '  %s'
+        yield 'repeat(%d) {' % program.repetition_count
+    else:
+        template = '%s'
+
+    if program.is_leaf():
+        yield template % waveform_to_seqc(program.waveform, channels, wf_database)
+    else:
+        for child in program.children:
+            for line in program_to_seqc(child, channels, sample_rate, wf_database):
+                yield template % line
+
+    if program.repetition_count > 1:
+        yield '}'
+
+
 
 
 class HDAWGRepresentation:
@@ -427,7 +465,7 @@ class HDAWGChannelPair(AWG):
     @property
     def awg_group_index(self) -> int:
         """AWG node group index assuming 4x2 channel grouping. Then 0...3 will give appropriate index of group."""
-        return int(np.ceil(self._channels[0]/2.0)-1)
+        return self._channels[0] // 2
 
     @property
     def device(self) -> HDAWGRepresentation:
