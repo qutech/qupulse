@@ -1,4 +1,8 @@
 import unittest
+from unittest import mock
+import sys
+import importlib
+
 import numpy
 
 from qupulse.pulses.plotting import PlottingNotPossibleException, render, iter_waveforms, iter_instruction_block, plot
@@ -304,3 +308,23 @@ class PlottingNotPossibleExceptionTests(unittest.TestCase):
         exception = PlottingNotPossibleException(t)
         self.assertIs(t, exception.pulse)
         self.assertIsInstance(str(exception), str)
+
+
+class PlottingIsinstanceTests(unittest.TestCase):
+    def test_bug_422(self):
+        import matplotlib
+        matplotlib.use('svg')  # use non-interactive backend so that test does not fail on travis
+
+        to_reload = ['qupulse._program._loop',
+                     'qupulse.pulses.pulse_template',
+                     'qupulse.pulses.table_pulse_template']
+
+        with mock.patch.dict(sys.modules, sys.modules.copy()):
+            for module in to_reload:
+                sys.modules[module] = importlib.reload(importlib.import_module(module))
+
+            from qupulse.pulses.table_pulse_template import TablePulseTemplate
+
+            pt = TablePulseTemplate({'X': [(0, 1), (1, 1)]})
+
+            plot(pt, parameters={})
