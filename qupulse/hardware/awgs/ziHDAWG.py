@@ -1,11 +1,18 @@
 import sys
 import functools
-from typing import List, Tuple, Set, NamedTuple, Callable, Optional, Any, Sequence, cast, Generator, Union, Dict
+from typing import List, Tuple, Set, Callable, Optional, Dict
 from enum import Enum
+import weakref
+import logging
+import warnings
 
-# Zurich Instruments LabOne python API distributed via the Python Package Index.
-import zhinst.ziPython
-import zhinst.utils
+try:
+    import zhinst.ziPython
+    import zhinst.utils
+except ImportError:
+    warnings.warn('Zurich Instruments LabOne python API is distributed via the Python Package Index. Install with pip.')
+    raise
+
 import numpy as np
 import textwrap
 import time
@@ -14,6 +21,7 @@ from qupulse.utils.types import ChannelID
 from qupulse._program._loop import Loop, make_compatible
 from qupulse.hardware.awgs.base import AWG, ChannelNotFoundException
 
+
 assert (sys.byteorder == 'little')
 
 
@@ -21,8 +29,8 @@ def valid_channel(function_object):
     """Check if channel is a valid AWG channels. Expects channel to be 2nd argument after self."""
     @functools.wraps(function_object)
     def valid_fn(*args, **kwargs):
-        if len(args) < 1:
-            raise TypeError('Channel is an required argument.')
+        if len(args) < 2:
+            raise HDAWGTypeError('Channel is an required argument.')
         channel = args[1]  # Expect channel to be second positional argument after self.
         if channel not in range(1, 8):
             raise ChannelNotFoundException(channel)
@@ -40,14 +48,13 @@ class HDAWGRepresentation:
                  data_server_addr='localhost',
                  data_server_port=8004,
                  api_level_number=6,
-                 external_trigger=False, reset=False):
+                 reset=False):
         """
         :param device_serial:     Device serial that uniquely identifies this device to the LabOne data server
         :param device_interface:  Either '1GbE' for ethernet or 'USB'
         :param data_server_addr:  Data server address. Must be already running. Default: localhost
         :param data_server_port:  Data server port. Default: 8004 for HDAWG, MF and UHF devices
         :param api_level_number:  Version of API to use for the session, higher number, newer. Default: 6 most recent
-        :param external_trigger:  Not supported yet
         :param reset:             Reset device before initialization
         """
         self._api_session = zhinst.ziPython.ziDAQServer(data_server_addr, data_server_port, api_level_number)
@@ -55,15 +62,12 @@ class HDAWGRepresentation:
         self.api_session.connectDevice(device_serial, device_interface)
         self._dev_ser = device_serial
 
-        if external_trigger:
-            raise NotImplementedError()  # pragma: no cover
-
         if reset:
             # TODO: Check if utils function is sufficient, or a custom reset function is required.
             # Create a base configuration: Disable all available outputs, awgs, demods, scopes,...
             zhinst.utils.disable_everything(self.api_session, self.serial)
 
-        self.initialize()
+        self._initialize()
 
         self._channel_pair_AB = HDAWGChannelPair(self, (1, 2), str(self.serial) + '_AB')
         self._channel_pair_CD = HDAWGChannelPair(self, (3, 4), str(self.serial) + '_CD')
@@ -94,7 +98,7 @@ class HDAWGRepresentation:
     def serial(self) -> str:
         return self._dev_ser
 
-    def initialize(self) -> None:
+    def _initialize(self) -> None:
         settings = []
         settings.append(['/{}/system/awg/channelgrouping'.format(self.serial),
                          HDAWGChannelGrouping.CHAN_GROUP_4x2.value])
@@ -103,6 +107,7 @@ class HDAWGRepresentation:
         settings.append(['/{}/awgs/*/outputs/*/amplitude'.format(self.serial), 1.0])  # Default amplitude factor 1.0
         settings.append(['/{}/awgs/*/outputs/*/modulation/mode'.format(self.serial), HDAWGModulationMode.OFF.value])
         settings.append(['/{}/awgs/*/userregs/*'.format(self.serial), 0])  # Reset all user registers to 0.
+        settings.append(['/{}/awgs/*/single'.format(self.serial), 1])  # Single execution mode of sequence.
 
         self.api_session.set(settings)
         self.api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
@@ -110,7 +115,7 @@ class HDAWGRepresentation:
     def reset(self) -> None:
         # TODO: Check if utils function is sufficient to reset device.
         zhinst.utils.disable_everything(self.api_session, self.serial)
-        self.initialize()
+        self._initialize()
         self.channel_pair_AB.clear()
         self.channel_pair_CD.clear()
         self.channel_pair_EF.clear()
@@ -143,6 +148,14 @@ class HDAWGRepresentation:
             self.api_session.setDouble(node_path, int(status))
             self.api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
         return bool(self.api_session.getDouble(node_path))
+
+    def get_status_table(self):
+        """Return node tree of instrument with all important settings, as well as each channel group as tuple."""
+        return (self.api_session.get('/{}/*'.format(self.serial)),
+                self.channel_pair_AB.awg_module.get('awgModule/*'),
+                self.channel_pair_CD.awg_module.get('awgModule/*'),
+                self.channel_pair_EF.awg_module.get('awgModule/*'),
+                self.channel_pair_GH.awg_module.get('awgModule/*'))
 
 
 class HDAWGChannelGrouping(Enum):
@@ -197,6 +210,11 @@ class HDAWGSamplingRate(Enum):
         return 2.4e9 / 2 ** self.value
 
 
+class HDAWGRegisterFunc(Enum):
+    """Functions of registers for sequence control."""
+    PROG_SEL = 1  # Use this register to select which program in the sequence should be running.
+
+
 class HDAWGChannelPair(AWG):
     """Represents a channel pair of the Zurich Instruments HDAWG as an independent AWG entity.
     It represents a set of channels that have to have(hardware enforced) the same:
@@ -208,20 +226,22 @@ class HDAWGChannelPair(AWG):
 
     def __init__(self, hdawg_device: HDAWGRepresentation, channels: Tuple[int, int], identifier: str):
         super().__init__(identifier)
-        self._device = hdawg_device
+        self._device = weakref.proxy(hdawg_device)
 
         if channels not in ((1, 2), (3, 4), (5, 6), (7, 8)):
-            raise ValueError('Invalid channel pair: {}'.format(channels))
+            raise HDAWGValueError('Invalid channel pair: {}'.format(channels))
         self._channels = channels
 
         self._awg_module = self.device.api_session.awgModule()
         self.awg_module.set('awgModule/device', self.device.serial)
         self.awg_module.set('awgModule/index', self.awg_group_index)
         self.awg_module.execute()
-        # Seems creating AWG module sets SINGLE (single execution mode of sequence) to 0.
+        # Seems creating AWG module sets SINGLE (single execution mode of sequence) to 0 per default.
         self.device.api_session.setInt('/{}/awgs/{}/single'.format(self.device.serial, self.awg_group_index), 1)
 
-        self._known_programs = dict()  # type: Dict[str, TaborProgramMemory]
+        self._known_programs = dict()  # type: Dict[str, Loop]
+        self._known_programs_register = dict()  # type: Dict[str, int]
+        self._current_program = None
 
     @property
     def num_channels(self) -> int:
@@ -259,11 +279,15 @@ class HDAWGChannelPair(AWG):
                 overwritten if force is set to True. (default = False)
         """
         if len(channels) != self.num_channels:
-            raise ValueError('Channel ID not specified')
+            raise HDAWGValueError('Channel ID not specified')
         if len(markers) != self.num_markers:
-            raise ValueError('Markers not specified')
+            raise HDAWGValueError('Markers not specified')
         if len(voltage_transformation) != self.num_channels:
-            raise ValueError('Wrong number of voltage transformations')
+            raise HDAWGValueError('Wrong number of voltage transformations')
+
+        if name in self.programs:
+            if not force:
+                raise HDAWGValueError('{} is already known on {}'.format(name, self.identifier))
 
         # Adjust program to fit criteria.
         make_compatible(program,
@@ -271,6 +295,11 @@ class HDAWGChannelPair(AWG):
                         waveform_quantum=16,
                         sample_rate=self.sample_rate)
 
+        self._known_programs[name] = program
+
+        # TODO: user registers could be used to arm programs. Uploaded sequence would have a switch statement.
+        # TODO: Create seqc sourcestring out of all known programs and upload everything.
+        # TODO: manage _known_programs_register with name to unique integer mapping used to switch programs.
         awg_program = textwrap.dedent("""\
         const N = 4096;
         wave gauss_pos = 1.0*gauss(N, N/2, N/8);
@@ -283,27 +312,63 @@ class HDAWGChannelPair(AWG):
         }
         """)
 
-        # Transfer the AWG sequence program. Compilation starts automatically in case of sourcestring.
-        self.awg_module.set('awgModule/compiler/sourcestring', awg_program)
+        self._upload_sourcestring(awg_program)
 
-        # Compilation started
+    # TODO: test this function. must waveform be seperated by only comma or comma space?
+    # TODO: is waveform list really necessary? In example: "All CSV files within the waves directory are automatically recognized by the AWG module"
+    def _upload_sourcefile(self, sourcefile: str, csv_waveforms: List[str] = None) -> None:
+        """Transfer AWG sequencer program as file to HDAWG and block till compilation and upload finish. Sourcefile must
+        reside in the LabOne user directory + "awg/src" and optional csv file waveforms in  "awg/waves"."""
+        if not sourcefile:
+            raise HDAWGTypeError('sourcefile must not empty.')
+        if csv_waveforms is None:
+            csv_waveforms = []
+        logger = logging.getLogger('ziHDAWG')
+
+        self.awg_module.set('awgModule/compiler/waveforms', ','.join(csv_waveforms))
+        self.awg_module.set('awgModule/compiler/sourcefile', sourcefile)
+        self.awg_module.set('awgModule/compiler/start', 1)  # Compilation must be started manually in case of file.
+        self._poll_compile_and_upload_finished(logger)
+
+    # TODO: add csv waveform variable? Does this behave different than sourcefile? Only automatic recognized if sourcestring?
+    def _upload_sourcestring(self, sourcestring: str) -> None:
+        """Transfer AWG sequencer program as string to HDAWG and block till compilation and upload finish.
+        Allows upload without access to data server file system."""
+        if not sourcestring:
+            raise HDAWGTypeError('sourcestring must not be empty or compilation will not start.')
+        logger = logging.getLogger('ziHDAWG')
+
+        # Transfer the AWG sequence program. Compilation starts automatically if sourcestring is set.
+        self.awg_module.set('awgModule/compiler/sourcestring', sourcestring)
+        self._poll_compile_and_upload_finished(logger)
+
+    def _poll_compile_and_upload_finished(self, logger: logging.Logger) -> None:
+        """Blocks till compilation on data server and upload to HDAWG succeed."""
+        logger.info('Compilation started')
         while self.awg_module.getInt('awgModule/compiler/status') == -1:
             time.sleep(0.1)
 
         if self.awg_module.getInt('awgModule/compiler/status') == 1:
-            raise HDAWGCompilationException(self.awg_module.getString('awgModule/compiler/statusstring'))
+            msg = self.awg_module.getString('awgModule/compiler/statusstring')
+            logger.error(msg)
+            raise HDAWGCompilationException(msg)
 
         if self.awg_module.getInt('awgModule/compiler/status') == 0:
-            pass  # Compilation successful
+            logger.info('Compilation successful')
         if self.awg_module.getInt('awgModule/compiler/status') == 2:
-            print("Compiler warning: ", self.awg_module.getString('awgModule/compiler/statusstring'))
+            msg = self.awg_module.getString('awgModule/compiler/statusstring')
+            logger.warning(msg)
 
+        i = 0
         while ((self.awg_module.getDouble('awgModule/progress') < 1.0) and
                (self.awg_module.getInt('awgModule/elf/status') != 1)):
             time.sleep(0.2)
+            logger.info("{} awgModule/progress: {:.2f}".format(i, self.awg_module.getDouble('awgModule/progress')))
+            i = i + 1
+        logger.info("{} awgModule/progress: {:.2f}".format(i, self.awg_module.getDouble('awgModule/progress')))
 
         if self.awg_module.getInt('awgModule/elf/status') == 0:
-            pass  # Upload to the instrument successful.
+            logger.info('Upload to the instrument successful')
         if self.awg_module.getInt('awgModule/elf/status') == 1:
             raise HDAWGUploadException()
 
@@ -315,46 +380,70 @@ class HDAWGChannelPair(AWG):
         Args:
             name: The name of the program to remove.
         """
-        raise NotImplementedError()  # pragma: no cover
+        # TODO: Can this function be implemented with the HDAWG as intended?
+        self._known_programs.pop(name)
 
     def clear(self) -> None:
         """Removes all programs and waveforms from the AWG.
 
         Caution: This affects all programs and waveforms on the AWG, not only those uploaded using qupulse!
         """
-        raise NotImplementedError()  # pragma: no cover
+        # TODO: Can this function be implemented with the HDAWG as intended?
+        self._known_programs.clear()
+        self._known_programs_register.clear()
+        self._current_program = None
 
     def arm(self, name: str) -> None:
         """Load the program 'name' and arm the device for running it. If name is None the awg will "dearm" its current
         program."""
-        raise NotImplementedError()  # pragma: no cover
+        if name not in self.programs:
+            raise HDAWGValueError('{} is unknown on {}'.format(name, self.identifier))
+        self._current_program = name
+        # TODO: Check if this works.
+        self.user_register(HDAWGRegisterFunc.PROG_SEL.value, self._known_programs_register[name])
+
+    def run_current_program(self) -> None:
+        """Run armed program."""
+        if self._current_program:
+            if self._current_program not in self.programs:
+                raise HDAWGValueError('{} is unknown on {}'.format(self._current_program, self.identifier))
+            # TODO: Check if this works.
+            self.enable(True)
+        else:
+            raise HDAWGRuntimeError('No program active')
 
     @property
     def programs(self) -> Set[str]:
         """The set of program names that can currently be executed on the hardware AWG."""
-        return set(program.name for program in self._known_programs.keys())
+        return set(self._known_programs.keys())
 
     @property
     def sample_rate(self) -> float:
-        """The default sample rate of the AWG."""
+        """The default sample rate of the AWG channel group."""
         node_path = '/{}/awgs/{}/time'.format(self.device.serial, self.awg_group_index)
         sample_rate_num = self.device.api_session.getInt(node_path)
         return HDAWGSamplingRate(sample_rate_num).exact_rate()
 
     @property
     def awg_group_index(self) -> int:
-        """AWG node branch index assuming 4x2 channel grouping. Then 0...3 will give appropriate index of group."""
+        """AWG node group index assuming 4x2 channel grouping. Then 0...3 will give appropriate index of group."""
         return int(np.ceil(self._channels[0]/2.0)-1)
 
     @property
     def device(self) -> HDAWGRepresentation:
-        """Reference to HDAWG represenation."""
+        """Reference to HDAWG representation."""
         return self._device
 
     @property
     def awg_module(self) -> zhinst.ziPython.AwgModule:
-        """Each AWG entity has its own awg module to manage program compilation and upload."""
+        """Each AWG channel group has its own awg module to manage program compilation and upload."""
         return self._awg_module
+
+    @property
+    def user_directory(self) -> str:
+        """LabOne user directory with subdirectories: "awg/src" (seqc sourcefiles), "awg/elf" (compiled AWG binaries),
+        "awag/waves" (user defined csv waveforms)."""
+        return self.awg_module.getString('awgModule/directory')
 
     def enable(self, status: bool = None) -> bool:
         """Start the AWG sequencer."""
@@ -368,16 +457,39 @@ class HDAWGChannelPair(AWG):
     def user_register(self, reg: int, value: int = None) -> int:
         """Query user registers (1-16) and optionally set it."""
         if reg not in range(1, 16):
-            raise ValueError('{} not a valid (1-16) register.'.format(reg))
-        node_path = '/{}/awgs/{}/userregs/{}'.format(self.device.serial, self.awg_group_index, reg)
+            raise HDAWGValueError('{} not a valid (1-16) register.'.format(reg))
+        node_path = '/{}/awgs/{}/userregs/{}'.format(self.device.serial, self.awg_group_index, reg-1)
         if value is not None:
             self.device.api_session.setInt(node_path, value)
-            self.device.api_session.sync()
+            self.device.api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
         return self.device.api_session.getInt(node_path)
+
+    def amplitude(self, channel: int, value: float = None) -> float:
+        """Query AWG channel amplitude value and optionally set it. Amplitude in units of full scale of the given
+         AWG Output. The full scale corresponds to the Range voltage setting of the Signal Outputs."""
+        if channel not in (1, 2):
+            raise HDAWGValueError('{} not a valid (1-2) channel.'.format(channel))
+        node_path = '/{}/awgs/{}/outputs/{}/amplitude'.format(self.device.serial, self.awg_group_index, channel-1)
+        if value is not None:
+            self.device.api_session.setDouble(node_path, value)
+            self.device.api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
+        return self.device.api_session.getDouble(node_path)
 
 
 class HDAWGException(Exception):
     """Base exception class for HDAWG errors."""
+    pass
+
+
+class HDAWGValueError(HDAWGException, ValueError):
+    pass
+
+
+class HDAWGTypeError(HDAWGException, TypeError):
+    pass
+
+
+class HDAWGRuntimeError(HDAWGException, RuntimeError):
     pass
 
 
