@@ -8,13 +8,13 @@ import json
 from unittest import mock
 from abc import ABCMeta, abstractmethod
 
-from tempfile import TemporaryDirectory, TemporaryFile
-from typing import Optional, Any, Dict, Tuple
+from tempfile import TemporaryDirectory, NamedTemporaryFile, TemporaryFile
+from typing import Optional, Any, Tuple
 
 from qupulse.serialization import FilesystemBackend, CachingBackend, Serializable, JSONSerializableEncoder,\
     ZipFileBackend, AnonymousSerializable, DictBackend, PulseStorage, JSONSerializableDecoder, Serializer,\
     get_default_pulse_registry, set_default_pulse_registry, new_default_pulse_registry, SerializableMeta, \
-    PulseRegistryType, DeserializationCallbackFinder
+    PulseRegistryType, DeserializationCallbackFinder, StorageBackend
 
 from qupulse.expressions import ExpressionScalar
 
@@ -120,7 +120,6 @@ class SerializableTests(metaclass=ABCMeta):
             self.assert_equal_instance(expected, instance)
 
     def test_serialization_and_deserialization(self):
-        # TODO PulseStorage registry specification
         registry = dict()
 
         instance = self.make_instance('blub', registry=registry)
@@ -261,6 +260,84 @@ class DummyPulseTemplateSerializationTests(SerializableTests, unittest.TestCase)
         self.assertEqual(lhs.compare_key, rhs.compare_key)
 
 
+@mock.patch.multiple(StorageBackend, __abstractmethods__=set())
+class StorageBackendTest(unittest.TestCase):
+    """Testing common methods implemented in StorageBackend base class based on the abstract methods implemented
+    by subclasses."""
+
+    def test_setitem(self) -> None:
+        with mock.patch.object(StorageBackend, 'put') as put_mock:
+            storage = StorageBackend()
+            storage["foo"] = "bar"
+            self.assertEqual(mock.call('foo', 'bar'), put_mock.call_args)
+
+        with mock.patch.object(StorageBackend, 'put', side_effect=FileExistsError()) as put_mock:
+            storage = StorageBackend()
+            with self.assertRaises(FileExistsError):
+                storage["foo"] = "bar"
+            self.assertEqual(mock.call('foo', 'bar'), put_mock.call_args)
+
+    def test_getitem(self) -> None:
+        expected = "bar"
+        with mock.patch.object(StorageBackend, 'get', return_value=expected) as get_mock:
+            storage = StorageBackend()
+            foo = storage["foo"]
+            self.assertEqual(expected, foo)
+            self.assertEqual(mock.call("foo"), get_mock.call_args)
+
+        with mock.patch.object(StorageBackend, 'get', side_effect=KeyError()) as get_mock:
+            storage = StorageBackend()
+            with self.assertRaises(KeyError):
+                storage['foo']
+            self.assertEqual(mock.call('foo'), get_mock.call_args)
+
+    def test_contains(self) -> None:
+        with mock.patch.object(StorageBackend, 'exists', return_value=True) as exists_mock:
+            storage = StorageBackend()
+            self.assertTrue('foo' in storage)
+            self.assertEqual(mock.call('foo'), exists_mock.call_args)
+
+        with mock.patch.object(StorageBackend, 'exists', return_value=False) as exists_mock:
+            storage = StorageBackend()
+            self.assertFalse('foo' in storage)
+            self.assertEqual(mock.call('foo'), exists_mock.call_args)
+
+    def test_delitem(self) -> None:
+        with mock.patch.object(StorageBackend, 'delete') as delete_mock:
+            storage = StorageBackend()
+            del(storage['foo'])
+            self.assertEqual(mock.call('foo'), delete_mock.call_args)
+
+        with mock.patch.object(StorageBackend, 'delete', side_effect=KeyError()) as delete_mock:
+            storage = StorageBackend()
+            with self.assertRaises(KeyError):
+                del(storage['foo'])
+            self.assertEqual(mock.call('foo'), delete_mock.call_args)
+
+    def test_list_contents(self) -> None:
+        expected = {'hugo', 'ilse', 'foo.bar'}
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', DeprecationWarning)
+            with mock.patch.object(StorageBackend, '__iter__', return_value=iter(expected)) as iter_mock:
+                storage = StorageBackend()
+                self.assertEqual(expected, storage.list_contents())
+                self.assertEqual(1, iter_mock.call_count)
+
+    def test_contents(self) -> None:
+        expected = {'hugo', 'ilse', 'foo.bar'}
+        with mock.patch.object(StorageBackend, '__iter__', return_value=iter(expected)) as iter_mock:
+            storage = StorageBackend()
+            self.assertEqual(expected, storage.contents)
+            self.assertEqual(1, iter_mock.call_count)
+
+    def test_len(self) -> None:
+        expected = {'hugo', 'ilse', 'foo.bar'}
+        with mock.patch.object(StorageBackend, '__iter__', return_value=iter(expected)) as iter_mock:
+            storage = StorageBackend()
+            self.assertEqual(3, len(storage))
+            self.assertEqual(1, iter_mock.call_count)
+
+
 class FileSystemBackendTest(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp_dir = TemporaryDirectory()
@@ -335,154 +412,134 @@ class FileSystemBackendTest(unittest.TestCase):
         self.assertFalse(self.backend.exists(name))
         self.assertFalse(os.listdir(self.tmp_dir.name))
 
-    def test_get_contents(self) -> None:
+    def test_get_contents_iter_len(self) -> None:
         expected = {'foo', 'bar', 'hugo.test'}
         for name in expected:
             self.backend.put(name, self.test_data)
-        contents = self.backend.list_contents()
 
-        self.assertEqual(expected, contents)
+        self.assertEqual(expected, self.backend.list_contents(), msg="list_contents() faulty")
+        self.assertEqual(expected, set(iter(self.backend)), msg="__iter__() faulty")
+        self.assertEqual(3, len(self.backend), msg="__len__() faulty")
 
-    def test_get_contents_empty(self) -> None:
-        contents = self.backend.list_contents()
-        self.assertEqual(0, len(contents))
+    def test_iter_empty(self) -> None:
+        self.assertEqual(set(), set(iter(self.backend)))
 
 
 class ZipFileBackendTests(unittest.TestCase):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
 
-    def test_init(self):
-        with TemporaryDirectory() as tmp_dir:
+    def setUp(self) -> None:
+        self.tmp_dir = TemporaryDirectory()
+        self.path = os.path.join(self.tmp_dir.name, 'backend.zip')
+        self.backend = ZipFileBackend(self.path)
+        self.assertTrue(zipfile.is_zipfile(self.path))
 
-            with self.assertRaises(NotADirectoryError):
-                ZipFileBackend(os.path.join(tmp_dir, 'fantasie', 'mehr_phantasie'))
+    def tearDown(self) -> None:
+        self.tmp_dir.cleanup()
 
-            root = os.path.join(tmp_dir, 'root.zip')
+    def test_init_invalid_path(self):
+        invalid_path = os.path.join(self.tmp_dir.name, "asdfasdf", "backend.zip")
+        with self.assertRaises(NotADirectoryError):
+            ZipFileBackend(invalid_path)
 
-            ZipFileBackend(root)
-
-            self.assertTrue(zipfile.is_zipfile(root))
+    def test_init_file_exists_not_zip(self):
+        with NamedTemporaryFile() as tmp_file:
+            with self.assertRaises(FileExistsError):
+                ZipFileBackend(tmp_file.name)
 
     def test_init_keeps_data(self):
-        with TemporaryDirectory() as tmp_dir:
-            root = os.path.join(tmp_dir, 'root.zip')
-            with zipfile.ZipFile(root, mode='w', compression=zipfile.ZIP_DEFLATED) as zip_file:
-                zip_file.writestr('test_file.txt', 'chichichi')
+        path = os.path.join(self.tmp_dir.name, 'test.zip')
+        with zipfile.ZipFile(path, mode='w', compression=zipfile.ZIP_DEFLATED) as zip_file:
+            zip_file.writestr('test_file.txt', 'chichichi')
 
-            ZipFileBackend(root)
+        ZipFileBackend(path)
 
-            with zipfile.ZipFile(root, 'r') as zip_file:
-                ma_string = zip_file.read('test_file.txt')
-                self.assertEqual(b'chichichi', ma_string)
-
-    def test_path(self):
-        with TemporaryDirectory() as tmp_dir:
-            root = os.path.join(tmp_dir, 'root.zip')
-            be = ZipFileBackend(root)
-            self.assertEqual(be._path('foo'), 'foo.json')
+        with zipfile.ZipFile(path, 'r') as zip_file:
+            ma_string = zip_file.read('test_file.txt')
+            self.assertEqual(b'chichichi', ma_string)
 
     def test_exists(self):
-        with TemporaryDirectory() as tmp_dir:
-            root = os.path.join(tmp_dir, 'root.zip')
-            be = ZipFileBackend(root)
+        self.assertFalse(self.backend.exists('foo'))
 
-            self.assertFalse(be.exists('foo'))
+        with zipfile.ZipFile(self.path, mode='w', compression=zipfile.ZIP_DEFLATED) as zip_file:
+            zip_file.writestr('foo.json', 'chichichi')
 
-            with zipfile.ZipFile(root, mode='w', compression=zipfile.ZIP_DEFLATED) as zip_file:
-                zip_file.writestr('foo.json', 'chichichi')
-
-            self.assertTrue(be.exists('foo'))
+        self.assertTrue(self.backend.exists('foo'))
 
     def test_put(self):
-        with TemporaryDirectory() as tmp_dir:
-            root = os.path.join(tmp_dir, 'root.zip')
+        self.backend.put('foo', 'foo_data')
 
-            be = ZipFileBackend(root)
+        with zipfile.ZipFile(self.path, 'r') as zip_file:
+            ma_string = zip_file.read('foo.json')
+            self.assertEqual(b'foo_data', ma_string)
 
-            be.put('foo', 'foo_data')
+        with self.assertRaises(FileExistsError):
+            self.backend.put('foo', 'bar_data')
+        with zipfile.ZipFile(self.path, 'r') as zip_file:
+            ma_string = zip_file.read('foo.json')
+            self.assertEqual(b'foo_data', ma_string)
 
-            with zipfile.ZipFile(root, 'r') as zip_file:
-                ma_string = zip_file.read('foo.json')
-                self.assertEqual(b'foo_data', ma_string)
-
-            with self.assertRaises(FileExistsError):
-                be.put('foo', 'bar_data')
-            with zipfile.ZipFile(root, 'r') as zip_file:
-                ma_string = zip_file.read('foo.json')
-                self.assertEqual(b'foo_data', ma_string)
-
-            be.put('foo', 'foo_bar_data', overwrite=True)
-            with zipfile.ZipFile(root, 'r') as zip_file:
-                ma_string = zip_file.read('foo.json')
-                self.assertEqual(b'foo_bar_data', ma_string)
+        self.backend.put('foo', 'foo_bar_data', overwrite=True)
+        with zipfile.ZipFile(self.path, 'r') as zip_file:
+            ma_string = zip_file.read('foo.json')
+            self.assertEqual(b'foo_bar_data', ma_string)
 
     def test_get(self):
-        with TemporaryDirectory() as tmp_dir:
-            root = os.path.join(tmp_dir, 'root.zip')
-            be = ZipFileBackend(root)
+        with self.assertRaises(KeyError):
+            self.backend.get('foo')
 
-            with self.assertRaises(KeyError):
-                be.get('foo')
+        data = 'foo_data'
+        with zipfile.ZipFile(self.path, 'a') as zip_file:
+            zip_file.writestr('foo.json', data)
 
-            data = 'foo_data'
-            with zipfile.ZipFile(root, 'a') as zip_file:
-                zip_file.writestr('foo.json', data)
+        self.assertEqual(self.backend.get('foo'), data)
 
-            self.assertEqual(be.get('foo'), data)
-
-            os.remove(root)
-            with self.assertRaises(KeyError):
-                be.get('foo')
+        os.remove(self.path)
+        with self.assertRaises(KeyError):
+            self.backend.get('foo')
 
     def test_update(self):
-        with TemporaryDirectory() as tmp_dir:
-            root = os.path.join(tmp_dir, 'root.zip')
-            be = ZipFileBackend(root)
+        self.backend.put('foo', 'foo_data')
+        self.backend.put('bar', 'bar_data')
 
-            be.put('foo', 'foo_data')
-            be.put('bar', 'bar_data')
+        self.backend._update('foo.json', 'foo_bar_data')
 
-            be._update('foo.json', 'foo_bar_data')
+        self.assertEqual(self.backend.get('foo'), 'foo_bar_data')
+        self.assertEqual(self.backend.get('bar'), 'bar_data')
 
-            self.assertEqual(be.get('foo'), 'foo_bar_data')
-            self.assertEqual(be.get('bar'), 'bar_data')
-
-            be._update('foo.json', None)
-            self.assertFalse(be.exists('foo'))
+        self.backend._update('foo.json', None)
+        self.assertFalse(self.backend.exists('foo'))
 
     def test_delete(self):
-        with TemporaryDirectory() as tmp_dir:
-            root = os.path.join(tmp_dir, 'root.zip')
-            backend = ZipFileBackend(root)
+        with self.assertRaisesRegex(KeyError, 'foo'):
+            self.backend.delete('foo')
 
-            with self.assertRaisesRegex(KeyError, 'foo'):
-                backend.delete('foo')
+        self.backend.put('foo', 'foo_data')
+        self.assertTrue(self.backend.exists('foo'))
+        self.backend.delete('foo')
+        self.assertFalse(self.backend.exists('foo'))
 
-            backend.put('foo', 'foo_data')
-            self.assertTrue(backend.exists('foo'))
-            backend.delete('foo')
-            self.assertFalse(backend.exists('foo'))
+        with zipfile.ZipFile(self.path, 'r') as file:
+            self.assertNotIn('foo', file.namelist())
 
-            with zipfile.ZipFile(root, 'r') as file:
-                self.assertNotIn('foo', file.namelist())
+    def test_get_contents_iter_len(self) -> None:
+        expected = {'foo', 'bar', 'hugo.test'}
+        for name in expected:
+            self.backend.put(name, "asdfasdfas")
 
-    def test_get_contents(self) -> None:
-        with TemporaryDirectory() as tmp_dir:
-            root = os.path.join(tmp_dir, 'root.zip')
-            backend = ZipFileBackend(root)
-            expected = {'foo', 'bar', 'hugo.test'}
-            for name in expected:
-                backend.put(name, 'foo_data')
-            contents = backend.list_contents()
+        self.assertEqual(expected, self.backend.list_contents(), msg="list_contents() faulty")
+        self.assertEqual(expected, set(iter(self.backend)), msg="__iter__() faulty")
+        self.assertEqual(3, len(self.backend), msg="__len__() faulty")
 
-            self.assertEqual(expected, contents)
+    def test_iter_empty(self) -> None:
+        self.assertEqual(set(), set(iter(self.backend)))
 
 
 class CachingBackendTests(unittest.TestCase):
     def setUp(self) -> None:
         self.dummy_backend = DummyStorageBackend()
-        self.caching_backend = CachingBackend(self.dummy_backend)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', DeprecationWarning)
+            self.caching_backend = CachingBackend(self.dummy_backend)
         self.identifier = 'foo'
         self.testdata = 'foodata'
         self.alternative_testdata = 'atadoof'
@@ -566,13 +623,17 @@ class CachingBackendTests(unittest.TestCase):
         self.assertNotIn('foo', self.caching_backend)
         self.assertNotIn('foo', self.dummy_backend)
 
-    def test_get_contents(self) -> None:
+    def test_get_contents_iter_len(self) -> None:
         expected = {'foo', 'bar', 'hugo.test'}
         for name in expected:
-            self.caching_backend.put(name, self.testdata)
-        contents = self.caching_backend.list_contents()
+            self.dummy_backend.put(name, "asdfasdfas")
 
-        self.assertEqual(expected, contents)
+        self.assertEqual(expected, self.caching_backend.list_contents(), msg="list_contents() faulty")
+        self.assertEqual(expected, set(iter(self.caching_backend)), msg="__iter__() faulty")
+        self.assertEqual(3, len(self.caching_backend), msg="__len__() faulty")
+
+    def test_iter_empty(self) -> None:
+        self.assertEqual(set(), set(iter(self.caching_backend)))
 
 
 class DictBackendTests(unittest.TestCase):
@@ -610,15 +671,19 @@ class DictBackendTests(unittest.TestCase):
 
         self.backend.delete('a')
         self.assertFalse(self.backend.storage)
-
-    def test_get_contents(self) -> None:
+        
+    def test_get_contents_iter_len(self) -> None:
         expected = {'foo', 'bar', 'hugo.test'}
         for name in expected:
-            self.backend.put(name, 'foo_data')
-        contents = self.backend.list_contents()
+            self.backend.put(name, "asdfasdfas")
 
-        self.assertEqual(expected, contents)
+        self.assertEqual(expected, self.backend.list_contents(), msg="list_contents() faulty")
+        self.assertEqual(expected, set(iter(self.backend)), msg="__iter__() faulty")
+        self.assertEqual(3, len(self.backend), msg="__len__() faulty")
 
+    def test_iter_empty(self) -> None:
+        self.assertEqual(set(), set(iter(self.backend)))
+        
 
 class DeserializationCallbackFinderTests(unittest.TestCase):
     def test_set_item(self):
@@ -908,15 +973,28 @@ class PulseStorageTests(unittest.TestCase):
         self.assertEqual({}, backend.stored_items)
         self.assertEqual(pulse_storage.temporary_storage, {})
 
+    @mock.patch.multiple(StorageBackend, __abstractmethods__=set())
     def test_len(self) -> None:
-        pulse_storage = PulseStorage(DummyStorageBackend())
-        with self.assertRaisesRegex(NotImplementedError, "request"):
-            len(pulse_storage)
+        with mock.patch.object(StorageBackend, '__len__', return_value=5) as len_mock:
+            pulse_storage = PulseStorage(StorageBackend())
+            self.assertEqual(5, len(pulse_storage))
+            self.assertEqual(1, len_mock.call_count)
 
+    @mock.patch.multiple(StorageBackend, __abstractmethods__=set())
     def test_iter(self) -> None:
-        pulse_storage = PulseStorage(DummyStorageBackend())
-        with self.assertRaisesRegex(NotImplementedError, "request"):
-            iter(pulse_storage)
+        data = ['hugo', 'ilse', 'foo.bar']
+        with mock.patch.object(StorageBackend, '__iter__', return_value=iter(data)) as iter_mock:
+            pulse_storage = PulseStorage(StorageBackend())
+            self.assertEqual(set(data), set(iter(pulse_storage)))
+            self.assertEqual(1, iter_mock.call_count)
+
+    @mock.patch.multiple(StorageBackend, __abstractmethods__=set())
+    def test_contents(self) -> None:
+        data = ['hugo', 'ilse', 'foo.bar']
+        with mock.patch.object(StorageBackend, '__iter__', return_value=iter(data)) as iter_mock:
+            pulse_storage = PulseStorage(StorageBackend())
+            self.assertEqual(set(data), set(iter(pulse_storage)))
+            self.assertEqual(1, iter_mock.call_count)
 
     def test_deserialize_storage_is_default_registry(self) -> None:
         backend = DummyStorageBackend()

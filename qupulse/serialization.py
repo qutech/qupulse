@@ -20,7 +20,7 @@ Functions:
 """
 
 from abc import ABCMeta, abstractmethod
-from typing import Dict, Any, Optional, NamedTuple, Union, Mapping, MutableMapping, Set, Callable
+from typing import Dict, Any, Optional, NamedTuple, Union, Mapping, MutableMapping, Set, Callable, Iterator, Iterable
 import os
 import zipfile
 import tempfile
@@ -29,6 +29,7 @@ import weakref
 import warnings
 import gc
 import importlib
+import warnings
 from contextlib import contextmanager
 
 from qupulse.utils.types import DocStringABCMeta
@@ -104,13 +105,29 @@ class StorageBackend(metaclass=ABCMeta):
     def __delitem__(self, identifier: str) -> None:
         self.delete(identifier)
 
-    @abstractmethod
-    def list_contents(self) -> Set[str]:
+    def list_contents(self) -> Iterable[str]:
         """Returns a listing of all available identifiers.
+
+        DEPRECATED (2018-09-20): Use property contents instead.
 
         Returns:
             List of all available identifiers.
         """
+        warnings.warn("list_contents is deprecated. Use the property contents instead", DeprecationWarning)
+        return self.contents
+
+    @property
+    def contents(self) -> Iterable[str]:
+        """The identifiers of all Serializables currently stored in this StorageBackend."""
+        return set(iter(self))
+
+    @abstractmethod
+    def __iter__(self) -> Iterator[str]:
+        """Iterator over all identifiers of Serializables currently stored in this StorageBackend."""
+        pass
+
+    def __len__(self) -> int:
+        return len(self.contents)
 
 
 class FilesystemBackend(StorageBackend):
@@ -166,20 +183,9 @@ class FilesystemBackend(StorageBackend):
         except FileNotFoundError as fnf:
             raise KeyError(identifier) from fnf
 
-    def list_contents(self) -> Set[str]:
-        contents = set()
+    def __iter__(self) -> Iterator[str]:
         for dirpath, dirs, files in os.walk(self._root):
-            contents = contents | {filename
-                                   for filename, ext in (os.path.splitext(file) for file in files)
-                                   if ext == '.json'}
-            break # abort after first iteration; FileSystemBackend doesn't allow for subdirectories anyway right now, so this is a safeguard
-
-            # pref = os.path.commonprefix((dirpath, self._root))
-            # dir_rel_path = dirpath[len(pref):]
-            # contents = contents | {os.path.join(dir_rel_path, filename)
-            #                        for filename, ext in (os.path.splitext(file) for file in files)
-            #                        if ext == '.json'}
-        return contents
+            return (filename for filename, ext in (os.path.splitext(file) for file in files) if ext == '.json')
 
 
 class ZipFileBackend(StorageBackend):
@@ -193,29 +199,38 @@ class ZipFileBackend(StorageBackend):
     network devices, but takes longer to update because every write causes a
     complete recompression (it's not too bad)."""
 
-    def __init__(self, root: str='./storage.zip') -> None:
+    def __init__(self, root: str='./storage.zip', compression_method: int=zipfile.ZIP_DEFLATED) -> None:
         """Creates a new FilesystemBackend.
 
         Args:
-            root (str): The path of the zip file in which all data files are stored. (default: "./storage.zip",
+            root: The path of the zip file in which all data files are stored. (default: "./storage.zip",
                 i.e. the current directory)
+            compression_method: The compression method/algorithm used to compress data in the zipfile. Accepts
+                all values handled by the zipfile module (ZIP_STORED, ZIP_DEFLATED, ZIP_BZIP2, ZIP_LZMA). Please refer
+                to the `zipfile docs <https://docs.python.org/3/library/zipfile.html#zipfile.ZIP_STORED>` for more
+                information. (default: zipfile.ZIP_DEFLATED)
         Raises:
             NotADirectoryError if root is not a valid path.
         """
         parent, fname = os.path.split(root)
-        if not os.path.isdir(parent):
-            raise NotADirectoryError()
         if not os.path.isfile(root):
+            if not os.path.isdir(parent):
+                raise NotADirectoryError(
+                    "Cannot create a ZipStorageBackend. The parent path {} is not valid.".format(parent)
+                )
             z = zipfile.ZipFile(root, "w")
             z.close()
+        elif not zipfile.is_zipfile(root):
+            raise FileExistsError("Cannot open a ZipStorageBackend. The file {} is not a zip archive.".format(root))
         self._root = root
+        self._compression_method = compression_method
 
     def _path(self, identifier) -> str:
         return os.path.join(identifier + '.json')
 
     def put(self, identifier: str, data: str, overwrite: bool=False) -> None:
         if not self.exists(identifier):
-            with zipfile.ZipFile(self._root, mode='a', compression=zipfile.ZIP_DEFLATED) as myzip:
+            with zipfile.ZipFile(self._root, mode='a', compression=self._compression_method) as myzip:
                 path = self._path(identifier)
                 myzip.writestr(path, data)
         else:
@@ -262,14 +277,14 @@ class ZipFileBackend(StorageBackend):
 
         # now add filename with its new data
         if data is not None:
-            with zipfile.ZipFile(self._root, mode='a', compression=zipfile.ZIP_DEFLATED) as zf:
+            with zipfile.ZipFile(self._root, mode='a', compression=self._compression_method) as zf:
                 zf.writestr(filename, data)
 
-    def list_contents(self) -> Set[str]:
+    def __iter__(self) -> Iterator[str]:
         with zipfile.ZipFile(self._root, 'r') as myzip:
-            return set(filename
-                       for filename, ext in (os.path.splitext(file) for file in myzip.namelist())
-                       if ext == '.json')
+            return (filename
+                    for filename, ext in (os.path.splitext(file) for file in myzip.namelist())
+                    if ext == '.json')
 
 
 class CachingBackend(StorageBackend):
@@ -278,8 +293,11 @@ class CachingBackend(StorageBackend):
     CachingBackend relies on another StorageBackend to provide real data IO functionality which
     it extends by caching already opened files in memory for faster subsequent access.
 
-    Note that it does not flush the cache at any time and may thus not be suitable for long-time
-    usage as it may consume increasing amounts of memory.
+    Note that it does not automatically clear the cache at any time and thus will consume increasing amounts of memory
+    over time. Use the :meth:`clear_cache` method to clear the cache manually.
+
+    DEPRECATED (2018-09-20): PulseStorage now already provides chaching around StorageBackends, rendering CachingBackend
+    obsolete.
     """
 
     def __init__(self, backend: StorageBackend) -> None:
@@ -289,6 +307,8 @@ class CachingBackend(StorageBackend):
             backend (StorageBackend): A StorageBackend that provides data
                 IO functionality.
         """
+        warnings.warn("CachingBackend is obsolete due to PulseStorage already offering caching functionality.",
+                      DeprecationWarning)
         self._backend = backend
         self._cache = {}
 
@@ -311,12 +331,18 @@ class CachingBackend(StorageBackend):
         if identifier in self._cache:
             del self._cache[identifier]
 
-    def list_contents(self) -> Set[str]:
-        return self._backend.list_contents()
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._backend)
+
+    def clear_cache(self) -> None:
+        self._cache = dict()
 
 
 class DictBackend(StorageBackend):
-    """DictBackend uses a dictionary to store the data for convenience serialization."""
+    """DictBackend uses a dictionary to store Serializables in memory.
+
+    Doing so, it does not provide any persistent storage functionality.
+    """
     def __init__(self) -> None:
         self._cache = {}
 
@@ -338,8 +364,8 @@ class DictBackend(StorageBackend):
     def delete(self, identifier: str) -> None:
         del self._cache[identifier]
 
-    def list_contents(self) -> Set[str]:
-        return set(self._cache.keys())
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._cache)
 
 
 class DeserializationCallbackFinder:
@@ -871,26 +897,26 @@ class PulseStorage(MutableMapping[str, Serializable]):
         except KeyError:
             pass
 
-    def __len__(self) -> None:
-        raise NotImplementedError("len(PulseStorage) has currently no meaningful semantics and is not implemented."
-                                  " If you require this feature, please create a feature request at \n"
-                                  "https://github.com/qutech/qupulse/issues/new")
+    @property
+    def contents(self) -> Iterable[str]:
+        return self._storage_backend.list_contents()
 
-    def __iter__(self) -> None:
-        raise NotImplementedError("iter(PulseStorage) has currently no meaningful semantics and is not implemented."
-                                  " If you require this feature, please create a feature request at \n"
-                                  "https://github.com/qutech/qupulse/issues/new")
+    def __len__(self) -> int:
+        return len(self._storage_backend)
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._storage_backend)
 
     def overwrite(self, identifier: str, serializable: Serializable) -> None:
         """Explicitly overwrites a pulse.
 
         Calling this method will overwrite the entity currently stored under the given identifier by the
         provided serializable. It does _not_ overwrite nested Serializable objects contained in serializable. If you
-        want to overwrite those as well, do that explicitely.
+        want to overwrite those as well, do that explicitly.
 
         Args:
               identifier: The identifier to store serializable under.
-            serializable: The Serializable object to be stored.
+              serializable: The Serializable object to be stored.
         """
 
         is_transaction_begin = (self._transaction_storage is None)
@@ -1018,7 +1044,8 @@ class JSONSerializableEncoder(json.JSONEncoder):
                 if o.identifier not in self.storage:
                     self.storage[o.identifier] = o
                 elif o is not self.storage[o.identifier]:
-                    raise RuntimeError('Trying to store a subpulse with an identifier that is already taken.')
+                    raise RuntimeError('Trying to store a subpulse with an identifier that is already taken.',
+                                       o.identifier)
 
 
                 return {Serializable.type_identifier_name: 'reference',

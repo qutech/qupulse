@@ -1,6 +1,7 @@
 import unittest
 import contextlib
 import math
+import sys
 
 from typing import Union
 
@@ -14,7 +15,8 @@ a_ = IndexedBase(a)
 b_ = IndexedBase(b)
 
 from qupulse.utils.sympy import sympify as qc_sympify, substitute_with_eval, recursive_substitution, Len,\
-    evaluate_lambdified, evaluate_compiled, get_most_simple_representation, get_variables, get_free_symbols
+    evaluate_lambdified, evaluate_compiled, get_most_simple_representation, get_variables, get_free_symbols,\
+    almost_equal, Broadcast
 
 
 ################################################### SUBSTITUTION #######################################################
@@ -237,24 +239,17 @@ class GetFreeSymbolsTests(TestCase):
         self.assertEqual({'a', 'b', 'i', 'j'}, set(get_variables(expr)))
 
 
-class EvaluationTests(TestCase):
-    def evaluate(self, expression: Union[sympy.Expr, np.ndarray], parameters):
-        if isinstance(expression, np.ndarray):
-            variables = set.union(*map(set, map(get_variables, expression.flat)))
-        else:
-            variables = get_variables(expression)
-        return evaluate_lambdified(expression, variables=list(variables), parameters=parameters, lambdified=None)[0]
+class EvaluationTestsBase:
 
     def test_eval_simple(self):
         for expr, parameters, expected in eval_simple:
             result = self.evaluate(expr, parameters)
             self.assertEqual(result, expected)
 
-    def test_eval_many_arguments(self, expected_exception=SyntaxError):
-        with self.assertRaises(expected_exception):
-            for expr, parameters, expected in eval_many_arguments:
-                result = self.evaluate(expr, parameters)
-                self.assertEqual(result, expected)
+    def test_eval_many_arguments(self):
+        for expr, parameters, expected in eval_many_arguments:
+            result = self.evaluate(expr, parameters)
+            self.assertEqual(result, expected)
 
     def test_eval_simple_functions(self):
         for expr, parameters, expected in eval_simple_functions:
@@ -277,7 +272,22 @@ class EvaluationTests(TestCase):
             np.testing.assert_equal(result, expected)
 
 
-class CompiledEvaluationTest(EvaluationTests):
+class LamdifiedEvaluationTest(EvaluationTestsBase, unittest.TestCase):
+
+    def evaluate(self, expression: Union[sympy.Expr, np.ndarray], parameters):
+        if isinstance(expression, np.ndarray):
+            variables = set.union(*map(set, map(get_variables, expression.flat)))
+        else:
+            variables = get_variables(expression)
+        return evaluate_lambdified(expression, variables=list(variables), parameters=parameters, lambdified=None)[0]
+
+    @unittest.skipIf(sys.version_info[0] == 3 and sys.version_info[1] < 7, "causes syntax error for python < 3.7")
+    def test_eval_many_arguments(self):
+        super().test_eval_many_arguments()
+
+
+class CompiledEvaluationTest(EvaluationTestsBase, unittest.TestCase):
+
     def evaluate(self, expression: Union[sympy.Expr, np.ndarray], parameters):
         if isinstance(expression, np.ndarray):
             return self.evaluate(sympy.Array(expression), parameters)
@@ -290,7 +300,7 @@ class CompiledEvaluationTest(EvaluationTests):
             return result
 
     def test_eval_many_arguments(self):
-        super().test_eval_many_arguments(None)
+        super().test_eval_many_arguments()
 
 
 class RepresentationTest(unittest.TestCase):
@@ -310,3 +320,95 @@ class RepresentationTest(unittest.TestCase):
         st = get_most_simple_representation(qc_sympify('a + b'))
         self.assertIsInstance(st, str)
         self.assertEqual(st, 'a + b')
+
+
+class AlmostEqualTests(unittest.TestCase):
+    def test_almost_equal(self):
+        self.assertTrue(almost_equal(sympy.sin(a) * 0.5, sympy.sin(a) / 2))
+        self.assertIsNone(almost_equal(sympy.sin(a) * 0.5, sympy.sin(b) / 2))
+        self.assertFalse(almost_equal(sympy.sin(a), sympy.sin(a) + 1e-14))
+
+        self.assertTrue(almost_equal(sympy.sin(a), sympy.sin(a) + 1e-14, epsilon=1e-13))
+
+
+class BroadcastTests(unittest.TestCase):
+    def test_symbolic_shape(self):
+        symbolic = Broadcast(a, (b,))
+        self.assertIs(symbolic.func, Broadcast)
+        self.assertEqual(symbolic.args, (a, (b,)))
+
+        subs_b = symbolic.subs({b: 6})
+        self.assertIs(subs_b.func, Broadcast)
+        self.assertEqual(subs_b.args, (a, (6,)))
+
+        subs_a = symbolic.subs({a: 3})
+        self.assertIs(subs_a.func, Broadcast)
+        self.assertEqual(subs_a.args, (3, (b,)))
+
+        subs_both_scalar = symbolic.subs({a: 3, b: 6})
+        self.assertEqual(subs_both_scalar, sympy.Array([3, 3, 3, 3, 3, 3]))
+
+        subs_both_array = symbolic.subs({a: (1, 2, 3, 4, 5, 6), b: 6})
+        self.assertEqual(subs_both_array, sympy.Array([1, 2, 3, 4, 5, 6]))
+
+        with self.assertRaises(ValueError):
+            symbolic.subs({a: (1, 2, 3, 4, 5, 6), b: 7})
+
+    def test_scalar_broad_cast(self):
+        symbolic = Broadcast(a, (6,))
+        self.assertIs(symbolic.func, Broadcast)
+        self.assertEqual(symbolic.args, (a, (6,)))
+
+        subs_symbol = symbolic.subs({a: b})
+        self.assertIs(subs_symbol.func, Broadcast)
+        self.assertEqual(subs_symbol.args, (b, (6,)))
+
+        subs_scalar = symbolic.subs({a: 3.4})
+        self.assertEqual(subs_scalar, sympy.Array([3.4, 3.4, 3.4, 3.4, 3.4, 3.4]))
+
+        subs_symbol_vector = symbolic.subs({a: (b, 1, 2, 3, 4, 5)})
+        self.assertEqual(subs_symbol_vector, sympy.Array([b, 1, 2, 3, 4, 5]))
+
+        subs_numeric_vector = symbolic.subs({a: (0, 1, 2, 3, 4, 5)})
+        self.assertEqual(subs_numeric_vector, sympy.Array([0, 1, 2, 3, 4, 5]))
+
+        with self.assertRaises(ValueError):
+            symbolic.subs({a: (b, 4, 5)})
+
+        with self.assertRaises(ValueError):
+            symbolic.subs({a: (8, 5, 3, 5, 5, 4, 4, 5)})
+
+    def test_array_broadcast(self):
+        expected = sympy.Array([1, 2, a, b])
+
+        self.assertEqual(expected, Broadcast(list(expected), (4,)))
+        self.assertEqual(expected, Broadcast(tuple(expected), (4,)))
+        self.assertEqual(expected, Broadcast(expected, (4,)))
+
+    def test_numeric_evaluation(self):
+        symbolic = Broadcast(a, (b,))
+
+        arguments = {'a': (1, 2., 3), 'b': 3}
+        expected = np.asarray([1, 2., 3])
+        result, _ = evaluate_lambdified(symbolic, ['a', 'b'], arguments, None)
+        np.testing.assert_array_equal(expected, result)
+
+        with self.assertRaises(ValueError):
+            arguments = {'a': (1, 2., 3), 'b': 4}
+            evaluate_lambdified(symbolic, ['a', 'b'], arguments, None)
+
+        arguments = {'a': 1, 'b': 3}
+        expected = np.asarray([1, 1, 1])
+        result, _ = evaluate_lambdified(symbolic, ['a', 'b'], arguments, None)
+        np.testing.assert_array_equal(expected, result)
+
+    def test_sympification(self):
+        symbolic = Broadcast(a, (3,))
+        as_str = str(symbolic)
+
+        re_sympified = qc_sympify(as_str)
+        self.assertEqual(re_sympified, symbolic)
+
+        sympification = qc_sympify('Broadcast(a, (3,))')
+        self.assertEqual(sympification, symbolic)
+

@@ -1,5 +1,5 @@
 import itertools
-from typing import Union, Dict, Set, Iterable, FrozenSet, Tuple, cast, List, Optional, DefaultDict, Deque, Generator
+from typing import Union, Dict, Set, Iterable, FrozenSet, Tuple, cast, List, Optional, DefaultDict, Generator
 from collections import defaultdict, deque
 from copy import deepcopy
 from enum import Enum
@@ -417,7 +417,7 @@ class MultiChannelProgram:
     def __split_channels(channels: FrozenSet[ChannelID],
                          root_loop: Loop,
                          block_stack: List[Tuple[Tuple[int, ...],
-                                                 Deque[Instruction]]]) -> Loop:
+                                                 deque]]) -> Loop:
         while block_stack:
             current_loop_location, current_instruction_block = block_stack.pop()
             current_loop = root_loop.locate(current_loop_location)

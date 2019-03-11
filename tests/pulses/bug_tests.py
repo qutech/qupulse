@@ -49,9 +49,7 @@ class BugTests(unittest.TestCase):
 
         _ = plot(sequence_template, parameters=sequence_parameters, sample_rate=100, show=False)
 
-    @unittest.expectedFailure
     def test_plot_with_parameter_value_being_expression_string(self) -> None:
-        """This is currently not supported but probably should be?"""
         sine_measurements = [('M', 't_duration/2', 't_duration')]
         sine = FunctionPulseTemplate('a*sin(omega*t)', 't_duration', measurements=sine_measurements)
         sine_channel_mapping = dict(default='sin_channel')

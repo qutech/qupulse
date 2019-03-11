@@ -48,8 +48,17 @@ class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
         allowed_types = (float, numpy.number, int, complex, bool, numpy.bool_)
         if isinstance(result, tuple):
             result = numpy.array(result)
-        if isinstance(result, numpy.ndarray) and issubclass(result.dtype.type, allowed_types):
-            return result
+        if isinstance(result, numpy.ndarray):
+            if issubclass(result.dtype.type, allowed_types):
+                return result
+            else:
+                obj_types = set(map(type, result.flat))
+                if obj_types == {sympy.Float} or obj_types == {sympy.Float, sympy.Integer}:
+                    return result.astype(float)
+                elif obj_types == {sympy.Integer}:
+                    return result.astype(np.int64)
+                else:
+                    raise NonNumericEvaluation(self, result, call_arguments)
         elif isinstance(result, allowed_types):
             return result
         elif isinstance(result, sympy.Float):
@@ -259,6 +268,9 @@ class ExpressionScalar(Expression):
         """Enable comparisons with Numbers"""
         return self._sympified_expression == self._sympify(other)
 
+    def __hash__(self) -> int:
+        return hash(self._sympified_expression)
+
     def __add__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> 'ExpressionScalar':
         return self.make(self._sympified_expression.__add__(self._sympify(other)))
 
@@ -337,6 +349,11 @@ class NonNumericEvaluation(Exception):
     def __str__(self) -> str:
         if isinstance(self.non_numeric_result, numpy.ndarray):
             dtype = self.non_numeric_result.dtype
+
+            if dtype == numpy.dtype('O'):
+                dtypes = set(map(type, self.non_numeric_result.flat))
+                "The result of evaluate_numeric is an array with the types {} " \
+                "which is not purely numeric".format(dtypes)
         else:
             dtype = type(self.non_numeric_result)
         return "The result of evaluate_numeric is of type {} " \

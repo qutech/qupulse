@@ -12,7 +12,7 @@ from typing import Union, Set, Sequence, NamedTuple, Tuple, Any, Iterable, Froze
 import numpy as np
 
 from qupulse import ChannelID
-from qupulse.utils import checked_int_cast
+from qupulse.utils import checked_int_cast, isclose
 from qupulse.utils.types import TimeType, time_from_float
 from qupulse.comparable import Comparable
 from qupulse.expressions import ExpressionScalar
@@ -395,16 +395,29 @@ class MultiChannelWaveform(Waveform):
         self._sub_waveforms = tuple(sorted(flatten_sub_waveforms(sub_waveforms),
                                            key=get_sub_waveform_sort_key))
 
-        if not all(waveform.duration == self._sub_waveforms[0].duration for waveform in self._sub_waveforms[1:]):
-            raise ValueError(
-                "MultiChannelWaveform cannot be constructed from channel waveforms of different"
-                "lengths."
-            )
         self.__defined_channels = set()
         for waveform in self._sub_waveforms:
             if waveform.defined_channels & self.__defined_channels:
-                raise ValueError('Channel may not be defined in multiple waveforms')
+                raise ValueError('Channel may not be defined in multiple waveforms',
+                                 waveform.defined_channels & self.__defined_channels)
             self.__defined_channels |= waveform.defined_channels
+
+        if not all(isclose(waveform.duration, self._sub_waveforms[0].duration) for waveform in self._sub_waveforms[1:]):
+            # meaningful error message:
+            durations = {}
+
+            for waveform in self._sub_waveforms:
+                for duration, channels in durations.items():
+                    if isclose(waveform.duration, duration):
+                        channels.update(waveform.defined_channels)
+                        break
+                else:
+                    durations[waveform.duration] = set(waveform.defined_channels)
+
+            raise ValueError(
+                "MultiChannelWaveform cannot be constructed from channel waveforms of different durations.",
+                durations
+            )
 
     @property
     def duration(self) -> TimeType:

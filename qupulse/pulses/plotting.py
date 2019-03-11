@@ -108,8 +108,10 @@ def iter_instruction_block(instruction_block: AbstractInstructionBlock,
 
 def render(program: Union[AbstractInstructionBlock, Loop],
            sample_rate: Real=10.0,
-           render_measurements=False) -> Union[Tuple[np.ndarray, Dict[ChannelID, np.ndarray]],
-                                               Tuple[np.ndarray, Dict[ChannelID, np.ndarray], List[MeasurementWindow]]]:
+           render_measurements: bool=False,
+           time_slice: Tuple[Real, Real]=None) -> Union[Tuple[np.ndarray, Dict[ChannelID, np.ndarray]],
+                                                        Tuple[np.ndarray, Dict[ChannelID, np.ndarray],
+                                                              List[MeasurementWindow]]]:
     """'Renders' a pulse program.
 
         Samples all contained waveforms into an array according to the control flow of the program.
@@ -118,7 +120,8 @@ def render(program: Union[AbstractInstructionBlock, Loop],
             program: The pulse (sub)program to render. Can be represented either by a Loop object or the more
                 old-fashioned InstructionBlock.
             sample_rate: The sample rate in GHz.
-            render_measurements: If True, the third return value is a list of measurement windows
+            render_measurements: If True, the third return value is a list of measurement windows.
+            time_slice: The time slice to be plotted. If None, the entire pulse will be shown.
 
         Returns:
             A tuple (times, values, measurements). times is a numpy.ndarray of dimensions sample_count where
@@ -129,9 +132,13 @@ def render(program: Union[AbstractInstructionBlock, Loop],
         """
 
     if isinstance(program, AbstractInstructionBlock):
+        warnings.warn("InstructionBlock API is deprecated", DeprecationWarning)
+        if time_slice is not None:
+            raise ValueError("Keyword argument time_slice is not supported when rendering instruction blocks")
         return _render_instruction_block(program, sample_rate=sample_rate, render_measurements=render_measurements)
     elif isinstance(program, Loop):
-        return _render_loop(program, sample_rate=sample_rate, render_measurements=render_measurements)
+        return _render_loop(program, sample_rate=sample_rate,
+                            render_measurements=render_measurements, time_slice=time_slice)
 
 
 def _render_instruction_block(sequence: AbstractInstructionBlock,
@@ -173,15 +180,23 @@ def _render_instruction_block(sequence: AbstractInstructionBlock,
 
 def _render_loop(loop: Loop,
                  sample_rate: Real,
-                 render_measurements: bool) -> Union[Tuple[np.ndarray, Dict[ChannelID, np.ndarray]],
-                                                     Tuple[np.ndarray, Dict[ChannelID, np.ndarray],
-                                                           List[MeasurementWindow]]]:
+                 render_measurements: bool,
+                 time_slice: Tuple[Real, Real] = None) -> Union[Tuple[np.ndarray, Dict[ChannelID, np.ndarray]],
+                                                                Tuple[np.ndarray, Dict[ChannelID, np.ndarray],
+                                                                List[MeasurementWindow]]]:
     """The specific implementation of render for Loop arguments."""
     waveform = to_waveform(loop)
     channels = waveform.defined_channels
 
-    sample_count = waveform.duration * sample_rate + 1
-    times = np.linspace(0., float(waveform.duration), num=int(sample_count), dtype=float)
+    if time_slice is None:
+        time_slice = (0, waveform.duration)
+    elif time_slice[1] < time_slice[0] or time_slice[0] < 0 or time_slice[1] < 0:
+        raise ValueError("time_slice is not valid.")
+
+    sample_count = (time_slice[1] - time_slice[0]) * sample_rate + 1
+    if sample_count<2:
+        raise PlottingNotPossibleException(pulse = None, description = 'cannot render sequence with less than 2 data points')
+    times = np.linspace(float(time_slice[0]), float(time_slice[1]), num=int(sample_count), dtype=float)
     times[-1] = np.nextafter(times[-1], times[-2])
 
     voltages = {}
@@ -193,7 +208,9 @@ def _render_loop(loop: Loop,
         measurement_dict = loop.get_measurement_windows()
         measurement_list = []
         for name, (begins, lengths) in measurement_dict.items():
-            measurement_list.extend(zip(itertools.repeat(name), begins, lengths))
+            measurement_list.extend(m
+                                    for m in zip(itertools.repeat(name), begins, lengths)
+                                    if m[1]+m[2] > time_slice[0] and m[1] < time_slice[1])
         measurements = sorted(measurement_list, key=operator.itemgetter(1))
     else:
         measurements = []
@@ -210,6 +227,7 @@ def plot(pulse: PulseTemplate,
          plot_measurements: Optional[Set[str]]=None,
          stepped: bool=True,
          maximum_points: int=10**6,
+         time_slice: Tuple[Real, Real]=None,
          **kwargs) -> Any:  # pragma: no cover
     """Plots a pulse using matplotlib.
 
@@ -229,6 +247,7 @@ def plot(pulse: PulseTemplate,
         stepped: If true pyplot.step is used for plotting
         plot_measurements: If specified measurements in this set will be plotted. If omitted no measurements will be.
         maximum_points: If the sampled waveform is bigger, it is not plotted
+        time_slice: The time slice to be plotted. If None, the entire pulse will be shown.
         kwargs: Forwarded to pyplot. Overwrites other settings.
     Returns:
         matplotlib.pyplot.Figure instance in which the pulse is rendered
@@ -249,7 +268,10 @@ def plot(pulse: PulseTemplate,
                                    measurement_mapping={w: w for w in pulse.measurement_names})
 
     if program is not None:
-        times, voltages, measurements = render(program, sample_rate, render_measurements=plot_measurements)
+        times, voltages, measurements = render(program,
+                                               sample_rate,
+                                               render_measurements=plot_measurements,
+                                               time_slice=time_slice)
     else:
         times, voltages, measurements = np.array([]), dict(), []
 
@@ -263,6 +285,9 @@ def plot(pulse: PulseTemplate,
         return None
     else:
         duration = times[-1]
+
+    if time_slice is None:
+        time_slice = (0, duration)
 
     legend_handles = []
     if axes is None:
@@ -303,7 +328,7 @@ def plot(pulse: PulseTemplate,
     min_voltage = min((min(channel, default=0) for channel in voltages.values()), default=0)
 
     # add some margins in the presentation
-    axes.set_xlim(-0.5, duration + 0.5)
+    axes.set_xlim(-0.5+time_slice[0], time_slice[1] + 0.5)
     axes.set_ylim(min_voltage - 0.1*(max_voltage-min_voltage), max_voltage + 0.1*(max_voltage-min_voltage))
     axes.set_xlabel('Time (ns)')
     axes.set_ylabel('Voltage (a.u.)')
@@ -320,10 +345,14 @@ class PlottingNotPossibleException(Exception):
     """Indicates that plotting is not possible because the sequencing process did not translate
     the entire given PulseTemplate structure."""
 
-    def __init__(self, pulse) -> None:
+    def __init__(self, pulse, description = None) -> None:
         super().__init__()
         self.pulse = pulse
-
+        self.description = description
     def __str__(self) -> str:
-        return "Plotting is not possible. There are parameters which cannot be computed."
+        if self.description is None:
+            return "Plotting is not possible. There are parameters which cannot be computed."
+        else:
+            return "Plotting is not possible: %s." % self.description
+            
 

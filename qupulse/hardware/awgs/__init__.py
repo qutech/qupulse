@@ -20,6 +20,7 @@ except ImportError:
 
 
 def install_requirements(vendor: str):
+    """Install requirements that are not (yet) available via pypi."""
     package_repos = {
         'tektronix': 'https://github.com/qutech/TekAwg/archive/qc_toolkit_1.zip',
         'tabor': 'https://git.rwth-aachen.de/qutech/python-TaborDriver/-/archive/python3/python-TaborDriver-python3.zip'

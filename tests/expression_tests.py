@@ -140,7 +140,14 @@ class ExpressionScalarTests(unittest.TestCase):
         params['a'] = np.array([[1, 2, 3], [4, 5, 6]])
         np.testing.assert_equal(e.evaluate_numeric(**params), 2 * np.array([4, 5, 6]))
 
-    def test_partial_evaluation(self):
+    def test_partial_evaluation(self) -> None:
+        e = ExpressionScalar('a * c')
+        params = {'c': 5.5}
+        evaluated = e.evaluate_symbolic(params)
+        expected = ExpressionScalar('a * 5.5')
+        self.assertEqual(expected.underlying_expression, evaluated.underlying_expression)
+
+    def test_partial_evaluation_vectorized(self) -> None:
         e = ExpressionScalar('a[i] * c')
 
         params = {
@@ -151,7 +158,6 @@ class ExpressionScalarTests(unittest.TestCase):
         expected = ExpressionVector([['a[i] * 1', 'a[i] * 2'], ['a[i] * 3', 'a[i] * 4']])
 
         np.testing.assert_equal(evaluated.underlying_expression, expected.underlying_expression)
-
 
     def test_evaluate_numeric_without_numpy(self):
         e = Expression('a * b + c')
@@ -228,6 +234,11 @@ class ExpressionScalarTests(unittest.TestCase):
     def test_original_expression(self):
         s = 'a    *    b'
         self.assertEqual(ExpressionScalar(s).original_expression, s)
+
+    def test_hash(self):
+        expected = {ExpressionScalar(2), ExpressionScalar('a')}
+        sequence = [ExpressionScalar(2), ExpressionScalar('a'), ExpressionScalar(2), ExpressionScalar('a')]
+        self.assertEqual(expected, set(sequence))
 
     def test_undefined_comparison(self):
         valued = ExpressionScalar(2)
@@ -336,6 +347,14 @@ class ExpressionScalarTests(unittest.TestCase):
         self.assertTrue(ExpressionScalar('0./0.').is_nan())
 
         self.assertFalse(ExpressionScalar(456).is_nan())
+
+    def test_special_function_numeric_evaluation(self):
+        expr = Expression('erfc(t)')
+        data = [-1., 0., 1.]
+        expected = np.array([1.84270079, 1., 0.15729921])
+        result = expr.evaluate_numeric(t=data)
+
+        np.testing.assert_allclose(expected, result)
 
 
 class ExpressionExceptionTests(unittest.TestCase):

@@ -73,7 +73,7 @@ function [pulse, args] = pulse_seq(pulses, varargin)
 
 	% Add fill if fill_param not empty
 	if ~isempty(args.fill_param)
-		duration = pulse.duration;
+		duration = py.getattr(pulse, 'duration');
 		if qc.is_instantiated_pulse(args.fill_pulse)		
 			fill_pulse = args.fill_pulse;
 		else

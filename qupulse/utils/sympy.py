@@ -1,12 +1,22 @@
 from typing import Union, Dict, Tuple, Any, Sequence, Optional
 from numbers import Number
 from types import CodeType
+import warnings
 
 import builtins
 import math
 
 import sympy
 import numpy
+
+try:
+    import scipy.special as _special_functions
+except ImportError:
+    _special_functions = {fname: numpy.vectorize(fobject)
+                          for fname, fobject in math.__dict__.items()
+                          if not fname.startswith('_') and fname not in numpy.__dict__}
+    warnings.warn('scipy is not installed. This reduces the set of available functions to those present in numpy + '
+                  'manually vectorized functions in math.')
 
 
 __all__ = ["sympify", "substitute_with_eval", "to_numpy", "get_variables", "get_free_symbols", "recursive_substitution",
@@ -17,12 +27,16 @@ Sympifyable = Union[str, Number, sympy.Expr, numpy.str_]
 
 
 class IndexedBasedFinder:
+    """Acts as a symbol lookup and determines which symbols in an expression a subscripted."""
+
     def __init__(self):
         self.symbols = set()
         self.indexed_base = set()
         self.indices = set()
 
         class SubscriptionChecker(sympy.Symbol):
+            """A symbol stand-in which detects whether the symbol is subscripted."""
+
             def __getitem__(s, k):
                 self.indexed_base.add(str(s))
                 self.indices.add(k)
@@ -33,11 +47,41 @@ class IndexedBasedFinder:
         self.SubscriptionChecker = SubscriptionChecker
 
     def __getitem__(self, k) -> sympy.Expr:
+        """Return an instance of the internal SubscriptionChecker class for each symbol to determine which symbols are
+        indexed/subscripted.
+
+        __getitem__ is (apparently) called by symbol for each token and gets either symbol names or type names such as
+        'Integer', 'Float', etc. We have to take care of returning correct types for symbols (-> SubscriptionChecker)
+        and the base types (-> Integer, Float, etc).
+        """
+        if hasattr(sympy, k): # if k is a sympy base type identifier, return the base type
+            return getattr(sympy, k)
+
+        # otherwise track the symbol name and return a SubscriptionChecker instance
         self.symbols.add(k)
         return self.SubscriptionChecker(k)
 
     def __contains__(self, k) -> bool:
         return True
+
+
+class Broadcast(sympy.Function):
+    """Broadcast x to the specified shape using numpy.broadcast_to
+
+    Examples:
+        >>> bc = Broadcast('a', (3,))
+        >>> assert bc.subs({'a': 2}) == sympy.Array([2, 2, 2])
+        >>> assert bc.subs({'a': (1, 2, 3)}) == sympy.Array([1, 2, 3])
+    """
+
+    @classmethod
+    def eval(cls, x, shape) -> Optional[sympy.Array]:
+        if hasattr(shape, 'free_symbols') and shape.free_symbols:
+            # cannot do anything
+            return None
+
+        if hasattr(x, '__len__') or not x.free_symbols:
+            return sympy.Array(numpy.broadcast_to(x, shape))
 
 
 class Len(sympy.Function):
@@ -53,7 +97,8 @@ Len.__name__ = 'len'
 
 
 sympify_namespace = {'len': Len,
-                     'Len': Len}
+                     'Len': Len,
+                     'Broadcast': Broadcast}
 
 
 def numpy_compatible_mul(*args) -> Union[sympy.Mul, sympy.Array]:
@@ -174,6 +219,8 @@ _math_environment = {**_base_environment, **math.__dict__}
 _numpy_environment = {**_base_environment, **numpy.__dict__}
 _sympy_environment = {**_base_environment, **sympy.__dict__}
 
+_lambdify_modules = [{'ceiling': numpy_compatible_ceiling, 'Broadcast': numpy.broadcast_to}, 'numpy', _special_functions]
+
 
 def evaluate_compiled(expression: sympy.Expr,
              parameters: Dict[str, Union[numpy.ndarray, Number]],
@@ -196,7 +243,19 @@ def evaluate_lambdified(expression: Union[sympy.Expr, numpy.ndarray],
                         variables: Sequence[str],
                         parameters: Dict[str, Union[numpy.ndarray, Number]],
                         lambdified) -> Tuple[Any, Any]:
-    lambdified = lambdified or sympy.lambdify(variables, expression,
-                                              [{'ceiling': numpy_compatible_ceiling}, 'numpy'])
+    lambdified = lambdified or sympy.lambdify(variables, expression, _lambdify_modules)
 
     return lambdified(**parameters), lambdified
+
+
+def almost_equal(lhs: sympy.Expr, rhs: sympy.Expr, epsilon: float=1e-15) -> Optional[bool]:
+    """Returns True (or False) if the two expressions are almost equal (or not). Returns None if this cannot be
+    determined."""
+    relation = sympy.simplify(sympy.Abs(lhs - rhs) <= epsilon)
+
+    if relation is sympy.true:
+        return True
+    elif relation is sympy.false:
+        return False
+    else:
+        return None

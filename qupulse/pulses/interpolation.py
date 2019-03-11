@@ -79,7 +79,7 @@ class LinearInterpolationStrategy(InterpolationStrategy):
 
     @property
     def integral(self) -> ExpressionScalar:
-        return ExpressionScalar('0.5 * (t1-t0) * (v0 + v1)')
+        return ExpressionScalar('(t1-t0) * (v0 + v1) / 2')
 
     @property
     def expression(self) -> ExpressionScalar:

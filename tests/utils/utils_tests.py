@@ -1,4 +1,5 @@
 import unittest
+from unittest import mock
 from qupulse.utils import checked_int_cast
 
 
@@ -31,4 +32,45 @@ class CheckedIntCastTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             checked_int_cast(6 + 1e-11, epsilon=1e-15)
 
+
+class IsCloseTest(unittest.TestCase):
+    def test_isclose_fallback(self):
+        import math
+        import importlib
+        import builtins
+        import qupulse.utils as qutils
+
+        def dummy_is_close():
+            pass
+
+        if hasattr(math, 'isclose'):
+            dummy_is_close = math.isclose
+
+        original_import = builtins.__import__
+
+        def mock_import_missing_isclose(name, globals=None, locals=None, fromlist=(), level=0):
+            if name == 'math' and 'isclose' in fromlist:
+                raise ImportError(name)
+            else:
+                return original_import(name, globals=globals, locals=locals, fromlist=fromlist, level=level)
+
+        def mock_import_exsiting_isclose(name, globals=None, locals=None, fromlist=(), level=0):
+            if name == 'math' and 'isclose' in fromlist:
+                if not hasattr(math, 'isclose'):
+                    math.isclose = dummy_is_close
+                return math
+            else:
+                return original_import(name, globals=globals, locals=locals, fromlist=fromlist, level=level)
+
+        with mock.patch('builtins.__import__', mock_import_missing_isclose):
+            reloaded_qutils = importlib.reload(qutils)
+            self.assertIs(reloaded_qutils.isclose, reloaded_qutils._fallback_is_close)
+
+        with mock.patch('builtins.__import__', mock_import_exsiting_isclose):
+            reloaded_qutils = importlib.reload(qutils)
+            self.assertIs(reloaded_qutils.isclose, math.isclose)
+
+        if math.isclose is dummy_is_close:
+            # cleanup
+            delattr(math, 'isclose')
 
