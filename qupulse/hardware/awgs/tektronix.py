@@ -14,12 +14,12 @@ except ImportError:
                   "If you wish to use it execute qctoolkit.hardware.awgs.install_requirements('tektronix')")
     raise
 
-from qctoolkit.hardware.awgs.base import AWG
-from qctoolkit import ChannelID
-from qctoolkit._program._loop import Loop, make_compatible
-from qctoolkit.utils.types import TimeType
-from qctoolkit.hardware.util import voltage_to_uint16
-from qctoolkit.utils import pairwise
+from qupulse.hardware.awgs.base import AWG
+from qupulse import ChannelID
+from qupulse._program._loop import Loop, make_compatible
+from qupulse.utils.types import TimeType
+from qupulse.hardware.util import voltage_to_uint16
+from qupulse.utils import pairwise
 
 
 __all__ = ['TektronixAWG']
