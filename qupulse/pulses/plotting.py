@@ -14,7 +14,7 @@ import warnings
 import operator
 import itertools
 
-from qupulse.utils.types import ChannelID, MeasurementWindow
+from qupulse.utils.types import ChannelID, MeasurementWindow, has_type_interface
 from qupulse.pulses.pulse_template import PulseTemplate
 from qupulse.pulses.parameters import Parameter
 from qupulse._program.waveforms import Waveform
@@ -130,15 +130,16 @@ def render(program: Union[AbstractInstructionBlock, Loop],
             measurements is a sequence of all measurements where each measurement is represented by a tuple
             (name, start_time, duration).
         """
-
-    if isinstance(program, AbstractInstructionBlock):
+    if has_type_interface(program, Loop):
+        return _render_loop(program, sample_rate=sample_rate,
+                            render_measurements=render_measurements, time_slice=time_slice)
+    elif has_type_interface(program, AbstractInstructionBlock):
         warnings.warn("InstructionBlock API is deprecated", DeprecationWarning)
         if time_slice is not None:
             raise ValueError("Keyword argument time_slice is not supported when rendering instruction blocks")
         return _render_instruction_block(program, sample_rate=sample_rate, render_measurements=render_measurements)
-    elif isinstance(program, Loop):
-        return _render_loop(program, sample_rate=sample_rate,
-                            render_measurements=render_measurements, time_slice=time_slice)
+    else:
+        raise ValueError('Cannot render an object of type %r' % type(program), program)
 
 
 def _render_instruction_block(sequence: AbstractInstructionBlock,
