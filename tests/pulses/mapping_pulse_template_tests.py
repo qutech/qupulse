@@ -362,7 +362,7 @@ class MappingPulseTemplateSequencingTest(MeasurementWindowTestCase):
 
         dpt = DummyPulseTemplate(defined_channels={'A', 'B'})
 
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, 'multiple channels to the same target'):
             MappingPulseTemplate(dpt, channel_mapping={'A': 'X', 'B': 'X'})
 
 
