@@ -14,7 +14,7 @@ import warnings
 import operator
 import itertools
 
-from qupulse.utils.types import ChannelID, MeasurementWindow
+from qupulse.utils.types import ChannelID, MeasurementWindow, has_type_interface
 from qupulse.pulses.pulse_template import PulseTemplate
 from qupulse.pulses.parameters import Parameter
 from qupulse._program.waveforms import Waveform
@@ -130,15 +130,16 @@ def render(program: Union[AbstractInstructionBlock, Loop],
             measurements is a sequence of all measurements where each measurement is represented by a tuple
             (name, start_time, duration).
         """
-
-    if isinstance(program, AbstractInstructionBlock):
+    if has_type_interface(program, Loop):
+        return _render_loop(program, sample_rate=sample_rate,
+                            render_measurements=render_measurements, time_slice=time_slice)
+    elif has_type_interface(program, AbstractInstructionBlock):
         warnings.warn("InstructionBlock API is deprecated", DeprecationWarning)
         if time_slice is not None:
             raise ValueError("Keyword argument time_slice is not supported when rendering instruction blocks")
         return _render_instruction_block(program, sample_rate=sample_rate, render_measurements=render_measurements)
-    elif isinstance(program, Loop):
-        return _render_loop(program, sample_rate=sample_rate,
-                            render_measurements=render_measurements, time_slice=time_slice)
+    else:
+        raise ValueError('Cannot render an object of type %r' % type(program), program)
 
 
 def _render_instruction_block(sequence: AbstractInstructionBlock,
@@ -194,6 +195,8 @@ def _render_loop(loop: Loop,
         raise ValueError("time_slice is not valid.")
 
     sample_count = (time_slice[1] - time_slice[0]) * sample_rate + 1
+    if sample_count<2:
+        raise PlottingNotPossibleException(pulse = None, description = 'cannot render sequence with less than 2 data points')
     times = np.linspace(float(time_slice[0]), float(time_slice[1]), num=int(sample_count), dtype=float)
     times[-1] = np.nextafter(times[-1], times[-2])
 
@@ -343,10 +346,14 @@ class PlottingNotPossibleException(Exception):
     """Indicates that plotting is not possible because the sequencing process did not translate
     the entire given PulseTemplate structure."""
 
-    def __init__(self, pulse) -> None:
+    def __init__(self, pulse, description = None) -> None:
         super().__init__()
         self.pulse = pulse
-
+        self.description = description
     def __str__(self) -> str:
-        return "Plotting is not possible. There are parameters which cannot be computed."
+        if self.description is None:
+            return "Plotting is not possible. There are parameters which cannot be computed."
+        else:
+            return "Plotting is not possible: %s." % self.description
+            
 

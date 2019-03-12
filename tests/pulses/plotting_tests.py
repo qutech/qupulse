@@ -1,4 +1,8 @@
 import unittest
+from unittest import mock
+import sys
+import importlib
+
 import numpy
 
 from qupulse.pulses.plotting import PlottingNotPossibleException, render, iter_waveforms, iter_instruction_block, plot
@@ -304,3 +308,43 @@ class PlottingNotPossibleExceptionTests(unittest.TestCase):
         exception = PlottingNotPossibleException(t)
         self.assertIs(t, exception.pulse)
         self.assertIsInstance(str(exception), str)
+
+
+class PlottingIsinstanceTests(unittest.TestCase):
+    @unittest.skip("Breaks other tests")
+    def test_bug_422(self):
+        import matplotlib
+        matplotlib.use('svg')  # use non-interactive backend so that test does not fail on travis
+
+        to_reload = ['qupulse._program._loop',
+                     'qupulse.pulses.pulse_template',
+                     'qupulse.pulses.table_pulse_template']
+
+        with mock.patch.dict(sys.modules, sys.modules.copy()):
+            for module in to_reload:
+                sys.modules.pop(module, None)
+            for module in to_reload:
+                sys.modules[module] = importlib.reload(importlib.import_module(module))
+
+            from qupulse.pulses.table_pulse_template import TablePulseTemplate
+
+            pt = TablePulseTemplate({'X': [(0, 1), (1, 1)]})
+
+            plot(pt, parameters={})
+
+    def test_bug_422_mock(self):
+        pt = TablePulseTemplate({'X': [(0, 1), (100, 1)]})
+        program = pt.create_program()
+
+        mock_program = mock.Mock(spec=dir(program))
+
+        for attr in dir(Loop):
+            if not attr.endswith('_'):
+                setattr(mock_program, attr, getattr(program, attr))
+        mock_program.__len__ = lambda x: 1
+        mock_program.__iter__ = lambda x: iter(program)
+        mock_program.__getitem__ = lambda x, idx: program[idx]
+
+        self.assertNotIsInstance(mock_program, Loop)
+
+        render(mock_program, sample_rate=1)

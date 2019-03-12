@@ -1,0 +1,47 @@
+{
+    "#identifier": "adread",
+    "#type": "qupulse.pulses.point_pulse_template.PointPulseTemplate",
+    "channel_names": [
+        "RFX",
+        "RFY"
+    ],
+    "measurements": [
+        [
+            "m",
+            "t_meas_start",
+            "t_meas_duration"
+        ]
+    ],
+    "parameter_constraints": [
+        "Abs(ST_jump/2 - ST_plus + meas) <= Abs(ST_plus - meas)",
+        "Abs(ST_jump/2 - ST_plus + meas)/t_ST_read <= max_ramp_speed",
+        "Abs(ST_jump/2 + ST_plus - op)/Abs(t_ST_read - t_op) <= max_ramp_speed"
+    ],
+    "time_point_tuple_list": [
+        [
+            0,
+            "op",
+            "hold"
+        ],
+        [
+            "t_ST_read",
+            "ST_plus + ST_jump/2",
+            "linear"
+        ],
+        [
+            "t_ST_read",
+            "ST_plus - ST_jump/2",
+            "hold"
+        ],
+        [
+            "t_meas_start",
+            "meas",
+            "linear"
+        ],
+        [
+            "t_meas_start + t_meas_duration",
+            "meas",
+            "hold"
+        ]
+    ]
+}

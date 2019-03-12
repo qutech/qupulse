@@ -76,20 +76,26 @@ class PointPulseTemplateTests(unittest.TestCase):
 
     def test_integral(self) -> None:
         pulse = PointPulseTemplate(
-            [(1, (2, 'b'), 'linear'), (3, (0, 0), 'jump'), (4, (2, 'c'), 'hold'), (5, (8, 'd'), 'hold')],
+            [(1, (2, 'b'), 'linear'),
+             (3, (0, 0), 'jump'),
+             (4, (2, 'c'), 'hold'),
+             (5, (8, 'd'), 'hold')],
             [0, 'other_channel']
         )
-        self.assertEqual({0: ExpressionScalar(6),
-                          'other_channel': ExpressionScalar('1.0*b + 2.0*c')},
+        self.assertEqual({0: ExpressionScalar('6'),
+                          'other_channel': ExpressionScalar('b + 2*c')},
                          pulse.integral)
 
         pulse = PointPulseTemplate(
-            [(1, ('2', 'b'), 'linear'), ('t0', (0, 0), 'jump'), (4, (2, 'c'), 'hold'), ('g', (8, 'd'), 'hold')],
+            [(1, ('2', 'b'), 'linear'), ('t0', (0, 0), 'jump'), (4, (2.0, 'c'), 'hold'), ('g', (8, 'd'), 'hold')],
             ['symbolic', 1]
         )
-        self.assertEqual({'symbolic': ExpressionScalar('2.0*g - t0 - 1.0'),
-                          1: ExpressionScalar('b*(0.5*t0 - 0.5) + c*(g - 4.0) + c*(-t0 + 4.0)')},
+        self.assertEqual({'symbolic': ExpressionScalar('2.0*g - 1.0*t0 - 1.0'),
+                          1: ExpressionScalar('b*(t0 - 1) / 2 + c*(g - 4) + c*(-t0 + 4)')},
                          pulse.integral)
+
+        ppt = PointPulseTemplate([(0, 0), ('t_init', 0)], ['X', 'Y'])
+        self.assertEqual(ppt.integral, {'X': 0, 'Y': 0})
 
 
 class PointPulseTemplateSequencingTests(unittest.TestCase):
