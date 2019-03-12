@@ -2,6 +2,7 @@
 from typing import Optional, Set, Dict, Union, List, Any, Tuple
 import itertools
 import numbers
+import collections
 
 from qupulse.utils.types import ChannelID
 from qupulse.expressions import Expression, ExpressionScalar
@@ -85,6 +86,11 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         missing_channel_mappings = internal_channels - mapped_internal_channels
         channel_mapping = dict(itertools.chain(((name, name) for name in missing_channel_mappings),
                                                channel_mapping.items()))
+        overlapping_targets = {channel
+                               for channel, n in collections.Counter(channel_mapping.values()).items() if n > 1}
+        if overlapping_targets:
+            raise ValueError('Cannot map multiple channels to the same target(s) %r' % overlapping_targets,
+                             channel_mapping)
 
         if isinstance(template, MappingPulseTemplate) and template.identifier is None:
             # avoid nested mappings

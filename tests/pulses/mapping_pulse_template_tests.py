@@ -358,6 +358,13 @@ class MappingPulseTemplateSequencingTest(MeasurementWindowTestCase):
         program_old = MultiChannelProgram(block, channels={'A'}).programs[frozenset({'A'})]
         self.assertEqual(program_old, program)
 
+    def test_same_channel_error(self):
+
+        dpt = DummyPulseTemplate(defined_channels={'A', 'B'})
+
+        with self.assertRaisesRegex(ValueError, 'multiple channels to the same target'):
+            MappingPulseTemplate(dpt, channel_mapping={'A': 'X', 'B': 'X'})
+
 
 class MappingPulseTemplateOldSequencingTests(unittest.TestCase):
 
