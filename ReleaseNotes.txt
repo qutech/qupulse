@@ -1,4 +1,4 @@
-## pending/current ##
+## 0.3 ##
 
 - General:
     - Introduce qupulse.utils.isclose (an alias for math.isclose if available)
@@ -14,6 +14,7 @@
     - Add `AbstractPulseTemplate` class
     - `PointPulseTemplate`:
         - Fixed bug in integral evaluation
+    - Add `ParallelConstantChannelPulseTemplate` which allows adding a constant valued channel to an arbitrary pulse template
 
 - Expressions:
     - Make ExpressionScalar hashable

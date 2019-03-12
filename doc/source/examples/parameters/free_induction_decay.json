@@ -1,0 +1,1 @@
+{"meas": [0, 0], "op": [5, -5], "eps_J": [1, -1], "ST_plus": [2.5, -2.5], "S_init": [-1, -1], "ST_jump": [1, -1], "max_ramp_speed": 0.3, "t_init": 5, "t_meas_wait": 1, "t_ST_prep": 10, "t_op": 20, "t_ST_read": 10, "t_meas_start": 20, "t_meas_duration": 5, "t_start": 5, "t_step": 5, "N_fid_steps": 1, "N_repetitions": 1}

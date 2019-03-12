@@ -1,0 +1,20 @@
+{
+    "#identifier": "S_init",
+    "#type": "qupulse.pulses.point_pulse_template.PointPulseTemplate",
+    "channel_names": [
+        "RFX",
+        "RFY"
+    ],
+    "time_point_tuple_list": [
+        [
+            0,
+            "S_init",
+            "hold"
+        ],
+        [
+            "t_init",
+            "S_init",
+            "hold"
+        ]
+    ]
+}
