@@ -81,3 +81,8 @@ class HashableNumpyArray(numpy.ndarray):
     """
     def __hash__(self):
         return hash(self.tobytes())
+
+
+def has_type_interface(obj: typing.Any, type_obj: typing.Type) -> bool:
+    """Return true if all public attributes of the class are attribues of the object"""
+    return set(dir(obj)) >= {attr for attr in dir(type_obj) if not attr.startswith('_')}
