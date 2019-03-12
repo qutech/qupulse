@@ -139,7 +139,7 @@ def render(program: Union[AbstractInstructionBlock, Loop],
             raise ValueError("Keyword argument time_slice is not supported when rendering instruction blocks")
         return _render_instruction_block(program, sample_rate=sample_rate, render_measurements=render_measurements)
     else:
-        raise ValueError('Cannot render an object of type %s', type(program))
+        raise ValueError('Cannot render an object of type %r' % type(program), program)
 
 
 def _render_instruction_block(sequence: AbstractInstructionBlock,
