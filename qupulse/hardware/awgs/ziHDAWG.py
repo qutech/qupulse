@@ -1,6 +1,8 @@
 import sys
 import functools
-from typing import List, Tuple, Set, Callable, Optional, Dict
+from typing import List, Tuple, Set, Callable, Optional, Dict, Mapping, Sequence, NamedTuple
+from types import MappingProxyType
+from collections import OrderedDict
 from enum import Enum
 import weakref
 import logging
@@ -13,6 +15,8 @@ except ImportError:
     warnings.warn('Zurich Instruments LabOne python API is distributed via the Python Package Index. Install with pip.')
     raise
 
+import gmpy2
+
 import numpy as np
 import textwrap
 import time
@@ -23,6 +27,9 @@ from qupulse._program.waveforms import Waveform
 from qupulse.hardware.awgs.base import AWG, ChannelNotFoundException
 
 
+# TODO: rename file, make lower case.
+# TODO: make format() calls to device node tree more explicit using :d, :.9g for numbers and booleans.
+
 def valid_channel(function_object):
     """Check if channel is a valid AWG channels. Expects channel to be 2nd argument after self."""
     @functools.wraps(function_object)
@@ -30,51 +37,59 @@ def valid_channel(function_object):
         if len(args) < 2:
             raise HDAWGTypeError('Channel is an required argument.')
         channel = args[1]  # Expect channel to be second positional argument after self.
-        if channel not in range(1, 8):
+        if channel not in range(1, 9):
             raise ChannelNotFoundException(channel)
         value = function_object(*args, **kwargs)
         return value
     return valid_fn
 
 
+class WaveformEntry:
+    def __init__(self, name: str, length: int, waveform: Waveform):
+        self.name = name
+        self.waveform = waveform
+        self.length = length
+
+
 class WaveformDatabase:
-    def get_name(self, waveform: Waveform, sample_rate):
-        raise NotImplementedError()
+    """Stores raw waveform and name relationship. Name is channelpaor ident _ hash liek in tektronix driver. This saves
+    sampled values. Waveforms that have a different structure but the same sampled result should reference the same
+    sampled data."""
+    def __init__(self, entries: Sequence[WaveformEntry] = None):
+        if not entries:
+            entries = []
+        self._waveforms_by_name = {wf.name: wf for wf in entries}
+        self._by_name = MappingProxyType(self._waveforms_by_name)
 
+        self._waveforms_by_data = {wf.waveform: wf for wf in entries}
+        self._by_data = MappingProxyType(self._waveforms_by_data)
 
-def waveform_to_seqc(waveform: Waveform, channels: Tuple[Optional[ChannelID], Optional[ChannelID]], wf_database: WaveformDatabase, sample_rate: TimeType):
-    """return command that plays the waveform"""
+    @property
+    def by_name(self) -> Mapping[str, WaveformEntry]:
+        return MappingProxyType(self._waveforms_by_name)
 
-    sample_times = np.arange(waveform.duration / sample_rate) *
+    @property
+    def by_data(self) -> Mapping[Waveform, WaveformEntry]:
+        return MappingProxyType(self._waveforms_by_data)
 
-    for ch in channels:
-        waveform.get_sampled(ch, )
+    def __iter__(self):
+        return iter(self._waveforms_by_data.values())
 
-    wf_name = wf_database.get_name(waveform, sample_rate)
+    def __len__(self):
+        return len(self._waveforms_by_data)
 
-    raise NotImplementedError()
+    def add_waveform(self, name: str, entry: WaveformEntry, overwrite: bool = False):
+        if name in self.by_name:
+            if not overwrite:
+                raise HDAWGRuntimeError('Waveform {} already existing'.format(name))
 
+        self._waveforms_by_data[entry.waveform] = entry
+        self._waveforms_by_name[name] = entry
 
-def program_to_seqc(program: Loop, channels: Tuple[Optional[ChannelID], Optional[ChannelID]], sample_rate, wf_database):
-    """This creates indentation by creating and destroying a lot of strings. Optimization would be to pass this as a
-    parameter"""
-    if program.repetition_count > 1:
-        template = '  %s'
-        yield 'repeat(%d) {' % program.repetition_count
-    else:
-        template = '%s'
-
-    if program.is_leaf():
-        yield template % waveform_to_seqc(program.waveform, channels, wf_database)
-    else:
-        for child in program.children:
-            for line in program_to_seqc(child, channels, sample_rate, wf_database):
-                yield template % line
-
-    if program.repetition_count > 1:
-        yield '}'
-
-
+    def pop_waveform(self, name: str) -> WaveformEntry:
+        wf = self._waveforms_by_name.pop(name)
+        del self._waveforms_by_data[wf.waveform]
+        return wf
 
 
 class HDAWGRepresentation:
@@ -101,7 +116,6 @@ class HDAWGRepresentation:
         self._dev_ser = device_serial
 
         if reset:
-            # TODO: Check if utils function is sufficient, or a custom reset function is required.
             # Create a base configuration: Disable all available outputs, awgs, demods, scopes,...
             zhinst.utils.disable_everything(self.api_session, self.serial)
 
@@ -140,18 +154,23 @@ class HDAWGRepresentation:
         settings = []
         settings.append(['/{}/system/awg/channelgrouping'.format(self.serial),
                          HDAWGChannelGrouping.CHAN_GROUP_4x2.value])
-        settings.append(['/{}/awgs/*/time'.format(self.serial), HDAWGSamplingRate.AWG_RATE_2400MHZ.value])
+        settings.append(['/{}/awgs/*/time'.format(self.serial), 0])  # Maximum sampling rate.
         settings.append(['/{}/sigouts/*/range'.format(self.serial), HDAWGVoltageRange.RNG_1V.value])
         settings.append(['/{}/awgs/*/outputs/*/amplitude'.format(self.serial), 1.0])  # Default amplitude factor 1.0
         settings.append(['/{}/awgs/*/outputs/*/modulation/mode'.format(self.serial), HDAWGModulationMode.OFF.value])
         settings.append(['/{}/awgs/*/userregs/*'.format(self.serial), 0])  # Reset all user registers to 0.
         settings.append(['/{}/awgs/*/single'.format(self.serial), 1])  # Single execution mode of sequence.
+        for ch in range(0, 8):  # Route marker 1 signal for each channel to marker output.
+            if ch % 2 == 0:
+                output = HDAWGTriggerOutSource.OUT_1_MARK_1.value
+            else:
+                output = HDAWGTriggerOutSource.OUT_2_MARK_1.value
+            settings.append(['/{}/triggers/out/{}/source'.format(self.serial, ch), output])
 
         self.api_session.set(settings)
         self.api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
 
     def reset(self) -> None:
-        # TODO: Check if utils function is sufficient to reset device.
         zhinst.utils.disable_everything(self.api_session, self.serial)
         self._initialize()
         self.channel_pair_AB.clear()
@@ -196,6 +215,28 @@ class HDAWGRepresentation:
                 self.channel_pair_GH.awg_module.get('awgModule/*'))
 
 
+class HDAWGTriggerOutSource(Enum):
+    """Assign a signal to a marker output. This is per AWG Core."""
+    AWG_TRIG_1 = 0  # Trigger output assigned to AWG trigger 1, controlled by AWG sequencer commands.
+    AWG_TRIG_2 = 1  # Trigger output assigned to AWG trigger 2, controlled by AWG sequencer commands.
+    AWG_TRIG_3 = 2  # Trigger output assigned to AWG trigger 3, controlled by AWG sequencer commands.
+    AWG_TRIG_4 = 3  # Trigger output assigned to AWG trigger 4, controlled by AWG sequencer commands.
+    OUT_1_MARK_1 = 4  # Trigger output assigned to output 1 marker 1.
+    OUT_1_MARK_2 = 5  # Trigger output assigned to output 1 marker 2.
+    OUT_2_MARK_1 = 6  # Trigger output assigned to output 2 marker 1.
+    OUT_2_MARK_2 = 7  # Trigger output assigned to output 2 marker 2.
+    TRIG_IN_1 = 8  # Trigger output assigned to trigger inout 1.
+    TRIG_IN_2 = 9  # Trigger output assigned to trigger inout 2.
+    TRIG_IN_3 = 10  # Trigger output assigned to trigger inout 3.
+    TRIG_IN_4 = 11  # Trigger output assigned to trigger inout 4.
+    TRIG_IN_5 = 12  # Trigger output assigned to trigger inout 5.
+    TRIG_IN_6 = 13  # Trigger output assigned to trigger inout 6.
+    TRIG_IN_7 = 14  # Trigger output assigned to trigger inout 7.
+    TRIG_IN_8 = 15  # Trigger output assigned to trigger inout 8.
+    HIGH = 17 # Trigger output is set to high.
+    LOW = 18 # Trigger output is set to low.
+
+
 class HDAWGChannelGrouping(Enum):
     """How many independent sequencers should run on the AWG and how the outputs should be grouped by sequencer."""
     CHAN_GROUP_4x2 = 0  # 4x2 with HDAWG8; 2x2 with HDAWG4.  /dev.../awgs/0..3/
@@ -226,31 +267,17 @@ class HDAWGModulationMode(Enum):
     ADVANCED = 5  # AWG output modulates corresponding sines from modulation carriers.
 
 
-class HDAWGSamplingRate(Enum):
-    """Supported sampling rates of the AWG."""
-    AWG_RATE_2400MHZ = 0  # Constant to set sampling rate to 2.4 GHz.
-    AWG_RATE_1200MHZ = 1  # Constant to set sampling rate to 1.2 GHz.
-    AWG_RATE_600MHZ = 2  # Constant to set sampling rate to 600 MHz.
-    AWG_RATE_300MHZ = 3  # Constant to set sampling rate to 300 MHz.
-    AWG_RATE_150MHZ = 4  # Constant to set sampling rate to 150 MHz.
-    AWG_RATE_75MHZ = 5  # Constant to set sampling rate to 75 MHz.
-    AWG_RATE_37P5MHZ = 6  # Constant to set sampling rate to 37.5 MHz.
-    AWG_RATE_18P75MHZ = 7  # Constant to set sampling rate to 18.75MHz.
-    AWG_RATE_9P4MHZ = 8  # Constant to set sampling rate to 9.4 MHz.
-    AWG_RATE_4P5MHZ = 9  # Constant to set sampling rate to 4.5 MHz.
-    AWG_RATE_2P34MHZ = 10  # Constant to set sampling rate to 2.34MHz.
-    AWG_RATE_1P2MHZ = 11  # Constant to set sampling rate to 1.2 MHz.
-    AWG_RATE_586KHZ = 12  # Constant to set sampling rate to 586 kHz.
-    AWG_RATE_293KHZ = 13  # Constant to set sampling rate to 293 kHz.
-
-    def exact_rate(self):
-        """Calculate exact sampling rate based on (2.4 GSa/s)/2^n, where n is the current enum value."""
-        return 2.4e9 / 2 ** self.value
-
-
 class HDAWGRegisterFunc(Enum):
     """Functions of registers for sequence control."""
     PROG_SEL = 1  # Use this register to select which program in the sequence should be running.
+    PROG_IDLE = 0  # This value of the PROG_SEL register is reserved for the idle waveform.
+
+
+class ProgramEntry(NamedTuple):
+    """Entry of known AWG programs."""
+    program: Loop
+    index: int  # Program to seqc switch case mapping.
+    seqc_rep: str  # Seqc representation of program inside case statement.
 
 
 class HDAWGChannelPair(AWG):
@@ -277,9 +304,10 @@ class HDAWGChannelPair(AWG):
         # Seems creating AWG module sets SINGLE (single execution mode of sequence) to 0 per default.
         self.device.api_session.setInt('/{}/awgs/{}/single'.format(self.device.serial, self.awg_group_index), 1)
 
-        self._known_programs = dict()  # type: Dict[str, Loop]
-        self._known_programs_register = dict()  # type: Dict[str, int]
-        self._current_program = None
+        # Use ordered dict, so index creation for new programs is trivial (also in case of deletions).
+        self._known_programs = OrderedDict()  # type: Dict[str, ProgramEntry]
+        self._known_waveforms = WaveformDatabase()
+        self._current_program = None  # Currently armed program.
 
     @property
     def num_channels(self) -> int:
@@ -315,6 +343,53 @@ class HDAWGChannelPair(AWG):
             in the list corresponds to the AWG channel
             force: If a different sequence is already present with the same name, it is
                 overwritten if force is set to True. (default = False)
+
+        self._known_programs is dict of known programs. Handled in host memory most of the time. Only when uploading the
+        device memory is touched at all.
+
+        Upload steps:
+        1. All necessary waveforms are sampled with the current device sample rate.
+        2. All files matching pattern of this channel group are deleted from waves folder.
+        3. The channel & marker waveforms are saved as csv-files in the wave folder with this channel group prefix.
+        4. _known_programs is indexed and index is stored with each program. Used later to identify program by user reg.
+        5. _known_programs dict is translated to seqc program and saved as seqc-file in src folder. Overwrites old file.
+        6. AWG sequencer is disabled.
+        7. seqc program file compilation and upload is started.
+        8. Program select user register is set to idle program.
+        8. AWG sequencer is enabled.
+
+        Returning from setting user register in seqc can take from 50ms to 60 ms. Fluctuates heavily. Not a good way to
+        have deterministic behaviour "setUserReg(PROG_SEL, PROG_IDLE);".
+
+        Structure of seqc program:
+        //////////  qupulse controlled sequence  //////////
+        const PROG_SEL = 0; // User register for switching current program.
+        const PROG_IDLE = 0; // User register value reserved for idle program.
+
+        // Start of analog waveform definitions.
+        wave idle = zeros(16); // Default idle waveform.
+        wave w0 = "channel_group_pattern_waveform_hash";
+        ...
+
+        // Start of marker waveform definitions.
+        wave m0 = "channel_group_pattern_waveform_hash";
+        ...
+
+        // Main loop.
+        while(true){
+            switch(getUserReg(PROG_SEL)){
+                case 1: // Program: program_name
+                    repeat(n){
+                        playWave(w0+m0,w1+m1);
+                        ...
+                    }
+                    waitWave();
+                    setUserReg(PROG_SEL, PROG_IDLE);
+                ...
+                default:
+                    playWave(idle, idle);
+            }
+        }
         """
         if len(channels) != self.num_channels:
             raise HDAWGValueError('Channel ID not specified')
@@ -327,26 +402,82 @@ class HDAWGChannelPair(AWG):
             if not force:
                 raise HDAWGValueError('{} is already known on {}'.format(name, self.identifier))
 
+        def generate_program_index() -> int:
+            if self._known_programs:
+                last_program = next(reversed(self._known_programs))
+                last_index = self._known_programs[last_program].index
+                return last_index+1
+            else:
+                return 1  # First index of programs. 0 reserved for idle pulse.
+
+        def program_to_seqc(prog: Loop) -> str:
+            """This creates indentation by creating and destroying a lot of strings. Optimization would be to pass this
+            as a parameter."""
+            if prog.repetition_count > 1:
+                template = '  {}'
+                yield 'repeat({:d}) {{'.format(prog.repetition_count)
+            else:
+                template = '{}'
+
+            if program.is_leaf():
+                yield template.format(waveform_to_seqc(prog.waveform))
+            else:
+                for child in prog.children:
+                    for line in program_to_seqc(child):
+                        yield template.format(line)
+
+            if program.repetition_count > 1:
+                yield '}'
+
+        def waveform_to_seqc(waveform: Waveform) -> str:
+            """return command that plays the waveform"""
+            # TODO: How to work with zero valued waveforms. Reuse zero pulses?
+
+            wf_name = self.identifier + '_' + str(abs(hash(waveform)))
+            time_per_sample = 1/self.sample_rate
+            sample_times = np.arange(waveform.duration / time_per_sample) * time_per_sample
+
+            for ch in channels:
+                voltage = waveform.get_sampled(ch, sample_times)
+                self._known_waveforms.add_waveform('{}_{}'.format(wf_name, ch), voltage)
+
+            return 'playWave({}, {});'.format(wf_name, wf_name)
+
         # Adjust program to fit criteria.
         make_compatible(program,
                         minimal_waveform_length=16,
                         waveform_quantum=16,
                         sample_rate=self.sample_rate)
 
-        self._known_programs[name] = program
+        self._known_programs[name] = ProgramEntry(program, HDAWGRegisterFunc.PROG_IDLE.value, '\n')
 
-        # TODO: user registers could be used to arm programs. Uploaded sequence would have a switch statement.
-        # TODO: Create seqc sourcestring out of all known programs and upload everything.
         # TODO: manage _known_programs_register with name to unique integer mapping used to switch programs.
         awg_program = textwrap.dedent("""\
-        const N = 4096;
-        wave gauss_pos = 1.0*gauss(N, N/2, N/8);
-        wave gauss_neg = -1.0*gauss(N, N/2, N/8);
-        while (true) {  
-            playWave(gauss_pos);
-            waitWave();
-            playWave(2, gauss_neg);
-            waitWave();
+        //////////  qupulse sequence (_upload_time_) //////////
+        
+        const PROG_SEL = 0; // User register for switching current program.
+
+        // Start of analog waveform definitions.
+        wave idle = zeros(16); // Default idle waveform.
+        _analog_waveform_block_
+
+        // Start of marker waveform definitions.
+        _marker_waveform_block_
+
+        // Arm program switch.
+        var prog_sel = getUserReg(PROG_SEL);
+        
+        // Main loop.
+        while(true){
+            switch(prog_sel){
+                case 1: // Program: program_name
+                    repeat(5){
+                        playWave(w0+m0,w0+m0);
+                    }
+                    while(true);
+                default:
+                    playWave(idle, idle);
+            }
         }
         """)
 
@@ -428,24 +559,30 @@ class HDAWGChannelPair(AWG):
         """
         # TODO: Can this function be implemented with the HDAWG as intended?
         self._known_programs.clear()
-        self._known_programs_register.clear()
         self._current_program = None
 
     def arm(self, name: str) -> None:
         """Load the program 'name' and arm the device for running it. If name is None the awg will "dearm" its current
         program."""
-        if name not in self.programs:
-            raise HDAWGValueError('{} is unknown on {}'.format(name, self.identifier))
-        self._current_program = name
-        # TODO: Check if this works.
-        self.user_register(HDAWGRegisterFunc.PROG_SEL.value, self._known_programs_register[name])
+        if not name:
+            self.user_register(HDAWGRegisterFunc.PROG_SEL.value, HDAWGRegisterFunc.PROG_IDLE.value)
+            self._current_program = None
+        else:
+            if name not in self.programs:
+                raise HDAWGValueError('{} is unknown on {}'.format(name, self.identifier))
+            self._current_program = name
+            # TODO: Check if this works.
+            self.user_register(HDAWGRegisterFunc.PROG_SEL.value, self._known_programs[name].index)
 
     def run_current_program(self) -> None:
         """Run armed program."""
+        # TODO: playWaveDigTrigger() + digital trigger here, alternative implementation.
         if self._current_program:
             if self._current_program not in self.programs:
                 raise HDAWGValueError('{} is unknown on {}'.format(self._current_program, self.identifier))
             # TODO: Check if this works.
+            if self.enable():
+                self.enable(False)
             self.enable(True)
         else:
             raise HDAWGRuntimeError('No program active')
@@ -456,11 +593,17 @@ class HDAWGChannelPair(AWG):
         return set(self._known_programs.keys())
 
     @property
-    def sample_rate(self) -> float:
+    def sample_rate(self) -> gmpy2.mpq:
         """The default sample rate of the AWG channel group."""
         node_path = '/{}/awgs/{}/time'.format(self.device.serial, self.awg_group_index)
         sample_rate_num = self.device.api_session.getInt(node_path)
-        return HDAWGSamplingRate(sample_rate_num).exact_rate()
+        node_path = '/{}/system/clocks/sampleclock/freq'.format(self.device.serial)
+        sample_clock = self.device.api_session.getDouble(node_path)
+
+        """Calculate exact rational number based on (sample_clock Sa/s) / 2^sample_rate_num. Otherwise numerical
+        imprecision will give rise to errors for very long pulses. fractions.Fraction does not accept floating point
+        numerator, which sample_clock could potentially be."""
+        return gmpy2.mpq(sample_clock, 2 ** sample_rate_num)
 
     @property
     def awg_group_index(self) -> int:
@@ -494,7 +637,7 @@ class HDAWGChannelPair(AWG):
 
     def user_register(self, reg: int, value: int = None) -> int:
         """Query user registers (1-16) and optionally set it."""
-        if reg not in range(1, 16):
+        if reg not in range(1, 17):
             raise HDAWGValueError('{} not a valid (1-16) register.'.format(reg))
         node_path = '/{}/awgs/{}/userregs/{}'.format(self.device.serial, self.awg_group_index, reg-1)
         if value is not None:
