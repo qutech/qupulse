@@ -1,12 +1,11 @@
-import sys
 import functools
-from typing import List, Tuple, Set, Callable, Optional, Dict, Mapping, Sequence, NamedTuple
-from types import MappingProxyType
+from typing import List, Tuple, Set, Callable, Optional, Dict, Mapping, Sequence, NamedTuple, Generator, Iterator
 from collections import OrderedDict
 from enum import Enum
 import weakref
 import logging
 import warnings
+import time
 
 try:
     import zhinst.ziPython
@@ -42,54 +41,6 @@ def valid_channel(function_object):
         value = function_object(*args, **kwargs)
         return value
     return valid_fn
-
-
-class WaveformEntry:
-    def __init__(self, name: str, length: int, waveform: Waveform):
-        self.name = name
-        self.waveform = waveform
-        self.length = length
-
-
-class WaveformDatabase:
-    """Stores raw waveform and name relationship. Name is channelpaor ident _ hash liek in tektronix driver. This saves
-    sampled values. Waveforms that have a different structure but the same sampled result should reference the same
-    sampled data."""
-    def __init__(self, entries: Sequence[WaveformEntry] = None):
-        if not entries:
-            entries = []
-        self._waveforms_by_name = {wf.name: wf for wf in entries}
-        self._by_name = MappingProxyType(self._waveforms_by_name)
-
-        self._waveforms_by_data = {wf.waveform: wf for wf in entries}
-        self._by_data = MappingProxyType(self._waveforms_by_data)
-
-    @property
-    def by_name(self) -> Mapping[str, WaveformEntry]:
-        return MappingProxyType(self._waveforms_by_name)
-
-    @property
-    def by_data(self) -> Mapping[Waveform, WaveformEntry]:
-        return MappingProxyType(self._waveforms_by_data)
-
-    def __iter__(self):
-        return iter(self._waveforms_by_data.values())
-
-    def __len__(self):
-        return len(self._waveforms_by_data)
-
-    def add_waveform(self, name: str, entry: WaveformEntry, overwrite: bool = False):
-        if name in self.by_name:
-            if not overwrite:
-                raise HDAWGRuntimeError('Waveform {} already existing'.format(name))
-
-        self._waveforms_by_data[entry.waveform] = entry
-        self._waveforms_by_name[name] = entry
-
-    def pop_waveform(self, name: str) -> WaveformEntry:
-        wf = self._waveforms_by_name.pop(name)
-        del self._waveforms_by_data[wf.waveform]
-        return wf
 
 
 class HDAWGRepresentation:
@@ -306,7 +257,7 @@ class HDAWGChannelPair(AWG):
 
         # Use ordered dict, so index creation for new programs is trivial (also in case of deletions).
         self._known_programs = OrderedDict()  # type: Dict[str, ProgramEntry]
-        self._known_waveforms = WaveformDatabase()
+        self._known_waveforms = dict()  # type: Dict[str, np.ndarray]
         self._current_program = None  # Currently armed program.
 
     @property
@@ -360,36 +311,6 @@ class HDAWGChannelPair(AWG):
 
         Returning from setting user register in seqc can take from 50ms to 60 ms. Fluctuates heavily. Not a good way to
         have deterministic behaviour "setUserReg(PROG_SEL, PROG_IDLE);".
-
-        Structure of seqc program:
-        //////////  qupulse controlled sequence  //////////
-        const PROG_SEL = 0; // User register for switching current program.
-        const PROG_IDLE = 0; // User register value reserved for idle program.
-
-        // Start of analog waveform definitions.
-        wave idle = zeros(16); // Default idle waveform.
-        wave w0 = "channel_group_pattern_waveform_hash";
-        ...
-
-        // Start of marker waveform definitions.
-        wave m0 = "channel_group_pattern_waveform_hash";
-        ...
-
-        // Main loop.
-        while(true){
-            switch(getUserReg(PROG_SEL)){
-                case 1: // Program: program_name
-                    repeat(n){
-                        playWave(w0+m0,w1+m1);
-                        ...
-                    }
-                    waitWave();
-                    setUserReg(PROG_SEL, PROG_IDLE);
-                ...
-                default:
-                    playWave(idle, idle);
-            }
-        }
         """
         if len(channels) != self.num_channels:
             raise HDAWGValueError('Channel ID not specified')
@@ -410,7 +331,7 @@ class HDAWGChannelPair(AWG):
             else:
                 return 1  # First index of programs. 0 reserved for idle pulse.
 
-        def program_to_seqc(prog: Loop) -> str:
+        def program_to_seqc(prog: Loop) -> Iterator[str]:
             """This creates indentation by creating and destroying a lot of strings. Optimization would be to pass this
             as a parameter."""
             if prog.repetition_count > 1:
@@ -419,14 +340,14 @@ class HDAWGChannelPair(AWG):
             else:
                 template = '{}'
 
-            if program.is_leaf():
+            if prog.is_leaf():
                 yield template.format(waveform_to_seqc(prog.waveform))
             else:
                 for child in prog.children:
                     for line in program_to_seqc(child):
                         yield template.format(line)
 
-            if program.repetition_count > 1:
+            if prog.repetition_count > 1:
                 yield '}'
 
         def waveform_to_seqc(waveform: Waveform) -> str:
@@ -437,22 +358,28 @@ class HDAWGChannelPair(AWG):
             time_per_sample = 1/self.sample_rate
             sample_times = np.arange(waveform.duration / time_per_sample) * time_per_sample
 
+            # TODO: csv file can have multiple columns. Mutli channel waveform. Simpler code?
             for ch in channels:
                 voltage = waveform.get_sampled(ch, sample_times)
-                self._known_waveforms.add_waveform('{}_{}'.format(wf_name, ch), voltage)
+                self._known_waveforms['{}_{}'.format(wf_name, ch)] = voltage
 
             return 'playWave({}, {});'.format(wf_name, wf_name)
 
+        def case_wrap_program(prog: ProgramEntry, prog_name, indent = 8) -> str:
+            indented_seqc = textwrap.indent('{}\nwhile(true);'.format(prog.seqc_rep), ' ' * 4)
+            case_str = 'case {:d}: // Program name: {}\n{}'.format(prog.index, prog_name, indented_seqc)
+            return textwrap.indent(case_str, ' ' * indent)
+
         # Adjust program to fit criteria.
-        make_compatible(program,
-                        minimal_waveform_length=16,
-                        waveform_quantum=16,
-                        sample_rate=self.sample_rate)
+        #make_compatible(program,
+        #                minimal_waveform_length=16,
+        #                waveform_quantum=16,
+        #                sample_rate=self.sample_rate)
 
-        self._known_programs[name] = ProgramEntry(program, HDAWGRegisterFunc.PROG_IDLE.value, '\n')
+        seqc_gen = program_to_seqc(program)
+        self._known_programs[name] = ProgramEntry(program, generate_program_index(), '\n'.join(seqc_gen))
 
-        # TODO: manage _known_programs_register with name to unique integer mapping used to switch programs.
-        awg_program = textwrap.dedent("""\
+        awg_sequence = textwrap.dedent("""\
         //////////  qupulse sequence (_upload_time_) //////////
         
         const PROG_SEL = 0; // User register for switching current program.
@@ -470,18 +397,24 @@ class HDAWGChannelPair(AWG):
         // Main loop.
         while(true){
             switch(prog_sel){
-                case 1: // Program: program_name
-                    repeat(5){
-                        playWave(w0+m0,w0+m0);
-                    }
-                    while(true);
+        _case_block_
                 default:
                     playWave(idle, idle);
             }
         }
         """)
+        awg_sequence = awg_sequence.replace('_upload_time_', time.strftime('%c'))
+        awg_sequence = awg_sequence.replace('_analog_waveform_block_', '')
+        awg_sequence = awg_sequence.replace('_marker_waveform_block_', '')
 
-        self._upload_sourcestring(awg_program)
+        case_block = []
+        for name, entry in self._known_programs.items():
+            case_block.append(case_wrap_program(entry, name))
+
+        awg_sequence = awg_sequence.replace('_case_block_', '\n'.join(case_block))
+
+        #self._upload_sourcestring(awg_sequence)
+        print(awg_sequence)
 
     # TODO: test this function. must waveform be seperated by only comma or comma space?
     # TODO: is waveform list really necessary? In example: "All CSV files within the waves directory are automatically recognized by the AWG module"
@@ -549,7 +482,6 @@ class HDAWGChannelPair(AWG):
         Args:
             name: The name of the program to remove.
         """
-        # TODO: Can this function be implemented with the HDAWG as intended?
         self._known_programs.pop(name)
 
     def clear(self) -> None:
@@ -557,8 +489,8 @@ class HDAWGChannelPair(AWG):
 
         Caution: This affects all programs and waveforms on the AWG, not only those uploaded using qupulse!
         """
-        # TODO: Can this function be implemented with the HDAWG as intended?
         self._known_programs.clear()
+        self._known_waveforms.clear()
         self._current_program = None
 
     def arm(self, name: str) -> None:
@@ -685,3 +617,113 @@ class HDAWGCompilationException(HDAWGException):
 class HDAWGUploadException(HDAWGException):
     def __str__(self) -> str:
         return "Upload to the instrument failed."
+
+
+if __name__ == "__main__":
+    from qupulse.pulses import TablePT
+    from qupulse.pulses import PointPT, SequencePT, ForLoopPT, RepetitionPT, MappingPT, FunctionPT, AtomicMultiChannelPT
+    entry_list = [(0, 0), (20e-9, 2, 'hold'), (40e-9, 3, 'linear'), (60e-9, 0, 'jump')]
+    tpt = TablePT({0: entry_list, 1: entry_list}, measurements=[('m', 20e-9, 30e-9)])
+    p = tpt.create_program()
+    channel_names = ['RFX', 'RFY']
+
+    S_init = PointPT([(0,        'S_init'),
+                      ('t_init', 'S_init')],
+                     channel_names=channel_names, identifier='S_init')
+
+    meas_wait = PointPT([(0,             'meas'),
+                         ('t_meas_wait', 'meas')],
+                        channel_names=channel_names)
+
+    adprep = PointPT([(0,           'meas'),
+                      ('t_ST_prep', 'ST_plus - ST_jump/2', 'linear'),
+                      ('t_ST_prep', 'ST_plus + ST_jump/2'),
+                      ('t_op',      'op', 'linear')],
+                     parameter_constraints=['Abs(ST_plus - ST_jump/2 - meas) <= Abs(ST_plus - meas)',
+                                            'Abs(ST_plus - ST_jump/2 - meas)/t_ST_prep <= max_ramp_speed',
+                                            'Abs(ST_plus + ST_jump/2 - op)/Abs(t_ST_prep-t_op) <= max_ramp_speed'],
+                     channel_names=channel_names, identifier='adprep')
+
+    adread = PointPT([(0,           'op'),
+                      ('t_ST_read', 'ST_plus + ST_jump/2', 'linear'),
+                      ('t_ST_read', 'ST_plus - ST_jump/2'),
+                      ('t_meas_start',      'meas', 'linear'),
+                      ('t_meas_start + t_meas_duration', 'meas')],
+                     parameter_constraints=['Abs(ST_plus - ST_jump/2 - meas) <= Abs(ST_plus - meas)',
+                                            'Abs(ST_plus - ST_jump/2 - meas)/t_ST_read <= max_ramp_speed',
+                                            'Abs(ST_plus + ST_jump/2 - op)/Abs(t_ST_read-t_op) <= max_ramp_speed'],
+                     channel_names=channel_names, identifier='adread',
+                     measurements=[('m', 't_meas_start', 't_meas_duration')])
+
+    free_induction = PointPT([(0, 'op-eps_J'),
+                              ('t_fid', 'op-eps_J')], channel_names=channel_names)
+    stepped_free_induction = MappingPT(free_induction, parameter_mapping={'t_fid': 't_start + i_fid*t_step'}, allow_partial_parameter_mapping=True)
+
+    pulse = SequencePT(S_init, meas_wait, adprep, stepped_free_induction, adread)
+
+    looped_pulse = ForLoopPT(pulse, loop_index='i_fid', loop_range='N_fid_steps')
+
+    experiment = RepetitionPT(looped_pulse, 'N_repetitions', identifier='free_induction_decay')
+    example_values = dict(meas=[0, 0],
+                          op=[5, -5],
+                          eps_J=[1, -1],
+                          ST_plus=[2.5, -2.5],
+                          S_init=[-1, -1],
+                          ST_jump=[1, -1],
+                          max_ramp_speed=0.3e9,
+
+                          t_init=50e-9,
+
+                          t_meas_wait=10e-9,
+
+                          t_ST_prep=100e-9,
+                          t_op=200e-9,
+
+                          t_ST_read=100e-9,
+                          t_meas_start=200e-9,
+                          t_meas_duration=50e-9,
+
+                          t_start=0,
+                          t_step=50e-9,
+                          N_fid_steps=5, N_repetitions=2)
+    p2 = experiment.create_program(parameters=example_values, channel_mapping={'RFX': 0, 'RFY': 1})
+
+    template = TablePT(entries={'A': [(0, 0),
+                                      ('ta', 'va', 'hold'),
+                                      ('tb', 'vb', 'linear'),
+                                      ('tend', 0, 'jump')],
+                                'B': [(0, 0),
+                                      ('ta', '-va', 'hold'),
+                                      ('tb', '-vb', 'linear'),
+                                      ('tend', 0, 'jump')]}, measurements=[('m', 0, 'ta'),
+                                                                           ('n', 'tb', 'tend-tb')])
+
+    parameters = {'ta': 20e-9,
+                  'va': 2,
+                  'tb': 40e-9,
+                  'vb': 3,
+                  'tc': 50e-9,
+                  'td': 110e-9,
+                  'tend': 60e-9}
+    repeated_template = RepetitionPT(template, 'n_rep')
+    sine_template = FunctionPT('sin_a*sin(t)', '2e-9*3.1415')
+    two_channel_sine_template = AtomicMultiChannelPT(
+        (sine_template, {'default': 'A'}),
+        (sine_template, {'default': 'B'}, {'sin_a': 'sin_b'})
+    )
+    sequence_template = SequencePT(repeated_template, two_channel_sine_template)
+
+    sequence_parameters = dict(parameters)  # we just copy our parameter dict from before
+    sequence_parameters['n_rep'] = 3  # and add a few new values for the new params from the sine wave
+    sequence_parameters['sin_a'] = 1
+    sequence_parameters['sin_b'] = 2
+    p3 = sequence_template.create_program(parameters=sequence_parameters,
+                                          channel_mapping={'A': 0, 'B': 1})
+
+    ch = (0, 1)
+    mk = (0, 1)
+    hdawg = HDAWGRepresentation(device_serial='dev8075', device_interface='USB')
+    hdawg.channel_pair_AB.upload('table_pulse_test', p, ch, mk, (None, None))
+    hdawg.channel_pair_AB.upload('free_induction_decay', p2, ch, mk, (None, None))
+    hdawg.channel_pair_AB.upload('rep_and_sin', p3, ch, mk, (None, None))
+
