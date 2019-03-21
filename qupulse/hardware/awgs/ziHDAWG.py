@@ -1,6 +1,5 @@
 from pathlib import Path
 import functools
-import os
 from typing import List, Tuple, Set, Callable, Optional, Dict, Mapping, Sequence, NamedTuple, Generator, Iterator
 from collections import OrderedDict
 from enum import Enum
@@ -49,12 +48,13 @@ class HDAWGRepresentation:
     """HDAWGRepresentation represents an HDAWG8 instruments and manages a LabOne data server api session. A data server
     must be running and the device be discoverable. Channels are per default grouped into pairs."""
 
-    def __init__(self, device_serial=None,
-                 device_interface='1GbE',
-                 data_server_addr='localhost',
-                 data_server_port=8004,
-                 api_level_number=6,
-                 reset=False) -> None:
+    def __init__(self, device_serial: str = None,
+                 device_interface: str = '1GbE',
+                 data_server_addr: str = 'localhost',
+                 data_server_port: int = 8004,
+                 api_level_number: int = 6,
+                 reset: bool = False,
+                 timeout: float = 20) -> None:
         """
         :param device_serial:     Device serial that uniquely identifies this device to the LabOne data server
         :param device_interface:  Either '1GbE' for ethernet or 'USB'
@@ -62,6 +62,7 @@ class HDAWGRepresentation:
         :param data_server_port:  Data server port. Default: 8004 for HDAWG, MF and UHF devices
         :param api_level_number:  Version of API to use for the session, higher number, newer. Default: 6 most recent
         :param reset:             Reset device before initialization
+        :param timeout:           Timeout in seconds for uploading
         """
         self._api_session = zhinst.ziPython.ziDAQServer(data_server_addr, data_server_port, api_level_number)
         zhinst.utils.api_server_version_check(self.api_session)  # Check equal data server and api version.
@@ -74,10 +75,10 @@ class HDAWGRepresentation:
 
         self._initialize()
 
-        self._channel_pair_AB = HDAWGChannelPair(self, (1, 2), str(self.serial) + '_AB')
-        self._channel_pair_CD = HDAWGChannelPair(self, (3, 4), str(self.serial) + '_CD')
-        self._channel_pair_EF = HDAWGChannelPair(self, (5, 6), str(self.serial) + '_EF')
-        self._channel_pair_GH = HDAWGChannelPair(self, (7, 8), str(self.serial) + '_GH')
+        self._channel_pair_AB = HDAWGChannelPair(self, (1, 2), str(self.serial) + '_AB', timeout)
+        self._channel_pair_CD = HDAWGChannelPair(self, (3, 4), str(self.serial) + '_CD', timeout)
+        self._channel_pair_EF = HDAWGChannelPair(self, (5, 6), str(self.serial) + '_EF', timeout)
+        self._channel_pair_GH = HDAWGChannelPair(self, (7, 8), str(self.serial) + '_GH', timeout)
 
     @property
     def channel_pair_AB(self) -> 'HDAWGChannelPair':
@@ -242,13 +243,14 @@ class HDAWGChannelPair(AWG):
     It keeps track of the AWG state and manages waveforms and programs on the hardware.
     """
 
-    def __init__(self, hdawg_device: HDAWGRepresentation, channels: Tuple[int, int], identifier: str) -> None:
+    def __init__(self, hdawg_device: HDAWGRepresentation, channels: Tuple[int, int], identifier: str, timeout: float) -> None:
         super().__init__(identifier)
         self._device = weakref.proxy(hdawg_device)
 
         if channels not in ((1, 2), (3, 4), (5, 6), (7, 8)):
             raise HDAWGValueError('Invalid channel pair: {}'.format(channels))
         self._channels = channels
+        self._timeout = timeout
 
         self._awg_module = self.device.api_session.awgModule()
         self.awg_module.set('awgModule/device', self.device.serial)
@@ -357,7 +359,8 @@ class HDAWGChannelPair(AWG):
                                                            channels,
                                                            markers,
                                                            voltage_transformation,
-                                                           self.sample_rate)
+                                                           self.sample_rate,
+                                                           force)
             if mk_name is None:
                 return 'playWave("{}");'.format(wf_name)
             else:
@@ -413,23 +416,6 @@ class HDAWGChannelPair(AWG):
 
         self._upload_sourcestring(awg_sequence)
 
-    # TODO: test this function. must waveform be seperated by only comma or comma space?
-    # TODO: is waveform list really necessary? In example: "All CSV files within the waves directory are automatically recognized by the AWG module"
-    def _upload_sourcefile(self, sourcefile: str, csv_waveforms: List[str] = None) -> None:
-        """Transfer AWG sequencer program as file to HDAWG and block till compilation and upload finish. Sourcefile must
-        reside in the LabOne user directory + "awg/src" and optional csv file waveforms in  "awg/waves"."""
-        if not sourcefile:
-            raise HDAWGTypeError('sourcefile must not be empty')
-        if csv_waveforms is None:
-            csv_waveforms = []
-        logger = logging.getLogger('ziHDAWG')
-
-        self.awg_module.set('awgModule/compiler/waveforms', ','.join(csv_waveforms))
-        self.awg_module.set('awgModule/compiler/sourcefile', sourcefile)
-        self.awg_module.set('awgModule/compiler/start', 1)  # Compilation must be started manually in case of file.
-        self._poll_compile_and_upload_finished(logger)
-
-    # TODO: add csv waveform variable? Does this behave different than sourcefile? Only automatic recognized if sourcestring?
     def _upload_sourcestring(self, sourcestring: str) -> None:
         """Transfer AWG sequencer program as string to HDAWG and block till compilation and upload finish.
         Allows upload without access to data server file system."""
@@ -441,12 +427,14 @@ class HDAWGChannelPair(AWG):
         self.awg_module.set('awgModule/compiler/sourcestring', sourcestring)
         self._poll_compile_and_upload_finished(logger)
 
-    # TODO: Add timeout like in example_awg_sourcefile.py
     def _poll_compile_and_upload_finished(self, logger: logging.Logger) -> None:
         """Blocks till compilation on data server and upload to HDAWG succeed."""
+        time_start = time.time()
         logger.info('Compilation started')
         while self.awg_module.getInt('awgModule/compiler/status') == -1:
             time.sleep(0.1)
+        if time.time() - time_start > self._timeout:
+            raise HDAWGTimeoutError("Compilation timeout out")
 
         if self.awg_module.getInt('awgModule/compiler/status') == 1:
             msg = self.awg_module.getString('awgModule/compiler/statusstring')
@@ -465,10 +453,13 @@ class HDAWGChannelPair(AWG):
             time.sleep(0.2)
             logger.info("{} awgModule/progress: {:.2f}".format(i, self.awg_module.getDouble('awgModule/progress')))
             i = i + 1
+            if time.time() - time_start > self._timeout:
+                raise HDAWGTimeoutError("Upload timeout out")
         logger.info("{} awgModule/progress: {:.2f}".format(i, self.awg_module.getDouble('awgModule/progress')))
 
         if self.awg_module.getInt('awgModule/elf/status') == 0:
             logger.info('Upload to the instrument successful')
+            logger.info('Process took {:.3f} seconds'.format(time.time()-time_start))
         if self.awg_module.getInt('awgModule/elf/status') == 1:
             raise HDAWGUploadException()
 
@@ -480,6 +471,7 @@ class HDAWGChannelPair(AWG):
         Args:
             name: The name of the program to remove.
         """
+        # TODO: Call removal of program waveforms on WaveManger.
         self._known_programs.pop(name)
 
     def clear(self) -> None:
@@ -501,7 +493,6 @@ class HDAWGChannelPair(AWG):
             if name not in self.programs:
                 raise HDAWGValueError('{} is unknown on {}'.format(name, self.identifier))
             self._current_program = name
-            # TODO: Check if this works.
             self.user_register(HDAWGRegisterFunc.PROG_SEL.value, self._known_programs[name].index)
 
     def run_current_program(self) -> None:
@@ -510,7 +501,6 @@ class HDAWGChannelPair(AWG):
         if self._current_program is not None:
             if self._current_program not in self.programs:
                 raise HDAWGValueError('{} is unknown on {}'.format(self._current_program, self.identifier))
-            # TODO: Check if this works.
             if self.enable():
                 self.enable(False)
             self.enable(True)
@@ -589,13 +579,19 @@ class HDAWGChannelPair(AWG):
 
 class HDAWGWaveManager:
     """Manages waveforms and IO of sampled data to disk."""
-    # TODO: Reuse data and return correct name + manage references and delete csv file when no program uses it.
-    # TODO: Implement markers.
+    # TODO: Manage references and delete csv file when no program uses it.
     # TODO: Implement voltage transformation.
     # TODO: Voltage to -1..1 range and check if max amplitude in range+offset window.
-    # TODO: How to work with zero valued waveforms. Reuse zero pulses?
+    # TODO: Manage side effects if reusing data over several programs and a shared waveform is overwritten.
+
+    class WaveformEntry(NamedTuple):
+        """Entry of known waveforms."""
+        waveform: Waveform
+        marker_name: Optional[str]  # None if this waveform does not define any markers.
+
     def __init__(self, user_dir: str, awg_identifier: str) -> None:
-        self._known_waveforms = dict()  # type: Dict[str, Waveform]
+        self._known_waveforms = dict()  # type: Dict[str, HDAWGWaveManager.WaveformEntry]
+        self._by_data = dict()  # type: Dict[int, str]
         self._file_type = 'csv'
         self._awg_prefix = awg_identifier
         self._wave_dir = Path(user_dir).joinpath('awg', 'waves')
@@ -605,11 +601,16 @@ class HDAWGWaveManager:
 
     def clear(self) -> None:
         self._known_waveforms.clear()
+        self._by_data.clear()
         for wave_file in self._wave_dir.glob(self._awg_prefix + '_*.' + self._file_type):
             wave_file.unlink()
 
     def remove(self, name: str) -> None:
         self._known_waveforms.pop(name)
+        for wf_entry, wf_name in self._by_data.items():
+            if wf_name == name:
+                del self._by_data[wf_entry]
+                break
         wave_path = self.full_file_path(name)
         wave_path.unlink()
 
@@ -625,15 +626,18 @@ class HDAWGWaveManager:
             raise HDAWGIOError('{} already exists'.format(file_path))
         np.savetxt(file_path, wave_data, fmt=fmt, delimiter=' ')
 
+    def calc_hash(self, data: np.ndarray) -> int:
+        return hash(bytes(data))
+
     def register(self, waveform: Waveform,
                  channels: Tuple[Optional[ChannelID], Optional[ChannelID]],
                  markers: Tuple[Optional[ChannelID], Optional[ChannelID]],
                  voltage_transformation: Tuple[Callable, Callable],
-                 sample_rate: gmpy2.mpq) -> Tuple[str, Optional[str]]:
+                 sample_rate: gmpy2.mpq,
+                 overwrite: bool = False) -> Tuple[str, Optional[str]]:
         name = self.generate_name(waveform)
         if name in self._known_waveforms:
-            return name, None
-        self._known_waveforms[name] = waveform
+            return name, self._known_waveforms[name].marker_name
 
         time_per_sample = 1/sample_rate
         sample_times = np.arange(waveform.duration / time_per_sample) * time_per_sample
@@ -643,15 +647,37 @@ class HDAWGWaveManager:
             if chan is not None:
                 voltage[:, idx] = waveform.get_sampled(chan, sample_times)
 
-        if markers[0] or markers[1]:
-            raise NotImplementedError()
+        # Reuse sampled data, if available.
+        voltage_hash = self.calc_hash(voltage)
+        if voltage_hash in self._by_data:
+            name = self._by_data[voltage_hash]
+        else:
+            self._by_data[voltage_hash] = name
+            self.to_file(name, voltage, overwrite=overwrite)
 
-        #marker_output = np.tile(np.vstack((np.ones((4, 2)), np.zeros((4, 2)))), (len(sample_times)//4, 1))
-        marker_output = np.full_like(voltage, 3, dtype=np.uint8)
+        if markers[0] is not None or markers[1] is not None:
+            marker_name = name + '_m'
 
-        self.to_file(name, voltage)
-        self.to_file(name + '_m', marker_output, fmt='%d')
-        return name, name + '_m'
+            marker_output = np.zeros((len(sample_times), 2), dtype=np.uint8)
+            for idx, marker in enumerate(markers):
+                if marker is not None:
+                    # TODO: Implement correct marker generation.
+                    temp = np.tile(np.vstack((np.ones((64, 1)), np.zeros((64, 1)))),
+                                   (len(sample_times)//64, 1))
+                    marker_output[:, idx] = temp[:len(sample_times)].ravel()
+
+            # Reuse sampled data, if available.
+            marker_hash = self.calc_hash(marker_output)
+            if marker_hash in self._by_data:
+                marker_name = self._by_data[marker_hash]
+            else:
+                self._by_data[marker_hash] = marker_name
+                self.to_file(marker_name, marker_output, fmt='%d', overwrite=overwrite)
+        else:
+            marker_name = None
+
+        self._known_waveforms[name] = self.WaveformEntry(waveform, marker_name)
+        return name, marker_name
 
 
 class HDAWGException(Exception):
@@ -672,6 +698,10 @@ class HDAWGRuntimeError(HDAWGException, RuntimeError):
 
 
 class HDAWGIOError(HDAWGException, IOError):
+    pass
+
+
+class HDAWGTimeoutError(HDAWGException, TimeoutError):
     pass
 
 
@@ -703,7 +733,7 @@ if __name__ == "__main__":
     p = spt2.create_program()
 
     ch = (0, 1)
-    mk = (None, None)
+    mk = (0, None)
     vt = (None, None)
     hdawg = HDAWGRepresentation(device_serial='dev8075', device_interface='USB')
     hdawg.channel_pair_AB.upload('table_pulse_test', p, ch, mk, vt)
