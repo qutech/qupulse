@@ -28,7 +28,6 @@ from qupulse.hardware.awgs.base import AWG, ChannelNotFoundException
 
 
 # TODO: rename file, make lower case.
-# TODO: make format() calls to device node tree more explicit using :d, :.9g for numbers and booleans.
 
 def valid_channel(function_object):
     """Check if channel is a valid AWG channels. Expects channel to be 2nd argument after self."""
@@ -135,7 +134,7 @@ class HDAWGRepresentation:
     @valid_channel
     def offset(self, channel: int, voltage: float = None) -> float:
         """Query channel offset voltage and optionally set it."""
-        node_path = '/{}/sigouts/{}/offset'.format(self.serial, channel-1)
+        node_path = '/{}/sigouts/{:d}/offset'.format(self.serial, channel-1)
         if voltage is not None:
             self.api_session.setDouble(node_path, voltage)
             self.api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
@@ -145,7 +144,7 @@ class HDAWGRepresentation:
     def range(self, channel: int, voltage: float = None) -> float:
         """Query channel voltage range and optionally set it. The instruments selects the next higher available range.
         This is the one-sided range Vp. Total range: -Vp...Vp"""
-        node_path = '/{}/sigouts/{}/range'.format(self.serial, channel-1)
+        node_path = '/{}/sigouts/{:d}/range'.format(self.serial, channel-1)
         if voltage is not None:
             self.api_session.setDouble(node_path, voltage)
             self.api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
@@ -154,11 +153,11 @@ class HDAWGRepresentation:
     @valid_channel
     def output(self, channel: int, status: bool = None) -> bool:
         """Query channel signal output status (enabled/disabled) and optionally set it. Corresponds to front LED."""
-        node_path = '/{}/sigouts/{}/on'.format(self.serial, channel-1)
+        node_path = '/{}/sigouts/{:d}/on'.format(self.serial, channel-1)
         if status is not None:
-            self.api_session.setDouble(node_path, int(status))
+            self.api_session.setInt(node_path, int(status))
             self.api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
-        return bool(self.api_session.getDouble(node_path))
+        return bool(self.api_session.getInt(node_path))
 
     def get_status_table(self):
         """Return node tree of instrument with all important settings, as well as each channel group as tuple."""
@@ -257,7 +256,7 @@ class HDAWGChannelPair(AWG):
         self.awg_module.set('awgModule/index', self.awg_group_index)
         self.awg_module.execute()
         # Seems creating AWG module sets SINGLE (single execution mode of sequence) to 0 per default.
-        self.device.api_session.setInt('/{}/awgs/{}/single'.format(self.device.serial, self.awg_group_index), 1)
+        self.device.api_session.setInt('/{}/awgs/{:d}/single'.format(self.device.serial, self.awg_group_index), 1)
 
         # Use ordered dict, so index creation for new programs is trivial (also in case of deletions).
         self._known_programs = OrderedDict()  # type: Dict[str, ProgramEntry]
@@ -549,7 +548,7 @@ class HDAWGChannelPair(AWG):
     def enable(self, status: bool = None) -> bool:
         """Start the AWG sequencer."""
         # There is also 'awgModule/awg/enable', which seems to have the same functionality.
-        node_path = '/{}/awgs/{}/enable'.format(self.device.serial, self.awg_group_index)
+        node_path = '/{}/awgs/{:d}/enable'.format(self.device.serial, self.awg_group_index)
         if status is not None:
             self.device.api_session.setInt(node_path, int(status))
             self.device.api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
@@ -559,7 +558,7 @@ class HDAWGChannelPair(AWG):
         """Query user registers (1-16) and optionally set it."""
         if reg not in range(1, 17):
             raise HDAWGValueError('{} not a valid (1-16) register.'.format(reg))
-        node_path = '/{}/awgs/{}/userregs/{}'.format(self.device.serial, self.awg_group_index, reg-1)
+        node_path = '/{}/awgs/{:d}/userregs/{:d}'.format(self.device.serial, self.awg_group_index, reg-1)
         if value is not None:
             self.device.api_session.setInt(node_path, value)
             self.device.api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
@@ -570,7 +569,7 @@ class HDAWGChannelPair(AWG):
          AWG Output. The full scale corresponds to the Range voltage setting of the Signal Outputs."""
         if channel not in (1, 2):
             raise HDAWGValueError('{} not a valid (1-2) channel.'.format(channel))
-        node_path = '/{}/awgs/{}/outputs/{}/amplitude'.format(self.device.serial, self.awg_group_index, channel-1)
+        node_path = '/{}/awgs/{:d}/outputs/{:d}/amplitude'.format(self.device.serial, self.awg_group_index, channel-1)
         if value is not None:
             self.device.api_session.setDouble(node_path, value)
             self.device.api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
