@@ -27,8 +27,6 @@ from qupulse._program.waveforms import Waveform
 from qupulse.hardware.awgs.base import AWG, ChannelNotFoundException
 
 
-# TODO: rename file, make lower case.
-
 def valid_channel(function_object):
     """Check if channel is a valid AWG channels. Expects channel to be 2nd argument after self."""
     @functools.wraps(function_object)
@@ -427,7 +425,8 @@ class HDAWGChannelPair(AWG):
         self._poll_compile_and_upload_finished(logger)
 
     def _poll_compile_and_upload_finished(self, logger: logging.Logger) -> None:
-        """Blocks till compilation on data server and upload to HDAWG succeed."""
+        """Blocks till compilation on data server and upload to HDAWG succeed,
+        if process takes less time than timeout."""
         time_start = time.time()
         logger.info('Compilation started')
         while self.awg_module.getInt('awgModule/compiler/status') == -1:
@@ -576,8 +575,12 @@ class HDAWGChannelPair(AWG):
         return self.device.api_session.getDouble(node_path)
 
 
+class HDAWGProgramManager:
+    """Manages qupulse programs in memory and seqc representations of those. Facilitates qupulse to seqc translation."""
+
+
 class HDAWGWaveManager:
-    """Manages waveforms and IO of sampled data to disk."""
+    """Manages waveforms in memory and I/O of sampled data to disk."""
     # TODO: Manage references and delete csv file when no program uses it.
     # TODO: Implement voltage transformation.
     # TODO: Voltage to -1..1 range and check if max amplitude in range+offset window.
@@ -599,12 +602,14 @@ class HDAWGWaveManager:
         self.clear()
 
     def clear(self) -> None:
+        """Clear all knonw waveforms from memory and disk, associated with this AWG instance."""
         self._known_waveforms.clear()
         self._by_data.clear()
         for wave_file in self._wave_dir.glob(self._awg_prefix + '_*.' + self._file_type):
             wave_file.unlink()
 
     def remove(self, name: str) -> None:
+        """Remove one waveform from memory and disk."""
         self._known_waveforms.pop(name)
         for wf_entry, wf_name in self._by_data.items():
             if wf_name == name:
@@ -614,18 +619,22 @@ class HDAWGWaveManager:
         wave_path.unlink()
 
     def full_file_path(self, name: str) -> Path:
+        """Absolute file path of waveform on disk."""
         return self._wave_dir.joinpath(name + '.' + self._file_type)
 
     def generate_name(self, waveform: Waveform) -> str:
+        """Unique name of waveform used for identification."""
         return self._awg_prefix + '_' + str(abs(hash(waveform)))
 
     def to_file(self, name: str, wave_data: np.ndarray, fmt: str = '%f', overwrite: bool = False) -> None:
+        """Save sampled data to disk."""
         file_path = self.full_file_path(name)
         if file_path.is_file() and not overwrite:
             raise HDAWGIOError('{} already exists'.format(file_path))
         np.savetxt(file_path, wave_data, fmt=fmt, delimiter=' ')
 
     def calc_hash(self, data: np.ndarray) -> int:
+        """Calculate hash of sampled data."""
         return hash(bytes(data))
 
     def register(self, waveform: Waveform,
@@ -634,6 +643,9 @@ class HDAWGWaveManager:
                  voltage_transformation: Tuple[Callable, Callable],
                  sample_rate: gmpy2.mpq,
                  overwrite: bool = False) -> Tuple[str, Optional[str]]:
+        """Return waveform name and optionally marker name if waveform is known. Register waveform in memory and save to
+        disk otherwise. If hash of newly sampled marker or waveform data matches previously sampled data, return
+        previously known data."""
         name = self.generate_name(waveform)
         if name in self._known_waveforms:
             return name, self._known_waveforms[name].marker_name
@@ -723,8 +735,8 @@ if __name__ == "__main__":
     entry_list2 = [(0, 0), (20e-9, -.2, 'hold'), (40e-9, -.3, 'linear'), (60e-9, 0, 'jump')]
     entry_list3 = [(0, 0), (20e-9, -.2, 'linear'), (50e-9, -.3, 'linear'), (60e-9, 0, 'jump')]
     tpt1 = TablePT({0: entry_list1, 1: entry_list2}, measurements=[('m', 20e-9, 30e-9)])
-    tpt2 = TablePT({0: entry_list2, 1: entry_list1}, measurements=[('m', 20e-9, 30e-9)])
-    tpt3 = TablePT({0: entry_list3, 1: entry_list2}, measurements=[('m', 20e-9, 30e-9)])
+    tpt2 = TablePT({0: entry_list2, 1: entry_list1})
+    tpt3 = TablePT({0: entry_list3, 1: entry_list2}, measurements=[('m', 10e-9, 50e-9)])
     rpt = RepetitionPT(tpt1, 4)
     spt = SequencePT(tpt2, rpt)
     rpt2 = RepetitionPT(spt, 2)
