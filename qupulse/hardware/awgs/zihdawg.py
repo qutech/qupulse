@@ -1,6 +1,6 @@
 from pathlib import Path
 import functools
-from typing import List, Tuple, Set, Callable, Optional, Dict, Mapping, Sequence, NamedTuple, Generator, Iterator
+from typing import Tuple, Set, Callable, Optional, Dict, NamedTuple, Iterator
 from collections import OrderedDict
 from enum import Enum
 import weakref
@@ -224,13 +224,6 @@ class HDAWGRegisterFunc(Enum):
     PROG_IDLE = 0  # This value of the PROG_SEL register is reserved for the idle waveform.
 
 
-class ProgramEntry(NamedTuple):
-    """Entry of known AWG programs."""
-    program: Loop
-    index: int  # Program to seqc switch case mapping.
-    seqc_rep: str  # Seqc representation of program inside case statement.
-
-
 class HDAWGChannelPair(AWG):
     """Represents a channel pair of the Zurich Instruments HDAWG as an independent AWG entity.
     It represents a set of channels that have to have(hardware enforced) the same:
@@ -240,7 +233,10 @@ class HDAWGChannelPair(AWG):
     It keeps track of the AWG state and manages waveforms and programs on the hardware.
     """
 
-    def __init__(self, hdawg_device: HDAWGRepresentation, channels: Tuple[int, int], identifier: str, timeout: float) -> None:
+    def __init__(self, hdawg_device: HDAWGRepresentation,
+                 channels: Tuple[int, int],
+                 identifier: str,
+                 timeout: float) -> None:
         super().__init__(identifier)
         self._device = weakref.proxy(hdawg_device)
 
@@ -256,9 +252,8 @@ class HDAWGChannelPair(AWG):
         # Seems creating AWG module sets SINGLE (single execution mode of sequence) to 0 per default.
         self.device.api_session.setInt('/{}/awgs/{:d}/single'.format(self.device.serial, self.awg_group_index), 1)
 
-        # Use ordered dict, so index creation for new programs is trivial (also in case of deletions).
-        self._known_programs = OrderedDict()  # type: Dict[str, ProgramEntry]
         self._wave_manager = HDAWGWaveManager(self.user_directory, self.identifier)
+        self._program_manager = HDAWGProgramManager(self._wave_manager)
         self._current_program = None  # Currently armed program.
 
     @property
@@ -296,19 +291,8 @@ class HDAWGChannelPair(AWG):
             force: If a different sequence is already present with the same name, it is
                 overwritten if force is set to True. (default = False)
 
-        self._known_programs is dict of known programs. Handled in host memory most of the time. Only when uploading the
+        Known programs are handled in host memory most of the time. Only when uploading the
         device memory is touched at all.
-
-        Upload steps:
-        1. All necessary waveforms are sampled with the current device sample rate.
-        2. All files matching pattern of this channel group are deleted from waves folder.
-        3. The channel & marker waveforms are saved as csv-files in the wave folder with this channel group prefix.
-        4. _known_programs is indexed and index is stored with each program. Used later to identify program by user reg.
-        5. _known_programs dict is translated to seqc program and saved as seqc-file in src folder. Overwrites old file.
-        6. AWG sequencer is disabled.
-        7. seqc program file compilation and upload is started.
-        8. Program select user register is set to idle program.
-        8. AWG sequencer is enabled.
 
         Returning from setting user register in seqc can take from 50ms to 60 ms. Fluctuates heavily. Not a good way to
         have deterministic behaviour "setUserReg(PROG_SEL, PROG_IDLE);".
@@ -323,94 +307,21 @@ class HDAWGChannelPair(AWG):
         if name in self.programs and not force:
             raise HDAWGValueError('{} is already known on {}'.format(name, self.identifier))
 
-        def generate_program_index() -> int:
-            if self._known_programs:
-                last_program = next(reversed(self._known_programs))
-                last_index = self._known_programs[last_program].index
-                return last_index+1
-            else:
-                return 1  # First index of programs. 0 reserved for idle pulse.
-
-        def program_to_seqc(prog: Loop) -> Iterator[str]:
-            """This creates indentation by creating and destroying a lot of strings. Optimization would be to pass this
-            as a parameter."""
-            if prog.repetition_count > 1:
-                template = '  {}'
-                yield 'repeat({:d}) {{'.format(prog.repetition_count)
-            else:
-                template = '{}'
-
-            if prog.is_leaf():
-                yield template.format(waveform_to_seqc(prog.waveform))
-            else:
-                for child in prog.children:
-                    for line in program_to_seqc(child):
-                        yield template.format(line)
-
-            if prog.repetition_count > 1:
-                yield '}'
-
-        def waveform_to_seqc(waveform: Waveform) -> str:
-            """return command that plays the waveform"""
-            wf_name, mk_name = self._wave_manager.register(waveform,
-                                                           channels,
-                                                           markers,
-                                                           voltage_transformation,
-                                                           self.sample_rate,
-                                                           force)
-            if mk_name is None:
-                return 'playWave("{}");'.format(wf_name)
-            else:
-                return 'playWave(add("{}", "{}"));'.format(wf_name, mk_name)
-
-        def case_wrap_program(prog: ProgramEntry, prog_name, indent = 8) -> str:
-            indented_seqc = textwrap.indent('{}\nwhile(true);'.format(prog.seqc_rep), ' ' * 4)
-            case_str = 'case {:d}: // Program name: {}\n{}'.format(prog.index, prog_name, indented_seqc)
-            return textwrap.indent(case_str, ' ' * indent)
-
         # Adjust program to fit criteria.
         make_compatible(program,
                         minimal_waveform_length=16,
                         waveform_quantum=8,  # 8 samples for single, 4 for dual channel waaveforms.
                         sample_rate=self.sample_rate)
 
-        seqc_gen = program_to_seqc(program)
-        self._known_programs[name] = ProgramEntry(program, generate_program_index(), '\n'.join(seqc_gen))
+        self._program_manager.register(name,
+                                       program,
+                                       channels,
+                                       markers,
+                                       voltage_transformation,
+                                       self.sample_rate,
+                                       force)
 
-        awg_sequence = textwrap.dedent("""\
-        //////////  qupulse sequence (_upload_time_) //////////
-        
-        const PROG_SEL = 0; // User register for switching current program.
-
-        // Start of analog waveform definitions.
-        wave idle = zeros(16); // Default idle waveform.
-        _analog_waveform_block_
-
-        // Start of marker waveform definitions.
-        _marker_waveform_block_
-
-        // Arm program switch.
-        var prog_sel = getUserReg(PROG_SEL);
-        
-        // Main loop.
-        while(true){
-            switch(prog_sel){
-        _case_block_
-                default:
-                    playWave(idle, idle);
-            }
-        }
-        """)
-        awg_sequence = awg_sequence.replace('_upload_time_', time.strftime('%c'))
-        awg_sequence = awg_sequence.replace('_analog_waveform_block_', '')
-        awg_sequence = awg_sequence.replace('_marker_waveform_block_', '')
-
-        case_block = []
-        for name, entry in self._known_programs.items():
-            case_block.append(case_wrap_program(entry, name))
-
-        awg_sequence = awg_sequence.replace('_case_block_', '\n'.join(case_block))
-
+        awg_sequence = self._program_manager.assemble_sequencer_program()
         self._upload_sourcestring(awg_sequence)
 
     def _upload_sourcestring(self, sourcestring: str) -> None:
@@ -469,15 +380,14 @@ class HDAWGChannelPair(AWG):
         Args:
             name: The name of the program to remove.
         """
-        # TODO: Call removal of program waveforms on WaveManger.
-        self._known_programs.pop(name)
+        self._program_manager.remove(name)
 
     def clear(self) -> None:
         """Removes all programs and waveforms from the AWG.
 
         Caution: This affects all programs and waveforms on the AWG, not only those uploaded using qupulse!
         """
-        self._known_programs.clear()
+        self._program_manager.clear()
         self._wave_manager.clear()
         self._current_program = None
 
@@ -491,7 +401,7 @@ class HDAWGChannelPair(AWG):
             if name not in self.programs:
                 raise HDAWGValueError('{} is unknown on {}'.format(name, self.identifier))
             self._current_program = name
-            self.user_register(HDAWGRegisterFunc.PROG_SEL.value, self._known_programs[name].index)
+            self.user_register(HDAWGRegisterFunc.PROG_SEL.value, self._program_manager.name_to_index(name))
 
     def run_current_program(self) -> None:
         """Run armed program."""
@@ -508,7 +418,7 @@ class HDAWGChannelPair(AWG):
     @property
     def programs(self) -> Set[str]:
         """The set of program names that can currently be executed on the hardware AWG."""
-        return set(self._known_programs.keys())
+        return self._program_manager.programs()
 
     @property
     def sample_rate(self) -> gmpy2.mpq:
@@ -573,10 +483,6 @@ class HDAWGChannelPair(AWG):
             self.device.api_session.setDouble(node_path, value)
             self.device.api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
         return self.device.api_session.getDouble(node_path)
-
-
-class HDAWGProgramManager:
-    """Manages qupulse programs in memory and seqc representations of those. Facilitates qupulse to seqc translation."""
 
 
 class HDAWGWaveManager:
@@ -689,6 +595,141 @@ class HDAWGWaveManager:
 
         self._known_waveforms[name] = self.WaveformEntry(waveform, marker_name)
         return name, marker_name
+
+
+class HDAWGProgramManager:
+    """Manages qupulse programs in memory and seqc representations of those. Facilitates qupulse to seqc translation."""
+
+    class ProgramEntry(NamedTuple):
+        """Entry of known programs."""
+        program: Loop
+        index: int  # Program to seqc switch case mapping.
+        seqc_rep: str  # Seqc representation of program inside case statement.
+
+    def __init__(self, wave_manager: HDAWGWaveManager) -> None:
+        # Use ordered dict, so index creation for new programs is trivial (also in case of deletions).
+        self._known_programs = OrderedDict()  # type: Dict[str, HDAWGProgramManager.ProgramEntry]
+        self._wave_manager = weakref.proxy(wave_manager)
+        # Overwritten by translation configuration call.
+        self._channels = (None, None)
+        self._markers = (None, None)
+        self._voltage_transformation = (None, None)
+        self._sample_rate = gmpy2.mpq()
+        self._overwrite = False
+
+    def remove(self, name: str) -> None:
+        # TODO: Call removal of program waveforms on WaveManger.
+        self._known_programs.pop(name)
+
+    def clear(self) -> None:
+        self._known_programs.clear()
+
+    def programs(self) -> Set[str]:
+        return set(self._known_programs.keys())
+
+    def name_to_index(self, name: str) -> int:
+        return self._known_programs[name].index
+
+    def register(self, name: str,
+                 program: Loop,
+                 channels: Tuple[Optional[ChannelID], Optional[ChannelID]],
+                 markers: Tuple[Optional[ChannelID], Optional[ChannelID]],
+                 voltage_transformation: Tuple[Callable, Callable],
+                 sample_rate: gmpy2.mpq,
+                 overwrite: bool = False) -> None:
+        self._channels = channels
+        self._markers = markers
+        self._voltage_transformation = voltage_transformation
+        self._sample_rate = sample_rate
+        self._overwrite = overwrite
+
+        seqc_gen = self.program_to_seqc(program)
+        self._known_programs[name] = self.ProgramEntry(program,
+                                                       self.generate_program_index(),
+                                                       '\n'.join(seqc_gen))
+
+    def assemble_sequencer_program(self) -> str:
+        awg_sequence = HDAWGProgramManager.sequencer_template.replace('_upload_time_', time.strftime('%c'))
+        awg_sequence = awg_sequence.replace('_analog_waveform_block_', '')  # Not used yet.
+        awg_sequence = awg_sequence.replace('_marker_waveform_block_', '')  # Not used yet.
+        return awg_sequence.replace('_case_block_', self.assemble_case_block())
+
+    def generate_program_index(self) -> int:
+        """Index generation for name <-> index mapping."""
+        if self._known_programs:
+            last_program = next(reversed(self._known_programs))
+            last_index = self._known_programs[last_program].index
+            return last_index+1
+        else:
+            return 1  # First index of programs. 0 reserved for idle pulse.
+
+    def program_to_seqc(self, prog: Loop) -> Iterator[str]:
+        # TODO: Improve performance, by not creating temporary variable each time.
+        if prog.repetition_count > 1:
+            template = '  {}'
+            yield 'repeat({:d}) {{'.format(prog.repetition_count)
+        else:
+            template = '{}'
+
+        if prog.is_leaf():
+            yield template.format(self.waveform_to_seqc(prog.waveform))
+        else:
+            for child in prog.children:
+                for line in self.program_to_seqc(child):
+                    yield template.format(line)
+        if prog.repetition_count > 1:
+            yield '}'
+
+    def waveform_to_seqc(self, waveform: Waveform) -> str:
+        """Return command that plays waveform."""
+        wf_name, mk_name = self._wave_manager.register(waveform,
+                                                       self._channels,
+                                                       self._markers,
+                                                       self._voltage_transformation,
+                                                       self._sample_rate,
+                                                       self._overwrite)
+        if mk_name is None:
+            return 'playWave("{}");'.format(wf_name)
+        else:
+            return 'playWave(add("{}", "{}"));'.format(wf_name, mk_name)
+
+    # noinspection PyMethodMayBeStatic
+    def case_wrap_program(self, prog: ProgramEntry, prog_name, indent: int = 8) -> str:
+        indented_seqc = textwrap.indent('{}\nwhile(true);'.format(prog.seqc_rep), ' ' * 4)
+        case_str = 'case {:d}: // Program name: {}\n{}'.format(prog.index, prog_name, indented_seqc)
+        return textwrap.indent(case_str, ' ' * indent)
+
+    def assemble_case_block(self) -> str:
+        case_block = []
+        for name, entry in self._known_programs.items():
+            case_block.append(self.case_wrap_program(entry, name))
+        return '\n'.join(case_block)
+
+    # Structure of sequencer program.
+    sequencer_template = textwrap.dedent("""\
+        //////////  qupulse sequence (_upload_time_) //////////
+        
+        const PROG_SEL = 0; // User register for switching current program.
+
+        // Start of analog waveform definitions.
+        wave idle = zeros(16); // Default idle waveform.
+        _analog_waveform_block_
+
+        // Start of marker waveform definitions.
+        _marker_waveform_block_
+
+        // Arm program switch.
+        var prog_sel = getUserReg(PROG_SEL);
+        
+        // Main loop.
+        while(true){
+            switch(prog_sel){
+        _case_block_
+                default:
+                    playWave(idle, idle);
+            }
+        }
+        """)
 
 
 class HDAWGException(Exception):
