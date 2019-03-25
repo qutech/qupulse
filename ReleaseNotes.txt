@@ -6,6 +6,7 @@
 - Pulse Templates:
     - `MappingPulseTemplate`:
         - Raise a ValueError if more than one inner channel is mapped to the same outer channel
+        - `allow_partial_parameter_mapping` is now True as a default. The default can be changed with the class variable `MappingPulseTemplate.ALLOW_PARTIAL_PARAMETER_MAPPING`.
 
 ## 0.3 ##
 

@@ -28,6 +28,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
     constraining parameters by deriving from ParameterConstrainer"""
 
     ALLOW_PARTIAL_PARAMETER_MAPPING = True
+    """Default value for allow_partial_parameter_mapping of the __init__ method."""
 
     def __init__(self, template: PulseTemplate, *,
                  identifier: Optional[str]=None,
@@ -52,7 +53,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         :param measurement_mapping: mappings for other measurement names are inserted
         :param channel_mapping: mappings for other channels are auto inserted
         :param parameter_constraints:
-        :param allow_partial_parameter_mapping:
+        :param allow_partial_parameter_mapping: If None the value of the class variable ALLOW_PARTIAL_PARAMETER_MAPPING
         """
         PulseTemplate.__init__(self, identifier=identifier)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
