@@ -422,6 +422,7 @@ class HDAWGChannelPair(AWG):
 
     @property
     def sample_rate(self) -> gmpy2.mpq:
+        # TODO: TimeType constructor.
         """The default sample rate of the AWG channel group."""
         node_path = '/{}/awgs/{}/time'.format(self.device.serial, self.awg_group_index)
         sample_rate_num = self.device.api_session.getInt(node_path)
@@ -543,6 +544,8 @@ class HDAWGWaveManager:
         """Calculate hash of sampled data."""
         return hash(bytes(data))
 
+    # TODO: Make sure, that first tuple element is channel A and second tuple element is channel B.
+    # TODO: Where voltage_transformation defined.
     def register(self, waveform: Waveform,
                  channels: Tuple[Optional[ChannelID], Optional[ChannelID]],
                  markers: Tuple[Optional[ChannelID], Optional[ChannelID]],
@@ -705,6 +708,8 @@ class HDAWGProgramManager:
             case_block.append(self.case_wrap_program(entry, name))
         return '\n'.join(case_block)
 
+    # TODO: Make sure waitWave is really not required.
+    # TODO: Is prefetching useful?
     # Structure of sequencer program.
     sequencer_template = textwrap.dedent("""\
         //////////  qupulse sequence (_upload_time_) //////////
