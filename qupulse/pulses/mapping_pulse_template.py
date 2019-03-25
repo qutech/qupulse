@@ -26,13 +26,16 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
     """This class can be used to remap parameters, the names of measurement windows and the names of channels. Besides
     the standard constructor, there is a static member function from_tuple for convenience. The class also allows
     constraining parameters by deriving from ParameterConstrainer"""
+
+    ALLOW_PARTIAL_PARAMETER_MAPPING = True
+
     def __init__(self, template: PulseTemplate, *,
                  identifier: Optional[str]=None,
                  parameter_mapping: Optional[Dict[str, str]]=None,
                  measurement_mapping: Optional[Dict[str, str]] = None,
                  channel_mapping: Optional[Dict[ChannelID, ChannelID]] = None,
                  parameter_constraints: Optional[List[str]]=None,
-                 allow_partial_parameter_mapping: bool=False,
+                 allow_partial_parameter_mapping: bool = None,
                  registry: PulseRegistryType=None) -> None:
         """Standard constructor for the MappingPulseTemplate.
 
@@ -53,6 +56,9 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         """
         PulseTemplate.__init__(self, identifier=identifier)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
+
+        if allow_partial_parameter_mapping is None:
+            allow_partial_parameter_mapping = self.ALLOW_PARTIAL_PARAMETER_MAPPING
 
         if parameter_mapping is None:
             parameter_mapping = dict((par, par) for par in template.parameter_names)
@@ -110,14 +116,17 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         self.__channel_mapping = channel_mapping
         self._register(registry=registry)
 
-    @staticmethod
-    def from_tuple(mapping_tuple: MappingTuple) -> 'MappingPulseTemplate':
+    @classmethod
+    def from_tuple(cls, mapping_tuple: MappingTuple) -> 'MappingPulseTemplate':
         """Construct a MappingPulseTemplate from a tuple of mappings. The mappings are automatically assigned to the
         mapped elements based on their content.
         :param mapping_tuple: A tuple of mappings
         :return: Constructed MappingPulseTemplate
         """
         template, *mappings = mapping_tuple
+
+        if not mappings:
+            return template
 
         parameter_mapping = None
         measurement_mapping = None
@@ -133,7 +142,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                     mapped <= template.defined_channels)) > 1:
                 raise AmbiguousMappingException(template, mapping)
 
-            if mapped == template.parameter_names:
+            if mapped <= template.parameter_names:
                 if parameter_mapping:
                     raise MappingCollisionException(template, object_type='parameter',
                                                     mapped=template.parameter_names,
@@ -153,10 +162,10 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                 channel_mapping = mapping
             else:
                 raise ValueError('Could not match mapping to mapped objects: {}'.format(mapping))
-        return MappingPulseTemplate(template,
-                                    parameter_mapping=parameter_mapping,
-                                    measurement_mapping=measurement_mapping,
-                                    channel_mapping=channel_mapping)
+        return cls(template,
+                   parameter_mapping=parameter_mapping,
+                   measurement_mapping=measurement_mapping,
+                   channel_mapping=channel_mapping)
 
     @property
     def template(self) -> PulseTemplate:
