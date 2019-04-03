@@ -300,6 +300,29 @@ class PlotterTests(unittest.TestCase):
         with self.assertWarnsRegex(UserWarning, "empty", msg="plot() did not issue a warning for an empty pulse"):
             plot(pt, dict(), show=False)
 
+    def test_bug_447(self):
+        """Code from https://github.com/qutech/qupulse/issues/447"""
+        TablePT = TablePulseTemplate
+        SequencePT = SequencePulseTemplate
+        Sequencing = Sequencer
+
+        period = 8.192004194306148e-05
+        repetitions = 80
+        sampling_rate = 1e7
+        sec_to_ns = 1e9
+
+        table_pt = TablePT({'test': [(0, 0), (period * sec_to_ns, 0, 'linear')]})
+
+        sequencer = Sequencing()
+        template = SequencePT(*((table_pt,) * repetitions))
+        channels = template.defined_channels
+        sequencer.push(template, dict(), channel_mapping={ch: ch for ch in channels},
+                       window_mapping={w: w for w in template.measurement_names})
+        instructions = sequencer.build()
+
+        with self.assertWarns(UserWarning):
+            (_, voltages, _) = render(instructions, sampling_rate / sec_to_ns)
+
 
 class PlottingNotPossibleExceptionTests(unittest.TestCase):
 
