@@ -14,10 +14,10 @@ import warnings
 import operator
 import itertools
 
-from qupulse.utils.types import ChannelID, MeasurementWindow, has_type_interface
+from qupulse.utils.types import ChannelID, MeasurementWindow, has_type_interface, TimeType
 from qupulse.pulses.pulse_template import PulseTemplate
 from qupulse.pulses.parameters import Parameter
-from qupulse._program.waveforms import Waveform
+from qupulse._program.waveforms import Waveform, SequenceWaveform
 from qupulse._program.instructions import EXECInstruction, STOPInstruction, AbstractInstructionBlock, \
     REPJInstruction, MEASInstruction, GOTOInstruction, InstructionPointer
 from qupulse._program._loop import Loop, to_waveform
@@ -50,7 +50,7 @@ def iter_waveforms(instruction_block: AbstractInstructionBlock,
 
 
 def iter_instruction_block(instruction_block: AbstractInstructionBlock,
-                           extract_measurements: bool) -> Tuple[list, list, Real]:
+                           extract_measurements: bool) -> Tuple[list, list, TimeType]:
     """Iterates over the instructions contained in an InstructionBlock (thus simulating execution).
 
     In effect, this function simulates the execution of the control flow represented by the passed InstructionBlock
@@ -72,7 +72,7 @@ def iter_instruction_block(instruction_block: AbstractInstructionBlock,
     block_stack = [(enumerate(instruction_block), None)]
     waveforms = []
     measurements = []
-    time = 0
+    time = TimeType(0)
 
     while block_stack:
         block, expected_return = block_stack.pop()
@@ -163,19 +163,11 @@ def _render_instruction_block(sequence: AbstractInstructionBlock,
     # move the last sample inside the waveform
     times[-1] = np.nextafter(times[-1], times[-2])
 
-    voltages = dict((ch, np.empty(len(times))) for ch in channels)
-    offset = 0
-    for waveform in waveforms:
-        wf_end = offset + waveform.duration
-        indices = slice(*np.searchsorted(times, (offset, wf_end)))
-        sample_times = times[indices] - float(offset)
-        for channel in channels:
-            output_array = voltages[channel][indices]
-            waveform.get_sampled(channel=channel,
-                                 sample_times=sample_times,
-                                 output_array=output_array)
-        assert(output_array.shape == sample_times.shape)
-        offset = wf_end
+    voltages = {}
+    sequence_waveform = SequenceWaveform(waveforms)
+    for ch in channels:
+        voltages[ch] = sequence_waveform.get_sampled(ch, times)
+
     return times, voltages, measurements
 
 
