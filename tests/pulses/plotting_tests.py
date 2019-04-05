@@ -25,8 +25,9 @@ class PlotterTests(unittest.TestCase):
             render(block)
 
     def test_render_no_waveforms(self) -> None:
-        time, channel_data = render(InstructionBlock())
+        time, channel_data, measurements = render(InstructionBlock())
         self.assertEqual(channel_data, dict())
+        self.assertEqual(measurements, [])
         numpy.testing.assert_equal(time, numpy.empty(0))
 
     def test_iter_waveforms(self) -> None:

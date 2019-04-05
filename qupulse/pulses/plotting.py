@@ -107,11 +107,11 @@ def iter_instruction_block(instruction_block: AbstractInstructionBlock,
 
 
 def render(program: Union[AbstractInstructionBlock, Loop],
-           sample_rate: Real=10.0,
-           render_measurements: bool=False,
-           time_slice: Tuple[Real, Real]=None) -> Union[Tuple[np.ndarray, Dict[ChannelID, np.ndarray]],
-                                                        Tuple[np.ndarray, Dict[ChannelID, np.ndarray],
-                                                              List[MeasurementWindow]]]:
+           sample_rate: Real = 10.0,
+           render_measurements: bool = False,
+           time_slice: Tuple[Real, Real] = None,
+           plot_channels: Optional[Set[ChannelID]] = None) -> Tuple[np.ndarray, Dict[ChannelID, np.ndarray],
+                                                                    List[MeasurementWindow]]:
     """'Renders' a pulse program.
 
         Samples all contained waveforms into an array according to the control flow of the program.
@@ -121,7 +121,8 @@ def render(program: Union[AbstractInstructionBlock, Loop],
                 old-fashioned InstructionBlock.
             sample_rate: The sample rate in GHz.
             render_measurements: If True, the third return value is a list of measurement windows.
-            time_slice: The time slice to be plotted. If None, the entire pulse will be shown.
+            time_slice: The time slice to be rendered. If None, the entire pulse will be shown.
+            plot_channels: Only channels in this set are rendered. If None, all will.
 
         Returns:
             A tuple (times, values, measurements). times is a numpy.ndarray of dimensions sample_count where
@@ -131,84 +132,84 @@ def render(program: Union[AbstractInstructionBlock, Loop],
             (name, start_time, duration).
         """
     if has_type_interface(program, Loop):
-        return _render_loop(program, sample_rate=sample_rate,
-                            render_measurements=render_measurements, time_slice=time_slice)
+        waveform, measurements = _render_loop(program, render_measurements=render_measurements)
     elif has_type_interface(program, AbstractInstructionBlock):
         warnings.warn("InstructionBlock API is deprecated", DeprecationWarning)
         if time_slice is not None:
             raise ValueError("Keyword argument time_slice is not supported when rendering instruction blocks")
-        return _render_instruction_block(program, sample_rate=sample_rate, render_measurements=render_measurements)
+        waveform, measurements = _render_instruction_block(program, render_measurements=render_measurements)
     else:
         raise ValueError('Cannot render an object of type %r' % type(program), program)
 
+    if waveform is None:
+        return np.array([]), dict(), measurements
 
-def _render_instruction_block(sequence: AbstractInstructionBlock,
-                              sample_rate: Real=10.0,
-                              render_measurements=False) -> Union[Tuple[np.ndarray, Dict[ChannelID, np.ndarray]],
-                                                                  Tuple[np.ndarray, Dict[ChannelID, np.ndarray],
-                                                                        List[MeasurementWindow]]]:
-    """The specific implementation of render for InstructionBlock arguments."""
+    if plot_channels is None:
+        channels = waveform.defined_channels
+    else:
+        channels = waveform.defined_channels & plot_channels
 
-    waveforms, measurements, total_time = iter_instruction_block(sequence, render_measurements)
-    if not waveforms:
-        return np.empty(0), dict()
+    if time_slice is None:
+        start_time, end_time = 0, waveform.duration
 
-    channels = waveforms[0].defined_channels
+    elif time_slice[1] < time_slice[0] or time_slice[0] < 0 or time_slice[1] < 0:
+        raise ValueError("time_slice is not valid.")
 
-    # add one sample to see the end of the waveform
-    sample_count = total_time * sample_rate + 1
+    else:
+        start_time, end_time, *_ = time_slice
+
+        # filter measurement windows
+        measurements = [(name, begin, length)
+                        for name, begin, length in measurements
+                        if begin < end_time and begin + length > start_time]
+
+    sample_count = (end_time - start_time) * sample_rate + 1
+    if sample_count < 2:
+        raise PlottingNotPossibleException(pulse=None,
+                                           description='cannot render sequence with less than 2 data points')
     if not float(sample_count).is_integer():
-        warnings.warn('Sample count not whole number. Casted to integer.')
-    times = np.linspace(0, float(total_time), num=int(sample_count), dtype=float)
-    # move the last sample inside the waveform
+        warnings.warn("Sample count is not an integer. Will be rounded (this changes the sample rate).")
+
+    times = np.linspace(float(start_time), float(end_time), num=int(sample_count), dtype=float)
     times[-1] = np.nextafter(times[-1], times[-2])
 
-    voltages = {}
-    sequence_waveform = SequenceWaveform(waveforms)
-    for ch in channels:
-        voltages[ch] = sequence_waveform.get_sampled(ch, times)
+    voltages = {ch: np.empty_like(times)
+                for ch in channels}
+    for ch, ch_voltage in voltages.items():
+        waveform.get_sampled(channel=ch, sample_times=times, output_array=ch_voltage)
 
     return times, voltages, measurements
 
 
+def _render_instruction_block(sequence: AbstractInstructionBlock,
+                              render_measurements=False) -> Tuple[Optional[Waveform], List[MeasurementWindow]]:
+    """Transform program into single waveform and measurement windows. The specific implementation of render for
+    InstructionBlock arguments."""
+
+    waveforms, measurements, total_time = iter_instruction_block(sequence, render_measurements)
+    if not waveforms:
+        return None, measurements
+    sequence_waveform = SequenceWaveform(waveforms)
+
+    return sequence_waveform, measurements
+
+
 def _render_loop(loop: Loop,
-                 sample_rate: Real,
-                 render_measurements: bool,
-                 time_slice: Tuple[Real, Real] = None) -> Union[Tuple[np.ndarray, Dict[ChannelID, np.ndarray]],
-                                                                Tuple[np.ndarray, Dict[ChannelID, np.ndarray],
-                                                                List[MeasurementWindow]]]:
-    """The specific implementation of render for Loop arguments."""
+                 render_measurements: bool,) -> Tuple[Waveform, List[MeasurementWindow]]:
+    """Transform program into single waveform and measurement windows.
+    The specific implementation of render for Loop arguments."""
     waveform = to_waveform(loop)
-    channels = waveform.defined_channels
-
-    if time_slice is None:
-        time_slice = (0, waveform.duration)
-    elif time_slice[1] < time_slice[0] or time_slice[0] < 0 or time_slice[1] < 0:
-        raise ValueError("time_slice is not valid.")
-
-    sample_count = (time_slice[1] - time_slice[0]) * sample_rate + 1
-    if sample_count<2:
-        raise PlottingNotPossibleException(pulse = None, description = 'cannot render sequence with less than 2 data points')
-    times = np.linspace(float(time_slice[0]), float(time_slice[1]), num=int(sample_count), dtype=float)
-    times[-1] = np.nextafter(times[-1], times[-2])
-
-    voltages = {}
-
-    for ch in channels:
-        voltages[ch] = waveform.get_sampled(ch, times)
 
     if render_measurements:
         measurement_dict = loop.get_measurement_windows()
         measurement_list = []
         for name, (begins, lengths) in measurement_dict.items():
-            measurement_list.extend(m
-                                    for m in zip(itertools.repeat(name), begins, lengths)
-                                    if m[1]+m[2] > time_slice[0] and m[1] < time_slice[1])
+            measurement_list.extend(zip(itertools.repeat(name), begins, lengths))
         measurements = sorted(measurement_list, key=operator.itemgetter(1))
     else:
         measurements = []
 
-    return times, voltages, measurements
+    return waveform, measurements
 
 
 def plot(pulse: PulseTemplate,
@@ -263,7 +264,7 @@ def plot(pulse: PulseTemplate,
     if program is not None:
         times, voltages, measurements = render(program,
                                                sample_rate,
-                                               render_measurements=plot_measurements,
+                                               render_measurements=bool(plot_measurements),
                                                time_slice=time_slice)
     else:
         times, voltages, measurements = np.array([]), dict(), []
