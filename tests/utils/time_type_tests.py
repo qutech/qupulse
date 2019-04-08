@@ -72,3 +72,18 @@ class TestTimeType(unittest.TestCase):
         self.assertEqual(self.fallback_qutypes.time_from_float(1000000 / 1000001, 1e-5),
                          fractions.Fraction(1))
 
+    @unittest.skipIf(gmpy2 is None, "gmpy2 not available.")
+    def test_default_time_from_fraction(self):
+        # assert mocking did no permanent damage
+        self.assertIs(gmpy2.mpq, qutypes.TimeType)
+
+        t = qutypes.time_from_fraction(43, 12)
+        # your challenge: find a better way
+        mpq_type = type(gmpy2.mpq())
+        self.assertIsInstance(t, mpq_type)
+        self.assertEqual(t, gmpy2.mpq(43, 12))
+
+    def test_fraction_time_from_fraction(self):
+        t = qutypes.time_from_fraction(43, 12)
+        self.assertIsInstance(t, fractions.Fraction)
+        self.assertEqual(t, fractions.Fraction(43, 12))

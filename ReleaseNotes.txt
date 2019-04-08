@@ -2,11 +2,15 @@
 
 - General:
     - Add utility function `qupulse.utils.types.has_type_interface` and use it to circumvent autoreload triggered isinstance fails
+    - Add utility function `qupulse.utils.time_from_fraction` to make creation from numerator and denominator obvious.
 
 - Pulse Templates:
     - `MappingPulseTemplate`:
         - Raise a ValueError if more than one inner channel is mapped to the same outer channel
         - `allow_partial_parameter_mapping` is now True as a default. The default can be changed with the class variable `MappingPulseTemplate.ALLOW_PARTIAL_PARAMETER_MAPPING`.
+
+    - Plotting:
+        - Make `plotting.render` behaviour and return value consistent between calls with `InstructionBlock` and `Loop`. Render now always returns 3 arguments.
 
 ## 0.3 ##
 
