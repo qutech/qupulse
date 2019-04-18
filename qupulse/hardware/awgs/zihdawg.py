@@ -15,13 +15,11 @@ except ImportError:
     warnings.warn('Zurich Instruments LabOne python API is distributed via the Python Package Index. Install with pip.')
     raise
 
-import gmpy2
-
 import numpy as np
 import textwrap
 import time
 
-from qupulse.utils.types import ChannelID, TimeType
+from qupulse.utils.types import ChannelID, TimeType, time_from_fraction
 from qupulse._program._loop import Loop, make_compatible
 from qupulse._program.waveforms import Waveform
 from qupulse.hardware.awgs.base import AWG, ChannelNotFoundException
@@ -421,7 +419,7 @@ class HDAWGChannelPair(AWG):
         return self._program_manager.programs()
 
     @property
-    def sample_rate(self) -> gmpy2.mpq:
+    def sample_rate(self) -> TimeType:
         # TODO: TimeType constructor.
         """The default sample rate of the AWG channel group."""
         node_path = '/{}/awgs/{}/time'.format(self.device.serial, self.awg_group_index)
@@ -432,7 +430,7 @@ class HDAWGChannelPair(AWG):
         """Calculate exact rational number based on (sample_clock Sa/s) / 2^sample_rate_num. Otherwise numerical
         imprecision will give rise to errors for very long pulses. fractions.Fraction does not accept floating point
         numerator, which sample_clock could potentially be."""
-        return gmpy2.mpq(sample_clock, 2 ** sample_rate_num)
+        return time_from_fraction(sample_clock, 2 ** sample_rate_num)
 
     @property
     def awg_group_index(self) -> int:
@@ -550,7 +548,7 @@ class HDAWGWaveManager:
                  channels: Tuple[Optional[ChannelID], Optional[ChannelID]],
                  markers: Tuple[Optional[ChannelID], Optional[ChannelID]],
                  voltage_transformation: Tuple[Callable, Callable],
-                 sample_rate: gmpy2.mpq,
+                 sample_rate: TimeType,
                  overwrite: bool = False) -> Tuple[str, Optional[str]]:
         """Return waveform name and optionally marker name if waveform is known. Register waveform in memory and save to
         disk otherwise. If hash of newly sampled marker or waveform data matches previously sampled data, return
@@ -617,7 +615,7 @@ class HDAWGProgramManager:
         self._channels = (None, None)
         self._markers = (None, None)
         self._voltage_transformation = (None, None)
-        self._sample_rate = gmpy2.mpq()
+        self._sample_rate = TimeType()
         self._overwrite = False
 
     def remove(self, name: str) -> None:
@@ -638,7 +636,7 @@ class HDAWGProgramManager:
                  channels: Tuple[Optional[ChannelID], Optional[ChannelID]],
                  markers: Tuple[Optional[ChannelID], Optional[ChannelID]],
                  voltage_transformation: Tuple[Callable, Callable],
-                 sample_rate: gmpy2.mpq,
+                 sample_rate: TimeType,
                  overwrite: bool = False) -> None:
         self._channels = channels
         self._markers = markers
