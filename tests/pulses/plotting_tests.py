@@ -1,4 +1,8 @@
 import unittest
+from unittest import mock
+import sys
+import importlib
+
 import numpy
 
 from qupulse.pulses.plotting import PlottingNotPossibleException, render, iter_waveforms, iter_instruction_block, plot
@@ -21,8 +25,9 @@ class PlotterTests(unittest.TestCase):
             render(block)
 
     def test_render_no_waveforms(self) -> None:
-        time, channel_data = render(InstructionBlock())
+        time, channel_data, measurements = render(InstructionBlock())
         self.assertEqual(channel_data, dict())
+        self.assertEqual(measurements, [])
         numpy.testing.assert_equal(time, numpy.empty(0))
 
     def test_iter_waveforms(self) -> None:
@@ -296,6 +301,29 @@ class PlotterTests(unittest.TestCase):
         with self.assertWarnsRegex(UserWarning, "empty", msg="plot() did not issue a warning for an empty pulse"):
             plot(pt, dict(), show=False)
 
+    def test_bug_447(self):
+        """Code from https://github.com/qutech/qupulse/issues/447"""
+        TablePT = TablePulseTemplate
+        SequencePT = SequencePulseTemplate
+        Sequencing = Sequencer
+
+        period = 8.192004194306148e-05
+        repetitions = 80
+        sampling_rate = 1e7
+        sec_to_ns = 1e9
+
+        table_pt = TablePT({'test': [(0, 0), (period * sec_to_ns, 0, 'linear')]})
+
+        sequencer = Sequencing()
+        template = SequencePT(*((table_pt,) * repetitions))
+        channels = template.defined_channels
+        sequencer.push(template, dict(), channel_mapping={ch: ch for ch in channels},
+                       window_mapping={w: w for w in template.measurement_names})
+        instructions = sequencer.build()
+
+        with self.assertWarns(UserWarning):
+            (_, voltages, _) = render(instructions, sampling_rate / sec_to_ns)
+
 
 class PlottingNotPossibleExceptionTests(unittest.TestCase):
 
@@ -304,3 +332,43 @@ class PlottingNotPossibleExceptionTests(unittest.TestCase):
         exception = PlottingNotPossibleException(t)
         self.assertIs(t, exception.pulse)
         self.assertIsInstance(str(exception), str)
+
+
+class PlottingIsinstanceTests(unittest.TestCase):
+    @unittest.skip("Breaks other tests")
+    def test_bug_422(self):
+        import matplotlib
+        matplotlib.use('svg')  # use non-interactive backend so that test does not fail on travis
+
+        to_reload = ['qupulse._program._loop',
+                     'qupulse.pulses.pulse_template',
+                     'qupulse.pulses.table_pulse_template']
+
+        with mock.patch.dict(sys.modules, sys.modules.copy()):
+            for module in to_reload:
+                sys.modules.pop(module, None)
+            for module in to_reload:
+                sys.modules[module] = importlib.reload(importlib.import_module(module))
+
+            from qupulse.pulses.table_pulse_template import TablePulseTemplate
+
+            pt = TablePulseTemplate({'X': [(0, 1), (1, 1)]})
+
+            plot(pt, parameters={})
+
+    def test_bug_422_mock(self):
+        pt = TablePulseTemplate({'X': [(0, 1), (100, 1)]})
+        program = pt.create_program()
+
+        mock_program = mock.Mock(spec=dir(program))
+
+        for attr in dir(Loop):
+            if not attr.endswith('_'):
+                setattr(mock_program, attr, getattr(program, attr))
+        mock_program.__len__ = lambda x: 1
+        mock_program.__iter__ = lambda x: iter(program)
+        mock_program.__getitem__ = lambda x, idx: program[idx]
+
+        self.assertNotIsInstance(mock_program, Loop)
+
+        render(mock_program, sample_rate=1)
