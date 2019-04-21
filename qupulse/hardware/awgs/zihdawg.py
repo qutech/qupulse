@@ -420,7 +420,6 @@ class HDAWGChannelPair(AWG):
 
     @property
     def sample_rate(self) -> TimeType:
-        # TODO: TimeType constructor.
         """The default sample rate of the AWG channel group."""
         node_path = '/{}/awgs/{}/time'.format(self.device.serial, self.awg_group_index)
         sample_rate_num = self.device.api_session.getInt(node_path)
@@ -487,7 +486,6 @@ class HDAWGChannelPair(AWG):
 class HDAWGWaveManager:
     """Manages waveforms in memory and I/O of sampled data to disk."""
     # TODO: Manage references and delete csv file when no program uses it.
-    # TODO: Implement voltage transformation.
     # TODO: Voltage to -1..1 range and check if max amplitude in range+offset window.
     # TODO: Manage side effects if reusing data over several programs and a shared waveform is overwritten.
 
@@ -542,8 +540,6 @@ class HDAWGWaveManager:
         """Calculate hash of sampled data."""
         return hash(bytes(data))
 
-    # TODO: Make sure, that first tuple element is channel A and second tuple element is channel B.
-    # TODO: Where voltage_transformation defined.
     def register(self, waveform: Waveform,
                  channels: Tuple[Optional[ChannelID], Optional[ChannelID]],
                  markers: Tuple[Optional[ChannelID], Optional[ChannelID]],
@@ -563,7 +559,7 @@ class HDAWGWaveManager:
         voltage = np.zeros((len(sample_times), 2), dtype=float)
         for idx, chan in enumerate(channels):
             if chan is not None:
-                voltage[:, idx] = waveform.get_sampled(chan, sample_times)
+                voltage[:, idx] = voltage_transformation[chan](waveform.get_sampled(chan, sample_times))
 
         # Reuse sampled data, if available.
         voltage_hash = self.calc_hash(voltage)
@@ -579,10 +575,7 @@ class HDAWGWaveManager:
             marker_output = np.zeros((len(sample_times), 2), dtype=np.uint8)
             for idx, marker in enumerate(markers):
                 if marker is not None:
-                    # TODO: Implement correct marker generation.
-                    temp = np.tile(np.vstack((np.ones((64, 1)), np.zeros((64, 1)))),
-                                   (len(sample_times)//64, 1))
-                    marker_output[:, idx] = temp[:len(sample_times)].ravel()
+                    marker_output[:, idx] = waveform.get_sampled(marker, sample_times) != 0
 
             # Reuse sampled data, if available.
             marker_hash = self.calc_hash(marker_output)
