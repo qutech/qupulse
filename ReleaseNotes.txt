@@ -1,4 +1,4 @@
-## pending/current ##
+## 0.4 ##
 
 - General:
     - Add utility function `qupulse.utils.types.has_type_interface` and use it to circumvent autoreload triggered isinstance fails
