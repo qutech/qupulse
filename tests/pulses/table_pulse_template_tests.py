@@ -224,7 +224,7 @@ class TablePulseTemplateTest(unittest.TestCase):
     def test_empty_instantiated(self) -> None:
         with self.assertRaises(TypeError):
             TablePulseTemplate()
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, 'empty TablePulseTemplate'):
             TablePulseTemplate(entries=dict())
 
     def test_get_entries_instantiated_two_equal_entries(self) -> None:
