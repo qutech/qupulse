@@ -95,6 +95,10 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
         AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 
+        if not entries:
+            raise ValueError("Cannot construct an empty TablePulseTemplate (no entries given). There is currently no "
+                             "specific reason for this. Please submit an issue if you need this 'feature'.")
+
         self._entries = dict((ch, list()) for ch in entries.keys())
         for channel, channel_entries in entries.items():
             if len(channel_entries) == 0:
