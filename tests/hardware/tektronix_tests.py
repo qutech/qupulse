@@ -3,10 +3,10 @@ import unittest
 import contextlib
 from unittest import mock
 
-import qctoolkit.hardware.awgs.tektronix as tektronix
-from qctoolkit.hardware.awgs.tektronix import TektronixAWG, TektronixProgram, parse_program
-from qctoolkit._program._loop import Loop
-from qctoolkit.utils.types import TimeType
+import qupulse.hardware.awgs.tektronix as tektronix
+from qupulse.hardware.awgs.tektronix import TektronixAWG, TektronixProgram, parse_program
+from qupulse._program._loop import Loop
+from qupulse.utils.types import TimeType
 
 
 class TektronixProgramTests(unittest.TestCase):
@@ -38,10 +38,10 @@ class TektronixAWGTests(unittest.TestCase):
             return cast(tektronix.TekAwg.TekAwg, DummyTekAwg(**kwargs))
 
     def make_awg(self, **kwargs):
-        make_waveform_patch = mock.patch('qctoolkit.hardware.awgs.tektronix.TektronixAWG.make_idle_waveform')
-        clear_patch = mock.patch('qctoolkit.hardware.awgs.tektronix.TektronixAWG.clear')
-        init_idle_patch = mock.patch('qctoolkit.hardware.awgs.tektronix.TektronixAWG.initialize_idle_program')
-        synchronize_patch = mock.patch('qctoolkit.hardware.awgs.tektronix.TektronixAWG.synchronize')
+        make_waveform_patch = mock.patch('qupulse.hardware.awgs.tektronix.TektronixAWG.make_idle_waveform')
+        clear_patch = mock.patch('qupulse.hardware.awgs.tektronix.TektronixAWG.clear')
+        init_idle_patch = mock.patch('qupulse.hardware.awgs.tektronix.TektronixAWG.initialize_idle_program')
+        synchronize_patch = mock.patch('qupulse.hardware.awgs.tektronix.TektronixAWG.synchronize')
 
         kwargs.setdefault('tek_awg', self.make_dummy_tek_awg())
         kwargs.setdefault('synchronize', 'read')
@@ -50,12 +50,12 @@ class TektronixAWGTests(unittest.TestCase):
             return TektronixAWG(**kwargs)
 
     def test_init(self):
-        make_waveform_patch = mock.patch('qctoolkit.hardware.awgs.tektronix.TektronixAWG.make_idle_waveform')
-        clear_patch = mock.patch('qctoolkit.hardware.awgs.tektronix.TektronixAWG.clear')
-        init_idle_patch = mock.patch('qctoolkit.hardware.awgs.tektronix.TektronixAWG.initialize_idle_program')
-        synchronize_patch = mock.patch('qctoolkit.hardware.awgs.tektronix.TektronixAWG.synchronize')
+        make_waveform_patch = mock.patch('qupulse.hardware.awgs.tektronix.TektronixAWG.make_idle_waveform')
+        clear_patch = mock.patch('qupulse.hardware.awgs.tektronix.TektronixAWG.clear')
+        init_idle_patch = mock.patch('qupulse.hardware.awgs.tektronix.TektronixAWG.initialize_idle_program')
+        synchronize_patch = mock.patch('qupulse.hardware.awgs.tektronix.TektronixAWG.synchronize')
 
-        with mock.patch('qctoolkit.hardware.awgs.tektronix.TekAwg', new=None):
+        with mock.patch('qupulse.hardware.awgs.tektronix.TekAwg', new=None):
             with self.assertRaisesRegex(RuntimeError, 'TekAwg'):
                 TektronixAWG(self.make_dummy_tek_awg(), 'clear')
 
