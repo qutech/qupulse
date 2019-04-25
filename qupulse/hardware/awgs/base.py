@@ -16,9 +16,17 @@ from qupulse.comparable import Comparable
 from qupulse._program.instructions import InstructionSequence
 
 __all__ = ["AWG", "Program", "ProgramOverwriteException",
-           "OutOfWaveformMemoryException"]
+           "OutOfWaveformMemoryException", "AWGAmplitudeOffsetHandling"]
 
 Program = InstructionSequence
+
+
+class AWGAmplitudeOffsetHandling:
+    IGNORE_OFFSET = 'ignore_offset'   # Offset is ignored.
+    CONSIDER_OFFSET = 'consider_offset' # Offset is discounted from the waveforms.
+    # TODO OPTIMIZED = 'optimized' # Offset and amplitude are set depending on the waveforms to maximize the waveforms resolution
+
+    _valid = [IGNORE_OFFSET, CONSIDER_OFFSET]
 
 
 class AWG(Comparable):
@@ -33,10 +41,25 @@ class AWG(Comparable):
 
     def __init__(self, identifier: str):
         self._identifier = identifier
+        self._amplitude_offset_handling = AWGAmplitudeOffsetHandling.IGNORE_OFFSET
 
     @property
     def identifier(self) -> str:
         return self._identifier
+
+    @property
+    def amplitude_offset_handling(self) -> str:
+        return self._amplitude_offset_handling
+
+    @amplitude_offset_handling.setter
+    def amplitude_offset_handling(self, value):
+        """
+        value (str): See possible values at `AWGAmplitudeOffsetHandling`
+        """
+        if value not in AWGAmplitudeOffsetHandling._valid:
+            raise ValueError('"{}" is invalid as AWGAmplitudeOffsetHandling'.format(value))
+
+        self._amplitude_offset_handling = value
 
     @property
     @abstractmethod
