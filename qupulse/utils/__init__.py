@@ -1,4 +1,5 @@
-from typing import Union
+from typing import Union, Iterable, Any, Tuple
+import itertools
 
 import numpy
 
@@ -8,7 +9,7 @@ except ImportError:
     # py version < 3.5
     isclose = None
 
-__all__ = ["checked_int_cast", "is_integer", "isclose"]
+__all__ = ["checked_int_cast", "is_integer", "isclose", "pairwise"]
 
 
 def checked_int_cast(x: Union[float, int, numpy.ndarray], epsilon: float=1e-6) -> int:
@@ -35,3 +36,20 @@ def _fallback_is_close(a, b, *, rel_tol=1e-09, abs_tol=0.0):
 
 if not isclose:
     isclose = _fallback_is_close
+
+
+def pairwise(iterable: Iterable[Any],
+             zip_function=itertools.zip_longest, **kwargs) -> Iterable[Tuple[Any, Any]]:
+    """s -> (s0,s1), (s1,s2), (s2, s3), ...
+
+    Args:
+        iterable: Iterable to iterate over pairwise
+        zip_function: Either zip or itertools.zip_longest(default)
+        **kwargs: Gets passed to zip_function
+
+    Returns:
+        An iterable that yield neighbouring elements
+    """
+    a, b = itertools.tee(iterable)
+    next(b, None)
+    return zip_function(a, b, **kwargs)

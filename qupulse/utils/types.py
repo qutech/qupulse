@@ -3,6 +3,9 @@ import abc
 import inspect
 import numbers
 import fractions
+import collections
+import itertools
+from collections.abc import Mapping as ABCMapping
 import warnings
 
 import numpy
