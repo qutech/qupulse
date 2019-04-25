@@ -223,9 +223,16 @@ class TaborChannelPairTests(TaborDummyBasedTest):
         with self.assertRaises(ValueError):
             channel_pair.upload('test', program, (1, 2), (3, 4), (lambda x: x,))
 
+        old = channel_pair._amplitude_offset_handling
+        with self.assertRaises(ValueError):
+            channel_pair._amplitude_offset_handling = 'invalid'
+            channel_pair.upload('test', program, (1, None), (None, None), (lambda x: x, lambda x: x))
+        channel_pair._amplitude_offset_handling = old
+
         channel_pair._known_programs['test'] = self.TaborProgramMemory(np.array([0]), None)
         with self.assertRaises(ValueError):
             channel_pair.upload('test', program, (1, 2), (3, 4), (lambda x: x, lambda x: x))
+
 
     def test_upload(self):
         segments = np.array([1, 2, 3, 4, 5])
