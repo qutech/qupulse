@@ -14,7 +14,7 @@ except ImportError:
                   "If you wish to use it execute qupulse.hardware.awgs.install_requirements('tektronix')")
     raise
 
-from qupulse.hardware.awgs.base import AWG
+from qupulse.hardware.awgs.base import AWG, AWGAmplitudeOffsetHandling
 from qupulse import ChannelID
 from qupulse._program._loop import Loop, make_compatible
 from qupulse.utils.types import TimeType
@@ -81,11 +81,16 @@ def parse_program(program: Loop,
                   markers: Tuple[Tuple[ChannelID, ChannelID], ...],
                   sample_rate: TimeType,
                   amplitudes: Tuple[float, ...],
-                  voltage_transformations: Tuple[Callable, ...]) -> Tuple[Sequence[TekAwg.SequenceEntry],
-                                                                          Sequence[TekAwg.Waveform]]:
+                  voltage_transformations: Tuple[Callable, ...],
+                  offsets: Tuple[float, ...] = None) -> Tuple[Sequence[TekAwg.SequenceEntry],
+                                                              Sequence[TekAwg.Waveform]]:
     """Convert the program into a sequence of sequence table entries and a sequence of waveforms that can be uploaded
     to the device."""
     assert program.depth() == 1, "Invalid program depth."
+
+    # For backward compatibility
+    if offsets is None:
+        offsets = tuple(np.zeros(len(amplitudes)))
 
     sequencing_elements = []
 
@@ -96,18 +101,19 @@ def parse_program(program: Loop,
 
     time_per_sample = float(1 / sample_rate_in_GHz)
 
-    def make_binary_converter(amp, trafo):
+    def make_binary_converter(amp, offs, trafo):
         def to_uint16(voltage):
             return voltage_to_uint16(trafo(voltage),
                                      output_amplitude=amp,
-                                     output_offset=0., resolution=14)
+                                     output_offset=offs,
+                                     resolution=14)
 
         return to_uint16
     longest_waveform_n_samples = int(max(loop.waveform.duration for loop in program) * sample_rate_in_GHz)
     time_array = np.arange(longest_waveform_n_samples) * time_per_sample
 
-    binary_converters = [make_binary_converter(amplitude, voltage_transformation)
-                         for amplitude, voltage_transformation in zip(amplitudes, voltage_transformations)]
+    binary_converters = [make_binary_converter(amplitude, offset, voltage_transformation)
+                         for amplitude, offset, voltage_transformation in zip(amplitudes, offsets, voltage_transformations)]
 
     for loop in program:
         n_samples = int(loop.waveform.duration * sample_rate_in_GHz)
@@ -172,7 +178,8 @@ class TektronixProgram:
                  markers: Sequence[Tuple[ChannelID, ChannelID]],
                  sample_rate: TimeType,
                  amplitudes: Sequence[float],
-                 voltage_transformations: Sequence[Callable]):
+                 voltage_transformations: Sequence[Callable],
+                 offsets: Sequence[float] = None):
         assert len(channels) == len(markers) and all(len(marker) == 2 for marker in markers), "Driver can currently only handle awgs wth two markers per channel"
 
         assert len(channels) == len(amplitudes)
@@ -180,6 +187,7 @@ class TektronixProgram:
         self._program = program.copy_tree_structure()
         self._sample_rate = sample_rate
         self._amplitudes = tuple(amplitudes)
+        self._offsets = tuple(offsets) if offsets is not None else None
         self._channels = tuple(channels)
         self._markers = tuple(markers)
         self._voltage_transformations = tuple(voltage_transformations)
@@ -195,7 +203,8 @@ class TektronixProgram:
                                                                    markers=self.markers,
                                                                    sample_rate=self._sample_rate,
                                                                    amplitudes=self._amplitudes,
-                                                                   voltage_transformations=self._voltage_transformations)
+                                                                   voltage_transformations=self._voltage_transformations,
+                                                                   offsets=self._offsets)
 
     def get_sequencing_elements(self) -> Sequence[TekAwg.SequenceEntry]:
         """The entries are either of type TekAwh.Waveform or integers which signal an idle waveform of this length"""
@@ -528,8 +537,16 @@ class TektronixAWG(AWG):
         # group markers in by channels
         markers = tuple(zip(markers[0::2], markers[1::2]))
 
+        if self._amplitude_offset_handling == AWGAmplitudeOffsetHandling.IGNORE_OFFSET:
+            offsets = None
+        elif self._amplitude_offset_handling == AWGAmplitudeOffsetHandling.CONSIDER_OFFSET:
+            offsets = self.device.get_offset()
+        else:
+            raise ValueError('{} is invalid as AWGAmplitudeOffsetHandling'.format(self._amplitude_offset_handling))
+
         tek_program = TektronixProgram(program, channels=channels, markers=markers,
                                        amplitudes=self.device.get_amplitude(),
+                                       offsets=self.device.get_offset(),
                                        voltage_transformations=voltage_transformation,
                                        sample_rate=TimeType(self.sample_rate))
 

@@ -14,7 +14,7 @@ class TektronixProgramTests(unittest.TestCase):
         ill_formed_program = Loop(children=[Loop(children=[Loop()])])
 
         with self.assertRaisesRegex(AssertionError, 'Invalid program depth'):
-            parse_program(ill_formed_program, (), (), TimeType(), (), ())
+            parse_program(ill_formed_program, (), (), TimeType(), (), (), ())
 
 
 
