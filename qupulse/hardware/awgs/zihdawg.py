@@ -542,8 +542,11 @@ class HDAWGWaveManager:
 
     def volt_to_amp(self, volt: np.ndarray, rng: float, offset: float) -> np.ndarray:
         """Scale voltage pulse data to dimensionless -1..1 amplitude of full range. If out of range throw error."""
-        # TODO: Finish this function and extend register call. Also should rename voltage variable to amplitude.
-        pass
+        # TODO: Extend register call. Also should rename voltage variable to amplitude.
+        # TODO: Is offset included or excluded from rng?
+        if np.any(np.abs(volt-offset) > rng):
+            raise HDAWGValueError('Voltage out of range')
+        return (volt-offset)/rng
 
     def register(self, waveform: Waveform,
                  channels: Tuple[Optional[ChannelID], Optional[ChannelID]],
