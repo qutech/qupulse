@@ -540,6 +540,11 @@ class HDAWGWaveManager:
         """Calculate hash of sampled data."""
         return hash(bytes(data))
 
+    def volt_to_amp(self, volt: np.ndarray, rng: float, offset: float) -> np.ndarray:
+        """Scale voltage pulse data to dimensionless -1..1 amplitude of full range. If out of range throw error."""
+        # TODO: Finish this function and extend register call. Also should rename voltage variable to amplitude.
+        pass
+
     def register(self, waveform: Waveform,
                  channels: Tuple[Optional[ChannelID], Optional[ChannelID]],
                  markers: Tuple[Optional[ChannelID], Optional[ChannelID]],
@@ -559,7 +564,7 @@ class HDAWGWaveManager:
         voltage = np.zeros((len(sample_times), 2), dtype=float)
         for idx, chan in enumerate(channels):
             if chan is not None:
-                voltage[:, idx] = voltage_transformation[chan](waveform.get_sampled(chan, sample_times))
+                voltage[:, idx] = voltage_transformation[idx](waveform.get_sampled(chan, sample_times))
 
         # Reuse sampled data, if available.
         voltage_hash = self.calc_hash(voltage)
@@ -782,7 +787,7 @@ if __name__ == "__main__":
 
     ch = (0, 1)
     mk = (0, None)
-    vt = (None, None)
+    vt = (lambda x: x, lambda x: x)
     hdawg = HDAWGRepresentation(device_serial='dev8075', device_interface='USB')
     hdawg.channel_pair_AB.upload('table_pulse_test', p, ch, mk, vt)
 
