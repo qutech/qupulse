@@ -311,12 +311,15 @@ class HDAWGChannelPair(AWG):
                         waveform_quantum=8,  # 8 samples for single, 4 for dual channel waaveforms.
                         sample_rate=self.sample_rate)
 
+        # TODO: Implement offset handling like in tabor driver.
         self._program_manager.register(name,
                                        program,
                                        channels,
                                        markers,
                                        voltage_transformation,
                                        self.sample_rate,
+                                       (self._device.range(self._channels[0]), self._device.range(self._channels[1])),
+                                       (0, 0),
                                        force)
 
         awg_sequence = self._program_manager.assemble_sequencer_program()
@@ -542,7 +545,6 @@ class HDAWGWaveManager:
 
     def volt_to_amp(self, volt: np.ndarray, rng: float, offset: float) -> np.ndarray:
         """Scale voltage pulse data to dimensionless -1..1 amplitude of full range. If out of range throw error."""
-        # TODO: Extend register call. Also should rename voltage variable to amplitude.
         # TODO: Is offset included or excluded from rng?
         if np.any(np.abs(volt-offset) > rng):
             raise HDAWGValueError('Voltage out of range')
@@ -553,6 +555,8 @@ class HDAWGWaveManager:
                  markers: Tuple[Optional[ChannelID], Optional[ChannelID]],
                  voltage_transformation: Tuple[Callable, Callable],
                  sample_rate: TimeType,
+                 output_range: Tuple[float, float],
+                 output_offset: Tuple[float, float],
                  overwrite: bool = False) -> Tuple[str, Optional[str]]:
         """Return waveform name and optionally marker name if waveform is known. Register waveform in memory and save to
         disk otherwise. If hash of newly sampled marker or waveform data matches previously sampled data, return
@@ -564,18 +568,19 @@ class HDAWGWaveManager:
         time_per_sample = 1/sample_rate
         sample_times = np.arange(waveform.duration / time_per_sample) * time_per_sample
 
-        voltage = np.zeros((len(sample_times), 2), dtype=float)
+        amplitude = np.zeros((len(sample_times), 2), dtype=float)
         for idx, chan in enumerate(channels):
             if chan is not None:
-                voltage[:, idx] = voltage_transformation[idx](waveform.get_sampled(chan, sample_times))
+                voltage = voltage_transformation[idx](waveform.get_sampled(chan, sample_times))
+                amplitude[:, idx] = self.volt_to_amp(voltage, output_range[idx], output_offset[idx])
 
         # Reuse sampled data, if available.
-        voltage_hash = self.calc_hash(voltage)
-        if voltage_hash in self._by_data:
-            name = self._by_data[voltage_hash]
+        amplitude_hash = self.calc_hash(amplitude)
+        if amplitude_hash in self._by_data:
+            name = self._by_data[amplitude_hash]
         else:
-            self._by_data[voltage_hash] = name
-            self.to_file(name, voltage, overwrite=overwrite)
+            self._by_data[amplitude_hash] = name
+            self.to_file(name, amplitude, overwrite=overwrite)
 
         if markers[0] is not None or markers[1] is not None:
             marker_name = name + '_m'
@@ -612,12 +617,14 @@ class HDAWGProgramManager:
         # Use ordered dict, so index creation for new programs is trivial (also in case of deletions).
         self._known_programs = OrderedDict()  # type: Dict[str, HDAWGProgramManager.ProgramEntry]
         self._wave_manager = weakref.proxy(wave_manager)
-        # Overwritten by translation configuration call.
+        # TODO: Overwritten by register and used in waveform_to_seqc. This pattern is ugly. Think of something better.
         self._channels = (None, None)
         self._markers = (None, None)
         self._voltage_transformation = (None, None)
         self._sample_rate = TimeType()
         self._overwrite = False
+        self._output_range = (1, 1)
+        self._output_offset = (0, 0)
 
     def remove(self, name: str) -> None:
         # TODO: Call removal of program waveforms on WaveManger.
@@ -638,12 +645,16 @@ class HDAWGProgramManager:
                  markers: Tuple[Optional[ChannelID], Optional[ChannelID]],
                  voltage_transformation: Tuple[Callable, Callable],
                  sample_rate: TimeType,
+                 output_range: Tuple[float, float],
+                 output_offset: Tuple[float, float],
                  overwrite: bool = False) -> None:
         self._channels = channels
         self._markers = markers
         self._voltage_transformation = voltage_transformation
         self._sample_rate = sample_rate
         self._overwrite = overwrite
+        self._output_range = output_range
+        self._output_offset = output_offset
 
         seqc_gen = self.program_to_seqc(program)
         self._known_programs[name] = self.ProgramEntry(program,
@@ -689,6 +700,8 @@ class HDAWGProgramManager:
                                                        self._markers,
                                                        self._voltage_transformation,
                                                        self._sample_rate,
+                                                       self._output_range,
+                                                       self._output_offset,
                                                        self._overwrite)
         if mk_name is None:
             return 'playWave("{}");'.format(wf_name)
