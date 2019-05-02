@@ -32,5 +32,5 @@ class DAC(metaclass=ABCMeta):
         """
 
     @abstractmethod
-    def measure_program(self, channels: Iterable[str]) -> Dict:
-        """Get all measurements at once and write them in a dictionary"""
+    def measure_program(self, channels: Iterable[str]) -> Dict[str, 'numpy.ndarray']:
+        """Get the last measurement's results of the specified operations/channels"""

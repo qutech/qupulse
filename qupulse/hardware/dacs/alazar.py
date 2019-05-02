@@ -150,8 +150,7 @@ class AlazarCard(DAC):
         """
         Get all measurements at once and write them in a dictionary.
         """
-        data = {}
-        
+
         scanline_data = self.__card.extractNextScanline()
 
         scanline_definition = scanline_data.definition
@@ -170,6 +169,7 @@ class AlazarCard(DAC):
             # It is better than self.config.inputConfiguration but still
             return self.__card.scanConfiguration.inputConfiguration[hw_channel].inputRange
 
+        data = {}
         for op_name in channels:
             input_range = get_input_range(op_name)
             data[op_name] = scanline_data.operationResults[op_name].getAsVoltage(input_range)
