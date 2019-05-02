@@ -165,8 +165,11 @@ class PulseTemplateTest(unittest.TestCase):
     def test_create_program(self) -> None:
         template = PulseTemplateStub(defined_channels={'A'}, parameter_names={'foo'})
         parameters = {'foo': ConstantParameter(2.126), 'bar': -26.2, 'hugo': 'exp(sin(pi/2))', 'append_a_child': '1'}
+        previous_parameters = parameters.copy()
         measurement_mapping = {'M': 'N'}
+        previos_measurement_mapping = measurement_mapping.copy()
         channel_mapping = {'A': 'B'}
+        previous_channel_mapping = channel_mapping.copy()
 
         expected_parameters = {'foo': ConstantParameter(2.126), 'bar': ConstantParameter(-26.2),
                                'hugo': ConstantParameter('exp(sin(pi/2))'), 'append_a_child': ConstantParameter('1')}
@@ -192,6 +195,9 @@ class PulseTemplateTest(unittest.TestCase):
                                               global_transformation=global_transformation)
             _create_program.assert_called_once_with(**expected_internal_kwargs, parent_loop=program)
         self.assertEqual(expected_program, program)
+        self.assertEqual(previos_measurement_mapping, measurement_mapping)
+        self.assertEqual(previous_channel_mapping, channel_mapping)
+        self.assertEqual(previous_parameters, parameters)
 
     def test__create_program(self):
         parameters = {'a': ConstantParameter(.1), 'b': ConstantParameter(.2)}

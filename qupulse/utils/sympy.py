@@ -371,6 +371,25 @@ def get_symbols_for_custom_syntax(expression: str) -> Dict[str, sympy.Symbol]:
 #############################################################
 
 
+class Broadcast(sympy.Function):
+    """Broadcast x to the specified shape using numpy.broadcast_to
+
+    Examples:
+        >>> bc = Broadcast('a', (3,))
+        >>> assert bc.subs({'a': 2}) == sympy.Array([2, 2, 2])
+        >>> assert bc.subs({'a': (1, 2, 3)}) == sympy.Array([1, 2, 3])
+    """
+
+    @classmethod
+    def eval(cls, x, shape) -> Optional[sympy.Array]:
+        if hasattr(shape, 'free_symbols') and shape.free_symbols:
+            # cannot do anything
+            return None
+
+        if hasattr(x, '__len__') or not x.free_symbols:
+            return sympy.Array(numpy.broadcast_to(x, shape))
+
+
 class Len(sympy.Function):
     nargs = 1
 
@@ -385,7 +404,8 @@ class Len(sympy.Function):
 Len.__name__ = 'len'
 
 sympify_namespace = {'len': Len,
-                     'Len': Len}
+                     'Len': Len,
+                     'Broadcast': Broadcast}
 
 #########################################
 ### Functions for numpy compatability ###
@@ -517,7 +537,7 @@ _math_environment = {**_base_environment, **math.__dict__}
 _numpy_environment = {**_base_environment, **numpy.__dict__}
 _sympy_environment = {**_base_environment, **sympy.__dict__}
 
-_lambdify_modules = [{'ceiling': numpy_compatible_ceiling}, 'numpy', _special_functions]
+_lambdify_modules = [{'ceiling': numpy_compatible_ceiling, 'Broadcast': numpy.broadcast_to}, 'numpy', _special_functions]
 
 
 def evaluate_compiled(expression: sympy.Expr,

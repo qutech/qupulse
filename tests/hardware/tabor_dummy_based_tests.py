@@ -1,11 +1,14 @@
 import sys
 import unittest
+from unittest.mock import patch, MagicMock
 
 from typing import List
 from copy import copy, deepcopy
 
 import numpy as np
 
+from qupulse.hardware.awgs.base import AWGAmplitudeOffsetHandling
+from qupulse.hardware.awgs.tabor import TaborProgram, TaborAWGRepresentation
 from tests.hardware.dummy_modules import import_package
 
 
@@ -220,9 +223,16 @@ class TaborChannelPairTests(TaborDummyBasedTest):
         with self.assertRaises(ValueError):
             channel_pair.upload('test', program, (1, 2), (3, 4), (lambda x: x,))
 
+        old = channel_pair._amplitude_offset_handling
+        with self.assertRaises(ValueError):
+            channel_pair._amplitude_offset_handling = 'invalid'
+            channel_pair.upload('test', program, (1, None), (None, None), (lambda x: x, lambda x: x))
+        channel_pair._amplitude_offset_handling = old
+
         channel_pair._known_programs['test'] = self.TaborProgramMemory(np.array([0]), None)
         with self.assertRaises(ValueError):
             channel_pair.upload('test', program, (1, 2), (3, 4), (lambda x: x, lambda x: x))
+
 
     def test_upload(self):
         segments = np.array([1, 2, 3, 4, 5])
@@ -274,6 +284,47 @@ class TaborChannelPairTests(TaborDummyBasedTest):
 
         finally:
             sys.modules['qupulse.hardware.awgs.tabor'].TaborProgram = to_restore
+
+    def test_upload_offset_handling(self):
+
+        program = self.Loop(waveform=self.TableWaveform(1, [(0, 0.1, self.HoldInterpolationStrategy()),
+                                                            (192, 0.1, self.HoldInterpolationStrategy())]))
+
+        channel_pair = self.TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
+
+        channels = (1, None)
+        markers = (None, None)
+
+        tabor_program = TaborProgram(program,
+                                     channels=channels,
+                                     markers=markers,
+                                     device_properties=channel_pair.device.dev_properties)
+
+        test_sample_rate = channel_pair.sample_rate
+        test_amplitudes = (channel_pair.device.amplitude(channel_pair._channels[0]) / 2,
+                           channel_pair.device.amplitude(channel_pair._channels[1]) / 2)
+        test_offset = 0.1
+        test_transform = (lambda x: x, lambda x: x)
+
+        with patch('qupulse.hardware.awgs.tabor.TaborProgram', return_value=tabor_program) as tabor_program_mock, \
+             patch.object(tabor_program, 'sampled_segments', wraps=tabor_program.sampled_segments) as sampled_segments_mock, \
+             patch.object(channel_pair.device, 'offset', return_value=test_offset):
+
+            channel_pair.amplitude_offset_handling = AWGAmplitudeOffsetHandling.CONSIDER_OFFSET
+            channel_pair.upload('test1', program, (1, None), (None, None), test_transform)
+
+            sampled_segments_mock.assert_called_once_with(sample_rate=test_sample_rate,
+                                                          voltage_amplitude=test_amplitudes,
+                                                          voltage_offset=(test_offset, test_offset),
+                                                          voltage_transformation=test_transform)
+
+            channel_pair.amplitude_offset_handling = AWGAmplitudeOffsetHandling.IGNORE_OFFSET
+            channel_pair.upload('test2', program, (1, None), (None, None), test_transform)
+
+            sampled_segments_mock.assert_called_with(sample_rate=test_sample_rate,
+                                                     voltage_amplitude=test_amplitudes,
+                                                     voltage_offset=(0, 0),
+                                                     voltage_transformation=test_transform)
 
     def test_find_place_for_segments_in_memory(self):
         def hash_based_on_dir(ch):

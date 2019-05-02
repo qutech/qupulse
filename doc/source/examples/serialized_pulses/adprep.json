@@ -1,0 +1,35 @@
+{
+    "#identifier": "adprep",
+    "#type": "qupulse.pulses.point_pulse_template.PointPulseTemplate",
+    "channel_names": [
+        "RFX",
+        "RFY"
+    ],
+    "parameter_constraints": [
+        "Abs(ST_jump/2 - ST_plus + meas) <= Abs(ST_plus - meas)",
+        "Abs(ST_jump/2 - ST_plus + meas)/t_ST_prep <= max_ramp_speed",
+        "Abs(ST_jump/2 + ST_plus - op)/Abs(t_ST_prep - t_op) <= max_ramp_speed"
+    ],
+    "time_point_tuple_list": [
+        [
+            0,
+            "meas",
+            "hold"
+        ],
+        [
+            "t_ST_prep",
+            "ST_plus - ST_jump/2",
+            "linear"
+        ],
+        [
+            "t_ST_prep",
+            "ST_plus + ST_jump/2",
+            "hold"
+        ],
+        [
+            "t_op",
+            "op",
+            "linear"
+        ]
+    ]
+}

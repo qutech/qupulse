@@ -1,4 +1,4 @@
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple, List, Iterable
 from collections import defaultdict
 
 import numpy as np
@@ -146,3 +146,32 @@ class AlazarCard(DAC):
             raise NotImplementedError('Currently only can do cross buffer mask')
         self._mask_prototypes[mask_id] = (hw_channel, mask_type)
 
+    def measure_program(self, channels: Iterable[str]) -> Dict[str, np.ndarray]:
+        """
+        Get all measurements at once and write them in a dictionary.
+        """
+
+        scanline_data = self.__card.extractNextScanline()
+
+        scanline_definition = scanline_data.definition
+        operation_definitions = {operation.identifier: operation
+                                 for operation in scanline_definition.operations}
+        mask_definitions = {mask.identifier: mask
+                            for mask in scanline_definition.masks}
+
+        def get_input_range(operation_id: str):
+            # currently does not work for ComputeMomentDefinition :(
+            mask_id = operation_definitions[operation_id].maskID
+
+            hw_channel = int(mask_definitions[mask_id].channel)
+
+            # This fails if new changes have been applied to the card in the meantime
+            # It is better than self.config.inputConfiguration but still
+            return self.__card.scanConfiguration.inputConfiguration[hw_channel].inputRange
+
+        data = {}
+        for op_name in channels:
+            input_range = get_input_range(op_name)
+            data[op_name] = scanline_data.operationResults[op_name].getAsVoltage(input_range)
+
+        return data

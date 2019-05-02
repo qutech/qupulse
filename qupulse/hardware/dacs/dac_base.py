@@ -1,7 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from typing import Dict, Tuple
-
-import numpy
+from typing import Dict, Tuple, Iterable
 
 __all__ = ['DAC']
 
@@ -17,7 +15,7 @@ class DAC(metaclass=ABCMeta):
     @abstractmethod
     def register_operations(self, program_name: str, operations) -> None:
         """"""
-
+    
     @abstractmethod
     def arm_program(self, program_name: str) -> None:
         """"""
@@ -32,3 +30,7 @@ class DAC(metaclass=ABCMeta):
 
         Caution: This affects all programs and waveforms on the AWG, not only those uploaded using qupulse!
         """
+
+    @abstractmethod
+    def measure_program(self, channels: Iterable[str]) -> Dict[str, 'numpy.ndarray']:
+        """Get the last measurement's results of the specified operations/channels"""

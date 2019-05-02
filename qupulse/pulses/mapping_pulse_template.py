@@ -3,6 +3,7 @@ from typing import Optional, Set, Dict, Union, List, Any, Tuple
 import itertools
 import numbers
 import warnings
+import collections
 
 from qupulse.utils.types import ChannelID
 from qupulse.expressions import Expression, ExpressionScalar
@@ -27,6 +28,10 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
     """This class can be used to remap parameters, the names of measurement windows and the names of channels. Besides
     the standard constructor, there is a static member function from_tuple for convenience. The class also allows
     constraining parameters by deriving from ParameterConstrainer"""
+
+    ALLOW_PARTIAL_PARAMETER_MAPPING = True
+    """Default value for allow_partial_parameter_mapping of the __init__ method."""
+
     def __init__(self, template: PulseTemplate, *,
                  identifier: Optional[str]=None,
                  parameter_mapping: Optional[Dict[str, str]]=None,
@@ -34,7 +39,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                  channel_mapping: Optional[Dict[ChannelID, ChannelID]] = None,
                  parameter_constraints: Optional[List[str]]=None,
                  namespace_mapping: Optional[Dict[str, str]] = None,
-                 allow_partial_parameter_mapping: Optional[bool]=False, # deprecated; todo: remove
+                 allow_partial_parameter_mapping: Optional[bool ]= None, # deprecated; todo: remove
                  registry: PulseRegistryType=None) -> None:
         """Standard constructor for the MappingPulseTemplate.
 
@@ -98,6 +103,11 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         missing_channel_mappings = internal_channels - mapped_internal_channels
         channel_mapping = dict(itertools.chain(((name, name) for name in missing_channel_mappings),
                                                channel_mapping.items()))
+        overlapping_targets = {channel
+                               for channel, n in collections.Counter(channel_mapping.values()).items() if n > 1}
+        if overlapping_targets:
+            raise ValueError('Cannot map multiple channels to the same target(s) %r' % overlapping_targets,
+                             channel_mapping)
 
 
         if isinstance(template, MappingPulseTemplate) and template.identifier is None:
@@ -118,14 +128,17 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         self.__channel_mapping = channel_mapping
         self._register(registry=registry)
 
-    @staticmethod
-    def from_tuple(mapping_tuple: MappingTuple) -> 'MappingPulseTemplate':
+    @classmethod
+    def from_tuple(cls, mapping_tuple: MappingTuple) -> 'MappingPulseTemplate':
         """Construct a MappingPulseTemplate from a tuple of mappings. The mappings are automatically assigned to the
         mapped elements based on their content.
         :param mapping_tuple: A tuple of mappings
         :return: Constructed MappingPulseTemplate
         """
         template, *mappings = mapping_tuple
+
+        if not mappings:
+            return template
 
         parameter_mapping = None
         measurement_mapping = None
@@ -141,7 +154,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                     mapped <= template.defined_channels)) > 1:
                 raise AmbiguousMappingException(template, mapping)
 
-            if mapped == template.parameter_names:
+            if mapped <= template.parameter_names:
                 if parameter_mapping:
                     raise MappingCollisionException(template, object_type='parameter',
                                                     mapped=template.parameter_names,
@@ -161,10 +174,10 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                 channel_mapping = mapping
             else:
                 raise ValueError('Could not match mapping to mapped objects: {}'.format(mapping))
-        return MappingPulseTemplate(template,
-                                    parameter_mapping=parameter_mapping,
-                                    measurement_mapping=measurement_mapping,
-                                    channel_mapping=channel_mapping)
+        return cls(template,
+                   parameter_mapping=parameter_mapping,
+                   measurement_mapping=measurement_mapping,
+                   channel_mapping=channel_mapping)
 
     @property
     def template(self) -> PulseTemplate:
