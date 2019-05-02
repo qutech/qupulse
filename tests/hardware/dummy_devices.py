@@ -1,4 +1,6 @@
 from typing import Tuple, Set, Dict
+from collections import deque
+
 
 from qupulse.hardware.awgs.base import AWG, ProgramOverwriteException
 from qupulse.hardware.dacs import DAC
@@ -7,6 +9,7 @@ class DummyDAC(DAC):
     def __init__(self):
         self._measurement_windows = dict()
         self._operations = dict()
+        self.measured_data = deque([])
 
         self._armed_program = None
 
@@ -34,6 +37,9 @@ class DummyDAC(DAC):
         self._measurement_windows = dict()
         self._operations = dict()
         self._armed_program = None
+
+    def measure_program(self, channels):
+        return self.measured_data.pop()
 
 
 class DummyAWG(AWG):
