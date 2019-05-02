@@ -21,6 +21,10 @@ try:
     def time_from_float(time: float, absolute_error: float=1e-12) -> TimeType:
         # gmpy2 is at least an order of magnitude faster than fractions.Fraction
         return gmpy2.mpq(gmpy2.f2q(time, absolute_error))
+
+    def time_from_fraction(numerator: int, denominator: int = 1) -> TimeType:
+        return gmpy2.mpq(numerator, denominator)
+
 except ImportError:
     warnings.warn('gmpy2 not found. Using fractions.Fraction as fallback. Install gmpy2 for better performance.')
 
@@ -28,6 +32,9 @@ except ImportError:
 
     def time_from_float(time: float, absolute_error: float = 1e-12) -> TimeType:
         return fractions.Fraction(time).limit_denominator(int(1/absolute_error))
+
+    def time_from_fraction(numerator: int, denominator: int = 1) -> TimeType:
+        return fractions.Fraction(numerator=numerator, denominator=denominator)
 
 
 class DocStringABCMeta(abc.ABCMeta):
