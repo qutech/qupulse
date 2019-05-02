@@ -25,9 +25,9 @@ class MappingTemplateTests(unittest.TestCase):
         parameter_mapping = {'foo': 't*k', 'bar': 't*l'}
 
         with self.assertRaises(MissingMappingException):
-            MappingPulseTemplate(template, parameter_mapping={})
+            MappingPulseTemplate(template, parameter_mapping={}, allow_partial_parameter_mapping=False)
         with self.assertRaises(MissingMappingException):
-            MappingPulseTemplate(template, parameter_mapping={'bar': 'kneipe'})
+            MappingPulseTemplate(template, parameter_mapping={'bar': 'kneipe'}, allow_partial_parameter_mapping=False)
         with self.assertRaises(UnnecessaryMappingException):
             MappingPulseTemplate(template, parameter_mapping=dict(**parameter_mapping, foobar='asd'))
 
@@ -39,6 +39,7 @@ class MappingTemplateTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             MappingPulseTemplate(template, parameter_mapping)
 
+        MappingPulseTemplate(template, parameter_mapping={'bar': 'kneipe'})
         MappingPulseTemplate(template, parameter_mapping=parameter_mapping)
 
     def test_from_tuple_exceptions(self):
@@ -97,6 +98,50 @@ class MappingTemplateTests(unittest.TestCase):
         test_mapping_permutations(template, None, None, {'c1': 'd1', 'c2': 'd2'})
         test_mapping_permutations(template, None, {'m1': 'n1', 'm2': 'n2'}, {'c1': 'd1'})
         test_mapping_permutations(template, None, {'m1': 'n1', 'm2': 'n2'}, None)
+
+    def test_from_tuple_partial_mappings(self):
+        template = DummyPulseTemplate(parameter_names={'foo', 'bar'},
+                                      measurement_names={'m1', 'm2'},
+                                      defined_channels={'c1', 'c2'})
+
+        unbound_from_tuple = MappingPulseTemplate.from_tuple.__func__
+
+        self.assertIs(unbound_from_tuple(None, (template,)), template)
+
+        mock_cls = mock.MagicMock()
+        unbound_from_tuple(mock_cls, (template, {'foo': 2}))
+        mock_cls.assert_called_once_with(template,
+                                         parameter_mapping={'foo': 2},
+                                         measurement_mapping=None,
+                                         channel_mapping=None)
+
+        mock_cls = mock.MagicMock()
+        unbound_from_tuple(mock_cls, (template, {'m1': 'n1'}))
+        mock_cls.assert_called_once_with(template,
+                                         parameter_mapping=None,
+                                         measurement_mapping={'m1': 'n1'},
+                                         channel_mapping=None)
+
+        mock_cls = mock.MagicMock(return_value='dummy')
+        self.assertEqual(unbound_from_tuple(mock_cls, (template, {'c1': 'd1'})), 'dummy')
+        mock_cls.assert_called_once_with(template,
+                                         parameter_mapping=None,
+                                         measurement_mapping=None,
+                                         channel_mapping={'c1': 'd1'})
+
+        mock_cls = mock.MagicMock(return_value='dummy')
+        self.assertEqual(unbound_from_tuple(mock_cls, (template,
+                                                       {'c1': 'd1'},
+                                                       {'foo': 2},
+                                                       {'m1': 'n1'})),
+                         'dummy')
+        mock_cls.assert_called_once_with(template,
+                                         parameter_mapping={'foo': 2},
+                                         measurement_mapping={'m1': 'n1'},
+                                         channel_mapping={'c1': 'd1'})
+
+
+
 
     def test_external_params(self):
         template = DummyPulseTemplate(parameter_names={'foo', 'bar'})
