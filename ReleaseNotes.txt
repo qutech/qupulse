@@ -13,7 +13,6 @@
 - Pulse Templates:
     - `MappingPulseTemplate`:
         - Raise a ValueError if more than one inner channel is mapped to the same outer channel
-
     - Plotting:
         - Make `plotting.render` behaviour and return value consistent between calls with `InstructionBlock` and `Loop`. Render now always returns 3 arguments.
 
