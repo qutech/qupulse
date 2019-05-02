@@ -18,7 +18,7 @@ from qupulse.utils.types import ChannelID
 from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
 from qupulse._program._loop import Loop, make_compatible
 from qupulse.hardware.util import voltage_to_uint16, make_combined_wave, find_positions
-from qupulse.hardware.awgs.base import AWG
+from qupulse.hardware.awgs.base import AWG, AWGAmplitudeOffsetHandling
 
 
 assert(sys.byteorder == 'little')
@@ -931,7 +931,15 @@ class TaborChannelPair(AWG):
                       self.device.amplitude(self._channels[1]))
 
             voltage_amplitudes = (ranges[0]/2, ranges[1]/2)
-            voltage_offsets = (0, 0)
+            
+            if self._amplitude_offset_handling == AWGAmplitudeOffsetHandling.IGNORE_OFFSET:
+                voltage_offsets = (0, 0)
+            elif self._amplitude_offset_handling == AWGAmplitudeOffsetHandling.CONSIDER_OFFSET:
+                voltage_offsets = (self.device.offset(self._channels[0]),
+                                   self.device.offset(self._channels[1]))
+            else:
+                raise ValueError('{} is invalid as AWGAmplitudeOffsetHandling'.format(self._amplitude_offset_handling))
+                
             segments, segment_lengths = tabor_program.sampled_segments(sample_rate=sample_rate,
                                                                        voltage_amplitude=voltage_amplitudes,
                                                                        voltage_offset=voltage_offsets,
