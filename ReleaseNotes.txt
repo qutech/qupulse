@@ -1,3 +1,12 @@
+## pending/current ##
+
+ - Hardware:
+   - Add a `measure_program` method to the DAC interface. This method is used by the QCoDeS integration.
+
+- Pulse Templates:
+    - `MappingPulseTemplate`:
+        - `allow_partial_parameter_mapping` is now True as a default. The default can be changed with the class variable `MappingPulseTemplate.ALLOW_PARTIAL_PARAMETER_MAPPING`.
+
 ## 0.4 ##
 
 - General:
