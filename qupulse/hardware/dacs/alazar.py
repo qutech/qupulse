@@ -111,7 +111,7 @@ class AlazarCard(DAC):
             if config.totalRecordSize < 5*config.aimedBufferSize:
                 config.aimedBufferSize = config.totalRecordSize // 5
 
-            config.apply(self.__card, True)
+            self.__card.applyConfiguration(config, True)
 
             # "Hide" work around from the user
             config.aimedBufferSize = old_aimed_buffer_size
