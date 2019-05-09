@@ -13,6 +13,10 @@ class DAC(metaclass=ABCMeta):
         """"""
 
     @abstractmethod
+    def set_measurement_mask(self, program_name, mask_name, begins, lengths) -> Tuple['numpy.ndarray', 'numpy.ndarray']:
+        """returns length of windows in samples"""
+
+    @abstractmethod
     def register_operations(self, program_name: str, operations) -> None:
         """"""
     
