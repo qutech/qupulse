@@ -2,8 +2,7 @@ import unittest
 from unittest import mock
 import itertools
 
-from qupulse.pulses.mapping_pulse_template import MissingMappingException,\
-    UnnecessaryMappingException, MappingPulseTemplate,\
+from qupulse.pulses.mapping_pulse_template import UnnecessaryMappingException, MappingPulseTemplate,\
     AmbiguousMappingException, MappingCollisionException
 from qupulse.pulses.parameters import ConstantParameter, ParameterConstraintViolation, ParameterConstraint, ParameterNotProvidedException
 from qupulse.expressions import Expression
@@ -24,10 +23,6 @@ class MappingTemplateTests(unittest.TestCase):
         template = DummyPulseTemplate(parameter_names={'foo', 'bar'}, defined_channels={'A'}, measurement_names={'B'})
         parameter_mapping = {'foo': 't*k', 'bar': 't*l'}
 
-        with self.assertRaises(MissingMappingException):
-            MappingPulseTemplate(template, parameter_mapping={}, allow_partial_parameter_mapping=False)
-        with self.assertRaises(MissingMappingException):
-            MappingPulseTemplate(template, parameter_mapping={'bar': 'kneipe'}, allow_partial_parameter_mapping=False)
         with self.assertRaises(UnnecessaryMappingException):
             MappingPulseTemplate(template, parameter_mapping=dict(**parameter_mapping, foobar='asd'))
 
@@ -175,6 +170,20 @@ class MappingTemplateTests(unittest.TestCase):
         for k, v in st.map_parameters(parameters).items():
             self.assertEqual(v, values[k])
 
+    def test_map_namespaces(self):
+        template = DummyPulseTemplate(parameter_names={'NS(foo).a', 'NS(foo).b', 'NS(bar).a', 'NS(foo).NS(bar).a'})
+        st = MappingPulseTemplate(template, parameter_mapping={'NS(foo).b': 't*k', 'NS(bar).a': 't*l'},
+                                  namespace_mapping={'NS(foo)': 'NS(bar)', 'NS(bar)': 'NS(scope)'})
+
+        parameters = {'t': ConstantParameter(3), 'k': ConstantParameter(2), 'l': ConstantParameter(7),
+                      'bar': {'a': ConstantParameter(1), 'bar': {'a': ConstantParameter(2)}}}
+        values = {'NS(foo).b': 6, 'NS(bar).a': 21, 'NS(foo).a': 1, 'NS(foo).NS(bar).a': 2}
+        for k, v in st.map_parameters(parameters).items():
+            self.assertEqual(v.get_value(), values[k])
+        parameters.popitem()
+        with self.assertRaises(ParameterNotProvidedException):
+             st.map_parameters(parameters)
+
     def test_partial_parameter_mapping(self):
         template = DummyPulseTemplate(parameter_names={'foo', 'bar'})
         st = MappingPulseTemplate(template, parameter_mapping={'foo': 't*k'}, allow_partial_parameter_mapping=True)
@@ -238,6 +247,13 @@ class MappingTemplateTests(unittest.TestCase):
                                      allow_partial_parameter_mapping=True)
 
         self.assertEqual({'default': Expression('2*f'), 'other': Expression('-3.2*f+2.3')}, pulse.integral)
+
+    def test_namespace_mapping(self) -> None:
+        template = DummyPulseTemplate(parameter_names={'foo', 'NS(outer).NS(inner).bar', 'NS(inner).bar', 'NS(outer).bar', 'NS(outer).NS(inner).foo'})
+        st = MappingPulseTemplate(template,
+                                  namespace_mapping={'NS(outer).NS(inner)': 'NS(combined)', 'NS(inner)': 'NS(bla)'},
+                                  parameter_mapping={'NS(outer).NS(inner).bar': 'NS(bla).a *c'})
+        self.assertEqual({'foo', 'NS(outer).bar', 'NS(bla).bar', 'NS(combined).foo', 'NS(bla).a', 'c'}, st.parameter_names)
 
 
 class MappingPulseTemplateSequencingTest(MeasurementWindowTestCase):
@@ -403,6 +419,46 @@ class MappingPulseTemplateSequencingTest(MeasurementWindowTestCase):
         program_old = MultiChannelProgram(block, channels={'A'}).programs[frozenset({'A'})]
         self.assertEqual(program_old, program)
 
+    def test_create_program_namespaces(self) -> None:
+        measurement_mapping = {'meas1': 'meas2'}
+        parameter_mapping = {'NS(foo).t': 'k'}
+        namespace_mapping = {'foo': 'bar'}
+        channel_mapping = {'B': 'default'}
+        global_transformation = TransformationStub()
+        to_single_waveform = {'tom', 'jerry'}
+
+        template = DummyPulseTemplate(measurements=[('meas1', 0, 1)], measurement_names={'meas1'}, defined_channels={'B'},
+                                      waveform=DummyWaveform(duration=2.0),
+                                      duration=2,
+                                      parameter_names={'NS(foo).t', 'NS(foo).a'})
+        st = MappingPulseTemplate(template, parameter_mapping=parameter_mapping,
+                                  measurement_mapping=measurement_mapping, channel_mapping=channel_mapping,
+                                  namespace_mapping=namespace_mapping)
+
+        pre_parameters = {'k': ConstantParameter(5), 'NS(foo).a': ConstantParameter(3)}
+        pre_measurement_mapping = {'meas2': 'meas3'}
+        pre_channel_mapping = {'default': 'A'}
+
+        program = Loop()
+        expected_inner_args = dict(parameters=st.map_parameters(pre_parameters),
+                                   measurement_mapping=st.get_updated_measurement_mapping(pre_measurement_mapping),
+                                   channel_mapping=st.get_updated_channel_mapping(pre_channel_mapping),
+                                   to_single_waveform=to_single_waveform,
+                                   global_transformation=global_transformation,
+                                   parent_loop=program)
+
+        with mock.patch.object(template, '_create_program') as inner_create_program:
+            st._internal_create_program(parameters=pre_parameters,
+                                        measurement_mapping=pre_measurement_mapping,
+                                        channel_mapping=pre_channel_mapping,
+                                        to_single_waveform=to_single_waveform,
+                                        global_transformation=global_transformation,
+                                        parent_loop=program)
+            inner_create_program.assert_called_once_with(**expected_inner_args)
+
+        # as we mock the inner function there shouldnt be any changes
+        self.assertEqual(program, Loop())
+
     def test_same_channel_error(self):
 
         dpt = DummyPulseTemplate(defined_channels={'A', 'B'})
@@ -445,11 +501,6 @@ class MappingPulseTemplateOldSequencingTests(unittest.TestCase):
 
 
 class PulseTemplateParameterMappingExceptionsTests(unittest.TestCase):
-
-    def test_missing_mapping_exception_str(self) -> None:
-        dummy = DummyPulseTemplate()
-        exception = MissingMappingException(dummy, 'foo')
-        self.assertIsInstance(str(exception), str)
 
     def test_unnecessary_mapping_exception_str(self) -> None:
         dummy = DummyPulseTemplate()

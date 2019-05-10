@@ -2,6 +2,7 @@
 from typing import Optional, Set, Dict, Union, List, Any, Tuple
 import itertools
 import numbers
+import warnings
 import collections
 
 from qupulse.utils.types import ChannelID
@@ -15,9 +16,10 @@ from qupulse._program._loop import Loop
 from qupulse.pulses.conditions import Condition
 from qupulse.serialization import Serializer, PulseRegistryType
 
+from qupulse.utils.sympy import sympify, flatten_parameter_dict
+
 __all__ = [
     "MappingPulseTemplate",
-    "MissingMappingException",
     "UnnecessaryMappingException",
 ]
 
@@ -36,45 +38,53 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                  measurement_mapping: Optional[Dict[str, str]] = None,
                  channel_mapping: Optional[Dict[ChannelID, ChannelID]] = None,
                  parameter_constraints: Optional[List[str]]=None,
-                 allow_partial_parameter_mapping: bool = None,
+                 namespace_mapping: Optional[Dict[str, str]] = None,
+                 allow_partial_parameter_mapping: Optional[bool ]= None, # deprecated; todo: remove
                  registry: PulseRegistryType=None) -> None:
         """Standard constructor for the MappingPulseTemplate.
 
-        Mappings that are not specified are defaulted to identity mappings. Channels and measurement names of the
-        encapsulated template can be mapped partially by default. F.i. if channel_mapping only contains one of two
-        channels the other channel name is mapped to itself.
-        However, if a parameter mapping is specified and one or more parameters are not mapped a MissingMappingException
-        is raised. To allow partial mappings and enable the same behaviour as for the channel and measurement name
-        mapping allow_partial_parameter_mapping must be set to True.
-        Furthermore parameter constrains can be specified.
+        Mappings that are not specified are defaulted to identity mappings. F.i. if channel_mapping only contains one of
+        two channels the other channel name is mapped to itself.
+        All parameters that are not explicitly mapped in the parameter_mapping dictionary are mapped to themselves i.e.,
+        no change occurs.
+
+        The namespace_mapping argument can be used to provide a mapping of namespaces which is applied to all parameters
+        not already explicitly mapped by parameter_mapping. Is is allowed to mapped nested namespaces, i.e.,
+        namespace mappings of the forms `'NS(foo).NS(bar)': 'NS(new)'`, `'NS(foo)': 'NS(new).NS(bar)'`,
+        `'NS(foo).NS(bar)': 'NS(new).NS(new_inner)'` are allowed. Note also that a nested namespace will only be mapped
+        if fully specified, i.e. a namespace `NS(foo).NS(bar)` will not be affected by a mapping of only `NS(bar)`.
+
+        Finally, if both an outer and an inner namespace are mapped at the same time, e.g.,
+        `{'NS(foo).NS(bar)': 'NS(foo).NS(rab)', 'NS(foo)': 'NS(new)'}` this results in undefined mapping behavior as the
+        order in which mappings are applied is not explicitly specified.
         
         :param template: The encapsulated pulse template whose parameters, measurement names and channels are mapped
         :param parameter_mapping: if not none, mappings for all parameters must be specified
         :param measurement_mapping: mappings for other measurement names are inserted
         :param channel_mapping: mappings for other channels are auto inserted
         :param parameter_constraints:
-        :param allow_partial_parameter_mapping: If None the value of the class variable ALLOW_PARTIAL_PARAMETER_MAPPING
+        :param namespace_mapping: mapping of namespaces
+        :param allow_partial_parameter_mapping: deprecated
         """
+        if allow_partial_parameter_mapping:
+            warnings.warn("The allow_partial_parameter_mapping argument is deprecated and will be ignored. Partial parameter mappings are always possible.", category=DeprecationWarning)
         PulseTemplate.__init__(self, identifier=identifier)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 
-        if allow_partial_parameter_mapping is None:
-            allow_partial_parameter_mapping = self.ALLOW_PARTIAL_PARAMETER_MAPPING
+        parameter_mapping = dict() if parameter_mapping is None else parameter_mapping
+        mapped_internal_parameters = set(parameter_mapping.keys())
+        internal_parameters = template.parameter_names
+        missing_parameter_mappings = internal_parameters - mapped_internal_parameters
+        if mapped_internal_parameters - internal_parameters:
+            raise UnnecessaryMappingException(template, mapped_internal_parameters - internal_parameters)
 
-        if parameter_mapping is None:
-            parameter_mapping = dict((par, par) for par in template.parameter_names)
-        else:
-            mapped_internal_parameters = set(parameter_mapping.keys())
-            internal_parameters = template.parameter_names
-            missing_parameter_mappings = internal_parameters - mapped_internal_parameters
-            if mapped_internal_parameters - internal_parameters:
-                raise UnnecessaryMappingException(template, mapped_internal_parameters - internal_parameters)
-            elif missing_parameter_mappings:
-                if allow_partial_parameter_mapping:
-                    parameter_mapping.update({p: p for p in missing_parameter_mappings})
-                else:
-                    raise MissingMappingException(template, internal_parameters - mapped_internal_parameters)
         parameter_mapping = dict((k, Expression(v)) for k, v in parameter_mapping.items())
+
+        if namespace_mapping is not None:
+            namespace_mapping = {sympify(k): sympify(v) for k, v in namespace_mapping.items()}
+            parameter_mapping.update({k: Expression(k).subs_namespaces(namespace_mapping) for k in missing_parameter_mappings})
+        else:
+            parameter_mapping.update(**{k:Expression(k) for k in missing_parameter_mappings})
 
         measurement_mapping = dict() if measurement_mapping is None else measurement_mapping
         internal_names = template.measurement_names
@@ -98,6 +108,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         if overlapping_targets:
             raise ValueError('Cannot map multiple channels to the same target(s) %r' % overlapping_targets,
                              channel_mapping)
+
 
         if isinstance(template, MappingPulseTemplate) and template.identifier is None:
             # avoid nested mappings
@@ -249,19 +260,24 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
             A new dictionary which maps parameter names to parameter values which have been
             mapped according to the mappings defined for template.
         """
+        parameters = flatten_parameter_dict(parameters)
         missing = set(self.__external_parameters) - set(parameters.keys())
         if missing:
             raise ParameterNotProvidedException(missing.pop())
 
         self.validate_parameter_constraints(parameters=parameters)
+        mapped_params = dict()
         if all(isinstance(parameter, Parameter) for parameter in parameters.values()):
-            return {parameter: MappedParameter(mapping_function, {name: parameters[name]
+            mapped_params = {parameter: MappedParameter(mapping_function, {name: parameters[name]
                                                                   for name in mapping_function.variables})
                     for (parameter, mapping_function) in self.__parameter_mapping.items()}
-        if all(isinstance(parameter, numbers.Real) for parameter in parameters.values()):
-            return {parameter: mapping_function.evaluate_numeric(**parameters)
-                    for parameter, mapping_function in self.__parameter_mapping.items()}
-        raise TypeError('Values of parameter dict are neither all Parameter nor Real')
+        elif all(isinstance(parameter, numbers.Real) for parameter in parameters.values()):
+            mapped_params =  {parameter: mapping_function.evaluate_numeric(**parameters)
+                              for parameter, mapping_function in self.__parameter_mapping.items()}
+        else:
+            raise TypeError('Values of parameter dict are neither all Parameter nor Real')
+        #mapped_params = {k: str(subs_namespaces(sympify(k), self.__namespace_mapping)) for v in }
+        return mapped_params
 
     def get_updated_measurement_mapping(self, measurement_mapping: Dict[str, str]) -> Dict[str, str]:
         return {k: measurement_mapping[v] for k, v in self.__measurement_mapping.items()}
@@ -345,20 +361,6 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
             expressions[channel_out] = expr
 
         return expressions
-
-
-class MissingMappingException(Exception):
-    """Indicates that no mapping was specified for some parameter declaration of a
-    SequencePulseTemplate's subtemplate."""
-
-    def __init__(self, template: PulseTemplate, key: Union[str,Set[str]]) -> None:
-        super().__init__()
-        self.key = key
-        self.template = template
-
-    def __str__(self) -> str:
-        return "The template {} needs a mapping function for parameter(s) {}".\
-            format(self.template, self.key)
 
 
 class UnnecessaryMappingException(Exception):

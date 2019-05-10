@@ -651,6 +651,26 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
         for expected_result, parameter_set, condition_set in test_sets:
             self.assertEqual(expected_result, table.requires_stop(parameter_set, condition_set))
 
+    def test_build_waveform_namespaces(self) -> None:
+        entry_list = [(0, 0),
+                      ('NS(simple_pulse).tx', 'NS(simple_pulse).x', 'hold'),
+                      ('NS(simple_pulse).ty', 'NS(simple_pulse).y', 'linear'),
+                      ('NS(all_pulses).t_end', 0, 'jump')]
+        entries = {0: entry_list}
+
+        template = TablePulseTemplate(entries)
+        #parameters = {'simple_pulse': {'tx': 2, 'ty': 4, 'x': 2, 'y': 3}, 'all_pulses': {'t_end': 6}}
+        parameters = {'NS(simple_pulse).tx': 2, 'NS(simple_pulse).ty': 4, 'NS(simple_pulse).x': 2, 'NS(simple_pulse).y': 3, 'NS(all_pulses).t_end': 6}
+
+        waveform = template.build_waveform(parameters=parameters, channel_mapping={0: 0})
+
+        self.assertIsInstance(waveform, TableWaveform)
+        self.assertEqual(waveform._table,
+                         ((0, 0, HoldInterpolationStrategy()),
+                          (2, 2, HoldInterpolationStrategy()),
+                          (4, 3, LinearInterpolationStrategy()),
+                          (6, 0, JumpInterpolationStrategy())))
+        self.assertEqual(waveform._channel_id, 0)
 
 
 class TablePulseConcatenationTests(unittest.TestCase):

@@ -30,6 +30,9 @@
     - `AtomicMultichannelPulseTemplate`:
         - Add duration keyword argument & example (see MultiChannelTemplates notebook)
         - Make duration equality check approximate (numeric tolerance)
+    - `MappingPulseTemplate`:
+        - Added `namespace_mapping` argument to enable mapping of namespaces for parameters not explicitly mapped.
+        - DEPRECATED: `allow_partial_parameter_mapping` argument. MappingPulseTemplate now always allows partial mapping.
     - Plotting:
         - Add `time_slice` keyword argument to render() and plot()
     - Add `AbstractPulseTemplate` class
@@ -40,6 +43,16 @@
 - Expressions:
     - Make ExpressionScalar hashable
     - Fix bug that prevented evaluation of expressions containing some special functions (`erfc`, `factorial`, etc.)
+    - ExpressionScalar equality operator now also returns true in case of numerical almost-equality
+    - Expressions now accept nested parameter dictionary representing namespaces in evaluate methods
+
+- Utils/sympy:
+    - Add class `SymbolNamespace`, `NamespacedSymbol` to allow specifying parameter namespaces in expressions
+        - either by explicit python `SymbolNamespace(foo).bar` (returns symbol `bar` (as `NamespaceSymbol` in a namespace `foo`)
+        - or in an expression string ``"NS(foo).bar"` (same result after sympify)
+    - Add subs_namespaces method to substitute namespaces in sympy.Expr objects
+    - recursive_substitution now can handle numpy arrays of expressions as well
+    - (temporarily) removed incompatible substitute_with_eval and evaluate_compiled
 
 - Parameters:
     - `ConstantParameter` now accepts a `Expression` without free variables as value (given as `Expression` or string)

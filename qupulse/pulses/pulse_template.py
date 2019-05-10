@@ -25,6 +25,8 @@ from qupulse.pulses.sequencing import Sequencer, SequencingElement, InstructionB
 from qupulse._program.waveforms import Waveform, TransformingWaveform
 from qupulse.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
 
+from qupulse.utils.sympy import flatten_parameter_dict
+
 __all__ = ["PulseTemplate", "AtomicPulseTemplate", "DoubleParameterNameException", "MappingTuple"]
 
 
@@ -138,7 +140,8 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
         if non_unique_targets:
             raise ValueError('The following channels are mapped to twice', non_unique_targets)
 
-        # make sure all values in the parameters dict are of type Parameter
+        # make sure all values in the parameters dict are of type Parameter and the dict is not nested
+        parameters = flatten_parameter_dict(parameters)
         parameters = {key: value if isinstance(value, Parameter) else ConstantParameter(value)
                       for key, value in parameters.items()}
 
