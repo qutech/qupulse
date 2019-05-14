@@ -2,6 +2,7 @@
 
  - Hardware:
    - Add a `measure_program` method to the DAC interface. This method is used by the QCoDeS integration.
+   - Add a `set_measurement_mask` to DAC interface. This method is used by the QCoDeS integration.
 
 - Pulse Templates:
     - `MappingPulseTemplate`:
