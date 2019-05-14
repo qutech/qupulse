@@ -16,7 +16,7 @@ from qupulse.utils import is_integer
 
 from qupulse._program.waveforms import SequenceWaveform, RepetitionWaveform
 
-__all__ = ['Loop', 'MultiChannelProgram', 'make_compatible']
+__all__ = ['Loop', 'MultiChannelProgram', 'make_compatible', 'to_waveform']
 
 
 class Loop(Node):

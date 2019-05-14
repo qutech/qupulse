@@ -79,6 +79,9 @@ class Node(Comparable):
     def __len__(self) -> int:
         return len(self.__children)
 
+    def __reversed__(self):
+        return reversed(self.__children)
+
     def get_depth_first_iterator(self: _NodeType) -> Generator[_NodeType, None, None]:
         stack = [(self, self.__children)]
 
