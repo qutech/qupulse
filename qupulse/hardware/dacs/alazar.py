@@ -17,7 +17,7 @@ class AlazarProgram:
         self.operations = []
         self._total_length = None
 
-    def masks(self, mask_maker: Callable[[str, np.ndarray, np.ndarray], Mask]) -> Tuple[Mask]:
+    def masks(self, mask_maker: Callable[[str, np.ndarray, np.ndarray], Mask]) -> List[Mask]:
         return [mask_maker(mask_name, *data) for mask_name, data in self._masks.items()]
 
     @property
@@ -38,6 +38,10 @@ class AlazarProgram:
     def clear_masks(self):
         self._masks.clear()
 
+    @property
+    def sample_factor(self) -> Optional[TimeType]:
+        return self._sample_factor
+
     def set_measurement_mask(self, mask_name: str, sample_factor: TimeType,
                              begins: np.ndarray, lengths: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """Raise error if sample factor has changed"""
@@ -51,7 +55,7 @@ class AlazarProgram:
 
         # optimization potential here (hash input?)
         begins = np.rint(begins * float(sample_factor)).astype(dtype=np.uint64)
-        lengths = np.floor(lengths * float(sample_factor)).astype(dtype=np.uint64)
+        lengths = np.floor_divide(lengths * float(sample_factor.numerator), float(sample_factor.denominator)).astype(dtype=np.uint64)
 
         sorting_indices = np.argsort(begins)
         begins = begins[sorting_indices]
@@ -105,18 +109,19 @@ class AlazarCard(DAC):
         return mask
 
     def set_measurement_mask(self, program_name, mask_name, begins, lengths) -> Tuple[np.ndarray, np.ndarray]:
-        sample_factor = TimeType(int(self.config.captureClockConfiguration.numeric_sample_rate(self.__card.model)), 10 ** 9)
+        sample_factor = TimeType(int(self.config.captureClockConfiguration.numeric_sample_rate(self.card.model)), 10**9)
         return self._registered_programs[program_name].set_measurement_mask(mask_name, sample_factor, begins, lengths)
 
     def register_measurement_windows(self,
                                      program_name: str,
                                      windows: Dict[str, Tuple[np.ndarray, np.ndarray]]) -> None:
         program = self._registered_programs[program_name]
-
+        sample_factor = TimeType(int(self.config.captureClockConfiguration.numeric_sample_rate(self.card.model)),
+                                 10 ** 9)
         program.clear_masks()
 
         for mask_name, (begins, lengths) in windows.items():
-            program.set_measurement_mask(mask_name, begins, lengths)
+            program.set_measurement_mask(mask_name, sample_factor, begins, lengths)
 
     def register_operations(self, program_name: str, operations) -> None:
         self._registered_programs[program_name].operations = operations
@@ -128,19 +133,23 @@ class AlazarCard(DAC):
             config.masks, config.operations, total_record_size = self._registered_programs[program_name].iter(
                 self._make_mask)
 
+            sample_factor = TimeType(self.config.captureClockConfiguration.numeric_sample_rate(self.card.model), 10 ** 9)
+
+            if not config.operations:
+                raise RuntimeError("No operations: Arming program without operations is an error as there will "
+                                   "be no result: %r" % program_name)
+
+            elif not config.masks:
+                raise RuntimeError("No masks although there are operations in program: %r" % program_name)
+
+            elif self._registered_programs[program_name].sample_factor != sample_factor:
+                raise RuntimeError("Masks were registered with a different sample rate {}!={}".format(
+                    self._registered_programs[program_name].sample_factor, sample_factor))
+
             assert total_record_size > 0
 
             minimum_record_size = self.__card.minimum_record_size
             total_record_size = (((total_record_size - 1) // minimum_record_size) + 1) * minimum_record_size
-
-            if len(config.operations) == 0:
-                raise RuntimeError('No operations configured for program {}'.format(program_name))
-
-            if not config.masks:
-                if config.operations:
-                    raise RuntimeError('Invalid configuration. Operations have no masks to work with')
-                else:
-                    return
 
             if config.totalRecordSize == 0:
                 config.totalRecordSize = total_record_size
