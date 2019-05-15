@@ -1,4 +1,4 @@
-from typing import Dict, Any, Optional, Tuple, List, Iterable
+from typing import Dict, Any, Optional, Tuple, List, Iterable, Callable
 from collections import defaultdict
 
 import numpy as np
@@ -6,16 +6,70 @@ import numpy as np
 from atsaverage.config import ScanlineConfiguration
 from atsaverage.masks import CrossBufferMask, Mask
 
+from qupulse.utils.types import TimeType
 from qupulse.hardware.dacs.dac_base import DAC
 
 
 class AlazarProgram:
-    def __init__(self, masks=list(), operations=list(), total_length=None):
-        self.masks = masks
-        self.operations = operations
-        self.total_length = total_length
-    def __iter__(self):
-        yield self.masks
+    def __init__(self):
+        self._sample_factor = None
+        self._masks = {}
+        self.operations = []
+        self._total_length = None
+
+    def masks(self, mask_maker: Callable[[str, np.ndarray, np.ndarray], Mask]) -> List[Mask]:
+        return [mask_maker(mask_name, *data) for mask_name, data in self._masks.items()]
+
+    @property
+    def total_length(self) -> int:
+        if not self._total_length:
+            total_length = 0
+            for begins, lengths in self._masks.values():
+                total_length = max(begins[-1] + lengths[-1], total_length)
+
+            return total_length
+        else:
+            return self._total_length
+
+    @total_length.setter
+    def total_length(self, val: int):
+        self._total_length = val
+
+    def clear_masks(self):
+        self._masks.clear()
+
+    @property
+    def sample_factor(self) -> Optional[TimeType]:
+        return self._sample_factor
+
+    def set_measurement_mask(self, mask_name: str, sample_factor: TimeType,
+                             begins: np.ndarray, lengths: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """Raise error if sample factor has changed"""
+        if self._sample_factor is None:
+            self._sample_factor = sample_factor
+
+        elif sample_factor != self._sample_factor:
+            raise RuntimeError('class AlazarProgram has already masks with differing sample factor')
+
+        assert begins.dtype == np.float and lengths.dtype == np.float
+
+        # optimization potential here (hash input?)
+        begins = np.rint(begins * float(sample_factor)).astype(dtype=np.uint64)
+        lengths = np.floor_divide(lengths * float(sample_factor.numerator), float(sample_factor.denominator)).astype(dtype=np.uint64)
+
+        sorting_indices = np.argsort(begins)
+        begins = begins[sorting_indices]
+        lengths = lengths[sorting_indices]
+
+        begins.flags.writeable = False
+        lengths.flags.writeable = False
+
+        self._masks[mask_name] = begins, lengths
+
+        return begins, lengths
+
+    def iter(self, mask_maker):
+        yield self.masks(mask_maker)
         yield self.operations
         yield self.total_length
 
@@ -54,32 +108,20 @@ class AlazarCard(DAC):
         mask.channel = hardware_channel
         return mask
 
+    def set_measurement_mask(self, program_name, mask_name, begins, lengths) -> Tuple[np.ndarray, np.ndarray]:
+        sample_factor = TimeType(int(self.config.captureClockConfiguration.numeric_sample_rate(self.card.model)), 10**9)
+        return self._registered_programs[program_name].set_measurement_mask(mask_name, sample_factor, begins, lengths)
+
     def register_measurement_windows(self,
                                      program_name: str,
                                      windows: Dict[str, Tuple[np.ndarray, np.ndarray]]) -> None:
-        if not windows:
-            self._registered_programs[program_name].masks = []
-        total_length = 0
-        for mask_id, (begins, lengths) in windows.items():
+        program = self._registered_programs[program_name]
+        sample_factor = TimeType(int(self.config.captureClockConfiguration.numeric_sample_rate(self.card.model)),
+                                 10 ** 9)
+        program.clear_masks()
 
-            sample_factor = self.config.captureClockConfiguration.numeric_sample_rate(self.__card.model) / 10**9
-
-            begins = np.rint(begins*sample_factor).astype(dtype=np.uint64)
-            lengths = np.floor(lengths*sample_factor).astype(dtype=np.uint64)
-
-            sorting_indices = np.argsort(begins)
-            begins = begins[sorting_indices]
-            lengths = lengths[sorting_indices]
-
-            windows[mask_id] = (begins, lengths)
-            total_length = max(total_length, begins[-1]+lengths[-1])
-
-        total_length = np.ceil(total_length/self.__card.minimum_record_size) * self.__card.minimum_record_size
-
-        self._registered_programs[program_name].masks = [
-            self._make_mask(mask_id, *window_begin_length)
-            for mask_id, window_begin_length in windows.items()]
-        self._registered_programs[program_name].total_length = total_length
+        for mask_name, (begins, lengths) in windows.items():
+            program.set_measurement_mask(mask_name, sample_factor, begins, lengths)
 
     def register_operations(self, program_name: str, operations) -> None:
         self._registered_programs[program_name].operations = operations
@@ -88,16 +130,26 @@ class AlazarCard(DAC):
         to_arm = self._registered_programs[program_name]
         if self.update_settings or self.__armed_program is not to_arm:
             config = self.config
-            config.masks, config.operations, total_record_size = self._registered_programs[program_name]
+            config.masks, config.operations, total_record_size = self._registered_programs[program_name].iter(
+                self._make_mask)
 
-            if len(config.operations) == 0:
-                raise RuntimeError('No operations configured for program {}'.format(program_name))
+            sample_factor = TimeType(self.config.captureClockConfiguration.numeric_sample_rate(self.card.model), 10 ** 9)
 
-            if not config.masks:
-                if config.operations:
-                    raise RuntimeError('Invalid configuration. Operations have no masks to work with')
-                else:
-                    return
+            if not config.operations:
+                raise RuntimeError("No operations: Arming program without operations is an error as there will "
+                                   "be no result: %r" % program_name)
+
+            elif not config.masks:
+                raise RuntimeError("No masks although there are operations in program: %r" % program_name)
+
+            elif self._registered_programs[program_name].sample_factor != sample_factor:
+                raise RuntimeError("Masks were registered with a different sample rate {}!={}".format(
+                    self._registered_programs[program_name].sample_factor, sample_factor))
+
+            assert total_record_size > 0
+
+            minimum_record_size = self.__card.minimum_record_size
+            total_record_size = (((total_record_size - 1) // minimum_record_size) + 1) * minimum_record_size
 
             if config.totalRecordSize == 0:
                 config.totalRecordSize = total_record_size
@@ -111,7 +163,7 @@ class AlazarCard(DAC):
             if config.totalRecordSize < 5*config.aimedBufferSize:
                 config.aimedBufferSize = config.totalRecordSize // 5
 
-            config.apply(self.__card, True)
+            self.__card.applyConfiguration(config, True)
 
             # "Hide" work around from the user
             config.aimedBufferSize = old_aimed_buffer_size
