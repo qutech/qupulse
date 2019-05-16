@@ -614,7 +614,7 @@ class TektronixAWG(AWG):
                 for name, (_, positions, _) in self._programs.items()}
 
     def arm(self, name: Optional[str]):
-        _, positions, _ = self._programs[name]
+        positions, _, _ = self._programs[name]
         self._armed_program = (name, positions[0])
 
     def run_current_program(self):
