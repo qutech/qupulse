@@ -560,7 +560,7 @@ class TektronixAWG(AWG):
 
         tek_program = TektronixProgram(program, channels=channels, markers=markers,
                                        amplitudes=self.device.get_amplitude(),
-                                       offsets=self.device.get_offset(),
+                                       offsets=offsets,
                                        voltage_transformations=voltage_transformation,
                                        sample_rate=TimeType(self.sample_rate))
 
