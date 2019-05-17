@@ -175,6 +175,13 @@ class MappingTemplateTests(unittest.TestCase):
         for k, v in st.map_parameters(parameters).items():
             self.assertEqual(v, values[k])
 
+        with self.assertRaisesRegex(ValueError, "type of return value"):
+            st.map_parameters({})
+
+        parameters = dict(t=3, k=2, l=ConstantParameter(7))
+        with self.assertRaisesRegex(TypeError, "neither all Parameter nor Real"):
+            st.map_parameters(parameters)
+
     def test_partial_parameter_mapping(self):
         template = DummyPulseTemplate(parameter_names={'foo', 'bar'})
         st = MappingPulseTemplate(template, parameter_mapping={'foo': 't*k'}, allow_partial_parameter_mapping=True)
