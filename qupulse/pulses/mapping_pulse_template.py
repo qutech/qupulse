@@ -244,12 +244,26 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
             raise ParameterNotProvidedException(missing.pop())
         self.validate_parameter_constraints(parameters=parameters)
 
-    def map_numeric_parameters(self, parameters: Dict[str, numbers.Real]) -> Dict[str, numbers.Real]:
+    def map_parameter_values(self, parameters: Dict[str, numbers.Real]) -> Dict[str, numbers.Real]:
+        """Map parameter values according to the defined mappings.
+
+        Args:
+            parameters: Dictionary with numeric values
+        Returns:
+            A new dictionary with mapped numeric values.
+        """
         self._validate_parameters(parameters=parameters)
         return {parameter: mapping_function.evaluate_numeric(**parameters)
                 for parameter, mapping_function in self.__parameter_mapping.items()}
 
-    def map_symbolic_parameters(self, parameters: Dict[str, Parameter]) ->  Dict[str, Parameter]:
+    def map_parameter_objects(self, parameters: Dict[str, Parameter]) ->  Dict[str, Parameter]:
+        """Map parameter objects (instances of Parameter class) according to the defined mappings.
+
+        Args:
+            parameters: Dictionary with parameter objects
+        Returns:
+            A new dictionary with mapped parameter objects
+        """
         self._validate_parameters(parameters=parameters)
         return {parameter: MappedParameter(mapping_function,
                                            {name: parameters[name] for name in mapping_function.variables})
@@ -261,8 +275,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         """Map parameter values according to the defined mappings.
 
         Args:
-            parameters (Dict(str -> Parameter)): A mapping of parameter names to Parameter
-                objects/values.
+            parameters: A mapping of parameter names to parameter objects/values.
         Returns:
             A new dictionary which maps parameter names to parameter values which have been
             mapped according to the mappings defined for template.
@@ -271,10 +284,10 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
             raise ValueError('Cannot infer type of return value (numeric or symbolic)')
 
         elif all(isinstance(parameter, numbers.Real) for parameter in parameters.values()):
-            return self.map_numeric_parameters(parameters=parameters)
+            return self.map_parameter_values(parameters=parameters)
 
         elif all(isinstance(parameter, Parameter) for parameter in parameters.values()):
-            return self.map_symbolic_parameters(parameters=parameters)
+            return self.map_parameter_objects(parameters=parameters)
 
         else:
             raise TypeError('Values of parameter dict are neither all Parameter nor Real')
@@ -293,7 +306,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                        channel_mapping: Dict[ChannelID, ChannelID],
                        instruction_block: InstructionBlock) -> None:
         self.template.build_sequence(sequencer,
-                                     parameters=self.map_parameters(parameters),
+                                     parameters=self.map_parameter_objects(parameters),
                                      conditions=conditions,
                                      measurement_mapping=self.get_updated_measurement_mapping(measurement_mapping),
                                      channel_mapping=self.get_updated_channel_mapping(channel_mapping),
@@ -307,7 +320,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
                                  parent_loop: Loop) -> None:
         # parameters are validated in map_parameters() call, no need to do it here again explicitly
-        self.template._create_program(parameters=self.map_parameters(parameters),
+        self.template._create_program(parameters=self.map_parameter_objects(parameters),
                                       measurement_mapping=self.get_updated_measurement_mapping(measurement_mapping),
                                       channel_mapping=self.get_updated_channel_mapping(channel_mapping),
                                       global_transformation=global_transformation,
@@ -319,14 +332,14 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                        channel_mapping: Dict[ChannelID, ChannelID]) -> Waveform:
         """This gets called if the parent is atomic"""
         return self.template.build_waveform(
-            parameters=self.map_parameters(parameters),
+            parameters=self.map_parameter_values(parameters),
             channel_mapping=self.get_updated_channel_mapping(channel_mapping))
 
     def get_measurement_windows(self,
                                 parameters: Dict[str, numbers.Real],
                                 measurement_mapping: Dict[str, Optional[str]]) -> List:
         return self.template.get_measurement_windows(
-            parameters=self.map_parameters(parameters=parameters),
+            parameters=self.map_parameter_values(parameters=parameters),
             measurement_mapping=self.get_updated_measurement_mapping(measurement_mapping=measurement_mapping)
         )
 
@@ -334,7 +347,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                       parameters: Dict[str, Parameter],
                       conditions: Dict[str, Condition]) -> bool:
         return self.template.requires_stop(
-            self.map_parameters(parameters),
+            self.map_parameter_objects(parameters),
             conditions
         )
 
