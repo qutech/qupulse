@@ -238,8 +238,26 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         # return MappingPulseTemplate(template=serializer.deserialize(template),
         #                             **kwargs)
 
+    def _validate_parameters(self, parameters: Dict[str, Union[Parameter, numbers.Real]]):
+        missing = set(self.__external_parameters) - set(parameters.keys())
+        if missing:
+            raise ParameterNotProvidedException(missing.pop())
+        self.validate_parameter_constraints(parameters=parameters)
+
+    def map_numeric_parameters(self, parameters: Dict[str, numbers.Real]) -> Dict[str, numbers.Real]:
+        self._validate_parameters(parameters=parameters)
+        return {parameter: mapping_function.evaluate_numeric(**parameters)
+                for parameter, mapping_function in self.__parameter_mapping.items()}
+
+    def map_symbolic_parameters(self, parameters: Dict[str, Parameter]) ->  Dict[str, Parameter]:
+        self._validate_parameters(parameters=parameters)
+        return {parameter: MappedParameter(mapping_function,
+                                           {name: parameters[name] for name in mapping_function.variables})
+                for (parameter, mapping_function) in self.__parameter_mapping.items()}
+
     def map_parameters(self,
-                       parameters: Dict[str, Union[Parameter, numbers.Real]]) -> Dict[str, Parameter]:
+                       parameters: Dict[str, Union[Parameter, numbers.Real]]) -> Dict[str,
+                                                                                      Union[Parameter, numbers.Real]]:
         """Map parameter values according to the defined mappings.
 
         Args:
@@ -249,19 +267,17 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
             A new dictionary which maps parameter names to parameter values which have been
             mapped according to the mappings defined for template.
         """
-        missing = set(self.__external_parameters) - set(parameters.keys())
-        if missing:
-            raise ParameterNotProvidedException(missing.pop())
+        if not parameters and self.__parameter_mapping:
+            raise ValueError('Cannot infer type of return value (numeric or symbolic)')
 
-        self.validate_parameter_constraints(parameters=parameters)
-        if all(isinstance(parameter, Parameter) for parameter in parameters.values()):
-            return {parameter: MappedParameter(mapping_function, {name: parameters[name]
-                                                                  for name in mapping_function.variables})
-                    for (parameter, mapping_function) in self.__parameter_mapping.items()}
-        if all(isinstance(parameter, numbers.Real) for parameter in parameters.values()):
-            return {parameter: mapping_function.evaluate_numeric(**parameters)
-                    for parameter, mapping_function in self.__parameter_mapping.items()}
-        raise TypeError('Values of parameter dict are neither all Parameter nor Real')
+        elif all(isinstance(parameter, numbers.Real) for parameter in parameters.values()):
+            return self.map_numeric_parameters(parameters=parameters)
+
+        elif all(isinstance(parameter, Parameter) for parameter in parameters.values()):
+            return self.map_symbolic_parameters(parameters=parameters)
+
+        else:
+            raise TypeError('Values of parameter dict are neither all Parameter nor Real')
 
     def get_updated_measurement_mapping(self, measurement_mapping: Dict[str, str]) -> Dict[str, str]:
         return {k: measurement_mapping[v] for k, v in self.__measurement_mapping.items()}
