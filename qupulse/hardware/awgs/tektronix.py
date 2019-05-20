@@ -267,6 +267,12 @@ class TektronixAWG(AWG):
 
         self._cleanup_stack = contextlib.ExitStack() if manual_cleanup else None
 
+        self._sequence_element_upload_sync_interval = 100
+        self._waveform_upload_sync_interval = 10
+
+        self._allow_upload_while_running = False
+        self._auto_stop_on_upload = True
+
         if synchronize.lower() == 'read':
             self.synchronize()
         elif synchronize.lower() == 'clear':
@@ -397,6 +403,14 @@ class TektronixAWG(AWG):
         raise NotImplementedError()
 
     def upload(self, *args, **kwargs):
+        if self.device.get_run_state().lower() == 'running':
+            if self._auto_stop_on_upload:
+                self.device.stop()
+                self.device.wait_until_commands_executed()
+            elif not self._allow_upload_while_running:
+                raise RuntimeError("Tektronix AWG %r is running and allow_upload_while_running "
+                                   "is False (its very slow)" % self.identifier)
+
         if self._cleanup_stack is None:
             with contextlib.ExitStack() as auto_cleanup:
                 self._upload(*args, **kwargs, cleanup_stack=auto_cleanup)
@@ -475,7 +489,7 @@ class TektronixAWG(AWG):
             self._upload_waveform(waveform_data=waveform_data,
                                   waveform_name=waveform_name,
                                   cleanup_stack=cleanup_stack)
-            if idx % 10 == 0:
+            if idx % self._waveform_upload_sync_interval == 0:
                 logging.debug('Waiting for sync after waveform %d' % idx)
                 self.device.wait_until_commands_executed()
                 logging.debug('Synced after waveform %d' % idx)
@@ -497,7 +511,7 @@ class TektronixAWG(AWG):
 
             self._upload_sequencing_element(element_index, sequencing_element)
 
-            if element_index % 100 == 0:
+            if element_index % self._sequence_element_upload_sync_interval == 0:
                 logger.debug('Waiting for sync after element %d' % element_index)
                 self.device.wait_until_commands_executed()
                 logger.debug('Synced after element %d' % element_index)
@@ -546,7 +560,7 @@ class TektronixAWG(AWG):
 
         tek_program = TektronixProgram(program, channels=channels, markers=markers,
                                        amplitudes=self.device.get_amplitude(),
-                                       offsets=self.device.get_offset(),
+                                       offsets=offsets,
                                        voltage_transformations=voltage_transformation,
                                        sample_rate=TimeType(self.sample_rate))
 
@@ -600,7 +614,7 @@ class TektronixAWG(AWG):
                 for name, (_, positions, _) in self._programs.items()}
 
     def arm(self, name: Optional[str]):
-        _, positions, _ = self._programs[name]
+        positions, _, _ = self._programs[name]
         self._armed_program = (name, positions[0])
 
     def run_current_program(self):
