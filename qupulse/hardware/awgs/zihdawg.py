@@ -495,6 +495,7 @@ class HDAWGWaveManager:
     class WaveformEntry(NamedTuple):
         """Entry of known waveforms."""
         waveform: Waveform
+        wave_name: str
         marker_name: Optional[str]  # None if this waveform does not define any markers.
 
     def __init__(self, user_dir: str, awg_identifier: str) -> None:
@@ -516,12 +517,19 @@ class HDAWGWaveManager:
 
     def remove(self, name: str) -> None:
         """Remove one waveform from memory and disk."""
-        self._known_waveforms.pop(name)
+        # TODO: Inefficient call & does not care about side-effects, if wave or marker used elsewhere.
+        wf = self._known_waveforms.pop(name)
         for wf_entry, wf_name in self._by_data.items():
-            if wf_name == name:
+            if wf_name == wf.wave_name:
                 del self._by_data[wf_entry]
                 break
-        wave_path = self.full_file_path(name)
+        for wf_entry, wf_name in self._by_data.items():
+            if wf_name == wf.marker_name:
+                del self._by_data[wf_entry]
+                break
+        wave_path = self.full_file_path(wf.wave_name)
+        wave_path.unlink()
+        wave_path = self.full_file_path(wf.marker_name)
         wave_path.unlink()
 
     def full_file_path(self, name: str) -> Path:
@@ -543,6 +551,10 @@ class HDAWGWaveManager:
         """Calculate hash of sampled data."""
         return hash(bytes(data))
 
+    def generate_wave_name(self, data: np.ndarray):
+        """Unique name of wave or marker data."""
+        return self._awg_prefix + '_' + str(abs(self.calc_hash(data)))
+
     def volt_to_amp(self, volt: np.ndarray, rng: float, offset: float) -> np.ndarray:
         """Scale voltage pulse data to dimensionless -1..1 amplitude of full range. If out of range throw error."""
         # TODO: Is offset included or excluded from rng?
@@ -563,7 +575,7 @@ class HDAWGWaveManager:
         previously known data."""
         name = self.generate_name(waveform)
         if name in self._known_waveforms:
-            return name, self._known_waveforms[name].marker_name
+            return self._known_waveforms[name].wave_name, self._known_waveforms[name].marker_name
 
         time_per_sample = 1/sample_rate
         sample_times = np.arange(waveform.duration / time_per_sample) * time_per_sample
@@ -576,15 +588,15 @@ class HDAWGWaveManager:
 
         # Reuse sampled data, if available.
         amplitude_hash = self.calc_hash(amplitude)
+        wave_name = self.generate_wave_name(amplitude)
+
         if amplitude_hash in self._by_data:
-            name = self._by_data[amplitude_hash]
+            wave_name = self._by_data[amplitude_hash]
         else:
-            self._by_data[amplitude_hash] = name
-            self.to_file(name, amplitude, overwrite=overwrite)
+            self._by_data[amplitude_hash] = wave_name
+            self.to_file(wave_name, amplitude, overwrite=overwrite)
 
         if markers[0] is not None or markers[1] is not None:
-            marker_name = name + '_m'
-
             marker_output = np.zeros((len(sample_times), 2), dtype=np.uint8)
             for idx, marker in enumerate(markers):
                 if marker is not None:
@@ -592,6 +604,8 @@ class HDAWGWaveManager:
 
             # Reuse sampled data, if available.
             marker_hash = self.calc_hash(marker_output)
+            marker_name = self.generate_wave_name(marker_output)
+
             if marker_hash in self._by_data:
                 marker_name = self._by_data[marker_hash]
             else:
@@ -600,8 +614,8 @@ class HDAWGWaveManager:
         else:
             marker_name = None
 
-        self._known_waveforms[name] = self.WaveformEntry(waveform, marker_name)
-        return name, marker_name
+        self._known_waveforms[name] = self.WaveformEntry(waveform, wave_name, marker_name)
+        return wave_name, marker_name
 
 
 class HDAWGProgramManager:
@@ -789,6 +803,8 @@ class HDAWGUploadException(HDAWGException):
 
 if __name__ == "__main__":
     from qupulse.pulses import TablePT, SequencePT, RepetitionPT
+    hdawg = HDAWGRepresentation(device_serial='dev8075', device_interface='USB')
+
     entry_list1 = [(0, 0), (20e-9, .2, 'hold'), (40e-9, .3, 'linear'), (60e-9, 0, 'jump')]
     entry_list2 = [(0, 0), (20e-9, -.2, 'hold'), (40e-9, -.3, 'linear'), (60e-9, 0, 'jump')]
     entry_list3 = [(0, 0), (20e-9, -.2, 'linear'), (50e-9, -.3, 'linear'), (60e-9, 0, 'jump')]
@@ -804,6 +820,19 @@ if __name__ == "__main__":
     ch = (0, 1)
     mk = (0, None)
     vt = (lambda x: x, lambda x: x)
-    hdawg = HDAWGRepresentation(device_serial='dev8075', device_interface='USB')
-    hdawg.channel_pair_AB.upload('table_pulse_test', p, ch, mk, vt)
+    hdawg.channel_pair_AB.upload('table_pulse_test5', p, ch, mk, vt)
+
+    hdawg.reset()
+    entry_list_zero = [(0, 0), (100e-9, 0, 'hold')]
+    entry_list_step = [(0, 0), (50e-9, .5, 'hold'), (100e-9, 0, 'hold')]
+    marker_start = TablePT({'P1': entry_list_zero, 'marker': entry_list_step})
+    tpt1 = TablePT({'P1': entry_list_zero, 'marker': entry_list_zero})
+    spt2 = SequencePT(marker_start, tpt1)
+
+    p = spt2.create_program()
+
+    ch = ('P1', None)
+    mk = ('marker', None)
+    voltage_transform = (lambda x: x,) * len(ch)
+    hdawg.channel_pair_AB.upload('table_pulse_test5', p, ch, mk, voltage_transform)
 
