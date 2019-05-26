@@ -8,7 +8,7 @@ import warnings
 import logging
 
 try:
-    import TekAwg
+    import tek_awg
 except ImportError:
     warnings.warn("Could not import Tektronix driver backend. "
                   "If you wish to use it execute qupulse.hardware.awgs.install_requirements('tektronix')")
@@ -26,7 +26,7 @@ __all__ = ['TektronixAWG']
 
 
 class WaveformEntry:
-    def __init__(self, name: str, length: int, waveform: TekAwg.Waveform, timestamp):
+    def __init__(self, name: str, length: int, waveform: tek_awg.Waveform, timestamp):
         self.name = name
         self.waveform = waveform
         self.length = length
@@ -46,7 +46,7 @@ class WaveformStorage:
         return self._by_name
 
     @property
-    def by_data(self) -> Mapping[TekAwg.Waveform, WaveformEntry]:
+    def by_data(self) -> Mapping[tek_awg.Waveform, WaveformEntry]:
         return self._by_data
 
     def __iter__(self):
@@ -82,8 +82,8 @@ def parse_program(program: Loop,
                   sample_rate: TimeType,
                   amplitudes: Tuple[float, ...],
                   voltage_transformations: Tuple[Callable, ...],
-                  offsets: Tuple[float, ...] = None) -> Tuple[Sequence[TekAwg.SequenceEntry],
-                                                              Sequence[TekAwg.Waveform]]:
+                  offsets: Tuple[float, ...] = None) -> Tuple[Sequence[tek_awg.SequenceEntry],
+                                                              Sequence[tek_awg.Waveform]]:
     """Convert the program into a sequence of sequence table entries and a sequence of waveforms that can be uploaded
     to the device."""
     assert program.depth() == 1, "Invalid program depth."
@@ -150,7 +150,7 @@ def parse_program(program: Loop,
                         marker_2_data = loop.waveform.get_sampled(channel=marker_2,
                                                                   sample_times=time_array[:n_samples])
 
-                    bin_waveform = TekAwg.Waveform(channel=channel_data,
+                    bin_waveform = tek_awg.Waveform(channel=channel_data,
                                                    marker_1=marker_1_data,
                                                    marker_2=marker_2_data)
                     if bin_waveform in bin_waveforms:
@@ -163,7 +163,7 @@ def parse_program(program: Loop,
                 entries.append(ch_waveforms[ch_waveform])
 
         sequencing_elements.append(
-            TekAwg.SequenceEntry(entries=entries,
+            tek_awg.SequenceEntry(entries=entries,
                                  loop_count=loop.repetition_count)
         )
     return tuple(sequencing_elements), tuple(bin_waveforms.keys())
@@ -206,11 +206,11 @@ class TektronixProgram:
                                                                    voltage_transformations=self._voltage_transformations,
                                                                    offsets=self._offsets)
 
-    def get_sequencing_elements(self) -> Sequence[TekAwg.SequenceEntry]:
+    def get_sequencing_elements(self) -> Sequence[tek_awg.SequenceEntry]:
         """The entries are either of type TekAwh.Waveform or integers which signal an idle waveform of this length"""
         return self._sequencing_elements
 
-    def get_waveforms(self) -> Sequence[Union[TekAwg.Waveform, int]]:
+    def get_waveforms(self) -> Sequence[Union[tek_awg.Waveform, int]]:
         """Integers denote idle waveforms of this length"""
         return self._waveforms
 
@@ -234,7 +234,7 @@ class TektronixProgram:
 class TektronixAWG(AWG):
     """TODO: Explain general idea here"""
 
-    def __init__(self, tek_awg: TekAwg.TekAwg,
+    def __init__(self, tek_awg: tek_awg.TekAwg,
                  synchronize: str,
                  identifier='Tektronix',
                  manual_cleanup=False):
@@ -247,8 +247,8 @@ class TektronixAWG(AWG):
         """
         super().__init__(identifier=identifier)
 
-        if TekAwg is None:
-            raise RuntimeError('Please install the TekAwg package or run "install_requirements" from this module')
+        if tek_awg is None:
+            raise RuntimeError('Please install the tek_awg package or run "install_requirements" from this module')
 
         self._device = tek_awg
 
@@ -320,7 +320,7 @@ class TektronixAWG(AWG):
             idle_waveform_name = self.idle_pulse_name(self._idle_waveform.size)
             self._upload_waveform(self._idle_waveform, idle_waveform_name)
 
-        idle_sequence_element = TekAwg.SequenceEntry(entries=[idle_waveform_name] * self.device.n_channels,
+        idle_sequence_element = tek_awg.SequenceEntry(entries=[idle_waveform_name] * self.device.n_channels,
                                                      wait=False,
                                                      loop_inf=True,
                                                      loop_count=None,
@@ -337,7 +337,7 @@ class TektronixAWG(AWG):
             self._idle_program_index = self._sequence_entries.index(idle_sequence_element) + 1
 
     @property
-    def device(self) -> TekAwg.TekAwg:
+    def device(self) -> tek_awg.TekAwg:
         return self._device
 
     def read_waveforms(self):
@@ -421,8 +421,8 @@ class TektronixAWG(AWG):
             self._upload(*args, **kwargs, cleanup_stack=cleanup_stack)
             cleanup_stack.pop_all()
 
-    def _process_program(self, name: str, tek_program: TektronixProgram) -> Tuple[Sequence[TekAwg.SequenceEntry],
-                                                                                  Mapping[TekAwg.Waveform, str]]:
+    def _process_program(self, name: str, tek_program: TektronixProgram) -> Tuple[Sequence[tek_awg.SequenceEntry],
+                                                                                  Mapping[tek_awg.Waveform, str]]:
         """Detect which waveforms are missing and create sequencing entries.
         This function does not change the state of the device.
 
@@ -459,7 +459,7 @@ class TektronixAWG(AWG):
 
                         required_idle_pulses[entry] = wf_name
 
-                elif isinstance(entry, TekAwg.Waveform):
+                elif isinstance(entry, tek_awg.Waveform):
                     if entry in self._waveforms.by_data:
                         wf_name = self._waveforms.by_data[entry].name
 
@@ -476,7 +476,7 @@ class TektronixAWG(AWG):
 
                 new_entries.append(wf_name)
 
-            sequencing_elements.append(TekAwg.SequenceEntry(new_entries,
+            sequencing_elements.append(tek_awg.SequenceEntry(new_entries,
                                                             *sequencing_info))
         return sequencing_elements, waveforms_to_upload
 
@@ -585,7 +585,7 @@ class TektronixAWG(AWG):
         if waveform_name in self._waveforms.by_name:
             self._waveforms.pop_waveform(waveform_name)
 
-    def _upload_waveform(self, waveform_data: TekAwg.Waveform, waveform_name, cleanup_stack: contextlib.ExitStack=None):
+    def _upload_waveform(self, waveform_data: tek_awg.Waveform, waveform_name, cleanup_stack: contextlib.ExitStack=None):
         self.device.new_waveform(waveform_name, waveform_data)
         if cleanup_stack:
             cleanup_stack.callback(functools.partial(self._delete_waveform, waveform_name))
@@ -596,12 +596,12 @@ class TektronixAWG(AWG):
                                                                   waveform=waveform_data,
                                                                   timestamp=timestamp))
 
-    def _upload_sequencing_element(self, element_index, sequencing_element: TekAwg.SequenceEntry):
+    def _upload_sequencing_element(self, element_index, sequencing_element: tek_awg.SequenceEntry):
         self._sequence_entries[element_index - 1] = sequencing_element
         self.device.set_seq_element(element_index, sequencing_element)
 
-    def make_idle_waveform(self, length) -> TekAwg.Waveform:
-        return TekAwg.Waveform(channel=np.full(length,
+    def make_idle_waveform(self, length) -> tek_awg.Waveform:
+        return tek_awg.Waveform(channel=np.full(length,
                                                fill_value=self.idle_value,
                                                dtype=np.uint16),
                                marker_1=0, marker_2=0)

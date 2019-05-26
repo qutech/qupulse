@@ -33,9 +33,9 @@ class DummyTekAwg:
 
 
 class TektronixAWGTests(unittest.TestCase):
-    def make_dummy_tek_awg(self, **kwargs) -> tektronix.TekAwg.TekAwg:
-        if tektronix.TekAwg:
-            return cast(tektronix.TekAwg.TekAwg, DummyTekAwg(**kwargs))
+    def make_dummy_tek_awg(self, **kwargs) -> tektronix.tek_awg.TekAwg:
+        if tektronix.tek_awg:
+            return cast(tektronix.tek_awg.TekAwg, DummyTekAwg(**kwargs))
 
     def make_awg(self, **kwargs):
         make_waveform_patch = mock.patch('qupulse.hardware.awgs.tektronix.TektronixAWG.make_idle_waveform')
@@ -55,8 +55,8 @@ class TektronixAWGTests(unittest.TestCase):
         init_idle_patch = mock.patch('qupulse.hardware.awgs.tektronix.TektronixAWG.initialize_idle_program')
         synchronize_patch = mock.patch('qupulse.hardware.awgs.tektronix.TektronixAWG.synchronize')
 
-        with mock.patch('qupulse.hardware.awgs.tektronix.TekAwg', new=None):
-            with self.assertRaisesRegex(RuntimeError, 'TekAwg'):
+        with mock.patch('qupulse.hardware.awgs.tektronix.tek_awg', new=None):
+            with self.assertRaisesRegex(RuntimeError, 'tek_awg'):
                 TektronixAWG(self.make_dummy_tek_awg(), 'clear')
 
         with make_waveform_patch as make_idle_waveform:
