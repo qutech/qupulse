@@ -581,6 +581,7 @@ class TektronixAWG(AWG):
 
     def _delete_waveform(self, waveform_name: str):
         self.device.del_waveform(waveform_name)
+        self.device.wait_until_commands_executed()
         if waveform_name in self._waveforms.by_name:
             self._waveforms.pop_waveform(waveform_name)
 
