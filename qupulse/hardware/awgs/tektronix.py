@@ -17,6 +17,7 @@ except ImportError:
 from qupulse.hardware.awgs.base import AWG, AWGAmplitudeOffsetHandling
 from qupulse import ChannelID
 from qupulse._program._loop import Loop, make_compatible
+from qupulse._program.waveforms import Waveform as QuPulseWaveform
 from qupulse.utils.types import TimeType
 from qupulse.hardware.util import voltage_to_uint16
 from qupulse.utils import pairwise
@@ -76,6 +77,29 @@ class WaveformStorage:
         return wf
 
 
+def _make_binary_waveform(waveform: QuPulseWaveform,
+                          time_array: np.ndarray,
+                          channel: Optional[ChannelID],
+                          marker_1: Optional[ChannelID],
+                          marker_2: Optional[ChannelID],
+                          voltage_transformation: Callable,
+                          voltage_to_uint16_kwargs: dict) -> tek_awg.Waveform:
+    def sample_channel(ch_id: Optional[ChannelID]):
+        if ch_id is None:
+            return 0
+        else:
+            return waveform.get_sampled(channel=ch_id,
+                                        sample_times=time_array)
+
+    channel_volts, marker_1_data, marker_2_data = map(sample_channel, (channel, marker_1, marker_2))
+    channel_volts = voltage_transformation(channel_volts)
+    channel_data = voltage_to_uint16(channel_volts, **voltage_to_uint16_kwargs)
+
+    return tek_awg.Waveform(channel=channel_data,
+                            marker_1=marker_1_data,
+                            marker_2=marker_2_data)
+
+
 def parse_program(program: Loop,
                   channels: Tuple[ChannelID, ...],
                   markers: Tuple[Tuple[ChannelID, ChannelID], ...],
@@ -92,6 +116,8 @@ def parse_program(program: Loop,
     if offsets is None:
         offsets = tuple(np.zeros(len(amplitudes)))
 
+    assert len(channels) == len(markers) == len(amplitudes) == len(voltage_transformations) == len(offsets)
+
     sequencing_elements = []
 
     ch_waveforms = {}
@@ -101,59 +127,40 @@ def parse_program(program: Loop,
 
     time_per_sample = float(1 / sample_rate_in_GHz)
 
-    def make_binary_converter(amp, offs, trafo):
-        def to_uint16(voltage):
-            return voltage_to_uint16(trafo(voltage),
-                                     output_amplitude=amp,
-                                     output_offset=offs,
-                                     resolution=14)
+    n_samples = [int(loop.waveform.duration * sample_rate_in_GHz) for loop in program]
 
-        return to_uint16
-    longest_waveform_n_samples = int(max(loop.waveform.duration for loop in program) * sample_rate_in_GHz)
-    time_array = np.arange(longest_waveform_n_samples) * time_per_sample
+    time_array = np.arange(max(n_samples)) * time_per_sample
 
-    binary_converters = [make_binary_converter(amplitude, offset, voltage_transformation)
-                         for amplitude, offset, voltage_transformation in zip(amplitudes, offsets, voltage_transformations)]
+    channel_wise_kwargs = [dict(voltage_to_uint16_kwargs=dict(output_amplitude=amplitude,
+                                                              output_offset=offset,
+                                                              resolution=14),
+                                voltage_transformation=voltage_trafo)
+                           for amplitude, offset, voltage_trafo in zip(amplitudes, offsets, voltage_transformations)]
 
-    for loop in program:
-        n_samples = int(loop.waveform.duration * sample_rate_in_GHz)
+    # List of Tuple[positional channel tuple, set chs to sample]
+    channel_infos = [((channel, marker_1, marker_2), {channel, marker_1, marker_2} - {None})
+                     for channel, (marker_1, marker_2) in zip(channels, markers)]
+
+    for n_sample, loop in zip(n_samples, program):
 
         entries = []
 
-        for channel, (marker_1, marker_2), binary_converter in zip(channels, markers, binary_converters):
-            chs = {channel, marker_1, marker_2} - {None}
+        for (positional_chs, chs_to_sample), kwargs in zip(channel_infos, channel_wise_kwargs):
 
-            if not chs:
-                entries.append(n_samples)
-                bin_waveforms[n_samples] = None
+            if not chs_to_sample:
+                entries.append(n_sample)
+                bin_waveforms[n_sample] = None
 
             else:
-                ch_waveform = loop.waveform.get_subset_for_channels(chs)
+                ch_waveform = loop.waveform.get_subset_for_channels(chs_to_sample)
 
                 if ch_waveform not in ch_waveforms:
-                    if channel is None:
-                        channel_volts = 0.
-                    else:
-                        channel_volts = loop.waveform.get_sampled(channel=channel,
-                                                                  sample_times=time_array[:n_samples])
-                    channel_data = binary_converter(channel_volts)
+                    bin_waveform = _make_binary_waveform(ch_waveform,
+                                                         time_array[:n_sample],
+                                                         *positional_chs, **kwargs)
 
-                    if marker_1 is None:
-                        marker_1_data = 0
-                    else:
-                        marker_1_data = loop.waveform.get_sampled(channel=marker_1,
-                                                                  sample_times=time_array[:n_samples])
-
-                    if marker_2 is None:
-                        marker_2_data = 0
-                    else:
-                        marker_2_data = loop.waveform.get_sampled(channel=marker_2,
-                                                                  sample_times=time_array[:n_samples])
-
-                    bin_waveform = tek_awg.Waveform(channel=channel_data,
-                                                   marker_1=marker_1_data,
-                                                   marker_2=marker_2_data)
                     if bin_waveform in bin_waveforms:
+                        # use identical binary waveform already created to save memory
                         bin_waveform = ch_waveforms[bin_waveforms[bin_waveform]]
                     else:
                         bin_waveforms[bin_waveform] = ch_waveform
