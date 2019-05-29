@@ -3,13 +3,53 @@ import unittest
 import contextlib
 from unittest import mock
 
+import numpy as np
+
 import qupulse.hardware.awgs.tektronix as tektronix
-from qupulse.hardware.awgs.tektronix import TektronixAWG, TektronixProgram, parse_program
+from qupulse.hardware.awgs.tektronix import TektronixAWG, TektronixProgram, parse_program, _make_binary_waveform
 from qupulse._program._loop import Loop
 from qupulse.utils.types import TimeType
 
 
 class TektronixProgramTests(unittest.TestCase):
+    @mock.patch('qupulse.hardware.awgs.tektronix.voltage_to_uint16')
+    @mock.patch('tek_awg.Waveform')
+    def test_make_binary_waveform(self, TekWf, mock_volt_to_bin):
+        def get_sampled(channel, sample_times):
+            return channel
+
+        transformed = [4, 5, 6]
+        def trafo(in_arr):
+            return transformed
+
+        tek_wf = mock.Mock()
+        TekWf.return_value = tek_wf
+
+        bin_data = [7, 8, 9]
+        mock_volt_to_bin.return_value = bin_data
+
+        waveform = mock.MagicMock()
+        waveform.get_sampled = mock.Mock(wraps=get_sampled)
+
+        mock_trafo = mock.Mock(wraps=trafo)
+        voltage_to_uint16_kwargs = dict(asd='foo', f='bar')
+
+        time_array = [1, 2, 3]
+        channels = ('A', 'B', 'C')
+
+        result = _make_binary_waveform(waveform, time_array, *channels, mock_trafo, voltage_to_uint16_kwargs)
+
+        waveform.get_sampled.assert_any_call(channel='A', sample_times=time_array)
+        waveform.get_sampled.assert_any_call(channel='B', sample_times=time_array)
+        waveform.get_sampled.assert_any_call(channel='C', sample_times=time_array)
+
+        mock_trafo.assert_called_once_with('A')
+
+        mock_volt_to_bin.assert_called_once_with(transformed, **voltage_to_uint16_kwargs)
+        TekWf.assert_called_once_with(channel=bin_data, marker_1='B', marker_2='C')
+
+        self.assertIs(result, tek_wf)
+
     def test_parse_program(self):
         ill_formed_program = Loop(children=[Loop(children=[Loop()])])
 
