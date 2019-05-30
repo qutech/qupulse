@@ -305,11 +305,14 @@ class HDAWGChannelPair(AWG):
         if name in self.programs and not force:
             raise HDAWGValueError('{} is already known on {}'.format(name, self.identifier))
 
+        # Go to qupulse nanoseconds time base.
+        q_sample_rate = time_from_fraction(self.sample_rate, 10**9)
+
         # Adjust program to fit criteria.
         make_compatible(program,
                         minimal_waveform_length=16,
                         waveform_quantum=8,  # 8 samples for single, 4 for dual channel waaveforms.
-                        sample_rate=self.sample_rate)
+                        sample_rate=q_sample_rate)
 
         # TODO: Implement offset handling like in tabor driver.
         self._program_manager.register(name,
@@ -317,7 +320,7 @@ class HDAWGChannelPair(AWG):
                                        channels,
                                        markers,
                                        voltage_transformation,
-                                       self.sample_rate,
+                                       q_sample_rate,
                                        (self._device.range(self._channels[0]), self._device.range(self._channels[1])),
                                        (0, 0),
                                        force)
@@ -805,12 +808,12 @@ if __name__ == "__main__":
     from qupulse.pulses import TablePT, SequencePT, RepetitionPT
     hdawg = HDAWGRepresentation(device_serial='dev8075', device_interface='USB')
 
-    entry_list1 = [(0, 0), (20e-9, .2, 'hold'), (40e-9, .3, 'linear'), (60e-9, 0, 'jump')]
-    entry_list2 = [(0, 0), (20e-9, -.2, 'hold'), (40e-9, -.3, 'linear'), (60e-9, 0, 'jump')]
-    entry_list3 = [(0, 0), (20e-9, -.2, 'linear'), (50e-9, -.3, 'linear'), (60e-9, 0, 'jump')]
-    tpt1 = TablePT({0: entry_list1, 1: entry_list2}, measurements=[('m', 20e-9, 30e-9)])
+    entry_list1 = [(0, 0), (20, .2, 'hold'), (40, .3, 'linear'), (80, 0, 'jump')]
+    entry_list2 = [(0, 0), (20, -.2, 'hold'), (40, -.3, 'linear'), (50, 0, 'jump')]
+    entry_list3 = [(0, 0), (20, -.2, 'linear'), (50, -.3, 'linear'), (70, 0, 'jump')]
+    tpt1 = TablePT({0: entry_list1, 1: entry_list2}, measurements=[('m', 20, 30)])
     tpt2 = TablePT({0: entry_list2, 1: entry_list1})
-    tpt3 = TablePT({0: entry_list3, 1: entry_list2}, measurements=[('m', 10e-9, 50e-9)])
+    tpt3 = TablePT({0: entry_list3, 1: entry_list2}, measurements=[('m', 10, 50)])
     rpt = RepetitionPT(tpt1, 4)
     spt = SequencePT(tpt2, rpt)
     rpt2 = RepetitionPT(spt, 2)
@@ -820,11 +823,10 @@ if __name__ == "__main__":
     ch = (0, 1)
     mk = (0, None)
     vt = (lambda x: x, lambda x: x)
-    hdawg.channel_pair_AB.upload('table_pulse_test5', p, ch, mk, vt)
+    hdawg.channel_pair_AB.upload('table_pulse_test1', p, ch, mk, vt)
 
-    hdawg.reset()
-    entry_list_zero = [(0, 0), (100e-9, 0, 'hold')]
-    entry_list_step = [(0, 0), (50e-9, .5, 'hold'), (100e-9, 0, 'hold')]
+    entry_list_zero = [(0, 0), (100, 0, 'hold')]
+    entry_list_step = [(0, 0), (50, .5, 'hold'), (100, 0, 'hold')]
     marker_start = TablePT({'P1': entry_list_zero, 'marker': entry_list_step})
     tpt1 = TablePT({'P1': entry_list_zero, 'marker': entry_list_zero})
     spt2 = SequencePT(marker_start, tpt1)
@@ -834,5 +836,5 @@ if __name__ == "__main__":
     ch = ('P1', None)
     mk = ('marker', None)
     voltage_transform = (lambda x: x,) * len(ch)
-    hdawg.channel_pair_AB.upload('table_pulse_test5', p, ch, mk, voltage_transform)
+    hdawg.channel_pair_AB.upload('table_pulse_test2', p, ch, mk, voltage_transform)
 
