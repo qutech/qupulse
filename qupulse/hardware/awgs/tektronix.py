@@ -86,7 +86,7 @@ def _make_binary_waveform(waveform: QuPulseWaveform,
                           voltage_to_uint16_kwargs: dict) -> tek_awg.Waveform:
     def sample_channel(ch_id: Optional[ChannelID]):
         if ch_id is None:
-            return 0
+            return np.zeros_like(time_array)
         else:
             return waveform.get_sampled(channel=ch_id,
                                         sample_times=time_array)
@@ -101,8 +101,8 @@ def _make_binary_waveform(waveform: QuPulseWaveform,
 
 
 def parse_program(program: Loop,
-                  channels: Tuple[ChannelID, ...],
-                  markers: Tuple[Tuple[ChannelID, ChannelID], ...],
+                  channels: Tuple[Optional[ChannelID], ...],
+                  markers: Tuple[Tuple[Optional[ChannelID], Optional[ChannelID]], ...],
                   sample_rate: TimeType,
                   amplitudes: Tuple[float, ...],
                   voltage_transformations: Tuple[Callable, ...],
