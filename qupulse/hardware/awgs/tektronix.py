@@ -111,6 +111,7 @@ def parse_program(program: Loop,
     """Convert the program into a sequence of sequence table entries and a sequence of waveforms that can be uploaded
     to the device."""
     assert program.depth() == 1, "Invalid program depth."
+    assert program.repetition_count == 1, "Cannot repeat program a finite number of times (only once)"
 
     # For backward compatibility
     if offsets is None:
@@ -202,7 +203,7 @@ class TektronixProgram:
         self._sequencing_elements = None
         self._waveforms = None
 
-        make_compatible(program, 250, 1, sample_rate / 10**9)
+        make_compatible(self._program, 250, 1, sample_rate / 10**9)
         self._program.flatten_and_balance(1)
 
         self._sequencing_elements, self._waveforms = parse_program(program=self._program,
