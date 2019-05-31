@@ -4,9 +4,10 @@ import contextlib
 from unittest import mock
 
 import numpy as np
+import tek_awg
 
 import qupulse.hardware.awgs.tektronix as tektronix
-from qupulse.hardware.awgs.tektronix import TektronixAWG, TektronixProgram, parse_program, _make_binary_waveform
+from qupulse.hardware.awgs.tektronix import TektronixAWG, TektronixProgram, parse_program, _make_binary_waveform, voltage_to_uint16
 from qupulse._program._loop import Loop
 from qupulse.utils.types import TimeType
 from tests.pulses.sequencing_dummies import DummyWaveform
@@ -121,6 +122,24 @@ class TektronixProgramTests(unittest.TestCase):
 
         n_bin_waveforms = len(set(binary_waveforms_6)) + len(set(binary_waveforms_4))
 
+
+
+        tek_waveforms_6 = [tek_awg.Waveform(channel=voltage_to_uint16(sampled_6[ch], 1, 0, 14),
+                                            marker_1=sampled_6[m1],
+                                            marker_2=sampled_6[m2])
+                           for (ch, m1, m2) in binary_waveforms_6]
+
+        tek_waveforms_4 = [tek_awg.Waveform(channel=voltage_to_uint16(sampled_4[ch], 1, 0, 14),
+                                            marker_1=sampled_4[m1],
+                                            marker_2=sampled_4[m2])
+                           for (ch, m1, m2) in binary_waveforms_4]
+
+        tek_waveforms = set(tek_waveforms_4 + tek_waveforms_6)
+
+        # equivalent of wfs_6
+        tek_6 = [tek_waveforms_6[:3] + [6], tek_waveforms_6[3:6] + [6], tek_waveforms_6[6:] + [6]]
+        tek_4 = [tek_waveforms_4[:3] + [4], tek_waveforms_4[3:6] + [4], tek_waveforms_4[6:] + [4]]
+
         program = [(wfs_6[0], 1),
                    (wfs_4[0], 2),
                    (wfs_6[0], 3),
@@ -130,6 +149,19 @@ class TektronixProgramTests(unittest.TestCase):
                    (wfs_4[2], 7),
                    (wfs_6[1], 8),
                    (wfs_6[2], 9)]
+
+        expected_sequence_entries_wfs = [tek_6[0],
+                                         tek_4[0],
+                                         tek_6[0],
+                                         tek_6[1],
+                                         tek_4[1],
+                                         tek_6[2],
+                                         tek_4[2],
+                                         tek_6[1],
+                                         tek_6[2]]
+
+        expected_sequence_entries = tuple(tek_awg.SequenceEntry(entries=wfs, loop_count=idx + 1)
+                                          for idx, wfs in enumerate(expected_sequence_entries_wfs))
 
         loop_program = Loop(children=[
             Loop(waveform=waveform, repetition_count=repetition_count)
@@ -153,10 +185,10 @@ class TektronixProgramTests(unittest.TestCase):
 
         waveform_set = waveform_set - {4, 6}
         self.assertEqual(len(waveform_set), n_bin_waveforms)
+        self.assertEqual(tek_waveforms, waveform_set)
 
         self.assertEqual(len(sequence_entries), 9)
-
-        raise NotImplementedError("Validate binary waveforms")
+        self.assertEqual(expected_sequence_entries, sequence_entries)
 
     @mock.patch('qupulse.hardware.awgs.tektronix.make_compatible')
     @mock.patch('qupulse.hardware.awgs.tektronix.parse_program')
