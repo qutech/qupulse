@@ -14,7 +14,7 @@ except ImportError:
                   "If you wish to use it execute qupulse.hardware.awgs.install_requirements('tektronix')")
     raise
 
-from qupulse.hardware.awgs.base import AWG, AWGAmplitudeOffsetHandling
+from qupulse.hardware.awgs.base import AWG, AWGAmplitudeOffsetHandling, ProgramOverwriteException
 from qupulse import ChannelID
 from qupulse._program._loop import Loop, make_compatible
 from qupulse._program.waveforms import Waveform as QuPulseWaveform
@@ -241,28 +241,53 @@ class TektronixProgram:
 
 
 class TektronixAWG(AWG):
-    """TODO: Explain general idea here"""
+    """Driver for Tektronix AWG object (5000/7000 series).
+
+    Special characteristics:
+     - Changing the run mode to 'running' takes a lot of time (depending on the sequence)
+     - To keep the "arm" time low each program is uploaded to the sequence table! This reduces the number of programs
+       drastically but allows very fast switching with arm.
+
+    This driver implements an interface for changing the program repetition mode consisting of:
+     - the property default_program_repetition_mode
+     - set_program_repetition_mode(program_name, mode)
+     - get_program_repetition_mode(program_name)
+
+     Synchronization:
+     The driver relies on the fact that internal variables correspond to the device state:
+     _sequence_entries and _waveforms
+     We do not aim to detect user manipulation but want to make sure invalidate the internal state on upload errors.
+     To do this the attribute _synchronized is set to False. Methods that rely on the synchronization state to correctly
+     modify the awg check that attribute.
+
+     All private functions assume that the error queue is empty when called.
+
+    TODO: Move logger and repetition mode functionality to AWG interface"""
 
     def __init__(self, tek_awg: tek_awg.TekAwg,
                  synchronize: str,
                  identifier='Tektronix',
-                 manual_cleanup=False):
+                 logger=None,
+                 default_program_repetition_mode='once',
+                 idle_waveform_length=250):
         """
         Args:
             tek_awg: Instance of the underlying driver from TekAwg package
             synchronize: Either 'read' or 'clear'.
             identifier:
-            manual_cleanup:
+            logger:
         """
         super().__init__(identifier=identifier)
+        self.logger = logger or logging.getLogger("qupulse.tektronix")
 
         if tek_awg is None:
             raise RuntimeError('Please install the tek_awg package or run "install_requirements" from this module')
 
         self._device = tek_awg
+        self._synchronized = False # this gets set to True by synchronize or clear and to False on error during manupulation
 
         self.idle_value = 8191
-        self._idle_waveform = self.make_idle_waveform(4000)
+        self._idle_waveform = self.make_idle_waveform(idle_waveform_length)
 
         self._programs = dict()
 
@@ -274,13 +299,14 @@ class TektronixAWG(AWG):
 
         self._waveforms = WaveformStorage()
 
-        self._cleanup_stack = contextlib.ExitStack() if manual_cleanup else None
-
         self._sequence_element_upload_sync_interval = 100
         self._waveform_upload_sync_interval = 10
 
         self._allow_upload_while_running = False
         self._auto_stop_on_upload = True
+
+        self._default_program_repetition_mode = None
+        self.default_program_repetition_mode = default_program_repetition_mode
 
         if synchronize.lower() == 'read':
             self.synchronize()
@@ -291,6 +317,59 @@ class TektronixAWG(AWG):
 
         self.initialize_idle_program()
 
+    @staticmethod
+    def _validate_program_repetition_code(mode: str):
+        if mode not in ('once', 'infinite'):
+            raise ValueError("Invalid program repetition mode (not 'once' or 'infinite')", mode)
+
+    @property
+    def default_program_repetition_mode(self) -> str:
+        """repetition mode for newly uploaded programs. Valid values are 'once' and 'infinite'. You can use
+        set_program_repetition_mode to change the repetition mode of an existing program"""
+        return self._default_program_repetition_mode
+
+    @default_program_repetition_mode.setter
+    def default_program_repetition_mode(self, mode: str):
+        self._validate_program_repetition_code(mode)
+        self._default_program_repetition_mode = mode
+
+    def set_program_repetition_mode(self, program_name: str, mode: str):
+        self.assert_synchronized()
+        self._validate_program_repetition_code(mode)
+
+        (positions, _, sequencing_elements) = self._programs[program_name]
+        if mode == 'infinite':
+            last_jump_to = positions[0]
+        elif mode == 'once':
+            last_jump_to = self._idle_program_index
+        assert isinstance(last_jump_to, int)
+        self.logger.debug("Setting repetition mode of '%s' to '%s'", program_name, mode)
+
+        self.device.set_seq_element_jmp_ind(positions[-1], last_jump_to)
+        sequencing_elements[-1].goto_ind = last_jump_to
+
+    def get_program_repetition_mode(self, program_name: str) -> str:
+        """This function uses cached data and does not talk to the awg"""
+        (positions, _, sequencing_elements) = self._programs[program_name]
+        if sequencing_elements[-1].goto_ind == self._idle_program_index:
+            return 'once'
+        elif sequencing_elements[-1].goto_ind == positions[0] :
+            return 'infinite'
+        else:
+            self.logger.warning("Could not extract repetition mode of %s. Last element goto index is %r",
+                                program_name, sequencing_elements[-1].goto_ind)
+            return 'unknown'
+
+    @property
+    def synchronized(self) -> bool:
+        return self._synchronized
+
+    def assert_synchronized(self):
+        if not self.synchronized:
+            raise RuntimeError("The drive might be out of sync with the device (probably due to an error "
+                               "during some operation). Call synchronize() to fix that. This is not done automatically "
+                               "because you maybe know how to recover cleverly yourself.")
+
     def _clear_waveforms(self):
         """Clear all waveforms on the device and synchronize the waveform list."""
         self.device.write('WLIS:WAV:DEL ALL')
@@ -299,33 +378,55 @@ class TektronixAWG(AWG):
     def _clear_sequence(self):
         """Clear sequence on device and synchronize sequence entries."""
         self.device.write('SEQ:LENG 0')
-        self.read_sequence()
+        self._sequence_entries = [None] * len(self.device.get_seq_length())
 
     def clear(self):
-        """Clear all waveforms and sequence and synchronize state"""
+        """Clear all waveforms, the sequence table and program registry and initialize the idle program."""
+        self.synchronized = False
         self._clear_sequence()
         self._clear_waveforms()
         self._programs = dict()
         self._armed_program = None
         self._idle_program_index = None
+        self._synchronized = True
+        self.initialize_idle_program()
 
     def synchronize(self):
-        """Read waveforms and sequences from device"""
+        """Read waveforms from device and re-upload all programs"""
         self.read_waveforms()
-        self.read_sequence()
+
+        to_upload = {program_name: (tek_program, self.get_program_repetition_mode(program_name))
+                     for program_name, (_, tek_program, _) in self.programs.items()}
+
+        self.programs.clear()
+        self._sequence_entries = [None] * self.device.get_seq_length()
+        self._synchronized = True
+
+        self.initialize_idle_program()
+
+        for program_name, (tek_program, mode) in to_upload.items():
+            self._upload_parsed(program_name, tek_program)
+            if not mode == 'unknown':
+                self.set_program_repetition_mode(program_name, mode)
+            else:
+                self.logger.error("Could not restore repetition mode of %s as it was invalid", program_name)
+
+        self._synchronized = True
 
     @property
     def armed_program(self) -> Optional[str]:
         return self._armed_program[0]
 
     def initialize_idle_program(self):
-        """Make sure we can arm the idle program which plays the idle waveform(default 0V) on all channels.
+        """Make sure we can arm the idle program which plays the idle waveform(default 0V) on all channels."""
+        self.assert_synchronized()
 
-
-        """
+        self.logger.info("Initializing idle progam")
         if self._idle_waveform in self._waveforms.by_data:
+            self.logger.debug("Idle waveform found on device")
             idle_waveform_name = self._waveforms.by_data[self._idle_waveform].name
         else:
+            self.logger.debug("Idle waveform not found on device")
             idle_waveform_name = self.idle_pulse_name(self._idle_waveform.size)
             self._upload_waveform(self._idle_waveform, idle_waveform_name)
 
@@ -341,9 +442,12 @@ class TektronixAWG(AWG):
             self._idle_program_index = self._sequence_entries.index(idle_sequence_element) + 1
         except ValueError:
             idle_index, *_ = self._get_empty_sequence_positions(1)
+            self.logger.debug("Idle sequence entry not found on device. Uploading it to %d", idle_index)
             self._upload_sequencing_element(idle_index, idle_sequence_element)
 
             self._idle_program_index = self._sequence_entries.index(idle_sequence_element) + 1
+        else:
+            self.logger.debug("Idle sequence entry found on device: %d", self._idle_program_index)
 
     @property
     def device(self) -> tek_awg.TekAwg:
@@ -361,14 +465,6 @@ class TektronixAWG(AWG):
                      for name, length, time, data in zip(wf_names, wf_lengths, wf_times, wf_datas)]
 
         self._waveforms = WaveformStorage(waveforms)
-
-    def read_sequence(self):
-        """Read all sequence data from the device"""
-        entries = [self.device.get_seq_element(i)
-                   for i in range(1, 1 + self.device.get_seq_length())]
-        entries = [None if all(wf == '' for wf in entry.entries) else entry
-                   for entry in entries]
-        self._sequence_entries = entries
 
     @property
     def num_channels(self) -> int:
@@ -402,16 +498,21 @@ class TektronixAWG(AWG):
             self._delete_waveform(name)
 
     def remove(self, name: str):
-        raise NotImplementedError()
+        self._unload(name)
 
     @property
     def sample_rate(self) -> float:
         return self.device.get_freq()
 
-    def _set_state(self, sequence_entries, waveforms, waveform_references):
-        raise NotImplementedError()
+    def warn_if_errors_are_present(self):
+        """Emit a warning with present errors."""
+        errors = self.device.get_error_queue()
+        if errors:
+            self.logger.warning("Previous error(s): %r", errors)
 
     def upload(self, *args, **kwargs):
+        self.warn_if_errors_are_present()
+
         if self.device.get_run_state().lower() == 'running':
             if self._auto_stop_on_upload:
                 self.device.stop()
@@ -420,20 +521,15 @@ class TektronixAWG(AWG):
                 raise RuntimeError("Tektronix AWG %r is running and allow_upload_while_running "
                                    "is False (its very slow)" % self.identifier)
 
-        if self._cleanup_stack is None:
-            with contextlib.ExitStack() as auto_cleanup:
-                self._upload(*args, **kwargs, cleanup_stack=auto_cleanup)
-                auto_cleanup.pop_all()
-        else:
-            cleanup_stack = contextlib.ExitStack()
-            self._cleanup_stack.push(cleanup_stack)
-            self._upload(*args, **kwargs, cleanup_stack=cleanup_stack)
-            cleanup_stack.pop_all()
+        try:
+            self._upload(*args, **kwargs)
+        except:
+            self.logger.exception("Error during upload. Set synced to false")
 
     def _process_program(self, name: str, tek_program: TektronixProgram) -> Tuple[Sequence[tek_awg.SequenceEntry],
                                                                                   Mapping[tek_awg.Waveform, str]]:
         """Detect which waveforms are missing and create sequencing entries.
-        This function does not change the state of the device.
+        This function does not communicate with the device.
 
         Args:
             name:
@@ -441,7 +537,7 @@ class TektronixAWG(AWG):
 
         Returns:
             sequencing_elements: List of SequenceEntries
-            waveforms_to_upload: Missing waveforms
+            waveforms_to_upload: Missing waveforms with names
         """
         waveforms_to_upload = dict()
         required_idle_pulses = dict()
@@ -489,50 +585,95 @@ class TektronixAWG(AWG):
                                                             *sequencing_info))
         return sequencing_elements, waveforms_to_upload
 
-    def _upload_parsed(self, name: str, tek_program: TektronixProgram, cleanup_stack: contextlib.ExitStack=None):
-        sequencing_elements, waveforms_to_upload = self._process_program(name, tek_program)
+    def _upload_linked_sequencing_elements(self,
+                                           positions: Sequence[int],
+                                           sequencing_elements: Sequence[tek_awg.SequenceEntry],
+                                           last_jump_to: int):
+        """Helper function to upload a linked list of sequencing elements. The goto+ind of each element is set if the
+        next element requires a jump. Will result in unsynchronized state on error."""
+        assert len(positions) == len(sequencing_elements)
+        self.assert_synchronized()
 
-        logger = logging.getLogger('tektronix')
+        previous_errors = self.device.get_error_queue()
+        if previous_errors:
+            self.logger.warning("Error queue not empty before sequence upload: %r", previous_errors)
 
-        for idx, (waveform_data, waveform_name) in enumerate(waveforms_to_upload.items()):
-            self._upload_waveform(waveform_data=waveform_data,
-                                  waveform_name=waveform_name,
-                                  cleanup_stack=cleanup_stack)
-            if idx % self._waveform_upload_sync_interval == 0:
-                logging.debug('Waiting for sync after waveform %d' % idx)
-                self.device.wait_until_commands_executed()
-                logging.debug('Synced after waveform %d' % idx)
+        positions_with_next = pairwise(positions, fillvalue=last_jump_to)
 
-        logger.info('Waiting for all waveforms to be uploaded...')
-        self.device.wait_until_commands_executed()
-        logger.info('All waveforms uploaded')
-
-        positions = self._get_empty_sequence_positions(len(sequencing_elements))
-
-        for (element_index, next_element), sequencing_element in zip(
-                pairwise(positions, fillvalue=self._idle_program_index),
-                sequencing_elements):
-            assert next_element is not None
-
+        self._synchronized = False
+        for idx, ((element_index, next_element), sequencing_element) in enumerate(zip(positions_with_next, sequencing_elements)):
             if element_index + 1 != next_element:
                 sequencing_element.goto_ind = next_element
                 sequencing_element.goto_state = True
+            else:
+                sequencing_element.goto_ind = None
+                sequencing_element.goto_state = False
 
             self._upload_sequencing_element(element_index, sequencing_element)
 
-            if element_index % self._sequence_element_upload_sync_interval == 0:
-                logger.debug('Waiting for sync after element %d' % element_index)
+            if idx % self._sequence_element_upload_sync_interval == 0:
+                self.logger.debug('Waiting for sync after element %d' % idx)
                 self.device.wait_until_commands_executed()
-                logger.debug('Synced after element %d' % element_index)
+                self.logger.debug('Synced after element %d' % idx)
 
         self.device.wait_until_commands_executed()
-        logger.info('All sequence elements uploaded')
+        errors = self.device.get_error_queue()
+        if errors:
+            raise RuntimeError("Error(s) during sequence upload", errors)
+        self._synchronized = True
 
-        self._programs[name] = (positions, tek_program, sequencing_elements)
+    def _upload_waveforms(self, waveforms: Dict[str, tek_awg.Waveform]):
+        """Upload waveforms from given dictionary. Will result in unsynchronized state on error."""
+        self._synchronized = False
+        for idx, (waveform_name, waveform_data) in enumerate(waveforms.items()):
+            self._upload_waveform(waveform_data=waveform_data,
+                                  waveform_name=waveform_name)
+            if idx % self._waveform_upload_sync_interval == 0:
+                self.logger.debug('Waiting for sync after waveform %d' % idx)
+                self.device.wait_until_commands_executed()
+                self.logger.debug('Synced after waveform %d' % idx)
+
+        self.logger.debug('Waiting for all waveforms to be uploaded...')
+        self.device.wait_until_commands_executed()
+
+        errors = self.device.get_error_queue()
+        if errors:
+            raise RuntimeError("Error(s) during waveform upload", errors)
+        self._synchronized = True
+
+
+    def _upload_parsed(self, program_name: str, tek_program: TektronixProgram):
+        """Requires to be in a synchronized state
+
+        Args:
+            name:
+            tek_program:
+            infinite_repetition: If true the last jump will be to the first entry. If false it will be the idle entry.
+        """
+        self.assert_synchronized()
+
+        sequencing_elements, waveforms_to_upload = self._process_program(program_name, tek_program)
+        positions = self._get_empty_sequence_positions(len(sequencing_elements))
+
+        waveforms = {waveform_name: waveform_data for waveform_data, waveform_name in waveforms_to_upload.items()}
+        assert len(waveforms) == len(waveforms_to_upload), "multiple waveforms with the same name (BUG)"
+
+        self._upload_waveforms(waveforms)
+        self.logger.info("All waveforms of '%s' uploaded", program_name)
+
+        self._upload_linked_sequencing_elements(positions, sequencing_elements, self._idle_program_index)
+        self.logger.info('All sequence elements of %s uploaded', program_name)
+
+        self._programs[program_name] = (positions, tek_program, sequencing_elements)
+
+        self.set_program_repetition_mode(program_name, self.default_program_repetition_mode)
 
     def _unload(self, name: str) -> TektronixProgram:
+        """Remove program from internal state (allows overwriting the sequence entries)"""
+        self.logger.debug("Deleting %s from known programs", name)
         positions, tek_program, seq_entries = self._programs.pop(name)
 
+        self.logger.debug("Marking sequence entries of %s as free", name)
         for position in positions:
             if position <= len(self._sequence_entries):
                 self._sequence_entries[position - 1] = None
@@ -544,18 +685,11 @@ class TektronixAWG(AWG):
                 channels: Tuple[Optional[ChannelID], ...],
                 markers: Tuple[Optional[ChannelID], ...],
                 voltage_transformation: Tuple[Callable, ...],
-                force: bool,
-                cleanup_stack: contextlib.ExitStack):
-
+                force: bool):
         assert self._idle_program_index
 
-        if name in self._programs:
-            if not force:
-                raise ValueError('{} is already known on {}'.format(name, self.identifier))
-
-            else:
-                old_program = self._unload(name)
-                cleanup_stack.callback(lambda: self._upload_parsed(name, old_program))
+        if name in self._programs and not force:
+            raise ProgramOverwriteException(name)
 
         # group markers in by channels
         markers = tuple(zip(markers[0::2], markers[1::2]))
@@ -573,10 +707,18 @@ class TektronixAWG(AWG):
                                        voltage_transformations=voltage_transformation,
                                        sample_rate=TimeType(self.sample_rate))
 
-        self._upload_parsed(name, tek_program, cleanup_stack)
+        self.logger.debug("Successfully parsed %s", name)
+
+        if name in self._programs:
+            self._unload(name)
+
+        self._upload_parsed(name, tek_program)
 
     def _get_empty_sequence_positions(self, length: int) -> Sequence[int]:
-        """Return a list of ``length`` empty sequence positions"""
+        """Return a list of ``length`` empty sequence positions. This function talks to the device and requires a
+        synchronized state"""
+        self.assert_synchronized()
+
         free_positions = [idx + 1
                           for idx, sequencing_element in enumerate(self._sequence_entries)
                           if sequencing_element is None]
@@ -594,10 +736,8 @@ class TektronixAWG(AWG):
         if waveform_name in self._waveforms.by_name:
             self._waveforms.pop_waveform(waveform_name)
 
-    def _upload_waveform(self, waveform_data: tek_awg.Waveform, waveform_name, cleanup_stack: contextlib.ExitStack=None):
+    def _upload_waveform(self, waveform_data: tek_awg.Waveform, waveform_name):
         self.device.new_waveform(waveform_name, waveform_data)
-        if cleanup_stack:
-            cleanup_stack.callback(functools.partial(self._delete_waveform, waveform_name))
         timestamp = self.device.get_waveform_timestamps(waveform_name)
         self._waveforms.add_waveform(waveform_name,
                                      waveform_entry=WaveformEntry(name=waveform_name,
