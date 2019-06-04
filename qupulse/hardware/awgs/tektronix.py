@@ -172,7 +172,7 @@ def parse_program(program: Loop,
 
         sequencing_elements.append(
             tek_awg.SequenceEntry(entries=entries,
-                                 loop_count=loop.repetition_count)
+                                  loop_count=loop.repetition_count)
         )
     return tuple(sequencing_elements), tuple(bin_waveforms.keys())
 
@@ -188,7 +188,8 @@ class TektronixProgram:
                  amplitudes: Sequence[float],
                  voltage_transformations: Sequence[Callable],
                  offsets: Sequence[float] = None):
-        assert len(channels) == len(markers) and all(len(marker) == 2 for marker in markers), "Driver can currently only handle awgs wth two markers per channel"
+        assert len(channels) == len(markers) and all(len(marker) == 2 for marker in markers),\
+            "Driver can currently only handle awgs wth two markers per channel"
 
         assert len(channels) == len(amplitudes)
 
