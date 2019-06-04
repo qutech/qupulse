@@ -378,7 +378,7 @@ class TektronixAWG(AWG):
     def _clear_sequence(self):
         """Clear sequence on device and synchronize sequence entries."""
         self.device.write('SEQ:LENG 0')
-        self._sequence_entries = [None] * len(self.device.get_seq_length())
+        self._sequence_entries = [None] * self.device.get_seq_length()
 
     def clear(self):
         """Clear all waveforms, the sequence table and program registry and initialize the idle program."""

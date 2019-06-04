@@ -235,6 +235,18 @@ class DummyTekAwg:
 
 
 class TektronixAWGTests(unittest.TestCase):
+    @staticmethod
+    def make_mock_tek_awg(**return_values):
+        mock_tek_awg = mock.MagicMock(spec=tek_awg.TekAwg)
+        for function_name, return_value in return_values.items():
+            getattr(mock_tek_awg, function_name).return_value = return_value
+        return mock_tek_awg
+
+    @staticmethod
+    def patch_method(method_name):
+        full_name = 'qupulse.hardware.awgs.tektronix.TektronixAWG.%s' % method_name
+        return mock.patch(full_name)
+
     def make_dummy_tek_awg(self, **kwargs) -> tektronix.tek_awg.TekAwg:
         if tektronix.tek_awg:
             return cast(tektronix.tek_awg.TekAwg, DummyTekAwg(**kwargs))
@@ -245,7 +257,7 @@ class TektronixAWGTests(unittest.TestCase):
         init_idle_patch = mock.patch('qupulse.hardware.awgs.tektronix.TektronixAWG.initialize_idle_program')
         synchronize_patch = mock.patch('qupulse.hardware.awgs.tektronix.TektronixAWG.synchronize')
 
-        kwargs.setdefault('tek_awg', self.make_dummy_tek_awg())
+        kwargs.setdefault('tek_awg', self.make_mock_tek_awg())
         kwargs.setdefault('synchronize', 'read')
 
         with make_waveform_patch, clear_patch, init_idle_patch, synchronize_patch:
@@ -261,30 +273,26 @@ class TektronixAWGTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'tek_awg'):
                 TektronixAWG(self.make_dummy_tek_awg(), 'clear')
 
-        with make_waveform_patch as make_idle_waveform:
+        with self.patch_method('make_idle_waveform') as make_idle_waveform:
             with self.assertRaisesRegex(ValueError, 'synchronize'):
-                TektronixAWG(self.make_dummy_tek_awg(), 'foo')
+                TektronixAWG(self.make_dummy_tek_awg(), 'foo', idle_waveform_length=300)
 
-            make_idle_waveform.assert_called_once_with(4000)
+            make_idle_waveform.assert_called_once_with(300)
 
         with make_waveform_patch as make_idle_waveform, clear_patch as clear, init_idle_patch as init_idle:
-            TektronixAWG(self.make_dummy_tek_awg(), 'clear')
-            make_idle_waveform.assert_called_once_with(4000)
+            TektronixAWG(self.make_dummy_tek_awg(), 'clear', idle_waveform_length=300)
+            make_idle_waveform.assert_called_once_with(300)
             clear.assert_called_once_with()
             init_idle.assert_called_once_with()
 
         with make_waveform_patch as make_idle_waveform, synchronize_patch as synchronize, init_idle_patch as init_idle:
             dummy = self.make_dummy_tek_awg()
-            tek_awg = TektronixAWG(dummy, 'read')
-            make_idle_waveform.assert_called_once_with(4000)
+            tek_awg = TektronixAWG(dummy, 'read', idle_waveform_length=300, default_program_repetition_mode='infinite')
+            make_idle_waveform.assert_called_once_with(300)
             synchronize.assert_called_once_with()
             init_idle.assert_called_once_with()
-
+            self.assertEqual(tek_awg.default_program_repetition_mode, 'infinite')
             self.assertIs(tek_awg.device, dummy)
-            self.assertIsNone(tek_awg._cleanup_stack)
-
-        tek_awg = self.make_awg(manual_cleanup=True)
-        self.assertIsInstance(tek_awg._cleanup_stack, contextlib.ExitStack)
 
     def test_clear_waveforms(self):
         tek_awg = self.make_awg()
@@ -300,8 +308,9 @@ class TektronixAWGTests(unittest.TestCase):
         tek_awg = self.make_awg()
 
         with mock.patch.object(tek_awg.device, 'write') as dev_write, \
-                mock.patch.object(tek_awg, 'read_sequence') as read_sequence:
+                mock.patch.object(tek_awg.device, 'get_seq_length', return_value=3) as get_seq_length:
             tek_awg._clear_sequence()
 
             dev_write.assert_called_once_with('SEQ:LENG 0')
-            read_sequence.assert_called_once_with()
+            get_seq_length.assert_called_once_with()
+            self.assertEqual(tek_awg._sequence_entries, [None]*3)
