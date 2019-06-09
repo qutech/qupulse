@@ -103,6 +103,12 @@ class ExpressionVectorTests(unittest.TestCase):
 
 
 class ExpressionScalarTests(unittest.TestCase):
+    
+    def test_fstring(self) -> None:
+        e = ExpressionScalar('2.0')
+        self.assertEqual( f'{e}', str(e) )
+        self.assertEqual( f'{e:.2f}', '%.2f' % e) 
+        
     def test_evaluate_numeric(self) -> None:
         e = ExpressionScalar('a * b + c')
         params = {
