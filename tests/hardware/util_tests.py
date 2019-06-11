@@ -5,9 +5,10 @@ import pytabor
 
 import numpy as np
 
+from qupulse.utils.types import TimeType
 from qupulse.hardware.awgs.tabor import TaborSegment
-from qupulse.hardware.util import voltage_to_uint16, make_combined_wave, find_positions
-
+from qupulse.hardware.util import voltage_to_uint16, make_combined_wave, find_positions, get_sample_times
+from tests.pulses.sequencing_dummies import DummyWaveform
 
 from . import dummy_modules
 
@@ -178,4 +179,31 @@ class FindPositionTest(unittest.TestCase):
 
 class SampleTimeCalculationTest(unittest.TestCase):
     def test_get_sample_times(self):
-        raise NotImplementedError()
+        sample_rate = TimeType(12, 10)
+        wf1 = DummyWaveform(duration=TimeType(20, 12))
+        wf2 = DummyWaveform(duration=TimeType(400000000001, 120000000000))
+        wf3 = DummyWaveform(duration=TimeType(1, 10**15))
+
+        expected_times = np.arange(4) / 1.2
+        times, n_samples = get_sample_times([wf1, wf2], sample_rate_in_GHz=sample_rate)
+        np.testing.assert_equal(expected_times, times)
+        np.testing.assert_equal(n_samples, np.asarray([2, 4]))
+
+        with self.assertRaises(AssertionError):
+            get_sample_times([], sample_rate_in_GHz=sample_rate)
+
+        with self.assertRaisesRegex(ValueError, "non integer length"):
+            get_sample_times([wf1, wf2], sample_rate_in_GHz=sample_rate, tolerance=0.)
+
+        with self.assertRaisesRegex(ValueError, "length <= zero"):
+            get_sample_times([wf1, wf3], sample_rate_in_GHz=sample_rate)
+
+    def test_get_sample_times_single_wf(self):
+        sample_rate = TimeType(12, 10)
+        wf = DummyWaveform(duration=TimeType(40, 12))
+
+        expected_times = np.arange(4) / 1.2
+        times, n_samples = get_sample_times(wf, sample_rate_in_GHz=sample_rate)
+
+        np.testing.assert_equal(times, expected_times)
+        np.testing.assert_equal(n_samples, np.asarray(4))
