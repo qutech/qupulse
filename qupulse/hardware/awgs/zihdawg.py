@@ -23,6 +23,7 @@ from qupulse.utils.types import ChannelID, TimeType, time_from_fraction
 from qupulse._program._loop import Loop, make_compatible
 from qupulse._program.waveforms import Waveform
 from qupulse.hardware.awgs.base import AWG, ChannelNotFoundException
+from qupulse.hardware.util import get_sample_times
 
 
 def valid_channel(function_object):
@@ -580,10 +581,9 @@ class HDAWGWaveManager:
         if name in self._known_waveforms:
             return self._known_waveforms[name].wave_name, self._known_waveforms[name].marker_name
 
-        time_per_sample = 1/sample_rate
-        sample_times = np.arange(waveform.duration / time_per_sample) * time_per_sample
+        sample_times, n_samples = get_sample_times(waveform, sample_rate_in_GHz=sample_rate)
 
-        amplitude = np.zeros((len(sample_times), 2), dtype=float)
+        amplitude = np.zeros((n_samples, 2), dtype=float)
         for idx, chan in enumerate(channels):
             if chan is not None:
                 voltage = voltage_transformation[idx](waveform.get_sampled(chan, sample_times))
@@ -600,7 +600,7 @@ class HDAWGWaveManager:
             self.to_file(wave_name, amplitude, overwrite=overwrite)
 
         if markers[0] is not None or markers[1] is not None:
-            marker_output = np.zeros((len(sample_times), 2), dtype=np.uint8)
+            marker_output = np.zeros((n_samples, 2), dtype=np.uint8)
             for idx, marker in enumerate(markers):
                 if marker is not None:
                     marker_output[:, idx] = waveform.get_sampled(marker, sample_times) != 0
