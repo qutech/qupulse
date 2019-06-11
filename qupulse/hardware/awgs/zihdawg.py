@@ -624,11 +624,15 @@ class HDAWGWaveManager:
 class HDAWGProgramManager:
     """Manages qupulse programs in memory and seqc representations of those. Facilitates qupulse to seqc translation."""
 
-    class ProgramEntry(NamedTuple):
-        """Entry of known programs."""
-        program: Loop
-        index: int  # Program to seqc switch case mapping.
-        seqc_rep: str  # Seqc representation of program inside case statement.
+    # Unfortunately this is the 3.5 compatible way
+    ProgramEntry = NamedTuple('ProgramEntry',
+                              [('program', Loop),
+                               ('index', int),
+                               ('seqc_rep', str)]
+                              )
+    ProgramEntry.__doc__ = """Entry of known programs."""
+    ProgramEntry.index.__doc__ = """Program to seqc switch case mapping."""
+    ProgramEntry.seqc_rep.__doc__ = """Seqc representation of program inside case statement."""
 
     def __init__(self, wave_manager: HDAWGWaveManager) -> None:
         # Use ordered dict, so index creation for new programs is trivial (also in case of deletions).
