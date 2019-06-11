@@ -174,3 +174,8 @@ class FindPositionTest(unittest.TestCase):
         positions = find_positions(data, to_find)
 
         self.assertEqual(positions.tolist(), [-1, -1, 5, 6, -1, 1, 0])
+
+
+class SampleTimeCalculationTest(unittest.TestCase):
+    def test_get_sample_times(self):
+        raise NotImplementedError()
