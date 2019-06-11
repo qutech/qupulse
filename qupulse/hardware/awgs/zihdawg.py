@@ -495,11 +495,11 @@ class HDAWGWaveManager:
     # TODO: Voltage to -1..1 range and check if max amplitude in range+offset window.
     # TODO: Manage side effects if reusing data over several programs and a shared waveform is overwritten.
 
-    class WaveformEntry(NamedTuple):
-        """Entry of known waveforms."""
-        waveform: Waveform
-        wave_name: str
-        marker_name: Optional[str]  # None if this waveform does not define any markers.
+    WaveformEntry = NamedTuple('WaveformEntry',
+                               [('waveform', Waveform),
+                                ('wave_name', str),
+                                ('marker_name', Optional[str])])
+    WaveformEntry.__doc__ = """Entry of known waveforms."""
 
     def __init__(self, user_dir: str, awg_identifier: str) -> None:
         self._known_waveforms = dict()  # type: Dict[str, HDAWGWaveManager.WaveformEntry]
