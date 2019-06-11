@@ -41,6 +41,7 @@ setup(name='qupulse',
           'plotting': ['matplotlib'],
           'VISA': ['pyvisa'],
           'tabor-instruments': ['pytabor>=1.0.1', 'teawg'],
+          'zurich-instruments': ['zhinst'],
           'Faster-fractions': ['gmpy2']
       },
       test_suite="tests",

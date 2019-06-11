@@ -3,19 +3,19 @@ python:
   - 3.5
   - 3.6
 env:
-  - INSTALL_EXTRAS=[VISA,plotting]
-  - INSTALL_EXTRAS=[VISA,plotting,Faster-fractions]
+  - INSTALL_EXTRAS=[VISA,plotting,zurich-instruments]
+  - INSTALL_EXTRAS=[VISA,plotting,zurich-instruments,Faster-fractions]
 
 matrix:
   include:
     - python: 3.7
       dist: xenial
       sudo: true
-      env: INSTALL_EXTRAS=[VISA,plotting]
+      env: INSTALL_EXTRAS=[VISA,plotting,zurich-instruments]
     - python: 3.7
       dist: xenial
       sudo: true
-      env: INSTALL_EXTRAS=[VISA,plotting,Faster-fractions]
+      env: INSTALL_EXTRAS=[VISA,plotting,zurich-instruments,Faster-fractions]
 
 #use container based infrastructure
 sudo: false
