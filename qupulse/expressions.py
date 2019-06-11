@@ -240,6 +240,11 @@ class ExpressionScalar(Expression):
     def __repr__(self) -> str:
         return 'Expression({})'.format(repr(self._original_expression))
 
+    def __format__(self, format_spec):
+        if format_spec == '':
+            return str(self)
+        return format(float(self), format_spec)
+    
     @property
     def variables(self) -> Sequence[str]:
         return self._variables

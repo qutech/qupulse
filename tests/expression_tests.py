@@ -1,4 +1,5 @@
 import unittest
+import sys
 
 import numpy as np
 from sympy import sympify, Eq
@@ -103,6 +104,30 @@ class ExpressionVectorTests(unittest.TestCase):
 
 
 class ExpressionScalarTests(unittest.TestCase):
+    def test_format(self):
+        expr = ExpressionScalar('17')
+        e_format = '{:.4e}'.format(expr)
+        self.assertEqual(e_format, "1.7000e+01")
+
+        empty_format = "{}".format(expr)
+        self.assertEqual(empty_format, '17')
+
+        expr_with_var = ExpressionScalar('17*a')
+        with self.assertRaises(TypeError):
+            # throw error on implicit float cast
+            '{:.4e}'.format(expr_with_var)
+
+        empty_format = "{}".format(expr_with_var)
+        self.assertEqual(empty_format, '17*a')
+
+    @unittest.skipIf(sys.version_info < (3, 6), "format string literals require 3.6 or higher")
+    def test_fstring(self) -> None:
+        src_code = """e = ExpressionScalar('2.0'); \
+        self.assertEqual( f'{e}', str(e) ); \
+        self.assertEqual( f'{e:.2f}', '%.2f' % e)
+        """
+        exec(src_code)
+        
     def test_evaluate_numeric(self) -> None:
         e = ExpressionScalar('a * b + c')
         params = {
