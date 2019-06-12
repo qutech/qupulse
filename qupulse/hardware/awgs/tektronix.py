@@ -249,6 +249,9 @@ class TektronixAWG(AWG):
        drastically but allows very fast switching with arm IF the awg runs.
      - Arm starts the awg if it does not run. The first call to arm after uploading new programs is therefore slow. This
        guarantees that subsequent calls to arm and run_current_program are always fast.
+     - Uploading while the awg runs is VERY slow. The private properties _allow_upload_while_running and
+       _auto_stop_on_upload control the behaviour in this case (stopping the awg or raising an exception).
+       These properties are currently not a stable interface to that functionality hence the privateness.
 
     This driver implements an interface for changing the program repetition mode consisting of:
      - the property default_program_repetition_mode
