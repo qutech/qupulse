@@ -158,7 +158,13 @@ class DummyWaveform(Waveform):
     @property
     def compare_key(self) -> Any:
         if self.sample_output is not None:
-            return hash(bytes(self.sample_output))
+            try:
+                return hash(self.sample_output.tobytes())
+            except AttributeError:
+                pass
+            return hash(
+                tuple(sorted((channel, output.tobytes()) for channel, output in self.sample_output.items()))
+            )
         else:
             return id(self)
 
@@ -189,9 +195,16 @@ class DummyWaveform(Waveform):
     def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> 'Waveform':
         if not channels <= self.defined_channels_:
             raise KeyError('channels not in defined_channels')
-        c = copy.copy(self)
-        c.defined_channels_ = channels
-        return c
+
+        if isinstance(self.sample_output, dict):
+            sample_output = {ch: self.sample_output[ch] for ch in channels}
+        else:
+            sample_output = copy.copy(self.sample_output)
+        duration = self.duration
+        defined_channels = channels
+        return DummyWaveform(sample_output=sample_output,
+                             duration=duration,
+                             defined_channels=defined_channels)
 
     @property
     def defined_channels(self):
