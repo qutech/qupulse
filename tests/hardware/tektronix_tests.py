@@ -1,4 +1,4 @@
-from typing import cast
+from typing import cast, Sequence
 import unittest
 import contextlib
 from unittest import mock
@@ -7,11 +7,60 @@ import numpy as np
 import tek_awg
 
 import qupulse.hardware.awgs.tektronix as tektronix
-from qupulse.hardware.awgs.tektronix import TektronixAWG, TektronixProgram, parse_program, _make_binary_waveform, voltage_to_uint16
+from qupulse.hardware.awgs.tektronix import TektronixAWG, TektronixProgram, parse_program, _make_binary_waveform,\
+    voltage_to_uint16, WaveformEntry, WaveformStorage
 from qupulse._program._loop import Loop
 from qupulse.utils.types import TimeType
 from tests.pulses.sequencing_dummies import DummyWaveform
 from qupulse._program.waveforms import MultiChannelWaveform
+
+
+class TektronixWaveformStorageTest(unittest.TestCase):
+    def assert_storage_contains(self, storage: WaveformStorage, entries: Sequence[WaveformEntry]):
+        by_name = {e.name: e for e in entries}
+        self.assertEqual(dict(storage.by_name.items()), by_name)
+
+        by_data = {e.waveform: e for e in entries}
+        self.assertEqual(dict(storage.by_data.items()), by_data)
+
+        self.assertEqual(set(storage), set(entries))
+        self.assertEqual(len(storage), len(entries))
+
+    def test_init(self):
+        entries = [WaveformEntry('wf1', 7, tek_awg.Waveform(np.arange(7, dtype=np.uint16), 1, 1), 6),
+                   WaveformEntry('wf2', 8, tek_awg.Waveform(np.arange(8, dtype=np.uint16), 0, 1), 6),
+                   WaveformEntry('wf3', 9, tek_awg.Waveform(np.arange(9, dtype=np.uint16), 1, 1), 6)]
+
+        storage = WaveformStorage(entries)
+        self.assert_storage_contains(storage, entries)
+
+    def test_add_waveform(self):
+        entries = [WaveformEntry('wf1', 7, tek_awg.Waveform(np.arange(7, dtype=np.uint16), 1, 1), 6),
+                   WaveformEntry('wf2', 8, tek_awg.Waveform(np.arange(8, dtype=np.uint16), 0, 1), 6),
+                   WaveformEntry('wf3', 9, tek_awg.Waveform(np.arange(9, dtype=np.uint16), 1, 1), 6)]
+
+        storage = WaveformStorage(entries[:2])
+        storage.add_waveform(entries[2])
+        self.assert_storage_contains(storage, entries)
+
+        other_wf3 = WaveformEntry('wf3', 9, tek_awg.Waveform(np.arange(10, dtype=np.uint16), 0, 1), 6)
+        with self.assertRaisesRegex(RuntimeError, "existing"):
+            storage.add_waveform(other_wf3)
+
+        new_entries = entries[:2] + [other_wf3]
+        storage.add_waveform(other_wf3, overwrite=True)
+        self.assert_storage_contains(storage, new_entries)
+
+    def test_pop_waveform(self):
+        entries = [WaveformEntry('wf1', 7, tek_awg.Waveform(np.arange(7, dtype=np.uint16), 1, 1), 6),
+                   WaveformEntry('wf2', 8, tek_awg.Waveform(np.arange(8, dtype=np.uint16), 0, 1), 6),
+                   WaveformEntry('wf3', 9, tek_awg.Waveform(np.arange(9, dtype=np.uint16), 1, 1), 6)]
+
+        storage = WaveformStorage(entries)
+        storage.pop_waveform(entries[0].name)
+
+        self.assert_storage_contains(storage, entries[1:])
+
 
 class TektronixProgramTests(unittest.TestCase):
     @mock.patch('qupulse.hardware.awgs.tektronix.voltage_to_uint16')

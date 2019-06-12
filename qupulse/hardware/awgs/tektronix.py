@@ -9,7 +9,7 @@ import logging
 
 try:
     import tek_awg
-except ImportError:
+except ImportError:  # pragma: no cover
     warnings.warn("Could not import Tektronix driver backend. "
                   "If you wish to use it execute qupulse.hardware.awgs.install_requirements('tektronix')")
     raise
@@ -35,6 +35,7 @@ class WaveformEntry:
 
 
 class WaveformStorage:
+    """Consistent map name->WaveformEntry tek_awg.Waveform->WaveformEntry"""
     def __init__(self, waveforms: Sequence[WaveformEntry]=()):
         self._waveforms_by_name = {wf.name: wf for wf in waveforms}
         self._by_name = MappingProxyType(self._waveforms_by_name)
@@ -56,20 +57,18 @@ class WaveformStorage:
     def __len__(self):
         return len(self._waveforms_by_data)
 
-    def add_waveform(self, name: str, waveform_entry: WaveformEntry, overwrite: bool=False):
-        with contextlib.ExitStack() as exit_stack:
-            if name in self._by_name:
-                if overwrite:
-                    # re-adding old entry in case of failure
-                    exit_stack.callback(functools.partial(self.add_waveform, name, self.pop_waveform(name)))
-                else:
-                    raise RuntimeError('Waveform already existing', name)
+    def add_waveform(self, waveform_entry: WaveformEntry, overwrite: bool = False):
+        """waveform must not be known by data"""
+        assert waveform_entry.waveform not in self.by_data
 
-            self._waveforms_by_data[waveform_entry.waveform] = waveform_entry
-            self._waveforms_by_name[name] = waveform_entry
+        if waveform_entry.name in self._by_name:
+            if overwrite:
+                self.pop_waveform(waveform_entry.name)
+            else:
+                raise RuntimeError('Waveform already existing', waveform_entry.name)
 
-            # remove cleanup
-            exit_stack.pop_all()
+        self._waveforms_by_data[waveform_entry.waveform] = waveform_entry
+        self._waveforms_by_name[waveform_entry.name] = waveform_entry
 
     def pop_waveform(self, name: str) -> WaveformEntry:
         wf = self._waveforms_by_name.pop(name)
@@ -269,7 +268,7 @@ class TektronixAWG(AWG):
 
     TODO: Move logger and repetition mode functionality to AWG interface"""
 
-    def __init__(self, tek_awg: tek_awg.TekAwg,
+    def __init__(self, device: tek_awg.TekAwg,
                  synchronize: str,
                  identifier='Tektronix',
                  logger=None,
@@ -277,7 +276,7 @@ class TektronixAWG(AWG):
                  idle_waveform_length=250):
         """
         Args:
-            tek_awg: Instance of the underlying driver from TekAwg package
+            tekawg: Instance of the underlying driver from TekAwg package
             synchronize: Either 'read' or 'clear'.
             identifier:
             logger:
@@ -285,10 +284,10 @@ class TektronixAWG(AWG):
         super().__init__(identifier=identifier)
         self.logger = logger or logging.getLogger("qupulse.tektronix")
 
-        if tek_awg is None:
+        if device is None:
             raise RuntimeError('Please install the tek_awg package or run "install_requirements" from this module')
 
-        self._device = tek_awg
+        self._device = device
         self._synchronized = False # this gets set to True by synchronize or clear and to False on error during manupulation
 
         self.idle_value = 8191
@@ -401,7 +400,7 @@ class TektronixAWG(AWG):
         self.read_waveforms()
 
         to_upload = {program_name: (tek_program, self.get_program_repetition_mode(program_name))
-                     for program_name, (_, tek_program, _) in self.programs.items()}
+                     for program_name, (_, tek_program, _) in self._programs.items()}
 
         self.programs.clear()
         self._sequence_entries = [None] * self.device.get_seq_length()
@@ -646,7 +645,6 @@ class TektronixAWG(AWG):
             raise RuntimeError("Error(s) during waveform upload", errors)
         self._synchronized = True
 
-
     def _upload_parsed(self, program_name: str, tek_program: TektronixProgram):
         """Requires to be in a synchronized state
 
@@ -744,8 +742,7 @@ class TektronixAWG(AWG):
     def _upload_waveform(self, waveform_data: tek_awg.Waveform, waveform_name):
         self.device.new_waveform(waveform_name, waveform_data)
         timestamp = self.device.get_waveform_timestamps(waveform_name)
-        self._waveforms.add_waveform(waveform_name,
-                                     waveform_entry=WaveformEntry(name=waveform_name,
+        self._waveforms.add_waveform(waveform_entry=WaveformEntry(name=waveform_name,
                                                                   length=waveform_data.size,
                                                                   waveform=waveform_data,
                                                                   timestamp=timestamp))
@@ -786,8 +783,6 @@ class TektronixAWG(AWG):
         else:
             positions, _, _ = self._programs[name]
             self._armed_program = (name, positions[0])
-
-
 
     def run_current_program(self, channel_states: Optional[Tuple[bool, bool, bool, bool]] = None):
         """Runs the currentlz armed program
