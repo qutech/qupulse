@@ -19,7 +19,7 @@ from qupulse import ChannelID
 from qupulse._program._loop import Loop, make_compatible
 from qupulse._program.waveforms import Waveform as QuPulseWaveform
 from qupulse.utils.types import TimeType
-from qupulse.hardware.util import voltage_to_uint16
+from qupulse.hardware.util import voltage_to_uint16, get_sample_times
 from qupulse.utils import pairwise
 
 
@@ -125,11 +125,8 @@ def parse_program(program: Loop,
 
     sample_rate_in_GHz = sample_rate / 10**9
 
-    time_per_sample = float(1 / sample_rate_in_GHz)
-
-    n_samples = [int(loop.waveform.duration * sample_rate_in_GHz) for loop in program]
-
-    time_array = np.arange(max(n_samples)) * time_per_sample
+    time_array, n_samples = get_sample_times([loop.waveform for loop in program],
+                                             sample_rate_in_GHz=sample_rate_in_GHz)
 
     channel_wise_kwargs = [dict(voltage_to_uint16_kwargs=dict(output_amplitude=amplitude,
                                                               output_offset=offset,
