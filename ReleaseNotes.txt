@@ -3,10 +3,15 @@
  - Hardware:
    - Add a `measure_program` method to the DAC interface. This method is used by the QCoDeS integration.
    - Add a `set_measurement_mask` to DAC interface. This method is used by the QCoDeS integration.
+   - Add a `get_sample_times` util method to share code for exact and fast sample time calculation
 
 - Pulse Templates:
     - `MappingPulseTemplate`:
         - `allow_partial_parameter_mapping` is now True as a default. The default can be changed with the class variable `MappingPulseTemplate.ALLOW_PARTIAL_PARAMETER_MAPPING`.
+        - Add specializations for `map_parameters` because the auto-inference of the return type did not work for empty input.
+
+- Expressions:
+    - Expressions can now be formatted as floats if they do not have free variables
 
 ## 0.4 ##
 

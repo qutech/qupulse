@@ -17,7 +17,7 @@ import numpy as np
 from qupulse.utils.types import ChannelID
 from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
 from qupulse._program._loop import Loop, make_compatible
-from qupulse.hardware.util import voltage_to_uint16, make_combined_wave, find_positions
+from qupulse.hardware.util import voltage_to_uint16, make_combined_wave, find_positions, get_sample_times
 from qupulse.hardware.awgs.base import AWG, AWGAmplitudeOffsetHandling
 
 
@@ -193,16 +193,10 @@ class TaborProgram:
                                                                                      Sequence[int]]:
         sample_rate = fractions.Fraction(sample_rate, 10**9)
 
-        segment_lengths = [waveform.duration*sample_rate for waveform in self._waveforms]
-        if not all(abs(int(segment_length) - segment_length) < 1e-10 and segment_length > 0
-                   for segment_length in segment_lengths):
-            raise TaborException('At least one waveform has a length that is no integer or smaller zero')
-        segment_lengths = np.asarray(segment_lengths, dtype=np.uint64)
+        time_array, segment_lengths = get_sample_times(self._waveforms, sample_rate)
 
         if np.any(segment_lengths % 16 > 0) or np.any(segment_lengths < 192):
             raise TaborException('At least one waveform has a length that is smaller 192 or not a multiple of 16')
-        sample_rate = float(sample_rate)
-        time_array = np.arange(np.max(segment_lengths)) / sample_rate
 
         def voltage_to_data(waveform, time, channel):
             if self._channels[channel]:
@@ -225,7 +219,7 @@ class TaborProgram:
 
         segments = np.empty_like(self._waveforms, dtype=TaborSegment)
         for i, waveform in enumerate(self._waveforms):
-            t = time_array[:int(waveform.duration*sample_rate)]
+            t = time_array[:segment_lengths[i]]
             marker_time = t[::2]
             segment_a = voltage_to_data(waveform, t, 0)
             segment_b = voltage_to_data(waveform, t, 1)

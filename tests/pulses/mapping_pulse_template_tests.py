@@ -175,6 +175,13 @@ class MappingTemplateTests(unittest.TestCase):
         for k, v in st.map_parameters(parameters).items():
             self.assertEqual(v, values[k])
 
+        with self.assertRaisesRegex(ValueError, "type of return value"):
+            st.map_parameters({})
+
+        parameters = dict(t=3, k=2, l=ConstantParameter(7))
+        with self.assertRaisesRegex(TypeError, "neither all Parameter nor Real"):
+            st.map_parameters(parameters)
+
     def test_partial_parameter_mapping(self):
         template = DummyPulseTemplate(parameter_names={'foo', 'bar'})
         st = MappingPulseTemplate(template, parameter_mapping={'foo': 't*k'}, allow_partial_parameter_mapping=True)
@@ -540,3 +547,18 @@ class MappingPulseTemplateOldSerializationTests(unittest.TestCase):
             self.assertEqual(data['measurement_mapping'], deserialized.measurement_mapping)
             self.assertEqual(data['parameter_constraints'], [str(pc) for pc in deserialized.parameter_constraints])
             self.assertIs(deserialized.template, dummy_pt)
+
+class MappingPulseTemplateRegressionTests(unittest.TestCase):
+    def test_issue_451(self):
+        from qupulse.pulses import TablePT, SequencePT, AtomicMultiChannelPT
+
+        gates_template = TablePT({'gate': [(0, 1), (60 * 1e3, 2, 'hold')]})
+        input_variables = {'period': float(gates_template.duration), 'uptime': 0}
+        marker_sequence = (TablePT({'m': [(0, 1), ('uptime', 0), ('period', 0)]}), input_variables)
+
+        combined_template = AtomicMultiChannelPT(gates_template, marker_sequence )
+        combined_template.create_program()
+
+        marker_sequence2 = TablePT({'m': [(0, 1), (0, 0), (gates_template.duration, 0)]})
+        combined_template2 = AtomicMultiChannelPT(gates_template, marker_sequence2)
+        combined_template2.create_program()
