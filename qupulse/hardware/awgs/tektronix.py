@@ -382,7 +382,7 @@ class TektronixAWG(AWG):
 
     def clear(self):
         """Clear all waveforms, the sequence table and program registry and initialize the idle program."""
-        self.synchronized = False
+        self._synchronized = False
         self._clear_sequence()
         self._clear_waveforms()
         self._programs = dict()
