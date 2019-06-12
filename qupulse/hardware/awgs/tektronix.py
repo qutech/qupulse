@@ -273,10 +273,12 @@ class TektronixAWG(AWG):
                  idle_waveform_length=250):
         """
         Args:
-            tekawg: Instance of the underlying driver from TekAwg package
+            device: Instance of the underlying driver from tek_awg package
             synchronize: Either 'read' or 'clear'.
-            identifier:
-            logger:
+            identifier: Some identifier
+            logger: Logging will happen here (defaults to 'qupulse.tektronix' otherwise)
+            default_program_repetition_mode: 'once' or 'infinite'
+            idle_waveform_length: length of the idle_waveform in samples
         """
         super().__init__(identifier=identifier)
         self.logger = logger or logging.getLogger("qupulse.tektronix")

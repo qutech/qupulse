@@ -306,7 +306,7 @@ class TektronixAWGTests(unittest.TestCase):
         init_idle_patch = mock.patch('qupulse.hardware.awgs.tektronix.TektronixAWG.initialize_idle_program')
         synchronize_patch = mock.patch('qupulse.hardware.awgs.tektronix.TektronixAWG.synchronize')
 
-        kwargs.setdefault('tek_awg', self.make_mock_tek_awg())
+        kwargs.setdefault('device', self.make_mock_tek_awg())
         kwargs.setdefault('synchronize', 'read')
 
         with make_waveform_patch, clear_patch, init_idle_patch, synchronize_patch:
