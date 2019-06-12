@@ -246,7 +246,9 @@ class TektronixAWG(AWG):
     Special characteristics:
      - Changing the run mode to 'running' takes a lot of time (depending on the sequence)
      - To keep the "arm" time low each program is uploaded to the sequence table! This reduces the number of programs
-       drastically but allows very fast switching with arm.
+       drastically but allows very fast switching with arm IF the awg runs.
+     - Arm starts the awg if it does not run. The first call to arm after uploading new programs is therefore slow. This
+       guarantees that subsequent calls to arm and run_current_program are always fast.
 
     This driver implements an interface for changing the program repetition mode consisting of:
      - the property default_program_repetition_mode
@@ -764,12 +766,42 @@ class TektronixAWG(AWG):
                 for name, (_, positions, _) in self._programs.items()}
 
     def arm(self, name: Optional[str]):
-        positions, _, _ = self._programs[name]
-        self._armed_program = (name, positions[0])
+        """Arming starts the awg"""
+        self.logger.info("Arming program %r", name)
 
-    def run_current_program(self):
-        _, program_index = self._armed_program
+        self.device.jump_to_sequence_element(self._idle_program_index)
+        self.device.wait_until_commands_executed()
+        self.logger.debug("Jumped to idle program")
 
         self.device.run()
-        self.device.jump_to_sequence_element(program_index)
         self.device.wait_until_commands_executed()
+        self.logger.debug("Switched to run")
+
+        if name is None:
+            self._armed_program = None, None
+
+        else:
+            positions, _, _ = self._programs[name]
+            self._armed_program = (name, positions[0])
+
+
+
+    def run_current_program(self, channel_states: Optional[Tuple[bool, bool, bool, bool]] = None):
+        """Runs the currentlz armed program
+
+        Args:
+            channel_states: If given the channel states are set to these values
+
+        Returns:
+
+        """
+        assert channel_states is None or len(channel_states) == 4
+
+        program_name, program_index = self._armed_program
+        if program_name is None:
+            self.logger.warning("Ignoring run_current_program call as no program is armed")
+            return
+        else:
+            self.logger.info("Running program '%s'", program_name)
+            self.device.jump_to_sequence_element(program_index)
+            self.device.wait_until_commands_executed()
