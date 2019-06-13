@@ -292,7 +292,7 @@ class TektronixAWGTests(unittest.TestCase):
         return mock_tek_awg
 
     @staticmethod
-    def patch_method(method_name):
+    def patch_method(method_name: str):
         full_name = 'qupulse.hardware.awgs.tektronix.TektronixAWG.%s' % method_name
         return mock.patch(full_name)
 
@@ -363,3 +363,36 @@ class TektronixAWGTests(unittest.TestCase):
             dev_write.assert_called_once_with('SEQ:LENG 0')
             get_seq_length.assert_called_once_with()
             self.assertEqual(tek_awg._sequence_entries, [None]*3)
+
+    def test_get_empty_sequence_positions(self):
+        patch_assert_synced = self.patch_method('assert_synchronized')
+
+        awg = self.make_awg()
+
+        awg._sequence_entries = [0, None, 1, None, 2, None, 3]
+        with mock.patch.object(awg.device, 'set_seq_length') as set_seq_length_mock, \
+                patch_assert_synced as assert_synced_mock:
+            results = awg._get_empty_sequence_positions(2)
+
+            set_seq_length_mock.assert_not_called()
+            assert_synced_mock.assert_called_once()
+        self.assertEqual([0, None, 1, None, 2, None, 3], awg._sequence_entries)
+        self.assertEqual([2, 4], results)
+
+        with mock.patch.object(awg.device, 'set_seq_length') as set_seq_length_mock, \
+                patch_assert_synced as assert_synced_mock:
+            results = awg._get_empty_sequence_positions(3)
+
+            set_seq_length_mock.assert_not_called()
+            assert_synced_mock.assert_called_once()
+        self.assertEqual([0, None, 1, None, 2, None, 3], awg._sequence_entries)
+        self.assertEqual([2, 4, 6], results)
+
+        with mock.patch.object(awg.device, 'set_seq_length') as set_seq_length_mock, \
+                patch_assert_synced as assert_synced_mock:
+            results = awg._get_empty_sequence_positions(6)
+
+            set_seq_length_mock.assert_called_once_with(10)
+            assert_synced_mock.assert_called_once()
+        self.assertEqual([0, None, 1, None, 2, None, 3, None, None, None], awg._sequence_entries)
+        self.assertEqual([2, 4, 6, 8, 9, 10], results)

@@ -733,7 +733,7 @@ class TektronixAWG(AWG):
             self.device.set_seq_length(len(self._sequence_entries) + len(missing))
             self._sequence_entries.extend(itertools.repeat(None, len(missing)))
             free_positions.extend(missing)
-        return free_positions
+        return free_positions[:length]
 
     def _delete_waveform(self, waveform_name: str):
         self.device.del_waveform(waveform_name)
