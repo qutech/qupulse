@@ -375,7 +375,7 @@ class TektronixAWGTests(unittest.TestCase):
             results = awg._get_empty_sequence_positions(2)
 
             set_seq_length_mock.assert_not_called()
-            assert_synced_mock.assert_called_once()
+            assert_synced_mock.assert_called_once_with()
         self.assertEqual([0, None, 1, None, 2, None, 3], awg._sequence_entries)
         self.assertEqual([2, 4], results)
 
@@ -384,7 +384,7 @@ class TektronixAWGTests(unittest.TestCase):
             results = awg._get_empty_sequence_positions(3)
 
             set_seq_length_mock.assert_not_called()
-            assert_synced_mock.assert_called_once()
+            assert_synced_mock.assert_called_once_with()
         self.assertEqual([0, None, 1, None, 2, None, 3], awg._sequence_entries)
         self.assertEqual([2, 4, 6], results)
 
@@ -393,6 +393,6 @@ class TektronixAWGTests(unittest.TestCase):
             results = awg._get_empty_sequence_positions(6)
 
             set_seq_length_mock.assert_called_once_with(10)
-            assert_synced_mock.assert_called_once()
+            assert_synced_mock.assert_called_once_with()
         self.assertEqual([0, None, 1, None, 2, None, 3, None, None, None], awg._sequence_entries)
         self.assertEqual([2, 4, 6, 8, 9, 10], results)
