@@ -550,7 +550,25 @@ class TektronixAWG(AWG):
             new_entries = []
 
             for entry in entries:
-                if isinstance(entry, int):
+                if isinstance(entry, str):
+                    # check that we know the waveform
+                    wf_name = self._waveforms.by_name[entry].name
+
+                elif isinstance(entry, tek_awg.Waveform):
+                    if entry in self._waveforms.by_data:
+                        wf_name = self._waveforms.by_data[entry].name
+
+                    elif entry in waveforms_to_upload:
+                        wf_name = waveforms_to_upload[entry]
+
+                    else:
+                        wf_name = name + '_' + str(abs(hash(entry)))
+                        waveforms_to_upload[entry] = wf_name
+
+                else:
+                    assert entry - int(entry) == 0
+                    entry = int(entry)
+
                     if entry in required_idle_pulses:
                         wf_name = required_idle_pulses[entry]
 
@@ -566,21 +584,6 @@ class TektronixAWG(AWG):
                             waveforms_to_upload[wf_data] = wf_name
 
                         required_idle_pulses[entry] = wf_name
-
-                elif isinstance(entry, tek_awg.Waveform):
-                    if entry in self._waveforms.by_data:
-                        wf_name = self._waveforms.by_data[entry].name
-
-                    elif entry in waveforms_to_upload:
-                        wf_name = waveforms_to_upload[entry]
-
-                    else:
-                        wf_name = name + '_' + str(abs(hash(entry)))
-                        waveforms_to_upload[entry] = wf_name
-
-                else:
-                    # check that we know the waveform
-                    wf_name = self._waveforms.by_name[entry].name
 
                 new_entries.append(wf_name)
 
