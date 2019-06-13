@@ -109,12 +109,14 @@ def parse_program(program: Loop,
                                                               Sequence[tek_awg.Waveform]]:
     """Convert the program into a sequence of sequence table entries and a sequence of waveforms that can be uploaded
     to the device."""
-    assert program.depth() == 1, "Invalid program depth."
-    assert program.repetition_count == 1, "Cannot repeat program a finite number of times (only once)"
+    assert program.depth() == 1, ("Invalid program depth: %d" % program.depth())
+    assert program.repetition_count == 1, ("Cannot repeat program a finite number of times (only once not %d)" %
+                                           program.repetition_count)
 
     # For backward compatibility
+    # EDIT: I think this is not needed? (Simon)
     if offsets is None:
-        offsets = tuple(np.zeros(len(amplitudes)))
+        offsets = (0.,) * len(amplitudes)
 
     assert len(channels) == len(markers) == len(amplitudes) == len(voltage_transformations) == len(offsets)
 
