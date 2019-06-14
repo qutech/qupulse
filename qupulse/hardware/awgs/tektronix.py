@@ -109,12 +109,14 @@ def parse_program(program: Loop,
                                                               Sequence[tek_awg.Waveform]]:
     """Convert the program into a sequence of sequence table entries and a sequence of waveforms that can be uploaded
     to the device."""
-    assert program.depth() == 1, "Invalid program depth."
-    assert program.repetition_count == 1, "Cannot repeat program a finite number of times (only once)"
+    assert program.depth() == 1, ("Invalid program depth: %d" % program.depth())
+    assert program.repetition_count == 1, ("Cannot repeat program a finite number of times (only once not %d)" %
+                                           program.repetition_count)
 
     # For backward compatibility
+    # EDIT: I think this is not needed? (Simon)
     if offsets is None:
-        offsets = tuple(np.zeros(len(amplitudes)))
+        offsets = (0.,) * len(amplitudes)
 
     assert len(channels) == len(markers) == len(amplitudes) == len(voltage_transformations) == len(offsets)
 
@@ -550,7 +552,25 @@ class TektronixAWG(AWG):
             new_entries = []
 
             for entry in entries:
-                if isinstance(entry, int):
+                if isinstance(entry, str):
+                    # check that we know the waveform
+                    wf_name = self._waveforms.by_name[entry].name
+
+                elif isinstance(entry, tek_awg.Waveform):
+                    if entry in self._waveforms.by_data:
+                        wf_name = self._waveforms.by_data[entry].name
+
+                    elif entry in waveforms_to_upload:
+                        wf_name = waveforms_to_upload[entry]
+
+                    else:
+                        wf_name = name + '_' + str(abs(hash(entry)))
+                        waveforms_to_upload[entry] = wf_name
+
+                else:
+                    assert entry - int(entry) == 0
+                    entry = int(entry)
+
                     if entry in required_idle_pulses:
                         wf_name = required_idle_pulses[entry]
 
@@ -566,21 +586,6 @@ class TektronixAWG(AWG):
                             waveforms_to_upload[wf_data] = wf_name
 
                         required_idle_pulses[entry] = wf_name
-
-                elif isinstance(entry, tek_awg.Waveform):
-                    if entry in self._waveforms.by_data:
-                        wf_name = self._waveforms.by_data[entry].name
-
-                    elif entry in waveforms_to_upload:
-                        wf_name = waveforms_to_upload[entry]
-
-                    else:
-                        wf_name = name + '_' + str(abs(hash(entry)))
-                        waveforms_to_upload[entry] = wf_name
-
-                else:
-                    # check that we know the waveform
-                    wf_name = self._waveforms.by_name[entry].name
 
                 new_entries.append(wf_name)
 
@@ -730,7 +735,7 @@ class TektronixAWG(AWG):
             self.device.set_seq_length(len(self._sequence_entries) + len(missing))
             self._sequence_entries.extend(itertools.repeat(None, len(missing)))
             free_positions.extend(missing)
-        return free_positions
+        return free_positions[:length]
 
     def _delete_waveform(self, waveform_name: str):
         self.device.del_waveform(waveform_name)
