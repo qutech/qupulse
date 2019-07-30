@@ -254,10 +254,11 @@ class MappingTemplateTests(unittest.TestCase):
         self.assertEqual({'a': Expression('2*f'), 'B': Expression('-3.2*f+2.3')}, pulse.integral)
 
     def test_drop_channel(self):
-        dummy = DummyPulseTemplate(defined_channels={'A', 'B', 'C'},
+        dummy = DummyPulseTemplate(defined_channels={'A', 'B', 'C', 'D'},
                                    parameter_names={'k', 'f', 'b'})
         pulse = MappingPulseTemplate(dummy, parameter_mapping={'k': 'f', 'b': 2.3}, channel_mapping={'A': 'a',
-                                                                                                     'C': None})
+                                                                                                     'C': None,
+                                                                                                     'D': None})
         self.assertEqual({'a', 'B'}, pulse.defined_channels)
 
 

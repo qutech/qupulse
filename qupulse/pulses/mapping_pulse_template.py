@@ -85,14 +85,17 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         measurement_mapping = dict(itertools.chain(((name, name) for name in missing_name_mappings),
                                                    measurement_mapping.items()))
 
-        channel_mapping = dict() if channel_mapping is None else channel_mapping
+        # we copy to modify in place
+        channel_mapping = dict() if channel_mapping is None else channel_mapping.copy()
         internal_channels = template.defined_channels
         mapped_internal_channels = set(channel_mapping.keys())
         if mapped_internal_channels - internal_channels:
             raise UnnecessaryMappingException(template,mapped_internal_channels - internal_channels)
 
+        # fill up implicit mappings (unchanged channels)
         missing_channel_mappings = internal_channels - mapped_internal_channels
-        channel_mapping = dict(itertools.chain(((name, name) for name in missing_channel_mappings), channel_mapping.items()))
+        for name in missing_channel_mappings:
+            channel_mapping[name] = name
 
         # None is an allowed overlapping target as it marks dropped channels
         overlapping_targets = {channel
