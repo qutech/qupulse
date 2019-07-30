@@ -42,7 +42,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
 
         Mappings that are not specified are defaulted to identity mappings. Channels and measurement names of the
         encapsulated template can be mapped partially by default. F.i. if channel_mapping only contains one of two
-        channels the other channel name is mapped to itself.
+        channels the other channel name is mapped to itself. Channels that are mapped to None are dropped.
         However, if a parameter mapping is specified and one or more parameters are not mapped a MissingMappingException
         is raised. To allow partial mappings and enable the same behaviour as for the channel and measurement name
         mapping allow_partial_parameter_mapping must be set to True.
@@ -51,7 +51,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         :param template: The encapsulated pulse template whose parameters, measurement names and channels are mapped
         :param parameter_mapping: if not none, mappings for all parameters must be specified
         :param measurement_mapping: mappings for other measurement names are inserted
-        :param channel_mapping: mappings for other channels are auto inserted
+        :param channel_mapping: mappings for other channels are auto inserted. Mapping to None drops the channel.
         :param parameter_constraints:
         :param allow_partial_parameter_mapping: If None the value of the class variable ALLOW_PARTIAL_PARAMETER_MAPPING
         """
@@ -85,16 +85,22 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         measurement_mapping = dict(itertools.chain(((name, name) for name in missing_name_mappings),
                                                    measurement_mapping.items()))
 
-        channel_mapping = dict() if channel_mapping is None else channel_mapping
+        # we copy to modify in place
+        channel_mapping = dict() if channel_mapping is None else channel_mapping.copy()
         internal_channels = template.defined_channels
         mapped_internal_channels = set(channel_mapping.keys())
         if mapped_internal_channels - internal_channels:
             raise UnnecessaryMappingException(template,mapped_internal_channels - internal_channels)
+
+        # fill up implicit mappings (unchanged channels)
         missing_channel_mappings = internal_channels - mapped_internal_channels
-        channel_mapping = dict(itertools.chain(((name, name) for name in missing_channel_mappings),
-                                               channel_mapping.items()))
+        for name in missing_channel_mappings:
+            channel_mapping[name] = name
+
+        # None is an allowed overlapping target as it marks dropped channels
         overlapping_targets = {channel
-                               for channel, n in collections.Counter(channel_mapping.values()).items() if n > 1}
+                               for channel, n in collections.Counter(channel_mapping.values()).items()
+                               if n > 1 and channel is not None}
         if overlapping_targets:
             raise ValueError('Cannot map multiple channels to the same target(s) %r' % overlapping_targets,
                              channel_mapping)
@@ -181,7 +187,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         return self.__parameter_mapping
 
     @property
-    def channel_mapping(self) -> Dict[ChannelID, ChannelID]:
+    def channel_mapping(self) -> Dict[ChannelID, Optional[ChannelID]]:
         return self.__channel_mapping
 
     @property
@@ -198,7 +204,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
 
     @property
     def defined_channels(self) -> Set[ChannelID]:
-        return {self.__channel_mapping[k] for k in self.template.defined_channels}
+        return {self.__channel_mapping[k] for k in self.template.defined_channels} - {None}
 
     @property
     def duration(self) -> Expression:
@@ -295,8 +301,12 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
     def get_updated_measurement_mapping(self, measurement_mapping: Dict[str, str]) -> Dict[str, str]:
         return {k: measurement_mapping[v] for k, v in self.__measurement_mapping.items()}
 
-    def get_updated_channel_mapping(self, channel_mapping: Dict[ChannelID, ChannelID]) -> Dict[ChannelID, ChannelID]:
-        return {inner_ch: channel_mapping[outer_ch] for inner_ch, outer_ch in self.__channel_mapping.items()}
+    def get_updated_channel_mapping(self, channel_mapping: Dict[ChannelID,
+                                                                Optional[ChannelID]]) -> Dict[ChannelID,
+                                                                                              Optional[ChannelID]]:
+        # do not look up the mapped outer channel if it is None (this marks a deleted channel)
+        return {inner_ch: None if outer_ch is None else channel_mapping[outer_ch]
+                for inner_ch, outer_ch in self.__channel_mapping.items()}
 
     def build_sequence(self,
                        sequencer: Sequencer,
@@ -364,14 +374,15 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
             if isinstance(parameter_mapping[i], ExpressionScalar):
                 parameter_mapping[i] = parameter_mapping[i].sympified_expression
 
-        for channel in internal_integral:
+        for channel, ch_integral in internal_integral.items():
             expr = ExpressionScalar(
-                internal_integral[channel].sympified_expression.subs(parameter_mapping)
+                ch_integral.sympified_expression.subs(parameter_mapping)
             )
             channel_out = channel
             if channel in self.__channel_mapping:
                 channel_out = self.__channel_mapping[channel]
-            expressions[channel_out] = expr
+            if channel_out is not None:
+                expressions[channel_out] = expr
 
         return expressions
 
