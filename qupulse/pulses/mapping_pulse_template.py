@@ -42,7 +42,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
 
         Mappings that are not specified are defaulted to identity mappings. Channels and measurement names of the
         encapsulated template can be mapped partially by default. F.i. if channel_mapping only contains one of two
-        channels the other channel name is mapped to itself.
+        channels the other channel name is mapped to itself. Channels that are mapped to None are dropped.
         However, if a parameter mapping is specified and one or more parameters are not mapped a MissingMappingException
         is raised. To allow partial mappings and enable the same behaviour as for the channel and measurement name
         mapping allow_partial_parameter_mapping must be set to True.
@@ -51,7 +51,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         :param template: The encapsulated pulse template whose parameters, measurement names and channels are mapped
         :param parameter_mapping: if not none, mappings for all parameters must be specified
         :param measurement_mapping: mappings for other measurement names are inserted
-        :param channel_mapping: mappings for other channels are auto inserted
+        :param channel_mapping: mappings for other channels are auto inserted. Mapping to None drops the channel.
         :param parameter_constraints:
         :param allow_partial_parameter_mapping: If None the value of the class variable ALLOW_PARTIAL_PARAMETER_MAPPING
         """
