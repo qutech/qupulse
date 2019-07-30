@@ -211,12 +211,16 @@ class MappingTemplateTests(unittest.TestCase):
         self.assertEqual({'t', 'k', 'm'}, mt.parameter_names)
 
     def test_get_updated_channel_mapping(self):
-        template = DummyPulseTemplate(defined_channels={'foo', 'bar'})
-        st = MappingPulseTemplate(template, channel_mapping={'bar': 'kneipe'})
+        template = DummyPulseTemplate(defined_channels={'foo', 'bar', 'brotzeit'})
+        st = MappingPulseTemplate(template, channel_mapping={'bar': 'kneipe', 'brotzeit': None})
         with self.assertRaises(KeyError):
             st.get_updated_channel_mapping(dict())
-        self.assertEqual(st.get_updated_channel_mapping({'kneipe': 'meas1', 'foo': 'meas2', 'troet': 'meas3'}),
-                         {'foo': 'meas2', 'bar': 'meas1'})
+        self.assertEqual(st.get_updated_channel_mapping({'kneipe': 'meas1',
+                                                         'foo': 'meas2',
+                                                         'troet': 'meas3'}),
+                         {'foo': 'meas2',
+                          'bar': 'meas1',
+                          'brotzeit': None})
 
     def test_measurement_names(self):
         template = DummyPulseTemplate(measurement_names={'foo', 'bar'})
@@ -238,13 +242,23 @@ class MappingTemplateTests(unittest.TestCase):
                          {'foo': 'meas2', 'bar': 'meas1'})
 
     def test_integral(self) -> None:
-        dummy = DummyPulseTemplate(defined_channels={'A', 'B'},
+        dummy = DummyPulseTemplate(defined_channels={'A', 'B', 'C'},
                                    parameter_names={'k', 'f', 'b'},
-                                   integrals={'A': Expression('2*k'), 'other': Expression('-3.2*f+b')})
-        pulse = MappingPulseTemplate(dummy, parameter_mapping={'k': 'f', 'b': 2.3}, channel_mapping={'A': 'default'},
+                                   integrals={'A': Expression('2*k'),
+                                              'B': Expression('-3.2*f+b'),
+                                              'C': Expression(1)})
+        pulse = MappingPulseTemplate(dummy, parameter_mapping={'k': 'f', 'b': 2.3}, channel_mapping={'A': 'a',
+                                                                                                     'C': None},
                                      allow_partial_parameter_mapping=True)
 
-        self.assertEqual({'default': Expression('2*f'), 'other': Expression('-3.2*f+2.3')}, pulse.integral)
+        self.assertEqual({'a': Expression('2*f'), 'B': Expression('-3.2*f+2.3')}, pulse.integral)
+
+    def test_drop_channel(self):
+        dummy = DummyPulseTemplate(defined_channels={'A', 'B', 'C'},
+                                   parameter_names={'k', 'f', 'b'})
+        pulse = MappingPulseTemplate(dummy, parameter_mapping={'k': 'f', 'b': 2.3}, channel_mapping={'A': 'a',
+                                                                                                     'C': None})
+        self.assertEqual({'a', 'B'}, pulse.defined_channels)
 
 
 class MappingPulseTemplateSequencingTest(MeasurementWindowTestCase):

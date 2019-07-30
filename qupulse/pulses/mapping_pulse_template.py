@@ -90,12 +90,14 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         mapped_internal_channels = set(channel_mapping.keys())
         if mapped_internal_channels - internal_channels:
             raise UnnecessaryMappingException(template,mapped_internal_channels - internal_channels)
-        if 0:
-            missing_channel_mappings = internal_channels - mapped_internal_channels
-            channel_mapping = dict(itertools.chain(((name, name) for name in missing_channel_mappings),
-                                               channel_mapping.items()))
+
+        missing_channel_mappings = internal_channels - mapped_internal_channels
+        channel_mapping = dict(itertools.chain(((name, name) for name in missing_channel_mappings), channel_mapping.items()))
+
+        # None is an allowed overlapping target as it marks dropped channels
         overlapping_targets = {channel
-                               for channel, n in collections.Counter(channel_mapping.values()).items() if n > 1}
+                               for channel, n in collections.Counter(channel_mapping.values()).items()
+                               if n > 1 and channel is not None}
         if overlapping_targets:
             raise ValueError('Cannot map multiple channels to the same target(s) %r' % overlapping_targets,
                              channel_mapping)
@@ -182,7 +184,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         return self.__parameter_mapping
 
     @property
-    def channel_mapping(self) -> Dict[ChannelID, ChannelID]:
+    def channel_mapping(self) -> Dict[ChannelID, Optional[ChannelID]]:
         return self.__channel_mapping
 
     @property
@@ -199,7 +201,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
 
     @property
     def defined_channels(self) -> Set[ChannelID]:
-        return {self.__channel_mapping[k] for k in self.template.defined_channels if k in self.__channel_mapping}
+        return {self.__channel_mapping[k] for k in self.template.defined_channels} - {None}
 
     @property
     def duration(self) -> Expression:
@@ -296,8 +298,12 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
     def get_updated_measurement_mapping(self, measurement_mapping: Dict[str, str]) -> Dict[str, str]:
         return {k: measurement_mapping[v] for k, v in self.__measurement_mapping.items()}
 
-    def get_updated_channel_mapping(self, channel_mapping: Dict[ChannelID, ChannelID]) -> Dict[ChannelID, ChannelID]:
-        return {inner_ch: channel_mapping[outer_ch] for inner_ch, outer_ch in self.__channel_mapping.items()}
+    def get_updated_channel_mapping(self, channel_mapping: Dict[ChannelID,
+                                                                Optional[ChannelID]]) -> Dict[ChannelID,
+                                                                                              Optional[ChannelID]]:
+        # do not look up the mapped outer channel if it is None (this marks a deleted channel)
+        return {inner_ch: None if outer_ch is None else channel_mapping[outer_ch]
+                for inner_ch, outer_ch in self.__channel_mapping.items()}
 
     def build_sequence(self,
                        sequencer: Sequencer,
@@ -365,14 +371,15 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
             if isinstance(parameter_mapping[i], ExpressionScalar):
                 parameter_mapping[i] = parameter_mapping[i].sympified_expression
 
-        for channel in internal_integral:
+        for channel, ch_integral in internal_integral.items():
             expr = ExpressionScalar(
-                internal_integral[channel].sympified_expression.subs(parameter_mapping)
+                ch_integral.sympified_expression.subs(parameter_mapping)
             )
             channel_out = channel
             if channel in self.__channel_mapping:
                 channel_out = self.__channel_mapping[channel]
-            expressions[channel_out] = expr
+            if channel_out is not None:
+                expressions[channel_out] = expr
 
         return expressions
 
