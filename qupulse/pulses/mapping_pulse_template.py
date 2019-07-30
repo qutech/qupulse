@@ -90,8 +90,9 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         mapped_internal_channels = set(channel_mapping.keys())
         if mapped_internal_channels - internal_channels:
             raise UnnecessaryMappingException(template,mapped_internal_channels - internal_channels)
-        missing_channel_mappings = internal_channels - mapped_internal_channels
-        channel_mapping = dict(itertools.chain(((name, name) for name in missing_channel_mappings),
+        if 0:
+            missing_channel_mappings = internal_channels - mapped_internal_channels
+            channel_mapping = dict(itertools.chain(((name, name) for name in missing_channel_mappings),
                                                channel_mapping.items()))
         overlapping_targets = {channel
                                for channel, n in collections.Counter(channel_mapping.values()).items() if n > 1}
@@ -198,7 +199,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
 
     @property
     def defined_channels(self) -> Set[ChannelID]:
-        return {self.__channel_mapping[k] for k in self.template.defined_channels}
+        return {self.__channel_mapping[k] for k in self.template.defined_channels if k in self.__channel_mapping}
 
     @property
     def duration(self) -> Expression:
