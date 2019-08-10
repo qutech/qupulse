@@ -323,7 +323,9 @@ def plot(pulse: PulseTemplate,
 
     # add some margins in the presentation
     axes.set_xlim(-0.5+time_slice[0], time_slice[1] + 0.5)
-    axes.set_ylim(min_voltage - 0.1*(max_voltage-min_voltage), max_voltage + 0.1*(max_voltage-min_voltage))
+    voltage_difference = max_voltage-min_voltage
+    if voltage_difference>0:
+        axes.set_ylim(min_voltage - 0.1*voltage_difference, max_voltage + 0.1*voltage_difference)
     axes.set_xlabel('Time (ns)')
     axes.set_ylabel('Voltage (a.u.)')
 
