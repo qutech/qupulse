@@ -34,7 +34,10 @@ except ImportError:
     TimeType = fractions.Fraction
 
     def time_from_float(time: float, absolute_error: float = 1e-12) -> TimeType:
-        return fractions.Fraction(time).limit_denominator(int(1/absolute_error))
+        if absolute_error > 0.:
+            return fractions.Fraction(time).limit_denominator(int(1/absolute_error))
+        else:
+            return fractions.Fraction(time)
 
     def time_from_fraction(numerator: int, denominator: int = 1) -> TimeType:
         return fractions.Fraction(numerator=numerator, denominator=denominator)
