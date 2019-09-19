@@ -39,7 +39,7 @@ def _with_other_as_time_type(fn):
     return wrapper
 
 
-class TimeType:
+class TimeType(numbers.Rational):
     """This type represents a rational number with arbitrary precision.
 
     Internally it uses gmpy2.mpq (if available) or fractions.Fraction
@@ -62,14 +62,45 @@ class TimeType:
     def denominator(self):
         return self._value.denominator
 
-    def __round__(self):
-        return self._value.__round__()
+    def __round__(self, *args, **kwargs):
+        return self._value.__round__(*args, **kwargs)
 
     def __abs__(self):
-        return self._value.__abs__()
+        return TimeType(self._value.__abs__())
 
     def __hash__(self):
         return self._value.__hash__()
+
+    def __ceil__(self):
+        return int(self._value.__ceil__())
+
+    def __floor__(self):
+        return int(self._value.__floor__())
+
+    @_with_other_as_time_type
+    def __mod__(self, other: 'TimeType'):
+        return self._value.__mod__(other._value)
+
+    @_with_other_as_time_type
+    def __rmod__(self, other: 'TimeType'):
+        return self._value.__rmod__(other._value)
+
+    def __neg__(self):
+        return TimeType(self._value.__neg__())
+
+    def __pos__(self):
+        return self
+
+    @_with_other_as_time_type
+    def __pow__(self, other: 'TimeType'):
+        return self._value.__pow__(other._value)
+
+    @_with_other_as_time_type
+    def __rpow__(self, other: 'TimeType'):
+        return self._value.__rpow__(other._value)
+
+    def __trunc__(self):
+        return int(self._value.__trunc__())
 
     @_with_other_as_time_type
     def __mul__(self, other: 'TimeType'):
