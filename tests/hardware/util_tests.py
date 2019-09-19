@@ -179,10 +179,10 @@ class FindPositionTest(unittest.TestCase):
 
 class SampleTimeCalculationTest(unittest.TestCase):
     def test_get_sample_times(self):
-        sample_rate = TimeType(12, 10)
-        wf1 = DummyWaveform(duration=TimeType(20, 12))
-        wf2 = DummyWaveform(duration=TimeType(400000000001, 120000000000))
-        wf3 = DummyWaveform(duration=TimeType(1, 10**15))
+        sample_rate = TimeType.from_fraction(12, 10)
+        wf1 = DummyWaveform(duration=TimeType.from_fraction(20, 12))
+        wf2 = DummyWaveform(duration=TimeType.from_fraction(400000000001, 120000000000))
+        wf3 = DummyWaveform(duration=TimeType.from_fraction(1, 10**15))
 
         expected_times = np.arange(4) / 1.2
         times, n_samples = get_sample_times([wf1, wf2], sample_rate_in_GHz=sample_rate)
@@ -199,8 +199,8 @@ class SampleTimeCalculationTest(unittest.TestCase):
             get_sample_times([wf1, wf3], sample_rate_in_GHz=sample_rate)
 
     def test_get_sample_times_single_wf(self):
-        sample_rate = TimeType(12, 10)
-        wf = DummyWaveform(duration=TimeType(40, 12))
+        sample_rate = TimeType.from_fraction(12, 10)
+        wf = DummyWaveform(duration=TimeType.from_fraction(40, 12))
 
         expected_times = np.arange(4) / 1.2
         times, n_samples = get_sample_times(wf, sample_rate_in_GHz=sample_rate)

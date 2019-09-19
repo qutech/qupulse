@@ -16,31 +16,167 @@ __all__ = ["MeasurementWindow", "ChannelID", "HashableNumpyArray", "TimeType", "
 MeasurementWindow = typing.Tuple[str, numbers.Real, numbers.Real]
 ChannelID = typing.Union[str, int]
 
-
 try:
     import gmpy2
-    TimeType = gmpy2.mpq
-
-    def time_from_float(time: float, absolute_error: float=1e-12) -> TimeType:
-        # gmpy2 is at least an order of magnitude faster than fractions.Fraction
-        return gmpy2.mpq(gmpy2.f2q(time, absolute_error))
-
-    def time_from_fraction(numerator: int, denominator: int = 1) -> TimeType:
-        return gmpy2.mpq(numerator, denominator)
-
 except ImportError:
-    warnings.warn('gmpy2 not found. Using fractions.Fraction as fallback. Install gmpy2 for better performance.')
+    gmpy2 = None
 
-    TimeType = fractions.Fraction
+    warnings.warn('gmpy2 not found. Using fractions.Fraction as fallback. Install gmpy2 for better performance.'
+                  'time_from_float might produce slightly different results')
 
-    def time_from_float(time: float, absolute_error: float = 1e-12) -> TimeType:
-        if absolute_error > 0.:
-            return fractions.Fraction(time).limit_denominator(int(1/absolute_error))
+
+def _with_other_as_time_type(fn):
+    """This is decorator to convert the other argument into a TimeType"""
+    def wrapper(self, other) -> 'TimeType':
+        converted = _converter.get(type(other), TimeType)(other)
+        result = fn(self, converted)
+        if result is NotImplemented:
+            return result
+        elif type(result) is TimeType._InternalRepresentation:
+            return TimeType(result)
         else:
-            return fractions.Fraction(time)
+            return result
+    return wrapper
 
-    def time_from_fraction(numerator: int, denominator: int = 1) -> TimeType:
-        return fractions.Fraction(numerator=numerator, denominator=denominator)
+
+class TimeType:
+    """This type represents a rational number with arbitrary precision.
+
+    Internally it uses gmpy2.mpq (if available) or fractions.Fraction
+    """
+    __slots__ = ('_value',)
+
+    _InternalRepresentation = fractions.Fraction if gmpy2 is None else gmpy2.mpq
+
+    def __init__(self, value: numbers.Real = 0.):
+        if type(value) == type(self):
+            self._value = value._value
+        else:
+            self._value = self._InternalRepresentation(value)
+
+    @property
+    def numerator(self):
+        return self._value.numerator
+
+    @property
+    def denominator(self):
+        return self._value.denominator
+
+    def __round__(self):
+        return self._value.__round__()
+
+    def __abs__(self):
+        return self._value.__abs__()
+
+    def __hash__(self):
+        return self._value.__hash__()
+
+    @_with_other_as_time_type
+    def __mul__(self, other: 'TimeType'):
+        return self._value.__mul__(other._value)
+
+    @_with_other_as_time_type
+    def __rmul__(self, other: 'TimeType'):
+        return self._value.__mul__(other._value)
+
+    @_with_other_as_time_type
+    def __add__(self, other: 'TimeType'):
+        return self._value.__add__(other._value)
+
+    @_with_other_as_time_type
+    def __radd__(self, other: 'TimeType'):
+        return self._value.__radd__(other._value)
+
+    @_with_other_as_time_type
+    def __sub__(self, other: 'TimeType'):
+        return self._value.__sub__(other._value)
+
+    @_with_other_as_time_type
+    def __rsub__(self, other: 'TimeType'):
+        return self._value.__rsub__(other._value)
+
+    @_with_other_as_time_type
+    def __truediv__(self, other: 'TimeType'):
+        return self._value.__truediv__(other._value)
+
+    @_with_other_as_time_type
+    def __rtruediv__(self, other: 'TimeType'):
+        return self._value.__rtruediv__(other._value)
+
+    @_with_other_as_time_type
+    def __floordiv__(self, other: 'TimeType'):
+        return self._value.__floordiv__(other._value)
+
+    @_with_other_as_time_type
+    def __rfloordiv__(self, other: 'TimeType'):
+        return self._value.__rfloordiv__(other._value)
+
+    @_with_other_as_time_type
+    def __le__(self, other: 'TimeType'):
+        return self._value.__le__(other._value)
+
+    @_with_other_as_time_type
+    def __ge__(self, other: 'TimeType'):
+        return self._value.__ge__(other._value)
+
+    @_with_other_as_time_type
+    def __lt__(self, other: 'TimeType'):
+        return self._value.__lt__(other._value)
+
+    @_with_other_as_time_type
+    def __gt__(self, other: 'TimeType'):
+        return self._value.__gt__(other._value)
+
+    def __eq__(self, other):
+        if type(other) == type(self):
+            return self._value.__eq__(other._value)
+        else:
+            return self._value == other
+
+    @classmethod
+    def from_float(cls, value: float, absolute_error: typing.Optional[float] = None) -> 'TimeType':
+        # gmpy2 is at least an order of magnitude faster than fractions.Fraction
+        if absolute_error is None:
+            # this method utilizes the 'print as many digits as necessary to destinguish between all floats'
+            # functionality of str
+            return cls(cls._InternalRepresentation(str(value).replace('e', 'E')))
+
+        elif absolute_error == 0:
+            return cls(cls._InternalRepresentation(value))
+        else:
+            if cls._InternalRepresentation is fractions.Fraction:
+                return fractions.Fraction(value).limit_denominator(int(1 / absolute_error))
+            else:
+                return cls(gmpy2.mpq(gmpy2.f2q(value, absolute_error)))
+
+    @classmethod
+    def from_fraction(cls, numerator: int, denominator: int) -> 'TimeType':
+        return cls(cls._InternalRepresentation(numerator, denominator))
+
+    def __repr__(self):
+        return 'TimeType(%s)' % self.__str__()
+
+    def __str__(self):
+        return '%d/%d' % (self._value.numerator, self._value.denominator)
+
+    def __float__(self):
+        return int(self._value.numerator) / int(self._value.denominator)
+
+
+_converter = {
+    float: TimeType.from_float,
+    TimeType: lambda x: x
+}
+
+
+def time_from_float(value: float, absolute_error: typing.Optional[float] = None) -> TimeType:
+    warnings.warn("time_from_float is deprecated. Use TimeType.from_float instead", DeprecationWarning)
+    return TimeType.from_float(value, absolute_error)
+
+
+def time_from_fraction(numerator: int, denominator: int) -> TimeType:
+    warnings.warn("time_from_fraction is deprecated. Use TimeType.from_fraction instead", DeprecationWarning)
+    return TimeType.from_fraction(numerator, denominator)
 
 
 class DocStringABCMeta(abc.ABCMeta):

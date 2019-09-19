@@ -17,7 +17,7 @@ class AlazarProgramTest(unittest.TestCase):
             'sorted': (np.array([30., 100, 1300]), np.array([10., 990, 811])),
             'overlapping': (np.array([30., 100, 300]), np.array([20., 900, 100]))
         }
-        self.sample_factor = TimeType(10**8, 10**9)
+        self.sample_factor = TimeType.from_fraction(10**8, 10**9)
         self.expected = {
             'unsorted': (np.array([0, 1, 10]).astype(np.uint64), np.array([1, 8, 99]).astype(np.uint64)),
             'sorted': (np.array([3, 10, 130]).astype(np.uint64), np.array([1, 99, 81]).astype(np.uint64)),

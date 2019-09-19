@@ -11,6 +11,8 @@ try:
 except ImportError:
     gmpy2 = None
 
+import numpy as np
+
 import qupulse.utils.types as qutypes
 
 
@@ -54,36 +56,41 @@ class TestTimeType(unittest.TestCase):
         return self._fallback_qutypes
 
     def test_fraction_fallback(self):
-        self.assertIs(fractions.Fraction, self.fallback_qutypes.TimeType)
+        self.assertIs(fractions.Fraction, self.fallback_qutypes.TimeType._InternalRepresentation)
 
-    @unittest.skipIf(gmpy2 is None, "gmpy2 not available.")
-    def test_default_time_from_float(self):
-        # assert mocking did no permanent damage
-        self.assertIs(gmpy2.mpq, qutypes.TimeType)
+    def test_fraction_time_from_float_exact(self):
+        self.assertEqual(self.fallback_qutypes.time_from_float(123 / 931, 0),
+                         fractions.Fraction(123 / 931))
 
-        self.assertEqual(qutypes.time_from_float(123/931), gmpy2.mpq(123, 931))
-
-        self.assertEqual(qutypes.time_from_float(1000000/1000001, 1e-5), gmpy2.mpq(1))
-
-    def test_fraction_time_from_float(self):
-        self.assertEqual(self.fallback_qutypes.time_from_float(123 / 931),
-                         fractions.Fraction(123, 931))
-
+    def test_fraction_time_from_float_with_precision(self):
         self.assertEqual(self.fallback_qutypes.time_from_float(1000000 / 1000001, 1e-5),
                          fractions.Fraction(1))
 
-    @unittest.skipIf(gmpy2 is None, "gmpy2 not available.")
-    def test_default_time_from_fraction(self):
-        # assert mocking did no permanent damage
-        self.assertIs(gmpy2.mpq, qutypes.TimeType)
-
-        t = qutypes.time_from_fraction(43, 12)
-        # your challenge: find a better way
-        mpq_type = type(gmpy2.mpq())
-        self.assertIsInstance(t, mpq_type)
-        self.assertEqual(t, gmpy2.mpq(43, 12))
-
     def test_fraction_time_from_fraction(self):
-        t = qutypes.time_from_fraction(43, 12)
-        self.assertIsInstance(t, fractions.Fraction)
+        t = qutypes.TimeType.from_fraction(43, 12)
+        self.assertIsInstance(t, qutypes.TimeType)
         self.assertEqual(t, fractions.Fraction(43, 12))
+
+    def test_from_float_no_extra_args(self):
+        # test that float(from_float(x)) == x
+        base_floats = [4/5, 1, 1000, 0, np.pi, 1.23456789**99, 1e-100, 2**53]
+        n_steps = 10**2
+
+        def float_generator():
+            for f in base_floats:
+                for _ in range(n_steps):
+                    yield f
+                    f = np.nextafter(f, float('inf'))
+
+            for f in base_floats:
+                for _ in range(n_steps):
+                    yield f
+                    f = np.nextafter(f, float('-inf'))
+
+        for x in float_generator():
+            t = qutypes.TimeType.from_float(x)
+            t2x = float(t)
+            self.assertEqual(x, t2x)
+            self.assertGreater(t2x, np.nextafter(x, float('-inf')))
+            self.assertLess(t2x, np.nextafter(x, float('inf')))
+
