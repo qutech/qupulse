@@ -135,6 +135,15 @@ class TimeType:
 
     @classmethod
     def from_float(cls, value: float, absolute_error: typing.Optional[float] = None) -> 'TimeType':
+        """Convert a floating point number to a TimeType using one of three modes depending on `absolute_error`.
+
+        absolute_error is None: Use `str(value)` as a proxy to get consistent precision (see below)
+        absolute_error == 0: Return the exact value of the float. 0.8 == 3602879701896397 / 4503599627370496
+        else: Use absolute error to limit the denominator
+
+        str(value) guarantees that all floats have a different result with sensible rounding.this was chosen as a
+        default because it is the expected behaviour most of the time.
+        """
         # gmpy2 is at least an order of magnitude faster than fractions.Fraction
         if absolute_error is None:
             # this method utilizes the 'print as many digits as necessary to destinguish between all floats'
