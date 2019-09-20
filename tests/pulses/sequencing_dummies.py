@@ -150,7 +150,7 @@ class DummyWaveform(Waveform):
 
     def __init__(self, duration: float=0, sample_output: Union[numpy.ndarray, dict]=None, defined_channels={'A'}) -> None:
         super().__init__()
-        self.duration_ = time_from_float(duration)
+        self.duration_ = TimeType.from_float(duration)
         self.sample_output = sample_output
         self.defined_channels_ = defined_channels
         self.sample_calls = []

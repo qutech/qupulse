@@ -42,6 +42,8 @@ def mock_missing_module(module_name: str):
 
 
 class TestTimeType(unittest.TestCase):
+    """The fallback test is here for convenience while developing. The fallback is also tested by the CI explicitly"""
+
     _fallback_qutypes = None
 
     @property
@@ -56,22 +58,50 @@ class TestTimeType(unittest.TestCase):
         return self._fallback_qutypes
 
     def test_fraction_fallback(self):
-        self.assertIs(fractions.Fraction, self.fallback_qutypes.TimeType._InternalRepresentation)
+        self.assertIs(fractions.Fraction, self.fallback_qutypes.TimeType._InternalType)
 
-    def test_fraction_time_from_float_exact(self):
-        self.assertEqual(self.fallback_qutypes.time_from_float(123 / 931, 0),
-                         fractions.Fraction(123 / 931))
-
-    def test_fraction_time_from_float_with_precision(self):
-        self.assertEqual(self.fallback_qutypes.time_from_float(1000000 / 1000001, 1e-5),
-                         fractions.Fraction(1))
-
-    def test_fraction_time_from_fraction(self):
-        t = qutypes.TimeType.from_fraction(43, 12)
-        self.assertIsInstance(t, qutypes.TimeType)
+    def assert_from_fraction_works(self, time_type):
+        t = time_type.from_fraction(43, 12)
+        self.assertIsInstance(t, time_type)
         self.assertEqual(t, fractions.Fraction(43, 12))
 
-    def test_from_float_no_extra_args(self):
+    def test_fraction_time_from_fraction(self):
+        self.assert_from_fraction_works(qutypes.TimeType)
+
+    @unittest.skipIf(gmpy2 is None, "fallback already tested")
+    def test_fraction_time_from_fraction_fallback(self):
+        self.assert_from_fraction_works(self.fallback_qutypes.TimeType)
+
+    def assert_from_float_exact_works(self, time_type):
+        self.assertEqual(time_type.from_float(123 / 931, 0),
+                         fractions.Fraction(123 / 931))
+
+    def test_fraction_time_from_float_exact(self):
+        self.assert_from_float_exact_works(qutypes.TimeType)
+
+    @unittest.skipIf(gmpy2 is None, "fallback already tested")
+    def test_fraction_time_from_float_exact_fallback(self):
+        self.assert_from_float_exact_works(self.fallback_qutypes.TimeType)
+
+    def assert_fraction_time_from_float_with_precision_works(self, time_type):
+        self.assertEqual(time_type.from_float(1000000 / 1000001, 1e-5),
+                         fractions.Fraction(1))
+
+    def test_fraction_time_from_float_with_precision(self):
+        self.assert_fraction_time_from_float_with_precision_works(qutypes.TimeType)
+
+    @unittest.skipIf(gmpy2 is None, "fallback already tested")
+    def test_fraction_time_from_float_with_precision_fallback(self):
+        self.assert_fraction_time_from_float_with_precision_works(self.fallback_qutypes.TimeType)
+
+    def test_deprecation_warnings(self):
+        with self.assertWarns(DeprecationWarning):
+            self.assertEqual(qutypes.time_from_float(1.), 1)
+
+        with self.assertWarns(DeprecationWarning):
+            self.assertEqual(qutypes.time_from_fraction(2, 3), fractions.Fraction(2, 3))
+
+    def assert_from_float_no_extra_args_works(self, time_type):
         # test that float(from_float(x)) == x
         base_floats = [4/5, 1, 1000, 0, np.pi, 1.23456789**99, 1e-100, 2**53]
         n_steps = 10**2
@@ -88,9 +118,15 @@ class TestTimeType(unittest.TestCase):
                     f = np.nextafter(f, float('-inf'))
 
         for x in float_generator():
-            t = qutypes.TimeType.from_float(x)
+            t = time_type.from_float(x)
             t2x = float(t)
             self.assertEqual(x, t2x)
-            self.assertGreater(t2x, np.nextafter(x, float('-inf')))
-            self.assertLess(t2x, np.nextafter(x, float('inf')))
+            self.assertGreater(t, np.nextafter(x, float('-inf')))
+            self.assertLess(t, np.nextafter(x, float('inf')))
 
+    def test_from_float_no_extra_args(self):
+        self.assert_from_float_exact_works(qutypes.TimeType)
+
+    @unittest.skipIf(gmpy2 is None, "fallback already tested")
+    def test_from_float_no_extra_args_fallback(self):
+        self.assert_from_float_exact_works(self.fallback_qutypes.TimeType)

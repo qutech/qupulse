@@ -4,7 +4,7 @@ from unittest import mock
 import numpy
 import numpy as np
 
-from qupulse.utils.types import time_from_float
+from qupulse.utils.types import TimeType
 from qupulse.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy,\
     JumpInterpolationStrategy
 from qupulse._program.waveforms import MultiChannelWaveform, RepetitionWaveform, SequenceWaveform,\
@@ -117,7 +117,7 @@ class MultiChannelWaveformTest(unittest.TestCase):
 
         waveform = MultiChannelWaveform([dwf])
         self.assertEqual({'A'}, waveform.defined_channels)
-        self.assertEqual(time_from_float(1.3), waveform.duration)
+        self.assertEqual(TimeType.from_float(1.3), waveform.duration)
 
     def test_init_several_channels(self) -> None:
         dwf_a = DummyWaveform(duration=2.2, defined_channels={'A'})
@@ -126,7 +126,7 @@ class MultiChannelWaveformTest(unittest.TestCase):
 
         waveform = MultiChannelWaveform([dwf_a, dwf_b])
         self.assertEqual({'A', 'B'}, waveform.defined_channels)
-        self.assertEqual(time_from_float(2.2), waveform.duration)
+        self.assertEqual(TimeType.from_float(2.2), waveform.duration)
 
         with self.assertRaises(ValueError):
             MultiChannelWaveform([dwf_a, dwf_c])
@@ -224,7 +224,7 @@ class RepetitionWaveformTest(unittest.TestCase):
 
     def test_duration(self):
         wf = RepetitionWaveform(DummyWaveform(duration=2.2), 3)
-        self.assertEqual(wf.duration, time_from_float(2.2)*3)
+        self.assertEqual(wf.duration, TimeType.from_float(2.2)*3)
 
     def test_defined_channels(self):
         body_wf = DummyWaveform(defined_channels={'a'})
@@ -333,8 +333,8 @@ class SequenceWaveformTest(unittest.TestCase):
         self.assertEqual(sub_wf.compare_key[0].defined_channels, subset)
         self.assertEqual(sub_wf.compare_key[1].defined_channels, subset)
 
-        self.assertEqual(sub_wf.compare_key[0].duration, time_from_float(2.2))
-        self.assertEqual(sub_wf.compare_key[1].duration, time_from_float(3.3))
+        self.assertEqual(sub_wf.compare_key[0].duration, TimeType.from_float(2.2))
+        self.assertEqual(sub_wf.compare_key[1].duration, TimeType.from_float(3.3))
 
 
 

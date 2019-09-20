@@ -32,7 +32,7 @@ def _with_other_as_time_type(fn):
         result = fn(self, converted)
         if result is NotImplemented:
             return result
-        elif type(result) is TimeType._InternalRepresentation:
+        elif type(result) is TimeType._InternalType:
             return TimeType(result)
         else:
             return result
@@ -46,13 +46,14 @@ class TimeType:
     """
     __slots__ = ('_value',)
 
-    _InternalRepresentation = fractions.Fraction if gmpy2 is None else gmpy2.mpq
+    _InternalType = fractions.Fraction if gmpy2 is None else type(gmpy2.mpq())
+    _to_internal = fractions.Fraction if gmpy2 is None else gmpy2.mpq
 
-    def __init__(self, value: numbers.Real = 0.):
+    def __init__(self, value: numbers.Rational = 0.):
         if type(value) == type(self):
             self._value = value._value
         else:
-            self._value = self._InternalRepresentation(value)
+            self._value = self._to_internal(value)
 
     @property
     def numerator(self):
@@ -78,7 +79,7 @@ class TimeType:
         return int(self._value.__floor__())
 
     def __int__(self):
-        return self._value.__int__()
+        return int(self._value)
 
     @_with_other_as_time_type
     def __mod__(self, other: 'TimeType'):
@@ -182,19 +183,22 @@ class TimeType:
         if absolute_error is None:
             # this method utilizes the 'print as many digits as necessary to destinguish between all floats'
             # functionality of str
-            return cls(cls._InternalRepresentation(str(value).replace('e', 'E')))
+            if isinstance(value, (cls, cls._InternalType, fractions.Fraction)):
+                return cls(value)
+            else:
+                return cls(cls._to_internal(str(value).replace('e', 'E')))
 
         elif absolute_error == 0:
-            return cls(cls._InternalRepresentation(value))
+            return cls(cls._to_internal(value))
         else:
-            if cls._InternalRepresentation is fractions.Fraction:
+            if cls._InternalType is fractions.Fraction:
                 return fractions.Fraction(value).limit_denominator(int(1 / absolute_error))
             else:
                 return cls(gmpy2.mpq(gmpy2.f2q(value, absolute_error)))
 
     @classmethod
     def from_fraction(cls, numerator: int, denominator: int) -> 'TimeType':
-        return cls(cls._InternalRepresentation(numerator, denominator))
+        return cls(cls._to_internal(numerator, denominator))
 
     def __repr__(self):
         return 'TimeType(%s)' % self.__str__()
