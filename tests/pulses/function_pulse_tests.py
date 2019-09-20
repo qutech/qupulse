@@ -2,7 +2,7 @@ import unittest
 import sympy
 import numpy as np
 
-from qupulse.utils.types import time_from_float
+from qupulse.utils.types import TimeType
 from qupulse.pulses.function_pulse_template import FunctionPulseTemplate,\
     FunctionWaveform
 from qupulse.serialization import Serializer, Serializable, PulseStorage
