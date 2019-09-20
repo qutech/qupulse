@@ -39,7 +39,7 @@ def _with_other_as_time_type(fn):
     return wrapper
 
 
-class TimeType(numbers.Rational):
+class TimeType:
     """This type represents a rational number with arbitrary precision.
 
     Internally it uses gmpy2.mpq (if available) or fractions.Fraction
@@ -76,6 +76,9 @@ class TimeType(numbers.Rational):
 
     def __floor__(self):
         return int(self._value.__floor__())
+
+    def __int__(self):
+        return self._value.__int__()
 
     @_with_other_as_time_type
     def __mod__(self, other: 'TimeType'):
@@ -201,6 +204,10 @@ class TimeType(numbers.Rational):
 
     def __float__(self):
         return int(self._value.numerator) / int(self._value.denominator)
+
+
+# this asserts isinstance(TimeType, Rational) is True
+numbers.Rational.register(TimeType)
 
 
 _converter = {
