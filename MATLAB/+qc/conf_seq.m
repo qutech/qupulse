@@ -66,6 +66,7 @@ function scan = conf_seq(varargin)
 		...											 												            % If you use this, all programs need to be uploaded manually before the scan and need to 
 		...											 												            % have the same Alazar configuration.
 		'rf_sources',            [true true], ...				            % turn RF sources on and off automatically
+		'buffer_strategy',        {plsdata.daq.defaultBufferStrategy},... % call qc.set_alazar_buffer_strategy with these arguments before pulse
 		'verbosity',             10 ...									            % 0: display nothing, 10: display all except when arming program, 11: display all
 		);
 	a = util.parse_varargin(varargin, defaultArgs);
@@ -123,9 +124,9 @@ function scan = conf_seq(varargin)
 		scan.configfn(end).args = {};
 	end
 	
-	% Alazar workaround (can be removed once bug is fixed)
+	% Alazar buffer strategy. Can be used to mitigate buffer artifacts.
 	scan.configfn(end+1).fn = @smaconfigwrap;
-	scan.configfn(end).args = {@qc.workaround_alazar_single_buffer_acquisition};
+	scan.configfn(end).args = [{@qc.set_alazar_buffer_strategy}, a.buffer_strategy];
 	
 	% Configure AWG
 	%  * Calling qc.awg_program('add', ...) makes sure the pulse is uploaded
