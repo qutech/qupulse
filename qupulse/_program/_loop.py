@@ -537,9 +537,10 @@ def _make_compatible(program: Loop, min_len: int, quantum: int, sample_rate: Tim
     else:
         comp_levels = np.array([_is_compatible(cast(Loop, sub_program), min_len, quantum, sample_rate)
                                 for sub_program in program])
-        incompatible = (np.any(comp_levels == _CompatibilityLevel.incompatible_too_short) or
-                        comp_levels == _CompatibilityLevel.incompatible_fraction)
-        if np.any(incompatible):
+        incompatible = (np.any(comp_levels == _CompatibilityLevel.incompatible_too_short)
+                        or np.any(comp_levels == _CompatibilityLevel.incompatible_fraction)
+                        or np.any(comp_levels == _CompatibilityLevel.incompatible_quantum))
+        if incompatible:
             single_run = program.duration * sample_rate / program.repetition_count
             if is_integer(single_run / quantum) and single_run >= min_len:
                 new_repetition_count = program.repetition_count
