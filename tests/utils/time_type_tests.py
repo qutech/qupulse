@@ -4,6 +4,7 @@ import builtins
 import contextlib
 import importlib
 import fractions
+import random
 from unittest import mock
 
 try:
@@ -87,3 +88,39 @@ class TestTimeType(unittest.TestCase):
         t = qutypes.time_from_fraction(43, 12)
         self.assertIsInstance(t, fractions.Fraction)
         self.assertEqual(t, fractions.Fraction(43, 12))
+
+
+floats = [random.random()*100 - 50 for _ in range(1000)]
+ints = [random.randint(-100, 100) for _ in range(1000)]
+
+
+def get_from_float(fs):
+    return [qutypes.TimeType.from_float(f) for f in fs]
+
+
+def do_additions(xs, ys):
+    for x, y in zip(xs, ys):
+        _ = x + y
+
+
+def do_multiplications(xs, ys):
+    for x, y in zip(xs, ys):
+        _ = x * y
+
+
+def test_time_type_from_float_performance(benchmark):
+    benchmark(get_from_float, floats)
+
+
+def test_time_type_addition_performance(benchmark):
+    values = get_from_float(floats)
+    benchmark(do_additions, values, values)
+
+
+def test_time_type_addition_with_float_performance(benchmark):
+    benchmark(do_additions, get_from_float(floats), floats)
+
+
+def test_time_type_mul_performance(benchmark):
+    values = get_from_float(floats)
+    benchmark(do_multiplications, values, values)

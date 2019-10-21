@@ -42,9 +42,11 @@ setup(name='qupulse',
           'VISA': ['pyvisa'],
           'tabor-instruments': ['pytabor>=1.0.1', 'teawg'],
           'zurich-instruments': ['zhinst'],
-          'Faster-fractions': ['gmpy2']
+          'Faster-fractions': ['gmpy2'],
+          'tektronix': 'tek_awg>=0.2.1'
       },
       test_suite="tests",
+      tests_require=['pytest_benchmark'],
       classifiers=[
           "Programming Language :: Python :: 3",
           "License :: OSI Approved :: MIT License",

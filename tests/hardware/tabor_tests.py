@@ -310,7 +310,7 @@ class TaborProgramTests(unittest.TestCase):
                 yield np.zeros(192)[::2]
 
         sample_rate = 10**9
-        with self.assertRaises(TaborException):
+        with self.assertRaisesRegex(ValueError, "non integer length"):
             root_loop = LoopTests.get_test_loop(WaveformGenerator(
                 waveform_data_generator=my_gen(self.waveform_data_generator),
                 duration_generator=itertools.repeat(12),
