@@ -533,16 +533,16 @@ def _make_compatible(program: Loop, min_len: int, quantum: int, sample_rate: Tim
     if program.is_leaf():
         program.waveform = to_waveform(program.copy_tree_structure())
         program.repetition_count = 1
-
     else:
-        comp_levels = np.array([_is_compatible(cast(Loop, sub_program), min_len, quantum, sample_rate)
-                                for sub_program in program])
-        incompatible = (np.any(comp_levels == _CompatibilityLevel.incompatible_too_short)
-                        or np.any(comp_levels == _CompatibilityLevel.incompatible_fraction)
-                        or np.any(comp_levels == _CompatibilityLevel.incompatible_quantum))
+        comp_levels = [_is_compatible(cast(Loop, sub_program), min_len, quantum, sample_rate)
+                       for sub_program in program]
+        incompatible = any(comp_level in (_CompatibilityLevel.incompatible_fraction,
+                                          _CompatibilityLevel.incompatible_quantum,
+                                          _CompatibilityLevel.incompatible_too_short)
+                           for comp_level in comp_levels)
         if incompatible:
             single_run = program.duration * sample_rate / program.repetition_count
-            if is_integer(single_run / quantum) and single_run >= min_len:
+            if (single_run / quantum).denominator == 1 and single_run >= min_len:
                 new_repetition_count = program.repetition_count
                 program.repetition_count = 1
             else:
@@ -567,9 +567,9 @@ def make_compatible(program: Loop, minimal_waveform_length: int, waveform_quantu
     if comp_level == _CompatibilityLevel.incompatible_fraction:
         raise ValueError('The program duration in samples {} is not an integer'.format(program.duration * sample_rate))
     if comp_level == _CompatibilityLevel.incompatible_too_short:
-        raise ValueError('The program is too short to be a valid waveform. \n program duration: {} \n minimal length: {}'.format(program.duration * sample_rate, minimal_waveform_length))
+        raise ValueError('The program is too short to be a valid waveform. \n program duration in samples: {} \n minimal length: {}'.format(program.duration * sample_rate, minimal_waveform_length))
     if comp_level == _CompatibilityLevel.incompatible_quantum:
-        raise ValueError('The program duration {} is not a multiple of quantum {}'.format(program.duration * sample_rate, waveform_quantum))
+        raise ValueError('The program duration in samples {} is not a multiple of quantum {}'.format(program.duration * sample_rate, waveform_quantum))
 
     elif comp_level == _CompatibilityLevel.action_required:
         _make_compatible(program,

@@ -570,6 +570,29 @@ class ProgramWaveformCompatibilityTest(unittest.TestCase):
         self.assertEqual(_is_compatible(program, min_len=1, quantum=1, sample_rate=time_from_float(1.)),
                          _CompatibilityLevel.action_required)
 
+    def test_make_compatible_repetition_count(self):
+        wf1 = DummyWaveform(duration=1.5)
+        wf2 = DummyWaveform(duration=2.0)
+
+        program = Loop(children=[Loop(waveform=wf1, repetition_count=2),
+                                 Loop(waveform=wf2)])
+        duration = program.duration
+        _make_compatible(program, min_len=1, quantum=1, sample_rate=time_from_float(1.))
+        self.assertEqual(program.duration, duration)
+
+        wf2 = DummyWaveform(duration=2.5)
+        program = Loop(children=[Loop(waveform=wf1, repetition_count=3),
+                                 Loop(waveform=wf2)])
+        duration = program.duration
+        make_compatible(program, minimal_waveform_length=1, waveform_quantum=1, sample_rate=time_from_float(1.))
+        self.assertEqual(program.duration, duration)
+
+        program = Loop(children=[Loop(waveform=wf1, repetition_count=3),
+                                 Loop(waveform=wf2)], repetition_count=3)
+        duration = program.duration
+        _make_compatible(program, min_len=1, quantum=3, sample_rate=time_from_float(1.))
+        self.assertEqual(program.duration, duration)
+
     def test_make_compatible_partial_unroll(self):
         wf1 = DummyWaveform(duration=1.5)
         wf2 = DummyWaveform(duration=2.0)
