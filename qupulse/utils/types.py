@@ -3,9 +3,7 @@ import abc
 import inspect
 import numbers
 import fractions
-import collections
-import itertools
-from collections.abc import Mapping as ABCMapping
+import functools
 import warnings
 
 import numpy
@@ -26,7 +24,8 @@ except ImportError:
 
 
 def _with_other_as_time_type(fn):
-    """This is decorator to convert the other argument into a TimeType"""
+    """This is decorator to convert the other argument and the result into a :class:`TimeType`"""
+    @functools.wraps(fn)
     def wrapper(self, other) -> 'TimeType':
         converted = _converter.get(type(other), TimeType)(other)
         result = fn(self, converted)
@@ -42,7 +41,7 @@ def _with_other_as_time_type(fn):
 class TimeType:
     """This type represents a rational number with arbitrary precision.
 
-    Internally it uses gmpy2.mpq (if available) or fractions.Fraction
+    Internally it uses :func:`gmpy2.mpq` (if available) or :class:`fractions.Fraction`
     """
     __slots__ = ('_value',)
 
@@ -198,6 +197,15 @@ class TimeType:
 
     @classmethod
     def from_fraction(cls, numerator: int, denominator: int) -> 'TimeType':
+        """
+
+        Args:
+            numerator: Numerator of the time fraction
+            denominator: Denominator of the time fraction
+
+        Returns:
+            A new TimeType object.
+        """
         return cls(cls._to_internal(numerator, denominator))
 
     def __repr__(self):
@@ -221,12 +229,12 @@ _converter = {
 
 
 def time_from_float(value: float, absolute_error: typing.Optional[float] = None) -> TimeType:
-    warnings.warn("time_from_float is deprecated. Use TimeType.from_float instead", DeprecationWarning)
+    """See :func:`TimeType.from_float`."""
     return TimeType.from_float(value, absolute_error)
 
 
 def time_from_fraction(numerator: int, denominator: int) -> TimeType:
-    warnings.warn("time_from_fraction is deprecated. Use TimeType.from_fraction instead", DeprecationWarning)
+    """See :func:`TimeType.from_float`."""
     return TimeType.from_fraction(numerator, denominator)
 
 
