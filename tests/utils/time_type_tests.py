@@ -4,6 +4,7 @@ import builtins
 import contextlib
 import importlib
 import fractions
+import random
 from unittest import mock
 
 try:
@@ -123,3 +124,43 @@ class TestTimeType(unittest.TestCase):
     @unittest.skipIf(gmpy2 is None, "fallback already tested")
     def test_from_float_no_extra_args_fallback(self):
         self.assert_from_float_exact_works(self.fallback_qutypes.TimeType)
+
+
+def get_some_floats(seed=42, n=1000):
+    rand = random.Random(seed)
+    return [rand.random()*100 - 50 for _ in range(n)]
+
+
+def get_from_float(fs):
+    return [qutypes.time_from_float(f) for f in fs]
+
+
+def do_additions(xs, ys):
+    for x, y in zip(xs, ys):
+        _ = x + y
+
+
+def do_multiplications(xs, ys):
+    for x, y in zip(xs, ys):
+        _ = x * y
+
+
+def test_time_type_from_float_performance(benchmark):
+    benchmark(get_from_float, get_some_floats())
+
+
+def test_time_type_addition_performance(benchmark):
+    values = get_from_float(get_some_floats())
+    benchmark(do_additions, values, values)
+
+
+def test_time_type_addition_with_float_performance(benchmark):
+
+    benchmark(do_additions,
+              get_from_float(get_some_floats(seed=42)),
+              get_some_floats(seed=43))
+
+
+def test_time_type_mul_performance(benchmark):
+    values = get_from_float(get_some_floats(seed=42))
+    benchmark(do_multiplications, values, values)
