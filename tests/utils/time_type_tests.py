@@ -87,3 +87,19 @@ class TestTimeType(unittest.TestCase):
         t = qutypes.time_from_fraction(43, 12)
         self.assertIsInstance(t, fractions.Fraction)
         self.assertEqual(t, fractions.Fraction(43, 12))
+
+
+def test_time_type_performance(benchmark):
+    def do_some_calculations():
+        time_types = [
+            qutypes.time_from_float(x / 10) for x in range(1000)
+                      ] + [
+            qutypes.time_from_fraction(i, j) for i in range(1, 50) for j in range(1, 50)
+                      ] + [
+            qutypes.time_from_float(x / 7) for x in range(1000)
+                      ]
+
+        for x, y in zip(time_types[::2], time_types[1::2]):
+            float((x + y) * (x - y))
+
+    benchmark(do_some_calculations)
