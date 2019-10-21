@@ -4,6 +4,7 @@ import builtins
 import contextlib
 import importlib
 import fractions
+import random
 from unittest import mock
 
 try:
@@ -89,17 +90,37 @@ class TestTimeType(unittest.TestCase):
         self.assertEqual(t, fractions.Fraction(43, 12))
 
 
-def test_time_type_performance(benchmark):
-    def do_some_calculations():
-        time_types = [
-            qutypes.time_from_float(x / 10) for x in range(1000)
-                      ] + [
-            qutypes.time_from_fraction(i, j) for i in range(1, 50) for j in range(1, 50)
-                      ] + [
-            qutypes.time_from_float(x / 7) for x in range(1000)
-                      ]
+floats = [random.random()*100 - 50 for _ in range(1000)]
+ints = [random.randint(-100, 100) for _ in range(1000)]
 
-        for x, y in zip(time_types[::2], time_types[1::2]):
-            float((x + y) * (x - y))
 
-    benchmark(do_some_calculations)
+def get_from_float(fs):
+    return [qutypes.TimeType.from_float(f) for f in fs]
+
+
+def do_additions(xs, ys):
+    for x, y in zip(xs, ys):
+        _ = x + y
+
+
+def do_multiplications(xs, ys):
+    for x, y in zip(xs, ys):
+        _ = x * y
+
+
+def test_time_type_from_float_performance(benchmark):
+    benchmark(get_from_float, floats)
+
+
+def test_time_type_addition_performance(benchmark):
+    values = get_from_float(floats)
+    benchmark(do_additions, values, values)
+
+
+def test_time_type_addition_with_float_performance(benchmark):
+    benchmark(do_additions, get_from_float(floats), floats)
+
+
+def test_time_type_mul_performance(benchmark):
+    values = get_from_float(floats)
+    benchmark(do_multiplications, values, values)
