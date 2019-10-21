@@ -94,13 +94,6 @@ class TestTimeType(unittest.TestCase):
     def test_fraction_time_from_float_with_precision_fallback(self):
         self.assert_fraction_time_from_float_with_precision_works(self.fallback_qutypes.TimeType)
 
-    def test_deprecation_warnings(self):
-        with self.assertWarns(DeprecationWarning):
-            self.assertEqual(qutypes.time_from_float(1.), 1)
-
-        with self.assertWarns(DeprecationWarning):
-            self.assertEqual(qutypes.time_from_fraction(2, 3), fractions.Fraction(2, 3))
-
     def assert_from_float_no_extra_args_works(self, time_type):
         # test that float(from_float(x)) == x
         base_floats = [4/5, 1, 1000, 0, np.pi, 1.23456789**99, 1e-100, 2**53]
