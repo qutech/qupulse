@@ -6,7 +6,6 @@ from enum import Enum
 import weakref
 import logging
 import warnings
-import time
 
 try:
     import zhinst.ziPython
@@ -19,7 +18,7 @@ import numpy as np
 import textwrap
 import time
 
-from qupulse.utils.types import ChannelID, TimeType, time_from_fraction
+from qupulse.utils.types import ChannelID, TimeType, time_from_float
 from qupulse._program._loop import Loop, make_compatible
 from qupulse._program.waveforms import Waveform
 from qupulse.hardware.awgs.base import AWG, ChannelNotFoundException
@@ -307,7 +306,7 @@ class HDAWGChannelPair(AWG):
             raise HDAWGValueError('{} is already known on {}'.format(name, self.identifier))
 
         # Go to qupulse nanoseconds time base.
-        q_sample_rate = time_from_fraction(self.sample_rate, 10**9)
+        q_sample_rate = self.sample_rate / 10**9
 
         # Adjust program to fit criteria.
         make_compatible(program,
@@ -436,7 +435,7 @@ class HDAWGChannelPair(AWG):
         """Calculate exact rational number based on (sample_clock Sa/s) / 2^sample_rate_num. Otherwise numerical
         imprecision will give rise to errors for very long pulses. fractions.Fraction does not accept floating point
         numerator, which sample_clock could potentially be."""
-        return time_from_fraction(sample_clock, 2 ** sample_rate_num)
+        return time_from_float(sample_clock) / 2 ** sample_rate_num
 
     @property
     def awg_group_index(self) -> int:
