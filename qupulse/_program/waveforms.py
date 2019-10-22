@@ -201,7 +201,7 @@ class TableWaveform(Waveform):
 
     @property
     def duration(self) -> TimeType:
-        return time_from_float(self._table[-1].t)
+        return TimeType.from_float(self._table[-1].t)
 
     def unsafe_sample(self,
                       channel: ChannelID,
@@ -245,7 +245,7 @@ class FunctionWaveform(Waveform):
             raise ValueError('FunctionWaveforms may not depend on anything but "t"')
 
         self._expression = expression
-        self._duration = time_from_float(duration)
+        self._duration = TimeType.from_float(duration)
         self._channel_id = channel
 
     @property
