@@ -125,6 +125,13 @@ class TestTimeType(unittest.TestCase):
     def test_from_float_no_extra_args_fallback(self):
         self.assert_from_float_exact_works(self.fallback_qutypes.TimeType)
 
+    def test_from_float_exceptions(self):
+        with self.assertRaisesRegex(ValueError, 'at least 0'):
+            qutypes.time_from_float(.8, -1)
+
+        with self.assertRaisesRegex(ValueError, 'smaller 1'):
+            qutypes.time_from_float(.8, 2)
+
 
 def get_some_floats(seed=42, n=1000):
     rand = random.Random(seed)

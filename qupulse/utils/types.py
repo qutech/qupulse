@@ -171,40 +171,48 @@ class TimeType:
     def from_float(cls, value: float, absolute_error: typing.Optional[float] = None) -> 'TimeType':
         """Convert a floating point number to a TimeType using one of three modes depending on `absolute_error`.
 
-        absolute_error is None: Use `str(value)` as a proxy to get consistent precision (see below)
-        absolute_error == 0: Return the exact value of the float. 0.8 == 3602879701896397 / 4503599627370496
-        else: Use absolute error to limit the denominator
+        The default str(value) guarantees that all floats have a different result with sensible rounding.
+        This was chosen as default because it is the expected behaviour most of the time if the user defined the float
+        from a literal in code.
 
-        str(value) guarantees that all floats have a different result with sensible rounding.this was chosen as a
-        default because it is the expected behaviour most of the time.
+        Args:
+            value: Floating point value to convert to arbitrary precision TimeType
+            absolute_error:
+                - :obj:`None`: Use `str(value)` as a proxy to get consistent precision
+                - 0: Return the exact value of the float i.e. float(0.8) == 3602879701896397 / 4503599627370496
+                - 0 < `absolute_error` <= 1: Use `absolute_error` to limit the denominator
+
+        Raises:
+            ValueError: If `absolute_error` is not None and not 0 <= `absolute_error` <=  1
         """
         # gmpy2 is at least an order of magnitude faster than fractions.Fraction
         if absolute_error is None:
             # this method utilizes the 'print as many digits as necessary to destinguish between all floats'
             # functionality of str
-            if isinstance(value, (cls, cls._InternalType, fractions.Fraction)):
+            if type(value) in (cls, cls._InternalType, fractions.Fraction):
                 return cls(value)
             else:
                 return cls(cls._to_internal(str(value).replace('e', 'E')))
 
         elif absolute_error == 0:
             return cls(cls._to_internal(value))
+        elif absolute_error < 0:
+            raise ValueError('absolute_error needs to be at least 0')
+        elif absolute_error > 1:
+            raise ValueError('absolute_error needs to be smaller 1')
         else:
             if cls._InternalType is fractions.Fraction:
                 return fractions.Fraction(value).limit_denominator(int(1 / absolute_error))
             else:
-                return cls(gmpy2.mpq(gmpy2.f2q(value, absolute_error)))
+                return cls(gmpy2.f2q(value, absolute_error))
 
     @classmethod
     def from_fraction(cls, numerator: int, denominator: int) -> 'TimeType':
-        """
+        """Convert a fraction to a TimeType.
 
         Args:
             numerator: Numerator of the time fraction
             denominator: Denominator of the time fraction
-
-        Returns:
-            A new TimeType object.
         """
         return cls(cls._to_internal(numerator, denominator))
 
