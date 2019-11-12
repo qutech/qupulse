@@ -310,8 +310,8 @@ class HDAWGChannelPair(AWG):
 
         # Adjust program to fit criteria.
         make_compatible(program,
-                        minimal_waveform_length=16,
-                        waveform_quantum=8,  # 8 samples for single, 4 for dual channel waaveforms.
+                        minimal_waveform_length=32,
+                        waveform_quantum=16,  # 8 samples for single, 4 for dual channel waveforms.
                         sample_rate=q_sample_rate)
 
         # TODO: Implement offset handling like in tabor driver.
@@ -325,7 +325,7 @@ class HDAWGChannelPair(AWG):
                                        (0, 0),
                                        force)
 
-        awg_sequence = self._program_manager.assemble_sequencer_program()
+        awg_sequence = self._program_manager.assemble_sequencer_program(program)
         self._upload_sourcestring(awg_sequence)
 
     def _upload_sourcestring(self, sourcestring: str) -> None:
@@ -676,15 +676,20 @@ class HDAWGProgramManager:
         self._output_range = output_range
         self._output_offset = output_offset
 
-        seqc_gen = self.program_to_seqc(program)
+        #seqc_gen = self.program_to_seqc(program)
+        #seqc_gen = self.new_program_to_seqc(program)
+        seqc_gen = self.charge_scan_to_seqc(program)
         self._known_programs[name] = self.ProgramEntry(program,
                                                        self.generate_program_index(),
                                                        '\n'.join(seqc_gen))
 
-    def assemble_sequencer_program(self) -> str:
+
+    def assemble_sequencer_program(self, program) -> str:
         awg_sequence = HDAWGProgramManager.sequencer_template.replace('_upload_time_', time.strftime('%c'))
         awg_sequence = awg_sequence.replace('_analog_waveform_block_', '')  # Not used yet.
         awg_sequence = awg_sequence.replace('_marker_waveform_block_', '')  # Not used yet.
+        awg_sequence = awg_sequence.replace('_var_block_', 'const {}_len={};'.format('test',self.length(program)))
+        awg_sequence = awg_sequence.replace('_wf_block_','wave _wf_name_={};'.format(self.assemble_wv_(program,True)))
         return awg_sequence.replace('_case_block_', self.assemble_case_block())
 
     def generate_program_index(self) -> int:
@@ -712,7 +717,73 @@ class HDAWGProgramManager:
                     yield template.format(line)
         if prog.repetition_count > 1:
             yield '}'
+####
+    def register_and_join_waveforms(self, prog, lst):
+        if prog.is_leaf():
+            return self.register_waveform(prog.waveform)
+        else:
+            for child in prog.children:
+                lst.append(self.register_and_join_waveforms(child,[]))
+            return lst
 
+
+    def register_waveform(self, wv):
+        wf_name, mk_name = self._wave_manager.register(wv,
+                                                       self._channels,
+                                                       self._markers,
+                                                       self._voltage_transformation,
+                                                       self._sample_rate,
+                                                       self._output_range,
+                                                       self._output_offset,
+                                                       self._overwrite)
+        return [wf_name, mk_name]
+
+    def assemble_wv_(self, prog,overwrite: bool = True):
+        waveform = self.register_and_join_waveforms(prog, [])
+        wf_list = [i for j in waveform for i in j]
+        wf=np.zeros((1,2))
+        marker_wf=np.zeros((1,2))
+        for k in wf_list:
+            dur_struct = tuple(set(prog.get_duration_structure()[1]))[0]
+            child_repetitions = dur_struct[0]
+            for i in range(child_repetitions):
+                wf=np.concatenate((wf, np.loadtxt(self._wave_manager.full_file_path(k[0]), delimiter=' ')), axis=0)
+                #wf.append(np.loadtxt(self._wave_manager.full_file_path(k[0]), delimiter=' '))
+                marker_wf=np.concatenate((marker_wf, np.loadtxt(self._wave_manager.full_file_path(k[1]), delimiter=' ')), axis=0)
+
+            #marker_wf.append(np.loadtxt(self._wave_manager.full_file_path(k[1]), delimiter=' '))
+        self._wave_manager.to_file('marker_chargescan', marker_wf[1:], fmt='%d', overwrite=overwrite)
+        self._wave_manager.to_file('wf_chargescan', wf[1:], overwrite=overwrite)
+        #wf = ['add("'+'","'.join(i)+'")' for i in wf_list]
+        addstr= 'add('+'"wf_chargescan"'+','+'"marker_chargescan")'
+        return addstr
+
+    def length(self, prog):
+        dur_struct = tuple(set(prog.get_duration_structure()[1]))[0]
+        child_repetitions = dur_struct[0]
+        child_duration_in_samples = dur_struct[1][0][1] * self._sample_rate
+        return child_repetitions * int(child_duration_in_samples)
+
+    def charge_scan_to_seqc(self, prog):
+        template = '{}'
+        if prog.repetition_count > 1:
+            yield 'repeat({}){{'.format(prog.repetition_count)
+        dur_struct = tuple(set(prog.get_duration_structure()[1]))[0]
+        child_repetitions = dur_struct[0]
+        if len(set(prog.get_duration_structure())) == 2:
+            child_duration_in_samples = dur_struct[1][0][1] *self._sample_rate
+            yield 'var pos=0;'
+            #yield 'var len={};'.format(child_repetitions*int(child_duration_in_samples))
+            yield 'repeat({}){{'.format(len(prog.children))
+            yield '\trepeat({}){{'.format(1)
+            yield '\t\tplayWaveIndexed( _wf_name_, pos, {}_len);'.format('test')#.format(child_repetitions*int(child_duration_in_samples))
+            yield '\t}'
+            yield '\tpos=pos+ {}_len;'.format('test')
+            yield '}'
+
+        if prog.repetition_count > 1:
+            yield '}'
+#####
     def waveform_to_seqc(self, waveform: Waveform) -> str:
         """Return command that plays waveform."""
         wf_name, mk_name = self._wave_manager.register(waveform,
@@ -749,9 +820,11 @@ class HDAWGProgramManager:
         const PROG_SEL = 0; // User register for switching current program.
 
         // Start of analog waveform definitions.
-        wave idle = zeros(16); // Default idle waveform.
+        wave idle = zeros(32); // Default idle waveform.
         _analog_waveform_block_
-
+        _wf_block_
+        _var_block_
+        
         // Start of marker waveform definitions.
         _marker_waveform_block_
 

@@ -327,6 +327,12 @@ class Loop(Node):
 
         elif len(self) != len(new_children):
             self[:] = new_children
+    
+    def get_duration_structure(self) -> Tuple[int, Union[int, tuple]]:
+        if self.is_leaf():
+            return self.repetition_count, self.waveform.duration
+        else:
+            return self.repetition_count, tuple(child.get_duration_structure() for child in self)
 
 
 class ChannelSplit(Exception):
@@ -560,7 +566,6 @@ def _make_compatible(program: Loop, min_len: int, quantum: int, sample_rate: Tim
 
 def make_compatible(program: Loop, minimal_waveform_length: int, waveform_quantum: int, sample_rate: TimeType):
     """ check program for compatibility to AWG requirements, make it compatible if necessary and  possible"""
-
     comp_level = _is_compatible(program,
                                 min_len=minimal_waveform_length,
                                 quantum=waveform_quantum,
