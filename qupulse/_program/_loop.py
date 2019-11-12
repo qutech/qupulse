@@ -25,10 +25,10 @@ class Loop(Node):
 
     """Build a loop tree. The leaves of the tree are loops with one element."""
     def __init__(self,
-                 parent: Union['Loop', None]=None,
-                 children: Iterable['Loop']=list(),
+                 parent: Union['Loop', None] = None,
+                 children: Iterable['Loop'] = (),
                  waveform: Optional[Waveform]=None,
-                 measurements: Optional[List[MeasurementWindow]]=None,
+                 measurements: Optional[List[MeasurementWindow]] = None,
                  repetition_count=1):
         super().__init__(parent=parent, children=children)
 
