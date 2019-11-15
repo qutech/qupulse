@@ -21,7 +21,7 @@ __all__ = ['Loop', 'MultiChannelProgram', 'make_compatible']
 
 class Loop(Node):
     MAX_REPR_SIZE = 2000
-    __slots__ = ('_waveform', '_measurements', '_repetition_count', '_cached_body_duration')
+    __slots__ = ('_waveform', '_measurements', '_repetition_count', '_cached_body_duration', '__weakref__')
 
     """Build a loop tree. The leaves of the tree are loops with one element."""
     def __init__(self,

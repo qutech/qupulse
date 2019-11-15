@@ -1,4 +1,4 @@
-from typing import Optional, cast, Union, Sequence, Dict, MutableSequence, Iterator, Generator
+from typing import Optional, cast, Union, Sequence, Dict, MutableSequence, Iterator, Generator, Set
 import abc
 import itertools
 
@@ -27,7 +27,12 @@ class SEQCProgram:
     def get_concatenated_waveform(self) -> BinaryWaveform:
         raise NotImplementedError()
 
-    def get_shared_waveforms(self) -> Set[BinaryWaveform]:
+    def generate_function_definition(self, waveform_manager) -> str:
+        raise NotImplementedError()
+
+    def generate_function_call(self) -> str:
+        raise NotImplementedError()
+
 
 
 def wf_to_bin(waveform: Waveform) -> BinaryWaveform:
