@@ -7,11 +7,17 @@ from qupulse._program._loop import Loop
 
 
 class BinaryWaveform:
+    def __init__(self, data):
+        self.data = data
+
+
     def __len__(self):
         raise NotImplementedError()
+        return len(self.data) // 3
 
     def __eq__(self, other):
         raise NotImplementedError()
+        return np.all_equal(data, other.data)
 
     def __hash__(self):
         raise NotImplementedError()
@@ -140,8 +146,21 @@ class SEQCNode(metaclass=abc.ABCMeta):
     def iter_waveform_playbacks(self) -> Iterator['WaveformPlayback']:
         pass
 
+    @abc.abstractmethod
     def to_source_code(self, waveform_manager, line_prefix: str, pos_var_name: str, initial_pos_var_value: int):
-        pass
+        """besides creating the source code, this function registers all needed waveforms to the program manager
+        1. shared waveforms
+        2. concatenated waveforms in the correct order
+
+        Args:
+            waveform_manager:
+            line_prefix:
+            pos_var_name:
+            initial_pos_var_value:
+
+        Returns:
+
+        """
 
 
 
@@ -262,3 +281,11 @@ class WaveformPlayback(SEQCNode):
 
     def iter_waveform_playbacks(self) -> Iterator[BinaryWaveform]:
         yield self
+
+    def to_source_code(self, waveform_manager,
+                       line_prefix: str, pos_var_name: str,
+                       initial_pos_var_value: Optional[int]):
+        if self.shared:
+            yield 'playWaveform("%s");' % waveform_manager.request_shared(self.waveform)
+        else:
+            yield 'playWaveformIndexed("{wf_name}", pos, {wf_len}); pos = pos + {wf_len}'.format(wf_name=waveform_manager.request_concatenated(self.waveform), wf_len=len(self.waveform))
