@@ -1,6 +1,7 @@
 from typing import Optional, cast, Union, Sequence, Dict, MutableSequence, Iterator, Generator, Tuple, Callable
 import abc
 import itertools
+import inspect
 
 import numpy as np
 
@@ -26,7 +27,7 @@ class BinaryWaveform:
         self.marker_mask = marker_mask
 
         # needed to be hashable
-        self.data.flags.writable = False
+        self.data.flags.writeable = False
 
     def __len__(self):
         return len(self.data) // (sum(self.channel_mask) + any(self.marker_mask))
@@ -65,7 +66,8 @@ def find_sharable_waveforms(node_cluster: Sequence['SEQCNode']) -> Optional[Sequ
 def mark_sharable_waveforms(node_cluster: Sequence['SEQCNode'], sharable_waveforms: Sequence[bool]):
     for node in node_cluster:
         for sharable, wf_playback in zip(sharable_waveforms, node.iter_waveform_playbacks()):
-            wf_playback.shared = True
+            if sharable:
+                wf_playback.shared = True
 
 
 def to_node_clusters(loop: Loop, loop_to_seqc_kwargs: dict) -> Sequence[Sequence['SEQCNode']]:
@@ -95,7 +97,7 @@ def loop_to_seqc(loop: Loop,
                  min_repetitions_for_for_loop: int,
                  min_repetitions_for_shared_wf: int,
                  waveform_to_bin: Callable[[Waveform], BinaryWaveform]) -> 'SEQCNode':
-    assert min_repetitions_for_for_loop >= min_repetitions_for_shared_wf
+    assert min_repetitions_for_for_loop <= min_repetitions_for_shared_wf
     # At which point do we switch from indexed to shared
 
     if loop.is_leaf():
@@ -136,6 +138,8 @@ def loop_to_seqc(loop: Loop,
 
 
 class SEQCNode(metaclass=abc.ABCMeta):
+    __slots__ = ()
+
     INDENTATION = '  '
 
     @abc.abstractmethod
@@ -169,6 +173,13 @@ class SEQCNode(metaclass=abc.ABCMeta):
         Returns:
 
         """
+
+    def __eq__(self, other):
+        """Compare objects based on __slots__"""
+        assert getattr(self, '__dict__', None) is None
+        return type(self) == type(other) and all(getattr(self, attr) == getattr(other, attr)
+                                                 for base_class in inspect.getmro(type(self))
+                                                 for attr in getattr(base_class, '__slots__', ()))
 
 
 class Scope(SEQCNode):
@@ -204,6 +215,7 @@ class Scope(SEQCNode):
 class Repeat(SEQCNode):
     """
     stepping: if False resets the pos to initial value after each iteration"""
+    __slots__ = ('repetition_count', 'scope')
 
     def __init__(self, repetition_count: int, scope: SEQCNode):
         assert repetition_count > 1
@@ -260,6 +272,8 @@ class Repeat(SEQCNode):
 
 
 class SteppingRepeat(SEQCNode):
+    __slots__ = ('node_cluster',)
+
     def __init__(self, node_cluster: Sequence[SEQCNode]):
         self.node_cluster = node_cluster
 
