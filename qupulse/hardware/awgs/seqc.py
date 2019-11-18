@@ -176,7 +176,7 @@ class SEQCNode(metaclass=abc.ABCMeta):
 
     def __eq__(self, other):
         """Compare objects based on __slots__"""
-        assert getattr(self, '__dict__', None) is None
+        #assert getattr(self, '__dict__', None) is None
         return type(self) == type(other) and all(getattr(self, attr) == getattr(other, attr)
                                                  for base_class in inspect.getmro(type(self))
                                                  for attr in getattr(base_class, '__slots__', ()))
@@ -207,7 +207,7 @@ class Scope(SEQCNode):
     def to_source_code(self, waveform_manager, node_name_generator: Iterator[str], line_prefix: str, pos_var_name: str):
         for node in self.nodes:
             yield from node.to_source_code(waveform_manager,
-                                           line_prefix=line_prefix + self.INDENTATION,
+                                           line_prefix=line_prefix,
                                            pos_var_name=pos_var_name,
                                            node_name_generator=node_name_generator)
 
@@ -248,27 +248,30 @@ class Repeat(SEQCNode):
         Returns:
 
         """
-        body_prefix = line_prefix + self.INDENTATION
-        node_name = next(node_name_generator)
-        
-        initial_position_name = 'init_pos_%s' % node_name
-        
-        # store initial position
-        yield '{line_prefix}var {init_pos_name} = {pos_var_name};'.format(line_prefix=line_prefix,
-                                                                          init_pos_name=initial_position_name,
-                                                                          pos_var_name=pos_var_name)
+        # TODO: detect if only a single stepped waveform is played
 
-        yield '{line_prefix}repeat({repetition_count}) {{ // {node_name}'.format(line_prefix=line_prefix,
-                                                                                 repetition_count=self.repetition_count,
-                                                                                 node_name=node_name)
-        yield ('{body_prefix}{pos_var_name} = {init_pos_name};'
-               ' // set back on each iteration').format(body_prefix=body_prefix,
-                                                        pos_var_name=pos_var_name,
-                                                        init_pos_name=initial_position_name)
+        body_prefix = line_prefix + self.INDENTATION
+        store_initial_pos = self.samples() > 0
+        if store_initial_pos:
+            node_name = next(node_name_generator)
+            initial_position_name = 'init_pos_%s' % node_name
+
+            # store initial position
+            yield '{line_prefix}var {init_pos_name} = {pos_var_name};'.format(line_prefix=line_prefix,
+                                                                              init_pos_name=initial_position_name,
+                                                                              pos_var_name=pos_var_name)
+
+        yield '{line_prefix}repeat({repetition_count}) {{'.format(line_prefix=line_prefix,
+                                                                  repetition_count=self.repetition_count)
+        if store_initial_pos:
+            yield ('{body_prefix}{pos_var_name} = {init_pos_name};'
+                   '').format(body_prefix=body_prefix,
+                              pos_var_name=pos_var_name,
+                              init_pos_name=initial_position_name)
         yield from self.scope.to_source_code(waveform_manager,
                                              line_prefix=body_prefix, pos_var_name=pos_var_name,
                                              node_name_generator=node_name_generator)
-        yield '{line_prefix}}} // repetition {node_name} end'.format(line_prefix=line_prefix, node_name=node_name)
+        yield '{line_prefix}}}'.format(line_prefix=line_prefix)
 
 
 class SteppingRepeat(SEQCNode):
@@ -290,7 +293,7 @@ class SteppingRepeat(SEQCNode):
 
     def same_stepping(self, other: 'SteppingRepeat'):
         return (type(other) is SteppingRepeat and
-                self.repetition_count == other.repetition_count and
+                len(self.node_cluster) == len(other.node_cluster) and
                 self.node_cluster[0].same_stepping(other.node_cluster[0]))
 
     def _visit_nodes(self, waveform_manager):
@@ -299,11 +302,10 @@ class SteppingRepeat(SEQCNode):
 
     def to_source_code(self, waveform_manager, node_name_generator: Iterator[str], line_prefix: str, pos_var_name: str):
         body_prefix = line_prefix + self.INDENTATION
-        node_name = next(node_name_generator)
 
         yield ('{line_prefix}repeat({repetition_count}) {{ '
-               '// stepping repeat {node_name}').format(line_prefix=line_prefix,
-                                                        repetition_count=self.repetition_count)
+               '// stepping repeat').format(line_prefix=line_prefix,
+                                            repetition_count=self.repetition_count)
         yield from self.node_cluster[0].to_source_code(waveform_manager,
                                                        line_prefix=body_prefix, pos_var_name=pos_var_name,
                                                        node_name_generator=node_name_generator)
@@ -312,8 +314,7 @@ class SteppingRepeat(SEQCNode):
         for node in itertools.islice(self.node_cluster, 1, None):
             node._visit_nodes(waveform_manager)
 
-        yield '{line_prefix}}} // end stepping repeat {node_name}'.format(line_prefix=line_prefix,
-                                                                          node_name=node_name)
+        yield '{line_prefix}}}'.format(line_prefix=line_prefix)
 
 
 class WaveformPlayback(SEQCNode):
@@ -344,12 +345,15 @@ class WaveformPlayback(SEQCNode):
             waveform_manager.request_concatenated(self.waveform)
 
     def to_source_code(self, waveform_manager,
-                       line_prefix: str, pos_var_name: str,
-                       initial_pos_var_value: Optional[int]):
+                       node_name_generator: Iterator[str], line_prefix: str, pos_var_name: str):
         if self.shared:
-            yield 'playWaveform({waveform});'.format(waveform=waveform_manager.request_shared(self.waveform))
+            yield '{line_prefix}playWaveform({waveform});'.format(waveform=waveform_manager.request_shared(self.waveform),
+                                                                  line_prefix=line_prefix)
         else:
             wf_name = waveform_manager.request_concatenated(self.waveform)
             wf_len = len(self.waveform)
-            yield 'playWaveformIndexed({wf_name}, pos, {wf_len}); pos = pos + {wf_len};'.format(wf_name=wf_name,
-                                                                                                wf_len=wf_len)
+            yield ('{line_prefix}playWaveformIndexed({wf_name}, {pos_var_name}, {wf_len}); '
+                   '{pos_var_name} = {pos_var_name} + {wf_len};').format(wf_name=wf_name,
+                                                                         wf_len=wf_len,
+                                                                         pos_var_name=pos_var_name,
+                                                                         line_prefix=line_prefix)

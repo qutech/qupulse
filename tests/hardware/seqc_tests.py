@@ -25,13 +25,56 @@ def make_binary_waveform(waveform):
         return BinaryWaveform(data, (True, False), (False, False))
 
 
+def get_unique_wfs(n=10000, duration=8):
+    if not hasattr(get_unique_wfs, 'cache'):
+        get_unique_wfs.cache = {}
+
+    key = (n, duration)
+    if key not in get_unique_wfs.cache:
+        get_unique_wfs.cache[key] = [
+            DummyWaveform(duration=duration, sample_output=float(idx) * np.arange(duration))
+            for idx in range(n)
+        ]
+    return get_unique_wfs.cache[key]
+
+
+def complex_program_as_loop(unique_wfs, wf_same):
+    root = Loop(repetition_count=12)
+
+    for wf_unique in unique_wfs:
+        root.append_child(children=[Loop(repetition_count=42, waveform=wf_unique),
+                                    Loop(repetition_count=98, waveform=wf_same)],
+                          repetition_count=10)
+
+    root.append_child(waveform=unique_wfs[0], repetition_count=21)
+    root.append_child(waveform=wf_same, repetition_count=23)
+
+    return root
+
+
+def complex_program_as_seqc(unique_wfs, wf_same):
+    return Repeat(12,
+           Scope([
+               SteppingRepeat([
+                   Repeat(repetition_count=10, scope=Scope([
+                       Repeat(42, WaveformPlayback(make_binary_waveform(unique_wf))),
+                       Repeat(98, WaveformPlayback(make_binary_waveform(wf_same), shared=True)),
+                   ]))
+                   for unique_wf in unique_wfs
+               ]),
+               Repeat(21, WaveformPlayback(make_binary_waveform(unique_wfs[0]))),
+               Repeat(23, WaveformPlayback(make_binary_waveform(wf_same))),
+           ])
+           )
+
+
 class SEQCNodeTests(TestCase):
     """Test everything besides source code generation"""
     def test_visit_nodes(self):
         raise NotImplementedError()
 
 
-class SEQCTranslationTests(TestCase):
+class LoopToSEQCTranslationTests(TestCase):
     def test_loop_to_seqc_leaf(self):
         """Test the translation of leaves"""
         wf = DummyWaveform(duration=10)
@@ -91,20 +134,10 @@ class SEQCTranslationTests(TestCase):
         raise NotImplementedError()
 
     def test_program_translation(self):
-        root = Loop(repetition_count=12)
-
-        unique_wfs = []
-
-        wf_same = DummyWaveform(duration=10, sample_output=np.ones(10))
-        for idx in range(10000):
-            wf_unique = DummyWaveform(duration=8, sample_output=float(idx) * np.arange(8))
-            unique_wfs.append(wf_unique)
-            root.append_child(children=[Loop(repetition_count=42, waveform=wf_unique),
-                                        Loop(repetition_count=98, waveform=wf_same)],
-                              repetition_count=10)
-
-        root.append_child(waveform=unique_wfs[0], repetition_count=21)
-        root.append_child(waveform=wf_same, repetition_count=23)
+        """Integration test"""
+        unique_wfs = get_unique_wfs()
+        same_wf = DummyWaveform(duration=15, sample_output=np.ones(15))
+        root, same_wf = complex_program_as_loop(unique_wfs, wf_same=same_wf)
 
         t0 = time.perf_counter()
 
@@ -113,17 +146,81 @@ class SEQCTranslationTests(TestCase):
         t1 = time.perf_counter()
         print('took', t1 - t0, 's')
 
-        expected = Repeat(12,
-                          Scope([
-                              SteppingRepeat([
-                                  Repeat(repetition_count=10, scope=Scope([
-                                      Repeat(42, WaveformPlayback(make_binary_waveform(unique_wf))),
-                                      Repeat(98, WaveformPlayback(make_binary_waveform(wf_same), shared=True)),
-                                  ]))
-                                  for unique_wf in unique_wfs
-                              ]),
-                              Repeat(21, WaveformPlayback(make_binary_waveform(unique_wfs[0]))),
-                              Repeat(23, WaveformPlayback(make_binary_waveform(wf_same))),
-                          ])
-                          )
+        expected = complex_program_as_seqc(unique_wfs, wf_same=same_wf)
         self.assertEqual(expected, seqc)
+
+
+class SEQCToCodeTranslationTests(TestCase):
+    def test_shared_playback(self):
+        raise NotImplementedError()
+
+    def test_indexed_playback(self):
+        raise NotImplementedError()
+
+    def test_scope(self):
+        raise NotImplementedError()
+
+    def test_stepped_repeat(self):
+        raise NotImplementedError()
+
+    def test_repeat(self):
+        raise NotImplementedError()
+
+    def test_program_to_code_translation(self):
+        """Integration test"""
+        unique_wfs = get_unique_wfs()
+        same_wf = DummyWaveform(duration=15, sample_output=np.ones(15))
+        seqc_nodes = complex_program_as_seqc(unique_wfs, wf_same=same_wf)
+
+        class DummyWfManager:
+            def __init__(self):
+                self.shared = {}
+                self.concatenated = []
+
+            def request_shared(self, wf):
+                return self.shared.setdefault(wf, len(self.shared) + 1)
+
+            def request_concatenated(self, wf):
+                self.concatenated.append(wf)
+                return 0
+
+        wf_manager = DummyWfManager()
+        def node_name_gen():
+            for i in range(100):
+                yield str(i)
+
+        seqc_code = '\n'.join(seqc_nodes.to_source_code(wf_manager,
+                                                        line_prefix='',
+                                                        pos_var_name='pos',
+                                                        node_name_generator=node_name_gen()))
+        # this is just copied from the result...
+        expected = """var init_pos_0 = pos;
+repeat(12) {
+  pos = init_pos_0;
+  repeat(10000) { // stepping repeat
+    var init_pos_1 = pos;
+    repeat(10) {
+      pos = init_pos_1;
+      var init_pos_2 = pos;
+      repeat(42) {
+        pos = init_pos_2;
+        playWaveformIndexed(0, pos, 8); pos = pos + 8;
+      }
+      repeat(98) {
+        playWaveform(1);
+      }
+    }
+  }
+  var init_pos_3 = pos;
+  repeat(21) {
+    pos = init_pos_3;
+    playWaveformIndexed(0, pos, 8); pos = pos + 8;
+  }
+  var init_pos_4 = pos;
+  repeat(23) {
+    pos = init_pos_4;
+    playWaveformIndexed(0, pos, 15); pos = pos + 15;
+  }
+}"""
+        self.assertEqual(expected, seqc_code)
+
