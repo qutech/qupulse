@@ -1,43 +1,43 @@
-from typing import Optional, cast, Union, Sequence, Dict, MutableSequence, Iterator, Generator
+from typing import Optional, cast, Union, Sequence, Dict, MutableSequence, Iterator, Generator, Tuple, Callable
 import abc
 import itertools
+
+import numpy as np
 
 from qupulse._program.waveforms import Waveform
 from qupulse._program._loop import Loop
 
 
 class BinaryWaveform:
-    def __init__(self, data):
-        self.data = data
+    __slots__ = ('data', 'channel_mask', 'marker_mask')
 
+    def __init__(self, data: np.ndarray,
+                 channel_mask: Tuple[bool, bool],
+                 marker_mask: Tuple[bool, bool]):
+        """ always use both channels?
+
+        Args:
+            data: data as returned from zhinst.utils.convert_awg_waveform
+            channel_mask: which channels are given
+            marker_mask:
+        """
+        self.data = data
+        self.channel_mask = channel_mask
+        self.marker_mask = marker_mask
+
+        # needed to be hashable
+        self.data.flags.writable = False
 
     def __len__(self):
-        raise NotImplementedError()
-        return len(self.data) // 3
+        return len(self.data) // (sum(self.channel_mask) + any(self.marker_mask))
 
     def __eq__(self, other):
-        raise NotImplementedError()
-        return np.all_equal(data, other.data)
+        return (self.channel_mask == other.channel_mask and
+                self.marker_mask == other.marker_mask and
+                np.array_equal(self.data, other.data))
 
     def __hash__(self):
-        raise NotImplementedError()
-
-
-class SEQCProgram:
-    def __init__(self):
-        root = None
-
-    def get_constants(self) -> Dict[str, int]:
-        raise NotImplementedError()
-
-    def get_concatenated_waveform(self) -> BinaryWaveform:
-        raise NotImplementedError()
-
-    def get_shared_waveforms(self) -> Set[BinaryWaveform]:
-
-
-def wf_to_bin(waveform: Waveform) -> BinaryWaveform:
-    raise NotImplementedError()
+        return hash((self.channel_mask, self.marker_mask, bytes(self.data)))
 
 
 def find_sharable_waveforms(node_cluster: Sequence['SEQCNode']) -> Optional[Sequence[bool]]:
@@ -68,17 +68,17 @@ def mark_sharable_waveforms(node_cluster: Sequence['SEQCNode'], sharable_wavefor
             wf_playback.shared = True
 
 
-def to_node_clusters(loop: Loop, **kwargs) -> Sequence[Sequence['SEQCNode']]:
+def to_node_clusters(loop: Loop, loop_to_seqc_kwargs: dict) -> Sequence[Sequence['SEQCNode']]:
     """transform to seqc recursively noes and cluster them if they have compatible stepping"""
     assert len(loop) > 1
 
     node_clusters = []
-    last_node = loop_to_seqc(loop[0], **kwargs)
+    last_node = loop_to_seqc(loop[0], **loop_to_seqc_kwargs)
     current_nodes = [last_node]
 
     # compress all nodes in clusters of the same stepping
     for child in itertools.islice(loop, 1, None):
-        current_node = loop_to_seqc(child, **kwargs)
+        current_node = loop_to_seqc(child, **loop_to_seqc_kwargs)
 
         if last_node.same_stepping(current_node):
             current_nodes.append(current_node)
@@ -91,22 +91,26 @@ def to_node_clusters(loop: Loop, **kwargs) -> Sequence[Sequence['SEQCNode']]:
     return node_clusters
 
 
-def loop_to_seqc(loop: Loop, min_repetitions_for_for_loop,  min_repetitions_for_shared_wf) -> 'SEQCNode':
+def loop_to_seqc(loop: Loop,
+                 min_repetitions_for_for_loop: int,
+                 min_repetitions_for_shared_wf: int,
+                 waveform_to_bin: Callable[[Waveform], BinaryWaveform]) -> 'SEQCNode':
     assert min_repetitions_for_for_loop >= min_repetitions_for_shared_wf
     # At which point do we switch from indexed to shared
 
     if loop.is_leaf():
-        bin_wf = wf_to_bin(loop.waveform)
-        node = WaveformPlayback(bin_wf)
+        node = WaveformPlayback(waveform_to_bin(loop.waveform))
 
     elif len(loop) == 1:
-        # TODO: merge nested repetitions?
         node = loop_to_seqc(loop[0],
-                             min_repetitions_for_for_loop=min_repetitions_for_for_loop,
-                             min_repetitions_for_shared_wf=min_repetitions_for_shared_wf)
+                            min_repetitions_for_for_loop=min_repetitions_for_for_loop,
+                            min_repetitions_for_shared_wf=min_repetitions_for_shared_wf,
+                            waveform_to_bin=waveform_to_bin)
 
     else:
-        node_clusters = to_node_clusters(loop)
+        node_clusters = to_node_clusters(loop, dict(min_repetitions_for_for_loop=min_repetitions_for_for_loop,
+                                                    min_repetitions_for_shared_wf=min_repetitions_for_shared_wf,
+                                                    waveform_to_bin=waveform_to_bin))
 
         seqc_nodes = []
 
@@ -147,21 +151,24 @@ class SEQCNode(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def to_source_code(self, waveform_manager, line_prefix: str, pos_var_name: str, initial_pos_var_value: int):
+    def _visit_nodes(self, waveform_manager):
+        """push all concatenated waveforms in the waveform manager"""
+
+    @abc.abstractmethod
+    def to_source_code(self, waveform_manager, node_name_generator: Iterator[str], line_prefix: str, pos_var_name: str):
         """besides creating the source code, this function registers all needed waveforms to the program manager
         1. shared waveforms
         2. concatenated waveforms in the correct order
 
         Args:
             waveform_manager:
+            node_name_generator: generates unique names of nodes
             line_prefix:
             pos_var_name:
-            initial_pos_var_value:
 
         Returns:
 
         """
-
 
 
 class Scope(SEQCNode):
@@ -169,34 +176,36 @@ class Scope(SEQCNode):
 
     __slots__ = ('nodes',)
 
-    def __init__(self, nodes: Sequence[SEQCNode]=()):
+    def __init__(self, nodes: Sequence[SEQCNode] = ()):
         self.nodes = list(nodes)
 
     def samples(self):
         return sum(node.samples() for node in self.nodes)
 
-    def iter_waveform_playbacks(self) -> Iterator[BinaryWaveform]:
+    def iter_waveform_playbacks(self) -> Iterator['WaveformPlayback']:
         for node in self.nodes:
             yield from node.iter_waveform_playbacks()
 
-    def same_stepping(self, other: SEQCNode):
+    def same_stepping(self, other: 'Scope'):
         return type(other) is Scope and all(n1.same_stepping(n2) for n1, n2 in zip(self.nodes, other.nodes))
 
-    def to_source_code(self, waveform_manager, line_prefix: str, pos_var_name: str, initial_pos_var_value: int):
-        pos_var_value = initial_pos_var_value
+    def _visit_nodes(self, waveform_manager):
+        for node in self.nodes:
+            node._visit_nodes(waveform_manager)
+
+    def to_source_code(self, waveform_manager, node_name_generator: Iterator[str], line_prefix: str, pos_var_name: str):
         for node in self.nodes:
             yield from node.to_source_code(waveform_manager,
-                                           line_prefix + self.INDENTATION,
+                                           line_prefix=line_prefix + self.INDENTATION,
                                            pos_var_name=pos_var_name,
-                                           initial_pos_var_value=pos_var_value)
-            pos_var_value = pos_var_value + node.samples()
+                                           node_name_generator=node_name_generator)
 
 
 class Repeat(SEQCNode):
     """
     stepping: if False resets the pos to initial value after each iteration"""
 
-    def __init__(self, repetition_count: int, scope: Scope):
+    def __init__(self, repetition_count: int, scope: SEQCNode):
         assert repetition_count > 1
         self.repetition_count = repetition_count
         self.scope = scope
@@ -204,31 +213,50 @@ class Repeat(SEQCNode):
     def samples(self):
         return self.scope.samples()
 
-    def same_stepping(self, other: SEQCNode):
+    def same_stepping(self, other: 'Repeat'):
         return (type(self) == type(other) and
                 self.repetition_count == other.repetition_count and
                 self.scope.same_stepping(other.scope))
 
-    def iter_waveform_playbacks(self) -> Iterator[BinaryWaveform]:
+    def iter_waveform_playbacks(self) -> Iterator['WaveformPlayback']:
         return self.scope.iter_waveform_playbacks()
 
-    def to_source_code(self, waveform_manager, line_prefix: str, pos_var_name: str, initial_pos_var_value: Optional[int]):
+    def _visit_nodes(self, waveform_manager):
+        self.scope._visit_nodes(waveform_manager)
+
+    def to_source_code(self, waveform_manager, node_name_generator: Iterator[str], line_prefix: str, pos_var_name: str):
+        """
+
+        Args:
+            waveform_manager:
+            line_prefix:
+            node_name_generator: Used to name the initial position variable
+            pos_var_name:
+
+        Returns:
+
+        """
         body_prefix = line_prefix + self.INDENTATION
+        node_name = next(node_name_generator)
+        
+        initial_position_name = 'init_pos_%s' % node_name
+        
+        # store initial position
+        yield '{line_prefix}var {init_pos_name} = {pos_var_name};'.format(line_prefix=line_prefix,
+                                                                          init_pos_name=initial_position_name,
+                                                                          pos_var_name=pos_var_name)
 
-        if initial_pos_var_value is None:
-            pos_cache_name = waveform_manager.get_pos_cache_name()
-            yield '{line_prefix}var {pos_cache_name} = {pos_var_name};'.format(line_prefix=line_prefix, pos_cache_name=pos_cache_name, pos_var_name=pos_var_name)
-            initial_pos_var = pos_cache_name
-        else:
-            initial_pos_var = initial_pos_var_value
-
-        yield '{line_prefix}repeat({repetition_count}) {{'.format(line_prefix=line_prefix,
-                                                                  repetition_count=self.repetition_count)
-        yield '{body_prefix}{pos_var_name} = {initial_pos_var_value}; // set back on each iteration'.format(body_prefix=body_prefix, pos_var_name=pos_var_name, initial_pos_var_value=initial_pos_var)
+        yield '{line_prefix}repeat({repetition_count}) {{ // {node_name}'.format(line_prefix=line_prefix,
+                                                                                 repetition_count=self.repetition_count,
+                                                                                 node_name=node_name)
+        yield ('{body_prefix}{pos_var_name} = {init_pos_name};'
+               ' // set back on each iteration').format(body_prefix=body_prefix,
+                                                        pos_var_name=pos_var_name,
+                                                        init_pos_name=initial_position_name)
         yield from self.scope.to_source_code(waveform_manager,
                                              line_prefix=body_prefix, pos_var_name=pos_var_name,
-                                             initial_pos_var_value=initial_pos_var_value)
-        yield '{line_prefix}}}'
+                                             node_name_generator=node_name_generator)
+        yield '{line_prefix}}} // repetition {node_name} end'.format(line_prefix=line_prefix, node_name=node_name)
 
 
 class SteppingRepeat(SEQCNode):
@@ -242,21 +270,36 @@ class SteppingRepeat(SEQCNode):
     def repetition_count(self):
         return len(self.node_cluster)
 
-    def same_stepping(self, other: 'SEQCNode'):
-        return (type(self) == type(other) and
+    def iter_waveform_playbacks(self) -> Iterator['WaveformPlayback']:
+        for node in self.node_cluster:
+            yield from node.iter_waveform_playbacks()
+
+    def same_stepping(self, other: 'SteppingRepeat'):
+        return (type(other) is SteppingRepeat and
                 self.repetition_count == other.repetition_count and
                 self.node_cluster[0].same_stepping(other.node_cluster[0]))
 
-    def to_source_code(self, waveform_manager, line_prefix: str, pos_var_name: str, initial_pos_var_value: Optional[int]):
-        raise NotImplementedError('tell waveform manager about all waveforms')
+    def _visit_nodes(self, waveform_manager):
+        for node in self.node_cluster:
+            node._visit_nodes(waveform_manager)
+
+    def to_source_code(self, waveform_manager, node_name_generator: Iterator[str], line_prefix: str, pos_var_name: str):
         body_prefix = line_prefix + self.INDENTATION
-        pos_var_value = initial_pos_var_value
-        yield '{line_prefix}repeat({repetition_count}) {{'.format(line_prefix=line_prefix,
-                                                                  repetition_count=self.repetition_count)
+        node_name = next(node_name_generator)
+
+        yield ('{line_prefix}repeat({repetition_count}) {{ '
+               '// stepping repeat {node_name}').format(line_prefix=line_prefix,
+                                                        repetition_count=self.repetition_count)
         yield from self.node_cluster[0].to_source_code(waveform_manager,
                                                        line_prefix=body_prefix, pos_var_name=pos_var_name,
-                                                       initial_pos_var_value=None)
-        yield '{line_prefix}}}'
+                                                       node_name_generator=node_name_generator)
+
+        # register remaining concatenated waveforms
+        for node in itertools.islice(self.node_cluster, 1, None):
+            node._visit_nodes(waveform_manager)
+
+        yield '{line_prefix}}} // end stepping repeat {node_name}'.format(line_prefix=line_prefix,
+                                                                          node_name=node_name)
 
 
 class WaveformPlayback(SEQCNode):
@@ -279,13 +322,20 @@ class WaveformPlayback(SEQCNode):
         else:
             return same_type and len(self.waveform) == len(other.waveform)
 
-    def iter_waveform_playbacks(self) -> Iterator[BinaryWaveform]:
+    def iter_waveform_playbacks(self) -> Iterator['WaveformPlayback']:
         yield self
+
+    def _visit_nodes(self, waveform_manager):
+        if not self.shared:
+            waveform_manager.request_concatenated(self.waveform)
 
     def to_source_code(self, waveform_manager,
                        line_prefix: str, pos_var_name: str,
                        initial_pos_var_value: Optional[int]):
         if self.shared:
-            yield 'playWaveform("%s");' % waveform_manager.request_shared(self.waveform)
+            yield 'playWaveform({waveform});'.format(waveform=waveform_manager.request_shared(self.waveform))
         else:
-            yield 'playWaveformIndexed("{wf_name}", pos, {wf_len}); pos = pos + {wf_len}'.format(wf_name=waveform_manager.request_concatenated(self.waveform), wf_len=len(self.waveform))
+            wf_name = waveform_manager.request_concatenated(self.waveform)
+            wf_len = len(self.waveform)
+            yield 'playWaveformIndexed({wf_name}, pos, {wf_len}); pos = pos + {wf_len};'.format(wf_name=wf_name,
+                                                                                                wf_len=wf_len)
