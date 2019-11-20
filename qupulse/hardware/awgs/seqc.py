@@ -154,12 +154,27 @@ class SEQCNode(metaclass=abc.ABCMeta):
     def iter_waveform_playbacks(self) -> Iterator['WaveformPlayback']:
         pass
 
+    def _get_single_indexed_playback(self) -> Optional['WaveformPlayback']:
+        """Returns None if there is no or if there are more than one indexed playbacks"""
+        # detect if there is only a single indexed playback
+        single_indexed_playback = None
+        for playback in self.iter_waveform_playbacks():
+            if not playback.shared:
+                if single_indexed_playback is None:
+                    single_indexed_playback = playback
+                else:
+                    break
+        else:
+            return single_indexed_playback
+        return None
+
     @abc.abstractmethod
     def _visit_nodes(self, waveform_manager):
         """push all concatenated waveforms in the waveform manager"""
 
     @abc.abstractmethod
-    def to_source_code(self, waveform_manager, node_name_generator: Iterator[str], line_prefix: str, pos_var_name: str):
+    def to_source_code(self, waveform_manager, node_name_generator: Iterator[str], line_prefix: str, pos_var_name: str,
+                        advance_pos_var: bool = True):
         """besides creating the source code, this function registers all needed waveforms to the program manager
         1. shared waveforms
         2. concatenated waveforms in the correct order
@@ -169,14 +184,15 @@ class SEQCNode(metaclass=abc.ABCMeta):
             node_name_generator: generates unique names of nodes
             line_prefix:
             pos_var_name:
-
+            advance_pos_var: Indexed playback will not advance the position if set to False. This is used internally
+            to optimize repeat statements with a single indexed playback.
         Returns:
 
         """
 
     def __eq__(self, other):
         """Compare objects based on __slots__"""
-        #assert getattr(self, '__dict__', None) is None
+        assert getattr(self, '__dict__', None) is None
         return type(self) == type(other) and all(getattr(self, attr) == getattr(other, attr)
                                                  for base_class in inspect.getmro(type(self))
                                                  for attr in getattr(base_class, '__slots__', ()))
@@ -204,12 +220,14 @@ class Scope(SEQCNode):
         for node in self.nodes:
             node._visit_nodes(waveform_manager)
 
-    def to_source_code(self, waveform_manager, node_name_generator: Iterator[str], line_prefix: str, pos_var_name: str):
+    def to_source_code(self, waveform_manager, node_name_generator: Iterator[str], line_prefix: str, pos_var_name: str,
+                       advance_pos_var: bool = True):
         for node in self.nodes:
             yield from node.to_source_code(waveform_manager,
                                            line_prefix=line_prefix,
                                            pos_var_name=pos_var_name,
-                                           node_name_generator=node_name_generator)
+                                           node_name_generator=node_name_generator,
+                                           advance_pos_var=advance_pos_var)
 
 
 class Repeat(SEQCNode):
@@ -236,7 +254,22 @@ class Repeat(SEQCNode):
     def _visit_nodes(self, waveform_manager):
         self.scope._visit_nodes(waveform_manager)
 
-    def to_source_code(self, waveform_manager, node_name_generator: Iterator[str], line_prefix: str, pos_var_name: str):
+    def _stores_initial_pos(self):
+        self_samples = self.samples()
+        if self_samples > 0:
+            single_playback = self.scope._get_single_indexed_playback()
+            if single_playback is None or single_playback.samples() != self_samples:
+                # there is more than one indexed playback
+                return True
+            else:
+                # there is only a single indexed playback
+                return False
+        else:
+            # there is no indexed playback
+            return False
+
+    def to_source_code(self, waveform_manager, node_name_generator: Iterator[str], line_prefix: str, pos_var_name: str,
+                       advance_pos_var: bool = True):
         """
 
         Args:
@@ -248,10 +281,9 @@ class Repeat(SEQCNode):
         Returns:
 
         """
-        # TODO: detect if only a single stepped waveform is played
-
         body_prefix = line_prefix + self.INDENTATION
-        store_initial_pos = self.samples() > 0
+
+        store_initial_pos = advance_pos_var is False or self._stores_initial_pos()
         if store_initial_pos:
             node_name = next(node_name_generator)
             initial_position_name = 'init_pos_%s' % node_name
@@ -270,7 +302,8 @@ class Repeat(SEQCNode):
                               init_pos_name=initial_position_name)
         yield from self.scope.to_source_code(waveform_manager,
                                              line_prefix=body_prefix, pos_var_name=pos_var_name,
-                                             node_name_generator=node_name_generator)
+                                             node_name_generator=node_name_generator,
+                                             advance_pos_var=store_initial_pos)
         yield '{line_prefix}}}'.format(line_prefix=line_prefix)
 
 
@@ -300,7 +333,8 @@ class SteppingRepeat(SEQCNode):
         for node in self.node_cluster:
             node._visit_nodes(waveform_manager)
 
-    def to_source_code(self, waveform_manager, node_name_generator: Iterator[str], line_prefix: str, pos_var_name: str):
+    def to_source_code(self, waveform_manager, node_name_generator: Iterator[str], line_prefix: str, pos_var_name: str,
+                       advance_pos_var: bool = True):
         body_prefix = line_prefix + self.INDENTATION
 
         yield ('{line_prefix}repeat({repetition_count}) {{ '
@@ -308,7 +342,8 @@ class SteppingRepeat(SEQCNode):
                                             repetition_count=self.repetition_count)
         yield from self.node_cluster[0].to_source_code(waveform_manager,
                                                        line_prefix=body_prefix, pos_var_name=pos_var_name,
-                                                       node_name_generator=node_name_generator)
+                                                       node_name_generator=node_name_generator,
+                                                       advance_pos_var=advance_pos_var)
 
         # register remaining concatenated waveforms
         for node in itertools.islice(self.node_cluster, 1, None):
@@ -345,15 +380,21 @@ class WaveformPlayback(SEQCNode):
             waveform_manager.request_concatenated(self.waveform)
 
     def to_source_code(self, waveform_manager,
-                       node_name_generator: Iterator[str], line_prefix: str, pos_var_name: str):
+                       node_name_generator: Iterator[str], line_prefix: str, pos_var_name: str,
+                       advance_pos_var: bool = True):
         if self.shared:
             yield '{line_prefix}playWaveform({waveform});'.format(waveform=waveform_manager.request_shared(self.waveform),
                                                                   line_prefix=line_prefix)
         else:
             wf_name = waveform_manager.request_concatenated(self.waveform)
             wf_len = len(self.waveform)
-            yield ('{line_prefix}playWaveformIndexed({wf_name}, {pos_var_name}, {wf_len}); '
-                   '{pos_var_name} = {pos_var_name} + {wf_len};').format(wf_name=wf_name,
-                                                                         wf_len=wf_len,
-                                                                         pos_var_name=pos_var_name,
-                                                                         line_prefix=line_prefix)
+            play_cmd = '{line_prefix}playWaveformIndexed({wf_name}, {pos_var_name}, {wf_len});'
+
+            if advance_pos_var:
+                advance_cmd = ' {pos_var_name} = {pos_var_name} + {wf_len};'
+            else:
+                advance_cmd = ' // advance disabled do to parent repetition'
+            yield (play_cmd + advance_cmd).format(wf_name=wf_name,
+                                                  wf_len=wf_len,
+                                                  pos_var_name=pos_var_name,
+                                                  line_prefix=line_prefix)
