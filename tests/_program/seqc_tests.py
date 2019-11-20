@@ -183,12 +183,40 @@ class SEQCNodeTests(TestCase):
         self.assertIsNone(Scope([wf1, wf_shared, wf1])._get_single_indexed_playback(), wf1)
 
     def test_stores_initial_pos(self):
-        wf1, wf_shared = map(WaveformPlayback, map(make_binary_waveform, get_unique_wfs(2, 32)))
+        node = mock.Mock()
+        node.samples.return_value = 0
+        node._get_single_indexed_playback.return_value.samples.return_value = 128
+        repeat = Repeat(10, node)
 
-        scope = Scope([wf1, wf1, wf1])
-        stepping_repeat = SteppingRepeat([wf1, wf1, wf1])
+        # no samples at all
+        self.assertFalse(repeat._stores_initial_pos())
+        node.samples.assert_called_once_with()
+        node._get_single_indexed_playback.assert_not_called()
 
-        raise NotImplementedError()
+        node.reset_mock()
+        node.samples.return_value = 64
+
+        # samples do differ
+        self.assertTrue(repeat._stores_initial_pos())
+        node.samples.assert_called_once_with()
+        node._get_single_indexed_playback.assert_called_once_with()
+        node._get_single_indexed_playback.return_value.samples.assert_called_once_with()
+
+        node.reset_mock()
+        node.samples.return_value = 128
+
+        # samples are the same
+        self.assertFalse(repeat._stores_initial_pos())
+        node.samples.assert_called_once_with()
+        node._get_single_indexed_playback.assert_called_once_with()
+        node._get_single_indexed_playback.return_value.samples.assert_called_once_with()
+
+        node.reset_mock()
+        node._get_single_indexed_playback.return_value = None
+        # multiple indexed playbacks
+        self.assertTrue(repeat._stores_initial_pos())
+        node.samples.assert_called_once_with()
+        node._get_single_indexed_playback.assert_called_once_with()
 
 
 class LoopToSEQCTranslationTests(TestCase):
@@ -359,20 +387,153 @@ class LoopToSEQCTranslationTests(TestCase):
 
 
 class SEQCToCodeTranslationTests(TestCase):
+    def setUp(self) -> None:
+        self.line_prefix = '   '
+        self.node_name_generator = map(str, range(10000000000000000000))
+        self.pos_var_name = 'foo'
+        self.waveform_manager = DummyWfManager()
+
     def test_shared_playback(self):
-        raise NotImplementedError()
+        wf, = map(WaveformPlayback, map(make_binary_waveform, get_unique_wfs(1, 32)))
+        wf.shared = True
+
+        expected = ['   playWave(1);']
+        result = list(wf.to_source_code(self.waveform_manager, self.node_name_generator, self.line_prefix, self.pos_var_name, True))
+        self.assertEqual(expected, result)
 
     def test_indexed_playback(self):
-        raise NotImplementedError()
+        wf, = map(WaveformPlayback, map(make_binary_waveform, get_unique_wfs(1, 32)))
+
+        expected = ['   playWaveIndexed(0, foo, 32); foo = foo + 32;']
+        result = list(
+            wf.to_source_code(self.waveform_manager, self.node_name_generator, self.line_prefix, self.pos_var_name,
+                              True))
+        self.assertEqual(expected, result)
+
+        expected = ['   playWaveIndexed(0, foo, 32);' + wf.ADVANCE_DISABLED_COMMENT]
+        result = list(
+            wf.to_source_code(self.waveform_manager, self.node_name_generator, self.line_prefix, self.pos_var_name,
+                              False))
+        self.assertEqual(expected, result)
 
     def test_scope(self):
-        raise NotImplementedError()
+        nodes = [mock.Mock(), mock.Mock(), mock.Mock()]
+        for idx, node in enumerate(nodes):
+            node.to_source_code = mock.Mock(return_value=map(str, [idx + 100, idx + 200]))
+
+        scope = Scope(nodes)
+        expected = ['100', '200', '101', '201', '102', '202']
+        result = list(scope.to_source_code(self.waveform_manager, self.node_name_generator,
+                                           self.line_prefix, self.pos_var_name, False))
+        self.assertEqual(expected, result)
+        for node in nodes:
+            node.to_source_code.assert_called_once_with(self.waveform_manager,
+                                                        line_prefix=self.line_prefix,
+                                                        pos_var_name=self.pos_var_name,
+                                                        node_name_generator=self.node_name_generator,
+                                                        advance_pos_var=False)
 
     def test_stepped_repeat(self):
-        raise NotImplementedError()
+        nodes = [mock.Mock(), mock.Mock(), mock.Mock()]
+        for idx, node in enumerate(nodes):
+            node.to_source_code = mock.Mock(return_value=map(str, [idx + 100, idx + 200]))
+
+        stepping_repeat = SteppingRepeat(nodes)
+
+        body_prefix = self.line_prefix + stepping_repeat.INDENTATION
+        expected = [
+            '   repeat(3) {' + stepping_repeat.STEPPING_REPEAT_COMMENT,
+            '100',
+            '200',
+            '   }'
+        ]
+        result = list(stepping_repeat.to_source_code(self.waveform_manager, self.node_name_generator,
+                                                     self.line_prefix, self.pos_var_name, False))
+        self.assertEqual(expected, result)
+        nodes[0].to_source_code.assert_called_once_with(self.waveform_manager,
+                                                        line_prefix=body_prefix,
+                                                        pos_var_name=self.pos_var_name,
+                                                        node_name_generator=self.node_name_generator,
+                                                        advance_pos_var=False)
+        nodes[1].to_source_code.assert_not_called()
+        nodes[2].to_source_code.assert_not_called()
+        nodes[0]._visit_nodes.assert_not_called()
+        nodes[1]._visit_nodes.assert_called_once_with(self.waveform_manager)
+        nodes[2]._visit_nodes.assert_called_once_with(self.waveform_manager)
 
     def test_repeat(self):
-        raise NotImplementedError()
+        node = mock.Mock()
+        node.to_source_code = mock.Mock(return_value=['asd', 'jkl'])
+        node._get_single_indexed_playback = mock.Mock(return_value=None)
+        node.samples = mock.Mock(return_value=64)
+
+        repeat = Repeat(12, node)
+
+        body_prefix = self.line_prefix + repeat.INDENTATION
+        expected = ['   var init_pos_0 = foo;',
+                    '   repeat(12) {',
+                    '     foo = init_pos_0;',
+                    'asd', 'jkl', '   }']
+
+        result = list(repeat.to_source_code(self.waveform_manager,
+                                            node_name_generator=self.node_name_generator,
+                                            line_prefix=self.line_prefix, pos_var_name=self.pos_var_name,
+                                            advance_pos_var=True))
+        self.assertEqual(expected, result)
+        node.to_source_code.assert_called_once_with(self.waveform_manager, node_name_generator=self.node_name_generator,
+                                                    line_prefix=body_prefix,
+                                                    pos_var_name=self.pos_var_name,
+                                                    advance_pos_var=True)
+        node._get_single_indexed_playback.assert_called_once_with()
+        node.samples.assert_called_once_with()
+
+
+    def test_repeat_detect_no_advance(self):
+        node = mock.Mock()
+        node.to_source_code = mock.Mock(return_value=['asd', 'jkl'])
+        node._get_single_indexed_playback = mock.Mock(return_value=None)
+        node.samples = mock.Mock(return_value=0)
+
+        repeat = Repeat(12, node)
+        body_prefix = self.line_prefix + repeat.INDENTATION
+
+        expected = ['   repeat(12) {',
+                    'asd', 'jkl', '   }']
+        result_no_advance = list(repeat.to_source_code(self.waveform_manager,
+                                                       node_name_generator=self.node_name_generator,
+                                                       line_prefix=self.line_prefix, pos_var_name=self.pos_var_name,
+                                                       advance_pos_var=True))
+        self.assertEqual(expected, result_no_advance)
+        node.to_source_code.assert_called_once_with(self.waveform_manager, node_name_generator=self.node_name_generator,
+                                                    line_prefix=body_prefix,
+                                                    pos_var_name=self.pos_var_name,
+                                                    advance_pos_var=False)
+        node._get_single_indexed_playback.assert_not_called()
+        node.samples.assert_called_once_with()
+
+    def test_repeat_extern_no_advance(self):
+        node = mock.Mock()
+        node.to_source_code = mock.Mock(return_value=['asd', 'jkl'])
+        node._get_single_indexed_playback = mock.Mock(return_value=None)
+        node.samples = mock.Mock(return_value=64)
+
+        repeat = Repeat(12, node)
+
+        body_prefix = self.line_prefix + repeat.INDENTATION
+
+        expected = ['   repeat(12) {',
+                    'asd', 'jkl', '   }']
+        result_no_advance = list(repeat.to_source_code(self.waveform_manager,
+                                                       node_name_generator=self.node_name_generator,
+                                                       line_prefix=self.line_prefix, pos_var_name=self.pos_var_name,
+                                                       advance_pos_var=False))
+        self.assertEqual(expected, result_no_advance)
+        node.to_source_code.assert_called_once_with(self.waveform_manager, node_name_generator=self.node_name_generator,
+                                                    line_prefix=body_prefix,
+                                                    pos_var_name=self.pos_var_name,
+                                                    advance_pos_var=False)
+        node._get_single_indexed_playback.assert_not_called()
+        node.samples.assert_not_called()
 
     def test_program_to_code_translation(self):
         """Integration test"""
@@ -394,28 +555,20 @@ class SEQCToCodeTranslationTests(TestCase):
 repeat(12) {
   pos = init_pos_0;
   repeat(10000) { // stepping repeat
-    var init_pos_1 = pos;
     repeat(10) {
-      pos = init_pos_1;
-      var init_pos_2 = pos;
       repeat(42) {
-        pos = init_pos_2;
-        playWaveformIndexed(0, pos, 8); pos = pos + 8;
+        playWaveIndexed(0, pos, 8); // advance disabled do to parent repetition
       }
       repeat(98) {
-        playWaveform(1);
+        playWave(1);
       }
     }
   }
-  var init_pos_3 = pos;
   repeat(21) {
-    pos = init_pos_3;
-    playWaveformIndexed(0, pos, 8); pos = pos + 8;
+    playWaveIndexed(0, pos, 8); // advance disabled do to parent repetition
   }
-  var init_pos_4 = pos;
   repeat(23) {
-    pos = init_pos_4;
-    playWaveformIndexed(0, pos, 15); pos = pos + 15;
+    playWaveIndexed(0, pos, 15); // advance disabled do to parent repetition
   }
 }"""
         self.assertEqual(expected, seqc_code)

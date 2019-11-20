@@ -70,7 +70,7 @@ def mark_sharable_waveforms(node_cluster: Sequence['SEQCNode'], sharable_wavefor
                 wf_playback.shared = True
 
 
-def to_node_clusters(loop: Loop, loop_to_seqc_kwargs: dict) -> Sequence[Sequence['SEQCNode']]:
+def to_node_clusters(loop: Union[Sequence[Loop], Loop], loop_to_seqc_kwargs: dict) -> Sequence[Sequence['SEQCNode']]:
     """transform to seqc recursively noes and cluster them if they have compatible stepping"""
     assert len(loop) > 1
 
@@ -214,7 +214,9 @@ class Scope(SEQCNode):
             yield from node.iter_waveform_playbacks()
 
     def same_stepping(self, other: 'Scope'):
-        return type(other) is Scope and all(n1.same_stepping(n2) for n1, n2 in zip(self.nodes, other.nodes))
+        return (type(other) is Scope and
+                len(self.nodes) == len(other.nodes) and
+                all(n1.same_stepping(n2) for n1, n2 in zip(self.nodes, other.nodes)))
 
     def _visit_nodes(self, waveform_manager):
         for node in self.nodes:
@@ -234,6 +236,7 @@ class Repeat(SEQCNode):
     """
     stepping: if False resets the pos to initial value after each iteration"""
     __slots__ = ('repetition_count', 'scope')
+    INITIAL_POSITION_NAME_TEMPLATE = 'init_pos_{node_name}'
 
     def __init__(self, repetition_count: int, scope: SEQCNode):
         assert repetition_count > 1
@@ -270,23 +273,12 @@ class Repeat(SEQCNode):
 
     def to_source_code(self, waveform_manager, node_name_generator: Iterator[str], line_prefix: str, pos_var_name: str,
                        advance_pos_var: bool = True):
-        """
-
-        Args:
-            waveform_manager:
-            line_prefix:
-            node_name_generator: Used to name the initial position variable
-            pos_var_name:
-
-        Returns:
-
-        """
         body_prefix = line_prefix + self.INDENTATION
 
-        store_initial_pos = advance_pos_var is False or self._stores_initial_pos()
+        store_initial_pos = advance_pos_var and self._stores_initial_pos()
         if store_initial_pos:
             node_name = next(node_name_generator)
-            initial_position_name = 'init_pos_%s' % node_name
+            initial_position_name = self.INITIAL_POSITION_NAME_TEMPLATE.format(node_name=node_name)
 
             # store initial position
             yield '{line_prefix}var {init_pos_name} = {pos_var_name};'.format(line_prefix=line_prefix,
@@ -308,6 +300,7 @@ class Repeat(SEQCNode):
 
 
 class SteppingRepeat(SEQCNode):
+    STEPPING_REPEAT_COMMENT = ' // stepping repeat'
     __slots__ = ('node_cluster',)
 
     def __init__(self, node_cluster: Sequence[SEQCNode]):
@@ -336,10 +329,9 @@ class SteppingRepeat(SEQCNode):
     def to_source_code(self, waveform_manager, node_name_generator: Iterator[str], line_prefix: str, pos_var_name: str,
                        advance_pos_var: bool = True):
         body_prefix = line_prefix + self.INDENTATION
-
-        yield ('{line_prefix}repeat({repetition_count}) {{ '
-               '// stepping repeat').format(line_prefix=line_prefix,
-                                            repetition_count=self.repetition_count)
+        repeat_open = '{line_prefix}repeat({repetition_count}) {{' + self.STEPPING_REPEAT_COMMENT
+        yield repeat_open.format(line_prefix=line_prefix,
+                                 repetition_count=self.repetition_count)
         yield from self.node_cluster[0].to_source_code(waveform_manager,
                                                        line_prefix=body_prefix, pos_var_name=pos_var_name,
                                                        node_name_generator=node_name_generator,
@@ -353,6 +345,8 @@ class SteppingRepeat(SEQCNode):
 
 
 class WaveformPlayback(SEQCNode):
+    ADVANCE_DISABLED_COMMENT = ' // advance disabled do to parent repetition'
+
     __slots__ = ('waveform', 'shared')
 
     def __init__(self, waveform: BinaryWaveform, shared: bool = False):
@@ -383,17 +377,17 @@ class WaveformPlayback(SEQCNode):
                        node_name_generator: Iterator[str], line_prefix: str, pos_var_name: str,
                        advance_pos_var: bool = True):
         if self.shared:
-            yield '{line_prefix}playWaveform({waveform});'.format(waveform=waveform_manager.request_shared(self.waveform),
-                                                                  line_prefix=line_prefix)
+            yield '{line_prefix}playWave({waveform});'.format(waveform=waveform_manager.request_shared(self.waveform),
+                                                              line_prefix=line_prefix)
         else:
             wf_name = waveform_manager.request_concatenated(self.waveform)
             wf_len = len(self.waveform)
-            play_cmd = '{line_prefix}playWaveformIndexed({wf_name}, {pos_var_name}, {wf_len});'
+            play_cmd = '{line_prefix}playWaveIndexed({wf_name}, {pos_var_name}, {wf_len});'
 
             if advance_pos_var:
                 advance_cmd = ' {pos_var_name} = {pos_var_name} + {wf_len};'
             else:
-                advance_cmd = ' // advance disabled do to parent repetition'
+                advance_cmd = self.ADVANCE_DISABLED_COMMENT
             yield (play_cmd + advance_cmd).format(wf_name=wf_name,
                                                   wf_len=wf_len,
                                                   pos_var_name=pos_var_name,
