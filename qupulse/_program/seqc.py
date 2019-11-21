@@ -1,7 +1,11 @@
-from typing import Optional, cast, Union, Sequence, Dict, MutableSequence, Iterator, Generator, Tuple, Callable
+from typing import Optional, cast, Union, Sequence, Dict, Iterator, Tuple, Callable, NamedTuple, MutableMapping, Mapping
+from types import MappingProxyType
 import abc
 import itertools
 import inspect
+import glob
+import os.path
+from collections import OrderedDict
 
 import numpy as np
 
@@ -145,6 +149,128 @@ class ConcatenatedWaveform:
             self._concatenated.clear()
         self._as_binary = None
 
+
+class WaveformMemory:
+    """Global waveform "memory" representation (currently the file system)"""
+    CONCATENATED_WAVEFORM_TEMPLATE = '{program_name}_concatenated_waveform'
+    SHARED_WAVEFORM_TEMPLATE = '{program_name}_shared_waveform_{hash}'
+    WF_PLACEHOLDER_TEMPLATE = '*{id}*'
+    FILE_NAME_TEMPLATE = '{hash}.csv'
+
+    _WaveInfo = NamedTuple('_WaveInfo', [('wave_name', str),
+                                         ('wave_placeholder', str),
+                                         ('file_name', str),
+                                         ('binary_waveform', BinaryWaveform)])
+
+    def __init__(self):
+        self.shared_waveforms = OrderedDict()  # type: MutableMapping[BinaryWaveform, set]
+        self.concatenated_waveforms = OrderedDict()  # type: MutableMapping[str, ConcatenatedWaveform]
+
+    def _shared_waveforms_iter(self) -> Iterator[_WaveInfo]:
+        for wf, program_set in self.shared_waveforms.items():
+            if program_set:
+                wave_hash = hash(wf)
+                wave_name = self.SHARED_WAVEFORM_TEMPLATE.format(program_name='_'.join(program_set),
+                                                                 hash=wave_hash)
+                wave_placeholder = self.WF_PLACEHOLDER_TEMPLATE.format(id=id(program_set))
+                file_name = self.FILE_NAME_TEMPLATE.format(hash=wave_hash)
+                yield self._WaveInfo(wave_name, wave_placeholder, file_name, wf)
+
+    def _concatenated_waveforms_iter(self) -> Iterator[_WaveInfo]:
+        for program_name, concatenated_waveform in self.concatenated_waveforms.items():
+            if concatenated_waveform:
+                wave_hash = hash(concatenated_waveform.as_binary())
+                wave_placeholder = self.WF_PLACEHOLDER_TEMPLATE.format(id=id(concatenated_waveform))
+                wave_name = self.CONCATENATED_WAVEFORM_TEMPLATE.format(program_name=program_name)
+                file_name = self.FILE_NAME_TEMPLATE.format(hash=wave_hash)
+                yield self._WaveInfo(wave_name, wave_placeholder, file_name, concatenated_waveform.as_binary())
+
+    def waveform_name_translation(self) -> Dict[str, str]:
+        """replace place holders of complete seqc program with
+
+        >>> waveform_name_translation = waveform_memory.waveform_name_translation()
+        >>> seqc_program = seqc_program.translate(waveform_name_translation)
+        """
+        translation = {}
+        for wave_info in self._shared_waveforms_iter():
+            translation[wave_info.wave_placeholder] = wave_info.wave_name
+
+        for wave_info in self._concatenated_waveforms_iter():
+            translation[wave_info.wave_placeholder] = wave_info.wave_name
+        return translation
+
+    def waveform_declaration(self) -> str:
+        """Produces a string that declares all needed waveforms.
+        It is needed to know the waveform index in case we want to update a waveform during playback."""
+        declarations = []
+        for wave_info in self._concatenated_waveforms_iter():
+            declarations.append(
+                'wave {wave_name} = "{file_name}";'.format(wave_name=wave_info.wave_name,
+                                                           file_name=wave_info.file_name.replace('.csv', ''))
+            )
+
+        for wave_info in self._shared_waveforms_iter():
+            declarations.append(
+                'wave {wave_name} = "{file_name}";'.format(wave_name=wave_info.wave_name,
+                                                           file_name=wave_info.file_name.replace('.csv', ''))
+            )
+        return '\n'.join(declarations)
+
+    def sync_to_file_system(self, path, delete=True, write_all=False):
+        to_save = {wave_info.file_name: wave_info.binary_waveform
+                   for wave_info in itertools.chain(self._concatenated_waveforms_iter(),
+                                                    self._shared_waveforms_iter())}
+
+        for file_name in glob.glob(os.path.join(path, '*.csv')):
+            if file_name in to_save:
+                if not write_all:
+                    to_save.pop(file_name)
+            elif delete:
+                try:
+                    os.remove(file_name)
+                except OSError:
+                    # TODO: log
+                    pass
+
+        for file_name, binary_waveform in to_save.items():
+            table = binary_waveform.to_csv_compatible_table()
+            np.savetxt(file_name, table, '%u')
+
+
+class ProgramWaveformManager:
+    """Manages waveforms of a program"""
+    def __init__(self, name, memory: WaveformMemory):
+        self._program_name = name
+        self._memory = memory
+
+        assert self._program_name not in self._memory.concatenated_waveforms
+        assert all(self._program_name not in programs for programs in self._memory.shared_waveforms.values())
+        self._memory.concatenated_waveforms[self._program_name] = ConcatenatedWaveform()
+
+    def clear_requested(self):
+        for programs in self._memory.shared_waveforms.values():
+            programs.discard(self._program_name)
+        self._memory.concatenated_waveforms[self._program_name].clear()
+
+    def request_shared(self, binary_waveform: BinaryWaveform) -> str:
+        """Register waveform if not already registered and return a unique identifier placeholder.
+
+        The unique identifier currently is computed from the id of the set which stores all programs using this
+        waveform.
+        """
+        program_set = self._memory.shared_waveforms.setdefault(binary_waveform, set())
+        program_set.add(self._program_name)
+        return self._memory.WF_PLACEHOLDER_TEMPLATE.format(id=id(program_set))
+
+    def request_concatenated(self, binary_waveform: BinaryWaveform) -> str:
+        """Append the waveform to the concatenated waveform"""
+        bin_wf_list = self._memory.concatenated_waveforms[self._program_name]
+        bin_wf_list.append(binary_waveform)
+        return self._memory.WF_PLACEHOLDER_TEMPLATE.format(id=id(bin_wf_list))
+
+    def finalize(self):
+        self._memory.concatenated_waveforms[self._program_name].finalize()
+
 def find_sharable_waveforms(node_cluster: Sequence['SEQCNode']) -> Optional[Sequence[bool]]:
     """Expects nodes to have a compatible stepping
 
@@ -273,11 +399,11 @@ class SEQCNode(metaclass=abc.ABCMeta):
         return None
 
     @abc.abstractmethod
-    def _visit_nodes(self, waveform_manager):
+    def _visit_nodes(self, waveform_manager: ProgramWaveformManager):
         """push all concatenated waveforms in the waveform manager"""
 
     @abc.abstractmethod
-    def to_source_code(self, waveform_manager, node_name_generator: Iterator[str], line_prefix: str, pos_var_name: str,
+    def to_source_code(self, waveform_manager: ProgramWaveformManager, node_name_generator: Iterator[str], line_prefix: str, pos_var_name: str,
                         advance_pos_var: bool = True):
         """besides creating the source code, this function registers all needed waveforms to the program manager
         1. shared waveforms
@@ -322,11 +448,12 @@ class Scope(SEQCNode):
                 len(self.nodes) == len(other.nodes) and
                 all(n1.same_stepping(n2) for n1, n2 in zip(self.nodes, other.nodes)))
 
-    def _visit_nodes(self, waveform_manager):
+    def _visit_nodes(self, waveform_manager: ProgramWaveformManager):
         for node in self.nodes:
             node._visit_nodes(waveform_manager)
 
-    def to_source_code(self, waveform_manager, node_name_generator: Iterator[str], line_prefix: str, pos_var_name: str,
+    def to_source_code(self, waveform_manager: ProgramWaveformManager, node_name_generator: Iterator[str],
+                       line_prefix: str, pos_var_name: str,
                        advance_pos_var: bool = True):
         for node in self.nodes:
             yield from node.to_source_code(waveform_manager,
@@ -358,7 +485,7 @@ class Repeat(SEQCNode):
     def iter_waveform_playbacks(self) -> Iterator['WaveformPlayback']:
         return self.scope.iter_waveform_playbacks()
 
-    def _visit_nodes(self, waveform_manager):
+    def _visit_nodes(self, waveform_manager: ProgramWaveformManager):
         self.scope._visit_nodes(waveform_manager)
 
     def _stores_initial_pos(self):
@@ -375,8 +502,8 @@ class Repeat(SEQCNode):
             # there is no indexed playback
             return False
 
-    def to_source_code(self, waveform_manager, node_name_generator: Iterator[str], line_prefix: str, pos_var_name: str,
-                       advance_pos_var: bool = True):
+    def to_source_code(self, waveform_manager: ProgramWaveformManager, node_name_generator: Iterator[str],
+                       line_prefix: str, pos_var_name: str, advance_pos_var: bool = True):
         body_prefix = line_prefix + self.INDENTATION
 
         store_initial_pos = advance_pos_var and self._stores_initial_pos()
@@ -426,11 +553,12 @@ class SteppingRepeat(SEQCNode):
                 len(self.node_cluster) == len(other.node_cluster) and
                 self.node_cluster[0].same_stepping(other.node_cluster[0]))
 
-    def _visit_nodes(self, waveform_manager):
+    def _visit_nodes(self, waveform_manager: ProgramWaveformManager):
         for node in self.node_cluster:
             node._visit_nodes(waveform_manager)
 
-    def to_source_code(self, waveform_manager, node_name_generator: Iterator[str], line_prefix: str, pos_var_name: str,
+    def to_source_code(self, waveform_manager: ProgramWaveformManager, node_name_generator: Iterator[str],
+                       line_prefix: str, pos_var_name: str,
                        advance_pos_var: bool = True):
         body_prefix = line_prefix + self.INDENTATION
         repeat_open = '{line_prefix}repeat({repetition_count}) {{' + self.STEPPING_REPEAT_COMMENT
@@ -473,11 +601,11 @@ class WaveformPlayback(SEQCNode):
     def iter_waveform_playbacks(self) -> Iterator['WaveformPlayback']:
         yield self
 
-    def _visit_nodes(self, waveform_manager):
+    def _visit_nodes(self, waveform_manager: ProgramWaveformManager):
         if not self.shared:
             waveform_manager.request_concatenated(self.waveform)
 
-    def to_source_code(self, waveform_manager,
+    def to_source_code(self, waveform_manager: ProgramWaveformManager,
                        node_name_generator: Iterator[str], line_prefix: str, pos_var_name: str,
                        advance_pos_var: bool = True):
         if self.shared:
