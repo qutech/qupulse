@@ -271,6 +271,72 @@ class ProgramWaveformManager:
     def finalize(self):
         self._memory.concatenated_waveforms[self._program_name].finalize()
 
+
+class HDAWGProgramManager:
+    GLOBAL_CONSTS = dict(PROG_SEL_REGISTER=0,
+                         NO_RESET_MASK=1 << 15,
+                         IDLE_WAIT_CYCLES=300)
+    PROGRAM_FUNCTION_NAME_TEMPLATE = '{program_name}_function'
+
+    INIT_PROGRAM_SWITCH = '// INIT program switch.\ngetUserReg(PROG_SEL_REGISTER, 0); var prog_sel = 0;'
+
+    ProgramEntry = NamedTuple('ProgramEntry',
+                              [('program', Loop),
+                               ('channels', Tuple[ChannelID, ChannelID]),
+                               ('markers', )
+                               ('seqc_node', 'SEQCNode'),
+                               ('seqc_source', str),
+                               ('selection_index', int)]
+                              )
+
+    def __init__(self):
+        self._waveform_memory = WaveformMemory()
+        self._programs = OrderedDict()
+        self._active_programs = []
+
+    @property
+    def programs(self) -> Mapping[str, ProgramEntry]:
+        return MappingProxyType(self._programs)
+
+    def to_seqc_program(self) -> str:
+        lines = ['const {const_name} = {const_val};'.format(const_name=const_name, const_val=const_val)
+                 for const_name, const_val in self.GLOBAL_CONSTS.items()]
+
+        lines.append(self._waveform_memory.waveform_declaration())
+
+        translations = self._waveform_memory.waveform_name_translation()
+
+        lines.append('\n// program definitions')
+        for program_name, program in self.programs.items():
+            program_function_name = self.PROGRAM_FUNCTION_NAME_TEMPLATE.format(program_name=program_name)
+            lines.append('void {program_function_name}() {'.format(program_function_name=program_function_name))
+            lines.append(program.seqc_source.translate(translations))
+            lines.append('}\n')
+
+        lines.append(self.INIT_PROGRAM_SWITCH)
+
+        lines.append('\n//runtime block')
+        lines.append('while (true) {')
+        lines.append('  // read program selection value')
+        lines.append('  prog_sel = getUserReg(PROG_SEL);')
+        lines.append('  if (!(prog_sel & NO_RESET_MASK))  getUserReg(PROG_SEL, 0);')
+        lines.append('  ')
+        lines.append('  switch (prog_sel) {')
+
+        for program_name, program_entry in self.programs.items():
+            program_function_name = self.PROGRAM_FUNCTION_NAME_TEMPLATE.format(program_name=program_name)
+            lines.append('    case {selection_index}:'.format(selection_index=program_entry.selection_index))
+            lines.append('      {program_function_name}();'.format(program_function_name=program_function_name))
+            lines.append('      waitWave();')
+
+        lines.append('    case default:')
+        lines.append('      wait(IDLE_WAIT_CYCLES);')
+        lines.append('  }')
+        lines.append('}')
+
+        return '\n'.join(lines)
+
+
 def find_sharable_waveforms(node_cluster: Sequence['SEQCNode']) -> Optional[Sequence[bool]]:
     """Expects nodes to have a compatible stepping
 
