@@ -8,37 +8,107 @@ import numpy as np
 from qupulse._program.waveforms import Waveform
 from qupulse._program._loop import Loop
 
+try:
+    import zhinst.utils
+except ImportError:
+    zhinst = None
+
 
 class BinaryWaveform:
-    __slots__ = ('data', 'channel_mask', 'marker_mask')
+    """This class represents a sampled waveform in the native HDAWG format as returned
+    by zhinst.utils.convert_awg_waveform.
 
-    def __init__(self, data: np.ndarray,
-                 channel_mask: Tuple[bool, bool],
-                 marker_mask: Tuple[bool, bool]):
+    BinaryWaveform.data can be uploaded directly to {device]/awgs/{awg}/waveform/waves/{wf}
+
+    `to_csv_compatible_table` can be used to create a compatible compact csv file (with marker data included)
+    """
+    __slots__ = ('data',)
+
+    def __init__(self, data: np.ndarray):
         """ always use both channels?
 
         Args:
             data: data as returned from zhinst.utils.convert_awg_waveform
-            channel_mask: which channels are given
-            marker_mask:
         """
-        self.data = data
-        self.channel_mask = channel_mask
-        self.marker_mask = marker_mask
+        n_quantum, remainder = divmod(data.size, 3 * 16)
+        assert n_quantum > 1, "Waveform too short"
+        assert remainder == 0, "Waveform has not a valid length"
+        assert data.dtype is np.uint16
+        assert np.all(data[2::3] < 16), "invalid marker data"
 
-        # needed to be hashable
+        self.data = data
         self.data.flags.writeable = False
 
+    @property
+    def ch1(self):
+        return self.data[::3]
+
+    @property
+    def ch2(self):
+        return self.data[1::3]
+
+    @property
+    def marker_data(self):
+        return self.data[2::3]
+
+    @property
+    def markers_ch1(self):
+        return np.bitwise_and(self.marker_data, 0b0011)
+
+    @property
+    def markers_ch2(self):
+        return np.bitwise_and(self.marker_data, 0b1100)
+
+    @classmethod
+    def from_sampled(cls, ch1: Optional[np.ndarray], ch2: Optional[np.ndarray],
+                     markers: Tuple[Optional[np.ndarray], Optional[np.ndarray],
+                                    Optional[np.ndarray], Optional[np.ndarray]]) -> 'BinaryWaveform':
+        """Combines the sampled and scaled waveform data into a single binary compatible waveform
+
+        Args:
+            ch1: sampled waveform scaled to full range (-1., 1.)
+            ch2: sampled waveform scaled to full range (-1., 1.)
+            markers: (ch1_front_marker, ch1_dio_marker, ch2_front_marker, ch2_dio_marker)
+
+        Returns:
+
+        """
+        all_input = (ch1, ch2, *markers)
+        assert any(x is not None for x in all_input)
+        size = next(x.size for x in all_input if x is not None)
+        if ch1 is None:
+            ch1 = np.zeros(size)
+        if ch2 is None:
+            ch2 = np.zeros(size)
+        marker_data = np.zeros(size, dtype=np.uint16)
+        for idx, marker in enumerate(markers):
+            if marker is not None:
+                marker_data += (marker > 0) * 2**idx
+        return cls(zhinst.utils.convert_awg_waveform(ch1, ch2, marker_data))
+
     def __len__(self):
-        return len(self.data) // (sum(self.channel_mask) + any(self.marker_mask))
+        return self.data.size // 3
 
     def __eq__(self, other):
-        return (self.channel_mask == other.channel_mask and
-                self.marker_mask == other.marker_mask and
-                np.array_equal(self.data, other.data))
+        return np.array_equal(self.data, other.data)
 
     def __hash__(self):
-        return hash((self.channel_mask, self.marker_mask, bytes(self.data)))
+        return hash(bytes(self.data))
+
+    def to_csv_compatible_table(self):
+        """The integer values in that file should be 18-bit unsigned integers with the two least significant bits
+        being the markers. The values are mapped to 0 => -FS, 262143 => +FS, with FS equal to the full scale.
+
+        >>> np.savetxt(waveform_dir, binary_waveform.to_csv_compatible_table(), fmt='%u')
+        """
+        table = np.zeros((len(self), 2), dtype=np.uint32)
+        table[:, 0] = self.ch1
+        table[:, 1] = self.ch2
+        np.left_shift(table, 2, out=table)
+        table[:, 0] += self.markers_ch1
+        table[:, 1] += self.markers_ch2
+
+        return table
 
 
 def find_sharable_waveforms(node_cluster: Sequence['SEQCNode']) -> Optional[Sequence[bool]]:
