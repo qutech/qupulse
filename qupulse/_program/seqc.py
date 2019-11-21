@@ -111,6 +111,40 @@ class BinaryWaveform:
         return table
 
 
+class ConcatenatedWaveform:
+    def __init__(self):
+        self._concatenated = []
+        self._as_binary = None
+
+    def __bool__(self):
+        return bool(self._concatenated)
+
+    def is_finalized(self):
+        return self._as_binary is not None or self._concatenated is None
+
+    def as_binary(self) -> Optional[BinaryWaveform]:
+        assert self.is_finalized()
+        return self._as_binary
+
+    def append(self, binary_waveform):
+        assert not self.is_finalized()
+        self._concatenated.append(binary_waveform)
+
+    def finalize(self):
+        assert not self.is_finalized()
+        if self._concatenated:
+            concatenated_data = np.concatenate([wf.data for wf in self._concatenated], order='F')
+            self._as_binary = BinaryWaveform(concatenated_data)
+        else:
+            self._concatenated = None
+
+    def clear(self):
+        if self._concatenated is None:
+            self._concatenated = []
+        else:
+            self._concatenated.clear()
+        self._as_binary = None
+
 def find_sharable_waveforms(node_cluster: Sequence['SEQCNode']) -> Optional[Sequence[bool]]:
     """Expects nodes to have a compatible stepping
 
