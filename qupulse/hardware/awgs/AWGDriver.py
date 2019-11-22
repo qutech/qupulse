@@ -2,7 +2,8 @@ from abc import ABC, abstractmethod
 
 
 class BaseFeature(ABC):
-    pass
+    def __init__(self):
+        self._functionList = []
 
 
 class AWGDeviceFeature(ABC, BaseFeature):
@@ -17,21 +18,25 @@ class AWGChannelTupleFeature(ABC, BaseFeature):
     pass
 
 
-class AWGProgrammManager(ABC):
-    @abstractmethod
-    def add(self, program: Programm):
+class Program:
+    def __init__(self, name: str, program: Loop):
+        self._name = name
+        self._program = program
+        self._channel_ids = []
+        self._marker_ids = []
+
+
+class AWGProgramManager:
+    def add(self, program: Program):
         pass
 
-    @abstractmethod
-    def get(self, name: str) -> Programm:
+    def get(self, name: str) -> Program:
         # Wie macht man die rückgabe von Programm?
         pass
 
-    @abstractmethod
     def remove(self, name: str):
         pass
 
-    @abstractmethod
     def clear(self):
         pass
 
@@ -41,6 +46,7 @@ class AWGDevice(ABC):
         self._channels = []
         self._channel_groups = []
 
+        # Code redundanz
         self._featureList = []
 
     @abstractmethod
@@ -63,11 +69,15 @@ class AWGDevice(ABC):
     @abstractmethod
     def add_feature(self, feature: AWGDeviceFeature):
         self._featureList.append(feature)
+        # str is not a callable
+        for function in feature._functionList:
+            #in Liste einfügen
+
 
 
 class AWGChannelTuple(ABC):
     def __init__(self, channel_tuple_id: int, device: AWGDevice, channels, sample_rate: float,
-                 programs: AWGProgrammManager):
+                 programs: AWGProgramManager):
         self._channel_tuptle_id = channel_tuple_id
         self._device = device
         self._channels = channels
