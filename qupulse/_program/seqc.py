@@ -9,8 +9,10 @@ from collections import OrderedDict
 
 import numpy as np
 
+from qupulse.utils.types import ChannelID, TimeType
 from qupulse._program.waveforms import Waveform
 from qupulse._program._loop import Loop
+from qupulse.hardware.awgs.base import ProgramEntry
 
 try:
     import zhinst.utils
@@ -272,9 +274,38 @@ class ProgramWaveformManager:
         self._memory.concatenated_waveforms[self._program_name].finalize()
 
 
+class HDAWGProgramEntry(ProgramEntry):
+    def __init__(self, loop: Loop, selection_index: int, waveform_memory: WaveformMemory,
+                 channels: Tuple[Optional[ChannelID], Optional[ChannelID]],
+                 markers: Tuple[Optional[ChannelID], Optional[ChannelID], Optional[ChannelID], Optional[ChannelID]],
+                 amplitudes: Tuple[float, float],
+                 offsets: Tuple[float, float],
+                 voltage_transformations: Tuple[Optional[Callable], Optional[Callable]],
+                 sample_rate: TimeType):
+        super().__init__(loop, channels=channels, markers=markers,
+                         amplitudes=amplitudes,
+                         offsets=offsets,
+                         voltage_transformations=voltage_transformations,
+                         sample_rate=sample_rate)
+        for waveform, (sampled_channels, sampled_markers) in self._waveforms.items():
+            self._waveforms[waveform] = BinaryWaveform.from_sampled(*sampled_channels, sampled_markers)
+
+        self._seqc_node = None
+        self._seqc_source = None
+        self.selection_index = selection_index
+
+    def parse_to_seqc(self, waveform_memory):
+        raise NotImplementedError()
+
+    def get_binary_waveform(self, waveform: Waveform) -> BinaryWaveform:
+        return self._waveforms[waveform]
+
+
+
 class HDAWGProgramManager:
     GLOBAL_CONSTS = dict(PROG_SEL_REGISTER=0,
                          NO_RESET_MASK=1 << 15,
+                         PROG_SEL_MASK=1 << 15 - 1,
                          IDLE_WAIT_CYCLES=300)
     PROGRAM_FUNCTION_NAME_TEMPLATE = '{program_name}_function'
 
@@ -292,10 +323,26 @@ class HDAWGProgramManager:
     def __init__(self):
         self._waveform_memory = WaveformMemory()
         self._programs = OrderedDict()
-        self._active_programs = []
+
+    def _get_low_unused_index(self):
+        existing = {entry.selection_index for entry in self._programs.values()}
+        for idx in itertools.count(1):
+            if idx not in existing:
+                return idx
+
+    def add_program(self, name, loop: Loop,
+                    channels: Tuple[Optional[ChannelID], Optional[ChannelID]],
+                    markers: Tuple[Optional[ChannelID], Optional[ChannelID], Optional[ChannelID], Optional[ChannelID]],
+                    amplitudes: Tuple[float, float],
+                    offsets: Tuple[float, float],
+                    voltage_transformations: Tuple[Optional[Callable], Optional[Callable]],
+                    sample_rate: TimeType):
+        selection_index = self._get_low_unused_index()
+
+
 
     @property
-    def programs(self) -> Mapping[str, ProgramEntry]:
+    def programs(self) -> Mapping[str, HDAWGProgramEntry]:
         return MappingProxyType(self._programs)
 
     def to_seqc_program(self) -> str:
@@ -319,7 +366,8 @@ class HDAWGProgramManager:
         lines.append('while (true) {')
         lines.append('  // read program selection value')
         lines.append('  prog_sel = getUserReg(PROG_SEL);')
-        lines.append('  if (!(prog_sel & NO_RESET_MASK))  getUserReg(PROG_SEL, 0);')
+        lines.append('  if (!(prog_sel & NO_RESET_MASK))  setUserReg(PROG_SEL, 0);')
+        lines.append('  prog_sel = prog_sel & PROG_SEL_MASK;')
         lines.append('  ')
         lines.append('  switch (prog_sel) {')
 
