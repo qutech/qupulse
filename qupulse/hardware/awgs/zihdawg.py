@@ -23,6 +23,7 @@ from qupulse._program._loop import Loop, make_compatible
 from qupulse._program.waveforms import Waveform
 from qupulse.hardware.awgs.base import AWG, ChannelNotFoundException
 from qupulse.hardware.util import get_sample_times
+from qupulse._program.seqc import HDAWGProgramManager
 
 
 def valid_channel(function_object):
@@ -250,8 +251,9 @@ class HDAWGChannelPair(AWG):
         # Seems creating AWG module sets SINGLE (single execution mode of sequence) to 0 per default.
         self.device.api_session.setInt('/{}/awgs/{:d}/single'.format(self.device.serial, self.awg_group_index), 1)
 
-        self._wave_manager = HDAWGWaveManager(self.user_directory, self.identifier)
-        self._program_manager = HDAWGProgramManager(self._wave_manager)
+        self._program_manager = HDAWGProgramManager()
+        self._required_seqc_source = None
+        self._uploaded_seqc_source = None
         self._current_program = None  # Currently armed program.
 
     @property
@@ -262,12 +264,12 @@ class HDAWGChannelPair(AWG):
     @property
     def num_markers(self) -> int:
         """Number of marker channels"""
-        return 2  # Actually 4 available.
+        return 4
 
     def upload(self, name: str,
                program: Loop,
                channels: Tuple[Optional[ChannelID], Optional[ChannelID]],
-               markers: Tuple[Optional[ChannelID], Optional[ChannelID]],
+               markers: Tuple[Optional[ChannelID], Optional[ChannelID], Optional[ChannelID], Optional[ChannelID]],
                voltage_transformation: Tuple[Callable, Callable],
                force: bool = False) -> None:
         """Upload a program to the AWG.
@@ -310,23 +312,28 @@ class HDAWGChannelPair(AWG):
 
         # Adjust program to fit criteria.
         make_compatible(program,
-                        minimal_waveform_length=32,
+                        minimal_waveform_length=192,
                         waveform_quantum=16,  # 8 samples for single, 4 for dual channel waveforms.
                         sample_rate=q_sample_rate)
 
-        # TODO: Implement offset handling like in tabor driver.
-        self._program_manager.register(name,
-                                       program,
-                                       channels,
-                                       markers,
-                                       voltage_transformation,
-                                       q_sample_rate,
-                                       (self._device.range(self._channels[0]), self._device.range(self._channels[1])),
-                                       (0, 0),
-                                       force)
+        amplitudes = self._device.range(self._channels[0]), self._device.range(self._channels[1])
+        offsets = (0., 0.)
 
-        awg_sequence = self._program_manager.assemble_sequencer_program(program)
-        self._upload_sourcestring(awg_sequence)
+        if name in self._program_manager.programs:
+            self._program_manager.remove(name)
+
+        # TODO: Implement offset handling like in tabor driver.
+        self._program_manager.add_program(name,
+                                          program,
+                                          channels=channels,
+                                          markers=markers,
+                                          voltage_transformations=voltage_transformation,
+                                          sample_rate=q_sample_rate,
+                                          amplitudes=amplitudes,
+                                          offsets=offsets)
+
+        self._required_seqc_source = self._program_manager.to_seqc_program()
+        self._program_manager.waveform_memory.sync_to_file_system(Path(self.user_directory).joinpath('awg', 'waves'))
 
     def _upload_sourcestring(self, sourcestring: str) -> None:
         """Transfer AWG sequencer program as string to HDAWG and block till compilation and upload finish.
@@ -338,6 +345,7 @@ class HDAWGChannelPair(AWG):
         # Transfer the AWG sequence program. Compilation starts automatically if sourcestring is set.
         self.awg_module.set('awgModule/compiler/sourcestring', sourcestring)
         self._poll_compile_and_upload_finished(logger)
+        self._uploaded_seqc_source = sourcestring
 
     def _poll_compile_and_upload_finished(self, logger: logging.Logger) -> None:
         """Blocks till compilation on data server and upload to HDAWG succeed,
@@ -385,6 +393,7 @@ class HDAWGChannelPair(AWG):
             name: The name of the program to remove.
         """
         self._program_manager.remove(name)
+        self._required_seqc_source = self._program_manager.to_seqc_program()
 
     def clear(self) -> None:
         """Removes all programs and waveforms from the AWG.
@@ -392,37 +401,49 @@ class HDAWGChannelPair(AWG):
         Caution: This affects all programs and waveforms on the AWG, not only those uploaded using qupulse!
         """
         self._program_manager.clear()
-        self._wave_manager.clear()
         self._current_program = None
+        self._required_seqc_source = ''
+        self.arm(None)
 
     def arm(self, name: Optional[str]) -> None:
         """Load the program 'name' and arm the device for running it. If name is None the awg will "dearm" its current
-        program."""
+        program.
+
+        Currently hardware triggering is not implemented. The HDAWGProgramManager needs to emit code that calls
+        `waitDigTrigger` to do that.
+        """
+        if self._required_seqc_source != self._uploaded_seqc_source:
+            self._upload_sourcestring(self._required_seqc_source)
+
+        self.user_register(self._program_manager.GLOBAL_CONSTS['TRIGGER_REGISTER'], 0)
+
         if not name:
-            self.user_register(HDAWGRegisterFunc.PROG_SEL.value, HDAWGRegisterFunc.PROG_IDLE.value)
+            self.user_register(self._program_manager.GLOBAL_CONSTS['PROG_SEL_REGISTER'],
+                               self._program_manager.GLOBAL_CONSTS['PROG_SEL_NONE'])
             self._current_program = None
         else:
             if name not in self.programs:
                 raise HDAWGValueError('{} is unknown on {}'.format(name, self.identifier))
             self._current_program = name
-            self.user_register(HDAWGRegisterFunc.PROG_SEL.value, self._program_manager.name_to_index(name))
+            self.user_register(self._program_manager.GLOBAL_CONSTS['PROG_SEL_REGISTER'],
+                               self._program_manager.name_to_index(name))
+        self.enable(True)
 
     def run_current_program(self) -> None:
         """Run armed program."""
-        # TODO: playWaveDigTrigger() + digital trigger here, alternative implementation.
         if self._current_program is not None:
             if self._current_program not in self.programs:
                 raise HDAWGValueError('{} is unknown on {}'.format(self._current_program, self.identifier))
-            if self.enable():
-                self.enable(False)
-            self.enable(True)
+            if not self.enable():
+                self.enable(True)
+            self.user_register(self._program_manager.GLOBAL_CONSTS['TRIGGER_REGISTER'], 1)
         else:
             raise HDAWGRuntimeError('No program active')
 
     @property
     def programs(self) -> Set[str]:
         """The set of program names that can currently be executed on the hardware AWG."""
-        return self._program_manager.programs()
+        return set(self._program_manager.programs.keys())
 
     @property
     def sample_rate(self) -> TimeType:
@@ -489,7 +510,7 @@ class HDAWGChannelPair(AWG):
         return self.device.api_session.getDouble(node_path)
 
 
-class HDAWGWaveManager:
+class _HDAWGWaveManager:
     """Manages waveforms in memory and I/O of sampled data to disk."""
     # TODO: Manage references and delete csv file when no program uses it.
     # TODO: Voltage to -1..1 range and check if max amplitude in range+offset window.
@@ -620,7 +641,7 @@ class HDAWGWaveManager:
         return wave_name, marker_name
 
 
-class HDAWGProgramManager:
+class _HDAWGProgramManager:
     """Manages qupulse programs in memory and seqc representations of those. Facilitates qupulse to seqc translation."""
 
     # Unfortunately this is the 3.5 compatible way
