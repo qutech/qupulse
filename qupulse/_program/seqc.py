@@ -20,6 +20,9 @@ except ImportError:
     zhinst = None
 
 
+__all__ = ["HDAWGProgramManager"]
+
+
 class BinaryWaveform:
     """This class represents a sampled waveform in the native HDAWG format as returned
     by zhinst.utils.convert_awg_waveform.
@@ -390,10 +393,14 @@ class HDAWGProgramManager:
         self._waveform_memory = WaveformMemory()
         self._programs = OrderedDict()
 
+    @property
+    def waveform_memory(self):
+        return self._waveform_memory
+
     def _get_low_unused_index(self):
         existing = {entry.selection_index for entry in self._programs.values()}
-        for idx in itertools.count(1):
-            if idx not in existing:
+        for idx in itertools.count():
+            if idx not in existing and idx != self.GLOBAL_CONSTS['PROG_SEL_NONE']:
                 return idx
 
     def add_program(self, name, loop: Loop,
