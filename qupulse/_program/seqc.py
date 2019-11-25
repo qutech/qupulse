@@ -305,29 +305,32 @@ class HDAWGProgramEntry(ProgramEntry):
 
         self._waveform_manager = ProgramWaveformManager(program_name, waveform_memory)
         self.selection_index = selection_index
+        self._trigger_wait_code = None
         self._seqc_node = None
         self._seqc_source = None
 
     def compile(self,
                 min_repetitions_for_for_loop: int,
                 min_repetitions_for_shared_wf: int,
-                indentation: str):
+                indentation: str,
+                trigger_wait_code: str):
         """Compile the loop representation to an internal sequencing c one using `loop_to_seqc`
 
         Args:
             min_repetitions_for_for_loop: See `loop_to_seqc`
             min_repetitions_for_shared_wf: See `loop_to_seqc`
             indentation: Each line is prefixed with this
-
+            trigger_wait_code: The code is put before the playback start
         Returns:
 
         """
-        if self._seqc_source:
+        if self._seqc_node:
             self._waveform_manager.clear_requested()
         self._seqc_node = loop_to_seqc(self._loop,
                                        min_repetitions_for_for_loop=min_repetitions_for_for_loop,
                                        min_repetitions_for_shared_wf=min_repetitions_for_shared_wf,
                                        waveform_to_bin=self.get_binary_waveform)
+        self._trigger_wait_code = trigger_wait_code
         self._seqc_source = '\n'.join(self._seqc_node.to_source_code(self._waveform_manager,
                                                                      map(str, itertools.count(1)),
                                                                      line_prefix=indentation,
@@ -343,7 +346,7 @@ class HDAWGProgramEntry(ProgramEntry):
     def seqc_source(self) -> str:
         if self._seqc_source is None:
             raise RuntimeError('compile not called')
-        return self._seqc_source
+        return '\n'.join([self._trigger_wait_code, self._seqc_source])
 
     @property
     def name(self) -> str:
@@ -363,13 +366,25 @@ class HDAWGProgramEntry(ProgramEntry):
 
 
 class HDAWGProgramManager:
-    GLOBAL_CONSTS = dict(PROG_SEL_REGISTER=0,
+    """This class contains everything that is needed to create the final seqc program and provides an interface to write
+    the required waveforms to the file system. It does not talk to the device."""
+
+    GLOBAL_CONSTS = dict(PROG_SEL_REGISTER=0, TRIGGER_REGISTER=1,
+                         TRIGGER_RESET_MASK=1 << 15,
+                         PROG_SEL_NONE=0,
                          NO_RESET_MASK=1 << 15,
                          PROG_SEL_MASK=1 << 15 - 1,
                          IDLE_WAIT_CYCLES=300)
     PROGRAM_FUNCTION_NAME_TEMPLATE = '{program_name}_function'
-
     INIT_PROGRAM_SWITCH = '// INIT program switch.\ngetUserReg(PROG_SEL_REGISTER, 0); var prog_sel = 0;'
+    WAIT_FOR_SOFTWARE_TRIGGER = "waitForSoftwareTrigger();"
+    SOFTWARE_WAIT_FOR_TRIGGER_FUNCTION_DEFINITION = """void waitForSoftwareTrigger() {
+  while (true) {
+    var trigger_register = getUserReg(TRIGGER_REGISTER);
+    if (trigger_register & TRIGGER_RESET_MASK) setUserReg(TRIGGER_REGISTER, 0);
+    if (trigger_register) return;
+  }
+}"""
 
     def __init__(self):
         self._waveform_memory = WaveformMemory()
@@ -388,13 +403,16 @@ class HDAWGProgramManager:
                     offsets: Tuple[float, float],
                     voltage_transformations: Tuple[Optional[Callable], Optional[Callable]],
                     sample_rate: TimeType):
+        """"""
+        assert name not in self._programs
+
         selection_index = self._get_low_unused_index()
 
         program_entry = HDAWGProgramEntry(loop, selection_index, self._waveform_memory, name,
                                           channels, markers, amplitudes, offsets, voltage_transformations, sample_rate)
-        
+
         # TODO: de-hardcode these parameters and put compilation in seperate function
-        program_entry.compile(20, 1000, '  ')
+        program_entry.compile(20, 1000, '  ', self.WAIT_FOR_SOFTWARE_TRIGGER)
 
         self._programs[name] = program_entry
 
@@ -418,6 +436,9 @@ class HDAWGProgramManager:
                  for const_name, const_val in self.GLOBAL_CONSTS.items()]
 
         lines.append(self._waveform_memory.waveform_declaration())
+
+        lines.append('\n//function used by manually triggered programs')
+        lines.append(self.SOFTWARE_WAIT_FOR_TRIGGER_FUNCTION_DEFINITION)
 
         translations = self._waveform_memory.waveform_name_translation()
 
