@@ -249,6 +249,10 @@ class ProgramWaveformManager:
         assert all(self._program_name not in programs for programs in self._memory.shared_waveforms.values())
         self._memory.concatenated_waveforms[self._program_name] = ConcatenatedWaveform()
 
+    @property
+    def program_name(self) -> str:
+        return self._program_name
+
     def clear_requested(self):
         for programs in self._memory.shared_waveforms.values():
             programs.discard(self._program_name)
@@ -275,7 +279,7 @@ class ProgramWaveformManager:
 
 
 class HDAWGProgramEntry(ProgramEntry):
-    def __init__(self, loop: Loop, selection_index: int, waveform_memory: WaveformMemory,
+    def __init__(self, loop: Loop, selection_index: int, waveform_memory: WaveformMemory, program_name: str,
                  channels: Tuple[Optional[ChannelID], Optional[ChannelID]],
                  markers: Tuple[Optional[ChannelID], Optional[ChannelID], Optional[ChannelID], Optional[ChannelID]],
                  amplitudes: Tuple[float, float],
@@ -290,17 +294,57 @@ class HDAWGProgramEntry(ProgramEntry):
         for waveform, (sampled_channels, sampled_markers) in self._waveforms.items():
             self._waveforms[waveform] = BinaryWaveform.from_sampled(*sampled_channels, sampled_markers)
 
+        self._waveform_manager = ProgramWaveformManager(program_name, waveform_memory)
+        self.selection_index = selection_index
         self._seqc_node = None
         self._seqc_source = None
-        self.selection_index = selection_index
+
+    def compile(self,
+                min_repetitions_for_for_loop: int,
+                min_repetitions_for_shared_wf: int,
+                indentation: str):
+        """Compile the loop representation to an internal sequencing c one using `loop_to_seqc`
+
+        Args:
+            min_repetitions_for_for_loop: See `loop_to_seqc`
+            min_repetitions_for_shared_wf: See `loop_to_seqc`
+            indentation: Each line is prefixed with this
+
+        Returns:
+
+        """
+        if self._seqc_source:
+            self._waveform_manager.clear_requested()
+        self._seqc_node = loop_to_seqc(self._loop,
+                                       min_repetitions_for_for_loop=min_repetitions_for_for_loop,
+                                       min_repetitions_for_shared_wf=min_repetitions_for_shared_wf,
+                                       waveform_to_bin=self.get_binary_waveform)
+        self._seqc_source = '\n'.join(self._seqc_node.to_source_code(self._waveform_manager,
+                                                                     map(str, itertools.count(1)),
+                                                                     line_prefix=indentation,
+                                                                     pos_var_name='pos'))
+
+    @property
+    def seqc_node(self) -> 'SEQCNode':
+        if self._seqc_node is None:
+            raise RuntimeError('compile not called')
+        return self._seqc_node
+
+    @property
+    def seqc_source(self) -> str:
+        if self._seqc_source is None:
+            raise RuntimeError('compile not called')
+        return self._seqc_source
+
+    @property
+    def name(self) -> str:
+        return self._waveform_manager.program_name
 
     def parse_to_seqc(self, waveform_memory):
         raise NotImplementedError()
 
     def get_binary_waveform(self, waveform: Waveform) -> BinaryWaveform:
         return self._waveforms[waveform]
-
-
 
 class HDAWGProgramManager:
     GLOBAL_CONSTS = dict(PROG_SEL_REGISTER=0,
@@ -310,15 +354,6 @@ class HDAWGProgramManager:
     PROGRAM_FUNCTION_NAME_TEMPLATE = '{program_name}_function'
 
     INIT_PROGRAM_SWITCH = '// INIT program switch.\ngetUserReg(PROG_SEL_REGISTER, 0); var prog_sel = 0;'
-
-    ProgramEntry = NamedTuple('ProgramEntry',
-                              [('program', Loop),
-                               ('channels', Tuple[ChannelID, ChannelID]),
-                               ('markers', )
-                               ('seqc_node', 'SEQCNode'),
-                               ('seqc_source', str),
-                               ('selection_index', int)]
-                              )
 
     def __init__(self):
         self._waveform_memory = WaveformMemory()
@@ -339,11 +374,28 @@ class HDAWGProgramManager:
                     sample_rate: TimeType):
         selection_index = self._get_low_unused_index()
 
+        program_entry = HDAWGProgramEntry(loop, selection_index, self._waveform_memory, name,
+                                          channels, markers, amplitudes, offsets, voltage_transformations, sample_rate)
+        
+        # TODO: de-hardcode these parameters and put compilation in seperate function
+        program_entry.compile(20, 1000, '  ')
 
+        self._programs[name] = program_entry
 
     @property
     def programs(self) -> Mapping[str, HDAWGProgramEntry]:
         return MappingProxyType(self._programs)
+
+    def remove(self, name: str) -> None:
+        # TODO: Call removal of program waveforms on WaveManger.
+        self._programs.pop(name)
+        raise NotImplementedError()
+
+    def clear(self) -> None:
+        self._programs.clear()
+
+    def name_to_index(self, name: str) -> int:
+        return self._programs[name].selection_index
 
     def to_seqc_program(self) -> str:
         lines = ['const {const_name} = {const_val};'.format(const_name=const_name, const_val=const_val)
