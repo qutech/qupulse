@@ -168,6 +168,10 @@ class WaveformMemory:
         self.shared_waveforms = OrderedDict()  # type: MutableMapping[BinaryWaveform, set]
         self.concatenated_waveforms = OrderedDict()  # type: MutableMapping[str, ConcatenatedWaveform]
 
+    def clear(self):
+        self.shared_waveforms.clear()
+        self.concatenated_waveforms.clear()
+
     def _shared_waveforms_iter(self) -> Iterator[_WaveInfo]:
         for wf, program_set in self.shared_waveforms.items():
             if program_set:
@@ -277,6 +281,11 @@ class ProgramWaveformManager:
     def finalize(self):
         self._memory.concatenated_waveforms[self._program_name].finalize()
 
+    def prepare_delete(self):
+        """Delete all references in waveform memory to this program. Cannot be used afterwards."""
+        self.clear_requested()
+        del self._memory.concatenated_waveforms[self._program_name]
+
 
 class HDAWGProgramEntry(ProgramEntry):
     def __init__(self, loop: Loop, selection_index: int, waveform_memory: WaveformMemory, program_name: str,
@@ -346,6 +355,13 @@ class HDAWGProgramEntry(ProgramEntry):
     def get_binary_waveform(self, waveform: Waveform) -> BinaryWaveform:
         return self._waveforms[waveform]
 
+    def prepare_delete(self):
+        """Delete all references to this program. Cannot be used afterwards"""
+        self._waveform_manager.prepare_delete()
+        self._seqc_node = None
+        self._seqc_source = None
+
+
 class HDAWGProgramManager:
     GLOBAL_CONSTS = dict(PROG_SEL_REGISTER=0,
                          NO_RESET_MASK=1 << 15,
@@ -387,14 +403,14 @@ class HDAWGProgramManager:
         return MappingProxyType(self._programs)
 
     def remove(self, name: str) -> None:
-        # TODO: Call removal of program waveforms on WaveManger.
-        self._programs.pop(name)
-        raise NotImplementedError()
+        self._programs.pop(name).prepare_delete()
 
     def clear(self) -> None:
+        self._waveform_memory.clear()
         self._programs.clear()
 
     def name_to_index(self, name: str) -> int:
+        assert self._programs[name].name == name
         return self._programs[name].selection_index
 
     def to_seqc_program(self) -> str:
