@@ -1,6 +1,7 @@
 from unittest import TestCase, mock
 import time
 from more_itertools import take
+from itertools import zip_longest
 
 import numpy as np
 
@@ -18,16 +19,19 @@ except ImportError:
 
 def make_binary_waveform(waveform):
     if waveform.duration == 0:
-        data = 3 * [1, 2, 3, 4, 5]
-        return BinaryWaveform(data, (True, True), (True, True))
+        data = np.asarray(3 * [1, 2, 3, 4, 5], dtype=np.uint16)
+        return BinaryWaveform(data)
     else:
-        ch = next(iter(sorted(waveform.defined_channels)))
+        chs = sorted(waveform.defined_channels)
         t = np.arange(0., waveform.duration, 1.)
-        data = waveform.get_sampled(ch, t)
-        return BinaryWaveform(data, (True, False), (False, False))
+
+        sampled = [None if ch is None else waveform.get_sampled(ch, t)
+                   for _, ch in zip_longest(range(6), take(6, chs), fillvalue=None)]
+        ch1, ch2, *markers = sampled
+        return BinaryWaveform.from_sampled(ch1, ch2, markers)
 
 
-def get_unique_wfs(n=10000, duration=8):
+def get_unique_wfs(n=10000, duration=32):
     if not hasattr(get_unique_wfs, 'cache'):
         get_unique_wfs.cache = {}
 
@@ -182,14 +186,14 @@ class SEQCNodeTests(TestCase):
         self.assertIs(Scope([wf1, wf_shared])._get_single_indexed_playback(), wf1)
         self.assertIsNone(Scope([wf1, wf_shared, wf1])._get_single_indexed_playback(), wf1)
 
-    def test_stores_initial_pos(self):
+    def test_get_position_advance_strategy(self):
         node = mock.Mock()
         node.samples.return_value = 0
         node._get_single_indexed_playback.return_value.samples.return_value = 128
         repeat = Repeat(10, node)
 
         # no samples at all
-        self.assertFalse(repeat._stores_initial_pos())
+        self.assertIs(repeat._get_position_advance_strategy(), repeat._AdvanceStrategy.IGNORE)
         node.samples.assert_called_once_with()
         node._get_single_indexed_playback.assert_not_called()
 
@@ -197,7 +201,7 @@ class SEQCNodeTests(TestCase):
         node.samples.return_value = 64
 
         # samples do differ
-        self.assertTrue(repeat._stores_initial_pos())
+        self.assertIs(repeat._get_position_advance_strategy(), repeat._AdvanceStrategy.INITIAL_RESET)
         node.samples.assert_called_once_with()
         node._get_single_indexed_playback.assert_called_once_with()
         node._get_single_indexed_playback.return_value.samples.assert_called_once_with()
@@ -206,7 +210,7 @@ class SEQCNodeTests(TestCase):
         node.samples.return_value = 128
 
         # samples are the same
-        self.assertFalse(repeat._stores_initial_pos())
+        self.assertIs(repeat._get_position_advance_strategy(), repeat._AdvanceStrategy.POST_ADVANCE)
         node.samples.assert_called_once_with()
         node._get_single_indexed_playback.assert_called_once_with()
         node._get_single_indexed_playback.return_value.samples.assert_called_once_with()
@@ -214,7 +218,7 @@ class SEQCNodeTests(TestCase):
         node.reset_mock()
         node._get_single_indexed_playback.return_value = None
         # multiple indexed playbacks
-        self.assertTrue(repeat._stores_initial_pos())
+        self.assertIs(repeat._get_position_advance_strategy(), repeat._AdvanceStrategy.INITIAL_RESET)
         node.samples.assert_called_once_with()
         node._get_single_indexed_playback.assert_called_once_with()
 
@@ -222,7 +226,7 @@ class SEQCNodeTests(TestCase):
 class LoopToSEQCTranslationTests(TestCase):
     def test_loop_to_seqc_leaf(self):
         """Test the translation of leaves"""
-        wf = DummyWaveform(duration=10)
+        wf = DummyWaveform(duration=32)
         loop = Loop(waveform=wf)
 
         # with wrapping repetition
@@ -372,7 +376,7 @@ class LoopToSEQCTranslationTests(TestCase):
     def test_program_translation(self):
         """Integration test"""
         unique_wfs = get_unique_wfs()
-        same_wf = DummyWaveform(duration=15, sample_output=np.ones(15))
+        same_wf = DummyWaveform(duration=32, sample_output=np.ones(32))
         root = complex_program_as_loop(unique_wfs, wf_same=same_wf)
 
         t0 = time.perf_counter()
@@ -487,7 +491,6 @@ class SEQCToCodeTranslationTests(TestCase):
         node._get_single_indexed_playback.assert_called_once_with()
         node.samples.assert_called_once_with()
 
-
     def test_repeat_detect_no_advance(self):
         node = mock.Mock()
         node.to_source_code = mock.Mock(return_value=['asd', 'jkl'])
@@ -538,7 +541,7 @@ class SEQCToCodeTranslationTests(TestCase):
     def test_program_to_code_translation(self):
         """Integration test"""
         unique_wfs = get_unique_wfs()
-        same_wf = DummyWaveform(duration=15, sample_output=np.ones(15))
+        same_wf = DummyWaveform(duration=48, sample_output=np.ones(48))
         seqc_nodes = complex_program_as_seqc(unique_wfs, wf_same=same_wf)
 
         wf_manager = DummyWfManager()
@@ -557,19 +560,22 @@ repeat(12) {
   repeat(10000) { // stepping repeat
     repeat(10) {
       repeat(42) {
-        playWaveIndexed(0, pos, 8); // advance disabled do to parent repetition
+        playWaveIndexed(0, pos, 32); // advance disabled do to parent repetition
       }
       repeat(98) {
         playWave(1);
       }
     }
+    pos = pos + 32;
   }
   repeat(21) {
-    playWaveIndexed(0, pos, 8); // advance disabled do to parent repetition
+    playWaveIndexed(0, pos, 32); // advance disabled do to parent repetition
   }
+  pos = pos + 32;
   repeat(23) {
-    playWaveIndexed(0, pos, 15); // advance disabled do to parent repetition
+    playWaveIndexed(0, pos, 48); // advance disabled do to parent repetition
   }
+  pos = pos + 48;
 }"""
         self.assertEqual(expected, seqc_code)
 

@@ -1,3 +1,17 @@
+"""This module contains the ZI HDAWG compatible description of programs. There is no code in here that interacts with
+hardware directly.
+
+The public interface to all functionality is given by `HDAWGProgramManager`. This class can create seqc source code
+which contains multiple programs and allows switching between these with the user registers of a device,
+
+Furthermore:
+- `SEQCNode`: AST of a subset of sequencing C
+- `loop_to_seqc`: conversion of `Loop` objects to this subset in a clever way
+- `BinaryWaveform`: Bundles functionality of handling segments in a native way.
+- `WaveformMemory`: Functionality to sync waveforms to the device (via the LabOne user folder)
+- `ProgramWaveformManager` and `HDAWGProgramEntry`: Program wise handling of waveforms and seqc-code
+classes that convert `Loop` objects"""
+
 from typing import Optional, Union, Sequence, Dict, Iterator, Tuple, Callable, NamedTuple, MutableMapping, Mapping
 from types import MappingProxyType
 import abc
@@ -43,10 +57,11 @@ class BinaryWaveform:
             data: data as returned from zhinst.utils.convert_awg_waveform
         """
         n_quantum, remainder = divmod(data.size, 3 * 16)
-        assert n_quantum > 1, "Waveform too short"
+        assert n_quantum > 1, "Waveform too short (min len is 32)"
         assert remainder == 0, "Waveform has not a valid length"
         assert data.dtype is np.dtype('uint16')
         assert np.all(data[2::3] < 16), "invalid marker data"
+        assert data.ndim == 1, "Data not one dimensional"
 
         self.data = data
         self.data.flags.writeable = False
@@ -87,7 +102,9 @@ class BinaryWaveform:
         """
         all_input = (ch1, ch2, *markers)
         assert any(x is not None for x in all_input)
-        size = next(x.size for x in all_input if x is not None)
+        size = {x.size for x in all_input if x is not None}
+        assert len(size) == 1, "Inputs have incompatible dimension"
+        size, = size
         if ch1 is None:
             ch1 = np.zeros(size)
         if ch2 is None:
@@ -127,6 +144,7 @@ class BinaryWaveform:
 
 
 class ConcatenatedWaveform:
+    """Handle the concatenation of multiple binary waveforms to create a big indexable waveform."""
     def __init__(self):
         self._concatenated = []
         self._as_binary = None
@@ -693,6 +711,12 @@ class Repeat(SEQCNode):
     __slots__ = ('repetition_count', 'scope')
     INITIAL_POSITION_NAME_TEMPLATE = 'init_pos_{node_name}'
 
+    class _AdvanceStrategy:
+        """describes what happens how this node interacts with the position variable"""
+        INITIAL_RESET = 'initial_reset'
+        POST_ADVANCE = 'post_advance'
+        IGNORE = 'ignore'
+
     def __init__(self, repetition_count: int, scope: SEQCNode):
         assert repetition_count > 1
         self.repetition_count = repetition_count
@@ -712,26 +736,37 @@ class Repeat(SEQCNode):
     def _visit_nodes(self, waveform_manager: ProgramWaveformManager):
         self.scope._visit_nodes(waveform_manager)
 
-    def _stores_initial_pos(self):
+    def _get_position_advance_strategy(self):
+        """Deduct the optimal position advance strategy:
+
+        There is more than one indexed playback -> position needs to be advanced during each iteration and set back to
+        initial value at the begin of each new iteration
+        There is exactly one indexed playback -> The position is not advanced in the body but needs to be advanced after
+        all repetitions are done
+        There is no indexed playback -> We do not care about the position at all
+        """
         self_samples = self.samples()
         if self_samples > 0:
             single_playback = self.scope._get_single_indexed_playback()
             if single_playback is None or single_playback.samples() != self_samples:
+                # TODO: I am not sure whether the 'single_playback.samples() != self_samples' is necessary
                 # there is more than one indexed playback
-                return True
+                return self._AdvanceStrategy.INITIAL_RESET
             else:
                 # there is only a single indexed playback
-                return False
+                return self._AdvanceStrategy.POST_ADVANCE
         else:
             # there is no indexed playback
-            return False
+            return self._AdvanceStrategy.IGNORE
 
     def to_source_code(self, waveform_manager: ProgramWaveformManager, node_name_generator: Iterator[str],
                        line_prefix: str, pos_var_name: str, advance_pos_var: bool = True):
         body_prefix = line_prefix + self.INDENTATION
 
-        store_initial_pos = advance_pos_var and self._stores_initial_pos()
-        if store_initial_pos:
+        advance_strategy = self._get_position_advance_strategy() if advance_pos_var else self._AdvanceStrategy.IGNORE
+        inner_advance_pos_var = advance_strategy == self._AdvanceStrategy.INITIAL_RESET
+
+        if advance_strategy == self._AdvanceStrategy.INITIAL_RESET:
             node_name = next(node_name_generator)
             initial_position_name = self.INITIAL_POSITION_NAME_TEMPLATE.format(node_name=node_name)
 
@@ -742,7 +777,7 @@ class Repeat(SEQCNode):
 
         yield '{line_prefix}repeat({repetition_count}) {{'.format(line_prefix=line_prefix,
                                                                   repetition_count=self.repetition_count)
-        if store_initial_pos:
+        if advance_strategy == self._AdvanceStrategy.INITIAL_RESET:
             yield ('{body_prefix}{pos_var_name} = {init_pos_name};'
                    '').format(body_prefix=body_prefix,
                               pos_var_name=pos_var_name,
@@ -750,9 +785,10 @@ class Repeat(SEQCNode):
         yield from self.scope.to_source_code(waveform_manager,
                                              line_prefix=body_prefix, pos_var_name=pos_var_name,
                                              node_name_generator=node_name_generator,
-                                             advance_pos_var=store_initial_pos)
+                                             advance_pos_var=inner_advance_pos_var)
         yield '{line_prefix}}}'.format(line_prefix=line_prefix)
-        if advance_pos_var and not store_initial_pos and self.samples() > 0:
+
+        if advance_strategy == self._AdvanceStrategy.POST_ADVANCE:
             yield '{line_prefix}{pos_var_name} = {pos_var_name} + {samples};'.format(line_prefix=line_prefix,
                                                                                      pos_var_name=pos_var_name,
                                                                                      samples=self.samples())
