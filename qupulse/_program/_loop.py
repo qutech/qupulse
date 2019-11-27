@@ -16,7 +16,7 @@ from qupulse.utils import is_integer
 
 from qupulse._program.waveforms import SequenceWaveform, RepetitionWaveform
 
-__all__ = ['Loop', 'MultiChannelProgram', 'make_compatible']
+__all__ = ['Loop', 'MultiChannelProgram', 'make_compatible', 'MakeCompatibleWarning']
 
 
 class Loop(Node):
@@ -573,12 +573,23 @@ def make_compatible(program: Loop, minimal_waveform_length: int, waveform_quantu
     if comp_level == _CompatibilityLevel.incompatible_fraction:
         raise ValueError('The program duration in samples {} is not an integer'.format(program.duration * sample_rate))
     if comp_level == _CompatibilityLevel.incompatible_too_short:
-        raise ValueError('The program is too short to be a valid waveform. \n program duration in samples: {} \n minimal length: {}'.format(program.duration * sample_rate, minimal_waveform_length))
+        raise ValueError('The program is too short to be a valid waveform. \n'
+                         ' program duration in samples: {} \n'
+                         ' minimal length: {}'.format(program.duration * sample_rate, minimal_waveform_length))
     if comp_level == _CompatibilityLevel.incompatible_quantum:
-        raise ValueError('The program duration in samples {} is not a multiple of quantum {}'.format(program.duration * sample_rate, waveform_quantum))
+        raise ValueError('The program duration in samples {} '
+                         'is not a multiple of quantum {}'.format(program.duration * sample_rate, waveform_quantum))
 
     elif comp_level == _CompatibilityLevel.action_required:
+        warnings.warn("qupulse will now concatenate waveforms to make the pulse/program compatible with the chosen AWG."
+                      " This might take some time. If you need this pulse more often it makes sense to write it in a "
+                      "way which is more AWG friendly.", MakeCompatibleWarning)
+
         _make_compatible(program,
                          min_len=minimal_waveform_length,
                          quantum=waveform_quantum,
                          sample_rate=sample_rate)
+
+
+class MakeCompatibleWarning(ResourceWarning):
+    pass

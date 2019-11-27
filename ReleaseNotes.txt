@@ -9,6 +9,7 @@
    - Add a `get_sample_times` util method to share code for exact and fast sample time calculation
    - Add a driver for Tektronix AWG5000/7000
    - Add a driver for Zurich Instruments HDAWG
+   - Warn the user if waveforms need to be concatenated to be compatible with hardware requirements.
 
 - Pulse Templates:
     - `MappingPulseTemplate`:
