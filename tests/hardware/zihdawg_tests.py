@@ -1,6 +1,6 @@
 import unittest
 
-from qupulse.hardware.awgs.zihdawg import HDAWGChannelPair, HDAWGWaveManager
+from qupulse.hardware.awgs.zihdawg import HDAWGChannelPair
 
 
 class HDAWGRepresentation(unittest.TestCase):
@@ -9,10 +9,5 @@ class HDAWGRepresentation(unittest.TestCase):
 
 
 class HDAWGChannelPairTests(unittest.TestCase):
-    def test_init(self):
-        raise NotImplementedError()
-
-
-class HDAWGWaveManagerTests(unittest.TestCase):
     def test_init(self):
         raise NotImplementedError()

@@ -4,9 +4,16 @@ import contextlib
 from unittest import mock
 
 import numpy as np
-import tek_awg
+try:
+    import tek_awg
+except ImportError:
+    tek_awg = None
 
-import qupulse.hardware.awgs.tektronix as tektronix
+try:
+    import qupulse.hardware.awgs.tektronix as tektronix
+except ImportError:
+    tektronix = None
+
 from qupulse.hardware.awgs.tektronix import TektronixAWG, TektronixProgram, parse_program, _make_binary_waveform,\
     voltage_to_uint16, WaveformEntry, WaveformStorage
 from qupulse._program._loop import Loop
@@ -14,7 +21,7 @@ from qupulse.utils.types import TimeType
 from tests.pulses.sequencing_dummies import DummyWaveform
 from qupulse._program.waveforms import MultiChannelWaveform
 
-
+unittest.skipIf(tek_awg is None, "tek_awg not installed")
 class TektronixWaveformStorageTest(unittest.TestCase):
     def assert_storage_contains(self, storage: WaveformStorage, entries: Sequence[WaveformEntry]):
         by_name = {e.name: e for e in entries}
@@ -62,6 +69,7 @@ class TektronixWaveformStorageTest(unittest.TestCase):
         self.assert_storage_contains(storage, entries[1:])
 
 
+unittest.skipIf(tek_awg is None, "tek_awg not installed")
 class TektronixProgramTests(unittest.TestCase):
     @mock.patch('qupulse.hardware.awgs.tektronix.voltage_to_uint16')
     @mock.patch('tek_awg.Waveform')
@@ -283,6 +291,7 @@ class DummyTekAwg:
         raise NotImplementedError()
 
 
+unittest.skipIf(tek_awg is None, "tek_awg not installed")
 class TektronixAWGTests(unittest.TestCase):
     @staticmethod
     def make_mock_tek_awg(**return_values):
