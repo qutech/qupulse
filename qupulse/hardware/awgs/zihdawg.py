@@ -19,7 +19,7 @@ import time
 from qupulse.utils.types import ChannelID, TimeType, time_from_float
 from qupulse._program._loop import Loop, make_compatible
 from qupulse._program.seqc import HDAWGProgramManager
-from qupulse.hardware.awgs.base import AWG, ChannelNotFoundException
+from qupulse.hardware.awgs.base import AWG, ChannelNotFoundException, AWGAmplitudeOffsetHandling
 
 
 def valid_channel(function_object):
@@ -234,7 +234,7 @@ class HDAWGChannelPair(AWG):
         if channels not in ((1, 2), (3, 4), (5, 6), (7, 8)):
             raise HDAWGValueError('Invalid channel pair: {}'.format(channels))
         self._channels = channels
-        self._timeout = timeout
+        self.timeout = timeout
 
         self._awg_module = self.device.api_session.awgModule()
         self.awg_module.set('awgModule/device', self.device.serial)
@@ -244,7 +244,7 @@ class HDAWGChannelPair(AWG):
         self.device.api_session.setInt('/{}/awgs/{:d}/single'.format(self.device.serial, self.awg_group_index), 1)
 
         self._program_manager = HDAWGProgramManager()
-        self._required_seqc_source = None
+        self._required_seqc_source = ''
         self._uploaded_seqc_source = None
         self._current_program = None  # Currently armed program.
 
@@ -308,13 +308,19 @@ class HDAWGChannelPair(AWG):
                         waveform_quantum=16,  # 8 samples for single, 4 for dual channel waveforms.
                         sample_rate=q_sample_rate)
 
+        if self._amplitude_offset_handling == AWGAmplitudeOffsetHandling.IGNORE_OFFSET:
+            voltage_offsets = (0., 0.)
+        elif self._amplitude_offset_handling == AWGAmplitudeOffsetHandling.CONSIDER_OFFSET:
+            voltage_offsets = (self._device.offset(self._channels[0]),
+                               self._device.offset(self._channels[1]))
+        else:
+            raise ValueError('{} is invalid as AWGAmplitudeOffsetHandling'.format(self._amplitude_offset_handling))
+
         amplitudes = self._device.range(self._channels[0]), self._device.range(self._channels[1])
-        offsets = (0., 0.)
 
         if name in self._program_manager.programs:
             self._program_manager.remove(name)
 
-        # TODO: Implement offset handling like in tabor driver.
         self._program_manager.add_program(name,
                                           program,
                                           channels=channels,
@@ -322,7 +328,7 @@ class HDAWGChannelPair(AWG):
                                           voltage_transformations=voltage_transformation,
                                           sample_rate=q_sample_rate,
                                           amplitudes=amplitudes,
-                                          offsets=offsets)
+                                          offsets=voltage_offsets)
 
         self._required_seqc_source = self._program_manager.to_seqc_program()
         self._program_manager.waveform_memory.sync_to_file_system(Path(self.user_directory).joinpath('awg', 'waves'))
