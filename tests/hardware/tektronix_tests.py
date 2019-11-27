@@ -138,7 +138,7 @@ class TektronixProgramTests(unittest.TestCase):
                      np.array([0., -.1, -.2, 0.]),
                      np.array([0., 0, 0, 1.])]
 
-        sample_rate_in_GHz = TimeType(1, 2)
+        sample_rate_in_GHz = TimeType.from_fraction(1, 2)
 
         # channel A is the same in wfs_6[1] and wfs_6[2]
         wfs_6 = [DummyWaveform(duration=12, sample_output={'A':  sampled_6[0],
