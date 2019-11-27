@@ -229,9 +229,10 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
             value = getattr(self, attr)
             if value is None:
                 continue
-            formatted.append('{attr}={value}'.format(attr=attr, value=value))
+            # the repr(str(value)) is to avoid very deep nesting. If needed one should use repr
+            formatted.append('{attr}={value}'.format(attr=attr, value=repr(str(value))))
         type_name = type(self).__name__
-        return '{type_name}({attrs})'.format(type_name=type_name, attrs=','.join(formatted))
+        return '{type_name}({attrs})'.format(type_name=type_name, attrs=', '.join(formatted))
 
     def __str__(self):
         return format(self)

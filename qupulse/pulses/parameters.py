@@ -193,7 +193,7 @@ class ParameterConstraint(AnonymousSerializable):
             return str(self._expression.sympified_expression)
 
     def __repr__(self):
-        return 'ParameterConstraint(%s)' % self
+        return 'ParameterConstraint(%s)' % repr(str(self))
 
     def get_serialization_data(self) -> str:
         return str(self)
