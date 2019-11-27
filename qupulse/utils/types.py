@@ -330,6 +330,7 @@ else:
             if cls is _ABCCollection:
                 print('check', _check_methods(C, "__len__", "__iter__", "__contains__"))
                 return _check_methods(C, "__len__", "__iter__", "__contains__")
+            print('check', cls)
             return NotImplemented
 
     class Collection(typing.Sized, typing.Iterable[typing.T_co], typing.Container[typing.T_co],
