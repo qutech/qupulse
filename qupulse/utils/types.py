@@ -328,6 +328,7 @@ else:
         @classmethod
         def __subclasshook__(cls, C):
             if cls is _ABCCollection:
+                print('check', _check_methods(C, "__len__", "__iter__", "__contains__"))
                 return _check_methods(C, "__len__", "__iter__", "__contains__")
             return NotImplemented
 
@@ -336,3 +337,5 @@ else:
         """Fallback for typing.Collection if python 3.5
         copied from https://github.com/python/cpython/blob/3.5/Lib/typing.py"""
         __slots__ = ()
+
+
