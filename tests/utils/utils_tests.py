@@ -1,5 +1,7 @@
 import unittest
 from unittest import mock
+from collections import OrderedDict
+
 from qupulse.utils import checked_int_cast, replace_multiple
 
 
@@ -85,10 +87,10 @@ class ReplacementTests(unittest.TestCase):
         self.assertEqual(result, expected)
 
     def test_replace_multiple_overlap(self):
-        replacements = {'asd': '1', 'asdf': '2'}
+        replacements = OrderedDict([('asd', '1'), ('asdf', '2')])
         result = replace_multiple('asdf', replacements)
         self.assertEqual(result, '1f')
 
-        replacements = {'asdf': '2', 'asd': '1'}
+        replacements = OrderedDict([('asd', '1'), ('asdf', '2')])
         result = replace_multiple('asdf', replacements)
         self.assertEqual(result, '2')

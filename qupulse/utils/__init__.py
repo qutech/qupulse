@@ -60,6 +60,7 @@ def replace_multiple(s: str, replacements: Mapping[str, str]) -> str:
     """Replace multiple strings at once. If multiple replacements overlap the precedence is given by the order in
     replacements.
 
+    For pyver >= 3.6 (otherwise use OrderedDict)
     >>> assert replace_multiple('asdf', {'asd': '1', 'asdf', '2'}) == 'asd1'
     >>> assert replace_multiple('asdf', {'asdf': '2', 'asd', '1'}) == '2'
     """
