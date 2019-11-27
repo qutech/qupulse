@@ -327,9 +327,8 @@ else:
 
         @classmethod
         def __subclasshook__(cls, C):
-            if cls is _ABCCollection:
-                return _check_methods(C, "__len__", "__iter__", "__contains__")
-            return NotImplemented
+            # removed "if cls is _ABCCollection" guard because reloading this module damages the test
+            return _check_methods(C, "__len__", "__iter__", "__contains__")
 
     class Collection(typing.Sized, typing.Iterable[typing.T_co], typing.Container[typing.T_co],
                      extra=_ABCCollection):
