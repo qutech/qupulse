@@ -16,6 +16,7 @@ class Comparable(metaclass=DocStringABCMeta):
     Comparable provides implementations of the hashing function as well as the equals and not-equals
     operators based on comparison of this key.
     """
+    __slots__ = ()
 
     @property
     @abstractmethod
