@@ -11,11 +11,11 @@ matrix:
     - python: 3.7
       dist: xenial
       sudo: true
-      env: INSTALL_EXTRAS=[VISA,plotting]
+      env: INSTALL_EXTRAS=[VISA,plotting,zurich-instruments]
     - python: 3.7
       dist: xenial
       sudo: true
-      env: INSTALL_EXTRAS=[VISA,plotting,Faster-fractions]
+      env: INSTALL_EXTRAS=[VISA,plotting,Faster-fractions,zurich-instruments]
 
 #use container based infrastructure
 sudo: false
