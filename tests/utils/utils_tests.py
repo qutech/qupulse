@@ -77,9 +77,18 @@ class IsCloseTest(unittest.TestCase):
 
 class ReplacementTests(unittest.TestCase):
     def test_replace_multiple(self):
-        replacements = {'asd': 'dfg', 'dfg': '77', r'\\*': '99'}
+        replacements = {'asd': 'dfg', 'dfg': '77', r'\*': '99'}
 
         text = r'it is asd and dfg that \*'
         expected = 'it is dfg and 77 that 99'
         result = replace_multiple(text, replacements)
         self.assertEqual(result, expected)
+
+    def test_replace_multiple_overlap(self):
+        replacements = {'asd': '1', 'asdf': '2'}
+        result = replace_multiple('asdf', replacements)
+        self.assertEqual(result, '1f')
+
+        replacements = {'asdf': '2', 'asd': '1'}
+        result = replace_multiple('asdf', replacements)
+        self.assertEqual(result, '2')

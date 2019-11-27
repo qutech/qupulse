@@ -126,5 +126,6 @@ else:
 
     class Collection(typing.Sized, typing.Iterable[typing.T_co], typing.Container[typing.T_co],
                      extra=_ABCCollection):
-        """copied from https://github.com/python/cpython/blob/3.5/Lib/typing.py"""
+        """Fallback for typing.Collection if python 3.5
+        copied from https://github.com/python/cpython/blob/3.5/Lib/typing.py"""
         __slots__ = ()

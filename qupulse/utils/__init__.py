@@ -57,7 +57,12 @@ def pairwise(iterable: Iterable[Any],
 
 
 def replace_multiple(s: str, replacements: Mapping[str, str]) -> str:
-    """Replace multiple strings at once"""
+    """Replace multiple strings at once. If multiple replacements overlap the precedence is given by the order in
+    replacements.
+
+    >>> assert replace_multiple('asdf', {'asd': '1', 'asdf', '2'}) == 'asd1'
+    >>> assert replace_multiple('asdf', {'asdf': '2', 'asd', '1'}) == '2'
+    """
     rep = {re.escape(k): v for k, v in replacements.items()}
     pattern = re.compile("|".join(rep.keys()))
     return pattern.sub(lambda m: rep[re.escape(m.group(0))], s)
