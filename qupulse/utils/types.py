@@ -5,6 +5,7 @@ import numbers
 import fractions
 import functools
 import warnings
+import collections
 
 import numpy
 
