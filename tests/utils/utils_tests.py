@@ -87,10 +87,11 @@ class ReplacementTests(unittest.TestCase):
         self.assertEqual(result, expected)
 
     def test_replace_multiple_overlap(self):
-        replacements = OrderedDict([('asd', '1'), ('asdf', '2')])
+        replacement_list = [('asd', '1'), ('asdf', '2')]
+        replacements = OrderedDict(replacement_list)
         result = replace_multiple('asdf', replacements)
         self.assertEqual(result, '1f')
 
-        replacements = OrderedDict([('asd', '1'), ('asdf', '2')])
+        replacements = OrderedDict(reversed(replacement_list))
         result = replace_multiple('asdf', replacements)
         self.assertEqual(result, '2')
