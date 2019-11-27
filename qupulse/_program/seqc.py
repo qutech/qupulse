@@ -1,15 +1,18 @@
-from typing import Optional, cast, Union, Sequence, Dict, Iterator, Tuple, Callable, NamedTuple, MutableMapping, Mapping
+from typing import Optional, Union, Sequence, Dict, Iterator, Tuple, Callable, NamedTuple, MutableMapping, Mapping
 from types import MappingProxyType
 import abc
 import itertools
 import inspect
 import glob
 import os.path
+import hashlib
 from collections import OrderedDict
 
 import numpy as np
+from pathlib import Path
 
 from qupulse.utils.types import ChannelID, TimeType
+from qupulse.utils import replace_multiple
 from qupulse._program.waveforms import Waveform
 from qupulse._program._loop import Loop
 from qupulse.hardware.awgs.base import ProgramEntry
@@ -42,7 +45,7 @@ class BinaryWaveform:
         n_quantum, remainder = divmod(data.size, 3 * 16)
         assert n_quantum > 1, "Waveform too short"
         assert remainder == 0, "Waveform has not a valid length"
-        assert data.dtype is np.uint16
+        assert data.dtype is np.dtype('uint16')
         assert np.all(data[2::3] < 16), "invalid marker data"
 
         self.data = data
@@ -92,7 +95,7 @@ class BinaryWaveform:
         marker_data = np.zeros(size, dtype=np.uint16)
         for idx, marker in enumerate(markers):
             if marker is not None:
-                marker_data += (marker > 0) * 2**idx
+                marker_data += np.uint16((marker > 0) * 2**idx)
         return cls(zhinst.utils.convert_awg_waveform(ch1, ch2, marker_data))
 
     def __len__(self):
@@ -103,6 +106,9 @@ class BinaryWaveform:
 
     def __hash__(self):
         return hash(bytes(self.data))
+
+    def fingerprint(self) -> str:
+        return hashlib.sha256(self.data).hexdigest()
 
     def to_csv_compatible_table(self):
         """The integer values in that file should be 18-bit unsigned integers with the two least significant bits
@@ -142,7 +148,7 @@ class ConcatenatedWaveform:
     def finalize(self):
         assert not self.is_finalized()
         if self._concatenated:
-            concatenated_data = np.concatenate([wf.data for wf in self._concatenated], order='F')
+            concatenated_data = np.concatenate([wf.data for wf in self._concatenated])
             self._as_binary = BinaryWaveform(concatenated_data)
         else:
             self._concatenated = None
@@ -178,7 +184,7 @@ class WaveformMemory:
     def _shared_waveforms_iter(self) -> Iterator[_WaveInfo]:
         for wf, program_set in self.shared_waveforms.items():
             if program_set:
-                wave_hash = hash(wf)
+                wave_hash = wf.fingerprint()
                 wave_name = self.SHARED_WAVEFORM_TEMPLATE.format(program_name='_'.join(program_set),
                                                                  hash=wave_hash)
                 wave_placeholder = self.WF_PLACEHOLDER_TEMPLATE.format(id=id(program_set))
@@ -188,17 +194,17 @@ class WaveformMemory:
     def _concatenated_waveforms_iter(self) -> Iterator[_WaveInfo]:
         for program_name, concatenated_waveform in self.concatenated_waveforms.items():
             if concatenated_waveform:
-                wave_hash = hash(concatenated_waveform.as_binary())
+                wave_hash = concatenated_waveform.as_binary().fingerprint()
                 wave_placeholder = self.WF_PLACEHOLDER_TEMPLATE.format(id=id(concatenated_waveform))
                 wave_name = self.CONCATENATED_WAVEFORM_TEMPLATE.format(program_name=program_name)
                 file_name = self.FILE_NAME_TEMPLATE.format(hash=wave_hash)
                 yield self._WaveInfo(wave_name, wave_placeholder, file_name, concatenated_waveform.as_binary())
 
-    def waveform_name_translation(self) -> Dict[str, str]:
+    def waveform_name_replacements(self) -> Dict[str, str]:
         """replace place holders of complete seqc program with
 
-        >>> waveform_name_translation = waveform_memory.waveform_name_translation()
-        >>> seqc_program = seqc_program.translate(waveform_name_translation)
+        >>> waveform_name_translation = waveform_memory.waveform_name_replacements()
+        >>> seqc_program = qupulse.utils.replace_multiple(seqc_program, waveform_name_translation)
         """
         translation = {}
         for wave_info in self._shared_waveforms_iter():
@@ -225,8 +231,8 @@ class WaveformMemory:
             )
         return '\n'.join(declarations)
 
-    def sync_to_file_system(self, path, delete=True, write_all=False):
-        to_save = {wave_info.file_name: wave_info.binary_waveform
+    def sync_to_file_system(self, path: Path, delete=True, write_all=False):
+        to_save = {path.joinpath(wave_info.file_name): wave_info.binary_waveform
                    for wave_info in itertools.chain(self._concatenated_waveforms_iter(),
                                                     self._shared_waveforms_iter())}
 
@@ -311,6 +317,7 @@ class HDAWGProgramEntry(ProgramEntry):
         self._trigger_wait_code = None
         self._seqc_node = None
         self._seqc_source = None
+        self._var_declarations = None
 
     def compile(self,
                 min_repetitions_for_for_loop: int,
@@ -327,17 +334,22 @@ class HDAWGProgramEntry(ProgramEntry):
         Returns:
 
         """
+        pos_var_name = 'pos'
+
         if self._seqc_node:
             self._waveform_manager.clear_requested()
         self._seqc_node = loop_to_seqc(self._loop,
                                        min_repetitions_for_for_loop=min_repetitions_for_for_loop,
                                        min_repetitions_for_shared_wf=min_repetitions_for_shared_wf,
                                        waveform_to_bin=self.get_binary_waveform)
-        self._trigger_wait_code = trigger_wait_code
+        self._var_declarations = '{indentation}var {pos_var_name} = 0;'.format(pos_var_name=pos_var_name,
+                                                                               indentation=indentation)
+        self._trigger_wait_code = indentation + trigger_wait_code
         self._seqc_source = '\n'.join(self._seqc_node.to_source_code(self._waveform_manager,
                                                                      map(str, itertools.count(1)),
                                                                      line_prefix=indentation,
-                                                                     pos_var_name='pos'))
+                                                                     pos_var_name=pos_var_name))
+        self._waveform_manager.finalize()
 
     @property
     def seqc_node(self) -> 'SEQCNode':
@@ -349,7 +361,7 @@ class HDAWGProgramEntry(ProgramEntry):
     def seqc_source(self) -> str:
         if self._seqc_source is None:
             raise RuntimeError('compile not called')
-        return '\n'.join([self._trigger_wait_code, self._seqc_source])
+        return '\n'.join([self._var_declarations, self._trigger_wait_code, self._seqc_source])
 
     @property
     def name(self) -> str:
@@ -373,21 +385,23 @@ class HDAWGProgramManager:
     the required waveforms to the file system. It does not talk to the device."""
 
     GLOBAL_CONSTS = dict(PROG_SEL_REGISTER=0, TRIGGER_REGISTER=1,
-                         TRIGGER_RESET_MASK=1 << 15,
+                         TRIGGER_RESET_MASK=bin(1 << 15),
                          PROG_SEL_NONE=0,
-                         NO_RESET_MASK=1 << 15,
-                         PROG_SEL_MASK=1 << 15 - 1,
+                         NO_RESET_MASK=bin(1 << 15),
+                         PROG_SEL_MASK=bin((1 << 15) - 1),
                          IDLE_WAIT_CYCLES=300)
     PROGRAM_FUNCTION_NAME_TEMPLATE = '{program_name}_function'
-    INIT_PROGRAM_SWITCH = '// INIT program switch.\ngetUserReg(PROG_SEL_REGISTER, 0); var prog_sel = 0;'
+    INIT_PROGRAM_SWITCH = '// INIT program switch.\nvar prog_sel = 0;'
     WAIT_FOR_SOFTWARE_TRIGGER = "waitForSoftwareTrigger();"
-    SOFTWARE_WAIT_FOR_TRIGGER_FUNCTION_DEFINITION = """void waitForSoftwareTrigger() {
-  while (true) {
-    var trigger_register = getUserReg(TRIGGER_REGISTER);
-    if (trigger_register & TRIGGER_RESET_MASK) setUserReg(TRIGGER_REGISTER, 0);
-    if (trigger_register) return;
-  }
-}"""
+    SOFTWARE_WAIT_FOR_TRIGGER_FUNCTION_DEFINITION = (
+        'void waitForSoftwareTrigger() {\n'
+        '  while (true) {\n'
+        '    var trigger_register = getUserReg(TRIGGER_REGISTER);\n'
+        '    if (trigger_register & TRIGGER_RESET_MASK) setUserReg(TRIGGER_REGISTER, 0);\n'
+        '    if (trigger_register) return;\n'
+        '  }\n'
+        '}\n'
+    )
 
     def __init__(self):
         self._waveform_memory = WaveformMemory()
@@ -447,13 +461,13 @@ class HDAWGProgramManager:
         lines.append('\n//function used by manually triggered programs')
         lines.append(self.SOFTWARE_WAIT_FOR_TRIGGER_FUNCTION_DEFINITION)
 
-        translations = self._waveform_memory.waveform_name_translation()
+        replacements = self._waveform_memory.waveform_name_replacements()
 
         lines.append('\n// program definitions')
         for program_name, program in self.programs.items():
             program_function_name = self.PROGRAM_FUNCTION_NAME_TEMPLATE.format(program_name=program_name)
-            lines.append('void {program_function_name}() {'.format(program_function_name=program_function_name))
-            lines.append(program.seqc_source.translate(translations))
+            lines.append('void {program_function_name}() {{'.format(program_function_name=program_function_name))
+            lines.append(replace_multiple(program.seqc_source, replacements))
             lines.append('}\n')
 
         lines.append(self.INIT_PROGRAM_SWITCH)
@@ -461,8 +475,8 @@ class HDAWGProgramManager:
         lines.append('\n//runtime block')
         lines.append('while (true) {')
         lines.append('  // read program selection value')
-        lines.append('  prog_sel = getUserReg(PROG_SEL);')
-        lines.append('  if (!(prog_sel & NO_RESET_MASK))  setUserReg(PROG_SEL, 0);')
+        lines.append('  prog_sel = getUserReg(PROG_SEL_REGISTER);')
+        lines.append('  if (!(prog_sel & NO_RESET_MASK))  setUserReg(PROG_SEL_REGISTER, 0);')
         lines.append('  prog_sel = prog_sel & PROG_SEL_MASK;')
         lines.append('  ')
         lines.append('  switch (prog_sel) {')
@@ -473,7 +487,7 @@ class HDAWGProgramManager:
             lines.append('      {program_function_name}();'.format(program_function_name=program_function_name))
             lines.append('      waitWave();')
 
-        lines.append('    case default:')
+        lines.append('    default:')
         lines.append('      wait(IDLE_WAIT_CYCLES);')
         lines.append('  }')
         lines.append('}')
@@ -738,6 +752,10 @@ class Repeat(SEQCNode):
                                              node_name_generator=node_name_generator,
                                              advance_pos_var=store_initial_pos)
         yield '{line_prefix}}}'.format(line_prefix=line_prefix)
+        if advance_pos_var and not store_initial_pos and self.samples() > 0:
+            yield '{line_prefix}{pos_var_name} = {pos_var_name} + {samples};'.format(line_prefix=line_prefix,
+                                                                                     pos_var_name=pos_var_name,
+                                                                                     samples=self.samples())
 
 
 class SteppingRepeat(SEQCNode):

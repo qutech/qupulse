@@ -178,7 +178,7 @@ class ProgramEntry:
         self._loop = loop
         self._waveforms = {node.waveform: None for node in loop.get_depth_first_iterator() if node.is_leaf()}
 
-        time_array, segment_lengths = get_sample_times(self._waveforms, sample_rate)
+        time_array, segment_lengths = get_sample_times(self._waveforms.keys(), sample_rate)
 
         for waveform, segment_length in zip(self._waveforms.keys(), segment_lengths):
             wf_time = time_array[:segment_length]
@@ -191,7 +191,7 @@ class ProgramEntry:
                     sampled = waveform.get_sampled(channel, wf_time)
                     if trafo:
                         sampled = trafo(sampled)
-                    sampled -= offset
+                    sampled = sampled - offset
                     sampled /= amplitude
                     sampled_channels.append(waveform.get_sampled(channel, wf_time))
 
