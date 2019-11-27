@@ -1,3 +1,4 @@
+import unittest
 from unittest import TestCase, mock
 import time
 from more_itertools import take
@@ -89,6 +90,7 @@ class DummyWfManager:
 
 class SEQCNodeTests(TestCase):
     """Test everything besides source code generation"""
+    @unittest.skipIf(zhinst is None, "test requires zhinst")
     def test_visit_nodes(self):
         wf, wf_shared = map(WaveformPlayback, map(make_binary_waveform, get_unique_wfs(2)))
         wf_shared.shared = True
@@ -119,6 +121,7 @@ class SEQCNodeTests(TestCase):
         for node in stepping_repeat.node_cluster:
             node._visit_nodes.assert_called_once_with(waveform_manager)
 
+    @unittest.skipIf(zhinst is None, "test requires zhinst")
     def test_same_stepping(self):
         wf1, wf2 = map(WaveformPlayback, map(make_binary_waveform, get_unique_wfs(2, 32)))
         wf3, wf_shared = map(WaveformPlayback, map(make_binary_waveform, get_unique_wfs(2, 64)))
@@ -160,6 +163,7 @@ class SEQCNodeTests(TestCase):
         self.assertFalse(stepping_repeat1.same_stepping(stepping_repeat3))
         self.assertFalse(stepping_repeat1.same_stepping(stepping_repeat4))
 
+    @unittest.skipIf(zhinst is None, "test requires zhinst")
     def test_iter_waveform_playback(self):
         wf1, wf2 = map(WaveformPlayback, map(make_binary_waveform, get_unique_wfs(2, 32)))
         wf3, wf_shared = map(WaveformPlayback, map(make_binary_waveform, get_unique_wfs(2, 64)))
@@ -177,6 +181,7 @@ class SEQCNodeTests(TestCase):
         stepping_repeat = SteppingRepeat([wf1, repeat, wf2, wf3, wf_shared])
         self.assertEqual(list(stepping_repeat.iter_waveform_playbacks()), [wf1, wf1, wf2, wf3, wf_shared])
 
+    @unittest.skipIf(zhinst is None, "test requires zhinst")
     def test_get_single_indexed_playback(self):
         wf1, wf_shared = map(WaveformPlayback, map(make_binary_waveform, get_unique_wfs(2, 32)))
         wf_shared.shared = True
@@ -223,6 +228,7 @@ class SEQCNodeTests(TestCase):
         node._get_single_indexed_playback.assert_called_once_with()
 
 
+@unittest.skipIf(zhinst is None, "test requires zhinst")
 class LoopToSEQCTranslationTests(TestCase):
     def test_loop_to_seqc_leaf(self):
         """Test the translation of leaves"""
@@ -390,6 +396,7 @@ class LoopToSEQCTranslationTests(TestCase):
         self.assertEqual(expected, seqc)
 
 
+@unittest.skipIf(zhinst is None, "test requires zhinst")
 class SEQCToCodeTranslationTests(TestCase):
     def setUp(self) -> None:
         self.line_prefix = '   '
