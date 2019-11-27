@@ -1,6 +1,7 @@
 from typing import Union, Iterable, Any, Tuple, Mapping
 import itertools
 import re
+from collections import OrderedDict
 
 import numpy
 
@@ -64,6 +65,6 @@ def replace_multiple(s: str, replacements: Mapping[str, str]) -> str:
     >>> assert replace_multiple('asdf', {'asd': '1', 'asdf', '2'}) == 'asd1'
     >>> assert replace_multiple('asdf', {'asdf': '2', 'asd', '1'}) == '2'
     """
-    rep = {re.escape(k): v for k, v in replacements.items()}
+    rep = OrderedDict((re.escape(k), v) for k, v in replacements.items())
     pattern = re.compile("|".join(rep.keys()))
     return pattern.sub(lambda m: rep[re.escape(m.group(0))], s)
