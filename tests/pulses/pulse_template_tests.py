@@ -355,7 +355,7 @@ class PulseTemplateTest(unittest.TestCase):
         a = PulseTemplateStub(identifier='asd', duration=Expression(5))
         self.assertEqual("PulseTemplateStub(identifier='asd')", str(a))
         self.assertEqual("PulseTemplateStub(identifier='asd')", format(a))
-        self.assertEqual("PulseTemplateStub(identifier='asd', duration=Expression(5))",
+        self.assertEqual("PulseTemplateStub(identifier='asd', duration='5')",
                          "{:identifier;duration}".format(a))
 
 
