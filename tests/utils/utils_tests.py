@@ -1,6 +1,8 @@
 import unittest
 from unittest import mock
-from qupulse.utils import checked_int_cast
+from collections import OrderedDict
+
+from qupulse.utils import checked_int_cast, replace_multiple
 
 
 class CheckedIntCastTest(unittest.TestCase):
@@ -74,3 +76,22 @@ class IsCloseTest(unittest.TestCase):
             # cleanup
             delattr(math, 'isclose')
 
+
+class ReplacementTests(unittest.TestCase):
+    def test_replace_multiple(self):
+        replacements = {'asd': 'dfg', 'dfg': '77', r'\*': '99'}
+
+        text = r'it is asd and dfg that \*'
+        expected = 'it is dfg and 77 that 99'
+        result = replace_multiple(text, replacements)
+        self.assertEqual(result, expected)
+
+    def test_replace_multiple_overlap(self):
+        replacement_list = [('asd', '1'), ('asdf', '2')]
+        replacements = OrderedDict(replacement_list)
+        result = replace_multiple('asdf', replacements)
+        self.assertEqual(result, '1f')
+
+        replacements = OrderedDict(reversed(replacement_list))
+        result = replace_multiple('asdf', replacements)
+        self.assertEqual(result, '2')

@@ -16,18 +16,19 @@ from qupulse.utils import is_integer
 
 from qupulse._program.waveforms import SequenceWaveform, RepetitionWaveform
 
-__all__ = ['Loop', 'MultiChannelProgram', 'make_compatible']
+__all__ = ['Loop', 'MultiChannelProgram', 'make_compatible', 'MakeCompatibleWarning']
 
 
 class Loop(Node):
     MAX_REPR_SIZE = 2000
+    __slots__ = ('_waveform', '_measurements', '_repetition_count', '_cached_body_duration')
 
     """Build a loop tree. The leaves of the tree are loops with one element."""
     def __init__(self,
-                 parent: Union['Loop', None]=None,
-                 children: Iterable['Loop']=list(),
+                 parent: Union['Loop', None] = None,
+                 children: Iterable['Loop'] = (),
                  waveform: Optional[Waveform]=None,
-                 measurements: Optional[List[MeasurementWindow]]=None,
+                 measurements: Optional[List[MeasurementWindow]] = None,
                  repetition_count=1):
         super().__init__(parent=parent, children=children)
 
@@ -326,6 +327,12 @@ class Loop(Node):
 
         elif len(self) != len(new_children):
             self[:] = new_children
+    
+    def get_duration_structure(self) -> Tuple[int, Union[int, tuple]]:
+        if self.is_leaf():
+            return self.repetition_count, self.waveform.duration
+        else:
+            return self.repetition_count, tuple(child.get_duration_structure() for child in self)
 
 
 class ChannelSplit(Exception):
@@ -559,7 +566,6 @@ def _make_compatible(program: Loop, min_len: int, quantum: int, sample_rate: Tim
 
 def make_compatible(program: Loop, minimal_waveform_length: int, waveform_quantum: int, sample_rate: TimeType):
     """ check program for compatibility to AWG requirements, make it compatible if necessary and  possible"""
-
     comp_level = _is_compatible(program,
                                 min_len=minimal_waveform_length,
                                 quantum=waveform_quantum,
@@ -567,12 +573,23 @@ def make_compatible(program: Loop, minimal_waveform_length: int, waveform_quantu
     if comp_level == _CompatibilityLevel.incompatible_fraction:
         raise ValueError('The program duration in samples {} is not an integer'.format(program.duration * sample_rate))
     if comp_level == _CompatibilityLevel.incompatible_too_short:
-        raise ValueError('The program is too short to be a valid waveform. \n program duration in samples: {} \n minimal length: {}'.format(program.duration * sample_rate, minimal_waveform_length))
+        raise ValueError('The program is too short to be a valid waveform. \n'
+                         ' program duration in samples: {} \n'
+                         ' minimal length: {}'.format(program.duration * sample_rate, minimal_waveform_length))
     if comp_level == _CompatibilityLevel.incompatible_quantum:
-        raise ValueError('The program duration in samples {} is not a multiple of quantum {}'.format(program.duration * sample_rate, waveform_quantum))
+        raise ValueError('The program duration in samples {} '
+                         'is not a multiple of quantum {}'.format(program.duration * sample_rate, waveform_quantum))
 
     elif comp_level == _CompatibilityLevel.action_required:
+        warnings.warn("qupulse will now concatenate waveforms to make the pulse/program compatible with the chosen AWG."
+                      " This might take some time. If you need this pulse more often it makes sense to write it in a "
+                      "way which is more AWG friendly.", MakeCompatibleWarning)
+
         _make_compatible(program,
                          min_len=minimal_waveform_length,
                          quantum=waveform_quantum,
                          sample_rate=sample_rate)
+
+
+class MakeCompatibleWarning(ResourceWarning):
+    pass

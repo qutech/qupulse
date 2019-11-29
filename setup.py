@@ -36,11 +36,12 @@ setup(name='qupulse',
       package_dir={'qupulse': 'qupulse', 'qctoolkit': 'qctoolkit'},
       packages=packages,
       python_requires='>=3.5',
-      install_requires=['sympy>=1.1.1', 'numpy', 'cached_property'],
+      install_requires=['sympy>=1.1.1', 'numpy', 'cached_property', 'more_itertools'],
       extras_require={
           'plotting': ['matplotlib'],
           'VISA': ['pyvisa'],
           'tabor-instruments': ['pytabor>=1.0.1', 'teawg'],
+          'zurich-instruments': ['zhinst'],
           'Faster-fractions': ['gmpy2'],
           'tektronix': 'tek_awg>=0.2.1'
       },
