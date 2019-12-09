@@ -4,6 +4,27 @@ from abc import ABC, abstractmethod
 class BaseFeature(ABC):
     def __init__(self):
         self._functionList = []
+        directory = dir(self)
+        tmp_list = []
+        i = 0
+        for attr in directory:
+            if callable(getattr(self, attr)) and attr[0] != "_":
+                tmp_list.append(attr)
+
+    @property
+    def function_list(self):
+        return tuple(self._functionList)
+
+
+class FeatureList(ABC):
+    def __init__(self):
+        self._featureList = []
+
+    def add_feature(self, feature: BaseFeature):
+        for function in feature.function_list:
+            setattr(self, function, getattr(feature, function))
+
+        self._featureList.append(feature)
 
 
 class AWGDeviceFeature(ABC, BaseFeature):
@@ -18,36 +39,55 @@ class AWGChannelTupleFeature(ABC, BaseFeature):
     pass
 
 
-class Program:
+class Program(ABC):
     def __init__(self, name: str, program: Loop):
         self._name = name
         self._program = program
         self._channel_ids = []
         self._marker_ids = []
 
+    @property
+    def name(self):
+        return self._name
 
-class AWGProgramManager:
+    @property
+    def program(self):
+        return self._program
+
+    @property
+    def channel_ids(self):
+        return self._channel_ids
+
+    @property
+    def marker_ids(self):
+        return self.marker_ids
+
+
+class AWGProgramManager(ABC):
+    @abstractmethod
     def add(self, program: Program):
         pass
 
+    @abstractmethod
     def get(self, name: str) -> Program:
-        # Wie macht man die rückgabe von Programm?
         pass
 
+    @abstractmethod
     def remove(self, name: str):
         pass
 
+    @abstractmethod
     def clear(self):
         pass
 
 
-class AWGDevice(ABC):
+class AWGDevice(ABC, FeatureList):
     def __init__(self):
         self._channels = []
         self._channel_groups = []
 
-        # Code redundanz
-        self._featureList = []
+    def add_feature(self, feature: AWGDeviceFeature):
+        super().add_feature(feature)
 
     @abstractmethod
     def initialize(self):
@@ -63,19 +103,18 @@ class AWGDevice(ABC):
 
     @abstractmethod
     def _send_querry(self, cmd: str) -> str:
-        # Wie wird der Return vom String umgesetzt
         pass
 
-    @abstractmethod
-    def add_feature(self, feature: AWGDeviceFeature):
-        self._featureList.append(feature)
-        # str is not a callable
-        for function in feature._functionList:
-            #in Liste einfügen
+    @property
+    def channels(self):
+        return self._channels
+
+    @property
+    def channel_group(self):
+        return self._channel_groups
 
 
-
-class AWGChannelTuple(ABC):
+class AWGChannelTuple(ABC, FeatureList):
     def __init__(self, channel_tuple_id: int, device: AWGDevice, channels, sample_rate: float,
                  programs: AWGProgramManager):
         self._channel_tuptle_id = channel_tuple_id
@@ -84,7 +123,8 @@ class AWGChannelTuple(ABC):
         self._sample_rate = sample_rate
         self._programs = programs
 
-        self._featureList = []
+    def add_feature(self, feature: AWGChannelTupleFeature):
+        super().add_feature(feature)
 
     @abstractmethod
     def _send_cmd(self, cmd: str):
@@ -92,21 +132,17 @@ class AWGChannelTuple(ABC):
 
     @abstractmethod
     def _send_querry(self, cmd: str) -> str:
-        # Wie wird der Return vom String umgesetzt
         pass
 
-    @abstractmethod
-    def _add_feature(self, feature: AWGChannelFeature):
-        self._featureList.append(feature)
 
-
-class AWGChannel(ABC):
+class AWGChannel(ABC, FeatureList):
     def __init__(self, channel_id: int, device: AWGDevice, channel_tupel: AWGChannelTuple):
         self._channel_id = channel_id
         self._device = device
         self._channel_tupel = channel_tupel
 
-        self._featureList = []
+    def add_feature(self, feature: AWGChannelFeature):
+        super().add_feature(feature)
 
     @abstractmethod
     def _send_cmd(self, cmd: str):
@@ -114,28 +150,16 @@ class AWGChannel(ABC):
 
     @abstractmethod
     def _send_querry(self, cmd: str) -> str:
-        # Was passiert wenn was anderes als ein String returnt wird?
         pass
 
-    @abstractmethod
-    def addFeature(self, feature: AWGChannelFeature):
-        self._featureList.append(feature)
-
-    # muss die Methode dann auch abstrakt sein?
-
-    # Getter fuer alle Attribute
     @property
     def channel_id(self):
         return self._channel_id
 
     @property
     def device(self):
-        return self.device
+        return self._device
 
     @property
     def channel_tupel(self):
-        return self.channel_tupel
-
-    # braucht channelId einen Setter?
-
-# Basisklassen
+        return self._channel_tupel
