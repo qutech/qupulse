@@ -12,7 +12,7 @@ from qupulse._program.instructions import AbstractInstructionBlock, EXECInstruct
     STOPInstruction, CHANInstruction, Waveform, MEASInstruction, Instruction
 from qupulse.utils.tree import Node, is_tree_circular
 from qupulse.utils.types import MeasurementWindow
-from qupulse.utils import is_integer
+from qupulse.pulses.parameters import MappedParameter
 
 from qupulse._program.waveforms import SequenceWaveform, RepetitionWaveform
 
@@ -21,7 +21,7 @@ __all__ = ['Loop', 'MultiChannelProgram', 'make_compatible', 'MakeCompatibleWarn
 
 class Loop(Node):
     MAX_REPR_SIZE = 2000
-    __slots__ = ('_waveform', '_measurements', '_repetition_count', '_cached_body_duration')
+    __slots__ = ('_waveform', '_measurements', '_repetition_count', '_cached_body_duration', '_repetition_parameter')
 
     """Build a loop tree. The leaves of the tree are loops with one element."""
     def __init__(self,
@@ -29,12 +29,24 @@ class Loop(Node):
                  children: Iterable['Loop'] = (),
                  waveform: Optional[Waveform]=None,
                  measurements: Optional[List[MeasurementWindow]] = None,
-                 repetition_count=1):
+                 repetition_count=1,
+                 repetition_parameter: MappedParameter=None):
+        """TODO
+
+        Args:
+            parent:
+            children:
+            waveform:
+            measurements:
+            repetition_count:
+            repetition_expression:
+        """
         super().__init__(parent=parent, children=children)
 
         self._waveform = waveform
         self._measurements = measurements
         self._repetition_count = int(repetition_count)
+        self._repetition_parameter = repetition_parameter
         self._cached_body_duration = None
 
         if abs(self._repetition_count - repetition_count) > 1e-10:
@@ -107,6 +119,10 @@ class Loop(Node):
     @property
     def duration(self) -> TimeType:
         return self.repetition_count*self.body_duration
+
+    @property
+    def repetition_parameter(self) -> Optional[MappedParameter]:
+        return self._repetition_parameter
 
     @property
     def repetition_count(self) -> int:

@@ -102,7 +102,8 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
                        measurement_mapping: Optional[Mapping[str, Optional[str]]]=None,
                        channel_mapping: Optional[Mapping[ChannelID, Optional[ChannelID]]]=None,
                        global_transformation: Optional[Transformation]=None,
-                       to_single_waveform: Set[Union[str, 'PulseTemplate']]=None) -> Optional['Loop']:
+                       to_single_waveform: Set[Union[str, 'PulseTemplate']]=None,
+                       volatile: Set[str] = None) -> Optional['Loop']:
         """Translates this PulseTemplate into a program Loop.
 
         The returned Loop represents the PulseTemplate with all parameter values instantiated provided as dictated by
@@ -116,6 +117,7 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
             global_transformation: This transformation is applied to every waveform
             to_single_waveform: A set of pulse templates (or identifiers) which are directly translated to a
                 waveform. This might change how transformations are applied. TODO: clarify
+            volatile: Everything in the final program that depends on these parameters is marked as volatile
         Returns:
              A Loop object corresponding to this PulseTemplate.
         """
@@ -127,6 +129,8 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
             channel_mapping = dict()
         if to_single_waveform is None:
             to_single_waveform = set()
+        if volatile is None:
+            volatile = set()
 
         # make sure all channels are mapped
         complete_channel_mapping = {channel: channel for channel in self.defined_channels}
@@ -149,7 +153,8 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
                              channel_mapping=complete_channel_mapping,
                              global_transformation=global_transformation,
                              to_single_waveform=to_single_waveform,
-                             parent_loop=root_loop)
+                             parent_loop=root_loop,
+                             volatile=volatile)
 
         if root_loop.waveform is None and len(root_loop.children) == 0:
             return None  # return None if no program
@@ -162,7 +167,8 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional[Transformation],
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
-                                 parent_loop: Loop) -> None:
+                                 parent_loop: Loop,
+                                 volatile: Set[str]) -> None:
         """The subclass specific implementation of create_program().
 
         Receives a Loop instance parent_loop to which it should append measurements and its own Loops as children.
@@ -183,7 +189,8 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
                         channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                         global_transformation: Optional[Transformation],
                         to_single_waveform: Set[Union[str, 'PulseTemplate']],
-                        parent_loop: Loop):
+                        parent_loop: Loop,
+                        volatile: Set[str]):
         """Generic part of create program. This method handles to_single_waveform and the configuration of the
         transformer."""
         if self.identifier in to_single_waveform or self in to_single_waveform:
@@ -194,7 +201,8 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
                                           channel_mapping=channel_mapping,
                                           global_transformation=None,
                                           to_single_waveform=to_single_waveform,
-                                          parent_loop=root)
+                                          parent_loop=root,
+                                          volatile=volatile)
 
             waveform = to_waveform(root)
 
