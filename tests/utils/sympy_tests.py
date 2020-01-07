@@ -2,7 +2,7 @@ import unittest
 import contextlib
 import math
 import sys
-from packaging import version
+import distutils
 
 from typing import Union
 
@@ -427,7 +427,7 @@ class BroadcastTests(unittest.TestCase):
         self.assertEqual(expr_with_int, expr_with_int_other_order)
         self.assertEqual(expr_with_float, expr_with_int_other_order)
 
-    test_numeric_equal = unittest.expectedFailure(test_expression_equality) if version.parse(sympy.__version__) >= version.parse('1.5') else test_expression_equality
+    test_numeric_equal = unittest.expectedFailure(test_expression_equality) if distutils.version.StrictVersion(sympy.__version__) >= distutils.version.StrictVersion('1.5') else test_expression_equality
 
 
 class IndexedBasedFinderTests(unittest.TestCase):

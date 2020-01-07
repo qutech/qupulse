@@ -46,7 +46,7 @@ setup(name='qupulse',
           'tektronix': 'tek_awg>=0.2.1'
       },
       test_suite="tests",
-      tests_require=['pytest_benchmark'],
+      tests_require=['pytest_benchmark', 'distutils'],
       classifiers=[
           "Programming Language :: Python :: 3",
           "License :: OSI Approved :: MIT License",
