@@ -45,6 +45,9 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
     called instantiation of the PulseTemplate and achieved by invoking the sequencing process.
     """
 
+    """This is not stable"""
+    _DEFAULT_FORMAT_SPEC = 'identifier'
+
     def __init__(self, *,
                  identifier: Optional[str]) -> None:
         super().__init__(identifier=identifier)
@@ -217,6 +220,29 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
                                           to_single_waveform=to_single_waveform,
                                           global_transformation=global_transformation,
                                           parent_loop=parent_loop)
+
+    def __format__(self, format_spec: str):
+        if format_spec == '':
+            format_spec = self._DEFAULT_FORMAT_SPEC
+        formatted = []
+        for attr in format_spec.split(';'):
+            value = getattr(self, attr)
+            if value is None:
+                continue
+            # the repr(str(value)) is to avoid very deep nesting. If needed one should use repr
+            formatted.append('{attr}={value}'.format(attr=attr, value=repr(str(value))))
+        type_name = type(self).__name__
+        return '{type_name}({attrs})'.format(type_name=type_name, attrs=', '.join(formatted))
+
+    def __str__(self):
+        return format(self)
+
+    def __repr__(self):
+        type_name = type(self).__name__
+        kwargs = ','.join('%s=%r' % (key, value)
+                          for key, value in self.get_serialization_data().items()
+                          if key.isidentifier() and value is not None)
+        return '{type_name}({kwargs})'.format(type_name=type_name, kwargs=kwargs)
 
 
 class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):

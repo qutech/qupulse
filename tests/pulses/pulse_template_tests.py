@@ -351,6 +351,13 @@ class PulseTemplateTest(unittest.TestCase):
             self.assertEqual(b @ a, 'concat')
             mock_concatenate.assert_called_once_with(b, a)
 
+    def test_format(self):
+        a = PulseTemplateStub(identifier='asd', duration=Expression(5))
+        self.assertEqual("PulseTemplateStub(identifier='asd')", str(a))
+        self.assertEqual("PulseTemplateStub(identifier='asd')", format(a))
+        self.assertEqual("PulseTemplateStub(identifier='asd', duration='5')",
+                         "{:identifier;duration}".format(a))
+
 
 class AtomicPulseTemplateTests(unittest.TestCase):
 
