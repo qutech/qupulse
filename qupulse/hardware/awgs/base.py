@@ -8,7 +8,8 @@ Classes:
 """
 
 from abc import abstractmethod
-from typing import Set, Tuple, Callable, Optional
+from numbers import Real
+from typing import Set, Tuple, Callable, Optional, Mapping
 
 from qupulse.hardware.util import get_sample_times
 from qupulse.utils.types import ChannelID
@@ -136,6 +137,10 @@ class AWG(Comparable):
         """Comparison and hashing is based on the id of the AWG so different devices with the same properties
         are ot equal"""
         return id(self)
+
+    @abstractmethod
+    def set_volatile_parameters(self, program_name: str, parameters: Mapping[str, Real]):
+        """Set the values of parameters which were marked as volatile on program creation."""
 
     def __copy__(self) -> None:
         raise NotImplementedError()
