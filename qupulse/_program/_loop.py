@@ -609,3 +609,8 @@ def make_compatible(program: Loop, minimal_waveform_length: int, waveform_quantu
 
 class MakeCompatibleWarning(ResourceWarning):
     pass
+
+
+class VolatileModificationWarning(RuntimeWarning):
+    """This warning is emitted if the colatile part of a program gets modified. This might imply that the volatile
+    parameter cannot be change anymore."""
