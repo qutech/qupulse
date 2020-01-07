@@ -16,7 +16,7 @@ b_ = IndexedBase(b)
 
 from qupulse.utils.sympy import sympify as qc_sympify, substitute_with_eval, recursive_substitution, Len,\
     evaluate_lambdified, evaluate_compiled, get_most_simple_representation, get_variables, get_free_symbols,\
-    almost_equal, Broadcast
+    almost_equal, Broadcast, IndexedBasedFinder
 
 
 ################################################### SUBSTITUTION #######################################################
@@ -412,3 +412,17 @@ class BroadcastTests(unittest.TestCase):
         sympification = qc_sympify('Broadcast(a, (3,))')
         self.assertEqual(sympification, symbolic)
 
+
+class IndexedBasedFinderTests(unittest.TestCase):
+    def test_isinstance(self):
+        self.assertIsInstance(IndexedBasedFinder(), dict)
+
+    def test_missing_methods(self):
+        fn = IndexedBasedFinder()
+
+        for method in ('pop', 'update', 'get', 'setdefault'):
+            with self.assertRaises(NotImplementedError, msg=method):
+                getattr(fn, method)()
+
+        with self.assertRaises(NotImplementedError):
+            fn['asd'] = 6
