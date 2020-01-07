@@ -2,6 +2,7 @@ import unittest
 import contextlib
 import math
 import sys
+from packaging import version
 
 from typing import Union
 
@@ -411,6 +412,22 @@ class BroadcastTests(unittest.TestCase):
 
         sympification = qc_sympify('Broadcast(a, (3,))')
         self.assertEqual(sympification, symbolic)
+
+    def test_expression_equality(self):
+        """Sympy decided to change their equality reasoning"""
+        self.assertEqual(sympy.sympify('3'), sympy.sympify('3.'))
+        self.assertEqual(sympy.sympify('3 + a'), sympy.sympify('3 + a'))
+        self.assertEqual(sympy.sympify('3 + a'), sympy.sympify('3. + a'))
+
+        expr_with_float = sympy.sympify('a*(b - 3.0) + (-b + c)*(d + 4.0)/2')
+        expr_with_int = sympy.sympify('a*(b - 3) + (-b + c)*(d + 4)/2')
+        expr_with_int_other_order = sympy.sympify('(b-3)*a + (c-b)*(d+4) / 2')
+
+        self.assertEqual(expr_with_float, expr_with_int)
+        self.assertEqual(expr_with_int, expr_with_int_other_order)
+        self.assertEqual(expr_with_float, expr_with_int_other_order)
+
+    test_numeric_equal = unittest.expectedFailure(test_expression_equality) if version.parse(sympy.__version__) >= version.parse('1.5') else test_expression_equality
 
 
 class IndexedBasedFinderTests(unittest.TestCase):
