@@ -199,8 +199,8 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
                                          channel_mapping=dict(),
                                          parent_loop=program,
                                          to_single_waveform=set(),
-                                         global_transformation=None)
-        self.assertEqual(children, program.children)
+                                         global_transformation=None, volatile=set())
+        self.assertEqual(children, list(program.children))
         self.assertEqual(1, program.repetition_count)
         self.assertIsNone(program._measurements)
         self.assert_measurement_windows_equal({}, program.get_measurement_windows())
@@ -222,9 +222,9 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
                                          channel_mapping=channel_mapping,
                                          parent_loop=program,
                                          to_single_waveform=set(),
-                                         global_transformation=None)
+                                         global_transformation=None, volatile=set())
 
-        self.assertEqual(children, program.children)
+        self.assertEqual(children, list(program.children))
         self.assertEqual(1, program.repetition_count)
         self.assertIsNone(program._measurements)
         self.assert_measurement_windows_equal({}, program.get_measurement_windows())
@@ -247,9 +247,9 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
                                          channel_mapping=channel_mapping,
                                          parent_loop=program,
                                          to_single_waveform=set(),
-                                         global_transformation=None)
+                                         global_transformation=None, volatile=set())
 
-        self.assertEqual(children, program.children)
+        self.assertEqual(children, list(program.children))
         self.assertEqual(1, program.repetition_count)
         self.assertIsNone(program._measurements)
         self.assert_measurement_windows_equal({}, program.get_measurement_windows())
@@ -262,7 +262,7 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
                                          channel_mapping=channel_mapping,
                                          parent_loop=program,
                                          to_single_waveform=set(),
-                                         global_transformation=None)
+                                         global_transformation=None, volatile=set())
 
     def test_create_program_missing_params(self) -> None:
         dt = DummyPulseTemplate(parameter_names={'i'}, waveform=DummyWaveform(duration=4.0), duration='t', measurements=[('b', 2, 1)])
@@ -283,7 +283,7 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
                                          channel_mapping=channel_mapping,
                                          parent_loop=program,
                                          to_single_waveform=set(),
-                                         global_transformation=None)
+                                         global_transformation=None, volatile=set())
 
         # test parameter in measurement mappings
         parameters = {'a': ConstantParameter(1), 'b': ConstantParameter(4), 'c': ConstantParameter(2)}
@@ -293,7 +293,7 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
                                          channel_mapping=channel_mapping,
                                          parent_loop=program,
                                          to_single_waveform=set(),
-                                         global_transformation=None)
+                                         global_transformation=None, volatile=set())
 
         # test parameter in duration
         parameters = {'a': ConstantParameter(1), 'b': ConstantParameter(4), 'c': ConstantParameter(2), 'alph': ConstantParameter(0)}
@@ -303,9 +303,9 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
                                          channel_mapping=channel_mapping,
                                          parent_loop=program,
                                          to_single_waveform=set(),
-                                         global_transformation=None)
+                                         global_transformation=None, volatile=set())
 
-        self.assertEqual(children, program.children)
+        self.assertEqual(children, list(program.children))
         self.assertEqual(1, program.repetition_count)
         self.assertIsNone(program._measurements)
         self.assert_measurement_windows_equal({}, program.get_measurement_windows())
@@ -326,11 +326,11 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
                                      channel_mapping=channel_mapping,
                                      parent_loop=program,
                                      to_single_waveform=set(),
-                                     global_transformation=None)
+                                     global_transformation=None, volatile=set())
 
         self.assertEqual(0, len(program.children))
         self.assertEqual(1, program.repetition_count)
-        self.assertEqual([], program.children)
+        self.assertEqual([], list(program.children))
 
         # ensure same result as from Sequencer
         sequencer = Sequencer()
@@ -339,7 +339,7 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
         block = sequencer.build()
         program_old = MultiChannelProgram(block, channels={'A'}).programs[frozenset({'A'})]
         self.assertEqual(program_old.repetition_count, program.repetition_count)
-        self.assertEqual(program_old.children, program.children)
+        self.assertEqual(list(program_old.children), list(program.children))
         self.assertEqual(program_old.waveform, program.waveform)
         # program_old defines measurements while program does not
 
@@ -355,6 +355,7 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
                       'meas_param': ConstantParameter(.1)}
         measurement_mapping = dict(A='B', b='b')
         channel_mapping = dict(C='D')
+        volatile = {'inner'}
 
         to_single_waveform = {'tom', 'jerry'}
         global_transformation = TransformationStub()
@@ -370,7 +371,7 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
                                               channel_mapping=channel_mapping,
                                               global_transformation=global_transformation,
                                               to_single_waveform=to_single_waveform,
-                                              parent_loop=program)
+                                              parent_loop=program, volatile=volatile)
         expected_create_program_calls = [mock.call(**expected_create_program_kwargs,
                                                    parameters=dict(i=ConstantParameter(i)))
                                          for i in (1, 3)]
@@ -384,7 +385,8 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
                                                  channel_mapping=channel_mapping,
                                                  parent_loop=program,
                                                  to_single_waveform=to_single_waveform,
-                                                 global_transformation=global_transformation)
+                                                 global_transformation=global_transformation,
+                                                 volatile=volatile)
 
                     validate_parameter_constraints.assert_called_once_with(parameters=parameters)
                     get_measurement_windows.assert_called_once_with(expected_meas_params, measurement_mapping)
@@ -401,6 +403,7 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
         parameters = {'a': ConstantParameter(1), 'b': ConstantParameter(4), 'c': ConstantParameter(2)}
         measurement_mapping = dict(A='B', b='b')
         channel_mapping = dict(C='D')
+        volatile = {'inner'}
 
         children = [Loop(waveform=DummyWaveform(duration=2.0))]
         program = Loop(children=children)
@@ -409,7 +412,7 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
                                      channel_mapping=channel_mapping,
                                      parent_loop=program,
                                      to_single_waveform=set(),
-                                     global_transformation=None)
+                                     global_transformation=None, volatile=volatile)
 
         self.assertEqual(3, len(program.children))
         self.assertIs(children[0], program.children[0])

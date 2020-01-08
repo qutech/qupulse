@@ -172,7 +172,8 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional['Transformation'],
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
-                                 parent_loop: Loop) -> None:
+                                 parent_loop: Loop,
+                                 volatile: Set[str]) -> None:
         self.validate_parameter_constraints(parameters=parameters)
 
         try:
@@ -180,6 +181,8 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                                       for parameter_name in self.measurement_parameters}
             duration_parameters = {parameter_name: parameters[parameter_name].get_value()
                                    for parameter_name in self.duration.variables}
+            assert not volatile.intersection(measurement_mapping), "not supported"
+            assert not volatile.intersection(duration_parameters), "not supported"
         except KeyError as e:
             raise ParameterNotProvidedException(e) from e
 
@@ -194,7 +197,8 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                                             channel_mapping=channel_mapping,
                                             global_transformation=global_transformation,
                                             to_single_waveform=to_single_waveform,
-                                            parent_loop=parent_loop)
+                                            parent_loop=parent_loop,
+                                            volatile=volatile)
 
     def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
         data = super().get_serialization_data(serializer)

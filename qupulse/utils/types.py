@@ -363,3 +363,11 @@ class SequenceProxy(collections.abc.Sequence):
 
     def count(self, elem):
         return self._inner.count(elem)
+
+    def __eq__(self, other):
+        """Not part of Sequence interface"""
+        if type(other) is SequenceProxy:
+            return (len(self) == len(other)
+                    and all(x == y for x, y in zip(self, other)))
+        else:
+            return NotImplemented

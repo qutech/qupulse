@@ -193,7 +193,7 @@ class PulseTemplateTest(unittest.TestCase):
                                               channel_mapping=channel_mapping,
                                               to_single_waveform=to_single_waveform,
                                               global_transformation=global_transformation)
-            _create_program.assert_called_once_with(**expected_internal_kwargs, parent_loop=program)
+            _create_program.assert_called_once_with(**expected_internal_kwargs, parent_loop=program, volatile=set())
         self.assertEqual(expected_program, program)
         self.assertEqual(previos_measurement_mapping, measurement_mapping)
         self.assertEqual(previous_channel_mapping, channel_mapping)
@@ -214,14 +214,14 @@ class PulseTemplateTest(unittest.TestCase):
                                      channel_mapping=channel_mapping,
                                      global_transformation=global_transformation,
                                      to_single_waveform=to_single_waveform,
-                                     parent_loop=parent_loop)
+                                     parent_loop=parent_loop, volatile=set())
 
             _internal_create_program.assert_called_once_with(parameters=parameters,
                                      measurement_mapping=measurement_mapping,
                                      channel_mapping=channel_mapping,
                                      global_transformation=global_transformation,
                                      to_single_waveform=to_single_waveform,
-                                     parent_loop=parent_loop)
+                                     parent_loop=parent_loop, volatile=set())
 
             self.assertEqual(parent_loop, Loop())
 
@@ -234,6 +234,7 @@ class PulseTemplateTest(unittest.TestCase):
                 measurement_mapping = {'M': 'N'}
                 channel_mapping = {'B': 'A'}
                 parent_loop = Loop()
+                volatile = {'a'}
 
                 wf = DummyWaveform()
                 single_waveform = DummyWaveform()
@@ -262,14 +263,15 @@ class PulseTemplateTest(unittest.TestCase):
                                                  channel_mapping=channel_mapping,
                                                  global_transformation=global_transformation,
                                                  to_single_waveform=to_single_waveform,
-                                                 parent_loop=parent_loop)
+                                                 parent_loop=parent_loop, volatile=volatile)
 
                         _internal_create_program.assert_called_once_with(parameters=parameters,
                                                                          measurement_mapping=measurement_mapping,
                                                                          channel_mapping=channel_mapping,
                                                                          global_transformation=None,
                                                                          to_single_waveform=to_single_waveform,
-                                                                         parent_loop=expected_inner_program)
+                                                                         parent_loop=expected_inner_program,
+                                                                         volatile=volatile)
 
                         to_waveform.assert_called_once_with(expected_inner_program)
 
@@ -294,7 +296,7 @@ class PulseTemplateTest(unittest.TestCase):
                                '_internal_create_program',
                                wraps=get_appending_internal_create_program(dummy_waveform, True)) as _internal_create_program:
             program = template.create_program()
-            _internal_create_program.assert_called_once_with(**expected_internal_kwargs, parent_loop=program)
+            _internal_create_program.assert_called_once_with(**expected_internal_kwargs, parent_loop=program, volatile=set())
         self.assertEqual(expected_program, program)
 
     def test_create_program_channel_mapping(self):
@@ -304,7 +306,7 @@ class PulseTemplateTest(unittest.TestCase):
                                         measurement_mapping=dict(),
                                         channel_mapping={'A': 'C', 'B': 'B'},
                                         global_transformation=None,
-                                        to_single_waveform=set())
+                                        to_single_waveform=set(), volatile=set())
 
         with mock.patch.object(template, '_internal_create_program') as _internal_create_program:
             template.create_program(channel_mapping={'A': 'C'})
@@ -323,7 +325,7 @@ class PulseTemplateTest(unittest.TestCase):
                                         measurement_mapping=measurement_mapping,
                                         channel_mapping=channel_mapping,
                                         global_transformation=None,
-                                        to_single_waveform=set())
+                                        to_single_waveform=set(), volatile=set())
 
         with mock.patch.object(template,
                                '_internal_create_program') as _internal_create_program:
@@ -417,7 +419,7 @@ class AtomicPulseTemplateTests(unittest.TestCase):
                                               channel_mapping=channel_mapping,
                                               parent_loop=program,
                                               to_single_waveform=set(),
-                                              global_transformation=None)
+                                              global_transformation=None, volatile=set())
             build_waveform.assert_called_once_with(parameters=expected_parameters, channel_mapping=channel_mapping)
 
         self.assertEqual(expected_program, program)
@@ -445,7 +447,7 @@ class AtomicPulseTemplateTests(unittest.TestCase):
                                               channel_mapping={},
                                               parent_loop=program,
                                               to_single_waveform=set(),
-                                              global_transformation=global_transformation)
+                                              global_transformation=global_transformation, volatile=set())
 
         self.assertEqual(expected_program, program)
 
@@ -470,7 +472,7 @@ class AtomicPulseTemplateTests(unittest.TestCase):
                                                   channel_mapping=channel_mapping,
                                                   parent_loop=program,
                                                   to_single_waveform=set(),
-                                                  global_transformation=None)
+                                                  global_transformation=None, volatile=set())
                 build_waveform.assert_called_once_with(parameters=expected_parameters, channel_mapping=channel_mapping)
                 get_meas_windows.assert_not_called()
 
@@ -496,7 +498,7 @@ class AtomicPulseTemplateTests(unittest.TestCase):
             template._internal_create_program(parameters=parameters,
                                               measurement_mapping=dict(),
                                               channel_mapping=dict(),
-                                              parent_loop=program)
+                                              parent_loop=program, volatile=set())
 
     def test_internal_create_program_missing_parameters(self) -> None:
         measurement_windows = [('M', 'z', 5)]
@@ -513,4 +515,4 @@ class AtomicPulseTemplateTests(unittest.TestCase):
                                               channel_mapping=dict(),
                                               parent_loop=program,
                                               to_single_waveform=set(),
-                                              global_transformation=None)
+                                              global_transformation=None, volatile=set())

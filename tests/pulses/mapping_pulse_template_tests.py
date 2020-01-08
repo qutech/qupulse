@@ -288,7 +288,7 @@ class MappingPulseTemplateSequencingTest(MeasurementWindowTestCase):
                                    channel_mapping=st.get_updated_channel_mapping(pre_channel_mapping),
                                    to_single_waveform=to_single_waveform,
                                    global_transformation=global_transformation,
-                                   parent_loop=program)
+                                   parent_loop=program, volatile=set())
 
         with mock.patch.object(template, '_create_program') as inner_create_program:
             st._internal_create_program(parameters=pre_parameters,
@@ -296,7 +296,7 @@ class MappingPulseTemplateSequencingTest(MeasurementWindowTestCase):
                                         channel_mapping=pre_channel_mapping,
                                         to_single_waveform=to_single_waveform,
                                         global_transformation=global_transformation,
-                                        parent_loop=program)
+                                        parent_loop=program, volatile=set())
             inner_create_program.assert_called_once_with(**expected_inner_args)
 
         # as we mock the inner function there shouldnt be any changes
@@ -326,7 +326,7 @@ class MappingPulseTemplateSequencingTest(MeasurementWindowTestCase):
                                         channel_mapping=pre_channel_mapping,
                                         to_single_waveform=set(),
                                         global_transformation=None,
-                                        parent_loop=program)
+                                        parent_loop=program, volatile=set())
 
     def test_create_program_missing_params(self) -> None:
         measurement_mapping = {'meas1': 'meas2'}
@@ -352,7 +352,7 @@ class MappingPulseTemplateSequencingTest(MeasurementWindowTestCase):
                                         channel_mapping=pre_channel_mapping,
                                        to_single_waveform=set(),
                                        global_transformation=None,
-                                        parent_loop=program)
+                                        parent_loop=program, volatile=set())
 
     def test_create_program_parameter_constraint_violation(self) -> None:
         measurement_mapping = {'meas1': 'meas2'}
@@ -379,12 +379,13 @@ class MappingPulseTemplateSequencingTest(MeasurementWindowTestCase):
                                         channel_mapping=pre_channel_mapping,
                                       to_single_waveform=set(),
                                         global_transformation=None,
-                                        parent_loop=program)
+                                        parent_loop=program, volatile=set())
 
     def test_create_program_subtemplate_none(self) -> None:
         measurement_mapping = {'meas1': 'meas2'}
         parameter_mapping = {'t': 'k'}
         channel_mapping = {'B': 'default'}
+        volatile = {'t'}
 
         template = DummyPulseTemplate(measurements=[('meas1', 0, 1)], measurement_names={'meas1'},
                                       defined_channels={'B'},
@@ -404,13 +405,13 @@ class MappingPulseTemplateSequencingTest(MeasurementWindowTestCase):
                                     channel_mapping=pre_channel_mapping,
                                     to_single_waveform=set(),
                                     global_transformation=None,
-                                    parent_loop=program)
+                                    parent_loop=program, volatile=volatile)
 
         self.assertEqual(1, len(template.create_program_calls))
         self.assertEqual((st.map_parameters(pre_parameters),
                           st.get_updated_measurement_mapping(pre_measurement_mapping),
                           st.get_updated_channel_mapping(pre_channel_mapping),
-                          program),
+                          program, st.map_volatile(volatile)),
                          template.create_program_calls[-1])
 
         self.assertEqual(1, program.repetition_count)
@@ -571,7 +572,7 @@ class MappingPulseTemplateRegressionTests(unittest.TestCase):
         input_variables = {'period': float(gates_template.duration), 'uptime': 0}
         marker_sequence = (TablePT({'m': [(0, 1), ('uptime', 0), ('period', 0)]}), input_variables)
 
-        combined_template = AtomicMultiChannelPT(gates_template, marker_sequence )
+        combined_template = AtomicMultiChannelPT(gates_template, marker_sequence)
         combined_template.create_program()
 
         marker_sequence2 = TablePT({'m': [(0, 1), (0, 0), (gates_template.duration, 0)]})

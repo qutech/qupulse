@@ -18,7 +18,7 @@ from qupulse.pulses.loop_pulse_template import LoopPulseTemplate
 from qupulse.pulses.sequencing import Sequencer
 from qupulse._program.instructions import InstructionBlock, InstructionPointer
 from qupulse._program.waveforms import RepetitionWaveform
-from qupulse.pulses.parameters import Parameter, ParameterConstrainer, ParameterNotProvidedException
+from qupulse.pulses.parameters import Parameter, ParameterConstrainer, ParameterNotProvidedException, MappedParameter
 from qupulse.pulses.conditions import Condition
 from qupulse.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
 
@@ -134,7 +134,8 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional['Transformation'],
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
-                                 parent_loop: Loop) -> None:
+                                 parent_loop: Loop,
+                                 volatile: Set[str]) -> None:
         self.validate_parameter_constraints(parameters=parameters)
         relevant_params = set(self._repetition_count.variables).union(self.measurement_parameters)
         try:
@@ -147,13 +148,22 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
         # todo (2018-07-19): could in some circumstances possibly just multiply subprogram repetition count?
         # could be tricky if any repetition count is volatile ? check later and optimize if necessary
         if repetition_count > 0:
-            repj_loop = Loop(repetition_count=repetition_count)
+            if volatile.intersection(self.repetition_count.variables):
+                repetition_expression = self.repetition_count.evaluate_symbolic(
+                    {parameter: value for parameter, value in real_parameters.items()
+                     if parameter not in volatile})
+                repetition_parameter = MappedParameter(repetition_expression, parameters)
+            else:
+                repetition_parameter = None
+
+            repj_loop = Loop(repetition_count=repetition_count, repetition_parameter=repetition_parameter)
             self.body._create_program(parameters=parameters,
                                       measurement_mapping=measurement_mapping,
                                       channel_mapping=channel_mapping,
                                       global_transformation=global_transformation,
                                       to_single_waveform=to_single_waveform,
-                                      parent_loop=repj_loop)
+                                      parent_loop=repj_loop,
+                                      volatile=volatile)
             if repj_loop.waveform is not None or len(repj_loop.children) > 0:
                 measurements = self.get_measurement_windows(real_parameters, measurement_mapping)
                 if measurements:

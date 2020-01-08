@@ -224,7 +224,8 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
                                           channel_mapping=channel_mapping,
                                           to_single_waveform=to_single_waveform,
                                           global_transformation=global_transformation,
-                                          parent_loop=parent_loop)
+                                          parent_loop=parent_loop,
+                                          volatile=volatile)
 
 
 class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
@@ -271,7 +272,8 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional[Transformation],
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
-                                 parent_loop: Loop) -> None:
+                                 parent_loop: Loop,
+                                 volatile: Set[str]) -> None:
         """Parameter constraints are validated in build_waveform because build_waveform is guaranteed to be called
         during sequencing"""
         ### current behavior (same as previously): only adds EXEC Loop and measurements if a waveform exists.
@@ -285,6 +287,7 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
         except KeyError as e:
             raise ParameterNotProvidedException(str(e)) from e
 
+        assert not volatile.intersection(parameters), "not supported"
         waveform = self.build_waveform(parameters=parameters,
                                        channel_mapping=channel_mapping)
         if waveform:
