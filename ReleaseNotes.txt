@@ -2,6 +2,7 @@
 
  - General:
    - Improve `TimeType` consistency by leveraging str(float) for rounding by default.
+   - Add support for sympy==1.5
 
  - Hardware:
    - Add a `measure_program` method to the DAC interface. This method is used by the QCoDeS integration.
