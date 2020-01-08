@@ -13,6 +13,7 @@
    - Warn the user if waveforms need to be concatenated to be compatible with hardware requirements.
 
 - Pulse Templates:
+    - Add `__repr__` and `__format__` for easier inspection
     - `MappingPulseTemplate`:
         - `allow_partial_parameter_mapping` is now True as a default. The default can be changed with the class variable `MappingPulseTemplate.ALLOW_PARTIAL_PARAMETER_MAPPING`.
         - Add specializations for `map_parameters` because the auto-inference of the return type did not work for empty input.
