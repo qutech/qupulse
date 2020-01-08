@@ -23,7 +23,10 @@ class Loop(Node):
     MAX_REPR_SIZE = 2000
     __slots__ = ('_waveform', '_measurements', '_repetition_count', '_cached_body_duration', '_repetition_parameter')
 
-    """Build a loop tree. The leaves of the tree are loops with one element."""
+    """Build a loop tree. The leaves of the tree are loops with one element.
+    
+    Loop objects are equal if all children are/the waveform is equal, the repetition count is equal    
+    """
     def __init__(self,
                  parent: Union['Loop', None] = None,
                  children: Iterable['Loop'] = (),
@@ -39,7 +42,7 @@ class Loop(Node):
             waveform:
             measurements:
             repetition_count:
-            repetition_expression:
+            repetition_parameter:
         """
         super().__init__(parent=parent, children=children)
 
@@ -49,16 +52,19 @@ class Loop(Node):
         self._repetition_parameter = repetition_parameter
         self._cached_body_duration = None
 
-        if abs(self._repetition_count - repetition_count) > 1e-10:
-            raise ValueError('Repetition count was not an integer')
+        assert self._repetition_count == repetition_count, "Repetition count was not an integer: %r" % repetition_count
+        assert isinstance(waveform, (type(None), Waveform))
 
-        if not isinstance(waveform, (type(None), Waveform)):
-            raise Exception()
-
-    @property
-    def compare_key(self) -> Tuple:
-        return self._waveform, self.repetition_count, self._measurements if self._measurements else None,\
-               super().compare_key
+    def __eq__(self, other: 'Loop') -> bool:
+        if type(self) == type(other):
+            return (self._repetition_count == other._repetition_count and
+                    self.waveform == other.waveform and
+                    (self._measurements or None) == (other._measurements or None) and
+                    self._repetition_parameter == other._repetition_parameter and
+                    len(self) == len(other) and
+                    all(self_child == other_child for self_child, other_child in zip(self, other)))
+        else:
+            return NotImplemented
 
     def append_child(self, loop: Optional['Loop']=None, **kwargs) -> None:
         # do not invalidate but update cached duration
@@ -118,7 +124,7 @@ class Loop(Node):
 
     @property
     def duration(self) -> TimeType:
-        return self.repetition_count*self.body_duration
+        return self.body_duration * self.repetition_count
 
     @property
     def repetition_parameter(self) -> Optional[MappedParameter]:
@@ -138,6 +144,8 @@ class Loop(Node):
     def unroll(self) -> None:
         if self.is_leaf():
             raise RuntimeError('Leaves cannot be unrolled')
+        if self.repetition_parameter is not None:
+            warnings.warn("Unrolling a Loop with volatile repetition count", VolatileModificationWarning)
 
         i = self.parent_index
         self.parent[i:i+1] = (child.copy_tree_structure(new_parent=self.parent)
@@ -150,19 +158,24 @@ class Loop(Node):
         self._invalidate_duration()
 
     def unroll_children(self) -> None:
+        if self._repetition_parameter is not None:
+            warnings.warn("Unrolling a Loop with volatile repetition count", VolatileModificationWarning)
         old_children = self.children
         self[:] = (child.copy_tree_structure()
                    for _ in range(self.repetition_count)
                    for child in old_children)
         self.repetition_count = 1
+        self._repetition_parameter = None
         self.assert_tree_integrity()
 
     def encapsulate(self) -> None:
         self[:] = [Loop(children=self,
                         repetition_count=self.repetition_count,
+                        repetition_parameter=self._repetition_parameter,
                         waveform=self._waveform,
                         measurements=self._measurements)]
         self.repetition_count = 1
+        self._repetition_parameter = None
         self._waveform = None
         self._measurements = None
         self.assert_tree_integrity()
@@ -197,6 +210,7 @@ class Loop(Node):
         return type(self)(parent=self.parent if new_parent is False else new_parent,
                           waveform=self._waveform,
                           repetition_count=self.repetition_count,
+                          repetition_parameter=self._repetition_parameter,
                           measurements=self._measurements,
                           children=(child.copy_tree_structure() for child in self))
 
@@ -243,18 +257,30 @@ class Loop(Node):
     def split_one_child(self, child_index=None) -> None:
         """Take the last child that has a repetition count larger one, decrease it's repetition count and insert a copy
         with repetition cout one after it"""
-        if child_index:
+        if child_index is not None:
             if self[child_index].repetition_count < 2:
                 raise ValueError('Cannot split child {} as the repetition count is not larger 1')
+
         else:
-            try:
-                child_index = next(i for i in reversed(range(len(self)))
-                                   if self[i].repetition_count > 1)
-            except StopIteration:
-                raise RuntimeError('There is no child with repetition count > 1')
+            for i, child in enumerate(reversed(self)):
+                if child.repetition_count > 1:
+                    if child.repetition_parameter is None:
+                        child_index = i
+                        break
+                    elif child_index is None:
+                        child_index = i
+            else:
+                if child_index is None:
+                    raise RuntimeError('There is no child with repetition count > 1')
+
+        if self[child_index]._repetition_parameter is not None:
+            warnings.warn("Splitting a child with volatile repetition count", VolatileModificationWarning)
+            self[child_index]._repetition_parameter = MappedParameter(expression=self[child_index]._repetition_parameter.expression - 1,
+                                                                      dependencies=self[child_index]._repetition_parameter.dependencies)
 
         new_child = self[child_index].copy_tree_structure()
         new_child.repetition_count = 1
+        new_child._repetition_parameter = None
 
         self[child_index].repetition_count -= 1
 
@@ -281,12 +307,30 @@ class Loop(Node):
             elif sub_program.depth() == depth - 1:
                 i += 1
 
-            elif len(sub_program) == 1 and len(sub_program[0]) == 1:
+            elif len(sub_program) == 1 and len(sub_program[0]) == 1 and not sub_program._measurements:
                 sub_sub_program = cast(Loop, sub_program[0])
 
-                sub_program.repetition_count = sub_program.repetition_count * sub_sub_program.repetition_count
+                measurements = sub_sub_program._measurements
+                repetition_count = sub_program.repetition_count * sub_sub_program.repetition_count
+                if sub_program._repetition_parameter is None and sub_sub_program._repetition_parameter is None:
+                    repetition_parameter = None
+                else:
+                    if sub_program._repetition_parameter is None:
+                        repetition_parameter = MappedParameter(expression=sub_sub_program._repetition_parameter.expression * sub_program.repetition_count,
+                                                                dependencies=sub_sub_program._repetition_parameter.dependencies)
+                    elif sub_sub_program._repetition_parameter is None:
+                        repetition_parameter = MappedParameter(expression=sub_program._repetition_parameter.expression * sub_sub_program.repetition_count,
+                                                                dependencies=sub_program._repetition_parameter.dependencies)
+                    else:
+                        # TODO: possible but requires complicated code elsewhere
+                        repetition_parameter = None
+
                 sub_program[:] = sub_sub_program[:]
-                sub_program.waveform = sub_sub_program.waveform
+                sub_program._waveform = sub_sub_program._waveform
+                sub_program._repetition_parameter = repetition_parameter
+                sub_program._repetition_count = repetition_count
+                sub_program._measurements = measurements
+                sub_program._invalidate_duration()
 
             elif not sub_program.is_leaf():
                 sub_program.unroll()
@@ -332,7 +376,7 @@ class Loop(Node):
                 elif child._measurements:
                     warnings.warn("Dropping measurement since there is no waveform in children")
 
-        if len(new_children) == 1 and not self._measurements:
+        if len(new_children) == 1 and not self._measurements and not self._repetition_parameter:
             assert not self._waveform
             only_child = new_children[0]
 
@@ -344,7 +388,7 @@ class Loop(Node):
         elif len(self) != len(new_children):
             self[:] = new_children
     
-    def get_duration_structure(self) -> Tuple[int, Union[int, tuple]]:
+    def get_duration_structure(self) -> Tuple[int, Union[TimeType, tuple]]:
         if self.is_leaf():
             return self.repetition_count, self.waveform.duration
         else:
