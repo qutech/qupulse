@@ -424,9 +424,11 @@ class TablePulseTemplateTest(unittest.TestCase):
         pulse = TablePulseTemplate(entries={0: [(1, 2, 'linear'), (3, 0, 'jump'), (4, 2, 'hold'), (5, 8, 'hold')],
                                             'other_channel': [(0, 7, 'linear'), (2, 0, 'hold'), (10, 0)],
                                             'symbolic': [(3, 'a', 'hold'), ('b', 4, 'linear'), ('c', Expression('d'), 'hold')]})
-        self.assertEqual(pulse.integral, {0: Expression('6'),
-                                          'other_channel': Expression(7),
-                                          'symbolic': Expression('(b-3)*a + (c-b)*(d+4) / 2')})
+        expected = {0: Expression('6'),
+                    'other_channel': Expression(7),
+                    'symbolic': Expression('(b-3.)*a + (c-b)*(d+4.) / 2')}
+
+        self.assertEqual(expected, pulse.integral)
 
 
 class TablePulseTemplateConstraintTest(ParameterConstrainerTest):
