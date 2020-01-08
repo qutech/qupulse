@@ -10,7 +10,7 @@ import collections
 import numpy
 
 __all__ = ["MeasurementWindow", "ChannelID", "HashableNumpyArray", "TimeType", "time_from_float", "DocStringABCMeta",
-           "SingletonABCMeta"]
+           "SingletonABCMeta", "SequenceProxy"]
 
 MeasurementWindow = typing.Tuple[str, numbers.Real, numbers.Real]
 ChannelID = typing.Union[str, int]
@@ -335,3 +335,31 @@ else:
         """Fallback for typing.Collection if python 3.5
         copied from https://github.com/python/cpython/blob/3.5/Lib/typing.py"""
         __slots__ = ()
+
+
+class SequenceProxy(collections.abc.Sequence):
+    __slots__ = ('_inner',)
+
+    def __init__(self, inner: typing.Sequence):
+        self._inner = inner
+
+    def __getitem__(self, item):
+        return self._inner.__getitem__(item)
+
+    def __iter__(self):
+        return self._inner.__iter__()
+
+    def __len__(self):
+        return self._inner.__len__()
+
+    def __contains__(self, item):
+        return self._inner.__contains__(item)
+
+    def __reversed__(self):
+        return self._inner.__reversed__()
+
+    def index(self, i, **kwargs):
+        return self._inner.index(i, **kwargs)
+
+    def count(self, elem):
+        return self._inner.count(elem)
