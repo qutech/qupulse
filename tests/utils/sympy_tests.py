@@ -2,6 +2,7 @@ import unittest
 import contextlib
 import math
 import sys
+import distutils
 
 from typing import Union
 
@@ -16,7 +17,7 @@ b_ = IndexedBase(b)
 
 from qupulse.utils.sympy import sympify as qc_sympify, substitute_with_eval, recursive_substitution, Len,\
     evaluate_lambdified, evaluate_compiled, get_most_simple_representation, get_variables, get_free_symbols,\
-    almost_equal, Broadcast
+    almost_equal, Broadcast, IndexedBasedFinder
 
 
 ################################################### SUBSTITUTION #######################################################
@@ -412,3 +413,33 @@ class BroadcastTests(unittest.TestCase):
         sympification = qc_sympify('Broadcast(a, (3,))')
         self.assertEqual(sympification, symbolic)
 
+    def test_expression_equality(self):
+        """Sympy decided to change their equality reasoning"""
+        self.assertEqual(sympy.sympify('3'), sympy.sympify('3.'))
+        self.assertEqual(sympy.sympify('3 + a'), sympy.sympify('3 + a'))
+        self.assertEqual(sympy.sympify('3 + a'), sympy.sympify('3. + a'))
+
+        expr_with_float = sympy.sympify('a*(b - 3.0) + (-b + c)*(d + 4.0)/2')
+        expr_with_int = sympy.sympify('a*(b - 3) + (-b + c)*(d + 4)/2')
+        expr_with_int_other_order = sympy.sympify('(b-3)*a + (c-b)*(d+4) / 2')
+
+        self.assertEqual(expr_with_float, expr_with_int)
+        self.assertEqual(expr_with_int, expr_with_int_other_order)
+        self.assertEqual(expr_with_float, expr_with_int_other_order)
+
+    test_numeric_equal = unittest.expectedFailure(test_expression_equality) if distutils.version.StrictVersion(sympy.__version__) >= distutils.version.StrictVersion('1.5') else test_expression_equality
+
+
+class IndexedBasedFinderTests(unittest.TestCase):
+    def test_isinstance(self):
+        self.assertIsInstance(IndexedBasedFinder(), dict)
+
+    def test_missing_methods(self):
+        fn = IndexedBasedFinder()
+
+        for method in ('pop', 'update', 'get', 'setdefault'):
+            with self.assertRaises(NotImplementedError, msg=method):
+                getattr(fn, method)()
+
+        with self.assertRaises(NotImplementedError):
+            fn['asd'] = 6

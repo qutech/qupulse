@@ -272,6 +272,8 @@ class ExpressionScalar(Expression):
 
     def __eq__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> bool:
         """Enable comparisons with Numbers"""
+        # sympy's __eq__ checks for structural equality to be consistent regarding __hash__ so we do that too
+        # see https://github.com/sympy/sympy/issues/18054#issuecomment-566198899
         return self._sympified_expression == self._sympify(other)
 
     def __hash__(self) -> int:

@@ -26,10 +26,11 @@ __all__ = ["sympify", "substitute_with_eval", "to_numpy", "get_variables", "get_
 Sympifyable = Union[str, Number, sympy.Expr, numpy.str_]
 
 
-class IndexedBasedFinder:
+class IndexedBasedFinder(dict):
     """Acts as a symbol lookup and determines which symbols in an expression a subscripted."""
 
     def __init__(self):
+        super().__init__()
         self.symbols = set()
         self.indexed_base = set()
         self.indices = set()
@@ -46,6 +47,13 @@ class IndexedBasedFinder:
 
         self.SubscriptionChecker = SubscriptionChecker
 
+        def unimplementded(*args, **kwargs):
+            raise NotImplementedError("Not a full dict")
+
+        for m in vars(dict).keys():
+            if not m.startswith('_'):
+                setattr(self, m, unimplementded)
+
     def __getitem__(self, k) -> sympy.Expr:
         """Return an instance of the internal SubscriptionChecker class for each symbol to determine which symbols are
         indexed/subscripted.
@@ -60,6 +68,12 @@ class IndexedBasedFinder:
         # otherwise track the symbol name and return a SubscriptionChecker instance
         self.symbols.add(k)
         return self.SubscriptionChecker(k)
+
+    def __setitem__(self, key, value):
+        raise NotImplementedError("Not a full dict")
+
+    def __delitem__(self, key):
+        raise NotImplementedError("Not a full dict")
 
     def __contains__(self, k) -> bool:
         return True
