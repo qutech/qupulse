@@ -9,8 +9,9 @@ Classes:
 """
 
 from abc import abstractmethod
-from typing import Optional, Union, Dict, Any, Iterable, Set, List
+from typing import Optional, Union, Dict, Any, Iterable, Set, List, Mapping
 from numbers import Real
+import types
 
 import sympy
 import numpy
@@ -47,12 +48,8 @@ class Parameter(metaclass=DocStringABCMeta):
             True, if evaluating this Parameter instance requires an interruption.
         """
 
-    @abstractmethod
-    def __hash__(self) -> int:
-        """Returns a hash value of the parameter. Must be implemented."""
-
-    def __eq__(self, other) -> bool:
-        return type(self) is type(other) and hash(self) == hash(other)
+    def __eq__(self, other: 'Parameter') -> bool:
+        return numpy.array_equal(self.get_value(), other.get_value())
         
         
 class ConstantParameter(Parameter):
@@ -103,7 +100,7 @@ class MappedParameter(Parameter):
 
     def __init__(self,
                  expression: Expression,
-                 dependencies: Optional[Dict[str, Parameter]]=None) -> None:
+                 dependencies: Optional[Mapping[str, Parameter]]=None) -> None:
         """Create a MappedParameter instance.
 
         Args:
@@ -114,8 +111,17 @@ class MappedParameter(Parameter):
         """
         super().__init__()
         self._expression = expression
-        self.dependencies = dict() if dependencies is None else dependencies
-        self._cached_value = (None, None)
+        self._dependencies = dict() if dependencies is None else dependencies
+        self._cached_value = None
+
+    @property
+    def dependencies(self):
+        return types.MappingProxyType(self._dependencies)
+
+    @dependencies.setter
+    def dependencies(self, new_dependencies):
+        self._dependencies = new_dependencies
+        self._cached_value = None
 
     def _collect_dependencies(self) -> Dict[str, float]:
         # filter only real dependencies from the dependencies dictionary
@@ -127,13 +133,13 @@ class MappedParameter(Parameter):
 
     def get_value(self) -> Union[Real, numpy.ndarray]:
         """Does not check explicitly if a parameter requires to stop."""
-        current_hash = hash(self)
-        if current_hash != self._cached_value[0]:
-            self._cached_value = (current_hash, self._expression.evaluate_numeric(**self._collect_dependencies()))
-        return self._cached_value[1]
+        if self._cached_value is None:
+            self._cached_value = self._expression.evaluate_numeric(**self._collect_dependencies())
+        return self._cached_value
 
-    def __hash__(self):
-        return hash(tuple(self.dependencies.items()))
+    @property
+    def expression(self):
+        return self._expression
 
     @property
     def requires_stop(self) -> bool:

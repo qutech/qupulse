@@ -615,7 +615,7 @@ class ProgramWaveformCompatibilityTest(unittest.TestCase):
         _make_compatible(program, min_len=5, quantum=1, sample_rate=TimeType.from_float(1.))
 
         self.assertIsInstance(program.waveform, SequenceWaveform)
-        self.assertEqual(program.children, [])
+        self.assertEqual(list(program.children), [])
         self.assertEqual(program.repetition_count, 2)
 
         self.assertEqual(len(program.waveform._sequenced_waveforms), 2)
@@ -634,7 +634,7 @@ class ProgramWaveformCompatibilityTest(unittest.TestCase):
         _make_compatible(program, min_len=5, quantum=10, sample_rate=TimeType.from_float(1.))
 
         self.assertIsInstance(program.waveform, RepetitionWaveform)
-        self.assertEqual(program.children, [])
+        self.assertEqual(list(program.children), [])
         self.assertEqual(program.repetition_count, 1)
 
         self.assertIsInstance(program.waveform, RepetitionWaveform)
