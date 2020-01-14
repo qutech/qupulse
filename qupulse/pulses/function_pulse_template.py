@@ -99,7 +99,7 @@ class FunctionPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
     def build_waveform(self,
                        parameters: Dict[str, numbers.Real],
                        channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional['FunctionWaveform']:
-        self.validate_parameter_constraints(parameters=parameters)
+        self.validate_parameter_constraints(parameters=parameters, volatile=set())
 
         channel = channel_mapping[self.__channel]
         if channel is None:

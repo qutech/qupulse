@@ -11,7 +11,7 @@ Classes:
 from abc import abstractmethod
 from typing import Optional, Union, Dict, Any, Iterable, Set, List, Mapping
 from numbers import Real
-import types
+import warnings
 
 import sympy
 import numpy
@@ -90,6 +90,8 @@ class MappedParameter(Parameter):
     """A pulse parameter whose value is derived from other parameters via some mathematical
     expression.
 
+    This class bundles an expression with some concrete Parameters which in turn can be derived from other Parameters.
+
     The dependencies of a MappedParameter instance are defined by the free variables appearing
     in the expression that defines how its value is derived.
 
@@ -100,34 +102,25 @@ class MappedParameter(Parameter):
 
     def __init__(self,
                  expression: Expression,
-                 dependencies: Optional[Mapping[str, Parameter]]=None) -> None:
+                 namespace: Optional[Mapping[str, Parameter]]=None) -> None:
         """Create a MappedParameter instance.
 
         Args:
             expression (Expression): The expression defining how the the value of this
                 MappedParameter instance is derived from its dependencies.
-             dependencies (Dict(str -> Parameter)): Parameter objects of the dependencies. May also
-                be defined via the dependencies public property. (Optional)
+             dependencies (Dict(str -> Parameter)): Parameter objects of the dependencies. The objects them selves must
+             not change but the parameters might return different values.
         """
         super().__init__()
         self._expression = expression
-        self._dependencies = dict() if dependencies is None else dependencies
-        self._cached_value = None
-
-    @property
-    def dependencies(self):
-        return types.MappingProxyType(self._dependencies)
-
-    @dependencies.setter
-    def dependencies(self, new_dependencies):
-        self._dependencies = new_dependencies
+        self._namespace = dict() if namespace is None else namespace
         self._cached_value = None
 
     def _collect_dependencies(self) -> Dict[str, float]:
         # filter only real dependencies from the dependencies dictionary
         try:
-            return {dependency_name: self.dependencies[dependency_name].get_value()
-                    for dependency_name in self._expression.variables}
+            return {parameter_name: self._namespace[parameter_name].get_value()
+                    for parameter_name in self._expression.variables}
         except KeyError as key_error:
             raise ParameterNotProvidedException(str(key_error)) from key_error
 
@@ -141,11 +134,23 @@ class MappedParameter(Parameter):
     def expression(self):
         return self._expression
 
+    def update_constants(self, new_values: Mapping[str, ConstantParameter]):
+        """This is stupid"""
+        for parameter_name, parameter in self._namespace.items():
+            if hasattr(parameter, '__hash__'):
+                # very stupid
+                # a constant parameter has a hash function
+                if parameter_name in new_values:
+                    self._namespace[parameter_name] = new_values[parameter_name]
+            else:
+                parameter.update_constants(new_values)
+        self._cached_value = None
+
     @property
     def requires_stop(self) -> bool:
         """Does not explicitly check that all parameters are provided if one requires stopping"""
         try:
-            return any(self.dependencies[v].requires_stop
+            return any(self._namespace[v].requires_stop
                        for v in self._expression.variables)
         except KeyError as err:
             raise ParameterNotProvidedException(err.args[0]) from err
@@ -153,7 +158,7 @@ class MappedParameter(Parameter):
     def __repr__(self) -> str:
         try:
             value = self.get_value()
-        except:
+        except ParameterNotProvidedException:
             value = 'nothing'
 
         return "<MappedParameter {0} evaluating to {1}>".format(
@@ -220,15 +225,28 @@ class ParameterConstrainer:
     def parameter_constraints(self) -> List[ParameterConstraint]:
         return self._parameter_constraints
 
-    def validate_parameter_constraints(self, parameters: [str, Union[Parameter, Real]]) -> None:
-        """Raises a ParameterConstraintViolation exception if one of the constraints is violated.
-        :param parameters: These parameters are checked.
-        :return:
+    def validate_parameter_constraints(self, parameters: [str, Union[Parameter, Real]], volatile: Set[str]) -> None:
+        """
+        Raises a ParameterConstraintViolation exception if one of the constraints is violated.
+
+        Args:
+            parameters: These parameters are checked.
+            volatile: For each of these parameters a warning is raised if they appear in a constraint
+
+        Raises:
+            ParameterConstraintViolation: if one of the constraints is violated.
+
+        Warnings:
+            ConstrainedParameterIsVolatileWarning: if a constrained parameter is volatile
         """
         for constraint in self._parameter_constraints:
             constraint_parameters = {k: v.get_value() if isinstance(v, Parameter) else v for k, v in parameters.items()}
             if not constraint.is_fulfilled(constraint_parameters):
                 raise ParameterConstraintViolation(constraint, constraint_parameters)
+
+            # warn for every parameter to allow custom filtering
+            for parameter in volatile.intersection(constraint_parameters):
+                warnings.warn(ConstrainedParameterIsVolatileWarning(parameter_name=parameter, constraint=constraint))
 
     @property
     def constrained_parameters(self) -> Set[str]:
@@ -262,3 +280,21 @@ class InvalidParameterNameException(Exception):
 
     def __str__(self) -> str:
         return '{} is an invalid parameter name'.format(self.parameter_name)
+
+
+class ConstrainedParameterIsVolatileWarning(RuntimeWarning):
+    def __init__(self, parameter_name: str, constraint: ParameterConstraint):
+        super().__init__(parameter_name, constraint)
+
+    @property
+    def parameter_name(self) -> str:
+        return self.args[0]
+
+    @property
+    def constraint(self) -> ParameterConstraint:
+        return self.args[1]
+
+    def __str__(self):
+        return ("The parameter '{parameter_name}' is constrained "
+                "by '{constraint}' but marked as volatile").format(parameter_name=self.parameter_name,
+                                                                   constraint=self.constraint)
