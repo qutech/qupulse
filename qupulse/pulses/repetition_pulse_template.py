@@ -109,7 +109,7 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
                        measurement_mapping: Dict[str, Optional[str]],
                        channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                        instruction_block: InstructionBlock) -> None:
-        self.validate_parameter_constraints(parameters=parameters)
+        self.validate_parameter_constraints(parameters=parameters, volatile=set())
         try:
             real_parameters = {v: parameters[v].get_value() for v in self._repetition_count.variables}
         except KeyError:
@@ -136,7 +136,7 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
                                  parent_loop: Loop,
                                  volatile: Set[str]) -> None:
-        self.validate_parameter_constraints(parameters=parameters)
+        self.validate_parameter_constraints(parameters=parameters, volatile=volatile)
         relevant_params = set(self._repetition_count.variables).union(self.measurement_parameters)
         try:
             real_parameters = {v: parameters[v].get_value() for v in relevant_params}
