@@ -142,7 +142,7 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
     def build_waveform(self,
                        parameters: Dict[str, Real],
                        channel_mapping: Dict[ChannelID, ChannelID]) -> SequenceWaveform:
-        self.validate_parameter_constraints(parameters=parameters)
+        self.validate_parameter_constraints(parameters=parameters, volatile=set())
         return SequenceWaveform([sub_template.build_waveform(parameters,
                                                              channel_mapping=channel_mapping)
                                  for sub_template in self.__subtemplates])
@@ -154,7 +154,7 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                        measurement_mapping: Dict[str, str],
                        channel_mapping: Dict['ChannelID', 'ChannelID'],
                        instruction_block: InstructionBlock) -> None:
-        self.validate_parameter_constraints(parameters=parameters)
+        self.validate_parameter_constraints(parameters=parameters, volatile=set())
         self.insert_measurement_instruction(instruction_block=instruction_block,
                                             parameters=parameters,
                                             measurement_mapping=measurement_mapping)
@@ -174,7 +174,7 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
                                  parent_loop: Loop,
                                  volatile: Set[str]) -> None:
-        self.validate_parameter_constraints(parameters=parameters)
+        self.validate_parameter_constraints(parameters=parameters, volatile=volatile)
 
         try:
             measurement_parameters = {parameter_name: parameters[parameter_name].get_value()

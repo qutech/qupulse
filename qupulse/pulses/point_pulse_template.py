@@ -66,7 +66,7 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
     def build_waveform(self,
                        parameters: Dict[str, Real],
                        channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[TableWaveform]:
-        self.validate_parameter_constraints(parameters)
+        self.validate_parameter_constraints(parameters=parameters, volatile=set())
 
         if all(channel_mapping[channel] is None
                for channel in self.defined_channels):
