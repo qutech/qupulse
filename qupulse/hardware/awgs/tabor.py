@@ -4,7 +4,8 @@ import functools
 import weakref
 import itertools
 import operator
-from typing import List, Tuple, Set, NamedTuple, Callable, Optional, Any, Sequence, cast, Generator, Union, Dict
+from numbers import Real
+from typing import List, Tuple, Set, NamedTuple, Callable, Optional, Any, Sequence, cast, Generator, Union, Dict, Mapping
 from enum import Enum
 from collections import OrderedDict
 
@@ -51,7 +52,7 @@ class TaborSegment:
         if marker_a is not None and len(marker_a)*2 != self.num_points:
             raise TaborException('Marker A has to have half of the channels length')
         if marker_b is not None and len(marker_b)*2 != self.num_points:
-            raise TaborException('Marker A has to have half of the channels length')
+            raise TaborException('Marker B has to have half of the channels length')
 
     @classmethod
     def from_binary_segment(cls, segment_data: np.ndarray) -> 'TaborSegment':
@@ -1253,7 +1254,7 @@ class TaborChannelPair(AWG):
     @property
     def programs(self) -> Set[str]:
         """The set of program names that can currently be executed on the hardware AWG."""
-        return set(program.name for program in self._known_programs.keys())
+        return set(program for program in self._known_programs.keys())
 
     @property
     def sample_rate(self) -> float:
