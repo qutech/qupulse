@@ -19,9 +19,6 @@ class TestDevice(AWGDevice):
     def initialize(self):
         print("initialize")
 
-    #def synchronize_channels(self, group: int):
-    #    print("synchronize channels")
-
     def _send_cmd(self, cmd: str):
         print("send cmd: " + cmd)
 
@@ -141,7 +138,7 @@ class TestChannel(AWGChannel):
 
     def _send_query(self, cmd: str) -> str:
         print("send query: " + cmd)
-        return str
+        return cmd
 
 
 print("--ChannelTest:")
@@ -173,14 +170,11 @@ channel.channel_test_feature_methode2()
 
 
 class TestAWGDriver(unittest.TestCase):
-
     def TestDeviceAddFeature(self):
         pass
 
 
 test_list = List[AWGChannel]
 
-
-#---
-
-testChannelList = [TestChannel(0), TestChannel(1), TestChannel(2), TestChannel(3), TestChannel(4), TestChannel(5), TestChannel(6), TestChannel(7)]
+testChannelList = [TestChannel(0), TestChannel(1), TestChannel(2), TestChannel(3), TestChannel(4), TestChannel(5),
+                   TestChannel(6), TestChannel(7)]

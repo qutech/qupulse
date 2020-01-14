@@ -2,9 +2,6 @@ from abc import ABC, abstractmethod
 from qupulse._program._loop import Loop
 from typing import TypeVar, Generic, List
 
-
-# TODO: Abstrakte Getter und Setter
-
 class BaseFeature(ABC):
     def __init__(self):
         super().__init__()
@@ -17,7 +14,6 @@ class BaseFeature(ABC):
             if callable(getattr(self, attr)) and attr[0] != "_":
                 if not (attr in self._function_list):
                     self._function_list[attr] = getattr(self, attr)
-                    # self._functionList.append(attr)
 
     # TODO: es heisst function_list aber ist ein Dictionary
 
@@ -43,7 +39,6 @@ class FeatureList(Generic[FeatureType], ABC):
         for function in feature.function_list:
             setattr(self, function, getattr(feature, function))
 
-        # self._feature_list.append(feature)
         self._feature_list[type(feature).__name__] = feature
 
     @abstractmethod
@@ -130,12 +125,6 @@ class AWGDevice(FeatureList[AWGDeviceFeature], ABC):
     def channels(self):
         return self._channels
 
-    # TODO: Ueberpruefung in " "
-    #@channels.setter
-    #@abstractmethod
-    #def channels(self, channels: List["AWGChannel"]):
-    #    pass
-
     @property
     def channel_group(self):
         return self._channel_groups
@@ -149,15 +138,15 @@ class AWGChannelTuple(FeatureList[AWGChannelTupleFeature], ABC):
         self._device = device
         self._channels = channels
 
-    #@property
-    #@abstractmethod
-    #def sample_rate(self):
-    #    pass
+    @property
+    @abstractmethod
+    def sample_rate(self):
+        pass
 
-    #@sample_rate.setter
-    #@abstractmethod
-    #def channel_tuple(self, sample_rate: float):
-    #   pass
+    @sample_rate.setter
+    @abstractmethod
+    def sample_rate(self, sample_rate: float):
+        pass
 
     @property
     def channel_tuple_id(self):
@@ -191,8 +180,5 @@ class AWGChannel(FeatureList[AWGChannelFeature], ABC):
     def channel_tuple(self):
         return self._channel_tupel
 
-    # TODO: @channel_tuple.setter da hat kann es keinen _ davor haben. -> Namensgebungs?
-
-    @channel_tuple.setter
-    def channel_tuple(self, channel_tuple: AWGChannelTuple):
+    def _set_channel_tuple(self, channel_tuple: AWGChannelTuple):
         self._channel_tuple = channel_tuple
