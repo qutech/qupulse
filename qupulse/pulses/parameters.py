@@ -155,6 +155,13 @@ class MappedParameter(Parameter):
         except KeyError as err:
             raise ParameterNotProvidedException(err.args[0]) from err
 
+    def __eq__(self, other):
+        if type(other) == type(self):
+            return (self._expression == other._expression and
+                    self._namespace == other._namespace)
+        else:
+            return NotImplemented
+
     def __repr__(self) -> str:
         try:
             value = self.get_value()
