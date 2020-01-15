@@ -12,7 +12,8 @@ Furthermore:
 - `ProgramWaveformManager` and `HDAWGProgramEntry`: Program wise handling of waveforms and seqc-code
 classes that convert `Loop` objects"""
 
-from typing import Optional, Union, Sequence, Dict, Iterator, Tuple, Callable, NamedTuple, MutableMapping, Mapping
+from typing import Optional, Union, Sequence, Dict, Iterator, Tuple, Callable, NamedTuple, MutableMapping, Mapping,\
+    Iterable
 from types import MappingProxyType
 import abc
 import itertools
@@ -21,6 +22,7 @@ import glob
 import os.path
 import hashlib
 from collections import OrderedDict
+import string
 
 import numpy as np
 from pathlib import Path
@@ -314,7 +316,38 @@ class ProgramWaveformManager:
         del self._memory.concatenated_waveforms[self._program_name]
 
 
+class UserRegisterManager:
+    """This class keeps track of the user registered that are used in a certain context"""
+    def __init__(self, available: Iterable[int], name_template: str):
+        assert 'register' in (x[1] for x in string.Formatter().parse(name_template))
+
+        self._available = set(available)
+        self._name_template = name_template
+        self._used = {}
+
+    def require(self, obj) -> str:
+        for register, registered_obj in self._used.items():
+            if obj == registered_obj:
+                return self._name_template.format(register=register)
+        if self._available:
+            register = self._available.pop()
+            self._used[register] = obj
+            return self._name_template.format(register=register)
+        else:
+            raise ValueError("No register available for %r" % obj)
+
+    def iter_used_registers(self) -> Iterator[Tuple[int, str]]:
+        """
+
+        Returns:
+            An iterator over (register index, register name) pairs
+        """
+        return ((register, self._name_template.format(register=register)) for register in self._used.keys())
+
+
 class HDAWGProgramEntry(ProgramEntry):
+    USER_REG_NAME_TEMPLATE = 'user_reg_{register}'
+
     def __init__(self, loop: Loop, selection_index: int, waveform_memory: WaveformMemory, program_name: str,
                  channels: Tuple[Optional[ChannelID], Optional[ChannelID]],
                  markers: Tuple[Optional[ChannelID], Optional[ChannelID], Optional[ChannelID], Optional[ChannelID]],
@@ -336,12 +369,15 @@ class HDAWGProgramEntry(ProgramEntry):
         self._seqc_node = None
         self._seqc_source = None
         self._var_declarations = None
+        self._user_registers = None
+        self._user_register_source = None
 
     def compile(self,
                 min_repetitions_for_for_loop: int,
                 min_repetitions_for_shared_wf: int,
                 indentation: str,
-                trigger_wait_code: str):
+                trigger_wait_code: str,
+                available_registers: Iterable[int]):
         """Compile the loop representation to an internal sequencing c one using `loop_to_seqc`
 
         Args:
@@ -349,6 +385,7 @@ class HDAWGProgramEntry(ProgramEntry):
             min_repetitions_for_shared_wf: See `loop_to_seqc`
             indentation: Each line is prefixed with this
             trigger_wait_code: The code is put before the playback start
+            available_registers
         Returns:
 
         """
@@ -356,10 +393,23 @@ class HDAWGProgramEntry(ProgramEntry):
 
         if self._seqc_node:
             self._waveform_manager.clear_requested()
+
+        user_registers = UserRegisterManager(available_registers, self.USER_REG_NAME_TEMPLATE)
+
         self._seqc_node = loop_to_seqc(self._loop,
                                        min_repetitions_for_for_loop=min_repetitions_for_for_loop,
                                        min_repetitions_for_shared_wf=min_repetitions_for_shared_wf,
-                                       waveform_to_bin=self.get_binary_waveform)
+                                       waveform_to_bin=self.get_binary_waveform,
+                                       user_registers=user_registers)
+
+        self._user_register_source = '\n'.join(
+            '{indentation}var {user_reg_name} = getUserReg({register});'.format(indentation=indentation,
+                                                                                user_reg_name=user_reg_name,
+                                                                                register=register)
+            for register, user_reg_name in user_registers.iter_used_registers()
+        )
+        self._user_registers = user_registers
+
         self._var_declarations = '{indentation}var {pos_var_name} = 0;'.format(pos_var_name=pos_var_name,
                                                                                indentation=indentation)
         self._trigger_wait_code = indentation + trigger_wait_code
@@ -371,15 +421,16 @@ class HDAWGProgramEntry(ProgramEntry):
 
     @property
     def seqc_node(self) -> 'SEQCNode':
-        if self._seqc_node is None:
-            raise RuntimeError('compile not called')
+        assert self._seqc_node is not None, "compile not called"
         return self._seqc_node
 
     @property
     def seqc_source(self) -> str:
-        if self._seqc_source is None:
-            raise RuntimeError('compile not called')
-        return '\n'.join([self._var_declarations, self._trigger_wait_code, self._seqc_source])
+        assert self._seqc_source is not None, "compile not called"
+        return '\n'.join([self._var_declarations,
+                          self._user_register_source,
+                          self._trigger_wait_code,
+                          self._seqc_source])
 
     @property
     def name(self) -> str:
@@ -435,25 +486,54 @@ class HDAWGProgramManager:
             if idx not in existing and idx != self.GLOBAL_CONSTS['PROG_SEL_NONE']:
                 return idx
 
-    def add_program(self, name, loop: Loop,
+    def add_program(self, name: str, loop: Loop,
                     channels: Tuple[Optional[ChannelID], Optional[ChannelID]],
                     markers: Tuple[Optional[ChannelID], Optional[ChannelID], Optional[ChannelID], Optional[ChannelID]],
                     amplitudes: Tuple[float, float],
                     offsets: Tuple[float, float],
                     voltage_transformations: Tuple[Optional[Callable], Optional[Callable]],
                     sample_rate: TimeType):
-        """"""
+        """Register the given program and translate it to seqc.
+
+        TODO: Add an interface to change the trigger mode
+
+        Args:
+            name: Human readable name of the program (used f.i. for the function name)
+            loop: The program to upload
+            channels: see AWG.upload
+            markers: see AWG.upload
+            amplitudes: Used to sample the waveforms
+            offsets: Used to sample the waveforms
+            voltage_transformations: see AWG.upload
+            sample_rate: Used to sample the waveforms
+        """
         assert name not in self._programs
 
         selection_index = self._get_low_unused_index()
+
+        # TODO: verify total number of registers
+        available_registers = range(2, 16)
 
         program_entry = HDAWGProgramEntry(loop, selection_index, self._waveform_memory, name,
                                           channels, markers, amplitudes, offsets, voltage_transformations, sample_rate)
 
         # TODO: de-hardcode these parameters and put compilation in seperate function
-        program_entry.compile(20, 1000, '  ', self.WAIT_FOR_SOFTWARE_TRIGGER)
+        program_entry.compile(20, 1000, '  ', self.WAIT_FOR_SOFTWARE_TRIGGER,
+                              available_registers=available_registers)
 
         self._programs[name] = program_entry
+
+    def get_register_values_to_update_volatile_parameters(self, name: str, parameters: Mapping[str, float]) -> Mapping[int, int]:
+        """
+
+        Args:
+            name: Program name
+            parameters: new values for volatile parameters
+
+        Returns:
+            A dict register->value that reflects the new parameter values
+        """
+        raise NotImplementedError()
 
     @property
     def programs(self) -> Mapping[str, HDAWGProgramEntry]:
@@ -568,7 +648,8 @@ def to_node_clusters(loop: Union[Sequence[Loop], Loop], loop_to_seqc_kwargs: dic
 def loop_to_seqc(loop: Loop,
                  min_repetitions_for_for_loop: int,
                  min_repetitions_for_shared_wf: int,
-                 waveform_to_bin: Callable[[Waveform], BinaryWaveform]) -> 'SEQCNode':
+                 waveform_to_bin: Callable[[Waveform], BinaryWaveform],
+                 user_registers: UserRegisterManager) -> 'SEQCNode':
     assert min_repetitions_for_for_loop <= min_repetitions_for_shared_wf
     # At which point do we switch from indexed to shared
 
@@ -579,12 +660,13 @@ def loop_to_seqc(loop: Loop,
         node = loop_to_seqc(loop[0],
                             min_repetitions_for_for_loop=min_repetitions_for_for_loop,
                             min_repetitions_for_shared_wf=min_repetitions_for_shared_wf,
-                            waveform_to_bin=waveform_to_bin)
+                            waveform_to_bin=waveform_to_bin, user_registers=user_registers)
 
     else:
         node_clusters = to_node_clusters(loop, dict(min_repetitions_for_for_loop=min_repetitions_for_for_loop,
                                                     min_repetitions_for_shared_wf=min_repetitions_for_shared_wf,
-                                                    waveform_to_bin=waveform_to_bin))
+                                                    waveform_to_bin=waveform_to_bin,
+                                                    user_registers=user_registers))
 
         seqc_nodes = []
 
@@ -603,7 +685,11 @@ def loop_to_seqc(loop: Loop,
 
         node = Scope(seqc_nodes)
 
-    if loop.repetition_count != 1:
+    if loop.repetition_parameter is not None:
+        register_var = user_registers.require(loop.repetition_parameter)
+        return Repeat(scope=node, repetition_count=register_var)
+
+    elif loop.repetition_count != 1:
         return Repeat(scope=node, repetition_count=loop.repetition_count)
     else:
         return node
@@ -706,10 +792,10 @@ class Scope(SEQCNode):
 
 
 class Repeat(SEQCNode):
-    """
-    stepping: if False resets the pos to initial value after each iteration"""
+    """"""
     __slots__ = ('repetition_count', 'scope')
     INITIAL_POSITION_NAME_TEMPLATE = 'init_pos_{node_name}'
+    FOR_LOOP_NAME_TEMPLATE = 'idx_{node_name}'
 
     class _AdvanceStrategy:
         """describes what happens how this node interacts with the position variable"""
@@ -717,8 +803,17 @@ class Repeat(SEQCNode):
         POST_ADVANCE = 'post_advance'
         IGNORE = 'ignore'
 
-    def __init__(self, repetition_count: int, scope: SEQCNode):
-        assert repetition_count > 1
+    def __init__(self, repetition_count: Union[int, str], scope: SEQCNode):
+        """
+        Args:
+            repetition_count: A const integer value or a string that is expected to be a "var"
+            scope: The repeated scope
+        """
+        if isinstance(repetition_count, int):
+            assert repetition_count > 1
+        else:
+            assert isinstance(repetition_count, str) and repetition_count.isidentifier()
+
         self.repetition_count = repetition_count
         self.scope = scope
 
@@ -766,17 +861,34 @@ class Repeat(SEQCNode):
         advance_strategy = self._get_position_advance_strategy() if advance_pos_var else self._AdvanceStrategy.IGNORE
         inner_advance_pos_var = advance_strategy == self._AdvanceStrategy.INITIAL_RESET
 
+        def get_node_name():
+            """Helper to assert node name only generated when needed and only generated once"""
+            if getattr(get_node_name, 'node_name', None) is None:
+                get_node_name.node_name = next(node_name_generator)
+            return get_node_name.node_name
+
         if advance_strategy == self._AdvanceStrategy.INITIAL_RESET:
-            node_name = next(node_name_generator)
-            initial_position_name = self.INITIAL_POSITION_NAME_TEMPLATE.format(node_name=node_name)
+            initial_position_name = self.INITIAL_POSITION_NAME_TEMPLATE.format(node_name=get_node_name())
 
             # store initial position
             yield '{line_prefix}var {init_pos_name} = {pos_var_name};'.format(line_prefix=line_prefix,
                                                                               init_pos_name=initial_position_name,
                                                                               pos_var_name=pos_var_name)
 
-        yield '{line_prefix}repeat({repetition_count}) {{'.format(line_prefix=line_prefix,
-                                                                  repetition_count=self.repetition_count)
+        if isinstance(self.repetition_count, int):
+            yield '{line_prefix}repeat({repetition_count}) {{'.format(line_prefix=line_prefix,
+                                                                      repetition_count=self.repetition_count)
+        else:
+            # repeat requires a const-expression so we need to use a for loop for user reg vars
+            assert isinstance(self.repetition_count, str)
+            loop_var = self.FOR_LOOP_NAME_TEMPLATE.format(node_name=get_node_name())
+            yield '{line_prefix}var {loop_var};'.format(line_prefix=line_prefix, loop_var=loop_var)
+            yield ('{line_prefix}for({loop_var} = 0; '
+                   '{loop_var} < {repetition_count}; '
+                   '{loop_var} = {loop_var} + 1) {{').format(line_prefix=line_prefix,
+                                                             loop_var=loop_var,
+                                                             repetition_count=self.repetition_count)
+
         if advance_strategy == self._AdvanceStrategy.INITIAL_RESET:
             yield ('{body_prefix}{pos_var_name} = {init_pos_name};'
                    '').format(body_prefix=body_prefix,
