@@ -232,7 +232,7 @@ class Loop(Node):
                           waveform=self._waveform,
                           repetition_count=self.repetition_count,
                           repetition_parameter=self._repetition_parameter,
-                          measurements=self._measurements,
+                          measurements=None if self._measurements is None else list(self._measurements),
                           children=(child.copy_tree_structure() for child in self))
 
     def _get_measurement_windows(self) -> Mapping[str, np.ndarray]:
@@ -347,7 +347,7 @@ class Loop(Node):
                 # subprogram is balanced with the correct depth
                 i += 1
 
-            elif len(sub_program) == 1 and not sub_program._measurements:
+            elif sub_program._has_single_child_that_can_be_merged():
                 # subprogram is balanced but to deep and has no measurements -> we can "lift" the sub-sub-program
                 # TODO: There was a len(sub_sub_program) == 1 check here that I cannot explain
                 sub_program._merge_single_child()
@@ -360,14 +360,31 @@ class Loop(Node):
                 # we land in this case if the function gets called with depth == 0 and the current subprogram is a leaf
                 i += 1
 
+    def _has_single_child_that_can_be_merged(self) -> bool:
+        if len(self) == 1:
+            child = cast(Loop, self[0])
+            return not self._measurements or (child.repetition_count == 1 and child.repetition_parameter is None)
+        else:
+            return False
+
     def _merge_single_child(self):
-        """Lift the single child to current level"""
+        """Lift the single child to current level. Requires _has_single_child_that_can_be_merged to be true"""
         assert len(self) == 1, "bug: _merge_single_child called on loop with len != 1"
-        assert not self._measurements, "bug: _merge_single_child called on loop with measurements"
+        child = cast(Loop, self[0])
+
+        # if the child has a fixed repetition count of 1 the measurements can be merged
+        mergable_measurements = child.repetition_count == 1 and child.repetition_parameter is None
+
+        assert not self._measurements or mergable_measurements, "bug: _merge_single_child called on loop with measurements"
         assert not self._waveform, "bug: _merge_single_child called on loop with children and waveform"
 
-        child = cast(Loop, self[0])
         measurements = child._measurements
+        if self._measurements:
+            if measurements:
+                measurements.extend(self._measurements)
+            else:
+                measurements = self._measurements
+
         repetition_count = self.repetition_count * child.repetition_count
 
         if self._repetition_parameter is None and child._repetition_parameter is None:
@@ -434,7 +451,7 @@ class Loop(Node):
             for child in self:
                 child.cleanup(actions)
 
-        if 'merge_single_child' in actions and len(self) == 1 and not self._measurements:
+        if 'merge_single_child' in actions and self._has_single_child_that_can_be_merged():
             self._merge_single_child()
     
     def get_duration_structure(self) -> Tuple[int, Union[TimeType, tuple]]:
@@ -613,6 +630,9 @@ class _CompatibilityLevel(Enum):
     incompatible_fraction = 3
     incompatible_quantum = 4
 
+    def is_incompatible(self) -> bool:
+        return self in (self.incompatible_fraction, self.incompatible_quantum, self.incompatible_too_short)
+
 
 def _is_compatible(program: Loop, min_len: int, quantum: int, sample_rate: TimeType) -> _CompatibilityLevel:
     """ check whether program loop is compatible with awg requirements
@@ -634,6 +654,9 @@ def _is_compatible(program: Loop, min_len: int, quantum: int, sample_rate: TimeT
     if program.is_leaf():
         waveform_duration_in_samples = program.body_duration * sample_rate
         if waveform_duration_in_samples < min_len or (waveform_duration_in_samples / quantum).denominator != 1:
+            if program.repetition_parameter is not None:
+                warnings.warn("_is_compatible requires an action which drops volatility.",
+                              category=VolatileModificationWarning)
             return _CompatibilityLevel.action_required
         else:
             return _CompatibilityLevel.compatible
@@ -642,6 +665,9 @@ def _is_compatible(program: Loop, min_len: int, quantum: int, sample_rate: TimeT
                for sub_program in program):
             return _CompatibilityLevel.compatible
         else:
+            if program.repetition_parameter is not None:
+                warnings.warn("_is_compatible requires an action which drops volatility.",
+                              category=VolatileModificationWarning)
             return _CompatibilityLevel.action_required
 
 
@@ -652,11 +678,8 @@ def _make_compatible(program: Loop, min_len: int, quantum: int, sample_rate: Tim
     else:
         comp_levels = [_is_compatible(cast(Loop, sub_program), min_len, quantum, sample_rate)
                        for sub_program in program]
-        incompatible = any(comp_level in (_CompatibilityLevel.incompatible_fraction,
-                                          _CompatibilityLevel.incompatible_quantum,
-                                          _CompatibilityLevel.incompatible_too_short)
-                           for comp_level in comp_levels)
-        if incompatible:
+
+        if any(comp_level.is_incompatible() for comp_level in comp_levels):
             single_run = program.duration * sample_rate / program.repetition_count
             if (single_run / quantum).denominator == 1 and single_run >= min_len:
                 new_repetition_count = program.repetition_count
@@ -698,6 +721,9 @@ def make_compatible(program: Loop, minimal_waveform_length: int, waveform_quantu
                          min_len=minimal_waveform_length,
                          quantum=waveform_quantum,
                          sample_rate=sample_rate)
+
+    else:
+        assert comp_level == _CompatibilityLevel.compatible
 
 
 class MakeCompatibleWarning(ResourceWarning):

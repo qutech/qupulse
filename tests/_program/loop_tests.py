@@ -6,7 +6,7 @@ from string import ascii_uppercase
 
 from qupulse.utils.types import TimeType, time_from_float
 from qupulse._program._loop import Loop, MultiChannelProgram, _make_compatible, _is_compatible, _CompatibilityLevel,\
-    RepetitionWaveform, SequenceWaveform, make_compatible, MakeCompatibleWarning
+    RepetitionWaveform, SequenceWaveform, make_compatible, MakeCompatibleWarning, DroppedMeasurementWarning, VolatileModificationWarning
 from qupulse._program.instructions import InstructionBlock, ImmutableInstructionBlock
 from tests.pulses.sequencing_dummies import DummyWaveform
 from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
@@ -330,32 +330,6 @@ LOOP 1 times:
                                   Loop(waveform=wf3)])
         self.assertEqual(expected, root)
 
-    def test_remove_empty_loops(self):
-        wfs = [DummyWaveform(duration=i) for i in range(2)]
-
-        root = Loop(children=[
-            Loop(waveform=wfs[0]),
-            Loop(waveform=None),
-            Loop(children=[Loop(waveform=None)]),
-            Loop(children=[Loop(waveform=wfs[1])])
-        ])
-
-        expected = Loop(children=[
-            Loop(waveform=wfs[0]),
-            Loop(children=[Loop(waveform=wfs[1])])
-        ])
-
-        root.remove_empty_loops()
-
-        self.assertEqual(expected, root)
-
-        root = Loop(children=[
-            Loop(measurements=[('m', 0, 1)])
-        ])
-
-        with self.assertWarnsRegex(UserWarning, 'Dropping measurement'):
-            root.remove_empty_loops()
-
     def test_cleanup(self):
         wfs = [DummyWaveform(duration=i) for i in range(3)]
 
@@ -377,18 +351,29 @@ LOOP 1 times:
 
         self.assertEqual(expected, root)
 
+    def test_cleanup_single_rep(self):
+        wf = DummyWaveform(duration=1)
+        measurements = [('n', 0, 1)]
+
+        root = Loop(children=[Loop(waveform=wf, repetition_count=1)],
+                    measurements=measurements, repetition_count=10)
+
+        expected = Loop(waveform=wf, repetition_count=10, measurements=measurements)
+        root.cleanup()
+        self.assertEqual(expected, root)
+
     def test_cleanup_warnings(self):
         root = Loop(children=[
             Loop(measurements=[('m', 0, 1)])
         ])
 
-        with self.assertWarnsRegex(UserWarning, 'Dropping measurement'):
+        with self.assertWarnsRegex(DroppedMeasurementWarning, 'Dropping measurement'):
             root.cleanup()
 
         root = Loop(children=[
             Loop(measurements=[('m', 0, 1)], children=[Loop()])
         ])
-        with self.assertWarnsRegex(UserWarning, 'Dropping measurement since there is no waveform in children'):
+        with self.assertWarnsRegex(DroppedMeasurementWarning, 'Dropping measurement since there is no waveform in children'):
             root.cleanup()
 
 
@@ -539,6 +524,10 @@ LOOP 1 times:
 
 
 class ProgramWaveformCompatibilityTest(unittest.TestCase):
+    def test_is_compatible_warnings(self):
+        with self.assertWarns(VolatileModificationWarning):
+            raise NotImplementedError()
+    
     def test_is_compatible_incompatible(self):
         wf = DummyWaveform(duration=1.1)
 
