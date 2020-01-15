@@ -6,7 +6,7 @@ from string import ascii_uppercase
 
 from qupulse.utils.types import TimeType, time_from_float
 from qupulse._program._loop import Loop, MultiChannelProgram, _make_compatible, _is_compatible, _CompatibilityLevel,\
-    RepetitionWaveform, SequenceWaveform, make_compatible, MakeCompatibleWarning, DroppedMeasurementWarning
+    RepetitionWaveform, SequenceWaveform, make_compatible, MakeCompatibleWarning, DroppedMeasurementWarning, VolatileModificationWarning
 from qupulse._program.instructions import InstructionBlock, ImmutableInstructionBlock
 from tests.pulses.sequencing_dummies import DummyWaveform
 from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
@@ -524,6 +524,10 @@ LOOP 1 times:
 
 
 class ProgramWaveformCompatibilityTest(unittest.TestCase):
+    def test_is_compatible_warnings(self):
+        with self.assertWarns(VolatileModificationWarning):
+            raise NotImplementedError()
+    
     def test_is_compatible_incompatible(self):
         wf = DummyWaveform(duration=1.1)
 

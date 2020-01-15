@@ -630,6 +630,9 @@ class _CompatibilityLevel(Enum):
     incompatible_fraction = 3
     incompatible_quantum = 4
 
+    def is_incompatible(self) -> bool:
+        return self in (self.incompatible_fraction, self.incompatible_quantum, self.incompatible_too_short)
+
 
 def _is_compatible(program: Loop, min_len: int, quantum: int, sample_rate: TimeType) -> _CompatibilityLevel:
     """ check whether program loop is compatible with awg requirements
@@ -651,6 +654,9 @@ def _is_compatible(program: Loop, min_len: int, quantum: int, sample_rate: TimeT
     if program.is_leaf():
         waveform_duration_in_samples = program.body_duration * sample_rate
         if waveform_duration_in_samples < min_len or (waveform_duration_in_samples / quantum).denominator != 1:
+            if program.repetition_parameter is not None:
+                warnings.warn("_is_compatible requires an action which drops volatility.",
+                              category=VolatileModificationWarning)
             return _CompatibilityLevel.action_required
         else:
             return _CompatibilityLevel.compatible
@@ -659,6 +665,9 @@ def _is_compatible(program: Loop, min_len: int, quantum: int, sample_rate: TimeT
                for sub_program in program):
             return _CompatibilityLevel.compatible
         else:
+            if program.repetition_parameter is not None:
+                warnings.warn("_is_compatible requires an action which drops volatility.",
+                              category=VolatileModificationWarning)
             return _CompatibilityLevel.action_required
 
 
@@ -669,11 +678,8 @@ def _make_compatible(program: Loop, min_len: int, quantum: int, sample_rate: Tim
     else:
         comp_levels = [_is_compatible(cast(Loop, sub_program), min_len, quantum, sample_rate)
                        for sub_program in program]
-        incompatible = any(comp_level in (_CompatibilityLevel.incompatible_fraction,
-                                          _CompatibilityLevel.incompatible_quantum,
-                                          _CompatibilityLevel.incompatible_too_short)
-                           for comp_level in comp_levels)
-        if incompatible:
+
+        if any(comp_level.is_incompatible() for comp_level in comp_levels):
             single_run = program.duration * sample_rate / program.repetition_count
             if (single_run / quantum).denominator == 1 and single_run >= min_len:
                 new_repetition_count = program.repetition_count
@@ -715,6 +721,9 @@ def make_compatible(program: Loop, minimal_waveform_length: int, waveform_quantu
                          min_len=minimal_waveform_length,
                          quantum=waveform_quantum,
                          sample_rate=sample_rate)
+
+    else:
+        assert comp_level == _CompatibilityLevel.compatible
 
 
 class MakeCompatibleWarning(ResourceWarning):
