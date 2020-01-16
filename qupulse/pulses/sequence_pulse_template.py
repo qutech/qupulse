@@ -181,8 +181,7 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                                       for parameter_name in self.measurement_parameters}
             duration_parameters = {parameter_name: parameters[parameter_name].get_value()
                                    for parameter_name in self.duration.variables}
-            assert not volatile.intersection(measurement_mapping), "not supported"
-            assert not volatile.intersection(duration_parameters), "not supported"
+            assert not volatile.intersection(measurement_parameters.keys()), "not supported"
         except KeyError as e:
             raise ParameterNotProvidedException(e) from e
 
