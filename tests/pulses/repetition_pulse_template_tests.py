@@ -144,7 +144,7 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
                                                                     global_transformation=global_transformation,
                                                                     to_single_waveform=to_single_waveform,
                                                                     parent_loop=program.children[0], volatile=set())
-                        validate_parameter_constraints.assert_called_once_with(parameters=parameters)
+                        validate_parameter_constraints.assert_called_once_with(parameters=parameters, volatile=set())
                         get_repetition_count_value.assert_called_once_with(real_relevant_parameters)
                         get_meas.assert_called_once_with(real_relevant_parameters, measurement_mapping)
 
@@ -165,7 +165,7 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
                                    parent_loop=program, volatile=volatile)
 
         self.assertEqual(1, len(program.children))
-        internal_loop = program.children[0] # type: Loop
+        internal_loop = program[0]  # type: Loop
         self.assertEqual(repetitions, internal_loop.repetition_count)
 
         self.assertEqual(1, len(internal_loop))
@@ -173,6 +173,12 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         self.assertEqual(body.waveform, internal_loop[0].waveform)
 
         self.assert_measurement_windows_equal({'b': ([0, 2, 4], [1, 1, 1]), 'thy': ([2], [2])}, program.get_measurement_windows())
+
+        # done in MultiChannelProgram
+        program.cleanup()
+
+        self.assert_measurement_windows_equal({'b': ([0, 2, 4], [1, 1, 1]), 'thy': ([2], [2])},
+                                              program.get_measurement_windows())
 
         # ensure same result as from Sequencer
         sequencer = Sequencer()
@@ -272,6 +278,10 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         self.assertEqual((parameters, measurement_mapping, channel_mapping, internal_loop, volatile), body.create_program_calls[-1])
         self.assertEqual(body.waveform, internal_loop[0].waveform)
 
+        self.assert_measurement_windows_equal({'fire': ([0], [7.1]), 'b': ([0, 2, 4], [1, 1, 1])}, program.get_measurement_windows())
+
+        # MultiChannelProgram calls cleanup
+        program.cleanup()
         self.assert_measurement_windows_equal({'fire': ([0], [7.1]), 'b': ([0, 2, 4], [1, 1, 1])}, program.get_measurement_windows())
 
         # ensure same result as from Sequencer

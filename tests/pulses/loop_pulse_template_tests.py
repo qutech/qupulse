@@ -388,7 +388,7 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
                                                  global_transformation=global_transformation,
                                                  volatile=volatile)
 
-                    validate_parameter_constraints.assert_called_once_with(parameters=parameters)
+                    validate_parameter_constraints.assert_called_once_with(parameters=parameters, volatile=volatile)
                     get_measurement_windows.assert_called_once_with(expected_meas_params, measurement_mapping)
                     self.assertEqual(body_create_program.call_args_list, expected_create_program_calls)
 

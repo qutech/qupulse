@@ -431,6 +431,9 @@ class AtomicPulseTemplateTests(unittest.TestCase):
 
         self.assertEqual(expected_program, program)
 
+        # MultiChannelProgram calls cleanup
+        program.cleanup()
+
         # ensure same result as from Sequencer
         sequencer = Sequencer()
         sequencer.push(template, parameters=parameters, conditions={}, window_mapping=measurement_mapping,
