@@ -2,7 +2,7 @@ from typing import NamedTuple, Set, Callable, Dict, Tuple, Union, Iterable, Any
 from collections import defaultdict
 import warnings
 
-from qupulse.hardware.awgs.base import AWG
+from qupulse.hardware.awgs.old_base import AWG
 from qupulse.hardware.dacs import DAC
 from qupulse._program._loop import MultiChannelProgram, Loop
 from qupulse._program.instructions import AbstractInstructionBlock
