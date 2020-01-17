@@ -14,7 +14,7 @@ except ImportError:  # pragma: no cover
                   "If you wish to use it execute qupulse.hardware.awgs.install_requirements('tektronix')")
     raise
 
-from qupulse.hardware.awgs.base import AWG, AWGAmplitudeOffsetHandling, ProgramOverwriteException
+from qupulse.hardware.awgs.old_base import AWG, AWGAmplitudeOffsetHandling, ProgramOverwriteException
 from qupulse import ChannelID
 from qupulse._program._loop import Loop, make_compatible
 from qupulse._program.waveforms import Waveform as QuPulseWaveform
