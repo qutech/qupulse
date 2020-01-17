@@ -7,7 +7,7 @@ from copy import copy, deepcopy
 
 import numpy as np
 
-from qupulse.hardware.awgs.base import AWGAmplitudeOffsetHandling
+from qupulse.hardware.awgs.old_base import AWGAmplitudeOffsetHandling
 from qupulse.hardware.awgs.tabor import TaborProgram, TaborAWGRepresentation
 from tests.hardware.dummy_modules import import_package
 
