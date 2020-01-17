@@ -19,10 +19,9 @@ from qupulse.hardware.awgs.features.amplitude_offset_feature import ChannelAmpli
 from qupulse.hardware.awgs.features.device_mirror_feature import DeviceMirrorFeature
 from qupulse.utils.types import ChannelID
 from qupulse._program._loop import Loop, make_compatible
-
 from qupulse.hardware.util import voltage_to_uint16, make_combined_wave, find_positions, get_sample_times
-from qupulse.hardware.awgs.old_base import AWGAmplitudeOffsetHandling
-from qupulse.hardware.awgs.base_features import FeatureAble
+from qupulse.hardware.awgs.old_base import AWG, AWGAmplitudeOffsetHandling
+
 
 from qupulse.hardware.awgs.base import AWGDevice, AWGChannel, AWGChannelTuple
 
