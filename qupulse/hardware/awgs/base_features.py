@@ -21,6 +21,7 @@ class FeatureAble(Generic[FeatureType], ABC):
     can be called with __getitem__.
     """
 
+
     def __init__(self):
         super().__init__()
 
@@ -45,3 +46,4 @@ class FeatureAble(Generic[FeatureType], ABC):
     def features(self) -> Dict[FeatureType, Callable]:
         """Returns the dictionary with all features of a FeatureAble"""
         return copy(self._features)
+
