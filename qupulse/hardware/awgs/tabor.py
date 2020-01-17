@@ -19,6 +19,8 @@ from qupulse.hardware.awgs.base import AWG, AWGAmplitudeOffsetHandling
 from qupulse._program.tabor import TaborSegment, TaborException, TaborProgram, PlottableProgram, TaborSequencing,\
     make_combined_wave
 
+assert(sys.byteorder == 'little')
+
 
 __all__ = ['TaborAWGRepresentation', 'TaborChannelPair']
 
