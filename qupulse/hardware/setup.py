@@ -3,7 +3,7 @@ from collections import defaultdict
 import warnings
 import numbers
 
-from qupulse.hardware.awgs.base import AWG
+from qupulse.hardware.awgs.old_base import AWG
 from qupulse.hardware.dacs import DAC
 from qupulse._program._loop import Loop
 

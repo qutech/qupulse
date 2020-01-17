@@ -2,7 +2,7 @@ from typing import Tuple, Set, Dict
 from collections import deque
 
 
-from qupulse.hardware.awgs.base import AWG, ProgramOverwriteException
+from qupulse.hardware.awgs.old_base import AWG, ProgramOverwriteException
 from qupulse.hardware.dacs import DAC
 
 class DummyDAC(DAC):
