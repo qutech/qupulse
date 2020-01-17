@@ -18,7 +18,7 @@ from qupulse.utils.types import ChannelID
 from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
 from qupulse._program._loop import Loop, make_compatible
 from qupulse.hardware.util import voltage_to_uint16, make_combined_wave, find_positions, get_sample_times
-from qupulse.hardware.awgs.base import AWG, AWGAmplitudeOffsetHandling
+from qupulse.hardware.awgs.old_base import AWG, AWGAmplitudeOffsetHandling
 
 
 assert(sys.byteorder == 'little')
