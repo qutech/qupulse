@@ -531,13 +531,6 @@ class MultiChannelProgram:
 
                     stacks[new_channel_set] = (root_loop.copy_tree_structure(), deepcopy(stack))
 
-        def repeat_measurements(child_loop, rep_count):
-            duration_float = float(child_loop.duration)
-            if child_loop._measurements:
-                for r in range(rep_count):
-                    for name, begin, length in child_loop._measurements:
-                        yield (name, begin+r*duration_float, length)
-
     @property
     def programs(self) -> Dict[FrozenSet[ChannelID], Loop]:
         return self._programs
