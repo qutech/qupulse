@@ -182,6 +182,9 @@ class TaborChannelPairTests(TaborDummyBasedTest):
         cls.make_combined_wave = staticmethod(make_combined_wave)
         cls.TaborSequencing = TaborSequencing
 
+    def test_set_volatile_parameters(self):
+        raise NotImplementedError()
+
     def test_copy(self):
         channel_pair = self.TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
         with self.assertRaises(NotImplementedError):

@@ -3,6 +3,7 @@
  - General:
    - Improve `TimeType` consistency by leveraging str(float) for rounding by default.
    - Add support for sympy==1.5
+   - Add volatile parameters. Repetition counts can now be changed at runtime in some cases (useful for DNP)
 
  - Hardware:
    - Add a `measure_program` method to the DAC interface. This method is used by the QCoDeS integration.

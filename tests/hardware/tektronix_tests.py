@@ -352,6 +352,9 @@ class TektronixAWGTests(unittest.TestCase):
             self.assertEqual(tek_awg.default_program_repetition_mode, 'infinite')
             self.assertIs(tek_awg.device, dummy)
 
+    def test_set_volatile_parameters(self):
+        raise NotImplementedError()
+
     def test_clear_waveforms(self):
         tek_awg = self.make_awg()
 
