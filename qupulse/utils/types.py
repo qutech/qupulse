@@ -146,21 +146,29 @@ class TimeType:
     def __rfloordiv__(self, other: 'TimeType'):
         return self._value.__rfloordiv__(other._value)
 
-    @_with_other_as_time_type
-    def __le__(self, other: 'TimeType'):
-        return self._value.__le__(other._value)
+    def __le__(self, other):
+        if type(other) is TimeType:
+            return self._value.__le__(other._value)
+        else:
+            return self._value.__le__(other)
 
-    @_with_other_as_time_type
-    def __ge__(self, other: 'TimeType'):
-        return self._value.__ge__(other._value)
+    def __ge__(self, other):
+        if type(other) is TimeType:
+            return self._value.__ge__(other._value)
+        else:
+            return self._value.__ge__(other)
 
-    @_with_other_as_time_type
-    def __lt__(self, other: 'TimeType'):
-        return self._value.__lt__(other._value)
+    def __lt__(self, other):
+        if type(other) is TimeType:
+            return self._value.__lt__(other._value)
+        else:
+            return self._value.__lt__(other)
 
-    @_with_other_as_time_type
-    def __gt__(self, other: 'TimeType'):
-        return self._value.__gt__(other._value)
+    def __gt__(self, other):
+        if type(other) is TimeType:
+            return self._value.__gt__(other._value)
+        else:
+            return self._value.__gt__(other)
 
     def __eq__(self, other):
         if type(other) == type(self):

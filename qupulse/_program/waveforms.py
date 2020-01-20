@@ -14,6 +14,7 @@ import numpy as np
 from qupulse import ChannelID
 from qupulse.utils import checked_int_cast, isclose
 from qupulse.utils.types import TimeType, time_from_float
+from qupulse.utils.performance import is_monotonic
 from qupulse.comparable import Comparable
 from qupulse.expressions import ExpressionScalar
 from qupulse.pulses.interpolation import InterpolationStrategy
@@ -72,13 +73,13 @@ class Waveform(Comparable, metaclass=ABCMeta):
         """
         if len(sample_times) == 0:
             if output_array is None:
-                return np.zeros_like(sample_times)
+                return np.zeros_like(sample_times, dtype=float)
             elif len(output_array) == len(sample_times):
                 return output_array
             else:
                 raise ValueError('Output array length and sample time length are different')
 
-        if np.any(sample_times[:-1] >= sample_times[1:]):
+        if not is_monotonic(sample_times):
             raise ValueError('The sample times are not monotonously increasing')
         if sample_times[0] < 0 or sample_times[-1] > self.duration:
             raise ValueError('The sample times are not in the range [0, duration]')

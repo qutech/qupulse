@@ -33,6 +33,7 @@ from qupulse.utils import replace_multiple
 from qupulse._program.waveforms import Waveform
 from qupulse._program._loop import Loop
 from qupulse.hardware.awgs.base import ProgramEntry
+from qupulse.hardware.util import zhinst_voltage_to_uint16
 from qupulse.pulses.parameters import MappedParameter, ConstantParameter
 
 try:
@@ -104,20 +105,7 @@ class BinaryWaveform:
         Returns:
 
         """
-        all_input = (ch1, ch2, *markers)
-        assert any(x is not None for x in all_input)
-        size = {x.size for x in all_input if x is not None}
-        assert len(size) == 1, "Inputs have incompatible dimension"
-        size, = size
-        if ch1 is None:
-            ch1 = np.zeros(size)
-        if ch2 is None:
-            ch2 = np.zeros(size)
-        marker_data = np.zeros(size, dtype=np.uint16)
-        for idx, marker in enumerate(markers):
-            if marker is not None:
-                marker_data += np.uint16((marker > 0) * 2**idx)
-        return cls(zhinst.utils.convert_awg_waveform(ch1, ch2, marker_data))
+        return cls(zhinst_voltage_to_uint16(ch1, ch2, markers))
 
     def __len__(self):
         return self.data.size // 3
@@ -131,7 +119,7 @@ class BinaryWaveform:
     def fingerprint(self) -> str:
         return hashlib.sha256(self.data).hexdigest()
 
-    def to_csv_compatible_table(self):
+    def to_csv_compatible_table(self) -> np.ndarray:
         """The integer values in that file should be 18-bit unsigned integers with the two least significant bits
         being the markers. The values are mapped to 0 => -FS, 262143 => +FS, with FS equal to the full scale.
 
