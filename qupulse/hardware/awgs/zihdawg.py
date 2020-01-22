@@ -1,6 +1,6 @@
 from pathlib import Path
 import functools
-from typing import Tuple, Set, Callable, Optional, Dict, NamedTuple, Iterator
+from typing import Tuple, Set, Callable, Optional, Mapping, NamedTuple, Iterator
 from collections import OrderedDict
 from enum import Enum
 import weakref
@@ -20,6 +20,7 @@ from qupulse.utils.types import ChannelID, TimeType, time_from_float
 from qupulse._program._loop import Loop, make_compatible
 from qupulse._program.seqc import HDAWGProgramManager
 from qupulse.hardware.awgs.base import AWG, ChannelNotFoundException, AWGAmplitudeOffsetHandling
+from qupulse.pulses.parameters import ConstantParameter
 
 
 def valid_channel(function_object):
@@ -382,6 +383,14 @@ class HDAWGChannelPair(AWG):
         if self.awg_module.getInt('awgModule/elf/status') == 1:
             raise HDAWGUploadException()
 
+    def set_volatile_parameters(self, program_name: str, parameters: Mapping[str, ConstantParameter]):
+        """Set the values of parameters which were marked as volatile on program creation."""
+        new_register_values = self._program_manager.get_register_values_to_update_volatile_parameters(program_name,
+                                                                                                      parameters)
+        if self._current_program == program_name:
+            for register, value in new_register_values.items():
+                self.user_register(register, value)
+
     def remove(self, name: str) -> None:
         """Remove a program from the AWG.
 
@@ -423,6 +432,13 @@ class HDAWGChannelPair(AWG):
             if name not in self.programs:
                 raise HDAWGValueError('{} is unknown on {}'.format(name, self.identifier))
             self._current_program = name
+
+            # set the registers of initial repetition counts
+            for register, value in self._program_manager.get_register_values(name).items():
+                assert register not in (self._program_manager.GLOBAL_CONSTS['PROG_SEL_REGISTER'],
+                                        self._program_manager.GLOBAL_CONSTS['TRIGGER_REGISTER'])
+                self.user_register(register, value)
+
             self.user_register(self._program_manager.GLOBAL_CONSTS['PROG_SEL_REGISTER'] + 1,
                                self._program_manager.name_to_index(name) | int(self._program_manager.GLOBAL_CONSTS['NO_RESET_MASK'], 2))
         self.enable(True)

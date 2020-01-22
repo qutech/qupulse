@@ -13,7 +13,7 @@ Furthermore:
 classes that convert `Loop` objects"""
 
 from typing import Optional, Union, Sequence, Dict, Iterator, Tuple, Callable, NamedTuple, MutableMapping, Mapping,\
-    Iterable
+    Iterable, Any
 from types import MappingProxyType
 import abc
 import itertools
@@ -23,6 +23,7 @@ import os.path
 import hashlib
 from collections import OrderedDict
 import string
+import warnings
 
 import numpy as np
 from pathlib import Path
@@ -32,6 +33,7 @@ from qupulse.utils import replace_multiple
 from qupulse._program.waveforms import Waveform
 from qupulse._program._loop import Loop
 from qupulse.hardware.awgs.base import ProgramEntry
+from qupulse.pulses.parameters import MappedParameter, ConstantParameter
 
 try:
     import zhinst.utils
@@ -336,13 +338,16 @@ class UserRegisterManager:
         else:
             raise ValueError("No register available for %r" % obj)
 
-    def iter_used_registers(self) -> Iterator[Tuple[int, str]]:
+    def iter_used_register_names(self) -> Iterator[Tuple[int, str]]:
         """
 
         Returns:
             An iterator over (register index, register name) pairs
         """
         return ((register, self._name_template.format(register=register)) for register in self._used.keys())
+
+    def iter_used_register_values(self) -> Iterable[Tuple[int, Any]]:
+        return self._used.items()
 
 
 class HDAWGProgramEntry(ProgramEntry):
@@ -406,7 +411,7 @@ class HDAWGProgramEntry(ProgramEntry):
             '{indentation}var {user_reg_name} = getUserReg({register});'.format(indentation=indentation,
                                                                                 user_reg_name=user_reg_name,
                                                                                 register=register)
-            for register, user_reg_name in user_registers.iter_used_registers()
+            for register, user_reg_name in user_registers.iter_used_register_names()
         )
         self._user_registers = user_registers
 
@@ -431,6 +436,14 @@ class HDAWGProgramEntry(ProgramEntry):
                           self._user_register_source,
                           self._trigger_wait_code,
                           self._seqc_source])
+
+    def volatile_repetition_counts(self) -> Iterable[Tuple[int, MappedParameter]]:
+        """
+        Returns:
+            An iterator over the register and parameter
+        """
+        assert self._user_registers is not None, "compile not called"
+        return self._user_registers.iter_used_register_values()
 
     @property
     def name(self) -> str:
@@ -474,7 +487,7 @@ class HDAWGProgramManager:
 
     def __init__(self):
         self._waveform_memory = WaveformMemory()
-        self._programs = OrderedDict()
+        self._programs = OrderedDict()  # type: MutableMapping[str, HDAWGProgramEntry]
 
     @property
     def waveform_memory(self):
@@ -523,7 +536,12 @@ class HDAWGProgramManager:
 
         self._programs[name] = program_entry
 
-    def get_register_values_to_update_volatile_parameters(self, name: str, parameters: Mapping[str, float]) -> Mapping[int, int]:
+    def get_register_values(self, name: str) -> Mapping[int, int]:
+        return {register: int(parameter.get_value())
+                for register, parameter in self._programs[name].volatile_repetition_counts()}
+
+    def get_register_values_to_update_volatile_parameters(self, name: str,
+                                                          parameters: Mapping[str, ConstantParameter]) -> Mapping[int, int]:
         """
 
         Args:
@@ -533,7 +551,19 @@ class HDAWGProgramManager:
         Returns:
             A dict register->value that reflects the new parameter values
         """
-        raise NotImplementedError()
+        program_entry = self._programs[name]
+        result = {}
+        for register, parameter in program_entry.volatile_repetition_counts():
+            old_value = int(parameter.get_value())
+            parameter.update_constants(parameters)
+            new_value = parameter.get_value()
+            if int(new_value) != new_value:
+                warnings.warn("Rounding {} to {}".format(new_value, int(new_value)), RuntimeWarning)
+            new_value = int(new_value)
+
+            if new_value != old_value:
+                result[register] = new_value
+        return result
 
     @property
     def programs(self) -> Mapping[str, HDAWGProgramEntry]:

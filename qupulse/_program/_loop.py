@@ -298,13 +298,16 @@ class Loop(Node):
                 raise ValueError('Cannot split child {} as the repetition count is not larger 1')
 
         else:
-            for i, child in enumerate(reversed(self)):
+            # we cannot reverse enumerate
+            n_child = len(self) - 1
+            for reverse_idx, child in enumerate(reversed(self)):
                 if child.repetition_count > 1:
+                    forward_idx = n_child - reverse_idx
                     if child.repetition_parameter is None:
-                        child_index = i
+                        child_index = forward_idx
                         break
                     elif child_index is None:
-                        child_index = i
+                        child_index = forward_idx
             else:
                 if child_index is None:
                     raise RuntimeError('There is no child with repetition count > 1')
@@ -530,13 +533,6 @@ class MultiChannelProgram:
                     assert (chans.issuperset(new_channel_set))
 
                     stacks[new_channel_set] = (root_loop.copy_tree_structure(), deepcopy(stack))
-
-        def repeat_measurements(child_loop, rep_count):
-            duration_float = float(child_loop.duration)
-            if child_loop._measurements:
-                for r in range(rep_count):
-                    for name, begin, length in child_loop._measurements:
-                        yield (name, begin+r*duration_float, length)
 
     @property
     def programs(self) -> Dict[FrozenSet[ChannelID], Loop]:
