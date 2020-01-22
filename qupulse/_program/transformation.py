@@ -156,7 +156,14 @@ class LinearTransformation(Transformation):
 
 class OffsetTransformation(Transformation):
     def __init__(self, offsets: Mapping[ChannelID, Real]):
-        self._offsets = dict(offsets)
+        """Adds an offset to each channel specified in offsets.
+
+        Channels not in offsets are forewarded
+
+        Args:
+            offsets: Channel -> offset mapping
+        """
+        self._offsets = dict(offsets.items())
 
     def __call__(self, time: np.ndarray, data: Mapping[ChannelID, np.ndarray]) -> Mapping[ChannelID, np.ndarray]:
         return {channel: channel_values + self._offsets[channel] if channel in self._offsets else channel_values
@@ -169,13 +176,13 @@ class OffsetTransformation(Transformation):
         return input_channels
 
     @property
-    def compare_key(self) -> Mapping[ChannelID, Real]:
-        return self._offsets
+    def compare_key(self) -> frozenset:
+        return frozenset(self._offsets.items())
 
 
 class ScalingTransformation(Transformation):
     def __init__(self, factors: Mapping[ChannelID, Real]):
-        self._factors = dict(factors)
+        self._factors = dict(factors.items())
 
     def __call__(self, time: np.ndarray, data: Mapping[ChannelID, np.ndarray]) -> Mapping[ChannelID, np.ndarray]:
         return {channel: channel_values * self._factors[channel] if channel in self._factors else channel_values
@@ -188,8 +195,8 @@ class ScalingTransformation(Transformation):
         return input_channels
 
     @property
-    def compare_key(self) -> Mapping[ChannelID, Real]:
-        return self._factors
+    def compare_key(self) -> frozenset:
+        return frozenset(self._factors.items())
 
 
 
@@ -217,7 +224,7 @@ class ParallelConstantChannelTransformation(Transformation):
         """Set channel values to given values regardless their former existence
 
         Args:
-            channels:
+            channels: Channels present in this map are set to the given value.
         """
         self._channels = {channel: float(value)
                           for channel, value in channels.items()}

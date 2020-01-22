@@ -591,6 +591,7 @@ class SubsetWaveform(Waveform):
 
 class ArithmeticWaveform(Waveform):
     """Channels only present in one waveform have the operations neutral element on the other."""
+
     numpy_operator_map = {'+': np.add,
                           '-': np.subtract}
     operator_map = {'+': operator.add,
@@ -598,18 +599,19 @@ class ArithmeticWaveform(Waveform):
 
     rhs_only_map = {'+': operator.pos,
                     '-': operator.neg}
-    numpy_rhs_only_map = {'+': lambda x: x,
-                          '-': lambda x: np.negative(x, out=x)}
+    numpy_rhs_only_map = {'+': np.positive,
+                          '-': np.negative}
 
     def __init__(self,
                  lhs: Waveform,
                  arithmetic_operator: str,
                  rhs: Waveform):
+        super().__init__()
         self._lhs = lhs
         self._rhs = rhs
         self._arithmetic_operator = arithmetic_operator
 
-        assert np.isclose(self._lhs.duration, self._rhs.duration)
+        assert np.isclose(float(self._lhs.duration), float(self._rhs.duration))
         assert arithmetic_operator in self.operator_map
 
     @property
@@ -635,7 +637,7 @@ class ArithmeticWaveform(Waveform):
     def unsafe_sample(self,
                       channel: ChannelID,
                       sample_times: np.ndarray,
-                      output_array: Union[np.ndarray, None]=None) -> np.ndarray:
+                      output_array: Union[np.ndarray, None] = None) -> np.ndarray:
         if channel in self._lhs.defined_channels:
             lhs = self._lhs.unsafe_sample(channel=channel, sample_times=sample_times, output_array=output_array)
         else:
@@ -643,26 +645,26 @@ class ArithmeticWaveform(Waveform):
 
         if channel in self._rhs.defined_channels:
             rhs = self._rhs.unsafe_sample(channel=channel, sample_times=sample_times,
-                                          output_array=None if lhs else output_array)
+                                          output_array=None if lhs is not None else output_array)
         else:
             rhs = None
 
-        if rhs and lhs:
-            arithmetic_operator = self.operator_map[self._arithmetic_operator]
-            if not output_array:
+        if rhs is not None and lhs is not None:
+            arithmetic_operator = self.numpy_operator_map[self._arithmetic_operator]
+            if output_array is None:
                 output_array = lhs
             return arithmetic_operator(lhs, rhs, out=output_array)
 
         else:
-            return lhs or self.rhs_only_map[self._arithmetic_operator](lhs)
+            if lhs is None:
+                assert rhs is not None, "channel %r not in defined channels (internal bug)" % channel
+                return self.numpy_rhs_only_map[self._arithmetic_operator](rhs, out=output_array)
+            else:
+                return lhs
 
     def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> Waveform:
-        if channels not in self._lhs.defined_channels:
-            return self._rhs.unsafe_get_subset_for_channels(channels=channels)
-        elif channels not in self._rhs.defined_channels:
-            return self._lhs.unsafe_get_subset_for_channels(channels=channels)
-        else:
-            return SubsetWaveform(self, channels)
+        # TODO: optimization possible
+        return SubsetWaveform(self, channels)
 
     @property
     def compare_key(self) -> Tuple[str, Waveform, Waveform]:
@@ -673,9 +675,10 @@ class FunctorWaveform(Waveform):
     """Apply a channel wise functor that works inplace to all results"""
     def __init__(self, inner_waveform: Waveform, functor: Mapping[ChannelID, 'Callable']):
         self._inner_waveform = inner_waveform
-        self._functor = functor.copy()
+        self._functor = dict(functor.items())
 
-        assert set(functor.keys()) == inner_waveform.defined_channels
+        assert set(functor.keys()) == inner_waveform.defined_channels, ("There is no default identity mapping (yet)."
+                                                                        "File an issue on github if you need it.")
 
     @property
     def duration(self) -> TimeType:

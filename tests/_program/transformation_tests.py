@@ -41,7 +41,7 @@ class LinearTransformationTests(unittest.TestCase):
         out_chs = ('transformed_a', 'transformed_b')
         matrix = np.array([[1, -1, 0], [1, 1, 1]])
 
-        with self.assertRaises(AssertionError):
+        with self.assertRaisesRegex(ValueError, 'Shape'):
             LinearTransformation(matrix, in_chs[:-1], out_chs)
         trafo = LinearTransformation(matrix, in_chs, out_chs)
 
