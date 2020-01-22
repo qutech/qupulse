@@ -167,9 +167,8 @@ class TaborProgram:
         self._sequencer_tables = []
         self._advanced_sequencer_table = []
         self._volatile_parameter_mappings = dict()  # keys: volatile parameter names, entries: position as list:
-        #                                                           [adv(1)/seq(0) table, table num, position in table]
-        self._volatile_parameter_mapping_program = dict()  # keys: volatile parameter names, entries: position as list:
-        #                                                           [in parent(0)/child(1), pos in parent, pos in child]
+        #                      [in parent(1)/child(0), pos in parent, pos in child, occurs in seq_table(1) or not (0)]
+        #                                                        [adv(1)/seq(0) table, table num, position in table, 1]
 
         if self.program.repetition_count > 1:
             self.program.encapsulate()
@@ -258,16 +257,14 @@ class TaborProgram:
             position += 1
             if repetition_parameter is not None:
                 for para_name in repetition_parameter.expression.variables:
-                    self._volatile_parameter_mappings.setdefault(para_name, []).append([0, 0, position])
-                    self._volatile_parameter_mapping_program.setdefault(para_name, []).append([1, 0, position])
+                    self._volatile_parameter_mappings.setdefault(para_name, []).append([0, 0, position, 1])
 
         self._waveforms = tuple(waveforms.keys())
         self._sequencer_tables = [sequencer_table]
         self._advanced_sequencer_table = [(self.program.repetition_count, 1, 0)]
         if self.program.repetition_parameter is not None:
             for para_name in self.program.repetition_parameter.expression.variables:
-                self._volatile_parameter_mappings.setdefault(para_name, []).append([1, 0, 0])
-                self._volatile_parameter_mapping_program.setdefault(para_name, []).append([0, 0, 0])
+                self._volatile_parameter_mappings.setdefault(para_name, []).append([1, 0, 0, 1])
 
     def setup_advanced_sequence_mode(self) -> None:
         assert self.program.depth() > 1
@@ -346,13 +343,12 @@ class TaborProgram:
         advanced_sequencer_table = []
         sequencer_tables = []
         waveforms = OrderedDict()
-        table_number = -1
         position = -1
         adv_position = 0
         for sequencer_table_loop in self.program:
             current_sequencer_table = []
-            current_table_mapping = {}
-            table_number += 1
+            current_table_mapping_p = {}
+            current_table_mapping_t = {}
             for waveform, repetition_count, repetition_parameter in ((waveform_loop.waveform.get_subset_for_channels(self.__used_channels),
                                                 waveform_loop.repetition_count, waveform_loop.repetition_parameter)
                                                for waveform_loop in sequencer_table_loop):
@@ -365,25 +361,27 @@ class TaborProgram:
                 position += 1
                 if repetition_parameter is not None:
                     for para_name in repetition_parameter.expression.variables:
-                        current_table_mapping.setdefault(para_name, []).append([0, table_number, position])
-                        self._volatile_parameter_mapping_program.setdefault(para_name, []).append([1, adv_position,
-                                                                                                   position])
+                        current_table_mapping_p.setdefault(para_name, []).append([0, adv_position, position, 0])
+                        current_table_mapping_t.setdefault(para_name, []).append([0, adv_position, position, 1])
 
             if current_sequencer_table in sequencer_tables:
                 sequence_no = sequencer_tables.index(current_sequencer_table) + 1
+                keys = set(self._volatile_parameter_mappings).union(current_table_mapping_p)
+                temp = []
+                self._volatile_parameter_mappings = dict((k, self._volatile_parameter_mappings.get(k, temp)
+                                                          + current_table_mapping_p.get(k, temp)) for k in keys)
             else:
                 sequence_no = len(sequencer_tables) + 1
                 sequencer_tables.append(current_sequencer_table)
-                keys = set(self._volatile_parameter_mappings).union(current_table_mapping)
+                keys = set(self._volatile_parameter_mappings).union(current_table_mapping_t)
                 temp = []
                 self._volatile_parameter_mappings = dict((k, self._volatile_parameter_mappings.get(k, temp)
-                                                          + current_table_mapping.get(k, temp)) for k in keys)
+                                                          + current_table_mapping_t.get(k, temp)) for k in keys)
 
             advanced_sequencer_table.append((sequencer_table_loop.repetition_count, sequence_no, 0))
             if sequencer_table_loop.repetition_parameter is not None:
                 for para_name in sequencer_table_loop.repetition_parameter.expression.variables:
-                    self._volatile_parameter_mappings.setdefault(para_name, []).append([1, 0, adv_position])
-                    self._volatile_parameter_mapping_program.setdefault(para_name, []).append([0, adv_position, 0])
+                    self._volatile_parameter_mappings.setdefault(para_name, []).append([1, 0, adv_position, 1])
             adv_position += 1
             position = -1
 
@@ -1216,88 +1214,63 @@ class TaborChannelPair(AWG):
         # Change sequencing tables in active program and program memory
         if program.program.depth() == 1:
             for name in names:
-                for program_mapping in program._volatile_parameter_mapping_program[name]:
-                    if program_mapping[0] == 1:
+                for program_mapping in program._volatile_parameter_mappings[name]:
+                    if program_mapping[0] == 0:
                         program.program.children[program_mapping[2]].repetition_parameter.update_constants(parameters)
                         new_rep_count = int(program.program.children[program_mapping[2]].repetition_parameter.get_value())
                         program.program.children[program_mapping[2]].repetition_count = new_rep_count
-                        for table_mapping in program._volatile_parameter_mappings[name]:
-                            new_rep_count = int(program.program.children[table_mapping[1]].children[
-                                                    table_mapping[2]].repetition_parameter.get_value())
-                            program._sequencer_tables[table_mapping[1]][table_mapping[2]] = (new_rep_count,
+                        if program_mapping[3] == 1:
+                            program._sequencer_tables[program_mapping[1]][program_mapping[2]] = (new_rep_count,
                                                                                              program._sequencer_tables[
-                                                                                                 table_mapping[1]][
-                                                                                                 table_mapping[2]][1],
+                                                                                                 program_mapping[1]][
+                                                                                                 program_mapping[2]][1],
                                                                                              program._sequencer_tables[
-                                                                                                 table_mapping[1]][
-                                                                                                 table_mapping[2]][2])
+                                                                                                 program_mapping[1]][
+                                                                                                 program_mapping[2]][2])
                             if self._current_program == program_name:
-                                seg_num = self.read_sequence_tables()[table_mapping[1] + 1][1][table_mapping[2]]
-                                self.device.send_cmd(':SEQ:SEL {}'.format(table_mapping[1] + 2))
+                                seg_num = self.read_sequence_tables()[program_mapping[1] + 1][1][program_mapping[2]]
+                                self.device.send_cmd(':SEQ:SEL {}'.format(program_mapping[1] + 2))
                                 self.device.send_cmd(
-                                    ':SEQ:DEF {}, {}, {}, {}'.format(table_mapping[2], seg_num, new_rep_count, 0))
+                                    ':SEQ:DEF {}, {}, {}, {}'.format(program_mapping[2], seg_num, new_rep_count, 0))
                     else:  # I dont think there is a case where the else case is executed
                         assert program.program.repetition_parameter is not None
-                        print('You should not end up here... there is a bug in the code.')
+                        print('You should not end up here... this is a bug in the code.')
                         return
         else:
             assert program.program.depth() == 2
             for name in names:
-                for program_mapping in program._volatile_parameter_mapping_program[name]:
-                    if program_mapping[0] == 1:
+                for program_mapping in program._volatile_parameter_mappings[name]:
+                    if program_mapping[0] == 0:
                         program.program.children[program_mapping[1]].children[program_mapping[2]].repetition_parameter.update_constants(parameters)
                         new_rep_count = int(program.program.children[program_mapping[1]].children[program_mapping[2]].repetition_parameter.get_value())
                         program.program.children[program_mapping[1]].children[program_mapping[2]].repetition_count = new_rep_count
-                        for table_mapping in program._volatile_parameter_mappings[name]:
-                            if table_mapping[0] == 0:
-                                new_rep_count = int(program.program.children[table_mapping[1]].children[table_mapping[2]].repetition_parameter.get_value())
-                                program._sequencer_tables[table_mapping[1]][table_mapping[2]] = (new_rep_count,
-                                                                        program._sequencer_tables[table_mapping[1]]
-                                                                                                 [table_mapping[2]][1],
-                                                                        program._sequencer_tables[table_mapping[1]]
-                                                                                                 [table_mapping[2]][2])
-                                if self._current_program == program_name:
-                                    seg_num = self.read_sequence_tables()[table_mapping[1] + 1][1][table_mapping[2]]
-                                    self.device.send_cmd(':SEQ:SEL {}'.format(table_mapping[1] + 2))
-                                    self.device.send_cmd(
-                                        ':SEQ:DEF {}, {}, {}, {}'.format(table_mapping[2], seg_num, new_rep_count, 0))
-                            else:  # Also probably dont end up here except vol para occurs in parent and child
-                                new_rep_count = int(program.program.children[table_mapping[2]].repetition_parameter.get_value())
-                                program._advanced_sequencer_table[table_mapping[2]] = (new_rep_count,
-                                                                program._advanced_sequencer_table[table_mapping[2]][1],
-                                                                program._advanced_sequencer_table[table_mapping[2]][2])
-                                if self._current_program == program_name:
-                                    seq_num = self.read_advanced_sequencer_table()[1][table_mapping[2] + 1]
-                                    self.device.send_cmd(
-                                        ':ASEQ:DEF {}, {}, {}, {}'.format(table_mapping[2] + 1, seq_num, new_rep_count, 0))
+                        if program_mapping[3] == 1:
+                            program._sequencer_tables[program_mapping[1]][program_mapping[2]] = (new_rep_count,
+                                                                                             program._sequencer_tables[
+                                                                                                 program_mapping[1]]
+                                                                                             [program_mapping[2]][1],
+                                                                                             program._sequencer_tables[
+                                                                                                 program_mapping[1]]
+                                                                                             [program_mapping[2]][2])
+                            if self._current_program == program_name:
+                                seg_num = self.read_sequence_tables()[program_mapping[1] + 1][1][program_mapping[2]]
+                                self.device.send_cmd(':SEQ:SEL {}'.format(program_mapping[1] + 2))
+                                self.device.send_cmd(
+                                    ':SEQ:DEF {}, {}, {}, {}'.format(program_mapping[2], seg_num, new_rep_count, 0))
                     else:
-                        program.program.children[program_mapping[1]].repetition_parameter.update_constants(parameters)
-                        new_rep_count = int(program.program.children[program_mapping[1]].repetition_parameter.get_value())
-                        program.program.children[program_mapping[1]].repetition_count = new_rep_count
-                        for table_mapping in program._volatile_parameter_mappings[name]:
-                            if table_mapping[0] == 0:  # Also probably dont end up here except vol para occurs in parent and child
-                                new_rep_count = int(program.program.children[table_mapping[1]].children[
-                                                        table_mapping[2]].repetition_parameter.get_value())
-                                program._sequencer_tables[table_mapping[1]][table_mapping[2]] = (new_rep_count,
-                                                                        program._sequencer_tables[table_mapping[1]]
-                                                                                                 [table_mapping[2]][1],
-                                                                        program._sequencer_tables[table_mapping[1]]
-                                                                                                 [table_mapping[2]][2])
-                                if self._current_program == program_name:
-                                    seg_num = self.read_sequence_tables()[table_mapping[1] + 1][1][table_mapping[2]]
-                                    self.device.send_cmd(':SEQ:SEL {}'.format(table_mapping[1] + 2))
-                                    self.device.send_cmd(
-                                        ':SEQ:DEF {}, {}, {}, {}'.format(table_mapping[2], seg_num, new_rep_count, 0))
-                            else:
-                                new_rep_count = int(
-                                    program.program.children[table_mapping[2]].repetition_parameter.get_value())
-                                program._advanced_sequencer_table[table_mapping[2]] = (new_rep_count,
-                                                                 program._advanced_sequencer_table[table_mapping[2]][1],
-                                                                 program._advanced_sequencer_table[table_mapping[2]][2])
-                                if self._current_program == program_name:
-                                    seq_num = self.read_advanced_sequencer_table()[1][table_mapping[2] + 1]
-                                    self.device.send_cmd(
-                                        ':ASEQ:DEF {}, {}, {}, {}'.format(table_mapping[2] + 1, seq_num, new_rep_count, 0))
+                        program.program.children[program_mapping[2]].repetition_parameter.update_constants(parameters)
+                        new_rep_count = int(program.program.children[program_mapping[2]].repetition_parameter.get_value())
+                        program.program.children[program_mapping[2]].repetition_count = new_rep_count
+                        if program_mapping[3] == 1:
+                            program._advanced_sequencer_table[program_mapping[2]] = (new_rep_count,
+                                                                                   program._advanced_sequencer_table[
+                                                                                       program_mapping[2]][1],
+                                                                                   program._advanced_sequencer_table[
+                                                                                       program_mapping[2]][2])
+                            if self._current_program == program_name:
+                                seq_num = self.read_advanced_sequencer_table()[1][program_mapping[2] + 1]
+                                self.device.send_cmd(
+                                    ':ASEQ:DEF {}, {}, {}, {}'.format(program_mapping[2] + 1, seq_num, new_rep_count, 0))
 
     def set_marker_state(self, marker: int, active: bool) -> None:
         """Sets the marker state of this channel pair. According to the manual one cannot turn them off/on separately."""
