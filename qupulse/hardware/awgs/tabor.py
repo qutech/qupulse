@@ -1203,7 +1203,7 @@ class TaborChannelPair(AWG):
 
     def set_volatile_parameters(self, program_name: str, parameters: Mapping[str, ConstantParameter]):
         """Set the values of parameters which were marked as volatile on program creation."""
-        # TODO: Add documentation, clean up, define subfunctions, restructure this function to make it faster/more clever
+        # TODO: Add documentation and optimize
 
         waveform_to_segment_index, program = self._known_programs[program_name]
         names = [name for name in [*parameters] if name in [*program._volatile_parameter_mappings]]
