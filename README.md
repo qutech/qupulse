@@ -1,7 +1,8 @@
 # qupulse: A Quantum compUting PULse parametrization and SEquencing framework
-[![Coverage Status](https://coveralls.io/repos/qutech/qc-toolkit/badge.svg?branch=master&service=github)](https://coveralls.io/github/qutech/qc-toolkit?branch=master)
+[![Coverage Status](https://coveralls.io/repos/github/qutech/qupulse/badge.svg?branch=master)](https://coveralls.io/github/qutech/qupulse?branch=master)
 [![Build Status](https://travis-ci.org/qutech/qupulse.svg?branch=master)](https://travis-ci.org/qutech/qupulse)
-[![Documentation Status](https://readthedocs.org/projects/qc-toolkit/badge/?version=latest)](http://qc-toolkit.readthedocs.org/en/latest/?badge=latest)
+[![Documentation Status](https://readthedocs.org/projects/qupulse/badge/?version=latest)](http://qupulse.readthedocs.org/en/latest/?badge=latest)
+[![DOI](https://zenodo.org/badge/29915259.svg)](https://zenodo.org/badge/latestdoi/29915259)
 
 The qupulse project aims to produce a software toolkit facilitating experiments involving pulse driven state manipulation of physical qubits.
 
@@ -38,8 +39,8 @@ Alternatively, the current development version of qupulse can be installed by ex
 pip3 install .
 ```
 
-qupulse is developed using Python 3.6 and tested on 3.4 - 3.6. It relies on some external Python packages as dependencies; 
-`requirements.txt` lists the versions of these qupulse is developed against and tested with. 
+qupulse is developed using Python 3.6 and tested on 3.5 - 3.7 It relies on some external Python packages as dependencies; 
+`requirements.txt` lists the versions of these qupulse is developed against. 
 We intentionally did not restrict versions of dependencies in the install scripts to not unnecessarily prevent usage of
 newer releases of dependencies that might be compatible. However, if qupulse does encounter problems with a particular dependency version,
 try installing the version listed in `requirements.txt`.   
@@ -51,7 +52,7 @@ The data acquisition backend for AlazarTech cards needs a package that unfortuna
 The optional script *tests/utils/syntax_check.py* invokes pyflakes to perform a static code analysis, so pyflakes should be installed if its usage is intended.
 
 ## Documentation
-You can find documentation on how to use this library on [readthedocs](http://qc-toolkit.readthedocs.io/en/latest/) and [IPython notebooks with examples in this repo](doc/source/examples)
+You can find documentation on how to use this library on [readthedocs](https://qupulse.readthedocs.io/en/latest/) and [IPython notebooks with examples in this repo](doc/source/examples)
 
 ## Folder Structure
 The repository primarily consists of the folders `qupulse` (toolkit core code) and `tests` (toolkit core tests). Additional parts of the project reside in `MATLAB` (MATLAB interface) and `doc` (configuration and source files to build documentation)  

@@ -184,8 +184,11 @@ class dummy_atsaverage(dummy_package):
             minimum_record_size = 256
             def __init__(self):
                 self._startAcquisition_calls = []
+                self._applyConfiguration_calls = []
             def startAcquisition(self, x: int):
                 self._startAcquisition_calls.append(x)
+            def applyConfiguration(self, config):
+                self._applyConfiguration_calls.append(config)
     class config(dummy_package):
         class CaptureClockConfig:
             def numeric_sample_rate(self, card):

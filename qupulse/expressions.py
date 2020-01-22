@@ -15,6 +15,7 @@ import numpy
 from qupulse.serialization import AnonymousSerializable
 from qupulse.utils.sympy import sympify, to_numpy, recursive_substitution, evaluate_lambdified,\
     get_most_simple_representation, get_variables
+from qupulse.utils.types import TimeType
 
 __all__ = ["Expression", "ExpressionVariableMissingException", "ExpressionScalar", "ExpressionVector", "ExpressionLike"]
 
@@ -45,7 +46,7 @@ class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
     def _parse_evaluate_numeric_result(self,
                                        result: Union[Number, numpy.ndarray],
                                        call_arguments: Any) -> Union[Number, numpy.ndarray]:
-        allowed_types = (float, numpy.number, int, complex, bool, numpy.bool_)
+        allowed_types = (float, numpy.number, int, complex, bool, numpy.bool_, TimeType)
         if isinstance(result, tuple):
             result = numpy.array(result)
         if isinstance(result, numpy.ndarray):
@@ -56,7 +57,7 @@ class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
                 if obj_types == {sympy.Float} or obj_types == {sympy.Float, sympy.Integer}:
                     return result.astype(float)
                 elif obj_types == {sympy.Integer}:
-                    return result.astype(np.int64)
+                    return result.astype(numpy.int64)
                 else:
                     raise NonNumericEvaluation(self, result, call_arguments)
         elif isinstance(result, allowed_types):
@@ -240,6 +241,11 @@ class ExpressionScalar(Expression):
     def __repr__(self) -> str:
         return 'Expression({})'.format(repr(self._original_expression))
 
+    def __format__(self, format_spec):
+        if format_spec == '':
+            return str(self)
+        return format(float(self), format_spec)
+    
     @property
     def variables(self) -> Sequence[str]:
         return self._variables
@@ -266,7 +272,12 @@ class ExpressionScalar(Expression):
 
     def __eq__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> bool:
         """Enable comparisons with Numbers"""
+        # sympy's __eq__ checks for structural equality to be consistent regarding __hash__ so we do that too
+        # see https://github.com/sympy/sympy/issues/18054#issuecomment-566198899
         return self._sympified_expression == self._sympify(other)
+
+    def __hash__(self) -> int:
+        return hash(self._sympified_expression)
 
     def __add__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> 'ExpressionScalar':
         return self.make(self._sympified_expression.__add__(self._sympify(other)))

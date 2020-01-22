@@ -12,15 +12,10 @@ def extract_version(version_file):
     raise RuntimeError("Unable to find version string.")
 
 
-if sys.version_info < (3, 4):
-    sys.stderr.write('ERROR: You need Python 3.4 or later '
+if sys.version_info < (3, 5):
+    sys.stderr.write('ERROR: You need Python 3.5 or later '
                      'to install the qupulse package.\n')
     exit(1)
-
-if sys.version_info < (3, 5):
-    requires_typing = ['typing==3.5.0']
-else:
-    requires_typing = []
 
 packages = [package for package in find_packages()
             if package.startswith('qupulse')] + ['qctoolkit']
@@ -40,15 +35,18 @@ setup(name='qupulse',
       author='Quantum Technology Group and Chair of Software Engineering, RWTH Aachen University',
       package_dir={'qupulse': 'qupulse', 'qctoolkit': 'qctoolkit'},
       packages=packages,
-      python_requires='>=3.4',
-      install_requires=['sympy>=1.1.1', 'numpy', 'cached_property'] + requires_typing,
+      python_requires='>=3.5',
+      install_requires=['sympy>=1.1.1', 'numpy', 'cached_property', 'more_itertools'],
       extras_require={
           'plotting': ['matplotlib'],
           'VISA': ['pyvisa'],
           'tabor-instruments': ['pytabor>=1.0.1', 'teawg'],
-          'Faster-fractions': ['gmpy2']
+          'zurich-instruments': ['zhinst'],
+          'Faster-fractions': ['gmpy2'],
+          'tektronix': 'tek_awg>=0.2.1'
       },
       test_suite="tests",
+      tests_require=['pytest_benchmark'],
       classifiers=[
           "Programming Language :: Python :: 3",
           "License :: OSI Approved :: MIT License",

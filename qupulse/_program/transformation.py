@@ -212,6 +212,32 @@ except ImportError:
     pass
 
 
+class ParallelConstantChannelTransformation(Transformation):
+    def __init__(self, channels: Mapping[ChannelID, Real]):
+        """Set channel values to given values regardless their former existence
+
+        Args:
+            channels:
+        """
+        self._channels = {channel: float(value)
+                          for channel, value in channels.items()}
+
+    def __call__(self, time: np.ndarray, data: Mapping[ChannelID, np.ndarray]) -> Mapping[ChannelID, np.ndarray]:
+        overwritten = {channel: np.full_like(time, fill_value=value, dtype=float)
+                       for channel, value in self._channels.items()}
+        return {**data, **overwritten}
+
+    @property
+    def compare_key(self) -> Tuple[Tuple[ChannelID, float], ...]:
+        return tuple(sorted(self._channels.items()))
+
+    def get_input_channels(self, output_channels: Set[ChannelID]) -> Set[ChannelID]:
+        return output_channels - self._channels.keys()
+
+    def get_output_channels(self, input_channels: Set[ChannelID]) -> Set[ChannelID]:
+        return input_channels | self._channels.keys()
+
+
 def chain_transformations(*transformations: Transformation) -> Transformation:
     parsed_transformations = []
     for transformation in transformations:

@@ -45,6 +45,9 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
     called instantiation of the PulseTemplate and achieved by invoking the sequencing process.
     """
 
+    """This is not stable"""
+    _DEFAULT_FORMAT_SPEC = 'identifier'
+
     def __init__(self, *,
                  identifier: Optional[str]) -> None:
         super().__init__(identifier=identifier)
@@ -98,9 +101,9 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
         """Returns an expression giving the integral over the pulse."""
 
     def create_program(self, *,
-                       parameters: Optional[Dict[str, Union[Parameter, float, Expression, str, Real]]]=None,
-                       measurement_mapping: Optional[Dict[str, Optional[str]]]=None,
-                       channel_mapping: Optional[Dict[ChannelID, Optional[ChannelID]]]=None,
+                       parameters: Optional[Mapping[str, Union[Parameter, float, Expression, str, Real]]]=None,
+                       measurement_mapping: Optional[Mapping[str, Optional[str]]]=None,
+                       channel_mapping: Optional[Mapping[ChannelID, Optional[ChannelID]]]=None,
                        global_transformation: Optional[Transformation]=None,
                        to_single_waveform: Set[Union[str, 'PulseTemplate']]=None) -> Optional['Loop']:
         """Translates this PulseTemplate into a program Loop.
@@ -128,9 +131,9 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
         if to_single_waveform is None:
             to_single_waveform = set()
 
-        for channel in self.defined_channels:
-            if channel not in channel_mapping:
-                channel_mapping[channel] = channel
+        # make sure all channels are mapped
+        complete_channel_mapping = {channel: channel for channel in self.defined_channels}
+        complete_channel_mapping.update(channel_mapping)
 
         non_unique_targets = {channel
                               for channel, count in collections.Counter(channel_mapping.values()).items()
@@ -139,21 +142,20 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
             raise ValueError('The following channels are mapped to twice', non_unique_targets)
 
         # make sure all values in the parameters dict are of type Parameter
-        for (key, value) in parameters.items():
-            if not isinstance(value, Parameter):
-                parameters[key] = ConstantParameter(value)
+        parameters = {key: value if isinstance(value, Parameter) else ConstantParameter(value)
+                      for key, value in parameters.items()}
 
         root_loop = Loop()
         # call subclass specific implementation
         self._create_program(parameters=parameters,
                              measurement_mapping=measurement_mapping,
-                             channel_mapping=channel_mapping,
+                             channel_mapping=complete_channel_mapping,
                              global_transformation=global_transformation,
                              to_single_waveform=to_single_waveform,
                              parent_loop=root_loop)
 
         if root_loop.waveform is None and len(root_loop.children) == 0:
-            return None # return None if no program
+            return None  # return None if no program
         return root_loop
 
     @abstractmethod
@@ -218,6 +220,29 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
                                           to_single_waveform=to_single_waveform,
                                           global_transformation=global_transformation,
                                           parent_loop=parent_loop)
+
+    def __format__(self, format_spec: str):
+        if format_spec == '':
+            format_spec = self._DEFAULT_FORMAT_SPEC
+        formatted = []
+        for attr in format_spec.split(';'):
+            value = getattr(self, attr)
+            if value is None:
+                continue
+            # the repr(str(value)) is to avoid very deep nesting. If needed one should use repr
+            formatted.append('{attr}={value}'.format(attr=attr, value=repr(str(value))))
+        type_name = type(self).__name__
+        return '{type_name}({attrs})'.format(type_name=type_name, attrs=', '.join(formatted))
+
+    def __str__(self):
+        return format(self)
+
+    def __repr__(self):
+        type_name = type(self).__name__
+        kwargs = ','.join('%s=%r' % (key, value)
+                          for key, value in self.get_serialization_data().items()
+                          if key.isidentifier() and value is not None)
+        return '{type_name}({kwargs})'.format(type_name=type_name, kwargs=kwargs)
 
     def __add__(self, other: ExpressionLike):
         from qupulse.pulses.arithmetic_pulse_template import ArithmeticPulseTemplate

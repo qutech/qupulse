@@ -2,6 +2,7 @@
 from typing import Optional, Set, Dict, Union, List, Any, Tuple
 import itertools
 import numbers
+import collections
 
 from qupulse.utils.types import ChannelID
 from qupulse.expressions import Expression, ExpressionScalar
@@ -25,19 +26,23 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
     """This class can be used to remap parameters, the names of measurement windows and the names of channels. Besides
     the standard constructor, there is a static member function from_tuple for convenience. The class also allows
     constraining parameters by deriving from ParameterConstrainer"""
+
+    ALLOW_PARTIAL_PARAMETER_MAPPING = True
+    """Default value for allow_partial_parameter_mapping of the __init__ method."""
+
     def __init__(self, template: PulseTemplate, *,
                  identifier: Optional[str]=None,
                  parameter_mapping: Optional[Dict[str, str]]=None,
                  measurement_mapping: Optional[Dict[str, str]] = None,
                  channel_mapping: Optional[Dict[ChannelID, ChannelID]] = None,
                  parameter_constraints: Optional[List[str]]=None,
-                 allow_partial_parameter_mapping: bool=False,
+                 allow_partial_parameter_mapping: bool = None,
                  registry: PulseRegistryType=None) -> None:
         """Standard constructor for the MappingPulseTemplate.
 
         Mappings that are not specified are defaulted to identity mappings. Channels and measurement names of the
         encapsulated template can be mapped partially by default. F.i. if channel_mapping only contains one of two
-        channels the other channel name is mapped to itself.
+        channels the other channel name is mapped to itself. Channels that are mapped to None are dropped.
         However, if a parameter mapping is specified and one or more parameters are not mapped a MissingMappingException
         is raised. To allow partial mappings and enable the same behaviour as for the channel and measurement name
         mapping allow_partial_parameter_mapping must be set to True.
@@ -46,12 +51,15 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         :param template: The encapsulated pulse template whose parameters, measurement names and channels are mapped
         :param parameter_mapping: if not none, mappings for all parameters must be specified
         :param measurement_mapping: mappings for other measurement names are inserted
-        :param channel_mapping: mappings for other channels are auto inserted
+        :param channel_mapping: mappings for other channels are auto inserted. Mapping to None drops the channel.
         :param parameter_constraints:
-        :param allow_partial_parameter_mapping:
+        :param allow_partial_parameter_mapping: If None the value of the class variable ALLOW_PARTIAL_PARAMETER_MAPPING
         """
         PulseTemplate.__init__(self, identifier=identifier)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
+
+        if allow_partial_parameter_mapping is None:
+            allow_partial_parameter_mapping = self.ALLOW_PARTIAL_PARAMETER_MAPPING
 
         if parameter_mapping is None:
             parameter_mapping = dict((par, par) for par in template.parameter_names)
@@ -77,14 +85,25 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         measurement_mapping = dict(itertools.chain(((name, name) for name in missing_name_mappings),
                                                    measurement_mapping.items()))
 
-        channel_mapping = dict() if channel_mapping is None else channel_mapping
+        # we copy to modify in place
+        channel_mapping = dict() if channel_mapping is None else channel_mapping.copy()
         internal_channels = template.defined_channels
         mapped_internal_channels = set(channel_mapping.keys())
         if mapped_internal_channels - internal_channels:
             raise UnnecessaryMappingException(template,mapped_internal_channels - internal_channels)
+
+        # fill up implicit mappings (unchanged channels)
         missing_channel_mappings = internal_channels - mapped_internal_channels
-        channel_mapping = dict(itertools.chain(((name, name) for name in missing_channel_mappings),
-                                               channel_mapping.items()))
+        for name in missing_channel_mappings:
+            channel_mapping[name] = name
+
+        # None is an allowed overlapping target as it marks dropped channels
+        overlapping_targets = {channel
+                               for channel, n in collections.Counter(channel_mapping.values()).items()
+                               if n > 1 and channel is not None}
+        if overlapping_targets:
+            raise ValueError('Cannot map multiple channels to the same target(s) %r' % overlapping_targets,
+                             channel_mapping)
 
         if isinstance(template, MappingPulseTemplate) and template.identifier is None:
             # avoid nested mappings
@@ -104,14 +123,17 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         self.__channel_mapping = channel_mapping
         self._register(registry=registry)
 
-    @staticmethod
-    def from_tuple(mapping_tuple: MappingTuple) -> 'MappingPulseTemplate':
+    @classmethod
+    def from_tuple(cls, mapping_tuple: MappingTuple) -> 'MappingPulseTemplate':
         """Construct a MappingPulseTemplate from a tuple of mappings. The mappings are automatically assigned to the
         mapped elements based on their content.
         :param mapping_tuple: A tuple of mappings
         :return: Constructed MappingPulseTemplate
         """
         template, *mappings = mapping_tuple
+
+        if not mappings:
+            return template
 
         parameter_mapping = None
         measurement_mapping = None
@@ -127,7 +149,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                     mapped <= template.defined_channels)) > 1:
                 raise AmbiguousMappingException(template, mapping)
 
-            if mapped == template.parameter_names:
+            if mapped <= template.parameter_names:
                 if parameter_mapping:
                     raise MappingCollisionException(template, object_type='parameter',
                                                     mapped=template.parameter_names,
@@ -147,10 +169,10 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                 channel_mapping = mapping
             else:
                 raise ValueError('Could not match mapping to mapped objects: {}'.format(mapping))
-        return MappingPulseTemplate(template,
-                                    parameter_mapping=parameter_mapping,
-                                    measurement_mapping=measurement_mapping,
-                                    channel_mapping=channel_mapping)
+        return cls(template,
+                   parameter_mapping=parameter_mapping,
+                   measurement_mapping=measurement_mapping,
+                   channel_mapping=channel_mapping)
 
     @property
     def template(self) -> PulseTemplate:
@@ -165,7 +187,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         return self.__parameter_mapping
 
     @property
-    def channel_mapping(self) -> Dict[ChannelID, ChannelID]:
+    def channel_mapping(self) -> Dict[ChannelID, Optional[ChannelID]]:
         return self.__channel_mapping
 
     @property
@@ -182,7 +204,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
 
     @property
     def defined_channels(self) -> Set[ChannelID]:
-        return {self.__channel_mapping[k] for k in self.template.defined_channels}
+        return {self.__channel_mapping[k] for k in self.template.defined_channels} - {None}
 
     @property
     def duration(self) -> Expression:
@@ -222,36 +244,69 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         # return MappingPulseTemplate(template=serializer.deserialize(template),
         #                             **kwargs)
 
-    def map_parameters(self,
-                       parameters: Dict[str, Union[Parameter, numbers.Real]]) -> Dict[str, Parameter]:
+    def _validate_parameters(self, parameters: Dict[str, Union[Parameter, numbers.Real]]):
+        missing = set(self.__external_parameters) - set(parameters.keys())
+        if missing:
+            raise ParameterNotProvidedException(missing.pop())
+        self.validate_parameter_constraints(parameters=parameters)
+
+    def map_parameter_values(self, parameters: Dict[str, numbers.Real]) -> Dict[str, numbers.Real]:
         """Map parameter values according to the defined mappings.
 
         Args:
-            parameters (Dict(str -> Parameter)): A mapping of parameter names to Parameter
-                objects/values.
+            parameters: Dictionary with numeric values
+        Returns:
+            A new dictionary with mapped numeric values.
+        """
+        self._validate_parameters(parameters=parameters)
+        return {parameter: mapping_function.evaluate_numeric(**parameters)
+                for parameter, mapping_function in self.__parameter_mapping.items()}
+
+    def map_parameter_objects(self, parameters: Dict[str, Parameter]) ->  Dict[str, Parameter]:
+        """Map parameter objects (instances of Parameter class) according to the defined mappings.
+
+        Args:
+            parameters: Dictionary with parameter objects
+        Returns:
+            A new dictionary with mapped parameter objects
+        """
+        self._validate_parameters(parameters=parameters)
+        return {parameter: MappedParameter(mapping_function,
+                                           {name: parameters[name] for name in mapping_function.variables})
+                for (parameter, mapping_function) in self.__parameter_mapping.items()}
+
+    def map_parameters(self,
+                       parameters: Dict[str, Union[Parameter, numbers.Real]]) -> Dict[str,
+                                                                                      Union[Parameter, numbers.Real]]:
+        """Map parameter values according to the defined mappings.
+
+        Args:
+            parameters: A mapping of parameter names to parameter objects/values.
         Returns:
             A new dictionary which maps parameter names to parameter values which have been
             mapped according to the mappings defined for template.
         """
-        missing = set(self.__external_parameters) - set(parameters.keys())
-        if missing:
-            raise ParameterNotProvidedException(missing.pop())
+        if not parameters and self.__parameter_mapping:
+            raise ValueError('Cannot infer type of return value (numeric or symbolic)')
 
-        self.validate_parameter_constraints(parameters=parameters)
-        if all(isinstance(parameter, Parameter) for parameter in parameters.values()):
-            return {parameter: MappedParameter(mapping_function, {name: parameters[name]
-                                                                  for name in mapping_function.variables})
-                    for (parameter, mapping_function) in self.__parameter_mapping.items()}
-        if all(isinstance(parameter, numbers.Real) for parameter in parameters.values()):
-            return {parameter: mapping_function.evaluate_numeric(**parameters)
-                    for parameter, mapping_function in self.__parameter_mapping.items()}
-        raise TypeError('Values of parameter dict are neither all Parameter nor Real')
+        elif all(isinstance(parameter, numbers.Real) for parameter in parameters.values()):
+            return self.map_parameter_values(parameters=parameters)
+
+        elif all(isinstance(parameter, Parameter) for parameter in parameters.values()):
+            return self.map_parameter_objects(parameters=parameters)
+
+        else:
+            raise TypeError('Values of parameter dict are neither all Parameter nor Real')
 
     def get_updated_measurement_mapping(self, measurement_mapping: Dict[str, str]) -> Dict[str, str]:
         return {k: measurement_mapping[v] for k, v in self.__measurement_mapping.items()}
 
-    def get_updated_channel_mapping(self, channel_mapping: Dict[ChannelID, ChannelID]) -> Dict[ChannelID, ChannelID]:
-        return {inner_ch: channel_mapping[outer_ch] for inner_ch, outer_ch in self.__channel_mapping.items()}
+    def get_updated_channel_mapping(self, channel_mapping: Dict[ChannelID,
+                                                                Optional[ChannelID]]) -> Dict[ChannelID,
+                                                                                              Optional[ChannelID]]:
+        # do not look up the mapped outer channel if it is None (this marks a deleted channel)
+        return {inner_ch: None if outer_ch is None else channel_mapping[outer_ch]
+                for inner_ch, outer_ch in self.__channel_mapping.items()}
 
     def build_sequence(self,
                        sequencer: Sequencer,
@@ -261,7 +316,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                        channel_mapping: Dict[ChannelID, ChannelID],
                        instruction_block: InstructionBlock) -> None:
         self.template.build_sequence(sequencer,
-                                     parameters=self.map_parameters(parameters),
+                                     parameters=self.map_parameter_objects(parameters),
                                      conditions=conditions,
                                      measurement_mapping=self.get_updated_measurement_mapping(measurement_mapping),
                                      channel_mapping=self.get_updated_channel_mapping(channel_mapping),
@@ -275,7 +330,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
                                  parent_loop: Loop) -> None:
         # parameters are validated in map_parameters() call, no need to do it here again explicitly
-        self.template._create_program(parameters=self.map_parameters(parameters),
+        self.template._create_program(parameters=self.map_parameter_objects(parameters),
                                       measurement_mapping=self.get_updated_measurement_mapping(measurement_mapping),
                                       channel_mapping=self.get_updated_channel_mapping(channel_mapping),
                                       global_transformation=global_transformation,
@@ -287,14 +342,14 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                        channel_mapping: Dict[ChannelID, ChannelID]) -> Waveform:
         """This gets called if the parent is atomic"""
         return self.template.build_waveform(
-            parameters=self.map_parameters(parameters),
+            parameters=self.map_parameter_values(parameters),
             channel_mapping=self.get_updated_channel_mapping(channel_mapping))
 
     def get_measurement_windows(self,
                                 parameters: Dict[str, numbers.Real],
                                 measurement_mapping: Dict[str, Optional[str]]) -> List:
         return self.template.get_measurement_windows(
-            parameters=self.map_parameters(parameters=parameters),
+            parameters=self.map_parameter_values(parameters=parameters),
             measurement_mapping=self.get_updated_measurement_mapping(measurement_mapping=measurement_mapping)
         )
 
@@ -302,7 +357,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                       parameters: Dict[str, Parameter],
                       conditions: Dict[str, Condition]) -> bool:
         return self.template.requires_stop(
-            self.map_parameters(parameters),
+            self.map_parameter_objects(parameters),
             conditions
         )
 
@@ -319,14 +374,15 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
             if isinstance(parameter_mapping[i], ExpressionScalar):
                 parameter_mapping[i] = parameter_mapping[i].sympified_expression
 
-        for channel in internal_integral:
+        for channel, ch_integral in internal_integral.items():
             expr = ExpressionScalar(
-                internal_integral[channel].sympified_expression.subs(parameter_mapping)
+                ch_integral.sympified_expression.subs(parameter_mapping)
             )
             channel_out = channel
             if channel in self.__channel_mapping:
                 channel_out = self.__channel_mapping[channel]
-            expressions[channel_out] = expr
+            if channel_out is not None:
+                expressions[channel_out] = expr
 
         return expressions
 

@@ -912,11 +912,11 @@ class PulseStorage(MutableMapping[str, Serializable]):
 
         Calling this method will overwrite the entity currently stored under the given identifier by the
         provided serializable. It does _not_ overwrite nested Serializable objects contained in serializable. If you
-        want to overwrite those as well, do that explicitely.
+        want to overwrite those as well, do that explicitly.
 
         Args:
               identifier: The identifier to store serializable under.
-            serializable: The Serializable object to be stored.
+              serializable: The Serializable object to be stored.
         """
 
         is_transaction_begin = (self._transaction_storage is None)
@@ -1044,7 +1044,8 @@ class JSONSerializableEncoder(json.JSONEncoder):
                 if o.identifier not in self.storage:
                     self.storage[o.identifier] = o
                 elif o is not self.storage[o.identifier]:
-                    raise RuntimeError('Trying to store a subpulse with an identifier that is already taken.')
+                    raise RuntimeError('Trying to store a subpulse with an identifier that is already taken.',
+                                       o.identifier)
 
 
                 return {Serializable.type_identifier_name: 'reference',

@@ -25,9 +25,9 @@ class MappingTemplateTests(unittest.TestCase):
         parameter_mapping = {'foo': 't*k', 'bar': 't*l'}
 
         with self.assertRaises(MissingMappingException):
-            MappingPulseTemplate(template, parameter_mapping={})
+            MappingPulseTemplate(template, parameter_mapping={}, allow_partial_parameter_mapping=False)
         with self.assertRaises(MissingMappingException):
-            MappingPulseTemplate(template, parameter_mapping={'bar': 'kneipe'})
+            MappingPulseTemplate(template, parameter_mapping={'bar': 'kneipe'}, allow_partial_parameter_mapping=False)
         with self.assertRaises(UnnecessaryMappingException):
             MappingPulseTemplate(template, parameter_mapping=dict(**parameter_mapping, foobar='asd'))
 
@@ -39,6 +39,7 @@ class MappingTemplateTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             MappingPulseTemplate(template, parameter_mapping)
 
+        MappingPulseTemplate(template, parameter_mapping={'bar': 'kneipe'})
         MappingPulseTemplate(template, parameter_mapping=parameter_mapping)
 
     def test_from_tuple_exceptions(self):
@@ -98,6 +99,50 @@ class MappingTemplateTests(unittest.TestCase):
         test_mapping_permutations(template, None, {'m1': 'n1', 'm2': 'n2'}, {'c1': 'd1'})
         test_mapping_permutations(template, None, {'m1': 'n1', 'm2': 'n2'}, None)
 
+    def test_from_tuple_partial_mappings(self):
+        template = DummyPulseTemplate(parameter_names={'foo', 'bar'},
+                                      measurement_names={'m1', 'm2'},
+                                      defined_channels={'c1', 'c2'})
+
+        unbound_from_tuple = MappingPulseTemplate.from_tuple.__func__
+
+        self.assertIs(unbound_from_tuple(None, (template,)), template)
+
+        mock_cls = mock.MagicMock()
+        unbound_from_tuple(mock_cls, (template, {'foo': 2}))
+        mock_cls.assert_called_once_with(template,
+                                         parameter_mapping={'foo': 2},
+                                         measurement_mapping=None,
+                                         channel_mapping=None)
+
+        mock_cls = mock.MagicMock()
+        unbound_from_tuple(mock_cls, (template, {'m1': 'n1'}))
+        mock_cls.assert_called_once_with(template,
+                                         parameter_mapping=None,
+                                         measurement_mapping={'m1': 'n1'},
+                                         channel_mapping=None)
+
+        mock_cls = mock.MagicMock(return_value='dummy')
+        self.assertEqual(unbound_from_tuple(mock_cls, (template, {'c1': 'd1'})), 'dummy')
+        mock_cls.assert_called_once_with(template,
+                                         parameter_mapping=None,
+                                         measurement_mapping=None,
+                                         channel_mapping={'c1': 'd1'})
+
+        mock_cls = mock.MagicMock(return_value='dummy')
+        self.assertEqual(unbound_from_tuple(mock_cls, (template,
+                                                       {'c1': 'd1'},
+                                                       {'foo': 2},
+                                                       {'m1': 'n1'})),
+                         'dummy')
+        mock_cls.assert_called_once_with(template,
+                                         parameter_mapping={'foo': 2},
+                                         measurement_mapping={'m1': 'n1'},
+                                         channel_mapping={'c1': 'd1'})
+
+
+
+
     def test_external_params(self):
         template = DummyPulseTemplate(parameter_names={'foo', 'bar'})
         st = MappingPulseTemplate(template, parameter_mapping={'foo': 't*k', 'bar': 't*l'})
@@ -130,6 +175,13 @@ class MappingTemplateTests(unittest.TestCase):
         for k, v in st.map_parameters(parameters).items():
             self.assertEqual(v, values[k])
 
+        with self.assertRaisesRegex(ValueError, "type of return value"):
+            st.map_parameters({})
+
+        parameters = dict(t=3, k=2, l=ConstantParameter(7))
+        with self.assertRaisesRegex(TypeError, "neither all Parameter nor Real"):
+            st.map_parameters(parameters)
+
     def test_partial_parameter_mapping(self):
         template = DummyPulseTemplate(parameter_names={'foo', 'bar'})
         st = MappingPulseTemplate(template, parameter_mapping={'foo': 't*k'}, allow_partial_parameter_mapping=True)
@@ -159,12 +211,16 @@ class MappingTemplateTests(unittest.TestCase):
         self.assertEqual({'t', 'k', 'm'}, mt.parameter_names)
 
     def test_get_updated_channel_mapping(self):
-        template = DummyPulseTemplate(defined_channels={'foo', 'bar'})
-        st = MappingPulseTemplate(template, channel_mapping={'bar': 'kneipe'})
+        template = DummyPulseTemplate(defined_channels={'foo', 'bar', 'brotzeit'})
+        st = MappingPulseTemplate(template, channel_mapping={'bar': 'kneipe', 'brotzeit': None})
         with self.assertRaises(KeyError):
             st.get_updated_channel_mapping(dict())
-        self.assertEqual(st.get_updated_channel_mapping({'kneipe': 'meas1', 'foo': 'meas2', 'troet': 'meas3'}),
-                         {'foo': 'meas2', 'bar': 'meas1'})
+        self.assertEqual(st.get_updated_channel_mapping({'kneipe': 'meas1',
+                                                         'foo': 'meas2',
+                                                         'troet': 'meas3'}),
+                         {'foo': 'meas2',
+                          'bar': 'meas1',
+                          'brotzeit': None})
 
     def test_measurement_names(self):
         template = DummyPulseTemplate(measurement_names={'foo', 'bar'})
@@ -186,13 +242,24 @@ class MappingTemplateTests(unittest.TestCase):
                          {'foo': 'meas2', 'bar': 'meas1'})
 
     def test_integral(self) -> None:
-        dummy = DummyPulseTemplate(defined_channels={'A', 'B'},
+        dummy = DummyPulseTemplate(defined_channels={'A', 'B', 'C'},
                                    parameter_names={'k', 'f', 'b'},
-                                   integrals={'A': Expression('2*k'), 'other': Expression('-3.2*f+b')})
-        pulse = MappingPulseTemplate(dummy, parameter_mapping={'k': 'f', 'b': 2.3}, channel_mapping={'A': 'default'},
+                                   integrals={'A': Expression('2*k'),
+                                              'B': Expression('-3.2*f+b'),
+                                              'C': Expression(1)})
+        pulse = MappingPulseTemplate(dummy, parameter_mapping={'k': 'f', 'b': 2.3}, channel_mapping={'A': 'a',
+                                                                                                     'C': None},
                                      allow_partial_parameter_mapping=True)
 
-        self.assertEqual({'default': Expression('2*f'), 'other': Expression('-3.2*f+2.3')}, pulse.integral)
+        self.assertEqual({'a': Expression('2*f'), 'B': Expression('-3.2*f+2.3')}, pulse.integral)
+
+    def test_drop_channel(self):
+        dummy = DummyPulseTemplate(defined_channels={'A', 'B', 'C', 'D'},
+                                   parameter_names={'k', 'f', 'b'})
+        pulse = MappingPulseTemplate(dummy, parameter_mapping={'k': 'f', 'b': 2.3}, channel_mapping={'A': 'a',
+                                                                                                     'C': None,
+                                                                                                     'D': None})
+        self.assertEqual({'a', 'B'}, pulse.defined_channels)
 
 
 class MappingPulseTemplateSequencingTest(MeasurementWindowTestCase):
@@ -358,6 +425,13 @@ class MappingPulseTemplateSequencingTest(MeasurementWindowTestCase):
         program_old = MultiChannelProgram(block, channels={'A'}).programs[frozenset({'A'})]
         self.assertEqual(program_old, program)
 
+    def test_same_channel_error(self):
+
+        dpt = DummyPulseTemplate(defined_channels={'A', 'B'})
+
+        with self.assertRaisesRegex(ValueError, 'multiple channels to the same target'):
+            MappingPulseTemplate(dpt, channel_mapping={'A': 'X', 'B': 'X'})
+
 
 class MappingPulseTemplateOldSequencingTests(unittest.TestCase):
 
@@ -488,3 +562,18 @@ class MappingPulseTemplateOldSerializationTests(unittest.TestCase):
             self.assertEqual(data['measurement_mapping'], deserialized.measurement_mapping)
             self.assertEqual(data['parameter_constraints'], [str(pc) for pc in deserialized.parameter_constraints])
             self.assertIs(deserialized.template, dummy_pt)
+
+class MappingPulseTemplateRegressionTests(unittest.TestCase):
+    def test_issue_451(self):
+        from qupulse.pulses import TablePT, SequencePT, AtomicMultiChannelPT
+
+        gates_template = TablePT({'gate': [(0, 1), (60 * 1e3, 2, 'hold')]})
+        input_variables = {'period': float(gates_template.duration), 'uptime': 0}
+        marker_sequence = (TablePT({'m': [(0, 1), ('uptime', 0), ('period', 0)]}), input_variables)
+
+        combined_template = AtomicMultiChannelPT(gates_template, marker_sequence )
+        combined_template.create_program()
+
+        marker_sequence2 = TablePT({'m': [(0, 1), (0, 0), (gates_template.duration, 0)]})
+        combined_template2 = AtomicMultiChannelPT(gates_template, marker_sequence2)
+        combined_template2.create_program()

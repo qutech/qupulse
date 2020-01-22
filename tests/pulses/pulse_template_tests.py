@@ -164,12 +164,15 @@ class PulseTemplateTest(unittest.TestCase):
 
     def test_create_program(self) -> None:
         template = PulseTemplateStub(defined_channels={'A'}, parameter_names={'foo'})
-        parameters = {'foo': ConstantParameter(2.126), 'bar': -26.2, 'hugo': '2*x+b', 'append_a_child': '1'}
+        parameters = {'foo': ConstantParameter(2.126), 'bar': -26.2, 'hugo': 'exp(sin(pi/2))', 'append_a_child': '1'}
+        previous_parameters = parameters.copy()
         measurement_mapping = {'M': 'N'}
+        previos_measurement_mapping = measurement_mapping.copy()
         channel_mapping = {'A': 'B'}
+        previous_channel_mapping = channel_mapping.copy()
 
         expected_parameters = {'foo': ConstantParameter(2.126), 'bar': ConstantParameter(-26.2),
-                               'hugo': ConstantParameter('2*x+b'), 'append_a_child': ConstantParameter('1')}
+                               'hugo': ConstantParameter('exp(sin(pi/2))'), 'append_a_child': ConstantParameter('1')}
         to_single_waveform = {'voll', 'toggo'}
         global_transformation = TransformationStub()
 
@@ -192,6 +195,9 @@ class PulseTemplateTest(unittest.TestCase):
                                               global_transformation=global_transformation)
             _create_program.assert_called_once_with(**expected_internal_kwargs, parent_loop=program)
         self.assertEqual(expected_program, program)
+        self.assertEqual(previos_measurement_mapping, measurement_mapping)
+        self.assertEqual(previous_channel_mapping, channel_mapping)
+        self.assertEqual(previous_parameters, parameters)
 
     def test__create_program(self):
         parameters = {'a': ConstantParameter(.1), 'b': ConstantParameter(.2)}
@@ -308,11 +314,11 @@ class PulseTemplateTest(unittest.TestCase):
 
     def test_create_program_none(self) -> None:
         template = PulseTemplateStub(defined_channels={'A'}, parameter_names={'foo'})
-        parameters = {'foo': ConstantParameter(2.126), 'bar': -26.2, 'hugo': '2*x+b'}
+        parameters = {'foo': ConstantParameter(2.126), 'bar': -26.2, 'hugo': 'exp(sin(pi/2))'}
         measurement_mapping = {'M': 'N'}
         channel_mapping = {'A': 'B'}
         expected_parameters = {'foo': ConstantParameter(2.126), 'bar': ConstantParameter(-26.2),
-                               'hugo': ConstantParameter('2*x+b')}
+                               'hugo': ConstantParameter('exp(sin(pi/2))')}
         expected_internal_kwargs = dict(parameters=expected_parameters,
                                         measurement_mapping=measurement_mapping,
                                         channel_mapping=channel_mapping,
@@ -344,6 +350,13 @@ class PulseTemplateTest(unittest.TestCase):
         with mock.patch.object(SequencePulseTemplate, 'concatenate', return_value='concat') as mock_concatenate:
             self.assertEqual(b @ a, 'concat')
             mock_concatenate.assert_called_once_with(b, a)
+
+    def test_format(self):
+        a = PulseTemplateStub(identifier='asd', duration=Expression(5))
+        self.assertEqual("PulseTemplateStub(identifier='asd')", str(a))
+        self.assertEqual("PulseTemplateStub(identifier='asd')", format(a))
+        self.assertEqual("PulseTemplateStub(identifier='asd', duration='5')",
+                         "{:identifier;duration}".format(a))
 
 
 class AtomicPulseTemplateTests(unittest.TestCase):

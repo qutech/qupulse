@@ -1,4 +1,5 @@
 import unittest
+import sys
 
 import numpy as np
 from sympy import sympify, Eq
@@ -103,6 +104,30 @@ class ExpressionVectorTests(unittest.TestCase):
 
 
 class ExpressionScalarTests(unittest.TestCase):
+    def test_format(self):
+        expr = ExpressionScalar('17')
+        e_format = '{:.4e}'.format(expr)
+        self.assertEqual(e_format, "1.7000e+01")
+
+        empty_format = "{}".format(expr)
+        self.assertEqual(empty_format, '17')
+
+        expr_with_var = ExpressionScalar('17*a')
+        with self.assertRaises(TypeError):
+            # throw error on implicit float cast
+            '{:.4e}'.format(expr_with_var)
+
+        empty_format = "{}".format(expr_with_var)
+        self.assertEqual(empty_format, '17*a')
+
+    @unittest.skipIf(sys.version_info < (3, 6), "format string literals require 3.6 or higher")
+    def test_fstring(self) -> None:
+        src_code = """e = ExpressionScalar('2.0'); \
+        self.assertEqual( f'{e}', str(e) ); \
+        self.assertEqual( f'{e:.2f}', '%.2f' % e)
+        """
+        exec(src_code)
+        
     def test_evaluate_numeric(self) -> None:
         e = ExpressionScalar('a * b + c')
         params = {
@@ -235,6 +260,11 @@ class ExpressionScalarTests(unittest.TestCase):
         s = 'a    *    b'
         self.assertEqual(ExpressionScalar(s).original_expression, s)
 
+    def test_hash(self):
+        expected = {ExpressionScalar(2), ExpressionScalar('a')}
+        sequence = [ExpressionScalar(2), ExpressionScalar('a'), ExpressionScalar(2), ExpressionScalar('a')]
+        self.assertEqual(expected, set(sequence))
+
     def test_undefined_comparison(self):
         valued = ExpressionScalar(2)
         unknown = ExpressionScalar('a')
@@ -342,6 +372,14 @@ class ExpressionScalarTests(unittest.TestCase):
         self.assertTrue(ExpressionScalar('0./0.').is_nan())
 
         self.assertFalse(ExpressionScalar(456).is_nan())
+
+    def test_special_function_numeric_evaluation(self):
+        expr = Expression('erfc(t)')
+        data = [-1., 0., 1.]
+        expected = np.array([1.84270079, 1., 0.15729921])
+        result = expr.evaluate_numeric(t=data)
+
+        np.testing.assert_allclose(expected, result)
 
 
 class ExpressionExceptionTests(unittest.TestCase):

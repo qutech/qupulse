@@ -4,8 +4,9 @@ import itertools
 
 from string import ascii_uppercase
 
-from qupulse.utils.types import time_from_float
-from qupulse._program._loop import Loop, MultiChannelProgram, _make_compatible, _is_compatible, _CompatibilityLevel, RepetitionWaveform, SequenceWaveform, make_compatible
+from qupulse.utils.types import TimeType, time_from_float
+from qupulse._program._loop import Loop, MultiChannelProgram, _make_compatible, _is_compatible, _CompatibilityLevel,\
+    RepetitionWaveform, SequenceWaveform, make_compatible, MakeCompatibleWarning
 from qupulse._program.instructions import InstructionBlock, ImmutableInstructionBlock
 from tests.pulses.sequencing_dummies import DummyWaveform
 from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
@@ -542,32 +543,56 @@ class ProgramWaveformCompatibilityTest(unittest.TestCase):
         wf = DummyWaveform(duration=1.1)
 
         self.assertEqual(_is_compatible(Loop(waveform=wf), min_len=1, quantum=1, sample_rate=time_from_float(1.)),
-                         _CompatibilityLevel.incompatible)
+                         _CompatibilityLevel.incompatible_fraction)
 
         self.assertEqual(_is_compatible(Loop(waveform=wf, repetition_count=10), min_len=20, quantum=1, sample_rate=time_from_float(1.)),
-                         _CompatibilityLevel.incompatible)
+                         _CompatibilityLevel.incompatible_too_short)
 
         self.assertEqual(_is_compatible(Loop(waveform=wf, repetition_count=10), min_len=10, quantum=3, sample_rate=time_from_float(1.)),
-                         _CompatibilityLevel.incompatible)
+                         _CompatibilityLevel.incompatible_quantum)
 
     def test_is_compatible_leaf(self):
         self.assertEqual(_is_compatible(Loop(waveform=DummyWaveform(duration=1.1), repetition_count=10),
-                                        min_len=11, quantum=1, sample_rate=time_from_float(1.)),
+                                        min_len=11, quantum=1, sample_rate=TimeType.from_float(1.)),
                          _CompatibilityLevel.action_required)
 
         self.assertEqual(_is_compatible(Loop(waveform=DummyWaveform(duration=1.1), repetition_count=10),
-                                        min_len=11, quantum=1, sample_rate=time_from_float(10.)),
+                                        min_len=11, quantum=1, sample_rate=TimeType.from_float(10.)),
                          _CompatibilityLevel.compatible)
 
     def test_is_compatible_node(self):
         program = Loop(children=[Loop(waveform=DummyWaveform(duration=1.5), repetition_count=2),
                                  Loop(waveform=DummyWaveform(duration=2.0))])
 
-        self.assertEqual(_is_compatible(program, min_len=1, quantum=1, sample_rate=time_from_float(2.)),
+        self.assertEqual(_is_compatible(program, min_len=1, quantum=1, sample_rate=TimeType.from_float(2.)),
                          _CompatibilityLevel.compatible)
 
-        self.assertEqual(_is_compatible(program, min_len=1, quantum=1, sample_rate=time_from_float(1.)),
+        self.assertEqual(_is_compatible(program, min_len=1, quantum=1, sample_rate=TimeType.from_float(1.)),
                          _CompatibilityLevel.action_required)
+
+    def test_make_compatible_repetition_count(self):
+        wf1 = DummyWaveform(duration=1.5)
+        wf2 = DummyWaveform(duration=2.0)
+
+        program = Loop(children=[Loop(waveform=wf1, repetition_count=2),
+                                 Loop(waveform=wf2)])
+        duration = program.duration
+        _make_compatible(program, min_len=1, quantum=1, sample_rate=time_from_float(1.))
+        self.assertEqual(program.duration, duration)
+
+        wf2 = DummyWaveform(duration=2.5)
+        program = Loop(children=[Loop(waveform=wf1, repetition_count=3),
+                                 Loop(waveform=wf2)])
+        duration = program.duration
+        with self.assertWarns(MakeCompatibleWarning):
+            make_compatible(program, minimal_waveform_length=1, waveform_quantum=1, sample_rate=time_from_float(1.))
+        self.assertEqual(program.duration, duration)
+
+        program = Loop(children=[Loop(waveform=wf1, repetition_count=3),
+                                 Loop(waveform=wf2)], repetition_count=3)
+        duration = program.duration
+        _make_compatible(program, min_len=1, quantum=3, sample_rate=time_from_float(1.))
+        self.assertEqual(program.duration, duration)
 
     def test_make_compatible_partial_unroll(self):
         wf1 = DummyWaveform(duration=1.5)
@@ -576,7 +601,7 @@ class ProgramWaveformCompatibilityTest(unittest.TestCase):
         program = Loop(children=[Loop(waveform=wf1, repetition_count=2),
                                  Loop(waveform=wf2)])
 
-        _make_compatible(program, min_len=1, quantum=1, sample_rate=time_from_float(1.))
+        _make_compatible(program, min_len=1, quantum=1, sample_rate=TimeType.from_float(1.))
 
         self.assertIsNone(program.waveform)
         self.assertEqual(len(program), 2)
@@ -587,7 +612,7 @@ class ProgramWaveformCompatibilityTest(unittest.TestCase):
 
         program = Loop(children=[Loop(waveform=wf1, repetition_count=2),
                                  Loop(waveform=wf2)], repetition_count=2)
-        _make_compatible(program, min_len=5, quantum=1, sample_rate=time_from_float(1.))
+        _make_compatible(program, min_len=5, quantum=1, sample_rate=TimeType.from_float(1.))
 
         self.assertIsInstance(program.waveform, SequenceWaveform)
         self.assertEqual(program.children, [])
@@ -606,7 +631,7 @@ class ProgramWaveformCompatibilityTest(unittest.TestCase):
         program = Loop(children=[Loop(waveform=wf1, repetition_count=2),
                                  Loop(waveform=wf2, repetition_count=1)], repetition_count=2)
 
-        _make_compatible(program, min_len=5, quantum=10, sample_rate=time_from_float(1.))
+        _make_compatible(program, min_len=5, quantum=10, sample_rate=TimeType.from_float(1.))
 
         self.assertIsInstance(program.waveform, RepetitionWaveform)
         self.assertEqual(program.children, [])
@@ -626,12 +651,24 @@ class ProgramWaveformCompatibilityTest(unittest.TestCase):
         program = Loop()
         pub_kwargs = dict(minimal_waveform_length=5,
                           waveform_quantum=10,
-                          sample_rate=time_from_float(1.))
-        priv_kwargs = dict(min_len=5, quantum=10, sample_rate=time_from_float(1.))
+                          sample_rate=TimeType.from_float(1.))
+        priv_kwargs = dict(min_len=5, quantum=10, sample_rate=TimeType.from_float(1.))
 
         with mock.patch('qupulse._program._loop._is_compatible',
-                        return_value=_CompatibilityLevel.incompatible) as mocked:
-            with self.assertRaisesRegex(ValueError, 'cannot be made compatible'):
+                        return_value=_CompatibilityLevel.incompatible_too_short) as mocked:
+            with self.assertRaisesRegex(ValueError, 'too short'):
+                make_compatible(program, **pub_kwargs)
+            mocked.assert_called_once_with(program, **priv_kwargs)
+
+        with mock.patch('qupulse._program._loop._is_compatible',
+                        return_value=_CompatibilityLevel.incompatible_fraction) as mocked:
+            with self.assertRaisesRegex(ValueError, 'not an integer'):
+                make_compatible(program, **pub_kwargs)
+            mocked.assert_called_once_with(program, **priv_kwargs)
+
+        with mock.patch('qupulse._program._loop._is_compatible',
+                        return_value=_CompatibilityLevel.incompatible_quantum) as mocked:
+            with self.assertRaisesRegex(ValueError, 'not a multiple of quantum'):
                 make_compatible(program, **pub_kwargs)
             mocked.assert_called_once_with(program, **priv_kwargs)
 
