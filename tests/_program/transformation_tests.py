@@ -4,7 +4,8 @@ from unittest import mock
 import numpy as np
 
 from qupulse._program.transformation import LinearTransformation, Transformation, IdentityTransformation,\
-    ChainedTransformation, ParallelConstantChannelTransformation, chain_transformations
+    ChainedTransformation, ParallelConstantChannelTransformation, chain_transformations, OffsetTransformation,\
+    ScalingTransformation
 
 
 class TransformationStub(Transformation):
@@ -307,3 +308,73 @@ class TestChaining(unittest.TestCase):
         result = chain_transformations(trafo, IdentityTransformation(), trafo)
 
         self.assertEqual(result, expected)
+
+
+class TestOffsetTransformation(unittest.TestCase):
+    def setUp(self) -> None:
+        self.offsets = {'A': 1., 'B': 1.2}
+
+    def test_init(self):
+        trafo = OffsetTransformation(self.offsets)
+        # test copy
+        self.assertIsNot(trafo._offsets, self.offsets)
+
+        self.assertEqual(trafo._offsets, self.offsets)
+
+    def test_get_input_channels(self):
+        trafo = OffsetTransformation(self.offsets)
+        channels = {'A', 'C'}
+        self.assertIs(channels, trafo.get_input_channels(channels))
+        self.assertIs(channels, trafo.get_output_channels(channels))
+
+    def test_compare_key(self):
+        trafo = OffsetTransformation(self.offsets)
+        _ = hash(trafo)
+        self.assertEqual(frozenset([('A', 1.), ('B', 1.2)]), trafo.compare_key)
+
+    def test_trafo(self):
+        trafo = OffsetTransformation(self.offsets)
+
+        time = np.asarray([.5, .6])
+        in_data = {'A': np.asarray([.1, .2]), 'C': np.asarray([3., 4.])}
+
+        expected = {'A': np.asarray([1.1, 1.2]), 'C': in_data['C']}
+
+        out_data = trafo(time, in_data)
+
+        self.assertIs(expected['C'], out_data['C'])
+        np.testing.assert_equal(expected, out_data)
+
+
+class TestScalingTransformation(unittest.TestCase):
+    def setUp(self) -> None:
+        self.scales = {'A': 1.5, 'B': 1.2}
+
+    def test_init(self):
+        trafo = ScalingTransformation(self.scales)
+        # test copy
+        self.assertIsNot(trafo._factors, self.scales)
+        self.assertEqual(trafo._factors, self.scales)
+
+    def test_get_input_channels(self):
+        trafo = ScalingTransformation(self.scales)
+        channels = {'A', 'C'}
+        self.assertIs(channels, trafo.get_input_channels(channels))
+        self.assertIs(channels, trafo.get_output_channels(channels))
+
+    def test_compare_key(self):
+        trafo = OffsetTransformation(self.scales)
+        _ = hash(trafo)
+        self.assertEqual(frozenset([('A', 1.5), ('B', 1.2)]), trafo.compare_key)
+
+    def test_trafo(self):
+        trafo = ScalingTransformation(self.scales)
+
+        time = np.asarray([.5, .6])
+        in_data = {'A': np.asarray([.1, .2]), 'C': np.asarray([3., 4.])}
+        expected = {'A': np.asarray([.1 * 1.5, .2 * 1.5]), 'C': in_data['C']}
+
+        out_data = trafo(time, in_data)
+
+        self.assertIs(expected['C'], out_data['C'])
+        np.testing.assert_equal(expected, out_data)
