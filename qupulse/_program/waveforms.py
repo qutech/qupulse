@@ -130,6 +130,12 @@ class Waveform(Comparable, metaclass=ABCMeta):
             return self
         return self.unsafe_get_subset_for_channels(channels=channels)
 
+    def __neg__(self):
+        return FunctorWaveform(self, {ch: np.negative for ch in self.defined_channels})
+
+    def __pos__(self):
+        return self
+
 
 class TableWaveformEntry(NamedTuple('TableWaveformEntry', [('t', float),
                                                            ('v', float),
