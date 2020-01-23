@@ -45,8 +45,8 @@ function scan = conf_seq(varargin)
 		... Saving variables
 		'save_custom_var_fn',    @tune.get_global_opts,...          % Can specify a function which returns data to be saved in the scan
 		'save_custom_var_args',  {{'dnp', 'tune_gui'}}, ...
-        'save_metadata_fns',     {@sm_scans.triton_200.metafn_get_chanvals}, ...  % Can specify functions to log metadata during each loop
-        'save_metadata_fields',  {'chanvals'}, ...                                % Fieldnames of the metadata struct saved by smrun
+    'save_metadata_fns',     {@sm_scans.triton_200.metafn_get_configchanvals}, ...  % Can specify functions to log metadata during each loop
+    'save_metadata_fields',  {'configchanvals'}, ...                                % Fieldnames of the metadata struct saved by smrun
 		...                      
 		... Measurements         
 		'operations',            {plsdata.daq.defaultOperations}, ...
@@ -219,11 +219,11 @@ function scan = conf_seq(varargin)
 	scan.loops(1).prefn(end+1).fn = @smaconfigwrap;
 	scan.loops(1).prefn(end).args = {@(chan)(smset('time', now()))};
 	
-    % Allow logging metadata
-    for i = 1:length(a.save_metadata_fns)
-        scan.loops(1).metafn(end+1).fn = @smaconfigwrap_save_metadata;
-        scan.loops(1).metafn(end).args = {a.save_metadata_fields{i}, a.save_metadata_fns{i}};
-    end
+  % Allow logging metadata
+  for i = 1:length(a.save_metadata_fns)
+      scan.loops(1).metafn(end+1).fn = @smaconfigwrap_save_metadata;
+      scan.loops(1).metafn(end).args = {a.save_metadata_fields{i}, a.save_metadata_fns{i}};
+  end
 	
 	% Turn AWG on
 	scan.configfn(end+1).fn = @smaconfigwrap;
