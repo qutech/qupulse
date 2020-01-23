@@ -525,8 +525,17 @@ LOOP 1 times:
 
 class ProgramWaveformCompatibilityTest(unittest.TestCase):
     def test_is_compatible_warnings(self):
+        wf = DummyWaveform(duration=1)
+
+        volatile_leaf = Loop(waveform=wf, repetition_count=3, repetition_parameter='x')
         with self.assertWarns(VolatileModificationWarning):
-            raise NotImplementedError()
+            self.assertEqual(_CompatibilityLevel.action_required, _is_compatible(volatile_leaf, min_len=3, quantum=1,
+                                                                                 sample_rate=time_from_float(1.)))
+
+        volatile_node = Loop(children=[Loop(waveform=wf)], repetition_count=3, repetition_parameter='x')
+        with self.assertWarns(VolatileModificationWarning):
+            self.assertEqual(_CompatibilityLevel.action_required, _is_compatible(volatile_node, min_len=3, quantum=1,
+                                                                                 sample_rate=time_from_float(1.)))
     
     def test_is_compatible_incompatible(self):
         wf = DummyWaveform(duration=1.1)

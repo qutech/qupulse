@@ -97,6 +97,9 @@ class HDAWGChannelPairTests(unittest.TestCase):
             self.assertEqual(channel_pair.num_channels, 2)
             self.assertEqual(channel_pair.num_markers, 4)
 
+    def test_set_volatile_parameters(self):
+        raise NotImplementedError()
+
     def test_upload(self):
         mock_loop = mock.MagicMock(wraps=Loop(repetition_count=2,
                                               waveform=DummyWaveform(duration=192,

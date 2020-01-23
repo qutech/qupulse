@@ -6,9 +6,11 @@ from itertools import zip_longest
 
 import numpy as np
 
+from qupulse.expressions import ExpressionScalar
+from qupulse.pulses.parameters import MappedParameter, ConstantParameter
 from qupulse._program._loop import Loop
 from qupulse._program.seqc import BinaryWaveform, loop_to_seqc, WaveformPlayback, Repeat, SteppingRepeat, Scope,\
-    to_node_clusters, find_sharable_waveforms, mark_sharable_waveforms
+    to_node_clusters, find_sharable_waveforms, mark_sharable_waveforms, UserRegisterManager, HDAWGProgramManager
 
 from tests.pulses.sequencing_dummies import DummyWaveform
 
@@ -32,14 +34,20 @@ def make_binary_waveform(waveform):
         return BinaryWaveform.from_sampled(ch1, ch2, markers)
 
 
-def get_unique_wfs(n=10000, duration=32):
+def get_unique_wfs(n=10000, duration=32, defined_channels=frozenset(['A'])):
     if not hasattr(get_unique_wfs, 'cache'):
         get_unique_wfs.cache = {}
 
     key = (n, duration)
+
     if key not in get_unique_wfs.cache:
+        h = hash(key)
+        base = np.bitwise_xor(np.linspace(-h, h, num=duration + n, dtype=np.int64), h)
+        base = base / np.max(np.abs(base))
+
         get_unique_wfs.cache[key] = [
-            DummyWaveform(duration=duration, sample_output=float(idx) * np.arange(duration))
+            DummyWaveform(duration=duration, sample_output=base[idx:idx+duration],
+                          defined_channels=defined_channels)
             for idx in range(n)
         ]
     return get_unique_wfs.cache[key]
@@ -56,6 +64,9 @@ def complex_program_as_loop(unique_wfs, wf_same):
     root.append_child(waveform=unique_wfs[0], repetition_count=21)
     root.append_child(waveform=wf_same, repetition_count=23)
 
+    mapped = MappedParameter(ExpressionScalar('n + 4'), {'n': ConstantParameter(3)})
+    root.append_child(waveform=wf_same, repetition_count=7, repetition_parameter=mapped)
+
     return root
 
 
@@ -71,6 +82,7 @@ def complex_program_as_seqc(unique_wfs, wf_same):
                ]),
                Repeat(21, WaveformPlayback(make_binary_waveform(unique_wfs[0]))),
                Repeat(23, WaveformPlayback(make_binary_waveform(wf_same))),
+               Repeat('test_14', WaveformPlayback(make_binary_waveform(wf_same)))
            ])
            )
 
@@ -232,6 +244,9 @@ class SEQCNodeTests(TestCase):
 class LoopToSEQCTranslationTests(TestCase):
     def test_loop_to_seqc_leaf(self):
         """Test the translation of leaves"""
+        # we use None because it is not used in this test
+        user_registers = None
+
         wf = DummyWaveform(duration=32)
         loop = Loop(waveform=wf)
 
@@ -239,7 +254,7 @@ class LoopToSEQCTranslationTests(TestCase):
         loop.repetition_count = 15
         waveform_to_bin = mock.Mock(wraps=make_binary_waveform)
         expected = Repeat(loop.repetition_count, WaveformPlayback(waveform=make_binary_waveform(wf)))
-        result = loop_to_seqc(loop, 1, 1, waveform_to_bin)
+        result = loop_to_seqc(loop, 1, 1, waveform_to_bin, user_registers=user_registers)
         waveform_to_bin.assert_called_once_with(wf)
         self.assertEqual(expected, result)
 
@@ -247,17 +262,21 @@ class LoopToSEQCTranslationTests(TestCase):
         loop.repetition_count = 1
         waveform_to_bin = mock.Mock(wraps=make_binary_waveform)
         expected = WaveformPlayback(waveform=make_binary_waveform(wf))
-        result = loop_to_seqc(loop, 1, 1, waveform_to_bin)
+        result = loop_to_seqc(loop, 1, 1, waveform_to_bin, user_registers=user_registers)
         waveform_to_bin.assert_called_once_with(wf)
         self.assertEqual(expected, result)
 
     def test_loop_to_seqc_len_1(self):
         """Test the translation of loops with len(loop) == 1"""
+        # we use None because it is not used in this test
+        user_registers = None
+
         loop = Loop(children=[Loop()])
         waveform_to_bin = mock.Mock(wraps=make_binary_waveform)
         loop_to_seqc_kwargs = dict(min_repetitions_for_for_loop=2,
                                    min_repetitions_for_shared_wf=3,
-                                   waveform_to_bin=waveform_to_bin)
+                                   waveform_to_bin=waveform_to_bin,
+                                   user_registers=user_registers)
 
         expected = 'asdf'
         with mock.patch('qupulse._program.seqc.loop_to_seqc', return_value=expected) as mocked_loop_to_seqc:
@@ -334,14 +353,18 @@ class LoopToSEQCTranslationTests(TestCase):
 
     def test_loop_to_seqc_cluster_handling(self):
         """Test handling of clusters"""
+
+        # we use None because it is not used in this test
+        user_registers = None
+
         with self.assertRaises(AssertionError):
             loop_to_seqc(Loop(repetition_count=12, children=[Loop()]),
                          min_repetitions_for_for_loop=3, min_repetitions_for_shared_wf=2,
-                         waveform_to_bin=make_binary_waveform)
+                         waveform_to_bin=make_binary_waveform, user_registers=user_registers)
 
         loop_to_seqc_kwargs = dict(min_repetitions_for_for_loop=3,
                                    min_repetitions_for_shared_wf=4,
-                                   waveform_to_bin=make_binary_waveform)
+                                   waveform_to_bin=make_binary_waveform, user_registers=user_registers)
 
         wf_same = map(WaveformPlayback, map(make_binary_waveform, get_unique_wfs(100000, 32)))
         wf_sep, = map(WaveformPlayback, map(make_binary_waveform, get_unique_wfs(1, 64)))
@@ -381,13 +404,15 @@ class LoopToSEQCTranslationTests(TestCase):
 
     def test_program_translation(self):
         """Integration test"""
+        user_registers = UserRegisterManager(range(14, 15), 'test_{register}')
+
         unique_wfs = get_unique_wfs()
         same_wf = DummyWaveform(duration=32, sample_output=np.ones(32))
         root = complex_program_as_loop(unique_wfs, wf_same=same_wf)
 
         t0 = time.perf_counter()
 
-        seqc = loop_to_seqc(root, 50, 100, make_binary_waveform)
+        seqc = loop_to_seqc(root, 50, 100, make_binary_waveform, user_registers=user_registers)
 
         t1 = time.perf_counter()
         print('took', t1 - t0, 's')
@@ -583,6 +608,126 @@ repeat(12) {
     playWaveIndexed(0, pos, 48); // advance disabled do to parent repetition
   }
   pos = pos + 48;
+  var idx_1;
+  for(idx_1 = 0; idx_1 < test_14; idx_1 = idx_1 + 1) {
+    playWaveIndexed(0, pos, 48); // advance disabled do to parent repetition
+  }
+  pos = pos + 48;
 }"""
         self.assertEqual(expected, seqc_code)
+
+
+class UserRegisterManagerTest(unittest.TestCase):
+    def test_require(self):
+        manager = UserRegisterManager([7, 8, 9], 'test{register}')
+
+        required = [manager.require(0), manager.require(1), manager.require(2)]
+
+        self.assertEqual({'test7', 'test8', 'test9'}, set(required))
+        self.assertEqual(required[1], manager.require(1))
+
+        with self.assertRaisesRegex(ValueError, "No register"):
+            manager.require(3)
+
+
+class HDAWGProgramManagerTest(unittest.TestCase):
+    def test_full_run(self):
+        defined_channels = frozenset(['A', 'B', 'C'])
+
+        unique_n = 1000
+        unique_duration = 32
+
+        unique_wfs = get_unique_wfs(n=unique_n, duration=unique_duration, defined_channels=defined_channels)
+        same_wf = DummyWaveform(duration=48, sample_output=np.ones(48), defined_channels=defined_channels)
+
+        channels = ('A', 'B')
+        markers = ('C', None, 'A', None)
+        amplitudes = (1., 1.)
+        offsets = (0., 0.)
+        volatage_transformations = (lambda x: x, lambda x: x)
+        sample_rate = 1
+
+        root = complex_program_as_loop(unique_wfs, wf_same=same_wf)
+        seqc_nodes = complex_program_as_seqc(unique_wfs, wf_same=same_wf)
+
+        manager = HDAWGProgramManager()
+
+        manager.add_program('test', root, channels, markers, amplitudes, offsets, volatage_transformations, sample_rate)
+
+        self.assertEqual({2: 7}, manager.get_register_values('test'))
+        seqc_program = manager.to_seqc_program()
+        expected_program = """const PROG_SEL_REGISTER = 0;
+const TRIGGER_REGISTER = 1;
+const TRIGGER_RESET_MASK = 0b1000000000000000;
+const PROG_SEL_NONE = 0;
+const NO_RESET_MASK = 0b1000000000000000;
+const PROG_SEL_MASK = 0b111111111111111;
+const IDLE_WAIT_CYCLES = 300;
+wave test_concatenated_waveform = "3e0090e8ffd002d1134ce38827c6a35fede89cf23d126a44057ef43f466ae4cd";
+wave test_shared_waveform_121f5c6e8822793b3836fb3098fa4591b91d4c205cc2d8afd01ee1bf6956e518 = "121f5c6e8822793b3836fb3098fa4591b91d4c205cc2d8afd01ee1bf6956e518";
+
+//function used by manually triggered programs
+void waitForSoftwareTrigger() {
+  while (true) {
+    var trigger_register = getUserReg(TRIGGER_REGISTER);
+    if (trigger_register & TRIGGER_RESET_MASK) setUserReg(TRIGGER_REGISTER, 0);
+    if (trigger_register) return;
+  }
+}
+
+
+// program definitions
+void test_function() {
+  var pos = 0;
+  var user_reg_2 = getUserReg(2);
+  waitForSoftwareTrigger();
+  var init_pos_1 = pos;
+  repeat(12) {
+    pos = init_pos_1;
+    repeat(1000) { // stepping repeat
+      repeat(10) {
+        repeat(42) {
+          playWaveIndexed(test_concatenated_waveform, pos, 32); // advance disabled do to parent repetition
+        }
+        repeat(98) {
+          playWave(test_shared_waveform_121f5c6e8822793b3836fb3098fa4591b91d4c205cc2d8afd01ee1bf6956e518);
+        }
+      }
+      pos = pos + 32;
+    }
+    repeat(21) {
+      playWaveIndexed(test_concatenated_waveform, pos, 32); // advance disabled do to parent repetition
+    }
+    pos = pos + 32;
+    repeat(23) {
+      playWaveIndexed(test_concatenated_waveform, pos, 48); // advance disabled do to parent repetition
+    }
+    pos = pos + 48;
+    var idx_2;
+    for(idx_2 = 0; idx_2 < user_reg_2; idx_2 = idx_2 + 1) {
+      playWaveIndexed(test_concatenated_waveform, pos, 48); // advance disabled do to parent repetition
+    }
+    pos = pos + 48;
+  }
+}
+
+// INIT program switch.
+var prog_sel = 0;
+
+//runtime block
+while (true) {
+  // read program selection value
+  prog_sel = getUserReg(PROG_SEL_REGISTER);
+  if (!(prog_sel & NO_RESET_MASK))  setUserReg(PROG_SEL_REGISTER, 0);
+  prog_sel = prog_sel & PROG_SEL_MASK;
+  
+  switch (prog_sel) {
+    case 1:
+      test_function();
+      waitWave();
+    default:
+      wait(IDLE_WAIT_CYCLES);
+  }
+}"""
+        self.assertEqual(expected_program, seqc_program)
 

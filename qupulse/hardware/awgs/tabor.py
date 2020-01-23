@@ -835,6 +835,9 @@ class TaborChannelPair(AWG):
 
         self.clear()
 
+    def set_volatile_parameters(self, program_name: str, parameters: Mapping[str, Real]):
+        raise NotImplementedError()
+
     def select(self) -> None:
         self.device.send_cmd(':INST:SEL {}'.format(self._channels[0]))
 

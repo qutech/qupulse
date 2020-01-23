@@ -257,7 +257,7 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
 
                     self.assertEqual(expected_program, program)
 
-                    validate_parameter_constraints.assert_called_once_with(parameters=kwargs['parameters'])
+                    validate_parameter_constraints.assert_called_once_with(parameters=kwargs['parameters'], volatile=set())
                     get_measurement_windows.assert_called_once_with(dict(a=.1, b=.2), kwargs['measurement_mapping'])
                     create_0.assert_called_once_with(**kwargs, parent_loop=program, volatile=set())
                     create_1.assert_called_once_with(**kwargs, parent_loop=program, volatile=set())
@@ -370,6 +370,10 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
                          list(loop.children))
         self.assert_measurement_windows_equal({'a': ([0], [1])}, loop.get_measurement_windows())
 
+        # MultiChannelProgram calls cleanup
+        loop.cleanup()
+        self.assert_measurement_windows_equal({'a': ([0], [1])}, loop.get_measurement_windows())
+
         # ensure same result as from Sequencer
         sequencer = Sequencer()
         sequencer.push(seq, parameters=parameters, conditions={}, window_mapping=measurement_mapping, channel_mapping=channel_mapping)
@@ -390,6 +394,10 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
         self.assertIsNone(loop.waveform)
         self.assertEqual([Loop(repetition_count=1, waveform=sub2.waveform)],
                          list(loop.children))
+        self.assert_measurement_windows_equal({'a': ([0], [1])}, loop.get_measurement_windows())
+
+        # MultiChannelProgram calls cleanup
+        loop.cleanup()
         self.assert_measurement_windows_equal({'a': ([0], [1])}, loop.get_measurement_windows())
 
         # ensure same result as from Sequencer
