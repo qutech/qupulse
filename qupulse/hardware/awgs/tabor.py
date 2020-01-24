@@ -1206,7 +1206,8 @@ class TaborChannelPair(AWG):
         waveform_to_segment_index, program = self._known_programs[program_name]
         names = set(parameters.keys()) & set(program._volatile_parameter_mappings.keys())
         if not names:
-            print('{} has no volatile parameters with these names'.format(program_name))
+            print('Either {} has no volatile parameters with these names or its volatile parameters where dropped '
+                  'during upload'.format(program_name))
             return
 
         # Change sequencing tables in active program and program memory

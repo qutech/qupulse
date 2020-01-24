@@ -653,6 +653,7 @@ def _is_compatible(program: Loop, min_len: int, quantum: int, sample_rate: TimeT
             if program.repetition_parameter is not None:
                 warnings.warn("_is_compatible requires an action which drops volatility.",
                               category=VolatileModificationWarning)
+                program._repetition_parameter = None
             return _CompatibilityLevel.action_required
         else:
             return _CompatibilityLevel.compatible
@@ -664,6 +665,7 @@ def _is_compatible(program: Loop, min_len: int, quantum: int, sample_rate: TimeT
             if program.repetition_parameter is not None:
                 warnings.warn("_is_compatible requires an action which drops volatility.",
                               category=VolatileModificationWarning)
+                program._repetition_parameter = None
             return _CompatibilityLevel.action_required
 
 
