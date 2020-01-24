@@ -7,7 +7,7 @@ import operator
 from numbers import Real
 from typing import List, Tuple, Set, NamedTuple, Callable, Optional, Any, Sequence, cast, Generator, Union, Dict, Mapping
 from enum import Enum
-from collections import OrderedDict
+from collections import OrderedDict, namedtuple
 
 # Provided by Tabor electronics for python 2.7
 # a python 3 version is in a private repository on https://git.rwth-aachen.de/qutech
@@ -142,6 +142,8 @@ class TaborSequencing(Enum):
     ADVANCED = 2
 
 
+volatile_mapping_entry = namedtuple('Mapping_Entry', 'aSeq adv_position position change_table')
+
 class TaborProgram:
     def __init__(self,
                  program: Loop,
@@ -166,7 +168,7 @@ class TaborProgram:
         self._waveforms = []  # type: List[MultiChannelWaveform]
         self._sequencer_tables = []
         self._advanced_sequencer_table = []
-        self._volatile_parameter_mappings = dict()  # keys: volatile parameter names, entries: position as list:
+        self._volatile_parameter_mappings = dict()  # keys: volatile parameter names, entries: position as namedtuple:
         #                      [in parent(1)/child(0), pos in parent, pos in child, occurs in seq_table(1) or not (0)]
         #                                                        [adv(1)/seq(0) table, table num, position in table, 1]
 
@@ -243,9 +245,8 @@ class TaborProgram:
 
         sequencer_table = []
         waveforms = OrderedDict()
-        position = -1
 
-        for waveform, repetition_count, repetition_parameter in ((waveform_loop.waveform.get_subset_for_channels(self.__used_channels),
+        for position, (waveform, repetition_count, repetition_parameter) in enumerate((waveform_loop.waveform.get_subset_for_channels(self.__used_channels),
                                             waveform_loop.repetition_count, waveform_loop.repetition_parameter)
                                            for waveform_loop in self.program):
             if waveform in waveforms:
@@ -254,17 +255,17 @@ class TaborProgram:
                 waveform_index = len(waveforms)
                 waveforms[waveform] = waveform_index
             sequencer_table.append((repetition_count, waveform_index, 0))
-            position += 1
             if repetition_parameter is not None:
                 for para_name in repetition_parameter.expression.variables:
-                    self._volatile_parameter_mappings.setdefault(para_name, []).append([0, 0, position, 1])
+                    self._volatile_parameter_mappings.setdefault(para_name,
+                                                                 []).append(volatile_mapping_entry(0, 0, position, 1))
 
         self._waveforms = tuple(waveforms.keys())
         self._sequencer_tables = [sequencer_table]
         self._advanced_sequencer_table = [(self.program.repetition_count, 1, 0)]
         if self.program.repetition_parameter is not None:
             for para_name in self.program.repetition_parameter.expression.variables:
-                self._volatile_parameter_mappings.setdefault(para_name, []).append([1, 0, 0, 1])
+                self._volatile_parameter_mappings.setdefault(para_name, []).append(volatile_mapping_entry(1, 0, 0, 1))
 
     def setup_advanced_sequence_mode(self) -> None:
         assert self.program.depth() > 1
@@ -343,13 +344,11 @@ class TaborProgram:
         advanced_sequencer_table = []
         sequencer_tables = []
         waveforms = OrderedDict()
-        position = -1
-        adv_position = 0
-        for sequencer_table_loop in self.program:
+        for adv_position, sequencer_table_loop in enumerate(self.program):
             current_sequencer_table = []
             current_table_mapping_p = {}
             current_table_mapping_t = {}
-            for waveform, repetition_count, repetition_parameter in ((waveform_loop.waveform.get_subset_for_channels(self.__used_channels),
+            for position, (waveform, repetition_count, repetition_parameter) in enumerate((waveform_loop.waveform.get_subset_for_channels(self.__used_channels),
                                                 waveform_loop.repetition_count, waveform_loop.repetition_parameter)
                                                for waveform_loop in sequencer_table_loop):
                 if waveform in waveforms:
@@ -358,11 +357,12 @@ class TaborProgram:
                     wf_index = len(waveforms)
                     waveforms[waveform] = wf_index
                 current_sequencer_table.append((repetition_count, wf_index, 0))
-                position += 1
                 if repetition_parameter is not None:
                     for para_name in repetition_parameter.expression.variables:
-                        current_table_mapping_p.setdefault(para_name, []).append([0, adv_position, position, 0])
-                        current_table_mapping_t.setdefault(para_name, []).append([0, adv_position, position, 1])
+                        current_table_mapping_p.setdefault(para_name, []).append(volatile_mapping_entry(0, adv_position,
+                                                                                                        position, 0))
+                        current_table_mapping_t.setdefault(para_name, []).append(volatile_mapping_entry(0, adv_position,
+                                                                                                        position, 1))
 
             if current_sequencer_table in sequencer_tables:
                 sequence_no = sequencer_tables.index(current_sequencer_table) + 1
@@ -381,9 +381,7 @@ class TaborProgram:
             advanced_sequencer_table.append((sequencer_table_loop.repetition_count, sequence_no, 0))
             if sequencer_table_loop.repetition_parameter is not None:
                 for para_name in sequencer_table_loop.repetition_parameter.expression.variables:
-                    self._volatile_parameter_mappings.setdefault(para_name, []).append([1, 0, adv_position, 1])
-            adv_position += 1
-            position = -1
+                    self._volatile_parameter_mappings.setdefault(para_name, []).append(volatile_mapping_entry(1, 0, adv_position, 1))
 
         self._advanced_sequencer_table = advanced_sequencer_table
         self._sequencer_tables = sequencer_tables
@@ -1206,7 +1204,7 @@ class TaborChannelPair(AWG):
         # TODO: Add exception if program creation threw a VolatileModificationWarning, add documentation
 
         waveform_to_segment_index, program = self._known_programs[program_name]
-        names = [name for name in [*parameters] if name in [*program._volatile_parameter_mappings]]
+        names = set(parameters.keys()) & set(program._volatile_parameter_mappings.keys())
         if not names:
             print('{} has no volatile parameters with these names'.format(program_name))
             return
@@ -1215,19 +1213,19 @@ class TaborChannelPair(AWG):
         if program.program.depth() == 1:
             for name in names:
                 for program_mapping in program._volatile_parameter_mappings[name]:
-                    if program_mapping[0] == 0:
-                        program.program.children[program_mapping[2]].repetition_parameter.update_constants(parameters)
-                        new_rep_count = int(program.program.children[program_mapping[2]].repetition_parameter.get_value())
-                        program.program.children[program_mapping[2]].repetition_count = new_rep_count
-                        if program_mapping[3] == 1:
-                            seg_ind = program._sequencer_tables[program_mapping[1]][program_mapping[2]][1]
-                            jump_flag = program._sequencer_tables[program_mapping[1]][program_mapping[2]][2]
-                            program._sequencer_tables[program_mapping[1]][program_mapping[2]] = (new_rep_count, seg_ind,
+                    if program_mapping.aSeq == 0:
+                        program.program.children[program_mapping.position].repetition_parameter.update_constants(parameters)
+                        new_rep_count = int(program.program.children[program_mapping.position].repetition_parameter.get_value())
+                        program.program.children[program_mapping.position].repetition_count = new_rep_count
+                        if program_mapping.change_table == 1:
+                            seg_ind = program._sequencer_tables[program_mapping.adv_position][program_mapping.position][1]
+                            jump_flag = program._sequencer_tables[program_mapping.adv_position][program_mapping.position][2]
+                            program._sequencer_tables[program_mapping.adv_position][program_mapping.position] = (new_rep_count, seg_ind,
                                                                                                  jump_flag)
                             if self._current_program == program_name:
-                                self.device.send_cmd(':SEQ:SEL {}'.format(program_mapping[1] + 2))
+                                self.device.send_cmd(':SEQ:SEL {}'.format(program_mapping.adv_position + 2))
                                 self.device.send_cmd(
-                                    ':SEQ:DEF {}, {}, {}, {}'.format(program_mapping[2],
+                                    ':SEQ:DEF {}, {}, {}, {}'.format(program_mapping.position,
                                                                      waveform_to_segment_index[seg_ind] + 1,
                                                                      new_rep_count, jump_flag))
                     else:  # I dont think there is a case where the else case is executed
@@ -1238,32 +1236,32 @@ class TaborChannelPair(AWG):
             assert program.program.depth() == 2
             for name in names:
                 for program_mapping in program._volatile_parameter_mappings[name]:
-                    if program_mapping[0] == 0:
-                        program.program.children[program_mapping[1]].children[program_mapping[2]].repetition_parameter.update_constants(parameters)
-                        new_rep_count = int(program.program.children[program_mapping[1]].children[program_mapping[2]].repetition_parameter.get_value())
-                        program.program.children[program_mapping[1]].children[program_mapping[2]].repetition_count = new_rep_count
-                        if program_mapping[3] == 1:
-                            seg_ind = program._sequencer_tables[program_mapping[1]][program_mapping[2]][1]
-                            jump_flag = program._sequencer_tables[program_mapping[1]][program_mapping[2]][2]
-                            program._sequencer_tables[program_mapping[1]][program_mapping[2]] = (new_rep_count, seg_ind,
+                    if program_mapping.aSeq == 0:
+                        program.program.children[program_mapping.adv_position].children[program_mapping.position].repetition_parameter.update_constants(parameters)
+                        new_rep_count = int(program.program.children[program_mapping.adv_position].children[program_mapping.position].repetition_parameter.get_value())
+                        program.program.children[program_mapping.adv_position].children[program_mapping.position].repetition_count = new_rep_count
+                        if program_mapping.change_table == 1:
+                            seg_ind = program._sequencer_tables[program_mapping.adv_position][program_mapping.position][1]
+                            jump_flag = program._sequencer_tables[program_mapping.adv_position][program_mapping.position][2]
+                            program._sequencer_tables[program_mapping.adv_position][program_mapping.position] = (new_rep_count, seg_ind,
                                                                                                  jump_flag)
                             if self._current_program == program_name:
-                                self.device.send_cmd(':SEQ:SEL {}'.format(program_mapping[1] + 2))
+                                self.device.send_cmd(':SEQ:SEL {}'.format(program_mapping.adv_position + 2))
                                 self.device.send_cmd(
-                                    ':SEQ:DEF {}, {}, {}, {}'.format(program_mapping[2],
+                                    ':SEQ:DEF {}, {}, {}, {}'.format(program_mapping.position,
                                                                      waveform_to_segment_index[seg_ind] + 1,
                                                                      new_rep_count, jump_flag))
                     else:
-                        program.program.children[program_mapping[2]].repetition_parameter.update_constants(parameters)
-                        new_rep_count = int(program.program.children[program_mapping[2]].repetition_parameter.get_value())
-                        program.program.children[program_mapping[2]].repetition_count = new_rep_count
-                        if program_mapping[3] == 1:
-                            seq_num = program._advanced_sequencer_table[program_mapping[2]][1]
-                            jump_flag = program._advanced_sequencer_table[program_mapping[2]][2]
-                            program._advanced_sequencer_table[program_mapping[2]] = (new_rep_count, seq_num, jump_flag)
+                        program.program.children[program_mapping.position].repetition_parameter.update_constants(parameters)
+                        new_rep_count = int(program.program.children[program_mapping.position].repetition_parameter.get_value())
+                        program.program.children[program_mapping.position].repetition_count = new_rep_count
+                        if program_mapping.change_table == 1:
+                            seq_num = program._advanced_sequencer_table[program_mapping.position][1]
+                            jump_flag = program._advanced_sequencer_table[program_mapping.position][2]
+                            program._advanced_sequencer_table[program_mapping.position] = (new_rep_count, seq_num, jump_flag)
                             if self._current_program == program_name:
                                 self.device.send_cmd(
-                                    ':ASEQ:DEF {}, {}, {}, {}'.format(program_mapping[2] + 1, seq_num + 1, new_rep_count, jump_flag))
+                                    ':ASEQ:DEF {}, {}, {}, {}'.format(program_mapping.position + 1, seq_num + 1, new_rep_count, jump_flag))
 
     def set_marker_state(self, marker: int, active: bool) -> None:
         """Sets the marker state of this channel pair. According to the manual one cannot turn them off/on separately."""
