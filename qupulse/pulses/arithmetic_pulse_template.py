@@ -1,6 +1,7 @@
 
 from typing import Any, Dict, List, Set, Optional, Union, Mapping
 from numbers import Real
+import warnings
 
 import sympy
 
@@ -16,19 +17,45 @@ from qupulse._program.transformation import Transformation, ScalingTransformatio
 
 
 class ArithmeticAtomicPulseTemplate(AtomicPulseTemplate):
-    """Channels only present in one pulse template have the operations neutral element on the other."""
     def __init__(self,
                  lhs: AtomicPulseTemplate,
                  arithmetic_operator: str,
                  rhs: AtomicPulseTemplate,
                  *,
-                 measurements=None,
-                 identifier=None,
+                 silent_atomic: bool = False,
+                 measurements: List = None,
+                 identifier: str = None,
                  registry: PulseRegistryType = None):
+        """Apply an operation (+ or -) channel wise to two atomic pulse templates. Channels only present in one pulse
+        template have the operations neutral element on the other. The operations are defined in
+        `ArithmeticWaveform.operator_map`.
+
+        Non-atomic pulse templates are implicitly interpreted as atomic.
+
+        Args:
+            lhs: Left hand side operand
+            arithmetic_operator: String representation of the operator
+            rhs: Right hand side operand
+            measurements: See AtomicPulseTemplate
+            identifier: See AtomicPulseTemplate
+            registry: See qupulse.serialization.PulseRegistry
+        """
         super().__init__(identifier=identifier, measurements=measurements)
 
         if arithmetic_operator not in ArithmeticWaveform.operator_map:
-            raise ValueError('Unknown operator. allowed: ', arithmetic_operator)
+            raise ValueError('Unknown operator. allowed: %r' % set(ArithmeticWaveform.operator_map.keys()))
+
+        if lhs.duration != rhs.duration:
+            warnings.warn("The operands have unequal expressions for their duration. "
+                          "If they evaluate to different values on instantiation this will result in an error. "
+                          "(%r != %r) for ALL inputs "
+                          "(it may be unequal only for fringe cases)" % (lhs.duration, rhs.duration),
+                          category=UnequalDurationWarningInArithmeticPT)
+
+        if not silent_atomic and (not isinstance(lhs, AtomicPulseTemplate) or not isinstance(rhs, AtomicPulseTemplate)):
+            warnings.warn("ArithmeticAtomicPulseTemplate treats all operands as if they are atomic. "
+                          "You can silence this warning by passing `silent_atomic=True` or by ignoring this category.",
+                          category=ImplicitAtomicityInArithmeticPT)
 
         self._lhs = lhs
         self._rhs = rhs
@@ -89,13 +116,10 @@ class ArithmeticAtomicPulseTemplate(AtomicPulseTemplate):
 
         if rhs is None:
             return lhs
-
         if lhs is None:
-            if self._arithmetic_operator == '-':
-                return
-            return rhs
-
-        return ArithmeticWaveform(lhs, self.arithmetic_operator, rhs)
+            return ArithmeticWaveform.rhs_only_map[self.arithmetic_operator](rhs)
+        else:
+            return ArithmeticWaveform(lhs, self.arithmetic_operator, rhs)
 
     def get_measurement_windows(self,
                                 parameters: Dict[str, Real],
@@ -128,6 +152,12 @@ class ArithmeticAtomicPulseTemplate(AtomicPulseTemplate):
 
         return data
 
+    def __repr__(self):
+        if any(super().get_serialization_data()):
+            return super().__repr__()
+        else:
+            return '(%r %r %r)' % (self.lhs, self.arithmetic_operator, self.rhs)
+
     @classmethod
     def deserialize(cls, serializer: Optional[Serializer]=None, **kwargs) -> 'ArithmeticAtomicPulseTemplate':
         if serializer:
@@ -139,11 +169,22 @@ class ArithmeticAtomicPulseTemplate(AtomicPulseTemplate):
 class ArithmeticPulseTemplate(PulseTemplate):
     """"""
     def __init__(self,
-                 lhs: Union[PulseTemplate, Union[ExpressionLike, Mapping[ChannelID, ExpressionLike]]],
+                 lhs: Union[PulseTemplate, ExpressionLike, Mapping[ChannelID, ExpressionLike]],
                  arithmetic_operator: str,
-                 rhs: Union[PulseTemplate, Union[ExpressionLike, Mapping[ChannelID, ExpressionLike]]],
+                 rhs: Union[PulseTemplate, ExpressionLike, Mapping[ChannelID, ExpressionLike]],
                  *,
                  identifier: Optional[str]=None):
+        """
+
+        Args:
+            lhs: Left hand side operand
+            arithmetic_operator: String representation of the operator
+            rhs: Right hand side operand
+            identifier:
+
+        Raises:
+             TypeError if both or none of the  operands are pulse templates
+        """
         PulseTemplate.__init__(self, identifier=identifier)
 
         if not isinstance(lhs, PulseTemplate) and not isinstance(rhs, PulseTemplate):
@@ -178,14 +219,13 @@ class ArithmeticPulseTemplate(PulseTemplate):
     @staticmethod
     def _parse_operand(operand: Union[ExpressionLike, Mapping[ChannelID, ExpressionLike]],
                        channels: Set[ChannelID]) -> Union[ExpressionScalar, Mapping[ChannelID, ExpressionScalar]]:
-        try:
+        if isinstance(operand, Mapping):
             if not channels <= operand.keys():
                 raise ValueError('The channels {} are defined in as an operand but not in the pulse template.')
             operand = {channel: value if isinstance(value, ExpressionScalar) else ExpressionScalar(value)
                        for channel, value in operand.items()}
             return operand
-
-        except AttributeError:
+        else:
             return operand if isinstance(operand, ExpressionScalar) else ExpressionScalar(operand)
 
     def _get_scalar_value(self,
@@ -257,7 +297,19 @@ class ArithmeticPulseTemplate(PulseTemplate):
                                                     to_single_waveform=to_single_waveform,
                                                     parent_loop=parent_loop)
 
-    def get_serialization_data(self, serializer: Optional['Serializer']=None):
+    def build_waveform(self,
+                       parameters: Dict[str, Real],
+                       channel_mapping: Dict[ChannelID, ChannelID]) -> Waveform:
+        """Required if one of ther operand is atomic"""
+        raise NotImplementedError()
+
+    def __repr__(self):
+        if any(super().get_serialization_data()):
+            return super().__repr__()
+        else:
+            return '(%r %r %r)' % (self.lhs, self._arithmetic_operator, self.rhs)
+
+    def get_serialization_data(self, serializer: Optional['Serializer'] = None) -> Dict:
         if serializer:
             raise NotImplementedError('Compatibility to old serialization routines not implemented for new type')
 
@@ -336,3 +388,45 @@ class ArithmeticPulseTemplate(PulseTemplate):
             scalar_parameters = set.union(*(value.variables for value in self._scalar.values()))
 
         return scalar_parameters | self._pulse_template.parameter_names
+
+
+def try_operation(lhs: Union[PulseTemplate, ExpressionLike, Mapping[ChannelID, ExpressionLike]],
+                  op: str,
+                  rhs: Union[PulseTemplate, ExpressionLike, Mapping[ChannelID, ExpressionLike]],
+                  **kwargs) -> Union['ArithmeticPulseTemplate', type(NotImplemented)]:
+    """
+
+    Args:
+        lhs: Left hand side operand
+        op: String representation of the operator
+        rhs: Right hand side operand
+        **kwargs: Forwarded to class init
+
+    Returns:
+        ArithmeticPulseTemplate if the desired operation is valid and returns a pulse template
+        NotImplemented otherwise
+    """
+    try:
+        # returns if only one of the operands is a pulse template and the operation is valid
+        return ArithmeticPulseTemplate(lhs, op, rhs, **kwargs)
+    except TypeError:
+        # either none or both are pulse templates
+        try:
+            return ArithmeticAtomicPulseTemplate(lhs, op, rhs, **kwargs)
+        except ValueError:
+            # invalid operand
+            return NotImplemented
+    except ValueError:
+        # invalid operand
+        return NotImplemented
+
+
+class UnequalDurationWarningInArithmeticPT(RuntimeWarning):
+    """Signals that an ArithmeticAtomicPulseTemplate was constructed from operands with unequal duration. This is a
+    separate class to allow easy silencing."""
+
+
+class ImplicitAtomicityInArithmeticPT(RuntimeWarning):
+    """Signals that an ArithmeticAtomicPulseTemplate has operands that are non-atomic but will be interpreted as atomic.
+    This is a separate class to allow easy silencing.
+    """
