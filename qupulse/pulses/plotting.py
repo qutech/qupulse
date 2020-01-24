@@ -168,7 +168,7 @@ def render(program: Union[AbstractInstructionBlock, Loop],
         raise PlottingNotPossibleException(pulse=None,
                                            description='cannot render sequence with less than 2 data points')
     if not round(float(sample_count), 10).is_integer():
-        warnings.warn(f"Sample count {sample_count} is not an integer. Will be rounded (this changes the sample rate).")
+        warnings.warn("Sample count {sample_count} is not an integer. Will be rounded (this changes the sample rate).".format(sample_count=sample_count))
 
     times = np.linspace(float(start_time), float(end_time), num=int(sample_count), dtype=float)
     times[-1] = np.nextafter(times[-1], times[-2])
