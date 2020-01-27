@@ -6,9 +6,11 @@ import numpy as np
 import sympy
 
 from qupulse.expressions import ExpressionScalar
+from qupulse.pulses.parameters import ConstantParameter
 from qupulse.pulses.arithmetic_pulse_template import ArithmeticAtomicPulseTemplate, ArithmeticPulseTemplate,\
-    ImplicitAtomicityInArithmeticPT, UnequalDurationWarningInArithmeticPT
-from qupulse._program.waveforms import ArithmeticWaveform
+    ImplicitAtomicityInArithmeticPT, UnequalDurationWarningInArithmeticPT, try_operation
+from qupulse._program.waveforms import TransformingWaveform
+from qupulse._program.transformation import OffsetTransformation, ScalingTransformation, IdentityTransformation
 
 from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummyWaveform
 from tests.pulses.pulse_template_tests import PulseTemplateStub
@@ -182,25 +184,324 @@ class ArithmeticAtomicPulseTemplateSerializationTest(SerializableTests, unittest
 
 class ArithmeticPulseTemplateTest(unittest.TestCase):
     def test_init(self):
-        raise NotImplementedError()
+        lhs = DummyPulseTemplate(duration=4, defined_channels={'a', 'b'}, parameter_names={'x', 'y'})
+        rhs = DummyPulseTemplate(duration=4, defined_channels={'a', 'c'}, parameter_names={'x', 'z'})
+
+        with self.assertRaisesRegex(TypeError, 'needs to be a pulse template'):
+            ArithmeticPulseTemplate('a', '+', 'b')
+
+        with self.assertRaisesRegex(TypeError, 'two PulseTemplates'):
+            ArithmeticPulseTemplate(lhs, '+', rhs)
+
+        with self.assertRaisesRegex(ValueError, r'Operands \(scalar, PulseTemplate\) require'):
+            ArithmeticPulseTemplate(4, '/', rhs)
+
+        with self.assertRaisesRegex(ValueError, r'Operands \(PulseTemplate, scalar\) require'):
+            ArithmeticPulseTemplate(lhs, '%', 4)
+
+        scalar = mock.Mock()
+        non_pt = mock.Mock()
+
+        with mock.patch.object(ArithmeticPulseTemplate, '_parse_operand',
+                               return_value=scalar) as parse_operand:
+            arith = ArithmeticPulseTemplate(lhs, '/', non_pt)
+            parse_operand.assert_called_once_with(non_pt, lhs.defined_channels)
+            self.assertEqual(lhs, arith.lhs)
+            self.assertEqual(scalar, arith.rhs)
+            self.assertEqual(lhs, arith._pulse_template)
+            self.assertEqual(scalar, arith._scalar)
+            self.assertEqual('/', arith._arithmetic_operator)
+
+        with mock.patch.object(ArithmeticPulseTemplate, '_parse_operand',
+                               return_value=scalar) as parse_operand:
+            arith = ArithmeticPulseTemplate(non_pt, '-', rhs)
+            parse_operand.assert_called_once_with(non_pt, rhs.defined_channels)
+            self.assertEqual(scalar, arith.lhs)
+            self.assertEqual(rhs, arith.rhs)
+            self.assertEqual(rhs, arith._pulse_template)
+            self.assertEqual(scalar, arith._scalar)
+            self.assertEqual('-', arith._arithmetic_operator)
 
     def test_parse_operand(self):
-        raise NotImplementedError()
+        operand = {'a': 3, 'b': 'x'}
+        with self.assertRaises(ValueError):
+            ArithmeticPulseTemplate._parse_operand(operand, {'a'})
+
+        self.assertEqual(dict(a=ExpressionScalar(3), b=ExpressionScalar('x')),
+                         ArithmeticPulseTemplate._parse_operand(operand, {'a', 'b', 'c'}))
+
+        expr_op = ExpressionScalar(3)
+        self.assertIs(expr_op, ArithmeticPulseTemplate._parse_operand(expr_op, {'a', 'b', 'c'}))
+
+        self.assertEqual(ExpressionScalar('foo'),
+                         ArithmeticPulseTemplate._parse_operand('foo', {'a', 'b', 'c'}))
 
     def test_get_scalar_value(self):
-        raise NotImplementedError()
+        lhs = 'x + y'
+        rhs = DummyPulseTemplate(defined_channels={'u', 'v', 'w'})
+        arith = ArithmeticPulseTemplate(lhs, '-', rhs)
+
+        parameters = dict(x=3, y=5, z=8)
+        channel_mapping = dict(u='a', v='b', w=None)
+        expected = dict(a=8, b=8)
+        self.assertEqual(expected, arith._get_scalar_value(parameters=parameters,
+                                                           channel_mapping=channel_mapping))
+
+        lhs = {'u': 1., 'w': 3.}
+        arith = ArithmeticPulseTemplate(lhs, '-', rhs)
+        expected = dict(a=1.)
+        self.assertEqual(expected, arith._get_scalar_value(parameters=parameters,
+                                                           channel_mapping=channel_mapping))
+
+    def test_get_transformation(self):
+        pulse_template = DummyPulseTemplate(defined_channels={'u', 'v', 'w'})
+        scalar = dict(a=1., b=2.)
+        neg_scalar = dict(a=-1., b=-2.)
+        inv_scalar = dict(a=1., b=1/2.)
+        neg_trafo = ScalingTransformation(dict(a=-1, b=-1))
+
+        parameters = dict(x=3, y=5, z=8)
+        channel_mapping = dict(u='a', v='b', w=None)
+
+        # (PT + scalar)
+        arith = ArithmeticPulseTemplate(pulse_template, '+', 'd')
+        with mock.patch.object(arith, '_get_scalar_value', return_value=scalar.copy()) as get_scalar_value:
+            trafo = arith._get_transformation(parameters=parameters, channel_mapping=channel_mapping)
+            get_scalar_value.assert_called_once_with(parameters=parameters, channel_mapping=channel_mapping)
+
+            expected_trafo = OffsetTransformation(scalar)
+            self.assertEqual(expected_trafo, trafo)
+
+        # (scalar + PT)
+        arith = ArithmeticPulseTemplate('d', '+', pulse_template)
+        with mock.patch.object(arith, '_get_scalar_value', return_value=scalar.copy()) as get_scalar_value:
+            trafo = arith._get_transformation(parameters=parameters, channel_mapping=channel_mapping)
+            get_scalar_value.assert_called_once_with(parameters=parameters, channel_mapping=channel_mapping)
+
+            expected_trafo = OffsetTransformation(scalar)
+            self.assertEqual(expected_trafo, trafo)
+
+        # (PT - scalar)
+        arith = ArithmeticPulseTemplate(pulse_template, '-', 'd')
+        with mock.patch.object(arith, '_get_scalar_value', return_value=scalar.copy()) as get_scalar_value:
+            trafo = arith._get_transformation(parameters=parameters, channel_mapping=channel_mapping)
+            get_scalar_value.assert_called_once_with(parameters=parameters, channel_mapping=channel_mapping)
+
+            expected_trafo = OffsetTransformation(neg_scalar)
+            self.assertEqual(expected_trafo, trafo)
+
+        # (scalar - PT)
+        arith = ArithmeticPulseTemplate('d', '-', pulse_template)
+        with mock.patch.object(arith, '_get_scalar_value', return_value=scalar.copy()) as get_scalar_value:
+            trafo = arith._get_transformation(parameters=parameters, channel_mapping=channel_mapping)
+            get_scalar_value.assert_called_once_with(parameters=parameters, channel_mapping=channel_mapping)
+
+            expected_trafo = neg_trafo.chain(OffsetTransformation(scalar))
+            self.assertEqual(expected_trafo, trafo)
+
+        # (PT * scalar)
+        arith = ArithmeticPulseTemplate(pulse_template, '*', 'd')
+        with mock.patch.object(arith, '_get_scalar_value', return_value=scalar.copy()) as get_scalar_value:
+            trafo = arith._get_transformation(parameters=parameters, channel_mapping=channel_mapping)
+            get_scalar_value.assert_called_once_with(parameters=parameters, channel_mapping=channel_mapping)
+
+            expected_trafo = ScalingTransformation(scalar)
+            self.assertEqual(expected_trafo, trafo)
+
+        # (scalar * PT)
+        arith = ArithmeticPulseTemplate('d', '*', pulse_template)
+        with mock.patch.object(arith, '_get_scalar_value', return_value=scalar.copy()) as get_scalar_value:
+            trafo = arith._get_transformation(parameters=parameters, channel_mapping=channel_mapping)
+            get_scalar_value.assert_called_once_with(parameters=parameters, channel_mapping=channel_mapping)
+
+            expected_trafo = ScalingTransformation(scalar)
+            self.assertEqual(expected_trafo, trafo)
+
+        # (PT / scalar)
+        arith = ArithmeticPulseTemplate(pulse_template, '/', 'd')
+        with mock.patch.object(arith, '_get_scalar_value', return_value=scalar.copy()) as get_scalar_value:
+            trafo = arith._get_transformation(parameters=parameters, channel_mapping=channel_mapping)
+            get_scalar_value.assert_called_once_with(parameters=parameters, channel_mapping=channel_mapping)
+
+            expected_trafo = ScalingTransformation(inv_scalar)
+            self.assertEqual(expected_trafo, trafo)
 
     def test_internal_create_program(self):
-        raise NotImplementedError()
+        lhs = 'x + y'
+        rhs = DummyPulseTemplate(defined_channels={'u', 'v', 'w'})
+        arith = ArithmeticPulseTemplate(lhs, '-', rhs)
+
+        parameters = dict(x=ConstantParameter(3), y=ConstantParameter(5), z=ConstantParameter(8))
+        real_parameters = dict(x=3, y=5)
+        channel_mapping = dict(u='a', v='b', w=None)
+        measurement_mapping = dict(m1='m2')
+        global_transformation = OffsetTransformation({'unrelated': 1.})
+        to_single_waveform = {'something_else'}
+        parent_loop = mock.Mock()
+
+        expected_transformation = mock.Mock(spec=IdentityTransformation())
+
+        inner_trafo = mock.Mock(spec=IdentityTransformation())
+        inner_trafo.chain.return_value = expected_transformation
+
+        with mock.patch.object(rhs, '_create_program') as inner_create_program:
+            with mock.patch.object(arith, '_get_transformation', return_value=inner_trafo) as get_transformation:
+                arith._internal_create_program(
+                    parameters=parameters,
+                    measurement_mapping=measurement_mapping,
+                    channel_mapping=channel_mapping,
+                    global_transformation=global_transformation,
+                    to_single_waveform=to_single_waveform,
+                    parent_loop=parent_loop
+                )
+                get_transformation.assert_called_once_with(parameters=real_parameters, channel_mapping=channel_mapping)
+
+            inner_trafo.chain.assert_called_once_with(global_transformation)
+            inner_create_program.assert_called_once_with(
+                parameters=parameters,
+                measurement_mapping=measurement_mapping,
+                channel_mapping=channel_mapping,
+                global_transformation=expected_transformation,
+                to_single_waveform=to_single_waveform,
+                parent_loop=parent_loop
+            )
 
     def test_integral(self):
-        raise NotImplementedError()
+        scalar = 'x + y'
+        mapping = {'u': 'x + y', 'v': 2.2}
+        pt = DummyPulseTemplate(defined_channels={'u', 'v', 'w'}, integrals={'u': ExpressionScalar('ui'),
+                                                                             'v': ExpressionScalar('vi'),
+                                                                             'w': ExpressionScalar('wi')},
+                                duration='t_dur')
+
+        # commutative (+ scalar pt)
+        expected = dict(u=ExpressionScalar('ui + (x + y) * t_dur'),
+                        v=ExpressionScalar('vi + (x + y) * t_dur'),
+                        w=ExpressionScalar('wi + (x + y) * t_dur'))
+        self.assertEqual(expected, ArithmeticPulseTemplate(scalar, '+', pt).integral)
+        self.assertEqual(expected, ArithmeticPulseTemplate(pt, '+', scalar).integral)
+
+        # commutative (+ mapping pt)
+        expected = dict(u=ExpressionScalar('ui + (x + y) * t_dur'),
+                        v=ExpressionScalar('vi + 2.2 * t_dur'),
+                        w=ExpressionScalar('wi'))
+        self.assertEqual(expected, ArithmeticPulseTemplate(mapping, '+', pt).integral)
+        self.assertEqual(expected, ArithmeticPulseTemplate(pt, '+', mapping).integral)
+
+        # commutative (* scalar pt)
+        expected = dict(u=ExpressionScalar('ui * (x + y)'),
+                        v=ExpressionScalar('vi * (x + y)'),
+                        w=ExpressionScalar('wi * (x + y)'))
+        self.assertEqual(expected, ArithmeticPulseTemplate(scalar, '*', pt).integral)
+        self.assertEqual(expected, ArithmeticPulseTemplate(pt, '*', scalar).integral)
+
+        # commutative (* mapping pt)
+        expected = dict(u=ExpressionScalar('ui * (x + y)'),
+                        v=ExpressionScalar('vi * 2.2'),
+                        w=ExpressionScalar('wi'))
+        self.assertEqual(expected, ArithmeticPulseTemplate(mapping, '*', pt).integral)
+        self.assertEqual(expected, ArithmeticPulseTemplate(pt, '*', mapping).integral)
+
+        # (pt - scalar)
+        expected = dict(u=ExpressionScalar('ui - (x + y) * t_dur'),
+                        v=ExpressionScalar('vi - (x + y) * t_dur'),
+                        w=ExpressionScalar('wi - (x + y) * t_dur'))
+        self.assertEqual(expected, ArithmeticPulseTemplate(pt, '-', scalar).integral)
+
+        # (scalar - pt)
+        expected = dict(u=ExpressionScalar('(x + y) * t_dur - ui'),
+                        v=ExpressionScalar('(x + y) * t_dur - vi'),
+                        w=ExpressionScalar('(x + y) * t_dur - wi'))
+        self.assertEqual(expected, ArithmeticPulseTemplate(scalar, '-', pt).integral)
+
+        # (mapping - pt)
+        expected = dict(u=ExpressionScalar('(x + y) * t_dur - ui'),
+                        v=ExpressionScalar('2.2 * t_dur - vi'),
+                        w=ExpressionScalar('-wi'))
+        self.assertEqual(expected, ArithmeticPulseTemplate(mapping, '-', pt).integral)
+
+        # (pt - mapping)
+        expected = dict(u=ExpressionScalar('ui - (x + y) * t_dur'),
+                        v=ExpressionScalar('vi - 2.2 * t_dur'),
+                        w=ExpressionScalar('wi'))
+        self.assertEqual(expected, ArithmeticPulseTemplate(pt, '-', mapping).integral)
+
+        # (pt / scalar)
+        expected = dict(u=ExpressionScalar('ui / (x + y)'),
+                        v=ExpressionScalar('vi / (x + y)'),
+                        w=ExpressionScalar('wi / (x + y)'))
+        self.assertEqual(expected, ArithmeticPulseTemplate(pt, '/', scalar).integral)
+
+        # (pt / mapping)
+        expected = dict(u=ExpressionScalar('ui / (x + y)'),
+                        v=ExpressionScalar('vi / 2.2'),
+                        w=ExpressionScalar('wi'))
+        self.assertEqual(expected, ArithmeticPulseTemplate(pt, '/', mapping).integral)
 
     def test_simple_attributes(self):
-        raise NotImplementedError()
+        lhs = DummyPulseTemplate(defined_channels={'a', 'b'}, duration=ExpressionScalar('t_dur'),
+                                 is_interruptable=mock.Mock(), measurement_names={'m1'})
+        rhs = 4
+        arith = ArithmeticPulseTemplate(lhs, '+', rhs)
+        self.assertIs(lhs.duration, arith.duration)
+        self.assertIs(lhs.is_interruptable, arith.is_interruptable)
+        self.assertIs(lhs.measurement_names, arith.measurement_names)
+
+    def test_parameter_names(self):
+        pt = DummyPulseTemplate(defined_channels={'a'}, parameter_names={'foo', 'bar'})
+        scalar = 'x + y'
+
+        arith = ArithmeticPulseTemplate(pt, '+', scalar)
+        self.assertEqual(frozenset({'x', 'y'}), arith._scalar_operand_parameters)
+        self.assertEqual({'x', 'y', 'foo', 'bar'}, arith.parameter_names)
+
+        pt = DummyPulseTemplate(defined_channels={'a'}, parameter_names={'foo', 'bar'})
+        mapping = {'a': 'x', 'b': 'y'}
+        self.assertEqual(frozenset({'x', 'y'}), arith._scalar_operand_parameters)
+        self.assertEqual({'x', 'y', 'foo', 'bar'}, arith.parameter_names)
 
     def test_try_operation(self):
-        raise NotImplementedError()
+        apt = DummyPulseTemplate(duration=1, defined_channels={'a'})
+        npt = PulseTemplateStub(defined_channels={'a'})
+
+        self.assertIsInstance(try_operation(npt, '+', 6), ArithmeticPulseTemplate)
+        self.assertIsInstance(try_operation(apt, '+', apt), ArithmeticAtomicPulseTemplate)
+        self.assertIs(NotImplemented, try_operation(npt, '/', npt))
+        self.assertIs(NotImplemented, try_operation(npt, '//', 6))
 
     def test_build_waveform(self):
-        raise NotImplementedError()
+        pt = DummyPulseTemplate(defined_channels={'a'})
+
+        parameters = dict(x=5., y=5.7)
+        channel_mapping = dict(a='u', b='v')
+
+        inner_wf = mock.Mock(spec=DummyWaveform)
+        trafo = mock.Mock(spec=IdentityTransformation())
+
+        arith = ArithmeticPulseTemplate(pt, '-', 6)
+
+        with mock.patch.object(pt, 'build_waveform', return_value=None) as inner_build:
+            with mock.patch.object(arith, '_get_transformation') as _get_transformation:
+                self.assertIsNone(arith.build_waveform(parameters=parameters, channel_mapping=channel_mapping))
+                inner_build.assert_called_once_with(parameters=parameters, channel_mapping=channel_mapping)
+                _get_transformation.assert_not_called()
+
+        expected = TransformingWaveform(inner_wf, trafo)
+
+        with mock.patch.object(pt, 'build_waveform', return_value=inner_wf) as inner_build:
+            with mock.patch.object(arith, '_get_transformation', return_value=trafo) as _get_transformation:
+                result = arith.build_waveform(parameters=parameters, channel_mapping=channel_mapping)
+                inner_build.assert_called_once_with(parameters=parameters, channel_mapping=channel_mapping)
+                _get_transformation.assert_called_once_with(parameters=parameters, channel_mapping=channel_mapping)
+        self.assertEqual(expected, result)
+
+    def test_repr(self):
+        pt = DummyPulseTemplate(defined_channels={'a'})
+        scalar = 'x'
+
+        with mock.patch.object(DummyPulseTemplate, '__repr__', wraps=lambda *args: 'dummy'):
+            r = repr(ArithmeticPulseTemplate(pt, '-', scalar))
+        self.assertEqual("(dummy - Expression('x'))", r)
+
+        arith = ArithmeticPulseTemplate(pt, '-', scalar, identifier='id')
+        self.assertEqual(super(ArithmeticPulseTemplate, arith).__repr__(), repr(arith))
