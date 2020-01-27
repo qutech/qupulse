@@ -79,8 +79,7 @@ class TestAWGDevice(AWGDevice):
         self._channel_tuples = []
 
         # Call the feature function, with the feature's signature
-        self[SynchronizeChannelsFeature].synchronize_channels(
-            2)  # default channel synchronization with a group size of 2
+        self[SynchronizeChannelsFeature].synchronize_channels(2)  # default channel synchronization with a group size of 2
 
     def cleanup(self) -> None:
         """This will be called automatically in __del__"""
@@ -233,7 +232,6 @@ class TestBaseClasses(unittest.TestCase):
                                  f"Invalid channel tuple {channel.channel_tuple.idn} for channel {i}")
                 self.assertTrue(channel in channel.channel_tuple.channels,
                                 f"Channel {i} not in its parent channel tuple {channel.channel_tuple.idn}")
-
         self.assertEqual(len(self.device.channel_tuples), 1, "Invalid number of channel tuples")
 
     def test_error_thrown(self):
@@ -244,4 +242,3 @@ class TestBaseClasses(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-
