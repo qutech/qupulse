@@ -73,7 +73,7 @@ class TestAWG(BaseAWG):
         self._channel_tuples: List["TestAWGChannelTuple"] = []
 
         # Call the feature function, with the feature's signature
-        self.synchronize_channels(2)  # default channel synchronization with a group size of 2
+        self[SynchronizeChannelsFeature].synchronize_channels(2)  # default channel synchronization with a group size of 2
 
     def cleanup(self) -> None:
         """This will be called automatically in __del__"""
@@ -135,7 +135,7 @@ class TestAWGChannelTuple(BaseAWGChannelTuple):
     @property
     def channels(self) -> Collection["TestAWGChannel"]:
         return self._channels
-    
+
     # Feature functions
     def _get_name(self) -> str:
         """Implementation of the feature's function"""
@@ -165,14 +165,14 @@ class TestAWGChannel(BaseAWGChannel):
     @property
     def channel_tuple(self) -> Optional[TestAWGChannelTuple]:
         return self._channel_tuple
-    
+
     def _set_channel_tuple(self, channel_tuple: TestAWGChannelTuple) -> None:
         self._channel_tuple = channel_tuple
 
     def _get_offs(self) -> float:
         """Implementation of the feature's function"""
         return self._offset
-    
+
     def _set_offs(self, offset: float) -> None:
         """Implementation of the feature's function"""
         self._offset = offset
@@ -202,19 +202,19 @@ def test():
     # Check if each channel is working correctly
     for i, channel in enumerate(device.channels):
         assert channel.idn == i, "Invalid channel id"
-        assert channel.get_offset() == 0, f"Invalid default offset for channel {i}"
-        assert channel.get_amplitude() == 5.0, f"Invalid default amplitude for channel {i}"
+        assert channel[ChannelOffsetAmplitudeFeature].get_offset() == 0, f"Invalid default offset for channel {i}"
+        assert channel[ChannelOffsetAmplitudeFeature].get_amplitude() == 5.0, f"Invalid default amplitude for channel {i}"
 
         offs = -0.1 * i
         ampl = 0.5 + 3 * i
-        channel.set_offset(offs)
-        channel.set_amplitude(ampl)
-        assert channel.get_offset() == offs, f"Invalid offset for channel {i}"
-        assert channel.get_amplitude() == ampl, f"Invalid amplitude for channel {i}"
+        channel[ChannelOffsetAmplitudeFeature].set_offset(offs)
+        channel[ChannelOffsetAmplitudeFeature].set_amplitude(ampl)
+        assert channel[ChannelOffsetAmplitudeFeature].get_offset() == offs, f"Invalid offset for channel {i}"
+        assert channel[ChannelOffsetAmplitudeFeature].get_amplitude() == ampl, f"Invalid amplitude for channel {i}"
 
     # Check if each channel tuple is working fine
     for group_size in [2, 4, 8]:
-        device.synchronize_channels(group_size)
+        device[SynchronizeChannelsFeature].synchronize_channels(group_size)
 
         assert len(device.channel_tuples) == 8 // group_size, "Invalid number of channel tuples"
 
@@ -225,7 +225,7 @@ def test():
 
     # Check if an error is thrown, when trying to process an invalid parameter
     try:
-        device.synchronize_channels(3)
+        device[SynchronizeChannelsFeature].synchronize_channels(3)
         assert True, "Missing error for invalid group size"
     except ValueError:
         pass
