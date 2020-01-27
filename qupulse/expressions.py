@@ -306,6 +306,9 @@ class ExpressionScalar(Expression):
     def __neg__(self) -> 'ExpressionScalar':
         return self.make(self._sympified_expression.__neg__())
 
+    def __pos__(self):
+        return self.make(self._sympified_expression.__pos__())
+
     @property
     def original_expression(self) -> Union[str, Number]:
         return self._original_expression

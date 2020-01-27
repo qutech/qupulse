@@ -90,18 +90,16 @@ class ArithmeticAtomicPulseTemplate(AtomicPulseTemplate):
     @property
     def duration(self) -> ExpressionScalar:
         """Duration of the lhs operand if it is larger zero. Else duration of the rhs."""
-        lhs_duration = self.lhs.duration
-        return ExpressionScalar(sympy.Piecewise((lhs_duration.sympified_expression > 0, lhs_duration),
-                                                (True, self.rhs.duration.sympified_expression)))
+        return ExpressionScalar(sympy.Max(self.lhs.duration, self.rhs.duration))
 
     @property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
         lhs = self.lhs.integral
         rhs = self.rhs.integral
 
-        result = lhs
+        result = lhs.copy()
 
-        for channel, rhs_value in rhs.values():
+        for channel, rhs_value in rhs.items():
             if channel in result:
                 result[channel] = ArithmeticWaveform.operator_map[self._arithmetic_operator](result[channel], rhs_value)
             else:
@@ -136,7 +134,7 @@ class ArithmeticAtomicPulseTemplate(AtomicPulseTemplate):
     def requires_stop(self,
                       parameters: Dict[str, Parameter],
                       conditions: Dict[str, 'Condition']) -> bool:
-        return self.lhs.requires_stop(parameters, conditions) or self.rhs.requires_stop(parameters, conditions)
+        raise NotImplementedError('Easy to implement but left out for now')
 
     def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
         data = super().get_serialization_data(serializer)
