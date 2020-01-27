@@ -57,6 +57,9 @@ class IdentityTransformation(Transformation, metaclass=SingletonABCMeta):
     def chain(self, next_transformation: Transformation) -> Transformation:
         return next_transformation
 
+    def __repr__(self):
+        return 'IdentityTransformation()'
+
 
 class ChainedTransformation(Transformation):
     def __init__(self, *transformations: Transformation):
@@ -88,6 +91,9 @@ class ChainedTransformation(Transformation):
     def chain(self, next_transformation) -> 'ChainedTransformation':
         return chain_transformations(*self.transformations, next_transformation)
 
+    def __repr__(self):
+        return 'ChainedTransformation%r' % (self._transformations,)
+
 
 class LinearTransformation(Transformation):
     def __init__(self,
@@ -101,6 +107,8 @@ class LinearTransformation(Transformation):
             input_channels: Channel ids of the columns
             output_channels: Channel ids of the rows
         """
+        transformation_matrix = np.asarray(transformation_matrix)
+
         if transformation_matrix.shape != (len(output_channels), len(input_channels)):
             raise ValueError('Shape of transformation matrix does not match to the given channels')
 
@@ -153,6 +161,14 @@ class LinearTransformation(Transformation):
     def compare_key(self) -> Tuple[Tuple[ChannelID], Tuple[ChannelID], bytes]:
         return self._input_channels, self._output_channels, self._matrix.tobytes()
 
+    def __repr__(self):
+        return ('LinearTransformation('
+                'transformation_matrix={transformation_matrix},'
+                'input_channels={input_channels},'
+                'output_channels={output_channels})').format(transformation_matrix=self._matrix.tolist(),
+                                                             input_channels=self._input_channels,
+                                                             output_channels=self._output_channels)
+
 
 class OffsetTransformation(Transformation):
     def __init__(self, offsets: Mapping[ChannelID, Real]):
@@ -179,6 +195,9 @@ class OffsetTransformation(Transformation):
     def compare_key(self) -> frozenset:
         return frozenset(self._offsets.items())
 
+    def __repr__(self):
+        return 'OffsetTransformation(%r)' % self._offsets
+
 
 class ScalingTransformation(Transformation):
     def __init__(self, factors: Mapping[ChannelID, Real]):
@@ -198,6 +217,8 @@ class ScalingTransformation(Transformation):
     def compare_key(self) -> frozenset:
         return frozenset(self._factors.items())
 
+    def __repr__(self):
+        return 'ScalingTransformation(%r)' % self._factors
 
 
 try:
@@ -243,6 +264,9 @@ class ParallelConstantChannelTransformation(Transformation):
 
     def get_output_channels(self, input_channels: Set[ChannelID]) -> Set[ChannelID]:
         return input_channels | self._channels.keys()
+
+    def __repr__(self):
+        return 'ParallelConstantChannelTransformation(%r)' % self._channels
 
 
 def chain_transformations(*transformations: Transformation) -> Transformation:
