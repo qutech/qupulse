@@ -2,7 +2,7 @@
 another PulseTemplate based on a condition."""
 
 
-from typing import Dict, Set, Optional, Any, Union, Tuple, Generator, Sequence, cast
+from typing import Dict, Set, Optional, Any, Union, Tuple, Generator, Sequence, cast, Callable
 import warnings
 
 import sympy
@@ -46,16 +46,6 @@ class LoopPulseTemplate(PulseTemplate):
     @property
     def is_interruptable(self):
         raise NotImplementedError()  # pragma: no cover
-
-    def __add__(self, other: AtomicPulseTemplate) -> 'LoopPulseTemplate':
-        serialized = self.get_serialization_data()
-        serialized['body'] = serialized['body'] + other
-        return type(self)(**serialized)
-
-    def __sub__(self, other: AtomicPulseTemplate) -> 'LoopPulseTemplate':
-        serialized = self.get_serialization_data()
-        serialized['body'] = serialized['body'] - other
-        return type(self)(**serialized)
 
 
 class ParametrizedRange:

@@ -2,7 +2,7 @@
 combines several other PulseTemplate objects for sequential execution."""
 
 import numpy as np
-from typing import Dict, List, Tuple, Set, Optional, Any, Iterable, Union
+from typing import Dict, List, Set, Optional, Any, Iterable, Union, Callable, cast
 from numbers import Real
 import functools
 import warnings
@@ -235,13 +235,3 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
             return {k: x[k] + y[k] for k in x}
 
         return functools.reduce(add_dicts, [sub.integral for sub in self.__subtemplates], expressions)
-
-    def __add__(self, other: AtomicPulseTemplate) -> 'SequencePulseTemplate':
-        serialized = self.get_serialization_data()
-        subtemplates = (subtemplate + other for subtemplate in serialized.pop('subtemplates'))
-        return type(self)(*subtemplates, **serialized)
-
-    def __sub__(self, other: AtomicPulseTemplate) -> 'SequencePulseTemplate':
-        serialized = self.get_serialization_data()
-        subtemplates = (subtemplate - other for subtemplate in serialized.pop('subtemplates'))
-        return type(self)(*subtemplates, **serialized)

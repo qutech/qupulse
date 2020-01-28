@@ -248,7 +248,7 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
         from qupulse.pulses.arithmetic_pulse_template import try_operation
         return try_operation(self, '+', other)
 
-    def __iadd__(other, self: ExpressionLike):
+    def __radd__(other, self: ExpressionLike):
         from qupulse.pulses.arithmetic_pulse_template import try_operation
         return try_operation(self, '+', other)
 
@@ -256,7 +256,7 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
         from qupulse.pulses.arithmetic_pulse_template import try_operation
         return try_operation(self, '-', other)
 
-    def __isub__(self, other):
+    def __rsub__(self, other):
         from qupulse.pulses.arithmetic_pulse_template import try_operation
         return try_operation(other, '-', self)
 
@@ -264,7 +264,7 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
         from qupulse.pulses.arithmetic_pulse_template import try_operation
         return try_operation(self, '*', other)
 
-    def __imul__(self, other):
+    def __rmul__(self, other):
         from qupulse.pulses.arithmetic_pulse_template import try_operation
         return try_operation(other, '*', self)
 
