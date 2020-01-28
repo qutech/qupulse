@@ -272,7 +272,7 @@ class ParallelConstantChannelTransformation(Transformation):
 def chain_transformations(*transformations: Transformation) -> Transformation:
     parsed_transformations = []
     for transformation in transformations:
-        if transformation is IdentityTransformation():
+        if transformation is IdentityTransformation() or transformation is None:
             pass
         elif isinstance(transformation, ChainedTransformation):
             parsed_transformations.extend(transformation.transformations)
