@@ -15,6 +15,7 @@ from qupulse._program.transformation import OffsetTransformation, ScalingTransfo
 from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummyWaveform
 from tests.pulses.pulse_template_tests import PulseTemplateStub
 from tests.serialization_tests import SerializableTests
+from qupulse.pulses import TablePT, FunctionPT, RepetitionPT, AtomicMultiChannelPT
 
 
 class ArithmeticAtomicPulseTemplateTest(unittest.TestCase):
@@ -505,3 +506,56 @@ class ArithmeticPulseTemplateTest(unittest.TestCase):
 
         arith = ArithmeticPulseTemplate(pt, '-', scalar, identifier='id')
         self.assertEqual(super(ArithmeticPulseTemplate, arith).__repr__(), repr(arith))
+
+
+class ArithmeticUsageTests(unittest.TestCase):
+    def setUp(self) -> None:
+        # define some building blocks
+        self.sin_pt = FunctionPT('sin(omega*t)', 't_duration', channel='X')
+        self.cos_pt = FunctionPT('sin(omega*t)', 't_duration', channel='Y')
+        self.exp_pt = AtomicMultiChannelPT(self.sin_pt, self.cos_pt)
+        self.tpt = TablePT({'X': [(0, 0), (3., 4.), ('t_duration', 2., 'linear')],
+                            'Y': [(0, 1.), ('t_y', 5.), ('t_duration', 0., 'linear')]})
+        self.complex_pt = RepetitionPT(self.tpt, 5) @ self.exp_pt
+        self.parameters = dict(t_duration=10, omega=3.14*2/10, t_y=3.4)
+
+    def test_scaling(self):
+        from qupulse.pulses import plotting
+
+        parameters = {**self.parameters, 'foo': 5.3}
+        t_ref, reference, _ = plotting.render(self.complex_pt.create_program(parameters=parameters))
+
+        for factor in (5, 5.3, 'foo'):
+            scaled = factor * self.complex_pt
+            real_scale = ExpressionScalar(factor).evaluate_numeric(**parameters)
+            program = scaled.create_program(parameters=parameters)
+
+            t, rendered, _ = plotting.render(program, 10.)
+            np.testing.assert_equal(t_ref, t)
+            for ch, volts in rendered.items():
+                np.testing.assert_allclose(reference[ch] * real_scale, volts)
+
+            divided = self.complex_pt / factor
+            t, rendered, _ = plotting.render(divided.create_program(parameters=parameters), 10.)
+            np.testing.assert_equal(t_ref, t)
+            for ch, volts in rendered.items():
+                np.testing.assert_allclose(reference[ch] / real_scale, volts)
+
+            sel_scaled = {'X': factor} * self.complex_pt
+            t, rendered, _ = plotting.render(sel_scaled.create_program(parameters=parameters), 10.)
+            np.testing.assert_equal(t_ref, t)
+            for ch, volts in rendered.items():
+                if ch == 'X':
+                    np.testing.assert_allclose(reference[ch] * real_scale, volts)
+                else:
+                    np.testing.assert_equal(reference[ch], volts)
+
+    def test_offset(self):
+        _ = 5.3 + self.complex_pt
+        _ = 5 + self.complex_pt
+        _ = 'foo' + self.complex_pt
+
+        _ = self.complex_pt + 4.5
+        _ = self.complex_pt - '4.5'
+
+
