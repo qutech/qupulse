@@ -76,7 +76,7 @@ class TestAWG(BaseAWG):
         self.add_feature(SynchronizeChannelsFeature(self._sync_chans))
 
         self._channels = [TestAWGChannel(i, self) for i in range(8)]  # 8 channels
-        self._channel_tuples: List["TestAWGChannelTuple"] = []
+        self._channel_tuples = []
 
         # Call the feature function, with the feature's signature
         self[SynchronizeChannelsFeature].synchronize_channels(
