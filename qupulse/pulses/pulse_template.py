@@ -248,9 +248,9 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
         from qupulse.pulses.arithmetic_pulse_template import try_operation
         return try_operation(self, '+', other)
 
-    def __radd__(other, self: ExpressionLike):
+    def __radd__(self, other: ExpressionLike):
         from qupulse.pulses.arithmetic_pulse_template import try_operation
-        return try_operation(self, '+', other)
+        return try_operation(other, '+', self)
 
     def __sub__(self, other):
         from qupulse.pulses.arithmetic_pulse_template import try_operation
