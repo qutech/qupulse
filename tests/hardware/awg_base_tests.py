@@ -79,7 +79,8 @@ class TestAWGDevice(AWGDevice):
         self._channel_tuples = []
 
         # Call the feature function, with the feature's signature
-        self[SynchronizeChannelsFeature].synchronize_channels(2)  # default channel synchronization with a group size of 2
+        self[SynchronizeChannelsFeature].synchronize_channels(
+            2)  # default channel synchronization with a group size of 2
 
     def cleanup(self) -> None:
         """This will be called automatically in __del__"""
