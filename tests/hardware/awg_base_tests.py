@@ -1,3 +1,9 @@
+import warnings
+
+warnings.simplefilter("ignore", UserWarning)
+
+import unittest
+
 from typing import Callable, Collection, Iterable, List, Optional
 
 from qupulse.hardware.awgs.base import BaseAWG, BaseAWGChannel, BaseAWGChannelTuple, BaseAWGFeature, \
@@ -5,8 +11,8 @@ from qupulse.hardware.awgs.base import BaseAWG, BaseAWGChannel, BaseAWGChannelTu
 
 
 ########################################################################################################################
-# Features
-######################################################################################################################## 
+# Example Features
+########################################################################################################################
 
 class SynchronizeChannelsFeature(BaseAWGFeature):
     def __init__(self, sync_func: Callable[[int], None]):
@@ -73,7 +79,8 @@ class TestAWG(BaseAWG):
         self._channel_tuples: List["TestAWGChannelTuple"] = []
 
         # Call the feature function, with the feature's signature
-        self[SynchronizeChannelsFeature].synchronize_channels(2)  # default channel synchronization with a group size of 2
+        self[SynchronizeChannelsFeature].synchronize_channels(
+            2)  # default channel synchronization with a group size of 2
 
     def cleanup(self) -> None:
         """This will be called automatically in __del__"""
@@ -186,57 +193,54 @@ class TestAWGChannel(BaseAWGChannel):
         self._amplitude = amplitude
 
 
-########################################################################################################################
-# Test
-########################################################################################################################
+class TestBaseClasses(unittest.TestCase):
+    def setUp(self):
+        self.device_name = "My device"
+        self.device = TestAWG(self.device_name)
 
-def test():
-    device_name = "My device"
-    device = TestAWG(device_name)
+    def test_Device(self):
+        self.assertEqual(self.device.name, self.device_name, "Invalid name for device")
+        self.assertEqual(len(self.device.channels), 8, "Invalid number of channels")
+        self.assertEqual(len(self.device.channel_tuples), 4, "Invalid default channel tuples for device")
 
-    # Check if the default values were set correctly
-    assert device.name == device_name, "Invalid name for device"
-    assert len(device.channels) == 8, "Invalid number of channels"
-    assert len(device.channel_tuples) == 4, "Invalid default channel tuples for device"
+    def test_channel(self):
+        for i, channel in enumerate(self.device.channels):
+            self.assertEqual(channel.idn, i), "Invalid channel id"
+            self.assertEqual(channel[ChannelOffsetAmplitudeFeature].get_offset(), 0,
+                             f"Invalid default offset for channel {i}")
+            self.assertEqual(channel[
+                                 ChannelOffsetAmplitudeFeature].get_amplitude(), 5.0,
+                             f"Invalid default amplitude for channel {i}")
 
-    # Check if each channel is working correctly
-    for i, channel in enumerate(device.channels):
-        assert channel.idn == i, "Invalid channel id"
-        assert channel[ChannelOffsetAmplitudeFeature].get_offset() == 0, f"Invalid default offset for channel {i}"
-        assert channel[ChannelOffsetAmplitudeFeature].get_amplitude() == 5.0, f"Invalid default amplitude for channel {i}"
+            offs = -0.1 * i
+            ampl = 0.5 + 3 * i
+            channel[ChannelOffsetAmplitudeFeature].set_offset(offs)
+            channel[ChannelOffsetAmplitudeFeature].set_amplitude(ampl)
+            self.assertEqual(channel[ChannelOffsetAmplitudeFeature].get_offset(), offs,
+                             f"Invalid offset for channel {i}")
+            self.assertEqual(channel[ChannelOffsetAmplitudeFeature].get_amplitude(), ampl,
+                             f"Invalid amplitude for channel {i}")
 
-        offs = -0.1 * i
-        ampl = 0.5 + 3 * i
-        channel[ChannelOffsetAmplitudeFeature].set_offset(offs)
-        channel[ChannelOffsetAmplitudeFeature].set_amplitude(ampl)
-        assert channel[ChannelOffsetAmplitudeFeature].get_offset() == offs, f"Invalid offset for channel {i}"
-        assert channel[ChannelOffsetAmplitudeFeature].get_amplitude() == ampl, f"Invalid amplitude for channel {i}"
+    def test_channel_tupels(self):
+        for group_size in [2, 4, 8]:
+            self.device[SynchronizeChannelsFeature].synchronize_channels(group_size)
 
-    # Check if each channel tuple is working fine
-    for group_size in [2, 4, 8]:
-        device[SynchronizeChannelsFeature].synchronize_channels(group_size)
+            self.assertEqual(len(self.device.channel_tuples), 8 // group_size, "Invalid number of channel tuples")
 
-        assert len(device.channel_tuples) == 8 // group_size, "Invalid number of channel tuples"
+            # Check if channels and channel tuples are connected right
+            for i, channel in enumerate(self.device.channels):
+                self.assertEqual(channel.channel_tuple.idn, i // group_size,
+                                 f"Invalid channel tuple {channel.channel_tuple.idn} for channel {i}")
+                self.assertTrue(channel in channel.channel_tuple.channels,
+                                f"Channel {i} not in its parent channel tuple {channel.channel_tuple.idn}")
 
-        # Check if channels and channel tuples are connected right
-        for i, channel in enumerate(device.channels):
-            assert channel.channel_tuple.idn == i // group_size, f"Invalid channel tuple {channel.channel_tuple.idn} for channel {i}"
-            assert channel in channel.channel_tuple.channels, f"Channel {i} not in its parent channel tuple {channel.channel_tuple.idn}"
+        self.assertEqual(len(self.device.channel_tuples), 1, "Invalid number of channel tuples")
 
-    # Check if an error is thrown, when trying to process an invalid parameter
-    try:
-        device[SynchronizeChannelsFeature].synchronize_channels(3)
-        assert True, "Missing error for invalid group size"
-    except ValueError:
-        pass
-    except:
-        assert True, "Wrong error for invalid group size"
-
-    # Check if the channel tuples are still the same
-    assert len(device.channel_tuples) == 1, "Invalid number of channel tuples"
-
-    print("Test successful :)")
+    def test_error_thrown(self):
+        with self.assertRaises(ValueError) as cm:
+            self.device[SynchronizeChannelsFeature].synchronize_channels(3)
+        self.assertEqual(ValueError, cm.exception.__class__, "Missing error for invalid group size")
 
 
-if __name__ == "__main__":
-    test()
+if __name__ == '__main__':
+    unittest.main()
