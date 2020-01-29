@@ -14,7 +14,7 @@ from numbers import Real
 
 from qupulse.utils.types import ChannelID, DocStringABCMeta
 from qupulse.serialization import Serializable
-from qupulse.expressions import ExpressionScalar, Expression
+from qupulse.expressions import ExpressionScalar, Expression, ExpressionLike
 from qupulse._program._loop import Loop, to_waveform
 from qupulse._program.transformation import Transformation, IdentityTransformation, ChainedTransformation, chain_transformations
 
@@ -243,6 +243,34 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
                           for key, value in self.get_serialization_data().items()
                           if key.isidentifier() and value is not None)
         return '{type_name}({kwargs})'.format(type_name=type_name, kwargs=kwargs)
+
+    def __add__(self, other: ExpressionLike):
+        from qupulse.pulses.arithmetic_pulse_template import try_operation
+        return try_operation(self, '+', other)
+
+    def __radd__(self, other: ExpressionLike):
+        from qupulse.pulses.arithmetic_pulse_template import try_operation
+        return try_operation(other, '+', self)
+
+    def __sub__(self, other):
+        from qupulse.pulses.arithmetic_pulse_template import try_operation
+        return try_operation(self, '-', other)
+
+    def __rsub__(self, other):
+        from qupulse.pulses.arithmetic_pulse_template import try_operation
+        return try_operation(other, '-', self)
+
+    def __mul__(self, other):
+        from qupulse.pulses.arithmetic_pulse_template import try_operation
+        return try_operation(self, '*', other)
+
+    def __rmul__(self, other):
+        from qupulse.pulses.arithmetic_pulse_template import try_operation
+        return try_operation(other, '*', self)
+
+    def __truediv__(self, other):
+        from qupulse.pulses.arithmetic_pulse_template import try_operation
+        return try_operation(self, '/', other)
 
 
 class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):

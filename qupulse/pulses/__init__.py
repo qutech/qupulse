@@ -11,13 +11,19 @@ from qupulse.pulses.repetition_pulse_template import RepetitionPulseTemplate as 
 from qupulse.pulses.sequence_pulse_template import SequencePulseTemplate as SequencePT
 from qupulse.pulses.table_pulse_template import TablePulseTemplate as TablePT
 from qupulse.pulses.point_pulse_template import PointPulseTemplate as PointPT
+from qupulse.pulses.arithmetic_pulse_template import ArithmeticPulseTemplate as ArithmeticPT,\
+    ArithmeticAtomicPulseTemplate as ArithmeticAtomicPT
 
 import warnings
 with warnings.catch_warnings():
     warnings.simplefilter('ignore')
-    # ensure this is included.. it adds a deserialization handler for pulse_template_parameter_mapping.MappingPT which is not present otherwise
+    # ensure this is included.. it adds a deserialization handler for pulse_template_parameter_mapping.MappingPT
+    # which is not present otherwise
     import qupulse.pulses.pulse_template_parameter_mapping
+    del qupulse
+del warnings
+
 
 __all__ = ["FunctionPT", "ForLoopPT", "AtomicMultiChannelPT", "MappingPT", "RepetitionPT", "SequencePT", "TablePT",
-           "PointPT", "AbstractPT", "ParallelConstantChannelPT"]
+           "PointPT", "AbstractPT", "ParallelConstantChannelPT", "ArithmeticPT", "ArithmeticAtomicPT"]
 

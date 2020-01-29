@@ -2,7 +2,7 @@
 combines several other PulseTemplate objects for sequential execution."""
 
 import numpy as np
-from typing import Dict, List, Tuple, Set, Optional, Any, Iterable, Union
+from typing import Dict, List, Set, Optional, Any, Iterable, Union, Callable, cast
 from numbers import Real
 import functools
 import warnings
@@ -13,7 +13,7 @@ from qupulse.serialization import Serializer, PulseRegistryType
 from qupulse._program._loop import Loop
 
 from qupulse.utils.types import MeasurementWindow, ChannelID, TimeType
-from qupulse.pulses.pulse_template import PulseTemplate
+from qupulse.pulses.pulse_template import PulseTemplate, AtomicPulseTemplate
 from qupulse.pulses.parameters import Parameter, ParameterConstrainer, ParameterNotProvidedException
 from qupulse.pulses.sequencing import InstructionBlock, Sequencer
 from qupulse.pulses.conditions import Condition
@@ -235,5 +235,3 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
             return {k: x[k] + y[k] for k in x}
 
         return functools.reduce(add_dicts, [sub.integral for sub in self.__subtemplates], expressions)
-
-
