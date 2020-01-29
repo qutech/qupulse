@@ -4,6 +4,7 @@ import functools
 import weakref
 import itertools
 import operator
+import logging
 from numbers import Real
 from typing import List, Tuple, Set, NamedTuple, Callable, Optional, Any, Sequence, cast, Generator, Union, Dict, Mapping
 from enum import Enum
@@ -21,6 +22,7 @@ from qupulse._program._loop import Loop, make_compatible
 from qupulse.hardware.util import voltage_to_uint16, make_combined_wave, find_positions, get_sample_times
 from qupulse.hardware.awgs.base import AWG, AWGAmplitudeOffsetHandling
 from qupulse.pulses.parameters import ConstantParameter
+import copy
 
 
 assert(sys.byteorder == 'little')
@@ -143,6 +145,8 @@ class TaborSequencing(Enum):
 
 
 volatile_mapping_entry = namedtuple('Mapping_Entry', 'aSeq adv_position position change_table')
+changes_keys = namedtuple('changes_keys', 'adv_position position')
+table_content = namedtuple('Table_Content', 'segment rep_count jump_flag')
 
 class TaborProgram:
     def __init__(self,
@@ -841,6 +845,10 @@ class TaborChannelPair(AWG):
         return int(self.device.dev_properties['max_arb_mem']) // 2
 
     @property
+    def logger(self):
+        return logging.getLogger("qupulse.tabor")
+
+    @property
     def device(self) -> TaborAWGRepresentation:
         return self._device()
 
@@ -1199,18 +1207,23 @@ class TaborChannelPair(AWG):
         self.free_program(name)
         self.cleanup()
 
-    def set_volatile_parameters(self, program_name: str, parameters: Mapping[str, ConstantParameter]):
+    def set_volatile_parameters(self, program_name: str, parameters: Mapping[str, ConstantParameter]) -> None:
         """Set the values of parameters which were marked as volatile on program creation."""
-        # TODO: Add exception if program creation threw a VolatileModificationWarning, add documentation
+        # TODO: Add documentation, increase readability
+        # When changing the tables of current program use guarded mode as it gives way smaller blips and seems to be faster
 
         waveform_to_segment_index, program = self._known_programs[program_name]
+        program_backup = copy.deepcopy(self._known_programs[program_name])
         names = set(parameters.keys()) & set(program._volatile_parameter_mappings.keys())
+        changes = dict()
+        changes_aSeq = dict()
+
         if not names:
             print('Either {} has no volatile parameters with these names or its volatile parameters where dropped '
                   'during upload'.format(program_name))
             return
 
-        # Change sequencing tables in active program and program memory
+        # Change sequencing tables in program memory and track which changes needs to be made in current seq tables
         if program.program.depth() == 1:
             for name in names:
                 for program_mapping in program._volatile_parameter_mappings[name]:
@@ -1221,17 +1234,12 @@ class TaborChannelPair(AWG):
                         if program_mapping.change_table == 1:
                             seg_ind = program._sequencer_tables[program_mapping.adv_position][program_mapping.position][1]
                             jump_flag = program._sequencer_tables[program_mapping.adv_position][program_mapping.position][2]
-                            program._sequencer_tables[program_mapping.adv_position][program_mapping.position] = (new_rep_count, seg_ind,
-                                                                                                 jump_flag)
-                            if self._current_program == program_name:
-                                self.device.send_cmd(':SEQ:SEL {}'.format(program_mapping.adv_position + 2))
-                                self.device.send_cmd(
-                                    ':SEQ:DEF {}, {}, {}, {}'.format(program_mapping.position,
-                                                                     waveform_to_segment_index[seg_ind] + 1,
-                                                                     new_rep_count, jump_flag))
-                    else:  # I dont think there is a case where the else case is executed
-                        assert program.program.repetition_parameter is not None
-                        print('You should not end up here... this is a bug in the code.')
+                            program._sequencer_tables[program_mapping.adv_position][program_mapping.position] = (
+                                                                                      new_rep_count, seg_ind, jump_flag)
+                            changes[changes_keys(program_mapping.adv_position + 2, program_mapping.position)] = table_content(
+                                                       waveform_to_segment_index[seg_ind] + 1, new_rep_count, jump_flag)
+                    else:
+                        self.logger.error('You should not end up here... this is a bug in the code.')
                         return
         else:
             assert program.program.depth() == 2
@@ -1244,14 +1252,10 @@ class TaborChannelPair(AWG):
                         if program_mapping.change_table == 1:
                             seg_ind = program._sequencer_tables[program_mapping.adv_position][program_mapping.position][1]
                             jump_flag = program._sequencer_tables[program_mapping.adv_position][program_mapping.position][2]
-                            program._sequencer_tables[program_mapping.adv_position][program_mapping.position] = (new_rep_count, seg_ind,
-                                                                                                 jump_flag)
-                            if self._current_program == program_name:
-                                self.device.send_cmd(':SEQ:SEL {}'.format(program_mapping.adv_position + 2))
-                                self.device.send_cmd(
-                                    ':SEQ:DEF {}, {}, {}, {}'.format(program_mapping.position,
-                                                                     waveform_to_segment_index[seg_ind] + 1,
-                                                                     new_rep_count, jump_flag))
+                            program._sequencer_tables[program_mapping.adv_position][program_mapping.position] = (
+                                                                                      new_rep_count, seg_ind, jump_flag)
+                            changes[changes_keys(program_mapping.adv_position + 2, program_mapping.position)] = table_content(
+                                                       waveform_to_segment_index[seg_ind] + 1, new_rep_count, jump_flag)
                     else:
                         program.program.children[program_mapping.position].repetition_parameter.update_constants(parameters)
                         new_rep_count = int(program.program.children[program_mapping.position].repetition_parameter.get_value())
@@ -1259,10 +1263,57 @@ class TaborChannelPair(AWG):
                         if program_mapping.change_table == 1:
                             seq_num = program._advanced_sequencer_table[program_mapping.position][1]
                             jump_flag = program._advanced_sequencer_table[program_mapping.position][2]
-                            program._advanced_sequencer_table[program_mapping.position] = (new_rep_count, seq_num, jump_flag)
-                            if self._current_program == program_name:
-                                self.device.send_cmd(
-                                    ':ASEQ:DEF {}, {}, {}, {}'.format(program_mapping.position + 1, seq_num + 1, new_rep_count, jump_flag))
+                            program._advanced_sequencer_table[program_mapping.position] = (new_rep_count, seq_num,
+                                                                                           jump_flag)
+                            changes_aSeq[program_mapping.position + 1] = table_content(seq_num + 1, new_rep_count,
+                                                                                       jump_flag)
+
+        if any(changes[entry].rep_count == 0 for entry in changes):
+            self._known_programs[program_name] = program_backup
+            self.logger.error('Repetition count cannot evaluate to 0')
+            return
+        elif any(changes_aSeq[entry].rep_count == 0 for entry in changes_aSeq):
+            self._known_programs[program_name] = program_backup
+            self.logger.error('Repetition count cannot evaluate to 0')
+            return
+
+        if self._current_program == program_name:
+            if changes:
+                self._set_current_sequencer_table(changes)
+            if changes_aSeq:
+                self._set_current_adv_sequencer_table(changes_aSeq)
+
+    @with_configuration_guard
+    def _set_current_sequencer_table(self, changes: Dict[changes_keys, table_content]) -> None:
+        """Changes the current sequencer table at the position given by changes_keys to the values in table_content"""
+        commands = dict()
+        # Rewrite changes for second loop
+        for positions in changes:
+            commands.setdefault(positions.adv_position, []).append([positions.position, changes[positions]])
+        for table_num in commands:
+            cmd_str = ":SEQ:SEL {}".format(table_num)
+            for command in commands[table_num]:
+                if command[1].rep_count == 0:
+                    raise ValueError('Repetition count cannot evaluate to 0')
+                cmd_str += "; :SEQ:DEF {}, {}, {}, {}".format(command[0], command[1].segment, command[1].rep_count,
+                                                              command[1].jump_flag)
+            self.device.send_cmd(cmd_str)
+
+    @with_configuration_guard
+    def _set_current_adv_sequencer_table(self, changes: Dict[int, table_content]) -> None:
+        """Changes the current advanced sequencer table at the position given by changes.keys to the values in table_content"""
+        cmd_str = ""
+        for i, pos in enumerate(changes):
+            if changes[pos].rep_count == 0:
+                raise ValueError('Repetition count cannot evaluate to 0')
+            if i == 0:
+                cmd_str += ":ASEQ:DEF {}, {}, {}, {}".format(pos, changes[pos].segment, changes[pos].rep_count,
+                                                             changes[pos].jump_flag)
+            else:
+                cmd_str += "; :ASEQ:DEF {}, {}, {}, {}".format(pos, changes[pos].segment, changes[pos].rep_count,
+                                                               changes[pos].jump_flag)
+
+        self.device.send_cmd(cmd_str)
 
     def set_marker_state(self, marker: int, active: bool) -> None:
         """Sets the marker state of this channel pair. According to the manual one cannot turn them off/on separately."""
