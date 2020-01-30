@@ -245,7 +245,7 @@ class HDAWGChannelPair(AWG):
         self.device.api_session.setInt('/{}/awgs/{:d}/single'.format(self.device.serial, self.awg_group_index), 1)
 
         self._program_manager = HDAWGProgramManager()
-        self._required_seqc_source = ''
+        self._required_seqc_source = self._program_manager.to_seqc_program()
         self._uploaded_seqc_source = None
         self._current_program = None  # Currently armed program.
 
@@ -409,7 +409,7 @@ class HDAWGChannelPair(AWG):
         """
         self._program_manager.clear()
         self._current_program = None
-        self._required_seqc_source = ''
+        self._required_seqc_source = self._program_manager.to_seqc_program()
         self.arm(None)
 
     def arm(self, name: Optional[str]) -> None:
