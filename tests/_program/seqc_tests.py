@@ -10,7 +10,7 @@ from qupulse.expressions import ExpressionScalar
 from qupulse.pulses.parameters import MappedParameter, ConstantParameter
 from qupulse._program._loop import Loop
 from qupulse._program.seqc import BinaryWaveform, loop_to_seqc, WaveformPlayback, Repeat, SteppingRepeat, Scope,\
-    to_node_clusters, find_sharable_waveforms, mark_sharable_waveforms, UserRegisterManager, HDAWGProgramManager
+    to_node_clusters, find_sharable_waveforms, mark_sharable_waveforms, UserRegisterManager, HDAWGProgramManager, UserRegister
 
 from tests.pulses.sequencing_dummies import DummyWaveform
 
@@ -617,6 +617,34 @@ repeat(12) {
         self.assertEqual(expected, seqc_code)
 
 
+class UserRegisterTest(unittest.TestCase):
+    def test_conversions(self):
+        reg = UserRegister(zero_based_value=3)
+        self.assertEqual(3, reg.to_seqc())
+        self.assertEqual(3, reg.to_labone())
+        self.assertEqual(4, reg.to_web_interface())
+
+        reg = UserRegister(one_based_value=4)
+        self.assertEqual(3, reg.to_seqc())
+        self.assertEqual(3, reg.to_labone())
+        self.assertEqual(4, reg.to_web_interface())
+
+        self.assertEqual(reg, UserRegister.from_seqc(3))
+        self.assertEqual(reg, UserRegister.from_labone(3))
+        self.assertEqual(reg, UserRegister.from_web_interface(4))
+
+    def test_formatting(self):
+        reg = UserRegister.from_seqc(3)
+
+        with self.assertRaises(ValueError):
+            '{}'.format(reg)
+
+        self.assertEqual('3', '{:seqc}'.format(reg))
+        self.assertEqual('4', '{:web}'.format(reg))
+        self.assertEqual('UserRegister(zero_based_value=3)', repr(reg))
+        self.assertEqual(repr(reg), '{:r}'.format(reg))
+
+
 class UserRegisterManagerTest(unittest.TestCase):
     def test_require(self):
         manager = UserRegisterManager([7, 8, 9], 'test{register}')
@@ -654,7 +682,7 @@ class HDAWGProgramManagerTest(unittest.TestCase):
 
         manager.add_program('test', root, channels, markers, amplitudes, offsets, volatage_transformations, sample_rate)
 
-        self.assertEqual({2: 7}, manager.get_register_values('test'))
+        self.assertEqual({UserRegister(zero_based_value=2): 7}, manager.get_register_values('test'))
         seqc_program = manager.to_seqc_program()
         expected_program = """const PROG_SEL_REGISTER = 0;
 const TRIGGER_REGISTER = 1;

@@ -418,7 +418,7 @@ class UserRegisterManager:
 
 
 class HDAWGProgramEntry(ProgramEntry):
-    USER_REG_NAME_TEMPLATE = 'user_reg_{register}'
+    USER_REG_NAME_TEMPLATE = 'user_reg_{register:seqc}'
 
     def __init__(self, loop: Loop, selection_index: int, waveform_memory: WaveformMemory, program_name: str,
                  channels: Tuple[Optional[ChannelID], Optional[ChannelID]],
@@ -593,7 +593,7 @@ class HDAWGProgramManager:
         selection_index = self._get_low_unused_index()
 
         # TODO: verify total number of registers
-        available_registers = range(2, 16)
+        available_registers = [UserRegister.from_seqc(idx) for idx in range(2, 16)]
 
         program_entry = HDAWGProgramEntry(loop, selection_index, self._waveform_memory, name,
                                           channels, markers, amplitudes, offsets, voltage_transformations, sample_rate)
