@@ -621,13 +621,13 @@ class UserRegisterManagerTest(unittest.TestCase):
     def test_require(self):
         manager = UserRegisterManager([7, 8, 9], 'test{register}')
 
-        required = [manager.require(0), manager.require(1), manager.require(2)]
+        required = [manager.request(0), manager.request(1), manager.request(2)]
 
         self.assertEqual({'test7', 'test8', 'test9'}, set(required))
-        self.assertEqual(required[1], manager.require(1))
+        self.assertEqual(required[1], manager.request(1))
 
         with self.assertRaisesRegex(ValueError, "No register"):
-            manager.require(3)
+            manager.request(3)
 
 
 class HDAWGProgramManagerTest(unittest.TestCase):

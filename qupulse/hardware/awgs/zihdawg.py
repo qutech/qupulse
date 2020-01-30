@@ -18,7 +18,7 @@ import time
 
 from qupulse.utils.types import ChannelID, TimeType, time_from_float
 from qupulse._program._loop import Loop, make_compatible
-from qupulse._program.seqc import HDAWGProgramManager
+from qupulse._program.seqc import HDAWGProgramManager, UserRegister
 from qupulse.hardware.awgs.base import AWG, ChannelNotFoundException, AWGAmplitudeOffsetHandling
 from qupulse.pulses.parameters import ConstantParameter
 
@@ -425,7 +425,7 @@ class HDAWGChannelPair(AWG):
         self.user_register(self._program_manager.GLOBAL_CONSTS['TRIGGER_REGISTER'], 0)
 
         if not name:
-            self.user_register(self._program_manager.GLOBAL_CONSTS['PROG_SEL_REGISTER'] + 1,
+            self.user_register(self._program_manager.GLOBAL_CONSTS['PROG_SEL_REGISTER'],
                                self._program_manager.GLOBAL_CONSTS['PROG_SEL_NONE'])
             self._current_program = None
         else:
@@ -439,7 +439,7 @@ class HDAWGChannelPair(AWG):
                                         self._program_manager.GLOBAL_CONSTS['TRIGGER_REGISTER'])
                 self.user_register(register, value)
 
-            self.user_register(self._program_manager.GLOBAL_CONSTS['PROG_SEL_REGISTER'] + 1,
+            self.user_register(self._program_manager.GLOBAL_CONSTS['PROG_SEL_REGISTER'],
                                self._program_manager.name_to_index(name) | int(self._program_manager.GLOBAL_CONSTS['NO_RESET_MASK'], 2))
         self.enable(True)
 
@@ -502,11 +502,24 @@ class HDAWGChannelPair(AWG):
             self.device.api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
         return bool(self.device.api_session.getInt(node_path))
 
-    def user_register(self, reg: int, value: int = None) -> int:
-        """Query user registers (1-16) and optionally set it."""
-        if reg not in range(1, 17):
-            raise HDAWGValueError('{} not a valid (1-16) register.'.format(reg))
-        node_path = '/{}/awgs/{:d}/userregs/{:d}'.format(self.device.serial, self.awg_group_index, reg-1)
+    def user_register(self, reg: UserRegister, value: int = None) -> int:
+        """Query user registers (1-16) and optionally set it.
+
+        Args:
+            reg: User register. If it is an int, a warning is raised and it is interpreted as a one based index
+            value: Value to set
+
+        Returns:
+            User Register value after setting it
+        """
+        if isinstance(reg, int):
+            warnings.warn("User register is not a UserRegister instance. It is interpreted as one based index.")
+            reg = UserRegister(one_based_value=reg)
+
+        if reg.to_web_interface() not in range(1, 17):
+            raise HDAWGValueError('{reg:repr} not a valid (1-16) register.'.format(reg=reg))
+
+        node_path = '/{}/awgs/{:d}/userregs/{:labone}'.format(self.device.serial, self.awg_group_index, reg)
         if value is not None:
             self.device.api_session.setInt(node_path, value)
             self.device.api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
