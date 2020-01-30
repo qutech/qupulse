@@ -19,6 +19,9 @@
         - `allow_partial_parameter_mapping` is now True as a default. The default can be changed with the class variable `MappingPulseTemplate.ALLOW_PARTIAL_PARAMETER_MAPPING`.
         - Add specializations for `map_parameters` because the auto-inference of the return type did not work for empty input.
         - Channels mapped to None are now dropped
+    - Add simple arithmetic operations for pulse templates
+        - offset and scaling with scalars
+        - addition with atomic pulse templates
 
 - Expressions:
     - Expressions can now be formatted as floats if they do not have free variables

@@ -57,6 +57,9 @@ class IdentityTransformation(Transformation, metaclass=SingletonABCMeta):
     def chain(self, next_transformation: Transformation) -> Transformation:
         return next_transformation
 
+    def __repr__(self):
+        return 'IdentityTransformation()'
+
 
 class ChainedTransformation(Transformation):
     def __init__(self, *transformations: Transformation):
@@ -88,6 +91,9 @@ class ChainedTransformation(Transformation):
     def chain(self, next_transformation) -> 'ChainedTransformation':
         return chain_transformations(*self.transformations, next_transformation)
 
+    def __repr__(self):
+        return 'ChainedTransformation%r' % (self._transformations,)
+
 
 class LinearTransformation(Transformation):
     def __init__(self,
@@ -97,9 +103,14 @@ class LinearTransformation(Transformation):
         """
 
         Args:
-            transformation_matrix: columns are input and index are output channels
+            transformation_matrix: Matrix describing the transformation with shape (output_channels, input_channels)
+            input_channels: Channel ids of the columns
+            output_channels: Channel ids of the rows
         """
-        assert transformation_matrix.shape == (len(output_channels), len(input_channels))
+        transformation_matrix = np.asarray(transformation_matrix)
+
+        if transformation_matrix.shape != (len(output_channels), len(input_channels)):
+            raise ValueError('Shape of transformation matrix does not match to the given channels')
 
         output_sorter = np.argsort(output_channels)
         transformation_matrix = transformation_matrix[output_sorter, :]
@@ -150,6 +161,65 @@ class LinearTransformation(Transformation):
     def compare_key(self) -> Tuple[Tuple[ChannelID], Tuple[ChannelID], bytes]:
         return self._input_channels, self._output_channels, self._matrix.tobytes()
 
+    def __repr__(self):
+        return ('LinearTransformation('
+                'transformation_matrix={transformation_matrix},'
+                'input_channels={input_channels},'
+                'output_channels={output_channels})').format(transformation_matrix=self._matrix.tolist(),
+                                                             input_channels=self._input_channels,
+                                                             output_channels=self._output_channels)
+
+
+class OffsetTransformation(Transformation):
+    def __init__(self, offsets: Mapping[ChannelID, Real]):
+        """Adds an offset to each channel specified in offsets.
+
+        Channels not in offsets are forewarded
+
+        Args:
+            offsets: Channel -> offset mapping
+        """
+        self._offsets = dict(offsets.items())
+
+    def __call__(self, time: np.ndarray, data: Mapping[ChannelID, np.ndarray]) -> Mapping[ChannelID, np.ndarray]:
+        return {channel: channel_values + self._offsets[channel] if channel in self._offsets else channel_values
+                for channel, channel_values in data.items()}
+
+    def get_input_channels(self, output_channels: Set[ChannelID]):
+        return output_channels
+
+    def get_output_channels(self, input_channels: Set[ChannelID]):
+        return input_channels
+
+    @property
+    def compare_key(self) -> frozenset:
+        return frozenset(self._offsets.items())
+
+    def __repr__(self):
+        return 'OffsetTransformation(%r)' % self._offsets
+
+
+class ScalingTransformation(Transformation):
+    def __init__(self, factors: Mapping[ChannelID, Real]):
+        self._factors = dict(factors.items())
+
+    def __call__(self, time: np.ndarray, data: Mapping[ChannelID, np.ndarray]) -> Mapping[ChannelID, np.ndarray]:
+        return {channel: channel_values * self._factors[channel] if channel in self._factors else channel_values
+                for channel, channel_values in data.items()}
+
+    def get_input_channels(self, output_channels: Set[ChannelID]):
+        return output_channels
+
+    def get_output_channels(self, input_channels: Set[ChannelID]):
+        return input_channels
+
+    @property
+    def compare_key(self) -> frozenset:
+        return frozenset(self._factors.items())
+
+    def __repr__(self):
+        return 'ScalingTransformation(%r)' % self._factors
+
 
 try:
     import pandas
@@ -175,7 +245,7 @@ class ParallelConstantChannelTransformation(Transformation):
         """Set channel values to given values regardless their former existence
 
         Args:
-            channels:
+            channels: Channels present in this map are set to the given value.
         """
         self._channels = {channel: float(value)
                           for channel, value in channels.items()}
@@ -195,11 +265,14 @@ class ParallelConstantChannelTransformation(Transformation):
     def get_output_channels(self, input_channels: Set[ChannelID]) -> Set[ChannelID]:
         return input_channels | self._channels.keys()
 
+    def __repr__(self):
+        return 'ParallelConstantChannelTransformation(%r)' % self._channels
+
 
 def chain_transformations(*transformations: Transformation) -> Transformation:
     parsed_transformations = []
     for transformation in transformations:
-        if transformation is IdentityTransformation():
+        if transformation is IdentityTransformation() or transformation is None:
             pass
         elif isinstance(transformation, ChainedTransformation):
             parsed_transformations.extend(transformation.transformations)

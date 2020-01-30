@@ -148,10 +148,15 @@ class DummyInstructionBlock(InstructionBlock):
 
 class DummyWaveform(Waveform):
 
-    def __init__(self, duration: float=0, sample_output: Union[numpy.ndarray, dict]=None, defined_channels={'A'}) -> None:
+    def __init__(self, duration: float=0, sample_output: Union[numpy.ndarray, dict]=None, defined_channels=None) -> None:
         super().__init__()
         self.duration_ = TimeType.from_float(duration)
         self.sample_output = sample_output
+        if defined_channels is None:
+            if isinstance(sample_output, dict):
+                defined_channels = set(sample_output.keys())
+            else:
+                defined_channels = {'A'}
         self.defined_channels_ = defined_channels
         self.sample_calls = []
 

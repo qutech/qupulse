@@ -17,7 +17,7 @@ from qupulse.utils.sympy import sympify, to_numpy, recursive_substitution, evalu
     get_most_simple_representation, get_variables
 from qupulse.utils.types import TimeType
 
-__all__ = ["Expression", "ExpressionVariableMissingException", "ExpressionScalar", "ExpressionVector"]
+__all__ = ["Expression", "ExpressionVariableMissingException", "ExpressionScalar", "ExpressionVector", "ExpressionLike"]
 
 
 _ExpressionType = TypeVar('_ExpressionType', bound='Expression')
@@ -306,6 +306,9 @@ class ExpressionScalar(Expression):
     def __neg__(self) -> 'ExpressionScalar':
         return self.make(self._sympified_expression.__neg__())
 
+    def __pos__(self):
+        return self.make(self._sympified_expression.__pos__())
+
     @property
     def original_expression(self) -> Union[str, Number]:
         return self._original_expression
@@ -366,3 +369,6 @@ class NonNumericEvaluation(Exception):
             dtype = type(self.non_numeric_result)
         return "The result of evaluate_numeric is of type {} " \
                "which is not a number".format(dtype)
+
+
+ExpressionLike = TypeVar('ExpressionLike', str, Number, sympy.Expr, ExpressionScalar)
