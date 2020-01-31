@@ -1,14 +1,10 @@
 import fractions
-import sys
 import functools
 import weakref
-import itertools
-import operator
 import logging
-from numbers import Real
-from typing import List, Tuple, Set, NamedTuple, Callable, Optional, Any, Sequence, cast, Generator, Union, Dict, Mapping
-from enum import Enum
-from collections import OrderedDict, namedtuple
+import copy
+from typing import List, Tuple, Set, Callable, Optional, Any, Sequence, cast, Union, Dict, Mapping, NamedTuple
+from collections import OrderedDict
 
 # Provided by Tabor electronics for python 2.7
 # a python 3 version is in a private repository on https://git.rwth-aachen.de/qutech
@@ -17,394 +13,16 @@ import teawg
 import numpy as np
 
 from qupulse.utils.types import ChannelID
-from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
 from qupulse._program._loop import Loop, make_compatible
-from qupulse.hardware.util import voltage_to_uint16, make_combined_wave, find_positions, get_sample_times
+from qupulse.hardware.util import voltage_to_uint16, make_combined_wave, find_positions
 from qupulse.hardware.awgs.base import AWG, AWGAmplitudeOffsetHandling
-from qupulse.pulses.parameters import ConstantParameter
-import copy
-
-
-assert(sys.byteorder == 'little')
+from qupulse.pulses.parameters import Parameter
+from qupulse._program.tabor import TaborSegment, TaborException, TaborProgram, PlottableProgram, TaborSequencing
 
 
 __all__ = ['TaborAWGRepresentation', 'TaborChannelPair']
 
 
-class TaborSegment:
-    """Represents one segment of two channels on the device. Convenience class."""
-
-    __slots__ = ('ch_a', 'ch_b', 'marker_a', 'marker_b')
-
-    def __init__(self,
-                 ch_a: Optional[np.ndarray],
-                 ch_b: Optional[np.ndarray],
-                 marker_a: Optional[np.ndarray],
-                 marker_b: Optional[np.ndarray]):
-        if ch_a is None and ch_b is None:
-            raise TaborException('Empty TaborSegments are not allowed')
-        if ch_a is not None and ch_b is not None and len(ch_a) != len(ch_b):
-            raise TaborException('Channel entries have to have the same length')
-
-        self.ch_a = None if ch_a is None else np.asarray(ch_a, dtype=np.uint16)
-        self.ch_b = None if ch_b is None else np.asarray(ch_b, dtype=np.uint16)
-
-        self.marker_a = None if marker_a is None else np.asarray(marker_a, dtype=bool)
-        self.marker_b = None if marker_b is None else np.asarray(marker_b, dtype=bool)
-
-        if marker_a is not None and len(marker_a)*2 != self.num_points:
-            raise TaborException('Marker A has to have half of the channels length')
-        if marker_b is not None and len(marker_b)*2 != self.num_points:
-            raise TaborException('Marker B has to have half of the channels length')
-
-    @classmethod
-    def from_binary_segment(cls, segment_data: np.ndarray) -> 'TaborSegment':
-        data_a = segment_data.reshape((-1, 16))[1::2, :].reshape((-1, ))
-        data_b = segment_data.reshape((-1, 16))[0::2, :].ravel()
-        return cls.from_binary_data(data_a, data_b)
-
-    @classmethod
-    def from_binary_data(cls, data_a: np.ndarray, data_b: np.ndarray) -> 'TaborSegment':
-        ch_b = data_b
-
-        channel_mask = np.uint16(2**14 - 1)
-        ch_a = np.bitwise_and(data_a, channel_mask)
-
-        marker_a_mask = np.uint16(2**14)
-        marker_b_mask = np.uint16(2**15)
-        marker_data = data_a.reshape(-1, 8)[1::2, :].reshape((-1, ))
-
-        marker_a = np.bitwise_and(marker_data, marker_a_mask)
-        marker_b = np.bitwise_and(marker_data, marker_b_mask)
-
-        return cls(ch_a=ch_a,
-                   ch_b=ch_b,
-                   marker_a=marker_a,
-                   marker_b=marker_b)
-
-    def __hash__(self) -> int:
-        return hash(tuple(0 if data is None else bytes(data)
-                          for data in (self.ch_a, self.ch_b, self.marker_a, self.marker_b)))
-
-    def __eq__(self, other: 'TaborSegment'):
-        def compare_markers(marker_1, marker_2):
-            if marker_1 is None:
-                if marker_2 is None:
-                    return True
-                else:
-                    return not np.any(marker_2)
-
-            elif marker_2 is None:
-                return not np.any(marker_1)
-
-            else:
-                return np.array_equal(marker_1, marker_2)
-
-        return (np.array_equal(self.ch_a, other.ch_a) and
-                np.array_equal(self.ch_b, other.ch_b) and
-                compare_markers(self.marker_a, other.marker_a) and
-                compare_markers(self.marker_b, other.marker_b))
-
-    @property
-    def data_a(self) -> np.ndarray:
-        """channel_data and marker data"""
-        if self.marker_a is None and self.marker_b is None:
-            return self.ch_a
-
-        if self.ch_a is None:
-            raise NotImplementedError('What data should be used in a?')
-
-        # copy channel information
-        data = np.array(self.ch_a)
-
-        if self.marker_a is not None:
-            data.reshape(-1, 8)[1::2, :].flat |= (1 << 14) * self.marker_a.astype(np.uint16)
-
-        if self.marker_b is not None:
-            data.reshape(-1, 8)[1::2, :].flat |= (1 << 15) * self.marker_b.astype(np.uint16)
-
-        return data
-
-    @property
-    def data_b(self) -> np.ndarray:
-        """channel_data and marker data"""
-        return self.ch_b
-
-    @property
-    def num_points(self) -> int:
-        return len(self.ch_b) if self.ch_a is None else len(self.ch_a)
-
-    def get_as_binary(self) -> np.ndarray:
-        assert not (self.ch_a is None or self.ch_b is None)
-        return make_combined_wave([self])
-
-
-class TaborSequencing(Enum):
-    SINGLE = 1
-    ADVANCED = 2
-
-
-volatile_mapping_entry = namedtuple('Mapping_Entry', 'aSeq adv_position position change_table')
-changes_keys = namedtuple('changes_keys', 'adv_position position')
-table_content = namedtuple('Table_Content', 'segment rep_count jump_flag')
-
-class TaborProgram:
-    def __init__(self,
-                 program: Loop,
-                 device_properties,
-                 channels: Tuple[Optional[ChannelID], Optional[ChannelID]],
-                 markers: Tuple[Optional[ChannelID], Optional[ChannelID]]):
-        if len(channels) != device_properties['chan_per_part']:
-            raise TaborException('TaborProgram only supports {} channels'.format(device_properties['chan_per_part']))
-        if len(markers) != device_properties['chan_per_part']:
-            raise TaborException('TaborProgram only supports {} markers'.format(device_properties['chan_per_part']))
-        channel_set = frozenset(channel for channel in channels if channel is not None) | frozenset(marker
-                                                                                                    for marker in
-                                                                                                    markers if marker is not None)
-        self._program = program
-
-        self.__waveform_mode = None
-        self._channels = tuple(channels)
-        self._markers = tuple(markers)
-        self.__used_channels = channel_set
-        self.__device_properties = device_properties
-
-        self._waveforms = []  # type: List[MultiChannelWaveform]
-        self._sequencer_tables = []
-        self._advanced_sequencer_table = []
-        self._volatile_parameter_mappings = dict()  # keys: volatile parameter names, entries: position as namedtuple:
-        #                      [in parent(1)/child(0), pos in parent, pos in child, occurs in seq_table(1) or not (0)]
-        #                                                        [adv(1)/seq(0) table, table num, position in table, 1]
-
-        if self.program.repetition_count > 1:
-            self.program.encapsulate()
-
-        if self.program.depth() > 1:
-            self.setup_advanced_sequence_mode()
-            self.__waveform_mode = TaborSequencing.ADVANCED
-        else:
-            if self.program.depth() == 0:
-                self.program.encapsulate()
-            self.setup_single_sequence_mode()
-            self.__waveform_mode = TaborSequencing.SINGLE
-
-    @property
-    def markers(self) -> Tuple[Optional[ChannelID], Optional[ChannelID]]:
-        return self._markers
-
-    @property
-    def channels(self) -> Tuple[Optional[ChannelID], Optional[ChannelID]]:
-        return self._channels
-
-    def sampled_segments(self,
-                         sample_rate: fractions.Fraction,
-                         voltage_amplitude: Tuple[float, float],
-                         voltage_offset: Tuple[float, float],
-                         voltage_transformation: Tuple[Callable, Callable]) -> Tuple[Sequence[TaborSegment],
-                                                                                     Sequence[int]]:
-        sample_rate = fractions.Fraction(sample_rate, 10**9)
-
-        time_array, segment_lengths = get_sample_times(self._waveforms, sample_rate)
-
-        if np.any(segment_lengths % 16 > 0) or np.any(segment_lengths < 192):
-            raise TaborException('At least one waveform has a length that is smaller 192 or not a multiple of 16')
-
-        def voltage_to_data(waveform, time, channel):
-            if self._channels[channel]:
-                return voltage_to_uint16(
-                    voltage_transformation[channel](
-                        waveform.get_sampled(channel=self._channels[channel],
-                                             sample_times=time)),
-                    voltage_amplitude[channel],
-                    voltage_offset[channel],
-                    resolution=14)
-            else:
-                return np.full_like(time, 8192, dtype=np.uint16)
-
-        def get_marker_data(waveform: MultiChannelWaveform, time, marker):
-            if self._markers[marker]:
-                markerID = self._markers[marker]
-                return waveform.get_sampled(channel=markerID, sample_times=time) != 0
-            else:
-                return np.full_like(time, False, dtype=bool)
-
-        segments = np.empty_like(self._waveforms, dtype=TaborSegment)
-        for i, waveform in enumerate(self._waveforms):
-            t = time_array[:segment_lengths[i]]
-            marker_time = t[::2]
-            segment_a = voltage_to_data(waveform, t, 0)
-            segment_b = voltage_to_data(waveform, t, 1)
-            assert (len(segment_a) == len(t))
-            assert (len(segment_b) == len(t))
-            marker_a = get_marker_data(waveform, marker_time, 0)
-            marker_b = get_marker_data(waveform, marker_time, 1)
-            segments[i] = TaborSegment(ch_a=segment_a,
-                                       ch_b=segment_b,
-                                       marker_a=marker_a,
-                                       marker_b=marker_b)
-        return segments, segment_lengths
-
-    def setup_single_sequence_mode(self) -> None:
-        assert self.program.depth() == 1
-
-        sequencer_table = []
-        waveforms = OrderedDict()
-
-        for position, (waveform, repetition_count, repetition_parameter) in enumerate((waveform_loop.waveform.get_subset_for_channels(self.__used_channels),
-                                            waveform_loop.repetition_count, waveform_loop.repetition_parameter)
-                                           for waveform_loop in self.program):
-            if waveform in waveforms:
-                waveform_index = waveforms[waveform]
-            else:
-                waveform_index = len(waveforms)
-                waveforms[waveform] = waveform_index
-            sequencer_table.append((repetition_count, waveform_index, 0))
-            if repetition_parameter is not None:
-                for para_name in repetition_parameter.expression.variables:
-                    self._volatile_parameter_mappings.setdefault(para_name,
-                                                                 []).append(volatile_mapping_entry(0, 0, position, 1))
-
-        self._waveforms = tuple(waveforms.keys())
-        self._sequencer_tables = [sequencer_table]
-        self._advanced_sequencer_table = [(self.program.repetition_count, 1, 0)]
-        if self.program.repetition_parameter is not None:
-            for para_name in self.program.repetition_parameter.expression.variables:
-                self._volatile_parameter_mappings.setdefault(para_name, []).append(volatile_mapping_entry(1, 0, 0, 1))
-
-    def setup_advanced_sequence_mode(self) -> None:
-        assert self.program.depth() > 1
-        assert self.program.repetition_count == 1
-
-        self.program.flatten_and_balance(2)
-
-        min_seq_len = self.__device_properties['min_seq_len']
-        max_seq_len = self.__device_properties['max_seq_len']
-
-        def check_merge_with_next(program, n):
-            if (program[n].repetition_count == 1 and program[n+1].repetition_count == 1 and
-                    len(program[n]) + len(program[n+1]) < max_seq_len):
-                program[n][len(program[n]):] = program[n + 1][:]
-                program[n + 1:n + 2] = []
-                return True
-            return False
-
-        def check_partial_unroll(program, n):
-            st = program[n]
-            if st.repetition_parameter is not None:
-                return False
-
-            if sum(entry.repetition_count for entry in st) * st.repetition_count >= min_seq_len:
-                if sum(entry.repetition_count for entry in st) < min_seq_len:
-                    st.unroll_children()
-                while len(st) < min_seq_len:
-                    st.split_one_child()
-                return True
-            return False
-
-        i = 0
-        while i < len(self.program):
-            self.program[i].assert_tree_integrity()
-            if len(self.program[i]) > max_seq_len:
-                raise TaborException('The algorithm is not smart enough to make sequence tables shorter')
-            elif len(self.program[i]) < min_seq_len:
-                assert self.program[i].repetition_count > 0
-                if self.program[i].repetition_count == 1:
-                    # check if merging with neighbour is possible
-                    if i > 0 and check_merge_with_next(self.program, i-1):
-                        pass
-                    elif i+1 < len(self.program) and check_merge_with_next(self.program, i):
-                        pass
-
-                    # check if (partial) unrolling is possible
-                    elif check_partial_unroll(self.program, i):
-                        i += 1
-
-                    # check if sequence table can be extended by unrolling a neighbor
-                    elif (i > 0
-                          and self.program[i - 1].repetition_count > 1
-                          and len(self.program[i]) + len(self.program[i-1]) < max_seq_len):
-                        self.program[i][:0] = self.program[i-1].copy_tree_structure()[:]
-                        self.program[i - 1].repetition_count -= 1
-
-                    elif (i+1 < len(self.program)
-                          and self.program[i+1].repetition_count > 1
-                          and len(self.program[i]) + len(self.program[i+1]) < max_seq_len):
-                        self.program[i][len(self.program[i]):] = self.program[i+1].copy_tree_structure()[:]
-                        self.program[i+1].repetition_count -= 1
-
-                    else:
-                        raise TaborException('The algorithm is not smart enough to make this sequence table longer')
-                elif check_partial_unroll(self.program, i):
-                    i += 1
-                else:
-                    raise TaborException('The algorithm is not smart enough to make this sequence table longer')
-            else:
-                i += 1
-
-        for sequence_table in self.program:
-            assert len(sequence_table) >= self.__device_properties['min_seq_len']
-            assert len(sequence_table) <= self.__device_properties['max_seq_len']
-
-        advanced_sequencer_table = []
-        sequencer_tables = []
-        waveforms = OrderedDict()
-        for adv_position, sequencer_table_loop in enumerate(self.program):
-            current_sequencer_table = []
-            current_table_mapping_p = {}
-            current_table_mapping_t = {}
-            for position, (waveform, repetition_count, repetition_parameter) in enumerate((waveform_loop.waveform.get_subset_for_channels(self.__used_channels),
-                                                waveform_loop.repetition_count, waveform_loop.repetition_parameter)
-                                               for waveform_loop in sequencer_table_loop):
-                if waveform in waveforms:
-                    wf_index = waveforms[waveform]
-                else:
-                    wf_index = len(waveforms)
-                    waveforms[waveform] = wf_index
-                current_sequencer_table.append((repetition_count, wf_index, 0))
-                if repetition_parameter is not None:
-                    for para_name in repetition_parameter.expression.variables:
-                        current_table_mapping_p.setdefault(para_name, []).append(volatile_mapping_entry(0, adv_position,
-                                                                                                        position, 0))
-                        current_table_mapping_t.setdefault(para_name, []).append(volatile_mapping_entry(0, adv_position,
-                                                                                                        position, 1))
-
-            if current_sequencer_table in sequencer_tables:
-                sequence_no = sequencer_tables.index(current_sequencer_table) + 1
-                keys = set(self._volatile_parameter_mappings).union(current_table_mapping_p)
-                temp = []
-                self._volatile_parameter_mappings = dict((k, self._volatile_parameter_mappings.get(k, temp)
-                                                          + current_table_mapping_p.get(k, temp)) for k in keys)
-            else:
-                sequence_no = len(sequencer_tables) + 1
-                sequencer_tables.append(current_sequencer_table)
-                keys = set(self._volatile_parameter_mappings).union(current_table_mapping_t)
-                temp = []
-                self._volatile_parameter_mappings = dict((k, self._volatile_parameter_mappings.get(k, temp)
-                                                          + current_table_mapping_t.get(k, temp)) for k in keys)
-
-            advanced_sequencer_table.append((sequencer_table_loop.repetition_count, sequence_no, 0))
-            if sequencer_table_loop.repetition_parameter is not None:
-                for para_name in sequencer_table_loop.repetition_parameter.expression.variables:
-                    self._volatile_parameter_mappings.setdefault(para_name, []).append(volatile_mapping_entry(1, 0, adv_position, 1))
-
-        self._advanced_sequencer_table = advanced_sequencer_table
-        self._sequencer_tables = sequencer_tables
-        self._waveforms = tuple(waveforms.keys())
-
-    @property
-    def program(self) -> Loop:
-        return self._program
-
-    def get_sequencer_tables(self) -> List[Tuple[int, int, int]]:
-        return self._sequencer_tables
-
-    def get_advanced_sequencer_table(self) -> List[Tuple[int, int, int]]:
-        """Advanced sequencer table that can be used  via the download_adv_seq_table pytabor command"""
-        return self._advanced_sequencer_table
-
-    @property
-    def waveform_mode(self) -> str:
-        return self.__waveform_mode
 
 
 class TaborAWGRepresentation:
@@ -649,7 +267,7 @@ TaborProgramMemory = NamedTuple('TaborProgramMemory', [('waveform_to_segment', n
 
 
 def with_configuration_guard(function_object: Callable[['TaborChannelPair', Any], Any]) -> Callable[['TaborChannelPair'],
-                                                                                               Any]:
+                                                                                                    Any]:
     """This decorator assures that the AWG is in configuration mode while the decorated method runs."""
     @functools.wraps(function_object)
     def guarding_method(channel_pair: 'TaborChannelPair', *args, **kwargs) -> Any:
@@ -677,137 +295,10 @@ def with_select(function_object: Callable[['TaborChannelPair', Any], Any]) -> Ca
     return selector
 
 
-class PlottableProgram:
-    TableEntry = NamedTuple('TableEntry', [('repetition_count', int),
-                                           ('element_number', int),
-                                           ('jump_flag', int)])
-
-    def __init__(self,
-                 segments: List[TaborSegment],
-                 sequence_tables: List[List[Tuple[int, int, int]]],
-                 advanced_sequence_table: List[Tuple[int, int, int]]):
-        self._segments = segments
-        self._sequence_tables = [[self.TableEntry(*sequence_table_entry)
-                                  for sequence_table_entry in sequence_table]
-                                 for sequence_table in sequence_tables]
-        self._advanced_sequence_table = [self.TableEntry(*adv_seq_entry)
-                                         for adv_seq_entry in advanced_sequence_table]
-
-    @classmethod
-    def from_read_data(cls, waveforms: List[np.ndarray],
-                       sequence_tables: List[Tuple[np.ndarray, np.ndarray, np.ndarray]],
-                       advanced_sequence_table: Tuple[np.ndarray, np.ndarray, np.ndarray]) -> 'PlottableProgram':
-        return cls([TaborSegment.from_binary_segment(wf) for wf in waveforms],
-                   [cls._reformat_rep_seg_jump(seq_table) for seq_table in sequence_tables],
-                   cls._reformat_rep_seg_jump(advanced_sequence_table))
-
-    @classmethod
-    def _reformat_rep_seg_jump(cls, rep_seg_jump_tuple: Tuple[np.ndarray, np.ndarray, np.ndarray]) -> List[TableEntry]:
-        return list(cls.TableEntry(int(rep), int(seg_no), int(jump))
-                    for rep, seg_no, jump in zip(*rep_seg_jump_tuple))
-
-    def _get_advanced_sequence_table(self, with_first_idle=False, with_last_idles=False) -> List[TableEntry]:
-        if not with_first_idle and self._advanced_sequence_table[0] == (1, 1, 1):
-            adv_seq_tab = self._advanced_sequence_table[1:]
-        else:
-            adv_seq_tab = self._advanced_sequence_table
-
-        #  remove idle pulse at end
-        if with_last_idles:
-            return adv_seq_tab
-        else:
-            while adv_seq_tab[-1] == (1, 1, 0):
-                adv_seq_tab = adv_seq_tab[:-1]
-            return adv_seq_tab
-
-    def _iter_segment_table_entry(self,
-                                  with_first_idle=False,
-                                  with_last_idles=False) -> Generator[TableEntry, None, None]:
-        for sequence_repeat, sequence_no, _ in self._get_advanced_sequence_table(with_first_idle, with_last_idles):
-            for _ in range(sequence_repeat):
-                yield from self._sequence_tables[sequence_no - 1]
-
-    def iter_waveforms_and_repetitions(self,
-                                       channel: int,
-                                       with_first_idle=False,
-                                       with_last_idles=False) -> Generator[Tuple[np.ndarray, int], None, None]:
-        ch_getter = (operator.attrgetter('ch_a'), operator.attrgetter('ch_b'))[channel]
-        for segment_repeat, segment_no, _ in self._iter_segment_table_entry(with_first_idle, with_last_idles):
-            yield ch_getter(self._segments[segment_no - 1]), segment_repeat
-
-    def iter_samples(self, channel: int,
-                     with_first_idle=False,
-                     with_last_idles=False) -> Generator[np.uint16, None, None]:
-        for waveform, repetition in self.iter_waveforms_and_repetitions(channel, with_first_idle, with_last_idles):
-            waveform = list(waveform)
-            for _ in range(repetition):
-                yield from waveform
-
-    def get_as_single_waveform(self, channel: int,
-                               max_total_length: int=10**9,
-                               with_marker: bool=False) -> Optional[np.ndarray]:
-        waveforms = self.get_waveforms(channel, with_marker=with_marker)
-        repetitions = self.get_repetitions()
-        waveform_lengths = np.fromiter((wf.size for wf in waveforms), count=len(waveforms), dtype=np.uint64)
-
-        total_length = (repetitions*waveform_lengths).sum()
-        if total_length > max_total_length:
-            return None
-
-        result = np.empty(total_length, dtype=np.uint16)
-        c_idx = 0
-        for wf, rep in zip(waveforms, repetitions):
-            mem = wf.size*rep
-            target = result[c_idx:c_idx+mem]
-
-            target = target.reshape((rep, wf.size))
-            target[:, :] = wf[np.newaxis, :]
-            c_idx += mem
-        return result
-
-    def get_waveforms(self, channel: int, with_marker: bool=False) -> List[np.ndarray]:
-        if with_marker:
-            ch_getter = (operator.attrgetter('data_a'), operator.attrgetter('data_b'))[channel]
-        else:
-            ch_getter = (operator.attrgetter('ch_a'), operator.attrgetter('ch_b'))[channel]
-        return [ch_getter(self._segments[segment_no - 1])
-                for _, segment_no, _ in self._iter_segment_table_entry()]
-
-    def get_segment_waveform(self, channel: int, segment_no: int) -> np.ndarray:
-        ch_getter = (operator.attrgetter('ch_a'), operator.attrgetter('ch_b'))[channel]
-        return [ch_getter(self._segments[segment_no - 1])]
-
-    def get_repetitions(self) -> np.ndarray:
-        return np.fromiter((segment_repeat
-                            for segment_repeat, *_ in self._iter_segment_table_entry()), dtype=np.uint32)
-
-    def __eq__(self, other):
-        for ch in (0, 1):
-            for x, y in itertools.zip_longest(self.iter_samples(ch, True, False),
-                                              other.iter_samples(ch, True, False)):
-                if x != y:
-                    return False
-        return True
-
-    def to_builtin(self) -> dict:
-        waveforms = [[wf.data_a.tolist() for wf in self._segments],
-                     [wf.data_b.tolist() for wf in self._segments]]
-        return {'waveforms': waveforms,
-                'seq_tables': self._sequence_tables,
-                'adv_seq_table': self._advanced_sequence_table}
-
-    @classmethod
-    def from_builtin(cls, data: dict) -> 'PlottableProgram':
-        waveforms = data['waveforms']
-        waveforms = [TaborSegment.from_binary_data(np.array(data_a, dtype=np.uint16), np.array(data_b, dtype=np.uint16))
-                     for data_a, data_b in zip(*waveforms)]
-        return cls(waveforms, data['seq_tables'], data['adv_seq_table'])
-
-
 class TaborChannelPair(AWG):
     def __init__(self, tabor_device: TaborAWGRepresentation, channels: Tuple[int, int], identifier: str):
         super().__init__(identifier)
-        self._device =  weakref.ref(tabor_device)
+        self._device = weakref.ref(tabor_device)
 
         self._configuration_guard_count = 0
         self._is_in_config_mode = False
@@ -944,53 +435,40 @@ class TaborChannelPair(AWG):
                         waveform_quantum=16,
                         sample_rate=fractions.Fraction(sample_rate, 10**9))
 
-        # helper to restore previous state if upload is impossible
-        to_restore = None
-        to_restore_was_armed = False
         if name in self._known_programs:
             if force:
-                if self._current_program == name:
-                    to_restore_was_armed = True
-
-                # save old program to restore in on error
-                to_restore = name, self.free_program(name)
+                self.free_program(name)
             else:
                 raise ValueError('{} is already known on {}'.format(name, self.identifier))
 
-        try:
-            # parse to tabor program
-            tabor_program = TaborProgram(program,
-                                         channels=tuple(channels),
-                                         markers=markers,
-                                         device_properties=self.device.dev_properties)
-            
-            # They call the peak to peak range amplitude
-            ranges = (self.device.amplitude(self._channels[0]),
-                      self.device.amplitude(self._channels[1]))
+        # They call the peak to peak range amplitude
+        ranges = (self.device.amplitude(self._channels[0]),
+                  self.device.amplitude(self._channels[1]))
 
-            voltage_amplitudes = (ranges[0]/2, ranges[1]/2)
-            
-            if self._amplitude_offset_handling == AWGAmplitudeOffsetHandling.IGNORE_OFFSET:
-                voltage_offsets = (0, 0)
-            elif self._amplitude_offset_handling == AWGAmplitudeOffsetHandling.CONSIDER_OFFSET:
-                voltage_offsets = (self.device.offset(self._channels[0]),
-                                   self.device.offset(self._channels[1]))
-            else:
-                raise ValueError('{} is invalid as AWGAmplitudeOffsetHandling'.format(self._amplitude_offset_handling))
-                
-            segments, segment_lengths = tabor_program.sampled_segments(sample_rate=sample_rate,
-                                                                       voltage_amplitude=voltage_amplitudes,
-                                                                       voltage_offset=voltage_offsets,
-                                                                       voltage_transformation=voltage_transformation)
+        voltage_amplitudes = (ranges[0]/2, ranges[1]/2)
 
-            waveform_to_segment, to_amend, to_insert = self._find_place_for_segments_in_memory(segments,
-                                                                                               segment_lengths)
-        except:
-            if to_restore:
-                self._restore_program(*to_restore)
-                if to_restore_was_armed:
-                    self.change_armed_program(name)
-            raise
+        if self._amplitude_offset_handling == AWGAmplitudeOffsetHandling.IGNORE_OFFSET:
+            voltage_offsets = (0, 0)
+        elif self._amplitude_offset_handling == AWGAmplitudeOffsetHandling.CONSIDER_OFFSET:
+            voltage_offsets = (self.device.offset(self._channels[0]),
+                               self.device.offset(self._channels[1]))
+        else:
+            raise ValueError('{} is invalid as AWGAmplitudeOffsetHandling'.format(self._amplitude_offset_handling))
+
+        # parse to tabor program
+        tabor_program = TaborProgram(program,
+                                     channels=tuple(channels),
+                                     markers=markers,
+                                     device_properties=self.device.dev_properties,
+                                     sample_rate=sample_rate / 10**9,
+                                     amplitudes=voltage_amplitudes,
+                                     offsets=voltage_offsets,
+                                     voltage_transformations=voltage_transformation)
+
+        segments, segment_lengths = tabor_program.get_sampled_segments()
+
+        waveform_to_segment, to_amend, to_insert = self._find_place_for_segments_in_memory(segments,
+                                                                                           segment_lengths)
 
         self._segment_references[waveform_to_segment[waveform_to_segment >= 0]] += 1
 
@@ -1000,7 +478,7 @@ class TaborChannelPair(AWG):
             waveform_to_segment[wf_index] = segment_index
 
         if np.any(to_amend):
-            segments_to_amend = segments[to_amend]
+            segments_to_amend = [segments[idx] for idx in np.flatnonzero(to_amend)]
             waveform_to_segment[to_amend] = self._amend_segments(segments_to_amend)
 
         self._known_programs[name] = TaborProgramMemory(waveform_to_segment=waveform_to_segment,
@@ -1207,12 +685,40 @@ class TaborChannelPair(AWG):
         self.free_program(name)
         self.cleanup()
 
-    def set_volatile_parameters(self, program_name: str, parameters: Mapping[str, ConstantParameter]) -> None:
+    def set_volatile_parameters(self, program_name: str, parameters: Mapping[str, Parameter]) -> None:
         """Set the values of parameters which were marked as volatile on program creation."""
         # TODO: Add documentation, increase readability
         # When changing the tables of current program use guarded mode as it gives way smaller blips and seems to be faster
 
         waveform_to_segment_index, program = self._known_programs[program_name]
+
+        modifications = program.update_volatile_parameters(parameters)
+
+        cmd_str = ""
+        for i, (position, rep_count) in enumerate(modifications.items()):
+            if rep_count == 0:
+                raise ValueError('Repetition count cannot evaluate to 0')
+            if isinstance(position, int):
+                if i == 0:
+                    cmd_str += ":ASEQ:DEF {}, {}, {}, {}".format(position, 0, rep_count, 0)
+
+    """
+
+                cmd_str = ""
+                for i, pos in enumerate(changes):
+                    if changes[pos].rep_count == 0:
+                        raise ValueError('Repetition count cannot evaluate to 0')
+                    if i == 0:
+                        cmd_str += ":ASEQ:DEF {}, {}, {}, {}".format(pos, changes[pos].segment, changes[pos].rep_count,
+                                                                     changes[pos].jump_flag)
+                    else:
+                        cmd_str += "; :ASEQ:DEF {}, {}, {}, {}".format(pos, changes[pos].segment,
+                                                                       changes[pos].rep_count,
+                                                                       changes[pos].jump_flag)
+
+                self.device.send_cmd(cmd_str)
+            else:
+
         program_backup = copy.deepcopy(self._known_programs[program_name])
         names = set(parameters.keys()) & set(program._volatile_parameter_mappings.keys())
         changes = dict()
@@ -1236,7 +742,7 @@ class TaborChannelPair(AWG):
                             jump_flag = program._sequencer_tables[program_mapping.adv_position][program_mapping.position][2]
                             program._sequencer_tables[program_mapping.adv_position][program_mapping.position] = (
                                                                                       new_rep_count, seg_ind, jump_flag)
-                            changes[changes_keys(program_mapping.adv_position + 2, program_mapping.position)] = table_content(
+                            changes[ChangesKeys(program_mapping.adv_position + 2, program_mapping.position)] = TableContent(
                                                        waveform_to_segment_index[seg_ind] + 1, new_rep_count, jump_flag)
                     else:
                         self.logger.error('You should not end up here... this is a bug in the code.')
@@ -1254,7 +760,7 @@ class TaborChannelPair(AWG):
                             jump_flag = program._sequencer_tables[program_mapping.adv_position][program_mapping.position][2]
                             program._sequencer_tables[program_mapping.adv_position][program_mapping.position] = (
                                                                                       new_rep_count, seg_ind, jump_flag)
-                            changes[changes_keys(program_mapping.adv_position + 2, program_mapping.position)] = table_content(
+                            changes[ChangesKeys(program_mapping.adv_position + 2, program_mapping.position)] = TableContent(
                                                        waveform_to_segment_index[seg_ind] + 1, new_rep_count, jump_flag)
                     else:
                         program.program.children[program_mapping.position].repetition_parameter.update_constants(parameters)
@@ -1265,7 +771,7 @@ class TaborChannelPair(AWG):
                             jump_flag = program._advanced_sequencer_table[program_mapping.position][2]
                             program._advanced_sequencer_table[program_mapping.position] = (new_rep_count, seq_num,
                                                                                            jump_flag)
-                            changes_aSeq[program_mapping.position + 1] = table_content(seq_num + 1, new_rep_count,
+                            changes_aSeq[program_mapping.position + 1] = TableContent(seq_num + 1, new_rep_count,
                                                                                        jump_flag)
 
         if any(changes[entry].rep_count == 0 for entry in changes):
@@ -1279,17 +785,34 @@ class TaborChannelPair(AWG):
 
         if self._current_program == program_name:
             if changes:
-                self._set_current_sequencer_table(changes)
-            if changes_aSeq:
+                self._update_current_sequencer_table(changes)
+            if changes_aSeq
                 self._set_current_adv_sequencer_table(changes_aSeq)
+    """
+    
 
     @with_configuration_guard
-    def _set_current_sequencer_table(self, changes: Dict[changes_keys, table_content]) -> None:
-        """Changes the current sequencer table at the position given by changes_keys to the values in table_content"""
+    def _update_current_sequencer_table(self, changes):  # : Dict[ChangesKeys, TableContent]) -> None:
+        """Changes the current sequencer table at the position given by ChangesKeys to the values in TableContent.
+
+           With_configuration_guard is necessary in order to prevent blips the AWG outputs if the it changes the table
+           while running (Blips are of oscillatory behavior with a maximum amplitude of ~ 300 mV). Further it seems to
+           make the communication faster.
+
+        Args:
+            changes (dict): Changes to the currently active sequencer table
+                changes.key  (ChangesKeys):  a NamedTuple('ChangesKeys', [('table_number', int), ('position', int)])
+                                             which states the number of the table to be changed as well as the position
+                                             in the sequencer table where the changes are to be made.
+                changes[key] (TableContent): a NamedTuple('TableContent', [('segment', int), ('rep_count', int),
+                                                                           ('jump_flag', int)])
+                                             which states the changes to be made at the given position.
+        """
+        """
         commands = dict()
         # Rewrite changes for second loop
         for positions in changes:
-            commands.setdefault(positions.adv_position, []).append([positions.position, changes[positions]])
+            commands.setdefault(positions.table_number, []).append([positions.position, changes[positions]])
         for table_num in commands:
             cmd_str = ":SEQ:SEL {}".format(table_num)
             for command in commands[table_num]:
@@ -1298,10 +821,22 @@ class TaborChannelPair(AWG):
                 cmd_str += "; :SEQ:DEF {}, {}, {}, {}".format(command[0], command[1].segment, command[1].rep_count,
                                                               command[1].jump_flag)
             self.device.send_cmd(cmd_str)
+        """
 
     @with_configuration_guard
-    def _set_current_adv_sequencer_table(self, changes: Dict[int, table_content]) -> None:
-        """Changes the current advanced sequencer table at the position given by changes.keys to the values in table_content"""
+    def _set_current_adv_sequencer_table(self, changes):  #: Dict[int, TableContent]) -> None:
+        """Changes the current advanced sequencer table at the position given by the keys of changes to the values
+           in TableContent.
+
+        Args:
+            changes (dict): Changes to the currently active advanced sequencer table
+                changes.key (int): gives the position of the entry to change in the adv. sequencer table
+                changes[key] (TableContent): a NamedTuple('TableContent', [('segment', int), ('rep_count', int),
+                                                                           ('jump_flag', int)])
+                                             which states the changes to be made at the given position. Here segment
+                                             represents the sequence number.
+        """
+        """
         cmd_str = ""
         for i, pos in enumerate(changes):
             if changes[pos].rep_count == 0:
@@ -1314,6 +849,7 @@ class TaborChannelPair(AWG):
                                                                changes[pos].jump_flag)
 
         self.device.send_cmd(cmd_str)
+        """
 
     def set_marker_state(self, marker: int, active: bool) -> None:
         """Sets the marker state of this channel pair. According to the manual one cannot turn them off/on separately."""
@@ -1353,8 +889,8 @@ class TaborChannelPair(AWG):
 
             # translate waveform number to actual segment
             sequencer_tables = [[(rep_count, waveform_to_segment_number[wf_index], jump_flag)
-                                 for (rep_count, wf_index, jump_flag) in sequencer_table]
-                                 for sequencer_table in program.get_sequencer_tables()]
+                                 for ((rep_count, wf_index, jump_flag), _) in sequencer_table]
+                                for sequencer_table in program.get_sequencer_tables()]
 
             # insert idle sequence
             sequencer_tables = [self._idle_sequence_table] + sequencer_tables
@@ -1466,8 +1002,6 @@ class TaborChannelPair(AWG):
         self._is_in_config_mode = False
 
 
-class TaborException(Exception):
-    pass
 
 class TaborUndefinedState(TaborException):
     """If this exception is raised the attached tabor device is in an undefined state.
