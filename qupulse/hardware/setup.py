@@ -2,6 +2,7 @@ from typing import NamedTuple, Set, Callable, Dict, Tuple, Union, Iterable, Any
 from collections import defaultdict
 import warnings
 
+from qupulse.pulses.parameters import Parameter, ConstantParameter
 from qupulse.hardware.awgs.base import AWG
 from qupulse.hardware.dacs import DAC
 from qupulse._program._loop import MultiChannelProgram, Loop
@@ -283,6 +284,17 @@ class HardwareSetup:
 
     def registered_channels(self) -> Dict[ChannelID, Set[_SingleChannel]]:
         return self._channel_map
+
+    def update_parameters(self, name: str, parameters):
+        *_, awgs, dacs = self._registered_programs[name]
+
+        for parameter_name, value in parameters.items():
+            if not isinstance(value, Parameter):
+                parameters[name] = ConstantParameter(value)
+
+        for awg in self.known_awgs:
+            if awg in awgs:
+                awg.set_volatile_parameters(name, parameters)
 
     @property
     def registered_programs(self) -> Dict[str, RegisteredProgram]:
