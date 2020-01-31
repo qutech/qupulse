@@ -321,7 +321,7 @@ class TaborProgram(ProgramEntry):
                          offsets=offsets,
                          voltage_transformations=voltage_transformations,
                          sample_rate=sample_rate,
-                         waveforms=[]  # no sampling happens here
+                         waveforms=None  # no sampling happens here
                          )
 
         self._used_channels = used_channels
