@@ -305,7 +305,7 @@ class TaborProgram(ProgramEntry):
             raise TaborException('TaborProgram only supports {} markers'.format(device_properties['chan_per_part']))
         used_channels = frozenset(set(channels).union(markers) - {None})
 
-        if program.repetition_count > 1 or program.depth() == 0: #  self.program.depth() == 0:
+        if program.repetition_count > 1 or program.depth() == 0:
             program.encapsulate()
 
         if mode is None:
@@ -422,14 +422,14 @@ class TaborProgram(ProgramEntry):
         return self._sampled_segments
 
     def update_volatile_parameters(self, parameters: Mapping[str, Parameter]) -> Mapping[Union[int, Tuple[int, int]],
-                                                                                         Tuple[int, int, int]]:
+                                                                                         Union[TableEntry, TableDescription]]:
         """
 
         Args:
             parameters:
 
         Returns:
-            Mapping position of change -> new repetition value
+            Mapping position of change -> (new repetition value, element_num/id, jump flag)
         """
         modifications = {}
 
@@ -441,7 +441,8 @@ class TaborProgram(ProgramEntry):
                 old_rep_count, element_num, jump_flag = self._parsed_program.advanced_sequencer_table[position]
                 self._parsed_program.advanced_sequencer_table[position] = TableEntry(new_value, element_num, jump_flag)
                 if new_value != old_rep_count:
-                    modifications[position] = (new_value, element_num, jump_flag)
+                    modifications[position] = TableEntry(repetition_count=new_value,
+                                                         element_number=element_num, jump_flag=jump_flag)
             else:
                 adv_pos, seq_pos = position
                 ((old_rep_count, element_id, jump_flag), param) = self._parsed_program.sequencer_tables[adv_pos][seq_pos]
@@ -449,7 +450,8 @@ class TaborProgram(ProgramEntry):
                 self._parsed_program.sequencer_tables[adv_pos][seq_pos] = (TableDescription(new_value, element_id,
                                                                                             jump_flag), param)
                 if new_value != old_rep_count:
-                    modifications[position] = (new_value, element_id, jump_flag)
+                    modifications[position] = TableDescription(repetition_count=new_value,
+                                                               element_id=element_id, jump_flag=jump_flag)
 
         return modifications
 

@@ -23,8 +23,6 @@ from qupulse._program.tabor import TaborSegment, TaborException, TaborProgram, P
 __all__ = ['TaborAWGRepresentation', 'TaborChannelPair']
 
 
-
-
 class TaborAWGRepresentation:
     def __init__(self, instr_addr=None, paranoia_level=1, external_trigger=False, reset=False, mirror_addresses=()):
         """
@@ -241,7 +239,6 @@ class TaborAWGRepresentation:
         self.send_cmd(':INST:SEL 3')
         self.send_cmd(setup_command)
 
-
     def reset(self) -> None:
         self.send_cmd(':RES')
         self.initialize()
@@ -416,7 +413,7 @@ class TaborChannelPair(AWG):
                channels: Tuple[Optional[ChannelID], Optional[ChannelID]],
                markers: Tuple[Optional[ChannelID], Optional[ChannelID]],
                voltage_transformation: Tuple[Callable, Callable],
-               force: bool=False) -> None:
+               force: bool = False) -> None:
         """Upload a program to the AWG.
 
         The policy is to prefer amending the unknown waveforms to overwriting old ones."""
@@ -685,6 +682,7 @@ class TaborChannelPair(AWG):
         self.free_program(name)
         self.cleanup()
 
+    @with_configuration_guard
     def set_volatile_parameters(self, program_name: str, parameters: Mapping[str, Parameter]) -> None:
         """Set the values of parameters which were marked as volatile on program creation."""
         # TODO: Add documentation, increase readability
@@ -695,30 +693,31 @@ class TaborChannelPair(AWG):
         modifications = program.update_volatile_parameters(parameters)
 
         cmd_str = ""
-        for i, (position, rep_count) in enumerate(modifications.items()):
-            if rep_count == 0:
+        for i, (position, entry) in enumerate(modifications.items()):
+            if entry.repetition_count == 0:
                 raise ValueError('Repetition count cannot evaluate to 0')
             if isinstance(position, int):
                 if i == 0:
-                    cmd_str += ":ASEQ:DEF {}, {}, {}, {}".format(position, 0, rep_count, 0)
+                    cmd_str += ":ASEQ:DEF {}, {}, {}, {}".format(position + 1, entry.element_number + 1,
+                                                                 entry.repetition_count, entry.jump_flag)
+                else:
+                    cmd_str += "; :ASEQ:DEF {}, {}, {}, {}".format(position + 1, entry.element_number + 1,
+                                                                   entry.repetition_count, entry.jump_flag)
+            else:
+                table_num, step_num = position
+                if i == 0:
+                    cmd_str += ":SEQ:SEL {}".format(table_num + 2)
+                    cmd_str += ":SEQ:DEF {}, {}, {}, {}".format(step_num,
+                                                                waveform_to_segment_index[entry.element_id] + 1,
+                                                                entry.repetition_count, entry.jump_flag)
+                else:
+                    cmd_str += "; :SEQ:SEL {}".format(table_num + 2)
+                    cmd_str += "; :SEQ:DEF {}, {}, {}, {}".format(step_num,
+                                                                  waveform_to_segment_index[entry.element_id] + 1,
+                                                                  entry.repetition_count, entry.jump_flag)
+        self.device.send_cmd(cmd_str)
 
     """
-
-                cmd_str = ""
-                for i, pos in enumerate(changes):
-                    if changes[pos].rep_count == 0:
-                        raise ValueError('Repetition count cannot evaluate to 0')
-                    if i == 0:
-                        cmd_str += ":ASEQ:DEF {}, {}, {}, {}".format(pos, changes[pos].segment, changes[pos].rep_count,
-                                                                     changes[pos].jump_flag)
-                    else:
-                        cmd_str += "; :ASEQ:DEF {}, {}, {}, {}".format(pos, changes[pos].segment,
-                                                                       changes[pos].rep_count,
-                                                                       changes[pos].jump_flag)
-
-                self.device.send_cmd(cmd_str)
-            else:
-
         program_backup = copy.deepcopy(self._known_programs[program_name])
         names = set(parameters.keys()) & set(program._volatile_parameter_mappings.keys())
         changes = dict()
@@ -789,7 +788,6 @@ class TaborChannelPair(AWG):
             if changes_aSeq
                 self._set_current_adv_sequencer_table(changes_aSeq)
     """
-    
 
     @with_configuration_guard
     def _update_current_sequencer_table(self, changes):  # : Dict[ChangesKeys, TableContent]) -> None:
@@ -1002,7 +1000,6 @@ class TaborChannelPair(AWG):
         self._is_in_config_mode = False
 
 
-
 class TaborUndefinedState(TaborException):
     """If this exception is raised the attached tabor device is in an undefined state.
     It is highly recommended to call reset it."""
@@ -1012,7 +1009,7 @@ class TaborUndefinedState(TaborException):
         self.device = device
 
     def reset_device(self):
-        if  isinstance(self.device, TaborAWGRepresentation):
+        if isinstance(self.device, TaborAWGRepresentation):
             self.device.reset()
         elif isinstance(self.device, TaborChannelPair):
             self.device.clear()
