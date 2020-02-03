@@ -707,14 +707,11 @@ class TaborChannelPair(AWG):
                 table_num, step_num = position
                 if i == 0:
                     cmd_str += ":SEQ:SEL {}".format(table_num + 2)
-                    cmd_str += ":SEQ:DEF {}, {}, {}, {}".format(step_num,
-                                                                waveform_to_segment_index[entry.element_id] + 1,
-                                                                entry.repetition_count, entry.jump_flag)
                 else:
                     cmd_str += "; :SEQ:SEL {}".format(table_num + 2)
-                    cmd_str += "; :SEQ:DEF {}, {}, {}, {}".format(step_num,
-                                                                  waveform_to_segment_index[entry.element_id] + 1,
-                                                                  entry.repetition_count, entry.jump_flag)
+                cmd_str += "; :SEQ:DEF {}, {}, {}, {}".format(step_num,
+                                                              waveform_to_segment_index[entry.element_id] + 1,
+                                                              entry.repetition_count, entry.jump_flag)
         self.device.send_cmd(cmd_str)
 
     def set_marker_state(self, marker: int, active: bool) -> None:

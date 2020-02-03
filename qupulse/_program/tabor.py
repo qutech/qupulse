@@ -436,24 +436,27 @@ class TaborProgram(ProgramEntry):
         modifications = {}
 
         for position, parameter in self._parsed_program.volatile_parameter_positions.items():
-            parameter.update_constants(parameters)
-            new_value = int(parameter.get_value())
-
             if isinstance(position, int):
                 old_rep_count, element_num, jump_flag = self._parsed_program.advanced_sequencer_table[position]
+                parameter.update_constants(parameters)
+                new_value = int(parameter.get_value())
                 self._parsed_program.advanced_sequencer_table[position] = TableEntry(new_value, element_num, jump_flag)
                 if new_value != old_rep_count:
                     modifications[position] = TableEntry(repetition_count=new_value,
                                                          element_number=element_num, jump_flag=jump_flag)
+                self._loop[position].repetition_count = new_value
             else:
-                adv_pos, seq_pos = position
+                adv_idx, seq_pos = position
+                adv_pos = self._parsed_program.advanced_sequencer_table[adv_idx].element_number - 1
                 ((old_rep_count, element_id, jump_flag), param) = self._parsed_program.sequencer_tables[adv_pos][seq_pos]
-
+                parameter.update_constants(parameters)
+                new_value = int(parameter.get_value())
                 self._parsed_program.sequencer_tables[adv_pos][seq_pos] = (TableDescription(new_value, element_id,
                                                                                             jump_flag), param)
                 if new_value != old_rep_count:
                     modifications[position] = TableDescription(repetition_count=new_value,
                                                                element_id=element_id, jump_flag=jump_flag)
+                self._loop[adv_idx][seq_pos].repetition_count = new_value
 
         return modifications
 
