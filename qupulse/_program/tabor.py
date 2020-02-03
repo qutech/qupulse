@@ -444,7 +444,8 @@ class TaborProgram(ProgramEntry):
                                                          element_number=element_num, jump_flag=jump_flag)
                 self._loop[position].repetition_count = new_value
             else:
-                adv_pos, seq_pos = position
+                adv_idx, seq_pos = position
+                adv_pos = self._parsed_program.advanced_sequencer_table[adv_idx].element_number - 1
                 ((old_rep_count, element_id, jump_flag), param) = self._parsed_program.sequencer_tables[adv_pos][seq_pos]
                 parameter.update_constants(parameters)
                 new_value = int(parameter.get_value())
@@ -453,7 +454,7 @@ class TaborProgram(ProgramEntry):
                 if new_value != old_rep_count:
                     modifications[position] = TableDescription(repetition_count=new_value,
                                                                element_id=element_id, jump_flag=jump_flag)
-                self._loop[adv_pos][seq_pos].repetition_count = new_value
+                self._loop[adv_idx][seq_pos].repetition_count = new_value
 
         return modifications
 
@@ -550,6 +551,7 @@ def parse_aseq_program(program: Loop, used_channels: FrozenSet[ChannelID]) -> Pa
     waveforms = OrderedDict()
     for adv_position, sequencer_table_loop in enumerate(program):
         current_sequencer_table = []
+        current_volatile_parameter_positions = {}
         for position, (waveform, repetition_count, repetition_parameter) in enumerate(
                 (waveform_loop.waveform.get_subset_for_channels(used_channels),
                  waveform_loop.repetition_count, waveform_loop.repetition_parameter)
@@ -574,6 +576,7 @@ def parse_aseq_program(program: Loop, used_channels: FrozenSet[ChannelID]) -> Pa
         else:
             sequence_no = len(sequencer_tables) + 1
             sequencer_tables.append(current_sequencer_table)
+            #volatile_parameter_positions.update(current_volatile_parameter_positions)
 
         advanced_sequencer_table.append(TableEntry(sequencer_table_loop.repetition_count, sequence_no, 0))
         if sequencer_table_loop.repetition_parameter is not None:

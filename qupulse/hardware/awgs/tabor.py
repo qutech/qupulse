@@ -690,7 +690,7 @@ class TaborChannelPair(AWG):
 
         waveform_to_segment_index, program = self._known_programs[program_name]
 
-        modifications = program.update_volatile_parameters(parameters)  # Here is a bug with parsedprogram.seqtable[advpos][pos}
+        modifications = program.update_volatile_parameters(parameters)
 
         cmd_str = ""
         for i, (position, entry) in enumerate(modifications.items()):
