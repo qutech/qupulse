@@ -170,7 +170,7 @@ class TaborChannelPairTests(TaborDummyBasedTest):
 
         from tests.pulses.sequencing_dummies import DummyWaveform
 
-        from qupulse.hardware.util import make_combined_wave
+        from qupulse._program.tabor import make_combined_wave
 
         cls.DummyWaveform = DummyWaveform
         cls.TaborChannelPair = TaborChannelPair
