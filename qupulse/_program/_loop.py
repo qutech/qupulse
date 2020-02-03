@@ -653,7 +653,6 @@ def _is_compatible(program: Loop, min_len: int, quantum: int, sample_rate: TimeT
             if program.repetition_parameter is not None:
                 warnings.warn("_is_compatible requires an action which drops volatility.",
                               category=VolatileModificationWarning)
-                program._repetition_parameter = None
             return _CompatibilityLevel.action_required
         else:
             return _CompatibilityLevel.compatible
@@ -665,7 +664,6 @@ def _is_compatible(program: Loop, min_len: int, quantum: int, sample_rate: TimeT
             if program.repetition_parameter is not None:
                 warnings.warn("_is_compatible requires an action which drops volatility.",
                               category=VolatileModificationWarning)
-                program._repetition_parameter = None
             return _CompatibilityLevel.action_required
 
 
@@ -673,6 +671,7 @@ def _make_compatible(program: Loop, min_len: int, quantum: int, sample_rate: Tim
     if program.is_leaf():
         program.waveform = to_waveform(program.copy_tree_structure())
         program.repetition_count = 1
+        program._repetition_parameter = None
     else:
         comp_levels = [_is_compatible(cast(Loop, sub_program), min_len, quantum, sample_rate)
                        for sub_program in program]
@@ -680,12 +679,17 @@ def _make_compatible(program: Loop, min_len: int, quantum: int, sample_rate: Tim
         if any(comp_level.is_incompatible() for comp_level in comp_levels):
             single_run = program.duration * sample_rate / program.repetition_count
             if (single_run / quantum).denominator == 1 and single_run >= min_len:
+                # it is enough to concatenate all children
                 new_repetition_count = program.repetition_count
+                new_repetition_parameter = program.repetition_parameter
                 program.repetition_count = 1
             else:
+                # we need to concatenate all children and unroll
                 new_repetition_count = 1
+                new_repetition_parameter = None
             program.waveform = to_waveform(program.copy_tree_structure())
             program.repetition_count = new_repetition_count
+            program._repetition_parameter = new_repetition_parameter
             program[:] = []
             return
         else:
