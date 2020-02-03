@@ -454,7 +454,10 @@ class TaborProgram(ProgramEntry):
                 if new_value != old_rep_count:
                     modifications[position] = TableDescription(repetition_count=new_value,
                                                                element_id=element_id, jump_flag=jump_flag)
-                self._loop[adv_idx][seq_pos].repetition_count = new_value
+                if self._loop.depth() == 1:
+                    self._loop[seq_pos].repetition_count = new_value
+                else:
+                    self._loop[adv_idx][seq_pos].repetition_count = new_value
 
         return modifications
 
