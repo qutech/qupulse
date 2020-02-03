@@ -713,6 +713,11 @@ class TaborChannelPair(AWG):
                 cmd_str += "; :SEQ:DEF {}, {}, {}, {}".format(step_num,
                                                               waveform_to_segment_index[entry.element_id] + 1,
                                                               entry.repetition_count, entry.jump_flag)
+        if cmd_str == "":
+            print("There are no volatile parameters to update. Either there are no volatile parameters with these names"
+                  ",\nthe respective repetition counts already have the given values or the volatile parameters were "
+                  "dropped during upload.")
+            return
         self.device.send_cmd(cmd_str)
 
     def set_marker_state(self, marker: int, active: bool) -> None:
