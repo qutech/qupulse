@@ -9,7 +9,7 @@ import numpy as np
 
 from qupulse.utils.types import ChannelID, TimeType
 from qupulse.hardware.awgs.base import ProgramEntry
-from qupulse.hardware.util import make_combined_wave, get_sample_times, voltage_to_uint16
+from qupulse.hardware.util import get_sample_times, voltage_to_uint16
 from qupulse.pulses.parameters import Parameter, MappedParameter
 from qupulse._program.waveforms import Waveform
 from qupulse._program._loop import Loop
@@ -42,14 +42,15 @@ class TaborException(Exception):
 
 
 class TaborSegment:
-    """Represents one segment of two channels on the device. Convenience class."""
+    """Represents one segment of two channels on the device. Convenience class. The data is stored in native format"""
 
+    QUANTUM = 16
     ZERO_VAL = np.uint16(8192)
     CHANNEL_MASK = np.uint16(2**14 - 1)
     MARKER_A_MASK = np.uint16(2**14)
     MARKER_B_MASK = np.uint16(2**15)
 
-    __slots__ = ('_data',)
+    __slots__ = ('_data', '_hash')
 
     @staticmethod
     def _data_a_view(data: np.ndarray) -> np.ndarray:
@@ -74,9 +75,22 @@ class TaborSegment:
         assert data.ndim == 3
         n_quanta, n_channels, quantum_size = data.shape
         assert n_channels == 2
-        assert quantum_size == 16
+        assert quantum_size == self.QUANTUM
         assert data.dtype is np.dtype('uint16')
         self._data = data
+        self._data.flags.writeable = False
+
+        # shape is not included because it only depends on the size i.e. (n_quantum, 2, 16)
+        self._hash = hash(self._data.tobytes())
+
+    @property
+    def native(self) -> np.ndarray:
+        """You must not change native (data or shape)
+
+        Returns:
+            An array with shape (n_quanta, 2, 16)
+        """
+        return self._data
 
     @property
     def data_a(self) -> np.ndarray:
@@ -116,18 +130,18 @@ class TaborSegment:
             raise TaborException('Channel entries have to have the same length')
         num_points, = num_points
 
-        assert num_points % 16 == 0
+        assert num_points % cls.QUANTUM == 0
 
-        data = np.full((num_points // 16, 2, 16), cls.ZERO_VAL, dtype=np.uint16)
+        data = np.full((num_points // cls.QUANTUM, 2, cls.QUANTUM), cls.ZERO_VAL, dtype=np.uint16)
         data_a = cls._data_a_view(data)
         data_b = cls._data_b_view(data)
         marker_view = cls._marker_data_view(data)
 
         if ch_a is not None:
-            data_a[:] = ch_a.reshape((-1, 16))
+            data_a[:] = ch_a.reshape((-1, cls.QUANTUM))
 
         if ch_b is not None:
-            data_b[:] = ch_b.reshape((-1, 16))
+            data_b[:] = ch_b.reshape((-1, cls.QUANTUM))
 
         if marker_a is not None:
             marker_view[:] |= np.left_shift(marker_a.astype(np.uint16), 14).reshape((-1, 8))
@@ -139,8 +153,6 @@ class TaborSegment:
 
     @classmethod
     def from_binary_segment(cls, segment_data: np.ndarray) -> 'TaborSegment':
-        # data_a = segment_data.reshape((-1, 16))[1::2, :].reshape((-1, ))
-        # data_b = segment_data.reshape((-1, 16))[0::2, :].ravel()
         return cls(data=segment_data.reshape((-1, 2, 16)))
 
     @property
@@ -174,7 +186,7 @@ class TaborSegment:
         return cls(data=data)
 
     def __hash__(self) -> int:
-        return hash(bytes(self._data))
+        return self._hash
 
     def __eq__(self, other: 'TaborSegment'):
         return np.array_equal(self._data, other._data)
@@ -184,8 +196,47 @@ class TaborSegment:
         return self._data.shape[0] * 16
 
     def get_as_binary(self) -> np.ndarray:
-        assert not (self.ch_a is None or self.ch_b is None)
-        return make_combined_wave([self])
+        return self.native.ravel()
+
+
+def make_combined_wave(segments: List[TaborSegment], destination_array=None) -> np.ndarray:
+    """Combine multiple segments to one binary blob for bulk upload. Better implementation of
+    `pytabor.make_combined_wave`.
+
+    Args:
+        segments:
+        destination_array:
+
+    Returns:
+        1 d array for upload to instrument
+    """
+    quantum = TaborSegment.QUANTUM
+
+    if len(segments) == 0:
+        return np.zeros(0, dtype=np.uint16)
+
+    n_quanta = sum(segment.native.shape[0] for segment in segments) + len(segments) - 1
+
+    if destination_array is not None:
+        if destination_array.size != 2 * n_quanta * quantum:
+            raise ValueError('Destination array has an invalid size')
+        destination_array = destination_array.reshape((n_quanta, 2, quantum))
+    else:
+        destination_array = np.empty((n_quanta, 2, quantum), dtype=np.uint16)
+
+    current_quantum = 0
+    for segment in segments:
+        if current_quantum > 0:
+            # fill one quantum with first data point from upcoming segment
+            destination_array[current_quantum, :, :] = segment.native[0, :, 0][:, None]
+            current_quantum += 1
+
+        segment_quanta = segment.native.shape[0]
+        destination_array[current_quantum:current_quantum + segment_quanta, ...] = segment.native
+
+        current_quantum += segment_quanta
+
+    return destination_array.ravel()
 
 
 class PlottableProgram:
