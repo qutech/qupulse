@@ -71,7 +71,7 @@ def validate_result(tabor_segments, result, fill_value=None):
 
 class TaborMakeCombinedTest(unittest.TestCase):
     def exec_general(self, data_1, data_2, fill_value=None):
-        tabor_segments = [TaborSegment(d1, d2, None, None) for d1, d2 in zip(data_1, data_2)]
+        tabor_segments = [TaborSegment.from_sampled(d1, d2, None, None) for d1, d2 in zip(data_1, data_2)]
         expected_length = (sum(segment.num_points for segment in tabor_segments) + 16 * (len(tabor_segments) - 1)) * 2
 
         result = make_combined_wave(tabor_segments, fill_value=fill_value)
@@ -120,6 +120,7 @@ class TaborMakeCombinedTest(unittest.TestCase):
         self.assertIs(combined.dtype, np.dtype('uint16'))
         self.assertEqual(len(combined), 0)
 
+    @unittest.skip("TaborSegment does a size % 16 check")
     def test_invalid_segment_length(self):
         gen = itertools.count()
         data_1 = [np.fromiter(gen, count=32, dtype=np.uint16),
@@ -130,11 +131,11 @@ class TaborMakeCombinedTest(unittest.TestCase):
                   np.fromiter(gen, count=16, dtype=np.uint16),
                   np.fromiter(gen, count=193, dtype=np.uint16)]
 
-        tabor_segments = [TaborSegment(d, d, None, None) for d in data_1]
+        tabor_segments = [TaborSegment.from_sampled(d, d, None, None) for d in data_1]
         with self.assertRaises(ValueError):
             make_combined_wave(tabor_segments)
 
-        tabor_segments = [TaborSegment(d, d, None, None) for d in data_2]
+        tabor_segments = [TaborSegment.from_sampled(d, d, None, None) for d in data_2]
         with self.assertRaises(ValueError):
             make_combined_wave(tabor_segments)
 
@@ -142,7 +143,7 @@ class TaborMakeCombinedTest(unittest.TestCase):
 @unittest.skipIf(pytabor is dummy_modules.dummy_pytabor, "Cannot compare to pytabor results")
 class TaborMakeCombinedPyTaborCompareTest(TaborMakeCombinedTest):
     def exec_general(self, data_1, data_2, fill_value=None):
-        tabor_segments = [TaborSegment(d1, d2, None, None) for d1, d2 in zip(data_1, data_2)]
+        tabor_segments = [TaborSegment.from_sampled(d1, d2, None, None) for d1, d2 in zip(data_1, data_2)]
         expected_length = (sum(segment.num_points for segment in tabor_segments) + 16 * (len(tabor_segments) - 1)) * 2
 
         offset = 0

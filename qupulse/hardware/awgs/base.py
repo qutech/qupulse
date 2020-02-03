@@ -207,6 +207,13 @@ class ProgramEntry:
         else:
             self._waveforms = OrderedDict()
 
+    def _sample_empty_channel(self, time: numpy.ndarray) -> Optional[numpy.ndarray]:
+        """Override this in derived class to change how """
+        return None
+
+    def _sample_empty_marker(self, time: numpy.ndarray) -> Optional[numpy.ndarray]:
+        return None
+
     def _sample_waveforms(self, waveforms: Sequence[Waveform]) -> List[Tuple[Tuple[numpy.ndarray, ...],
                                                                              Tuple[numpy.ndarray, ...]]]:
         sampled_waveforms = []
@@ -219,10 +226,10 @@ class ProgramEntry:
             for channel, trafo, amplitude, offset in zip(self._channels, self._voltage_transformations,
                                                          self._amplitudes, self._offsets):
                 if channel is None:
-                    sampled_channels.append(None)
+                    sampled_channels.append(self._sample_empty_channel())
                 else:
                     sampled = waveform.get_sampled(channel, wf_time)
-                    if trafo:
+                    if trafo is not None:
                         sampled = trafo(sampled)
                     sampled = sampled - offset
                     sampled /= amplitude

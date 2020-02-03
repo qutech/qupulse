@@ -304,12 +304,13 @@ class TaborChannelPair(AWG):
             raise ValueError('Invalid channel pair: {}'.format(channels))
         self._channels = channels
 
-        self._idle_segment = TaborSegment(voltage_to_uint16(voltage=np.zeros(192),
-                                                    output_amplitude=0.5,
-                                                    output_offset=0., resolution=14),
-                                    voltage_to_uint16(voltage=np.zeros(192),
-                                                    output_amplitude=0.5,
-                                                    output_offset=0., resolution=14), None, None)
+        self._idle_segment = TaborSegment.from_sampled(voltage_to_uint16(voltage=np.zeros(192),
+                                                                         output_amplitude=0.5,
+                                                                         output_offset=0., resolution=14),
+                                                       voltage_to_uint16(voltage=np.zeros(192),
+                                                                         output_amplitude=0.5,
+                                                                         output_offset=0., resolution=14),
+                                                       None, None)
         self._idle_sequence_table = [(1, 1, 0), (1, 1, 0), (1, 1, 0)]
 
         self._known_programs = dict()  # type: Dict[str, TaborProgramMemory]

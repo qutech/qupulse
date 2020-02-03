@@ -24,7 +24,7 @@ class PlottableProgramTests(unittest.TestCase):
         self.marker_a = [np.ones(8, bool), np.array([0, 1]*8, dtype=bool)]
         self.marker_b = [np.array([0, 0, 0, 1]*2, bool), np.array([1, 0, 1, 1] * 4, dtype=bool)]
 
-        self.segments = [TaborSegment(ch_a, ch_b, marker_a, marker_b)
+        self.segments = [TaborSegment.from_sampled(ch_a, ch_b, marker_a, marker_b)
                          for ch_a, ch_b, marker_a, marker_b in zip(self.ch_a, self.ch_b, self.marker_a, self.marker_b)]
 
         self.sequencer_tables = [[(1, 1, 0), (1, 2, 0)],
@@ -364,31 +364,32 @@ class TaborProgramTests(unittest.TestCase):
 
 
 class TaborSegmentTests(unittest.TestCase):
-    def test_init(self):
-        with self.assertRaises(TaborException):
-            TaborSegment(None, None, None, None)
-        with self.assertRaises(TaborException):
-            TaborSegment(np.zeros(5), np.zeros(4), None, None)
-        with self.assertRaises(TaborException):
-            TaborSegment(np.zeros(4), np.zeros(4), np.zeros(4), None)
-        with self.assertRaises(TaborException):
-            TaborSegment(np.zeros(4), np.zeros(4), None, np.zeros(4))
-
-        ch_a = np.asarray(100 + np.arange(6), dtype=np.uint16)
-        ch_b = np.asarray(1000 + np.arange(6), dtype=np.uint16)
-
-        marker_a = np.ones(3, dtype=bool)
-        marker_b = np.arange(3, dtype=np.uint16)
-
-        ts = TaborSegment(ch_a=ch_a, ch_b=ch_b, marker_a=marker_a, marker_b=marker_b)
-        self.assertIs(ts.ch_a, ch_a)
-        self.assertIs(ts.ch_b, ch_b)
-        self.assertIs(ts.marker_a, marker_a)
-        self.assertIsNot(ts.marker_b, marker_b)
+    @staticmethod
+    def assert_from_sampled_consistent(ch_a, ch_b, marker_a, marker_b):
+        ts = TaborSegment.from_sampled(ch_a=ch_a, ch_b=ch_b, marker_a=marker_a, marker_b=marker_b)
+        np.testing.assert_equal(ts.ch_a, ch_a)
+        np.testing.assert_equal(ts.ch_b, ch_b)
+        np.testing.assert_equal(ts.marker_a, marker_a != 0)
         np.testing.assert_equal(ts.marker_b, marker_b != 0)
+        return ts
+
+    def test_from_sampled(self):
+        with self.assertRaisesRegex(TaborException, 'Empty'):
+            TaborSegment.from_sampled(None, None, None, None)
+        with self.assertRaisesRegex(TaborException, 'same length'):
+            TaborSegment.from_sampled(np.zeros(16, dtype=np.uint16), np.zeros(32, dtype=np.uint16), None, None)
+
+        ch_a = np.asarray(100 + np.arange(192), dtype=np.uint16)
+        ch_b = np.asarray(1000 + np.arange(192), dtype=np.uint16)
+
+        marker_a = np.ones(192 // 2, dtype=bool)
+        marker_b = np.arange(192 // 2, dtype=np.uint16)
+
+        self.assert_from_sampled_consistent(ch_a=ch_a, ch_b=ch_b, marker_a=marker_a, marker_b=marker_b)
 
     def test_num_points(self):
-        self.assertEqual(TaborSegment(np.zeros(6), np.zeros(6), None, None).num_points, 6)
+        self.assertEqual(TaborSegment.from_sampled(np.zeros(32, dtype=np.uint16), np.zeros(32, dtype=np.uint16),
+                                                   None, None).num_points, 32)
 
     def test_data_a(self):
         ch_a = np.asarray(100 + np.arange(32), dtype=np.uint16)
@@ -407,34 +408,30 @@ class TaborSegmentTests(unittest.TestCase):
         marker_b_data = np.asarray([0]*8 + [off] + [on]*4 + [off] + [on]*2 +
                                    [0]*8 + [on]*3 + [off] + [on]*4)
 
-        ts = TaborSegment(ch_a=ch_a, ch_b=ch_b, marker_a=None, marker_b=None)
-        self.assertIs(ts.data_a, ch_a)
+        ts = TaborSegment.from_sampled(ch_a=ch_a, ch_b=ch_b, marker_a=None, marker_b=None)
+        np.testing.assert_equal(ts.data_a, ch_a)
 
-        ts = TaborSegment(ch_a=ch_a, ch_b=ch_b, marker_a=marker_a, marker_b=None)
+        ts = TaborSegment.from_sampled(ch_a=ch_a, ch_b=ch_b, marker_a=marker_a, marker_b=None)
         expected_data = ch_a + marker_a_data
         np.testing.assert_equal(ts.data_a, expected_data)
 
-        ts = TaborSegment(ch_a=ch_a, ch_b=ch_b, marker_a=None, marker_b=marker_b)
+        ts = TaborSegment.from_sampled(ch_a=ch_a, ch_b=ch_b, marker_a=None, marker_b=marker_b)
         expected_data = ch_a + marker_b_data
         np.testing.assert_equal(ts.data_a, expected_data)
 
-        ts = TaborSegment(ch_a=ch_a, ch_b=ch_b, marker_a=marker_a, marker_b=marker_b)
+        ts = TaborSegment.from_sampled(ch_a=ch_a, ch_b=ch_b, marker_a=marker_a, marker_b=marker_b)
         expected_data = ch_a + marker_b_data + marker_a_data
         np.testing.assert_equal(ts.data_a, expected_data)
 
-        with self.assertRaises(NotImplementedError):
-            TaborSegment(ch_a=None, ch_b=ch_b, marker_a=marker_a, marker_b=marker_b).data_a
-
     def test_data_b(self):
-        ch_a = np.asarray(100 + np.arange(6), dtype=np.uint16)
-        ch_b = np.asarray(1000 + np.arange(6), dtype=np.uint16)
+        ch_a = np.asarray(100 + np.arange(16), dtype=np.uint16)
+        ch_b = np.asarray(1000 + np.arange(16), dtype=np.uint16)
 
-        marker_a = np.ones(3, dtype=bool)
-        marker_b = np.arange(3, dtype=np.uint16)
+        marker_a = np.ones(8, dtype=bool)
+        marker_b = np.arange(8, dtype=np.uint16)
 
-        ts = TaborSegment(ch_a=ch_a, ch_b=ch_b, marker_a=marker_a, marker_b=marker_b)
-
-        self.assertIs(ts.data_b, ch_b)
+        ts = self.assert_from_sampled_consistent(ch_a=ch_a, ch_b=ch_b, marker_a=marker_a, marker_b=marker_b)
+        np.testing.assert_equal(ts.ch_b, ts.data_b)
 
     def test_from_binary_segment(self):
         ch_a = np.asarray(100 + np.arange(32), dtype=np.uint16)
@@ -443,7 +440,7 @@ class TaborSegmentTests(unittest.TestCase):
         marker_a = np.ones(16, dtype=bool)
         marker_b = np.asarray(list(range(5)) + list(range(6)) + list(range(5)), dtype=np.uint16)
 
-        segment = TaborSegment(ch_a=ch_a, ch_b=ch_b, marker_a=marker_a, marker_b=marker_b)
+        segment = TaborSegment.from_sampled(ch_a=ch_a, ch_b=ch_b, marker_a=marker_a, marker_b=marker_b)
 
         binary = segment.get_as_binary()
 
@@ -458,7 +455,7 @@ class TaborSegmentTests(unittest.TestCase):
         marker_a = np.ones(16, dtype=bool)
         marker_b = np.asarray(list(range(5)) + list(range(6)) + list(range(5)), dtype=np.uint16)
 
-        segment = TaborSegment(ch_a=ch_a, ch_b=ch_b, marker_a=marker_a, marker_b=marker_b)
+        segment = TaborSegment.from_sampled(ch_a=ch_a, ch_b=ch_b, marker_a=marker_a, marker_b=marker_b)
 
         data_a = segment.data_a
         data_b = segment.data_b
@@ -475,12 +472,12 @@ class TaborSegmentTests(unittest.TestCase):
         marker_random = np.asarray(list(range(5)) + list(range(6)) + list(range(5)), dtype=np.uint16)
         marker_zeros = np.zeros(16, dtype=bool)
 
-        segment_1 = TaborSegment(ch_a=ch_a, ch_b=ch_b, marker_a=marker_ones, marker_b=marker_random)
-        segment_2 = TaborSegment(ch_a=ch_a, ch_b=ch_a, marker_a=marker_ones, marker_b=marker_random)
+        segment_1 = TaborSegment.from_sampled(ch_a=ch_a, ch_b=ch_b, marker_a=marker_ones, marker_b=marker_random)
+        segment_2 = TaborSegment.from_sampled(ch_a=ch_a, ch_b=ch_a, marker_a=marker_ones, marker_b=marker_random)
 
-        segment_a0 = TaborSegment(ch_a=ch_a, ch_b=ch_b, marker_a=marker_zeros, marker_b=marker_random)
-        segment_anone = TaborSegment(ch_a=ch_a, ch_b=ch_b, marker_a=None, marker_b=marker_random)
-        segment_none = TaborSegment(ch_a=ch_a, ch_b=ch_b, marker_a=None, marker_b=None)
+        segment_a0 = TaborSegment.from_sampled(ch_a=ch_a, ch_b=ch_b, marker_a=marker_zeros, marker_b=marker_random)
+        segment_anone = TaborSegment.from_sampled(ch_a=ch_a, ch_b=ch_b, marker_a=None, marker_b=marker_random)
+        segment_none = TaborSegment.from_sampled(ch_a=ch_a, ch_b=ch_b, marker_a=None, marker_b=None)
 
         self.assertEqual(segment_1, segment_1)
         self.assertNotEqual(segment_1, segment_2)
@@ -491,3 +488,8 @@ class TaborSegmentTests(unittest.TestCase):
         self.assertNotEqual(segment_anone, segment_none)
         self.assertEqual(segment_none, segment_none)
         self.assertNotEqual(segment_a0, segment_1)
+
+        all_segments = [segment_1, segment_2, segment_a0, segment_anone, segment_none]
+        for seg_a, seg_b in itertools.product(all_segments, all_segments):
+            if seg_a == seg_b:
+                self.assertEqual(hash(seg_a), hash(seg_b))

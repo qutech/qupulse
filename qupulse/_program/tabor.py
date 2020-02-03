@@ -44,105 +44,144 @@ class TaborException(Exception):
 class TaborSegment:
     """Represents one segment of two channels on the device. Convenience class."""
 
-    __slots__ = ('ch_a', 'ch_b', 'marker_a', 'marker_b')
+    ZERO_VAL = np.uint16(8192)
+    CHANNEL_MASK = np.uint16(2**14 - 1)
+    MARKER_A_MASK = np.uint16(2**14)
+    MARKER_B_MASK = np.uint16(2**15)
 
-    def __init__(self,
-                 ch_a: Optional[np.ndarray],
-                 ch_b: Optional[np.ndarray],
-                 marker_a: Optional[np.ndarray],
-                 marker_b: Optional[np.ndarray]):
-        if ch_a is None and ch_b is None:
-            raise TaborException('Empty TaborSegments are not allowed')
-        if ch_a is not None and ch_b is not None and len(ch_a) != len(ch_b):
-            raise TaborException('Channel entries have to have the same length')
+    __slots__ = ('_data',)
 
-        self.ch_a = None if ch_a is None else np.asarray(ch_a, dtype=np.uint16)
-        self.ch_b = None if ch_b is None else np.asarray(ch_b, dtype=np.uint16)
+    @staticmethod
+    def _data_a_view(data: np.ndarray) -> np.ndarray:
+        view = data[:, 1, :]
+        assert view.base is data
+        return view
 
-        self.marker_a = None if marker_a is None else np.asarray(marker_a, dtype=bool)
-        self.marker_b = None if marker_b is None else np.asarray(marker_b, dtype=bool)
+    @staticmethod
+    def _data_b_view(data: np.ndarray) -> np.ndarray:
+        view = data[:, 0, :]
+        assert view.base is data
+        return view
 
-        if marker_a is not None and len(marker_a)*2 != self.num_points:
-            raise TaborException('Marker A has to have half of the channels length')
-        if marker_b is not None and len(marker_b)*2 != self.num_points:
-            raise TaborException('Marker B has to have half of the channels length')
+    @staticmethod
+    def _marker_data_view(data: np.ndarray) -> np.ndarray:
+        view = data.reshape((-1, 2, 2, 8))[:, 1, 1, :]
+        assert view.base is data
+        return view
 
-    @classmethod
-    def from_binary_segment(cls, segment_data: np.ndarray) -> 'TaborSegment':
-        data_a = segment_data.reshape((-1, 16))[1::2, :].reshape((-1, ))
-        data_b = segment_data.reshape((-1, 16))[0::2, :].ravel()
-        return cls.from_binary_data(data_a, data_b)
-
-    @classmethod
-    def from_binary_data(cls, data_a: np.ndarray, data_b: np.ndarray) -> 'TaborSegment':
-        ch_b = data_b
-
-        channel_mask = np.uint16(2**14 - 1)
-        ch_a = np.bitwise_and(data_a, channel_mask)
-
-        marker_a_mask = np.uint16(2**14)
-        marker_b_mask = np.uint16(2**15)
-        marker_data = data_a.reshape(-1, 8)[1::2, :].reshape((-1, ))
-
-        marker_a = np.bitwise_and(marker_data, marker_a_mask)
-        marker_b = np.bitwise_and(marker_data, marker_b_mask)
-
-        return cls(ch_a=ch_a,
-                   ch_b=ch_b,
-                   marker_a=marker_a,
-                   marker_b=marker_b)
-
-    def __hash__(self) -> int:
-        return hash(tuple(0 if data is None else bytes(data)
-                          for data in (self.ch_a, self.ch_b, self.marker_a, self.marker_b)))
-
-    def __eq__(self, other: 'TaborSegment'):
-        def compare_markers(marker_1, marker_2):
-            if marker_1 is None:
-                if marker_2 is None:
-                    return True
-                else:
-                    return not np.any(marker_2)
-
-            elif marker_2 is None:
-                return not np.any(marker_1)
-
-            else:
-                return np.array_equal(marker_1, marker_2)
-
-        return (np.array_equal(self.ch_a, other.ch_a) and
-                np.array_equal(self.ch_b, other.ch_b) and
-                compare_markers(self.marker_a, other.marker_a) and
-                compare_markers(self.marker_b, other.marker_b))
+    def __init__(self, *,
+                 data: np.ndarray):
+        assert data.ndim == 3
+        n_quanta, n_channels, quantum_size = data.shape
+        assert n_channels == 2
+        assert quantum_size == 16
+        assert data.dtype is np.dtype('uint16')
+        self._data = data
 
     @property
     def data_a(self) -> np.ndarray:
-        """channel_data and marker data"""
-        if self.marker_a is None and self.marker_b is None:
-            return self.ch_a
-
-        if self.ch_a is None:
-            raise NotImplementedError('What data should be used in a?')
-
-        # copy channel information
-        data = np.array(self.ch_a)
-
-        if self.marker_a is not None:
-            data.reshape(-1, 8)[1::2, :].flat |= (1 << 14) * self.marker_a.astype(np.uint16)
-
-        if self.marker_b is not None:
-            data.reshape(-1, 8)[1::2, :].flat |= (1 << 15) * self.marker_b.astype(np.uint16)
-
-        return data
+        return self._data_a_view(self._data).reshape(-1)
 
     @property
     def data_b(self) -> np.ndarray:
-        """channel_data and marker data"""
-        return self.ch_b
+        return self._data_b_view(self._data).reshape(-1)
+
+    @classmethod
+    def from_sampled(cls,
+                     ch_a: Optional[np.ndarray],
+                     ch_b: Optional[np.ndarray],
+                     marker_a: Optional[np.ndarray],
+                     marker_b: Optional[np.ndarray]) -> 'TaborSegment':
+        num_points = set()
+        if ch_a is not None:
+            assert ch_a.ndim == 1
+            assert ch_a.dtype is np.dtype('uint16')
+            num_points.add(ch_a.size)
+        if ch_b is not None:
+            assert ch_b.ndim == 1
+            assert ch_b.dtype is np.dtype('uint16')
+            num_points.add(ch_b.size)
+        if marker_a is not None:
+            assert marker_a.ndim == 1
+            marker_a = marker_a.astype(dtype=bool)
+            num_points.add(marker_a.size * 2)
+        if marker_b is not None:
+            assert marker_b.ndim == 1
+            marker_b = marker_b.astype(dtype=bool)
+            num_points.add(marker_b.size * 2)
+
+        if len(num_points) == 0:
+            raise TaborException('Empty TaborSegments are not allowed')
+        elif len(num_points) > 1:
+            raise TaborException('Channel entries have to have the same length')
+        num_points, = num_points
+
+        assert num_points % 16 == 0
+
+        data = np.full((num_points // 16, 2, 16), cls.ZERO_VAL, dtype=np.uint16)
+        data_a = cls._data_a_view(data)
+        data_b = cls._data_b_view(data)
+        marker_view = cls._marker_data_view(data)
+
+        if ch_a is not None:
+            data_a[:] = ch_a.reshape((-1, 16))
+
+        if ch_b is not None:
+            data_b[:] = ch_b.reshape((-1, 16))
+
+        if marker_a is not None:
+            marker_view[:] |= np.left_shift(marker_a.astype(np.uint16), 14).reshape((-1, 8))
+
+        if marker_b is not None:
+            marker_view[:] |= np.left_shift(marker_b.astype(np.uint16), 15).reshape((-1, 8))
+
+        return cls(data=data)
+
+    @classmethod
+    def from_binary_segment(cls, segment_data: np.ndarray) -> 'TaborSegment':
+        # data_a = segment_data.reshape((-1, 16))[1::2, :].reshape((-1, ))
+        # data_b = segment_data.reshape((-1, 16))[0::2, :].ravel()
+        return cls(data=segment_data.reshape((-1, 2, 16)))
+
+    @property
+    def ch_a(self):
+        return np.bitwise_and(self.data_a, self.CHANNEL_MASK)
+
+    @property
+    def ch_b(self):
+        return self.data_b
+
+    @property
+    def marker_a(self) -> np.ndarray:
+        marker_data = self._marker_data_view(self._data)
+        return np.bitwise_and(marker_data, self.MARKER_A_MASK).astype(bool).reshape(-1)
+
+    @property
+    def marker_b(self) -> np.ndarray:
+        marker_data = self._marker_data_view(self._data)
+        return np.bitwise_and(marker_data, self.MARKER_B_MASK).astype(bool).reshape(-1)
+
+    @classmethod
+    def from_binary_data(cls, data_a: np.ndarray, data_b: np.ndarray) -> 'TaborSegment':
+        assert data_a.size == data_b.size
+        assert data_a.ndim == 1 == data_b.ndim
+        assert data_a.size % 16 == 0
+
+        data = np.empty((data_a.size // 16, 2, 16), dtype=np.uint16)
+        cls._data_a_view(data)[:] = data_a.reshape((-1, 16))
+        cls._data_b_view(data)[:] = data_b.reshape((-1, 16))
+
+        return cls(data=data)
+
+    def __hash__(self) -> int:
+        return hash(bytes(self._data))
+
+    def __eq__(self, other: 'TaborSegment'):
+        return np.array_equal(self._data, other._data)
 
     @property
     def num_points(self) -> int:
-        return len(self.ch_b) if self.ch_a is None else len(self.ch_a)
+        return self._data.shape[0] * 16
 
     def get_as_binary(self) -> np.ndarray:
         assert not (self.ch_a is None or self.ch_b is None)
@@ -389,7 +428,7 @@ class TaborProgram(ProgramEntry):
             assert (len(segment_b) == len(t))
             marker_a = self._marker_data(waveform, marker_time, 0)
             marker_b = self._marker_data(waveform, marker_time, 1)
-            segment = TaborSegment(ch_a=segment_a,
+            segment = TaborSegment.from_sampled(ch_a=segment_a,
                                    ch_b=segment_b,
                                    marker_a=marker_a,
                                    marker_b=marker_b)
