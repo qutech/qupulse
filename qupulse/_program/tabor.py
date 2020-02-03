@@ -321,7 +321,7 @@ class TaborProgram(ProgramEntry):
                          offsets=offsets,
                          voltage_transformations=voltage_transformations,
                          sample_rate=sample_rate,
-                         waveforms=None  # no sampling happens here
+                         waveforms=[]  # no sampling happens here
                          )
 
         self._used_channels = used_channels
@@ -374,13 +374,13 @@ class TaborProgram(ProgramEntry):
         Returns:
             (segments, segment_lengths)
         """
-        time_array, segment_lengths = get_sample_times(self._waveforms, self._sample_rate)
+        time_array, segment_lengths = get_sample_times(self._parsed_program.waveforms, self._sample_rate)
 
         if np.any(segment_lengths % 16 > 0) or np.any(segment_lengths < 192):
             raise TaborException('At least one waveform has a length that is smaller 192 or not a multiple of 16')
 
         segments = []
-        for i, waveform in enumerate(self._waveforms):
+        for i, waveform in enumerate(self._parsed_program.waveforms):
             t = time_array[:segment_lengths[i]]
             marker_time = t[::2]
             segment_a = self._channel_data(waveform, t, 0)
@@ -410,6 +410,8 @@ class TaborProgram(ProgramEntry):
 
         min_seq_len = self._device_properties['min_seq_len']
         max_seq_len = self._device_properties['max_seq_len']
+
+        prepare_program_for_advanced_sequence_mode(self.program, min_seq_len=min_seq_len, max_seq_len=max_seq_len)
 
         for sequence_table in self.program:
             assert len(sequence_table) >= min_seq_len
@@ -496,7 +498,18 @@ def _check_partial_unroll(program, n, min_seq_len):
     return False
 
 
-def prepare_program_for_advanced_sequence_mode(program: Loop, min_seq_len, max_seq_len):
+def prepare_program_for_advanced_sequence_mode(program: Loop, min_seq_len: int, max_seq_len: int):
+    """This function tries to bring the program in a form, where the sequence tables' lengths are valid.
+
+    Args:
+        program:
+        min_seq_len:
+        max_seq_len:
+
+    Raises:
+        TaborException: if a sequence table that is too long cannot be shortened or a sequence table that is to short
+            cannot be enlarged.
+    """
     i = 0
     while i < len(program):
         program[i].assert_tree_integrity()
@@ -527,6 +540,8 @@ def prepare_program_for_advanced_sequence_mode(program: Loop, min_seq_len, max_s
                       and len(program[i]) + len(program[i + 1]) < max_seq_len):
                     program[i][len(program[i]):] = program[i + 1].copy_tree_structure()[:]
                     program[i + 1].repetition_count -= 1
+                    if program[i + 1].repetition_parameter is not None:
+                        program[i + 1].repetition_parameter = program[i + 1].repetition_parameter - 1
 
                 else:
                     raise TaborException('The algorithm is not smart enough to make this sequence table longer')

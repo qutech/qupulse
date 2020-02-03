@@ -202,10 +202,13 @@ class ProgramEntry:
         if waveforms is None:
             waveforms = OrderedDict((node.waveform, None)
                                     for node in loop.get_depth_first_iterator() if node.is_leaf()).keys()
+        if waveforms:
+            self._waveforms = OrderedDict(zip(waveforms, self._sample_waveforms(waveforms)))
+        else:
+            self._waveforms = OrderedDict()
 
-        self._waveforms = OrderedDict(zip(waveforms, self._sample_waveforms(waveforms)))
-
-    def _sample_waveforms(self, waveforms: Sequence[Waveform]):  # -> List[Tuple[numpy.ndarray, ...], Tuple[numpy.ndarray]]:
+    def _sample_waveforms(self, waveforms: Sequence[Waveform]) -> List[Tuple[Tuple[numpy.ndarray, ...],
+                                                                             Tuple[numpy.ndarray, ...]]]:
         sampled_waveforms = []
 
         time_array, segment_lengths = get_sample_times(waveforms, self._sample_rate)

@@ -1,14 +1,16 @@
 import unittest
 import itertools
 import numpy as np
+from unittest import mock
 
 from teawg import model_properties_dict
 
-from qupulse.hardware.awgs.tabor import TaborException, TaborProgram, \
-    TaborSegment, TaborSequencing, with_configuration_guard, PlottableProgram
+from qupulse._program.tabor import TaborException, TaborProgram, \
+    TaborSegment, TaborSequencing, PlottableProgram, TableDescription
 from qupulse._program._loop import MultiChannelProgram, Loop
 from qupulse._program.instructions import InstructionBlock
 from qupulse.hardware.util import voltage_to_uint16
+from qupulse.utils.types import TimeType
 
 from tests.pulses.sequencing_dummies import DummyWaveform
 from tests._program.loop_tests import LoopTests, WaveformGenerator, MultiChannelTests
@@ -134,14 +136,22 @@ class PlottableProgramTests(unittest.TestCase):
         np.testing.assert_equal(prog.get_as_single_waveform(1), expected_single_waveform_1)
 
 
-
 class TaborProgramTests(unittest.TestCase):
+    """This test looks very messy because it was adapted multiple times to code changes while trying to keep the
+    test-case similar."""
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
     def setUp(self) -> None:
         self.instr_props = model_properties_dict['WX2184C'].copy()
-
+        self.program_entry_kwargs = dict(amplitudes=(1., 1.),
+                                         offsets=(0., 0.),
+                                         voltage_transformations=(mock.Mock(wraps=lambda x: x),
+                                                                  mock.Mock(wraps=lambda x: x)),
+                                         sample_rate=TimeType.from_fraction(192, 1),
+                                         mode=None
+                                         )
 
     @property
     def waveform_data_generator(self):
@@ -154,65 +164,68 @@ class TaborProgramTests(unittest.TestCase):
     def root_loop(self):
         return LoopTests.get_test_loop(WaveformGenerator(num_channels=2,
                                                          waveform_data_generator=self.waveform_data_generator,
-                                                         duration_generator=itertools.repeat(4048e-9)))
+                                                         duration_generator=itertools.repeat(1)))
 
     def test_init(self):
         prog = MultiChannelProgram(MultiChannelTests().root_block)
-        TaborProgram(prog['A'], self.instr_props, ('A', None), (None, None))
+        tabor_program = TaborProgram(prog['A'], self.instr_props, ('A', None), (None, None), **self.program_entry_kwargs)
+
+        self.assertEqual(tabor_program.channels, ('A', None))
+        self.assertEqual(tabor_program.markers, (None, None))
+        self.assertIs(prog['A'], tabor_program.program)
+        self.assertIs(self.instr_props, tabor_program._device_properties)
+        self.assertEqual(frozenset('A'), tabor_program._used_channels)
+        self.assertEqual(TaborSequencing.ADVANCED, tabor_program._mode)
 
         with self.assertRaises(KeyError):
-            TaborProgram(prog['A'], self.instr_props, ('A', 'B'), (None, None))
+            TaborProgram(prog['A'], self.instr_props, ('A', 'B'), (None, None), **self.program_entry_kwargs)
 
         with self.assertRaises(TaborException):
-            TaborProgram(prog['A'], self.instr_props, ('A', 'B'), (None, None, None))
+            TaborProgram(prog['A'], self.instr_props, ('A', 'B'), (None, None, None), **self.program_entry_kwargs)
         with self.assertRaises(TaborException):
-            TaborProgram(prog['A'], self.instr_props, ('A', 'B', 'C'), (None, None))
-
-    def test_markers(self):
-        self.assertEqual(TaborProgram(self.root_loop, self.instr_props, ('A', None), (None, 'B')).markers, (None, 'B'))
-
-    def test_channels(self):
-        self.assertEqual(TaborProgram(self.root_loop, self.instr_props, ('A', None), (None, 'B')).channels, ('A', None))
+            TaborProgram(prog['A'], self.instr_props, ('A', 'B', 'C'), (None, None), **self.program_entry_kwargs)
 
     def test_depth_0_single_waveform(self):
-        program = Loop(waveform=DummyWaveform(defined_channels={'A'}), repetition_count=3)
+        program = Loop(waveform=DummyWaveform(defined_channels={'A'}, duration=1), repetition_count=3)
 
-        t_program = TaborProgram(program, channels=(None, 'A'), markers=(None, None), device_properties=self.instr_props)
+        t_program = TaborProgram(program, channels=(None, 'A'), markers=(None, None),
+                                 device_properties=self.instr_props, **self.program_entry_kwargs)
 
         self.assertEqual(t_program.waveform_mode, TaborSequencing.SINGLE)
 
-        self.assertEqual(t_program.get_sequencer_tables(), [[(3, 0, 0)]])
-        self.assertEqual(t_program.get_advanced_sequencer_table(), [(1, 1, 0)])
+        self.assertEqual(t_program.get_sequencer_tables(), [[(TableDescription(3, 0, 0), None)]])
+        self.assertEqual(t_program.get_advanced_sequencer_table(), [TableDescription(1, 1, 0)])
 
     def test_depth_1_single_waveform(self):
-        program = Loop(children=[Loop(waveform=DummyWaveform(defined_channels={'A'}), repetition_count=3)],
+        program = Loop(children=[Loop(waveform=DummyWaveform(defined_channels={'A'}, duration=1), repetition_count=3)],
                        repetition_count=1)
 
         t_program = TaborProgram(program, channels=(None, 'A'), markers=(None, None),
-                                 device_properties=self.instr_props)
+                                 device_properties=self.instr_props, **self.program_entry_kwargs)
 
         self.assertEqual(t_program.waveform_mode, TaborSequencing.SINGLE)
 
-        self.assertEqual(t_program.get_sequencer_tables(), [[(3, 0, 0)]])
-        self.assertEqual(t_program.get_advanced_sequencer_table(), [(1, 1, 0)])
+        self.assertEqual(t_program.get_sequencer_tables(), [[(TableDescription(3, 0, 0), None)]])
+        self.assertEqual(t_program.get_advanced_sequencer_table(), [TableDescription(1, 1, 0)])
 
     def test_depth_1_single_sequence(self):
-        program = Loop(children=[Loop(waveform=DummyWaveform(defined_channels={'A'}), repetition_count=3),
-                                 Loop(waveform=DummyWaveform(defined_channels={'A'}), repetition_count=4)],
+        program = Loop(children=[Loop(waveform=DummyWaveform(defined_channels={'A'}, duration=1), repetition_count=3),
+                                 Loop(waveform=DummyWaveform(defined_channels={'A'}, duration=1), repetition_count=4)],
                        repetition_count=1)
 
         t_program = TaborProgram(program, channels=(None, 'A'), markers=(None, None),
-                                 device_properties=self.instr_props)
+                                 device_properties=self.instr_props, **self.program_entry_kwargs)
 
         self.assertEqual(t_program.waveform_mode, TaborSequencing.SINGLE)
 
-        self.assertEqual(t_program.get_sequencer_tables(), [[(3, 0, 0), (4, 1, 0)]])
-        self.assertEqual(t_program.get_advanced_sequencer_table(), [(1, 1, 0)])
+        self.assertEqual(t_program.get_sequencer_tables(), [[(TableDescription(3, 0, 0), None),
+                                                             (TableDescription(4, 1, 0), None)]])
+        self.assertEqual(t_program.get_advanced_sequencer_table(), [TableDescription(1, 1, 0)])
 
     def test_depth_1_single_sequence_2(self):
         """Use the same wf twice"""
-        wf_1 = DummyWaveform(defined_channels={'A'})
-        wf_2 = DummyWaveform(defined_channels={'A'})
+        wf_1 = DummyWaveform(defined_channels={'A'}, duration=1)
+        wf_2 = DummyWaveform(defined_channels={'A'}, duration=1)
 
         program = Loop(children=[Loop(waveform=wf_1, repetition_count=3),
                                  Loop(waveform=wf_2, repetition_count=4),
@@ -220,33 +233,37 @@ class TaborProgramTests(unittest.TestCase):
                        repetition_count=1)
 
         t_program = TaborProgram(program, channels=(None, 'A'), markers=(None, None),
-                                 device_properties=self.instr_props)
+                                 device_properties=self.instr_props, **self.program_entry_kwargs)
 
         self.assertEqual(t_program.waveform_mode, TaborSequencing.SINGLE)
 
-        self.assertEqual(t_program.get_sequencer_tables(), [[(3, 0, 0), (4, 1, 0), (1, 0, 0)]])
-        self.assertEqual(t_program.get_advanced_sequencer_table(), [(1, 1, 0)])
+        self.assertEqual(t_program.get_sequencer_tables(), [[(TableDescription(3, 0, 0), None),
+                                                             (TableDescription(4, 1, 0), None),
+                                                             (TableDescription(1, 0, 0), None)]])
+        self.assertEqual(t_program.get_advanced_sequencer_table(), [TableDescription(1, 1, 0)])
 
     def test_depth_1_advanced_sequence_unroll(self):
-        wf_1 = DummyWaveform(defined_channels={'A'})
-        wf_2 = DummyWaveform(defined_channels={'A'})
+        wf_1 = DummyWaveform(defined_channels={'A'}, duration=1)
+        wf_2 = DummyWaveform(defined_channels={'A'}, duration=1)
 
         program = Loop(children=[Loop(waveform=wf_1, repetition_count=3),
                                  Loop(waveform=wf_2, repetition_count=4)],
                        repetition_count=5)
 
         t_program = TaborProgram(program, channels=(None, 'A'), markers=(None, None),
-                                 device_properties=self.instr_props)
+                                 device_properties=self.instr_props, **self.program_entry_kwargs)
 
         self.assertEqual(t_program.waveform_mode, TaborSequencing.ADVANCED)
 
         # partial unroll of the last segment
-        self.assertEqual(t_program.get_sequencer_tables(), [[(3, 0, 0), (3, 1, 0), (1, 1, 0)]])
-        self.assertEqual(t_program.get_advanced_sequencer_table(), [(5, 1, 0)])
+        self.assertEqual(t_program.get_sequencer_tables(), [[(TableDescription(3, 0, 0), None),
+                                                             (TableDescription(3, 1, 0), None),
+                                                             (TableDescription(1, 1, 0), None)]])
+        self.assertEqual(t_program.get_advanced_sequencer_table(), [TableDescription(5, 1, 0)])
 
     def test_depth_1_advanced_sequence(self):
-        wf_1 = DummyWaveform(defined_channels={'A'})
-        wf_2 = DummyWaveform(defined_channels={'A'})
+        wf_1 = DummyWaveform(defined_channels={'A'}, duration=1)
+        wf_2 = DummyWaveform(defined_channels={'A'}, duration=1)
 
         program = Loop(children=[Loop(waveform=wf_1, repetition_count=3),
                                  Loop(waveform=wf_2, repetition_count=4),
@@ -254,41 +271,43 @@ class TaborProgramTests(unittest.TestCase):
                        repetition_count=5)
 
         t_program = TaborProgram(program, channels=(None, 'A'), markers=(None, None),
-                                 device_properties=self.instr_props)
+                                 device_properties=self.instr_props, **self.program_entry_kwargs)
 
         self.assertEqual(t_program.waveform_mode, TaborSequencing.ADVANCED)
 
         # partial unroll of the last segment
-        self.assertEqual(t_program.get_sequencer_tables(), [[(3, 0, 0), (4, 1, 0), (1, 0, 0)]])
-        self.assertEqual(t_program.get_advanced_sequencer_table(), [(5, 1, 0)])
+        self.assertEqual(t_program.get_sequencer_tables(), [[(TableDescription(3, 0, 0), None),
+                                                             (TableDescription(4, 1, 0), None),
+                                                             (TableDescription(1, 0, 0), None)]])
+        self.assertEqual(t_program.get_advanced_sequencer_table(), [TableDescription(5, 1, 0)])
 
     def test_advanced_sequence_exceptions(self):
         temp_properties = self.instr_props.copy()
         temp_properties['max_seq_len'] = 5
 
-        program = Loop(children=[Loop(waveform=DummyWaveform(defined_channels={'A'}), repetition_count=1)
+        program = Loop(children=[Loop(waveform=DummyWaveform(defined_channels={'A'}, duration=1), repetition_count=1)
                                  for _ in range(temp_properties['max_seq_len']+1)],
                        repetition_count=2)
         with self.assertRaises(TaborException):
             TaborProgram(program.copy_tree_structure(), channels=(None, 'A'), markers=(None, None),
-                         device_properties=temp_properties)
+                         device_properties=temp_properties, **self.program_entry_kwargs)
 
         temp_properties['min_seq_len'] = 100
         temp_properties['max_seq_len'] = 120
         with self.assertRaises(TaborException) as exception:
             TaborProgram(program.copy_tree_structure(), channels=(None, 'A'), markers=(None, None),
-                         device_properties=temp_properties)
+                         device_properties=temp_properties, **self.program_entry_kwargs)
         self.assertEqual(str(exception.exception), 'The algorithm is not smart enough '
                                                    'to make this sequence table longer')
 
-        program = Loop(children=[Loop(children=[Loop(waveform=DummyWaveform(defined_channels={'A'})),
-                                                Loop(waveform=DummyWaveform(defined_channels={'A'}))]),
-                                 Loop(children=[Loop(waveform=DummyWaveform(defined_channels={'A'})),
-                                                Loop(waveform=DummyWaveform(defined_channels={'A'}))])
+        program = Loop(children=[Loop(children=[Loop(waveform=DummyWaveform(defined_channels={'A'}, duration=1)),
+                                                Loop(waveform=DummyWaveform(defined_channels={'A'}, duration=1))]),
+                                 Loop(children=[Loop(waveform=DummyWaveform(defined_channels={'A'}, duration=1)),
+                                                Loop(waveform=DummyWaveform(defined_channels={'A'}, duration=1))])
                                  ])
         with self.assertRaises(TaborException) as exception:
             TaborProgram(program.copy_tree_structure(), channels=(None, 'A'), markers=(None, None),
-                         device_properties=temp_properties)
+                         device_properties=temp_properties, **self.program_entry_kwargs)
         self.assertEqual(str(exception.exception), 'The algorithm is not smart enough '
                                                    'to make this sequence table longer')
 
@@ -302,38 +321,32 @@ class TaborProgramTests(unittest.TestCase):
                 yield next(alternating_on_off)[::2]
                 yield np.zeros(192)[::2]
 
-        sample_rate = 10**9
         with self.assertRaisesRegex(ValueError, "non integer length"):
             root_loop = LoopTests.get_test_loop(WaveformGenerator(
                 waveform_data_generator=my_gen(self.waveform_data_generator),
-                duration_generator=itertools.repeat(12),
+                duration_generator=itertools.repeat(1/200),
                 num_channels=4))
 
             mcp = MultiChannelProgram(InstructionBlock(), tuple())
             mcp.programs[frozenset(('A', 'B', 'C', 'D'))] = root_loop
-            TaborProgram(root_loop, self.instr_props, ('A', 'B'), (None, None)).sampled_segments(8000,
-                                                                                           (1., 1.),
-                                                                                           (0, 0),
-                                                                                           (lambda x: x, lambda x: x))
+            TaborProgram(root_loop, self.instr_props, ('A', 'B'), (None, None), **self.program_entry_kwargs)
 
         root_loop = LoopTests.get_test_loop(WaveformGenerator(
             waveform_data_generator=my_gen(self.waveform_data_generator),
-            duration_generator=itertools.repeat(192),
+            duration_generator=itertools.repeat(1),
             num_channels=4))
 
         mcp = MultiChannelProgram(InstructionBlock(), tuple())
         mcp.programs[frozenset(('A', 'B', 'C', 'D'))] = root_loop
 
-        prog = TaborProgram(root_loop, self.instr_props, ('A', 'B'), (None, None))
+        prog = TaborProgram(root_loop, self.instr_props, ('A', 'B'), (None, None), **self.program_entry_kwargs)
 
-        sampled, sampled_length = prog.sampled_segments(sample_rate, (1., 1.), (0, 0),
-                                                        (lambda x: x, lambda x: x))
+        sampled, sampled_length = prog.get_sampled_segments()
 
         self.assertEqual(len(sampled), 3)
 
-        prog = TaborProgram(root_loop, self.instr_props, ('A', 'B'), ('C', None))
-        sampled, sampled_length = prog.sampled_segments(sample_rate, (1., 1.), (0, 0),
-                                                        (lambda x: x, lambda x: x))
+        prog = TaborProgram(root_loop, self.instr_props, ('A', 'B'), ('C', None), **self.program_entry_kwargs)
+        sampled, sampled_length = prog.get_sampled_segments()
         self.assertEqual(len(sampled), 6)
 
         iteroe = my_gen(self.waveform_data_generator)
