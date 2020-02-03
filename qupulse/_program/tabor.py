@@ -551,7 +551,6 @@ def parse_aseq_program(program: Loop, used_channels: FrozenSet[ChannelID]) -> Pa
     waveforms = OrderedDict()
     for adv_position, sequencer_table_loop in enumerate(program):
         current_sequencer_table = []
-        current_volatile_parameter_positions = {}
         for position, (waveform, repetition_count, repetition_parameter) in enumerate(
                 (waveform_loop.waveform.get_subset_for_channels(used_channels),
                  waveform_loop.repetition_count, waveform_loop.repetition_parameter)
@@ -576,7 +575,6 @@ def parse_aseq_program(program: Loop, used_channels: FrozenSet[ChannelID]) -> Pa
         else:
             sequence_no = len(sequencer_tables) + 1
             sequencer_tables.append(current_sequencer_table)
-            #volatile_parameter_positions.update(current_volatile_parameter_positions)
 
         advanced_sequencer_table.append(TableEntry(sequencer_table_loop.repetition_count, sequence_no, 0))
         if sequencer_table_loop.repetition_parameter is not None:
