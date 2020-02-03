@@ -155,10 +155,10 @@ class PlottableProgram:
                  sequence_tables: List[List[Tuple[int, int, int]]],
                  advanced_sequence_table: List[Tuple[int, int, int]]):
         self._segments = segments
-        self._sequence_tables = [[self.TableEntry(*sequence_table_entry)
+        self._sequence_tables = [[TableEntry(*sequence_table_entry)
                                   for sequence_table_entry in sequence_table]
                                  for sequence_table in sequence_tables]
-        self._advanced_sequence_table = [self.TableEntry(*adv_seq_entry)
+        self._advanced_sequence_table = [TableEntry(*adv_seq_entry)
                                          for adv_seq_entry in advanced_sequence_table]
 
     @classmethod
@@ -171,7 +171,7 @@ class PlottableProgram:
 
     @classmethod
     def _reformat_rep_seg_jump(cls, rep_seg_jump_tuple: Tuple[np.ndarray, np.ndarray, np.ndarray]) -> List[TableEntry]:
-        return list(cls.TableEntry(int(rep), int(seg_no), int(jump))
+        return list(TableEntry(int(rep), int(seg_no), int(jump))
                     for rep, seg_no, jump in zip(*rep_seg_jump_tuple))
 
     def _get_advanced_sequence_table(self, with_first_idle=False, with_last_idles=False) -> List[TableEntry]:
