@@ -2,7 +2,6 @@ import fractions
 import functools
 import weakref
 import logging
-import copy
 from typing import List, Tuple, Set, Callable, Optional, Any, Sequence, cast, Union, Dict, Mapping, NamedTuple
 from collections import OrderedDict
 
@@ -694,32 +693,31 @@ class TaborChannelPair(AWG):
 
         modifications = program.update_volatile_parameters(parameters)
 
-        cmd_str = ""
-        for i, (position, entry) in enumerate(modifications.items()):
-            if entry.repetition_count == 0:
-                raise ValueError('Repetition count cannot evaluate to 0')
-            if isinstance(position, int):
-                if i == 0:
-                    cmd_str += ":ASEQ:DEF {}, {}, {}, {}".format(position + 1, entry.element_number + 1,
-                                                                 entry.repetition_count, entry.jump_flag)
+        self.logger.debug("parameter modifications: %r" % modifications)
+
+        if not modifications:
+            self.logger.info("There are no volatile parameters to update. Either there are no volatile parameters with "
+                             "these names,\nthe respective repetition counts already have the given values or the "
+                             "volatile parameters were dropped during upload.")
+
+        if program_name == self._current_program:
+            commands = []
+
+            for position, entry in modifications.items():
+                if not entry.repetition_count > 0:
+                    raise ValueError('Repetition must be > 0')
+
+                if isinstance(position, int):
+                    commands.append(":ASEQ:DEF {},{},{},{}".format(position + 1, entry.element_number + 1,
+                                                                   entry.repetition_count, entry.jump_flag))
                 else:
-                    cmd_str += "; :ASEQ:DEF {}, {}, {}, {}".format(position + 1, entry.element_number + 1,
-                                                                   entry.repetition_count, entry.jump_flag)
-            else:
-                table_num, step_num = position
-                if i == 0:
-                    cmd_str += ":SEQ:SEL {}".format(table_num + 2)
-                else:
-                    cmd_str += "; :SEQ:SEL {}".format(table_num + 2)
-                cmd_str += "; :SEQ:DEF {}, {}, {}, {}".format(step_num,
-                                                              waveform_to_segment_index[entry.element_id] + 1,
-                                                              entry.repetition_count, entry.jump_flag)
-        if cmd_str == "":
-            print("There are no volatile parameters to update. Either there are no volatile parameters with these names"
-                  ",\nthe respective repetition counts already have the given values or the volatile parameters were "
-                  "dropped during upload.")
-            return
-        self.device.send_cmd(cmd_str)
+                    table_num, step_num = position
+                    commands.append(":SEQ:SEL {}".format(table_num + 2))
+                    commands.append(":SEQ:DEF {},{},{},{}".format(step_num,
+                                                                  waveform_to_segment_index[entry.element_id] + 1,
+                                                                  entry.repetition_count, entry.jump_flag))
+            cmd_str = ";".join(commands)
+            self.device.send_cmd(cmd_str)
 
     def set_marker_state(self, marker: int, active: bool) -> None:
         """Sets the marker state of this channel pair. According to the manual one cannot turn them off/on separately."""
