@@ -170,7 +170,7 @@ class TaborChannelPairTests(TaborDummyBasedTest):
 
         from tests.pulses.sequencing_dummies import DummyWaveform
 
-        from qupulse.hardware.util import make_combined_wave
+        from qupulse._program.tabor import make_combined_wave
 
         cls.DummyWaveform = DummyWaveform
         cls.TaborChannelPair = TaborChannelPair
@@ -434,7 +434,7 @@ class TaborChannelPairTests(TaborDummyBasedTest):
         # prevent entering and exiting configuration mode
         channel_pair._configuration_guard_count = 2
 
-        segment = self.TaborSegment(np.ones(192+16, dtype=np.uint16), np.zeros(192+16, dtype=np.uint16), None, None)
+        segment = self.TaborSegment.from_sampled(np.ones(192+16, dtype=np.uint16), np.zeros(192+16, dtype=np.uint16), None, None)
         segment_binary = segment.get_as_binary()
         with self.assertRaises(ValueError):
             channel_pair._upload_segment(3, segment)
@@ -477,8 +477,8 @@ class TaborChannelPairTests(TaborDummyBasedTest):
         channel_pair._segment_hashes = np.array([1, 2, 3, 4], dtype=np.int64)
 
         data = np.ones(192, dtype=np.uint16)
-        segments = [self.TaborSegment(0*data, 1*data, None, None),
-                    self.TaborSegment(1*data, 2*data, None, None)]
+        segments = [self.TaborSegment.from_sampled(0*data, 1*data, None, None),
+                    self.TaborSegment.from_sampled(1*data, 2*data, None, None)]
 
         channel_pair._amend_segments(segments)
 
@@ -524,8 +524,8 @@ class TaborChannelPairTests(TaborDummyBasedTest):
         channel_pair._segment_hashes = np.array([1, 2, 3, 4], dtype=np.int64)
 
         data = np.ones(192, dtype=np.uint16)
-        segments = [self.TaborSegment(0*data, 1*data, None, None),
-                    self.TaborSegment(1*data, 2*data, None, None)]
+        segments = [self.TaborSegment.from_sampled(0*data, 1*data, None, None),
+                    self.TaborSegment.from_sampled(1*data, 2*data, None, None)]
 
         indices = channel_pair._amend_segments(segments)
 
