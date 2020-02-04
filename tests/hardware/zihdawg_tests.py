@@ -1,12 +1,14 @@
 import unittest
 from unittest import mock
+from collections import OrderedDict
 
 import numpy as np
 
 from qupulse.utils.types import TimeType
 from qupulse._program._loop import Loop
 from tests.pulses.sequencing_dummies import DummyWaveform
-from qupulse.hardware.awgs.zihdawg import HDAWGChannelPair, HDAWGRepresentation, HDAWGValueError, AWGAmplitudeOffsetHandling
+from qupulse.hardware.awgs.zihdawg import HDAWGChannelPair, HDAWGRepresentation, HDAWGValueError, UserRegister,\
+    ConstantParameter
 
 
 class HDAWGRepresentationTests(unittest.TestCase):
@@ -98,7 +100,31 @@ class HDAWGChannelPairTests(unittest.TestCase):
             self.assertEqual(channel_pair.num_markers, 4)
 
     def test_set_volatile_parameters(self):
-        raise NotImplementedError()
+        mock_device = mock.Mock()
+
+        parameters = {'a': ConstantParameter(9)}
+        requested_changes = OrderedDict([(UserRegister.from_seqc(4), 2), (UserRegister.from_seqc(3), 6)])
+
+        expected_user_reg_calls = [mock.call(*args) for args in requested_changes.items()]
+
+        channel_pair = HDAWGChannelPair(mock_device, (3, 4), 'foo', 3.4)
+
+        channel_pair._current_program = 'active_program'
+        with mock.patch.object(channel_pair._program_manager, 'get_register_values_to_update_volatile_parameters',
+                               return_value=requested_changes) as get_reg_val:
+            with mock.patch.object(channel_pair, 'user_register') as user_register:
+                channel_pair.set_volatile_parameters('other_program', parameters)
+
+                user_register.assert_not_called()
+                get_reg_val.assert_called_once_with('other_program', parameters)
+
+        with mock.patch.object(channel_pair._program_manager, 'get_register_values_to_update_volatile_parameters',
+                               return_value=requested_changes) as get_reg_val:
+            with mock.patch.object(channel_pair, 'user_register') as user_register:
+                channel_pair.set_volatile_parameters('active_program', parameters)
+
+                self.assertEqual(expected_user_reg_calls, user_register.call_args_list)
+                get_reg_val.assert_called_once_with('active_program', parameters)
 
     def test_upload(self):
         mock_loop = mock.MagicMock(wraps=Loop(repetition_count=2,
