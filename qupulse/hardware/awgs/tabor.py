@@ -684,10 +684,15 @@ class TaborChannelPair(AWG):
         self.cleanup()
 
     @with_configuration_guard
+    def _send_commands_with_configuration_guard(self, commands: List[str]) -> None:
+        cmd_str = ";".join(commands)
+        self.device.send_cmd(cmd_str)
+
     def set_volatile_parameters(self, program_name: str, parameters: Mapping[str, Parameter]) -> None:
         """Set the values of parameters which were marked as volatile on program creation."""
         # TODO: Add documentation, increase readability
-        # When changing the tables of current program use guarded mode as it gives way smaller blips and seems to be faster
+        # When changing the tables of current program use guarded mode as it gives way smaller blips
+        # But it is slower however (184 ms vs 47 ms)
 
         waveform_to_segment_index, program = self._known_programs[program_name]
 
@@ -716,8 +721,7 @@ class TaborChannelPair(AWG):
                     commands.append(":SEQ:DEF {},{},{},{}".format(step_num,
                                                                   waveform_to_segment_index[entry.element_id] + 1,
                                                                   entry.repetition_count, entry.jump_flag))
-            cmd_str = ";".join(commands)
-            self.device.send_cmd(cmd_str)
+            self._send_commands_with_configuration_guard(commands)
 
     def set_marker_state(self, marker: int, active: bool) -> None:
         """Sets the marker state of this channel pair. According to the manual one cannot turn them off/on separately."""
