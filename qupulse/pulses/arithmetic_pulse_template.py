@@ -319,7 +319,8 @@ class ArithmeticPulseTemplate(PulseTemplate):
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional[Transformation],
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
-                                 parent_loop: 'Loop'):
+                                 parent_loop: 'Loop',
+                                 volatile: Set[str]):
         """The operation is applied by modifying the transformation the pulse template operand sees."""
 
         scalar_operand_parameters = {parameter_name: parameters[parameter_name].get_value()
@@ -336,7 +337,8 @@ class ArithmeticPulseTemplate(PulseTemplate):
                                              channel_mapping=channel_mapping,
                                              global_transformation=transformation,
                                              to_single_waveform=to_single_waveform,
-                                             parent_loop=parent_loop)
+                                             parent_loop=parent_loop,
+                                             volatile=volatile)
 
     def build_waveform(self,
                        parameters: Dict[str, Real],
