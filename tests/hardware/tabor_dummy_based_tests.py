@@ -1,14 +1,16 @@
 import sys
 import unittest
+from unittest import mock
 from unittest.mock import patch, MagicMock
 
-from typing import List
+from typing import List, Tuple, Optional, Any
 from copy import copy, deepcopy
 
 import numpy as np
 
 from qupulse.hardware.awgs.base import AWGAmplitudeOffsetHandling
 from qupulse.hardware.awgs.tabor import TaborProgram, TaborAWGRepresentation
+from qupulse._program.tabor import TableDescription, TimeType
 from tests.hardware.dummy_modules import import_package
 
 
@@ -159,6 +161,16 @@ class TaborAWGRepresentationDummyBasedTests(TaborDummyBasedTest):
 
 
 class TaborChannelPairTests(TaborDummyBasedTest):
+    @staticmethod
+    def to_new_sequencer_tables(sequencer_tables: List[List[Tuple[int, int, int]]]
+                                ) -> List[List[Tuple[TableDescription, Optional[Any]]]]:
+        return [[(TableDescription(*entry), None) for entry in sequencer_table]
+                for sequencer_table in sequencer_tables]
+
+    @staticmethod
+    def to_new_advanced_sequencer_table(advanced_sequencer_table: List[Tuple[int, int, int]]) -> List[TableDescription]:
+        return [TableDescription(*entry) for entry in advanced_sequencer_table]
+
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -181,6 +193,9 @@ class TaborChannelPairTests(TaborDummyBasedTest):
         cls.TaborSegment = TaborSegment
         cls.make_combined_wave = staticmethod(make_combined_wave)
         cls.TaborSequencing = TaborSequencing
+
+    def setUp(self):
+        super().setUp()
 
     def test_set_volatile_parameters(self):
         raise NotImplementedError()
@@ -210,7 +225,6 @@ class TaborChannelPairTests(TaborDummyBasedTest):
 
         np.testing.assert_equal(channel_pair._segment_references, np.array([1, 2, 0, 0]))
 
-
     def test_upload_exceptions(self):
 
         wv = self.TableWaveform(1, [(0, 0.1, self.HoldInterpolationStrategy()),
@@ -236,10 +250,9 @@ class TaborChannelPairTests(TaborDummyBasedTest):
         with self.assertRaises(ValueError):
             channel_pair.upload('test', program, (1, 2), (3, 4), (lambda x: x, lambda x: x))
 
-
     def test_upload(self):
         segments = np.array([1, 2, 3, 4, 5])
-        segment_lengths = np.array([0, 16, 0, 16, 0], dtype=np.uint16)
+        segment_lengths = np.array([0, 16, 0, 16, 0], dtype=np.uint16).tolist()
 
         segment_references = np.array([1, 1, 2, 0, 1], dtype=np.uint32)
 
@@ -247,10 +260,15 @@ class TaborChannelPairTests(TaborDummyBasedTest):
         ta = np.array([True, False, False, False, True])
         ti = np.array([-1, 3, -1, -1, -1])
 
-        to_restore = sys.modules['qupulse.hardware.awgs.tabor'].TaborProgram
-        my_class = DummyTaborProgramClass(segments=segments, segment_lengths=segment_lengths)
-        sys.modules['qupulse.hardware.awgs.tabor'].TaborProgram = my_class
-        try:
+        channels = (1, None)
+        markers = (None, None)
+        voltage_transformations = (lambda x: x, lambda x: x)
+        sample_rate = TimeType.from_fraction(1, 1)
+
+        with mock.patch('qupulse.hardware.awgs.tabor.TaborProgram', specs=TaborProgram) as DummyTaborProgram:
+            tabor_program = DummyTaborProgram.return_value
+            tabor_program.get_sampled_segments.return_value = (segments, segment_lengths)
+
             program = self.Loop(waveform=self.DummyWaveform(duration=192))
 
             channel_pair = self.TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
@@ -273,9 +291,18 @@ class TaborChannelPairTests(TaborDummyBasedTest):
             channel_pair._upload_segment = dummy_upload_segment
             channel_pair._amend_segments = dummy_amend_segments
 
-            channel_pair.upload('test', program, (1, None), (None, None), (lambda x: x, lambda x: x))
+            channel_pair.upload('test', program, channels, markers, voltage_transformations)
 
-            self.assertIs(my_class.program, program)
+            DummyTaborProgram.assert_called_once_with(
+                program,
+                channels=tuple(channels),
+                markers=markers,
+                device_properties=channel_pair.device.dev_properties,
+                sample_rate=sample_rate,
+                amplitudes=(.5, .5),
+                offsets=(0., 0.),
+                voltage_transformations=voltage_transformations
+            )
 
             # the other references are increased in amend and upload segment method
             np.testing.assert_equal(channel_pair._segment_references, np.array([1, 2, 3, 0, 1]))
@@ -283,10 +310,6 @@ class TaborChannelPairTests(TaborDummyBasedTest):
             self.assertEqual(len(channel_pair._known_programs), 1)
             np.testing.assert_equal(channel_pair._known_programs['test'].waveform_to_segment,
                                     np.array([5, 3, 1, 2, 6], dtype=np.int64))
-            self.assertIs(channel_pair._known_programs['test'].program, my_class.created[0])
-
-        finally:
-            sys.modules['qupulse.hardware.awgs.tabor'].TaborProgram = to_restore
 
     def test_upload_offset_handling(self):
 
@@ -298,36 +321,42 @@ class TaborChannelPairTests(TaborDummyBasedTest):
         channels = (1, None)
         markers = (None, None)
 
-        tabor_program = TaborProgram(program,
-                                     channels=channels,
-                                     markers=markers,
-                                     device_properties=channel_pair.device.dev_properties)
+        tabor_program_kwargs = dict(
+            channels=channels,
+            markers=markers,
+            device_properties=channel_pair.device.dev_properties)
 
-        test_sample_rate = channel_pair.sample_rate
+        test_sample_rate = TimeType.from_fraction(1, 1)
         test_amplitudes = (channel_pair.device.amplitude(channel_pair._channels[0]) / 2,
                            channel_pair.device.amplitude(channel_pair._channels[1]) / 2)
         test_offset = 0.1
         test_transform = (lambda x: x, lambda x: x)
 
-        with patch('qupulse.hardware.awgs.tabor.TaborProgram', return_value=tabor_program) as tabor_program_mock, \
-             patch.object(tabor_program, 'sampled_segments', wraps=tabor_program.sampled_segments) as sampled_segments_mock, \
-             patch.object(channel_pair.device, 'offset', return_value=test_offset):
+        with patch('qupulse.hardware.awgs.tabor.TaborProgram', wraps=TaborProgram) as tabor_program_mock:
+            with patch.object(self.instrument, 'offset', return_value=test_offset) as offset_mock:
+                tabor_program_mock.get_sampled_segments = mock.Mock(wraps=tabor_program_mock.get_sampled_segments)
 
-            channel_pair.amplitude_offset_handling = AWGAmplitudeOffsetHandling.CONSIDER_OFFSET
-            channel_pair.upload('test1', program, (1, None), (None, None), test_transform)
+                channel_pair.amplitude_offset_handling = AWGAmplitudeOffsetHandling.CONSIDER_OFFSET
+                channel_pair.upload('test1', program, channels, markers, test_transform)
 
-            sampled_segments_mock.assert_called_once_with(sample_rate=test_sample_rate,
-                                                          voltage_amplitude=test_amplitudes,
-                                                          voltage_offset=(test_offset, test_offset),
-                                                          voltage_transformation=test_transform)
+                tabor_program_mock.assert_called_once_with(program, **tabor_program_kwargs,
+                                                           sample_rate=test_sample_rate,
+                                                           amplitudes=test_amplitudes,
+                                                           offsets=(test_offset, test_offset),
+                                                           voltage_transformations=test_transform)
+                self.assertEqual([mock.call(1), mock.call(2)], offset_mock.call_args_list)
+                offset_mock.reset_mock()
+                tabor_program_mock.reset_mock()
 
-            channel_pair.amplitude_offset_handling = AWGAmplitudeOffsetHandling.IGNORE_OFFSET
-            channel_pair.upload('test2', program, (1, None), (None, None), test_transform)
+                channel_pair.amplitude_offset_handling = AWGAmplitudeOffsetHandling.IGNORE_OFFSET
+                channel_pair.upload('test2', program, (1, None), (None, None), test_transform)
 
-            sampled_segments_mock.assert_called_with(sample_rate=test_sample_rate,
-                                                     voltage_amplitude=test_amplitudes,
-                                                     voltage_offset=(0, 0),
-                                                     voltage_transformation=test_transform)
+                tabor_program_mock.assert_called_once_with(program, **tabor_program_kwargs,
+                                                           sample_rate=test_sample_rate,
+                                                           amplitudes=test_amplitudes,
+                                                           offsets=(0., 0.),
+                                                           voltage_transformations=test_transform)
+                self.assertEqual([], offset_mock.call_args_list)
 
     def test_find_place_for_segments_in_memory(self):
         def hash_based_on_dir(ch):
@@ -623,6 +652,9 @@ class TaborChannelPairTests(TaborDummyBasedTest):
         sequencer_tables = [[(3, 0, 0), (2, 1, 0), (1, 0, 0), (1, 2, 0), (1, 3, 0)]]
         w2s = np.array([2, 5, 3, 1])
 
+        sequencer_tables = self.to_new_sequencer_tables(sequencer_tables)
+        advanced_sequencer_table = self.to_new_advanced_sequencer_table(advanced_sequencer_table)
+
         expected_sequencer_table = [(3, 3, 0), (2, 6, 0), (1, 3, 0), (1, 4, 0), (1, 2, 0)]
 
         program = DummyTaborProgramClass(advanced_sequencer_table=advanced_sequencer_table,
@@ -691,6 +723,9 @@ class TaborChannelPairTests(TaborDummyBasedTest):
         sequencer_tables = [[(3, 0, 0), (2, 1, 0), (1, 0, 0), (1, 2, 0), (1, 3, 0)],
                             [(4, 1, 0), (2, 1, 0), (1, 0, 0), (1, 2, 0), (1, 3, 0)]]
         wf_idx2seg_idx = np.array([2, 5, 3, 1])
+
+        sequencer_tables = self.to_new_sequencer_tables(sequencer_tables)
+        advanced_sequencer_table = self.to_new_advanced_sequencer_table(advanced_sequencer_table)
 
         expected_sequencer_tables = [[(3, 3, 0), (2, 6, 0), (1, 3, 0), (1, 4, 0), (1, 2, 0)],
                                      [(4, 6, 0), (2, 6, 0), (1, 3, 0), (1, 4, 0), (1, 2, 0)]]
