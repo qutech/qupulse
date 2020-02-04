@@ -704,6 +704,7 @@ class TaborChannelPair(AWG):
             self.logger.info("There are no volatile parameters to update. Either there are no volatile parameters with "
                              "these names,\nthe respective repetition counts already have the given values or the "
                              "volatile parameters were dropped during upload.")
+            return
 
         if program_name == self._current_program:
             commands = []
