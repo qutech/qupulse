@@ -688,6 +688,9 @@ class TaborChannelPairTests(TaborDummyBasedTest):
         sequencer_tables = [[(10, 0, 0)]]
         w2s = np.array([4])
 
+        sequencer_tables = self.to_new_sequencer_tables(sequencer_tables)
+        advanced_sequencer_table = self.to_new_advanced_sequencer_table(advanced_sequencer_table)
+
         expected_sequencer_table = [(10, 5, 0), (1, 1, 0), (1, 1, 0)]
 
         program = DummyTaborProgramClass(advanced_sequencer_table=advanced_sequencer_table,
