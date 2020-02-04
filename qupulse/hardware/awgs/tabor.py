@@ -694,7 +694,7 @@ class TaborChannelPair(AWG):
         self.cleanup()
 
     @with_configuration_guard
-    def _send_commands_with_configuration_guard(self, commands: List[str]) -> None:
+    def _execute_multiple_commands_with_config_guard(self, commands: List[str]) -> None:
         cmd_str = ";".join(commands)
         self.device.send_cmd(cmd_str)
 
@@ -732,7 +732,7 @@ class TaborChannelPair(AWG):
                     commands.append(":SEQ:DEF{},{},{},{}".format(step_num,
                                                                  waveform_to_segment_index[entry.element_id] + 1,
                                                                  entry.repetition_count, entry.jump_flag))
-            self._send_commands_with_configuration_guard(commands)
+            self._execute_multiple_commands_with_config_guard(commands)
 
     def set_marker_state(self, marker: int, active: bool) -> None:
         """Sets the marker state of this channel pair.
