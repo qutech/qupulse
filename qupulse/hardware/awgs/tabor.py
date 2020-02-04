@@ -34,6 +34,7 @@ class TaborAWGRepresentation:
         """
         self._instr = teawg.TEWXAwg(instr_addr, paranoia_level)
         self._mirrors = tuple(teawg.TEWXAwg(address, paranoia_level) for address in mirror_addresses)
+        self._coupled = None
 
         self._clock_marker = [0, 0, 0, 0]
 
@@ -47,6 +48,12 @@ class TaborAWGRepresentation:
 
         self._channel_pair_AB = TaborChannelPair(self, (1, 2), str(instr_addr) + '_AB')
         self._channel_pair_CD = TaborChannelPair(self, (3, 4), str(instr_addr) + '_CD')
+
+    def is_coupled(self) -> bool:
+        if self._coupled is None:
+            return self.send_query(':INST:COUP:STAT?') == 'ON'
+        else:
+            return self._coupled
 
     @property
     def channel_pair_AB(self) -> 'TaborChannelPair':
@@ -241,6 +248,7 @@ class TaborAWGRepresentation:
 
     def reset(self) -> None:
         self.send_cmd(':RES')
+        self._coupled = None
         self.initialize()
         self.channel_pair_AB.clear()
         self.channel_pair_CD.clear()
@@ -293,6 +301,8 @@ def with_select(function_object: Callable[['TaborChannelPair', Any], Any]) -> Ca
 
 
 class TaborChannelPair(AWG):
+    CONFIG_MODE_PARANOIA_LEVEL = None
+
     def __init__(self, tabor_device: TaborAWGRepresentation, channels: Tuple[int, int], identifier: str):
         super().__init__(identifier)
         self._device = weakref.ref(tabor_device)
@@ -725,7 +735,8 @@ class TaborChannelPair(AWG):
             self._send_commands_with_configuration_guard(commands)
 
     def set_marker_state(self, marker: int, active: bool) -> None:
-        """Sets the marker state of this channel pair. According to the manual one cannot turn them off/on separately."""
+        """Sets the marker state of this channel pair.
+        According to the manual one cannot turn them off/on separately."""
         command_string = ':INST:SEL {channel}; :SOUR:MARK:SEL {marker}; :SOUR:MARK:SOUR USER; :SOUR:MARK:STAT {active}'
         command_string = command_string.format(
             channel=self._channels[0],
@@ -829,49 +840,56 @@ class TaborChannelPair(AWG):
         return 2
 
     def _enter_config_mode(self) -> None:
-        """Enter the configuration mode if not already in. All outputs are set to the DC offset of the device and the sequencing is disabled
-        as the manual states this speeds up sequence validation when uploading multiple sequences."""
+        """Enter the configuration mode if not already in. All outputs are set to the DC offset of the device and the
+        sequencing is disabled. The manual states this speeds up sequence validation when uploading multiple
+        sequences."""
         if self._is_in_config_mode is False:
 
             # 1. Select channel pair
             # 2. Select DC as function shape
             # 3. Select build-in waveform mode
 
-            if self.device.send_query(':INST:COUP:STAT?') == 'ON':
-                self.device.send_cmd(':OUTP:ALL OFF')
+            if self.device.is_coupled():
+                out_cmd = ':OUTP:ALL OFF'
             else:
-                self.device.send_cmd(':INST:SEL {}; :OUTP OFF; :INST:SEL {}; :OUTP OFF'.format(*self._channels))
-                
-            self.set_marker_state(0, False)
-            self.set_marker_state(1, False)
-            self.device.send_cmd(':SOUR:FUNC:MODE FIX')
+                out_cmd = ':INST:SEL {};:OUTP OFF;:INST:SEL {};:OUTP OFF'.format(*self._channels)
 
+            marker_0_cmd = ':SOUR:MARK:SEL 1;:SOUR:MARK:SOUR USER;:SOUR:MARK:STAT OFF'
+            marker_1_cmd = ':SOUR:MARK:SEL 2;:SOUR:MARK:SOUR USER;:SOUR:MARK:STAT OFF'
+
+            wf_mode_cmd = ':SOUR:FUNC:MODE FIX'
+
+            cmd = ';'.join([out_cmd, marker_0_cmd, marker_1_cmd, wf_mode_cmd])
+            self.device.send_cmd(cmd, paranoia_level=self.CONFIG_MODE_PARANOIA_LEVEL)
             self._is_in_config_mode = True
 
-    @with_select
     def _exit_config_mode(self) -> None:
         """Leave the configuration mode. Enter advanced sequence mode and turn on all outputs"""
 
-        if self.device.send_query(':INST:COUP:STAT?') == 'ON':
+        sel_ch = ':INST:SEL {}'.format(self._channels[0])
+        aseq_cmd = ':SOUR:FUNC:MODE ASEQ;SEQ:SEL 1'
+
+        cmds = [sel_ch, aseq_cmd]
+
+        if self.device.is_coupled():
             # Coupled -> switch all channels at once
             if self._channels == (1, 2):
                 other_channel_pair = self.device.channel_pair_CD
             else:
+                assert self._channels == (3, 4)
                 other_channel_pair = self.device.channel_pair_AB
 
             if not other_channel_pair._is_in_config_mode:
-                self.device.send_cmd(':SOUR:FUNC:MODE ASEQ')
-                self.device.send_cmd(':SEQ:SEL 1')
-                self.device.send_cmd(':OUTP:ALL ON')
+                cmds.append(':OUTP:ALL ON')
 
         else:
-            self.device.send_cmd(':SOUR:FUNC:MODE ASEQ')
-            self.device.send_cmd(':SEQ:SEL 1')
+            # ch 0 already selected
+            cmds.append(':OUTP ON; :INST:SEL {}; :OUTP ON'.format(self._channels[1]))
 
-            self.device.send_cmd(':INST:SEL {}; :OUTP ON; :INST:SEL {}; :OUTP ON'.format(*self._channels))
-
-        self.set_marker_state(0, True)
-        self.set_marker_state(1, True)
+        cmds.append(':SOUR:MARK:SEL 1;:SOUR:MARK:SOUR USER;:SOUR:MARK:STAT ON')
+        cmds.append(':SOUR:MARK:SEL 2;:SOUR:MARK:SOUR USER;:SOUR:MARK:STAT ON')
+        cmd = ';'.join(cmds)
+        self.device.send_cmd(cmd, paranoia_level=self.CONFIG_MODE_PARANOIA_LEVEL)
         self._is_in_config_mode = False
 
 
