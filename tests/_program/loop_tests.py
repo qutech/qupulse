@@ -5,7 +5,8 @@ import itertools
 from string import ascii_uppercase
 
 from qupulse.utils.types import TimeType, time_from_float
-from qupulse._program._loop import Loop, MultiChannelProgram, _make_compatible, _is_compatible, _CompatibilityLevel, RepetitionWaveform, SequenceWaveform, make_compatible
+from qupulse._program._loop import Loop, MultiChannelProgram, _make_compatible, _is_compatible, _CompatibilityLevel,\
+    RepetitionWaveform, SequenceWaveform, make_compatible, MakeCompatibleWarning
 from qupulse._program.instructions import InstructionBlock, ImmutableInstructionBlock
 from tests.pulses.sequencing_dummies import DummyWaveform
 from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
@@ -583,7 +584,8 @@ class ProgramWaveformCompatibilityTest(unittest.TestCase):
         program = Loop(children=[Loop(waveform=wf1, repetition_count=3),
                                  Loop(waveform=wf2)])
         duration = program.duration
-        make_compatible(program, minimal_waveform_length=1, waveform_quantum=1, sample_rate=time_from_float(1.))
+        with self.assertWarns(MakeCompatibleWarning):
+            make_compatible(program, minimal_waveform_length=1, waveform_quantum=1, sample_rate=time_from_float(1.))
         self.assertEqual(program.duration, duration)
 
         program = Loop(children=[Loop(waveform=wf1, repetition_count=3),

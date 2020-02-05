@@ -7,7 +7,8 @@ Classes:
 import itertools
 from abc import ABCMeta, abstractmethod
 from weakref import WeakValueDictionary, ref
-from typing import Union, Set, Sequence, NamedTuple, Tuple, Any, Iterable, FrozenSet, Optional
+from typing import Union, Set, Sequence, NamedTuple, Tuple, Any, Iterable, FrozenSet, Optional, Mapping
+import operator
 
 import numpy as np
 
@@ -21,7 +22,7 @@ from qupulse._program.transformation import Transformation
 
 
 __all__ = ["Waveform", "TableWaveform", "TableWaveformEntry", "FunctionWaveform", "SequenceWaveform",
-           "MultiChannelWaveform", "RepetitionWaveform", "TransformingWaveform"]
+           "MultiChannelWaveform", "RepetitionWaveform", "TransformingWaveform", "ArithmeticWaveform"]
 
 
 class Waveform(Comparable, metaclass=ABCMeta):
@@ -128,6 +129,12 @@ class Waveform(Comparable, metaclass=ABCMeta):
         if channels == self.defined_channels:
             return self
         return self.unsafe_get_subset_for_channels(channels=channels)
+
+    def __neg__(self):
+        return FunctorWaveform(self, {ch: np.negative for ch in self.defined_channels})
+
+    def __pos__(self):
+        return self
 
 
 class TableWaveformEntry(NamedTuple('TableWaveformEntry', [('t', float),
@@ -586,3 +593,116 @@ class SubsetWaveform(Waveform):
                       sample_times: np.ndarray,
                       output_array: Union[np.ndarray, None]=None) -> np.ndarray:
         return self.inner_waveform.unsafe_sample(channel, sample_times, output_array)
+
+
+class ArithmeticWaveform(Waveform):
+    """Channels only present in one waveform have the operations neutral element on the other."""
+
+    numpy_operator_map = {'+': np.add,
+                          '-': np.subtract}
+    operator_map = {'+': operator.add,
+                    '-': operator.sub}
+
+    rhs_only_map = {'+': operator.pos,
+                    '-': operator.neg}
+    numpy_rhs_only_map = {'+': np.positive,
+                          '-': np.negative}
+
+    def __init__(self,
+                 lhs: Waveform,
+                 arithmetic_operator: str,
+                 rhs: Waveform):
+        super().__init__()
+        self._lhs = lhs
+        self._rhs = rhs
+        self._arithmetic_operator = arithmetic_operator
+
+        assert np.isclose(float(self._lhs.duration), float(self._rhs.duration))
+        assert arithmetic_operator in self.operator_map
+
+    @property
+    def lhs(self) -> Waveform:
+        return self._lhs
+
+    @property
+    def rhs(self) -> Waveform:
+        return self._rhs
+
+    @property
+    def arithmetic_operator(self) -> str:
+        return self._arithmetic_operator
+
+    @property
+    def duration(self) -> TimeType:
+        return self._lhs.duration
+
+    @property
+    def defined_channels(self) -> Set[ChannelID]:
+        return set.union(self._lhs.defined_channels, self._rhs.defined_channels)
+
+    def unsafe_sample(self,
+                      channel: ChannelID,
+                      sample_times: np.ndarray,
+                      output_array: Union[np.ndarray, None] = None) -> np.ndarray:
+        if channel in self._lhs.defined_channels:
+            lhs = self._lhs.unsafe_sample(channel=channel, sample_times=sample_times, output_array=output_array)
+        else:
+            lhs = None
+
+        if channel in self._rhs.defined_channels:
+            rhs = self._rhs.unsafe_sample(channel=channel, sample_times=sample_times,
+                                          output_array=None if lhs is not None else output_array)
+        else:
+            rhs = None
+
+        if rhs is not None and lhs is not None:
+            arithmetic_operator = self.numpy_operator_map[self._arithmetic_operator]
+            if output_array is None:
+                output_array = lhs
+            return arithmetic_operator(lhs, rhs, out=output_array)
+
+        else:
+            if lhs is None:
+                assert rhs is not None, "channel %r not in defined channels (internal bug)" % channel
+                return self.numpy_rhs_only_map[self._arithmetic_operator](rhs, out=output_array)
+            else:
+                return lhs
+
+    def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> Waveform:
+        # TODO: optimization possible
+        return SubsetWaveform(self, channels)
+
+    @property
+    def compare_key(self) -> Tuple[str, Waveform, Waveform]:
+        return self._arithmetic_operator, self._lhs, self._rhs
+
+
+class FunctorWaveform(Waveform):
+    """Apply a channel wise functor that works inplace to all results"""
+    def __init__(self, inner_waveform: Waveform, functor: Mapping[ChannelID, 'Callable']):
+        self._inner_waveform = inner_waveform
+        self._functor = dict(functor.items())
+
+        assert set(functor.keys()) == inner_waveform.defined_channels, ("There is no default identity mapping (yet)."
+                                                                        "File an issue on github if you need it.")
+
+    @property
+    def duration(self) -> TimeType:
+        return self._inner_waveform.duration
+
+    @property
+    def defined_channels(self) -> Set[ChannelID]:
+        return self._inner_waveform.defined_channels
+
+    def unsafe_sample(self,
+                      channel: ChannelID,
+                      sample_times: np.ndarray,
+                      output_array: Union[np.ndarray, None] = None) -> np.ndarray:
+        return self._functor[channel](self._inner_waveform.unsafe_sample(channel, sample_times, output_array))
+
+    def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> Waveform:
+        return SubsetWaveform(self, channels)
+
+    @property
+    def compare_key(self) -> Tuple[Waveform, FrozenSet]:
+        return self._inner_waveform, frozenset(self._functor.items())

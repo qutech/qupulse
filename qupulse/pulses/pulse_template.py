@@ -14,7 +14,7 @@ from numbers import Real
 
 from qupulse.utils.types import ChannelID, DocStringABCMeta
 from qupulse.serialization import Serializable
-from qupulse.expressions import ExpressionScalar, Expression
+from qupulse.expressions import ExpressionScalar, Expression, ExpressionLike
 from qupulse._program._loop import Loop, to_waveform
 from qupulse._program.transformation import Transformation, IdentityTransformation, ChainedTransformation, chain_transformations
 
@@ -44,6 +44,9 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
     Obtaining an actual pulse which can be executed by specifying values for these parameters is
     called instantiation of the PulseTemplate and achieved by invoking the sequencing process.
     """
+
+    """This is not stable"""
+    _DEFAULT_FORMAT_SPEC = 'identifier'
 
     def __init__(self, *,
                  identifier: Optional[str]) -> None:
@@ -217,6 +220,57 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
                                           to_single_waveform=to_single_waveform,
                                           global_transformation=global_transformation,
                                           parent_loop=parent_loop)
+
+    def __format__(self, format_spec: str):
+        if format_spec == '':
+            format_spec = self._DEFAULT_FORMAT_SPEC
+        formatted = []
+        for attr in format_spec.split(';'):
+            value = getattr(self, attr)
+            if value is None:
+                continue
+            # the repr(str(value)) is to avoid very deep nesting. If needed one should use repr
+            formatted.append('{attr}={value}'.format(attr=attr, value=repr(str(value))))
+        type_name = type(self).__name__
+        return '{type_name}({attrs})'.format(type_name=type_name, attrs=', '.join(formatted))
+
+    def __str__(self):
+        return format(self)
+
+    def __repr__(self):
+        type_name = type(self).__name__
+        kwargs = ','.join('%s=%r' % (key, value)
+                          for key, value in self.get_serialization_data().items()
+                          if key.isidentifier() and value is not None)
+        return '{type_name}({kwargs})'.format(type_name=type_name, kwargs=kwargs)
+
+    def __add__(self, other: ExpressionLike):
+        from qupulse.pulses.arithmetic_pulse_template import try_operation
+        return try_operation(self, '+', other)
+
+    def __radd__(self, other: ExpressionLike):
+        from qupulse.pulses.arithmetic_pulse_template import try_operation
+        return try_operation(other, '+', self)
+
+    def __sub__(self, other):
+        from qupulse.pulses.arithmetic_pulse_template import try_operation
+        return try_operation(self, '-', other)
+
+    def __rsub__(self, other):
+        from qupulse.pulses.arithmetic_pulse_template import try_operation
+        return try_operation(other, '-', self)
+
+    def __mul__(self, other):
+        from qupulse.pulses.arithmetic_pulse_template import try_operation
+        return try_operation(self, '*', other)
+
+    def __rmul__(self, other):
+        from qupulse.pulses.arithmetic_pulse_template import try_operation
+        return try_operation(other, '*', self)
+
+    def __truediv__(self, other):
+        from qupulse.pulses.arithmetic_pulse_template import try_operation
+        return try_operation(self, '/', other)
 
 
 class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):

@@ -2,7 +2,7 @@
 another PulseTemplate based on a condition."""
 
 
-from typing import Dict, Set, Optional, Any, Union, Tuple, Generator, Sequence, cast
+from typing import Dict, Set, Optional, Any, Union, Tuple, Generator, Sequence, cast, Callable
 import warnings
 
 import sympy
@@ -14,7 +14,7 @@ from qupulse._program._loop import Loop
 from qupulse.expressions import ExpressionScalar
 from qupulse.utils import checked_int_cast
 from qupulse.pulses.parameters import Parameter, ConstantParameter, InvalidParameterNameException, ParameterConstrainer, ParameterNotProvidedException
-from qupulse.pulses.pulse_template import PulseTemplate, ChannelID
+from qupulse.pulses.pulse_template import PulseTemplate, ChannelID, AtomicPulseTemplate
 from qupulse.pulses.conditions import Condition, ConditionMissingException
 from qupulse._program.instructions import InstructionBlock
 from qupulse.pulses.sequencing import Sequencer

@@ -114,6 +114,10 @@ class ParameterConstraintTest(unittest.TestCase):
         self.assertEqual(str(ParameterConstraint('a==b')), 'a==b')
         self.assertEqual(ParameterConstraint('a==b').get_serialization_data(), 'a==b')
 
+    def test_repr(self):
+        pc = ParameterConstraint('a < b')
+        self.assertEqual("ParameterConstraint('a < b')", repr(pc))
+
 
 class ParameterNotProvidedExceptionTests(unittest.TestCase):
 

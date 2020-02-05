@@ -18,6 +18,7 @@ _NodeType = TypeVar('_NodeType', bound='Node')
 
 class Node(Comparable):
     debug = False
+    __slots__ = ('__parent', '__children', '__parent_index', '__weakref__')
 
     def __init__(self: _NodeType,
                  parent: Union[_NodeType, None]=None,
