@@ -1,25 +1,25 @@
 from abc import ABC, abstractmethod
 from typing import Iterable, Optional
 
-from .base_features import BaseFeature, FeatureAble
+from .base_features import Feature, FeatureAble
 
 
-class BaseAWGFeature(BaseFeature, ABC):
+class AWGFeature(Feature, ABC):
     """Base class for features that are used for `AWGDevice`s"""
     pass
 
 
-class BaseAWGChannelFeature(BaseFeature, ABC):
+class AWGChannelFeature(Feature, ABC):
     """Base class for features that are used for `AWGChannel`s"""
     pass
 
 
-class BaseAWGChannelTupleFeature(BaseFeature, ABC):
+class AWGChannelTupleFeature(Feature, ABC):
     """Base class for features that are used for `AWGChannelTuple`s"""
     pass
 
 
-class BaseAWG(FeatureAble[BaseAWGFeature], ABC):
+class AWG(FeatureAble[AWGFeature], ABC):
     """Base class for all drivers of all arbitrary waveform generators"""
 
     def __init__(self, name: str):
@@ -51,12 +51,12 @@ class BaseAWG(FeatureAble[BaseAWGFeature], ABC):
 
     @property
     @abstractmethod
-    def channel_tuples(self) -> Iterable["BaseAWGChannelTuple"]:
+    def channel_tuples(self) -> Iterable["AWGChannelTuple"]:
         """Returns a list of all channel tuples of a list"""
         raise NotImplementedError()
 
 
-class BaseAWGChannelTuple(FeatureAble[BaseAWGChannelTupleFeature], ABC):
+class AWGChannelTuple(FeatureAble[AWGChannelTupleFeature], ABC):
     """Base class for all groups of synchronized channels of an AWG"""
 
     def __init__(self, idn: int):
@@ -81,7 +81,7 @@ class BaseAWGChannelTuple(FeatureAble[BaseAWGChannelTupleFeature], ABC):
 
     @property
     @abstractmethod
-    def device(self) -> BaseAWG:
+    def device(self) -> AWG:
         """Returns the device which the channel tuple belong to"""
         raise NotImplementedError()
 
@@ -92,7 +92,7 @@ class BaseAWGChannelTuple(FeatureAble[BaseAWGChannelTupleFeature], ABC):
         raise NotImplementedError()
 
 
-class BaseAWGChannel(FeatureAble[BaseAWGChannelFeature], ABC):
+class BaseAWGChannel(FeatureAble[AWGChannelFeature], ABC):
     """Base class for a single channel of an AWG"""
 
     def __init__(self, idn: int):
@@ -110,13 +110,13 @@ class BaseAWGChannel(FeatureAble[BaseAWGChannelFeature], ABC):
 
     @property
     @abstractmethod
-    def device(self) -> BaseAWG:
+    def device(self) -> AWG:
         """Returns the device which the channel belongs to"""
         raise NotImplementedError()
 
     @property
     @abstractmethod
-    def channel_tuple(self) -> Optional[BaseAWGChannelTuple]:
+    def channel_tuple(self) -> Optional[AWGChannelTuple]:
         """Returns the channel tuple which a channel belongs to"""
         raise NotImplementedError()
 

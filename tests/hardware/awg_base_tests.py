@@ -5,7 +5,6 @@ warnings.simplefilter("ignore", UserWarning)
 import unittest
 
 from typing import Callable, Collection, Iterable, List, Optional
-
 from qupulse.hardware.awgs.base import AWGDevice, AWGChannel, AWGChannelTuple, AWGFeature, \
     AWGChannelFeature, AWGChannelTupleFeature
 
