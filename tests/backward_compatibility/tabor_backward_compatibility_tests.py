@@ -11,7 +11,7 @@ from tests.hardware.dummy_devices import DummyDAC
 from qupulse.serialization import Serializer, FilesystemBackend, PulseStorage
 from qupulse.pulses.pulse_template import PulseTemplate
 from qupulse.hardware.setup import HardwareSetup, PlaybackChannel, MarkerChannel, MeasurementMask
-from qupulse.hardware.awgs.tabor import PlottableProgram
+from qupulse.hardware.awgs.old_tabor import PlottableProgram
 
 
 
