@@ -210,7 +210,7 @@ class TestAWGChannel(AWGChannel):
         self._channel_tuple = channel_tuple
 
 
-class TestBaseClasses(unittest.TestCase):
+class TestAWGBaseClasses(unittest.TestCase):
     def setUp(self):
         self.device_name = "My device"
         self.device = TestAWGDevice(self.device_name)
