@@ -5,14 +5,14 @@ from abc import ABC
 from copy import copy
 
 
-class BaseFeature(ABC):
+class Feature(ABC):
     """
     Base class for features of `FeatureAble`s.
     """
     pass
 
 
-FeatureType = TypeVar("FeatureType", bound=BaseFeature)
+FeatureType = TypeVar("FeatureType", bound=Feature)
 
 
 class FeatureAble(Generic[FeatureType], ABC):
@@ -36,7 +36,7 @@ class FeatureAble(Generic[FeatureType], ABC):
         Args:
              feature: A certain feature which functions should be added to the dictionary _features
         """
-        if not isinstance(feature, BaseFeature):
+        if not isinstance(feature, Feature):
             raise TypeError("Invalid type for feature")
 
         self._features[type(feature)] = feature
