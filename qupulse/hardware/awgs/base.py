@@ -1,25 +1,32 @@
 from abc import ABC, abstractmethod
-from typing import Iterable, Optional
+from typing import Collection, Optional
 
-from .base_features import Feature, FeatureAble
+from qupulse.hardware.awgs.base_features import Feature, FeatureAble
 
 
-class AWGFeature(Feature, ABC):
+__all__ = ["AWGDevice", "AWGChannelTuple", "AWGChannel", "AWGMarkerChannel", "AWGDeviceFeature", "AWGChannelFeature",
+           "AWGChannelTupleFeature"]
+
+
+class AWGDeviceFeature(Feature, ABC):
     """Base class for features that are used for `AWGDevice`s"""
-    pass
+    def __init__(self):
+        super().__init__(AWGDevice)
 
 
 class AWGChannelFeature(Feature, ABC):
     """Base class for features that are used for `AWGChannel`s"""
-    pass
+    def __init__(self):
+        super().__init__(AWGChannel)
 
 
 class AWGChannelTupleFeature(Feature, ABC):
     """Base class for features that are used for `AWGChannelTuple`s"""
-    pass
+    def __init__(self):
+        super().__init__(AWGChannelTuple)
 
 
-class AWGDevice(FeatureAble[AWGFeature], ABC):
+class AWGDevice(FeatureAble[AWGDeviceFeature], ABC):
     """Base class for all drivers of all arbitrary waveform generators"""
 
     def __init__(self, name: str):
@@ -45,13 +52,19 @@ class AWGDevice(FeatureAble[AWGFeature], ABC):
 
     @property
     @abstractmethod
-    def channels(self) -> Iterable["AWGChannel"]:
+    def channels(self) -> Collection["AWGChannel"]:
         """Returns a list of all channels of a Device"""
         raise NotImplementedError()
 
     @property
     @abstractmethod
-    def channel_tuples(self) -> Iterable["AWGChannelTuple"]:
+    def marker_channels(self) -> Collection["AWGMarkerChannel"]:
+        """Returns a list of all marker channels of a device. The collection may be empty"""
+        raise NotImplementedError()
+
+    @property
+    @abstractmethod
+    def channel_tuples(self) -> Collection["AWGChannelTuple"]:
         """Returns a list of all channel tuples of a list"""
         raise NotImplementedError()
 
@@ -74,10 +87,19 @@ class AWGChannelTuple(FeatureAble[AWGChannelTupleFeature], ABC):
         return self._idn
 
     @property
+    def name(self) -> str:
+        """Returns the name of a channel tuple"""
+        return "{dev}_CT{idn}".format(dev=self.device.name, idn=self.idn)
+
+    @property
     @abstractmethod
     def sample_rate(self) -> float:
         """Returns the sample rate of a channel tuple as a float"""
         raise NotImplementedError()
+
+    # Optional sample_rate-setter
+    # @sample_rate.setter
+    # def sample_rate(self, sample_rate: float) -> None:
 
     @property
     @abstractmethod
@@ -87,12 +109,18 @@ class AWGChannelTuple(FeatureAble[AWGChannelTupleFeature], ABC):
 
     @property
     @abstractmethod
-    def channels(self) -> Iterable["AWGChannel"]:
+    def channels(self) -> Collection["AWGChannel"]:
         """Returns a list of all channels of the channel tuple"""
         raise NotImplementedError()
 
+    @property
+    @abstractmethod
+    def marker_channels(self) -> Collection["AWGMarkerChannel"]:
+        """Returns a list of all marker channels of the channel tuple. The collection may be empty"""
+        raise NotImplementedError()
 
-class AWGChannel(FeatureAble[AWGChannelFeature], ABC):
+
+class _BaseAWGChannel(ABC):
     """Base class for a single channel of an AWG"""
 
     def __init__(self, idn: int):
@@ -129,3 +157,19 @@ class AWGChannel(FeatureAble[AWGChannelFeature], ABC):
             channel_tuple: reference to the channel tuple
         """
         raise NotImplementedError()
+
+
+class AWGChannel(_BaseAWGChannel, FeatureAble[AWGChannelFeature], ABC):
+    """Base class for a single channel of an AWG"""
+    @property
+    def name(self) -> str:
+        """Returns the name of a channel"""
+        return "{dev}_C{idn}".format(dev=self.device.name, idn=self.idn)
+    
+    
+class AWGMarkerChannel(_BaseAWGChannel, ABC):
+    """Base class for a single marker channel of an AWG"""
+    @property
+    def name(self) -> str:
+        """Returns the name of a marker channel"""
+        return "{dev}_M{idn}".format(dev=self.device.name, idn=self.idn)
