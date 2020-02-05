@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import Collection, Optional
+from typing import Optional
 
 from qupulse.hardware.awgs.base_features import Feature, FeatureAble
+from qupulse.utils.types import Collection
 
 
 __all__ = ["AWGDevice", "AWGChannelTuple", "AWGChannel", "AWGMarkerChannel", "AWGDeviceFeature", "AWGChannelFeature",
