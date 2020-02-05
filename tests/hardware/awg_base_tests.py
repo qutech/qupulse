@@ -6,7 +6,7 @@ import unittest
 
 from typing import Callable, Collection, Iterable, List, Optional
 
-from qupulse.hardware.awgs.base import AWG, BaseAWGChannel, AWGChannelTuple, AWGFeature, \
+from qupulse.hardware.awgs.base import AWGDevice, AWGChannel, AWGChannelTuple, AWGFeature, \
     AWGChannelFeature, AWGChannelTupleFeature
 
 
@@ -67,7 +67,7 @@ class ChannelOffsetAmplitudeFeature(AWGChannelFeature):
 # Device & Channels
 ########################################################################################################################
 
-class TestAWG(AWG):
+class TestAWGDevice(AWGDevice):
     def __init__(self, name: str):
         super().__init__(name)
 
@@ -116,7 +116,7 @@ class TestAWG(AWG):
 
 
 class TestAWGChannelTuple(AWGChannelTuple):
-    def __init__(self, idn: int, device: TestAWG, channels: Iterable["TestAWGChannel"]):
+    def __init__(self, idn: int, device: TestAWGDevice, channels: Iterable["TestAWGChannel"]):
         super().__init__(idn)
 
         # Add feature to this object (self)
@@ -136,7 +136,7 @@ class TestAWGChannelTuple(AWGChannelTuple):
         self._sample_rate = sample_rate
 
     @property
-    def device(self) -> TestAWG:
+    def device(self) -> TestAWGDevice:
         return self._device
 
     @property
@@ -149,8 +149,8 @@ class TestAWGChannelTuple(AWGChannelTuple):
         return chr(ord('A') + self.idn)  # 0 -> 'A',  1 -> 'B',  2 -> 'C', ...
 
 
-class TestAWGChannel(BaseAWGChannel):
-    def __init__(self, idn: int, device: TestAWG):
+class TestAWGChannel(AWGChannel):
+    def __init__(self, idn: int, device: TestAWGDevice):
         super().__init__(idn)
 
         # Add feature to this object (self)
@@ -166,7 +166,7 @@ class TestAWGChannel(BaseAWGChannel):
         self._amplitude = 5.0
 
     @property
-    def device(self) -> TestAWG:
+    def device(self) -> TestAWGDevice:
         return self._device
 
     @property
@@ -196,7 +196,7 @@ class TestAWGChannel(BaseAWGChannel):
 class TestBaseClasses(unittest.TestCase):
     def setUp(self):
         self.device_name = "My device"
-        self.device = TestAWG(self.device_name)
+        self.device = TestAWGDevice(self.device_name)
 
     def test_Device(self):
         self.assertEqual(self.device.name, self.device_name, "Invalid name for device")
