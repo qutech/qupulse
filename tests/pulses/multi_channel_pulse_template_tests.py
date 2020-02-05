@@ -1,10 +1,8 @@
 import unittest
 from unittest import mock
-import warnings
 
 import numpy
 
-from qupulse.utils.types import time_from_float
 from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform, MappingPulseTemplate,\
     ChannelMappingException, AtomicMultiChannelPulseTemplate, ParallelConstantChannelPulseTemplate,\
     TransformingWaveform, ParallelConstantChannelTransformation

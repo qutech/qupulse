@@ -15,6 +15,7 @@ import numpy
 from qupulse.serialization import AnonymousSerializable
 from qupulse.utils.sympy import sympify, to_numpy, recursive_substitution, evaluate_lambdified,\
     get_most_simple_representation, get_variables
+from qupulse.utils.types import TimeType
 
 __all__ = ["Expression", "ExpressionVariableMissingException", "ExpressionScalar", "ExpressionVector"]
 
@@ -45,7 +46,7 @@ class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
     def _parse_evaluate_numeric_result(self,
                                        result: Union[Number, numpy.ndarray],
                                        call_arguments: Any) -> Union[Number, numpy.ndarray]:
-        allowed_types = (float, numpy.number, int, complex, bool, numpy.bool_)
+        allowed_types = (float, numpy.number, int, complex, bool, numpy.bool_, TimeType)
         if isinstance(result, tuple):
             result = numpy.array(result)
         if isinstance(result, numpy.ndarray):
@@ -56,7 +57,7 @@ class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
                 if obj_types == {sympy.Float} or obj_types == {sympy.Float, sympy.Integer}:
                     return result.astype(float)
                 elif obj_types == {sympy.Integer}:
-                    return result.astype(np.int64)
+                    return result.astype(numpy.int64)
                 else:
                     raise NonNumericEvaluation(self, result, call_arguments)
         elif isinstance(result, allowed_types):

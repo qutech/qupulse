@@ -116,7 +116,7 @@ class AlazarCard(DAC):
                                      program_name: str,
                                      windows: Dict[str, Tuple[np.ndarray, np.ndarray]]) -> None:
         program = self._registered_programs[program_name]
-        sample_factor = TimeType(int(self.config.captureClockConfiguration.numeric_sample_rate(self.card.model)),
+        sample_factor = TimeType.from_fraction(int(self.config.captureClockConfiguration.numeric_sample_rate(self.card.model)),
                                  10 ** 9)
         program.clear_masks()
 
@@ -133,7 +133,8 @@ class AlazarCard(DAC):
             config.masks, config.operations, total_record_size = self._registered_programs[program_name].iter(
                 self._make_mask)
 
-            sample_factor = TimeType(self.config.captureClockConfiguration.numeric_sample_rate(self.card.model), 10 ** 9)
+            sample_factor = TimeType.from_fraction(self.config.captureClockConfiguration.numeric_sample_rate(self.card.model),
+                                                   10 ** 9)
 
             if not config.operations:
                 raise RuntimeError("No operations: Arming program without operations is an error as there will "

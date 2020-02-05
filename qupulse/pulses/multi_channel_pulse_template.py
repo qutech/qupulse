@@ -80,7 +80,7 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
                 if channels_i & channels_j:
                     raise ChannelMappingException('subtemplate {}'.format(i + 1),
                                                   'subtemplate {}'.format(i + 2 + j),
-                                                  (channels_i | channels_j).pop())
+                                                  (channels_i & channels_j).pop())
 
         if external_parameters is not None:
             warnings.warn("external_parameters is an obsolete argument and will be removed in the future.",
