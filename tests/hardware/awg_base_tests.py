@@ -193,7 +193,7 @@ class TestAWGChannel(AWGChannel):
         self.add_feature(TestOffsetAmplitudeFeature(self))
 
         self._device = device
-        self._channel_tuple: Optional[TestAWGChannelTuple] = None
+        self._channel_tuple = None
         self._offset = 0.0
         self._amplitude = 5.0
         self._ampl_offs_handling = AmplitudeOffsetHandling.IGNORE_OFFSET
