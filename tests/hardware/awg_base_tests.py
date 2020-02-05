@@ -1,66 +1,98 @@
+from typing import Callable, Collection, Iterable, List, Optional, Set, Tuple
+import unittest
 import warnings
 
+from qupulse import ChannelID
+from qupulse._program._loop import Loop
+from qupulse.hardware.awgs.base import AWGDevice, AWGChannel, AWGChannelTuple, AWGMarkerChannel
+from qupulse.hardware.awgs.features import ChannelSynchronization, ProgramManagement, OffsetAmplitude, \
+    AmplitudeOffsetHandling
+
+
 warnings.simplefilter("ignore", UserWarning)
-
-import unittest
-
-from typing import Callable, Collection, Iterable, List, Optional
-
-from qupulse.hardware.awgs.base import AWGDevice, AWGChannel, AWGChannelTuple, AWGFeature, \
-    AWGChannelFeature, AWGChannelTupleFeature
 
 
 ########################################################################################################################
 # Example Features
 ########################################################################################################################
 
-class SynchronizeChannelsFeature(AWGFeature):
-    def __init__(self, sync_func: Callable[[int], None]):
-        """Storing the callable, to call it if needed below"""
+class TestSynchronizeChannelsFeature(ChannelSynchronization):
+    def __init__(self, device: "TestAWGDevice"):
         super().__init__()
-        self._sync_func = sync_func
+        self._parent = device
 
     def synchronize_channels(self, group_size: int) -> None:
-        """Forwarding call to callable object, which was provided threw __init__"""
-        self._sync_func(group_size)
+        """Forwarding call to TestAWGDevice"""
+        self._parent.synchronize_channels(group_size)
 
 
-class ChannelTupleNameFeature(AWGChannelTupleFeature):
-    def __init__(self, name_get: Callable[[], str]):
-        """Storing the callable, to call it if needed below"""
+class TestOffsetAmplitudeFeature(OffsetAmplitude):
+    def __init__(self, channel: "TestAWGChannel"):
         super().__init__()
-        self._get_name = name_get
+        self._parent = channel
 
-    def get_name(self) -> str:
-        """Forwarding call to callable object, which was provided threw __init__"""
-        return self._get_name()
+    @property
+    def offset(self) -> float:
+        """Get offset of TestAWGChannel"""
+        return self._parent._offset
+
+    @offset.setter
+    def offset(self, offset: float) -> None:
+        """Set offset of TestAWGChannel"""
+        self._parent._offset = offset
+
+    @property
+    def amplitude(self) -> float:
+        """Get amplitude of TestAWGChannel"""
+        return self._parent._amplitude
+
+    @amplitude.setter
+    def amplitude(self, amplitude: float) -> None:
+        """Set amplitude of TestAWGChannel"""
+        self._parent._amplitude = amplitude
+
+    @property
+    def amplitude_offset_handling(self) -> str:
+        """Get amplitude-offset-handling of TestAWGChannel"""
+        return self._parent._ampl_offs_handling
+
+    @amplitude_offset_handling.setter
+    def amplitude_offset_handling(self, ampl_offs_handling: float) -> None:
+        """Set amplitude-offset-handling of TestAWGChannel"""
+        self._parent._ampl_offs_handling = ampl_offs_handling
 
 
-class ChannelOffsetAmplitudeFeature(AWGChannelFeature):
-    def __init__(self, offset_get: Callable[[], float], offset_set: Callable[[float], None],
-                 amp_get: Callable[[], float], amp_set: Callable[[float], None]):
-        """Storing all callables, to call them if needed below"""
+class TestProgramManagementFeature(ProgramManagement):
+    def __init__(self):
         super().__init__()
-        self._get_offset = offset_get
-        self._set_offset = offset_set
-        self._get_amp = amp_get
-        self._set_amp = amp_set
+        self._programs = {}
+        self._armed_program = None
 
-    def get_offset(self) -> float:
-        """Forwarding call to callable object, which was provided threw __init__"""
-        return self._get_offset()
+    def upload(self, name: str, program: Loop, channels: Tuple[Optional[ChannelID], ...],
+               markers: Tuple[Optional[ChannelID], ...], voltage_transformation: Tuple[Optional[Callable], ...],
+               force: bool = False) -> None:
+        if name in self._programs:
+            raise KeyError("Program with name \"{}\" is already on the instrument.".format(name))
+        self._programs[name] = program
 
-    def set_offset(self, offset: float) -> None:
-        """Forwarding call to callable object, which was provided threw __init__"""
-        self._set_offset(offset)
+    def remove(self, name: str) -> None:
+        if self._armed_program == name:
+            raise RuntimeError("Cannot remove program, when it is armed.")
+        if name not in self._programs:
+            raise KeyError("Unknown program: {}".format(name))
+        del self._programs[name]
 
-    def get_amplitude(self) -> float:
-        """Forwarding call to callable object, which was provided threw __init__"""
-        return self._get_amp()
+    def clear(self) -> None:
+        if self._armed_program is not None:
+            raise RuntimeError("Cannot clear programs, with an armed program.")
+        self._programs.clear()
 
-    def set_amplitude(self, amplitude: float) -> None:
-        """Forwarding call to callable object, which was provided threw __init__"""
-        self._set_amp(amplitude)
+    def arm(self, name: Optional[str]) -> None:
+        self._armed_program = name
+
+    @property
+    def programs(self) -> Set[str]:
+        return set(self._programs.keys())
 
 
 ########################################################################################################################
@@ -73,14 +105,14 @@ class TestAWGDevice(AWGDevice):
 
         # Add feature to this object (self)
         # During this call, the function of the feature is dynamically added to this object
-        self.add_feature(SynchronizeChannelsFeature(self._sync_chans))
+        self.add_feature(TestSynchronizeChannelsFeature(self))
 
         self._channels = [TestAWGChannel(i, self) for i in range(8)]  # 8 channels
         self._channel_tuples = []
 
         # Call the feature function, with the feature's signature
-        self[SynchronizeChannelsFeature].synchronize_channels(
-            2)  # default channel synchronization with a group size of 2
+        # Default channel synchronization with a group size of 2
+        self[ChannelSynchronization].synchronize_channels(2)
 
     def cleanup(self) -> None:
         """This will be called automatically in __del__"""
@@ -92,11 +124,15 @@ class TestAWGDevice(AWGDevice):
         return self._channels
 
     @property
+    def marker_channels(self) -> Collection[AWGMarkerChannel]:
+        return []
+
+    @property
     def channel_tuples(self) -> Collection["TestAWGChannelTuple"]:
         return self._channel_tuples
 
-    def _sync_chans(self, group_size: int) -> None:
-        """Implementation of the feature's function"""
+    def synchronize_channels(self, group_size: int) -> None:
+        """Implementation of the feature's , but you can also call it directly"""
         if group_size not in [2, 4, 8]:  # Allowed group sizes
             raise ValueError("Invalid group size for channel synchronization")
 
@@ -121,11 +157,11 @@ class TestAWGChannelTuple(AWGChannelTuple):
 
         # Add feature to this object (self)
         # During this call, the function of the feature is dynamically added to this object
-        self.add_feature(ChannelTupleNameFeature(self._get_name))
+        self.add_feature(TestProgramManagementFeature())
 
         self._device = device
         self._channels = tuple(channels)
-        self.sample_rate = 12.456  # default value
+        self._sample_rate = 12.456  # default value
 
     @property
     def sample_rate(self) -> float:
@@ -143,10 +179,9 @@ class TestAWGChannelTuple(AWGChannelTuple):
     def channels(self) -> Collection["TestAWGChannel"]:
         return self._channels
 
-    # Feature functions
-    def _get_name(self) -> str:
-        """Implementation of the feature's function"""
-        return chr(ord('A') + self.idn)  # 0 -> 'A',  1 -> 'B',  2 -> 'C', ...
+    @property
+    def marker_channels(self) -> Collection[AWGMarkerChannel]:
+        return []
 
 
 class TestAWGChannel(AWGChannel):
@@ -155,15 +190,13 @@ class TestAWGChannel(AWGChannel):
 
         # Add feature to this object (self)
         # During this call, all functions of the feature are dynamically added to this object
-        self.add_feature(ChannelOffsetAmplitudeFeature(self._get_offs,
-                                                       self._set_offs,
-                                                       self._get_ampl,
-                                                       self._set_ampl))
+        self.add_feature(TestOffsetAmplitudeFeature(self))
 
         self._device = device
         self._channel_tuple: Optional[TestAWGChannelTuple] = None
         self._offset = 0.0
         self._amplitude = 5.0
+        self._ampl_offs_handling = AmplitudeOffsetHandling.IGNORE_OFFSET
 
     @property
     def device(self) -> TestAWGDevice:
@@ -176,54 +209,36 @@ class TestAWGChannel(AWGChannel):
     def _set_channel_tuple(self, channel_tuple: TestAWGChannelTuple) -> None:
         self._channel_tuple = channel_tuple
 
-    def _get_offs(self) -> float:
-        """Implementation of the feature's function"""
-        return self._offset
-
-    def _set_offs(self, offset: float) -> None:
-        """Implementation of the feature's function"""
-        self._offset = offset
-
-    def _get_ampl(self) -> float:
-        """Implementation of the feature's function"""
-        return self._amplitude
-
-    def _set_ampl(self, amplitude: float) -> None:
-        """Implementation of the feature's function"""
-        self._amplitude = amplitude
-
 
 class TestBaseClasses(unittest.TestCase):
     def setUp(self):
         self.device_name = "My device"
         self.device = TestAWGDevice(self.device_name)
 
-    def test_Device(self):
+    def test_device(self):
         self.assertEqual(self.device.name, self.device_name, "Invalid name for device")
         self.assertEqual(len(self.device.channels), 8, "Invalid number of channels")
+        self.assertEqual(len(self.device.marker_channels), 0, "Invalid number of marker channels")
         self.assertEqual(len(self.device.channel_tuples), 4, "Invalid default channel tuples for device")
 
-    def test_channel(self):
+    def test_channels(self):
         for i, channel in enumerate(self.device.channels):
             self.assertEqual(channel.idn, i), "Invalid channel id"
-            self.assertEqual(channel[ChannelOffsetAmplitudeFeature].get_offset(), 0,
-                             f"Invalid default offset for channel {i}")
-            self.assertEqual(channel[
-                                 ChannelOffsetAmplitudeFeature].get_amplitude(), 5.0,
+            self.assertEqual(channel[OffsetAmplitude].offset, 0, f"Invalid default offset for channel {i}")
+            self.assertEqual(channel[OffsetAmplitude].amplitude, 5.0,
                              f"Invalid default amplitude for channel {i}")
 
             offs = -0.1 * i
             ampl = 0.5 + 3 * i
-            channel[ChannelOffsetAmplitudeFeature].set_offset(offs)
-            channel[ChannelOffsetAmplitudeFeature].set_amplitude(ampl)
-            self.assertEqual(channel[ChannelOffsetAmplitudeFeature].get_offset(), offs,
-                             f"Invalid offset for channel {i}")
-            self.assertEqual(channel[ChannelOffsetAmplitudeFeature].get_amplitude(), ampl,
-                             f"Invalid amplitude for channel {i}")
+            channel[OffsetAmplitude].offset = offs
+            channel[OffsetAmplitude].amplitude = ampl
 
-    def test_channel_tupels(self):
+            self.assertEqual(channel[OffsetAmplitude].offset, offs, f"Invalid offset for channel {i}")
+            self.assertEqual(channel[OffsetAmplitude].amplitude, ampl, f"Invalid amplitude for channel {i}")
+
+    def test_channel_tuples(self):
         for group_size in [2, 4, 8]:
-            self.device[SynchronizeChannelsFeature].synchronize_channels(group_size)
+            self.device[ChannelSynchronization].synchronize_channels(group_size)
 
             self.assertEqual(len(self.device.channel_tuples), 8 // group_size, "Invalid number of channel tuples")
 
@@ -236,10 +251,18 @@ class TestBaseClasses(unittest.TestCase):
 
         self.assertEqual(len(self.device.channel_tuples), 1, "Invalid number of channel tuples")
 
-    def test_error_thrown(self):
-        with self.assertRaises(ValueError) as cm:
-            self.device[SynchronizeChannelsFeature].synchronize_channels(3)
-        self.assertEqual(ValueError, cm.exception.__class__, "Missing error for invalid group size")
+    def test_error_handling(self):
+        with self.assertRaises(ValueError):
+            self.device[ChannelSynchronization].synchronize_channels(3)
+
+        with self.assertRaises(KeyError):
+            self.device.add_feature(TestSynchronizeChannelsFeature(self.device))
+
+        with self.assertRaises(TypeError):
+            self.device.add_feature(TestProgramManagementFeature())
+
+        with self.assertRaises(TypeError):
+            self.device.features[ChannelSynchronization] = None
 
 
 if __name__ == '__main__':

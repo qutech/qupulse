@@ -1272,7 +1272,7 @@ class TaborChannelPair(AWG):
         as the manual states this speeds up sequence validation when uploading multiple sequences."""
         if self._is_in_config_mode is False:
 
-            # 1. Selct channel pair
+            # 1. Select channel pair
             # 2. Select DC as function shape
             # 3. Select build-in waveform mode
 
