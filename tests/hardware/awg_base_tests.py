@@ -224,17 +224,17 @@ class TestAWGBaseClasses(unittest.TestCase):
     def test_channels(self):
         for i, channel in enumerate(self.device.channels):
             self.assertEqual(channel.idn, i), "Invalid channel id"
-            self.assertEqual(channel[OffsetAmplitude].offset, 0, f"Invalid default offset for channel {i}")
+            self.assertEqual(channel[OffsetAmplitude].offset, 0, "Invalid default offset for channel {}".format(i))
             self.assertEqual(channel[OffsetAmplitude].amplitude, 5.0,
-                             f"Invalid default amplitude for channel {i}")
+                             "Invalid default amplitude for channel {}".format(i))
 
             offs = -0.1 * i
             ampl = 0.5 + 3 * i
             channel[OffsetAmplitude].offset = offs
             channel[OffsetAmplitude].amplitude = ampl
 
-            self.assertEqual(channel[OffsetAmplitude].offset, offs, f"Invalid offset for channel {i}")
-            self.assertEqual(channel[OffsetAmplitude].amplitude, ampl, f"Invalid amplitude for channel {i}")
+            self.assertEqual(channel[OffsetAmplitude].offset, offs, "Invalid offset for channel {}".format(i))
+            self.assertEqual(channel[OffsetAmplitude].amplitude, ampl, "Invalid amplitude for channel {}".format(i))
 
     def test_channel_tuples(self):
         for group_size in [2, 4, 8]:
@@ -245,9 +245,9 @@ class TestAWGBaseClasses(unittest.TestCase):
             # Check if channels and channel tuples are connected right
             for i, channel in enumerate(self.device.channels):
                 self.assertEqual(channel.channel_tuple.idn, i // group_size,
-                                 f"Invalid channel tuple {channel.channel_tuple.idn} for channel {i}")
+                                 "Invalid channel tuple {} for channel {}".format(channel.channel_tuple.idn, i))
                 self.assertTrue(channel in channel.channel_tuple.channels,
-                                f"Channel {i} not in its parent channel tuple {channel.channel_tuple.idn}")
+                                "Channel {} not in its parent channel tuple {}".format(i, channel.channel_tuple.idn))
 
         self.assertEqual(len(self.device.channel_tuples), 1, "Invalid number of channel tuples")
 
