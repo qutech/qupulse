@@ -1,4 +1,4 @@
-from typing import Callable, Collection, Iterable, List, Optional, Set, Tuple
+from typing import Callable, Iterable, List, Optional, Set, Tuple
 import unittest
 import warnings
 
@@ -7,6 +7,7 @@ from qupulse._program._loop import Loop
 from qupulse.hardware.awgs.base import AWGDevice, AWGChannel, AWGChannelTuple, AWGMarkerChannel
 from qupulse.hardware.awgs.features import ChannelSynchronization, ProgramManagement, OffsetAmplitude, \
     AmplitudeOffsetHandling
+from qupulse.utils.types import Collection
 
 warnings.simplefilter("ignore", UserWarning)
 
