@@ -137,7 +137,7 @@ class TestAWGDevice(AWGDevice):
             raise ValueError("Invalid group size for channel synchronization")
 
         self._channel_tuples.clear()
-        tmp_channel_tuples: List[List["TestAWGChannel"]] = [[] for i in range(len(self._channels) // group_size)]
+        tmp_channel_tuples = [[] for i in range(len(self._channels) // group_size)]
 
         # Preparing the channel structure
         for i, channel in enumerate(self._channels):
