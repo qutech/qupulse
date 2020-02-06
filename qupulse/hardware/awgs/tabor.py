@@ -15,7 +15,7 @@ from qupulse.utils.types import ChannelID
 from qupulse._program._loop import Loop, make_compatible
 from qupulse.hardware.util import voltage_to_uint16, find_positions
 from qupulse.hardware.awgs.base import AWG, AWGAmplitudeOffsetHandling
-from qupulse.pulses.parameters import Parameter
+from qupulse.pulses.parameters import ConstantParameter
 from qupulse._program.tabor import TaborSegment, TaborException, TaborProgram, PlottableProgram, TaborSequencing,\
     make_combined_wave
 
@@ -695,14 +695,25 @@ class TaborChannelPair(AWG):
 
     @with_configuration_guard
     def _execute_multiple_commands_with_config_guard(self, commands: List[str]) -> None:
+        """ Joins the given commands into one and executes it with configuration guard.
+
+        Args:
+            commands: Commands that should be executed.
+        """
         cmd_str = ";".join(commands)
         self.device.send_cmd(cmd_str)
 
-    def set_volatile_parameters(self, program_name: str, parameters: Mapping[str, Parameter]) -> None:
-        """Set the values of parameters which were marked as volatile on program creation."""
-        # TODO: Add documentation, increase readability
-        # When changing the tables of current program use guarded mode as it gives way smaller blips
-        # But it is slower however (184 ms vs 47 ms)
+    def set_volatile_parameters(self, program_name: str, parameters: Mapping[str, ConstantParameter]) -> None:
+        """ Set the values of parameters which were marked as volatile on program creation. Sets volatile parameters
+        in program memory and device's (adv.) sequence tables if program is current program.
+
+        If set_volatile_parameters needs to run faster, set CONFIG_MODE_PARANOIA_LEVEL to 0 which causes the device to
+        enter the configuration mode with paranoia level 0 (Note: paranoia level 0 does not work for the simulator).
+
+        Args:
+            program_name: Name of program which should be changed.
+            parameters: Names of volatile parameters and respective values to which they should be set.
+        """
 
         waveform_to_segment_index, program = self._known_programs[program_name]
 
@@ -841,8 +852,8 @@ class TaborChannelPair(AWG):
 
     def _enter_config_mode(self) -> None:
         """Enter the configuration mode if not already in. All outputs are set to the DC offset of the device and the
-        sequencing is disabled. The manual states this speeds up sequence validation when uploading multiple
-        sequences."""
+        sequencing is disabled. The manual states this speeds up sequence validation when uploading multiple sequences.
+        When entering and leaving the configuration mode the AWG outputs a small (~60 mV in 4 V mode) blip."""
         if self._is_in_config_mode is False:
 
             # 1. Select channel pair
