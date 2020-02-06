@@ -223,7 +223,7 @@ class TaborChannelPairTests(TaborDummyBasedTest):
                 update_prog.assert_called_once_with(parameters)
 
                 channel_pair.set_volatile_parameters('active_program', parameters)
-                ex_com.assert_called_once()
+                self.assertEqual(1, ex_com.call_count)
                 actual_commands, = ex_com.call_args[0]
                 self.assertEqual(expected_commands, set(actual_commands))
                 self.assertEqual(len(expected_commands), len(actual_commands))
