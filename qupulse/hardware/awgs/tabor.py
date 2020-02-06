@@ -724,14 +724,14 @@ class TaborChannelPair(AWG):
                     raise ValueError('Repetition must be > 0')
 
                 if isinstance(position, int):
-                    commands.append(":ASEQ:DEF{},{},{},{}".format(position + 1, entry.element_number + 1,
-                                                                  entry.repetition_count, entry.jump_flag))
+                    commands.append(":ASEQ:DEF {},{},{},{}".format(position + 1, entry.element_number + 1,
+                                                                   entry.repetition_count, entry.jump_flag))
                 else:
                     table_num, step_num = position
-                    commands.append(":SEQ:SEL{}".format(table_num + 2))
-                    commands.append(":SEQ:DEF{},{},{},{}".format(step_num,
-                                                                 waveform_to_segment_index[entry.element_id] + 1,
-                                                                 entry.repetition_count, entry.jump_flag))
+                    commands.append(":SEQ:SEL {}".format(table_num + 2))
+                    commands.append(":SEQ:DEF {},{},{},{}".format(step_num,
+                                                                  waveform_to_segment_index[entry.element_id] + 1,
+                                                                  entry.repetition_count, entry.jump_flag))
             self._execute_multiple_commands_with_config_guard(commands)
 
     def set_marker_state(self, marker: int, active: bool) -> None:
