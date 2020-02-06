@@ -206,6 +206,7 @@ class PulseTemplateTest(unittest.TestCase):
         global_transformation = TransformationStub()
         to_single_waveform = {'voll', 'toggo'}
         parent_loop = Loop()
+        volatile = {'c'}
 
         template = PulseTemplateStub()
         with mock.patch.object(template, '_internal_create_program') as _internal_create_program:
@@ -214,19 +215,31 @@ class PulseTemplateTest(unittest.TestCase):
                                      channel_mapping=channel_mapping,
                                      global_transformation=global_transformation,
                                      to_single_waveform=to_single_waveform,
-                                     parent_loop=parent_loop, volatile=set())
+                                     parent_loop=parent_loop,
+                                     volatile=volatile)
 
-            _internal_create_program.assert_called_once_with(parameters=parameters,
-                                     measurement_mapping=measurement_mapping,
-                                     channel_mapping=channel_mapping,
-                                     global_transformation=global_transformation,
-                                     to_single_waveform=to_single_waveform,
-                                     parent_loop=parent_loop, volatile=set())
+            _internal_create_program.assert_called_once_with(
+                parameters=parameters,
+                measurement_mapping=measurement_mapping,
+                channel_mapping=channel_mapping,
+                global_transformation=global_transformation,
+                to_single_waveform=to_single_waveform,
+                parent_loop=parent_loop, volatile=volatile)
 
             self.assertEqual(parent_loop, Loop())
 
+            with self.assertRaisesRegex(NotImplementedError, "volatile"):
+                template._parameter_names = {'c'}
+                template._create_program(parameters=parameters,
+                                         measurement_mapping=measurement_mapping,
+                                         channel_mapping=channel_mapping,
+                                         global_transformation=global_transformation,
+                                         to_single_waveform={template},
+                                         parent_loop=parent_loop,
+                                         volatile=volatile)
+
     def test__create_program_single_waveform(self):
-        template = PulseTemplateStub(identifier='pt_identifier')
+        template = PulseTemplateStub(identifier='pt_identifier', parameter_names={'alpha'})
 
         for to_single_waveform in ({template}, {template.identifier}):
             for global_transformation in (None, TransformationStub()):

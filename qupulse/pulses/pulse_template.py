@@ -199,6 +199,10 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
         if self.identifier in to_single_waveform or self in to_single_waveform:
             root = Loop()
 
+            if volatile.intersection(self.parameter_names):
+                raise NotImplementedError('A pulse template that has volatile parameters cannot be transformed into a '
+                                          'single waveform yet.')
+
             self._internal_create_program(parameters=parameters,
                                           measurement_mapping=measurement_mapping,
                                           channel_mapping=channel_mapping,
