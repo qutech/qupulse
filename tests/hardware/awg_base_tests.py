@@ -6,15 +6,15 @@ import unittest
 
 from typing import Callable, Collection, Iterable, List, Optional
 
-from qupulse.hardware.awgs.base import BaseAWG, BaseAWGChannel, BaseAWGChannelTuple, BaseAWGFeature, \
-    BaseAWGChannelFeature, BaseAWGChannelTupleFeature
+from qupulse.hardware.awgs.base import AWGDevice, AWGChannel, AWGChannelTuple, AWGFeature, \
+    AWGChannelFeature, AWGChannelTupleFeature
 
 
 ########################################################################################################################
 # Example Features
 ########################################################################################################################
 
-class SynchronizeChannelsFeature(BaseAWGFeature):
+class SynchronizeChannelsFeature(AWGFeature):
     def __init__(self, sync_func: Callable[[int], None]):
         """Storing the callable, to call it if needed below"""
         super().__init__()
@@ -25,7 +25,7 @@ class SynchronizeChannelsFeature(BaseAWGFeature):
         self._sync_func(group_size)
 
 
-class ChannelTupleNameFeature(BaseAWGChannelTupleFeature):
+class ChannelTupleNameFeature(AWGChannelTupleFeature):
     def __init__(self, name_get: Callable[[], str]):
         """Storing the callable, to call it if needed below"""
         super().__init__()
@@ -36,7 +36,7 @@ class ChannelTupleNameFeature(BaseAWGChannelTupleFeature):
         return self._get_name()
 
 
-class ChannelOffsetAmplitudeFeature(BaseAWGChannelFeature):
+class ChannelOffsetAmplitudeFeature(AWGChannelFeature):
     def __init__(self, offset_get: Callable[[], float], offset_set: Callable[[float], None],
                  amp_get: Callable[[], float], amp_set: Callable[[float], None]):
         """Storing all callables, to call them if needed below"""
@@ -67,7 +67,7 @@ class ChannelOffsetAmplitudeFeature(BaseAWGChannelFeature):
 # Device & Channels
 ########################################################################################################################
 
-class TestAWG(BaseAWG):
+class TestAWGDevice(AWGDevice):
     def __init__(self, name: str):
         super().__init__(name)
 
@@ -115,8 +115,8 @@ class TestAWG(BaseAWG):
                 channel._set_channel_tuple(channel_tuple)
 
 
-class TestAWGChannelTuple(BaseAWGChannelTuple):
-    def __init__(self, idn: int, device: TestAWG, channels: Iterable["TestAWGChannel"]):
+class TestAWGChannelTuple(AWGChannelTuple):
+    def __init__(self, idn: int, device: TestAWGDevice, channels: Iterable["TestAWGChannel"]):
         super().__init__(idn)
 
         # Add feature to this object (self)
@@ -136,7 +136,7 @@ class TestAWGChannelTuple(BaseAWGChannelTuple):
         self._sample_rate = sample_rate
 
     @property
-    def device(self) -> TestAWG:
+    def device(self) -> TestAWGDevice:
         return self._device
 
     @property
@@ -149,8 +149,8 @@ class TestAWGChannelTuple(BaseAWGChannelTuple):
         return chr(ord('A') + self.idn)  # 0 -> 'A',  1 -> 'B',  2 -> 'C', ...
 
 
-class TestAWGChannel(BaseAWGChannel):
-    def __init__(self, idn: int, device: TestAWG):
+class TestAWGChannel(AWGChannel):
+    def __init__(self, idn: int, device: TestAWGDevice):
         super().__init__(idn)
 
         # Add feature to this object (self)
@@ -166,7 +166,7 @@ class TestAWGChannel(BaseAWGChannel):
         self._amplitude = 5.0
 
     @property
-    def device(self) -> TestAWG:
+    def device(self) -> TestAWGDevice:
         return self._device
 
     @property
@@ -196,7 +196,7 @@ class TestAWGChannel(BaseAWGChannel):
 class TestBaseClasses(unittest.TestCase):
     def setUp(self):
         self.device_name = "My device"
-        self.device = TestAWG(self.device_name)
+        self.device = TestAWGDevice(self.device_name)
 
     def test_Device(self):
         self.assertEqual(self.device.name, self.device_name, "Invalid name for device")

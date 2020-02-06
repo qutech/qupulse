@@ -1,9 +1,9 @@
 from collections import Callable
 
-from qupulse.hardware.awgs.base import BaseAWGChannelFeature
+from qupulse.hardware.awgs.base import AWGChannelFeature
 
 
-class ChannelAmplitudeOffsetFeature(BaseAWGChannelFeature):
+class ChannelAmplitudeOffsetFeature(AWGChannelFeature):
     def __init__(self, offset_get: Callable[[], float], offset_set: Callable[[float], None],
                  amp_get: Callable[[], float], amp_set: Callable[[float], None]):
         """Storing all callables, to call them if needed below"""

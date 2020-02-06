@@ -2,10 +2,10 @@ from collections import Callable
 
 import typing
 
-from qupulse.hardware.awgs.base import BaseAWGFeature
+from qupulse.hardware.awgs.base import AWGFeature
 
 
-class DeviceMirrorFeature(BaseAWGFeature):
+class DeviceMirrorFeature(AWGFeature):
     def __init__(self, main_instrument: Callable, mirrored_instruments: Callable,
                  all_devices: Callable):
         self._main_instrument = main_instrument

@@ -24,7 +24,7 @@ from qupulse.hardware.util import voltage_to_uint16, make_combined_wave, find_po
 from qupulse.hardware.awgs.old_base import AWGAmplitudeOffsetHandling
 from qupulse.hardware.awgs.base_features import FeatureAble
 
-from qupulse.hardware.awgs.base import BaseAWG, BaseAWGChannel, BaseAWGChannelTuple
+from qupulse.hardware.awgs.base import AWGDevice, AWGChannel, AWGChannelTuple
 
 
 # TODO: ???
@@ -540,7 +540,7 @@ class PlottableProgram:
 
 ########################################################################################################################
 
-class AWGDeviceTabor(BaseAWG):
+class AWGDeviceDeviceTabor(AWGDevice):
     def __init__(self, device_name: str, instr_addr=None, paranoia_level=1, external_trigger=False, reset=False,
                  mirror_addresses=()):
         """
@@ -567,8 +567,7 @@ class AWGDeviceTabor(BaseAWG):
 
         # TODO: Wird der Parametername wirklich noch benoetigt?
         # TODO: Startet i bei 1 oder 0?
-        # Wenn es doch bei 1 startet + 1 entfernen
-        self._channels = [AWGChannelTabor("test", i + 1, self) for i in range(4)]
+        self._channels = [AWGChannelTabor("test", i, self) for i in range(4)]
         self._channel_tuples = []
 
         # TODO: Braucht man den alten identifier noch?
@@ -590,19 +589,16 @@ class AWGDeviceTabor(BaseAWG):
     # New
     ###########################################################################################
     def cleanup(self) -> None:
-        for tuple in self._channel_tuples:
+        for channel_tuple in self._channel_tuples:
             # TODO: clear oder cleanup
-            tuple.cleanup()
+            channel_tuple.cleanup()
 
-
-    # Bearbeitet
     @property
-    def channels(self) -> Iterable["BaseAWGChannel"]:
+    def channels(self) -> Iterable["AWGChannel"]:
         return self._channels
 
-    # Bearbeitet
     @property
-    def channel_tuples(self) -> Iterable["BaseAWGChannelTuple"]:
+    def channel_tuples(self) -> Iterable["AWGChannelTuple"]:
         return self._channel_tuples
 
     # Old
@@ -841,8 +837,8 @@ TaborProgramMemory = NamedTuple('TaborProgramMemory', [('waveform_to_segment', n
 
 
 
-class AWGChannelTupleTabor(BaseAWGChannelTuple):
-    def __init__(self, idn: int, tabor_device: AWGDeviceTabor, channels: Iterable["AWGChannelTabor"]):
+class AWGChannelTupleTabor(AWGChannelTuple):
+    def __init__(self, idn: int, tabor_device: AWGDeviceDeviceTabor, channels: Iterable["AWGChannelTabor"]):
         # New
         ###########
         super().__init__(idn)
@@ -898,12 +894,12 @@ class AWGChannelTupleTabor(BaseAWGChannelTuple):
 
     # Bearbeitet
     @property
-    def device(self) -> BaseAWG:
+    def device(self) -> AWGDevice:
         return self._device()
 
     # Bearbeitet
     @property
-    def channels(self) -> Iterable["BaseAWGChannel"]:
+    def channels(self) -> Iterable["AWGChannel"]:
         return self._channels
 
     # Old
@@ -1497,11 +1493,11 @@ class AWGChannelTupleTabor(BaseAWGChannelTuple):
 
 
 
-class AWGChannelTabor(BaseAWGChannel):
+class AWGChannelTabor(AWGChannel):
     # Union aus String und Int in der alten Darstellung
 
     # TODO: doppelter identifier wegen identifier des alten ChannelPairs + Marker
-    def __init__(self, name: str, idn: int, tabor_device: AWGDeviceTabor, marker=False):
+    def __init__(self, name: str, idn: int, tabor_device: AWGDeviceDeviceTabor, marker=False):
         super().__init__(idn)
 
         self.add_feature(
@@ -1542,11 +1538,11 @@ class AWGChannelTabor(BaseAWGChannel):
         pass
 
     @property
-    def device(self) -> BaseAWG:
+    def device(self) -> AWGDevice:
         return self._device
 
     @property
-    def channel_tuple(self) -> Optional[BaseAWGChannelTuple]:
+    def channel_tuple(self) -> Optional[AWGChannelTuple]:
         return self._channel_tuple
 
     def _set_channel_tuple(self, channel_tuple) -> None:
@@ -1570,7 +1566,7 @@ class TaborUndefinedState(TaborException):
         self.device = device
 
     def reset_device(self):
-        if isinstance(self.device, AWGDeviceTabor):
+        if isinstance(self.device, AWGDeviceDeviceTabor):
             self.device.reset()
         elif isinstance(self.device, AWGChannelTupleTabor):
             self.device.clear()
