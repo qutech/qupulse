@@ -29,7 +29,7 @@ from qupulse.utils.types import ChannelID, TimeType
 from qupulse.utils import replace_multiple
 from qupulse._program.waveforms import Waveform
 from qupulse._program._loop import Loop
-from qupulse.hardware.awgs.base import ProgramEntry
+from qupulse.hardware.awgs.old_base import ProgramEntry
 
 try:
     import zhinst.utils
