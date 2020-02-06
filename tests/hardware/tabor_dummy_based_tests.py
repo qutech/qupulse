@@ -210,7 +210,7 @@ class TaborChannelPairTests(TaborDummyBasedTest):
         program_mock = mock.Mock(TaborProgram)
         program_memory = TaborProgramMemory(waveform_to_segment=np.array([1, 4]), program=program_mock)
 
-        expected_commands = [':ASEQ:DEF 2,2,5,0', ':SEQ:SEL 2', ':SEQ:DEF 1,2,10,0']
+        expected_commands = {':ASEQ:DEF 2,2,5,0', ':SEQ:SEL 2', ':SEQ:DEF 1,2,10,0'}
 
         channel_pair._known_programs['active_program'] = program_memory
         channel_pair._known_programs['other_program'] = program_memory
@@ -223,7 +223,11 @@ class TaborChannelPairTests(TaborDummyBasedTest):
                 update_prog.assert_called_once_with(parameters)
 
                 channel_pair.set_volatile_parameters('active_program', parameters)
-                ex_com.assert_called_once_with(expected_commands)
+                ex_com.assert_called_once()
+                actual_commands, = ex_com.call_args.args
+                self.assertEqual(expected_commands, set(actual_commands))
+                self.assertEqual(len(expected_commands), len(actual_commands))
+
                 assert update_prog.call_count == 2
                 update_prog.assert_called_with(parameters)
 

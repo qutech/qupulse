@@ -3,6 +3,7 @@ from unittest import TestCase, mock
 import time
 from more_itertools import take
 from itertools import zip_longest
+import sys
 
 import numpy as np
 
@@ -659,6 +660,7 @@ class UserRegisterManagerTest(unittest.TestCase):
 
 
 class HDAWGProgramManagerTest(unittest.TestCase):
+    @unittest.skipIf(sys.version_info.minor < 6, "This test requires dict to be ordered.")
     def test_full_run(self):
         defined_channels = frozenset(['A', 'B', 'C'])
 
