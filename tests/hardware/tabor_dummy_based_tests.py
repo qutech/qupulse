@@ -9,8 +9,9 @@ from copy import copy, deepcopy
 import numpy as np
 
 from qupulse.hardware.awgs.base import AWGAmplitudeOffsetHandling
-from qupulse.hardware.awgs.tabor import TaborProgram, TaborAWGRepresentation
-from qupulse._program.tabor import TableDescription, TimeType
+from qupulse.hardware.awgs.tabor import TaborProgram, TaborAWGRepresentation, TaborProgramMemory
+from qupulse._program.tabor import TableDescription, TimeType, TableEntry
+from qupulse.pulses.parameters import ConstantParameter
 from tests.hardware.dummy_modules import import_package
 
 
@@ -198,7 +199,48 @@ class TaborChannelPairTests(TaborDummyBasedTest):
         super().setUp()
 
     def test_set_volatile_parameters(self):
-        raise NotImplementedError()
+        channel_pair = self.TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
+
+        parameters = {'var': ConstantParameter(2)}
+        modifications = {1: TableEntry(repetition_count=5, element_number=1, jump_flag=0),
+                         (0, 1): TableDescription(repetition_count=10, element_id=0, jump_flag=0)}
+        invalid_modification = {1: TableEntry(repetition_count=0, element_number=1, jump_flag=0)}
+        no_modifications = {}
+
+        program_mock = mock.Mock(TaborProgram)
+        program_memory = TaborProgramMemory(waveform_to_segment=np.array([1, 4]), program=program_mock)
+
+        expected_commands = [':ASEQ:DEF 2,2,5,0', ':SEQ:SEL 2', ':SEQ:DEF 1,2,10,0']
+
+        channel_pair._known_programs['active_program'] = program_memory
+        channel_pair._known_programs['other_program'] = program_memory
+        channel_pair._current_program = 'active_program'
+
+        with mock.patch.object(program_mock, 'update_volatile_parameters', return_value=modifications) as update_prog:
+            with mock.patch.object(channel_pair, '_execute_multiple_commands_with_config_guard') as ex_com:
+                channel_pair.set_volatile_parameters('other_program', parameters)
+                ex_com.assert_not_called()
+                update_prog.assert_called_once_with(parameters)
+
+                channel_pair.set_volatile_parameters('active_program', parameters)
+                ex_com.assert_called_once_with(expected_commands)
+                assert update_prog.call_count == 2
+                update_prog.assert_called_with(parameters)
+
+        with mock.patch.object(program_mock, 'update_volatile_parameters', return_value=no_modifications) as update_prog:
+            with mock.patch.object(channel_pair, '_execute_multiple_commands_with_config_guard') as ex_com:
+                channel_pair.set_volatile_parameters('active_program', parameters)
+
+                ex_com.assert_not_called()
+                update_prog.assert_called_once_with(parameters)
+
+        with mock.patch.object(program_mock, 'update_volatile_parameters', return_value=invalid_modification) as update_prog:
+            with mock.patch.object(channel_pair, '_execute_multiple_commands_with_config_guard') as ex_com:
+                with self.assertRaises(ValueError):
+                    channel_pair.set_volatile_parameters('active_program', parameters)
+
+                ex_com.assert_not_called()
+                update_prog.assert_called_once_with(parameters)
 
     def test_copy(self):
         channel_pair = self.TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))

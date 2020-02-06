@@ -694,15 +694,15 @@ class TaborChannelPair(AWG):
         self.cleanup()
 
     @with_configuration_guard
-    def _execute_multiple_commands_with_config_guard(self, commands: List[str]):
+    def _execute_multiple_commands_with_config_guard(self, commands: List[str]) -> None:
         cmd_str = ";".join(commands)
         self.device.send_cmd(cmd_str)
 
-    @with_configuration_guard
     def set_volatile_parameters(self, program_name: str, parameters: Mapping[str, Parameter]) -> None:
         """Set the values of parameters which were marked as volatile on program creation."""
         # TODO: Add documentation, increase readability
-        # When changing the tables of current program use guarded mode as it gives way smaller blips and seems to be faster
+        # When changing the tables of current program use guarded mode as it gives way smaller blips
+        # But it is slower however (184 ms vs 47 ms)
 
         waveform_to_segment_index, program = self._known_programs[program_name]
 
@@ -714,6 +714,7 @@ class TaborChannelPair(AWG):
             self.logger.info("There are no volatile parameters to update. Either there are no volatile parameters with "
                              "these names,\nthe respective repetition counts already have the given values or the "
                              "volatile parameters were dropped during upload.")
+            return
 
         if program_name == self._current_program:
             commands = []
