@@ -198,6 +198,17 @@ class TaborChannelPairTests(TaborDummyBasedTest):
     def setUp(self):
         super().setUp()
 
+    def test__execute_multiple_commands_with_config_guard(self):
+        channel_pair = self.TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
+        # prevent entering and exiting configuration mode
+        channel_pair._configuration_guard_count = 2
+
+        given_commands = [':ASEQ:DEF 2,2,5,0', ':SEQ:SEL 2', ':SEQ:DEF 1,2,10,0']
+        expected_command = ':ASEQ:DEF 2,2,5,0;:SEQ:SEL 2;:SEQ:DEF 1,2,10,0'
+        with mock.patch.object(channel_pair.device, 'send_cmd') as send_cmd:
+            channel_pair._execute_multiple_commands_with_config_guard(given_commands)
+            send_cmd.assert_called_once_with(expected_command)
+
     def test_set_volatile_parameters(self):
         channel_pair = self.TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
 
