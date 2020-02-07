@@ -7,8 +7,9 @@ import os
 import pytabor
 import numpy as np
 
-from qupulse.hardware.awgs.tabor import TaborAWGRepresentation, TaborException, TaborSegment, TaborChannelPair, PlottableProgram
-
+from qupulse.hardware.awgs.tabor import TaborAWGRepresentation, TaborChannelPair
+from qupulse._program.tabor import TaborSegment, PlottableProgram, TaborException, TableDescription, TableEntry
+from typing import List, Tuple, Optional, Any
 
 class TaborSimulatorManager:
     def __init__(self,
@@ -99,6 +100,16 @@ class TaborSimulatorBasedTest(unittest.TestCase):
         self.instrument.reset()
         self.simulator_manager.disconnect()
 
+    @staticmethod
+    def to_new_sequencer_tables(sequencer_tables: List[List[Tuple[int, int, int]]]
+                                ) -> List[List[Tuple[TableDescription, Optional[Any]]]]:
+        return [[(TableDescription(*entry), None) for entry in sequencer_table]
+                for sequencer_table in sequencer_tables]
+
+    @staticmethod
+    def to_new_advanced_sequencer_table(advanced_sequencer_table: List[Tuple[int, int, int]]) -> List[TableDescription]:
+        return [TableDescription(*entry) for entry in advanced_sequencer_table]
+
 
 class TaborAWGRepresentationTests(TaborSimulatorBasedTest):
     def __init__(self, *args, **kwargs):
@@ -160,16 +171,19 @@ class TaborMemoryReadTests(TaborSimulatorBasedTest):
         zero = np.ones(192, dtype=np.uint16) * 2**13
         sine = ((np.sin(np.linspace(0, 2*np.pi, 192+64)) + 1) / 2 * (2**14 - 1)).astype(np.uint16)
 
-        self.segments = [TaborSegment(ramp_up, ramp_up, None, None),
-                         TaborSegment(ramp_down, zero, None, None),
-                         TaborSegment(sine, sine, None, None)]
+        self.segments = [TaborSegment.from_sampled(ramp_up, ramp_up, None, None),
+                         TaborSegment.from_sampled(ramp_down, zero, None, None),
+                         TaborSegment.from_sampled(sine, sine, None, None)]
 
-        self.zero_segment = TaborSegment(zero, zero, None, None)
+        self.zero_segment = TaborSegment.from_sampled(zero, zero, None, None)
 
         # program 1
-        self.sequence_tables = [[(10, 0, 0), (10, 1, 0), (10, 0, 0), (10, 1, 0)],
-                                [(1, 0, 0), (1, 1, 0), (1, 0, 0), (1, 1, 0)]]
+        self.sequence_tables_raw = [[(10, 0, 0), (10, 1, 0), (10, 0, 0), (10, 1, 0)],
+                                    [(1, 0, 0), (1, 1, 0), (1, 0, 0), (1, 1, 0)]]
         self.advanced_sequence_table = [(1, 1, 0), (1, 2, 0)]
+
+        self.sequence_tables = self.to_new_sequencer_tables(self.sequence_tables_raw)
+        self.advanced_sequence_table = self.to_new_advanced_sequencer_table(self.advanced_sequence_table)
 
         self.channel_pair = TaborChannelPair(self.instrument, (1, 2), 'tabor_unit_test')
 
@@ -215,13 +229,13 @@ class TaborMemoryReadTests(TaborSimulatorBasedTest):
 
         sequence_tables = self.channel_pair.read_sequence_tables()
 
-        actual_sequece_tables = [self.channel_pair._idle_sequence_table] + [[(rep, index+2, jump)
+        actual_sequence_tables = [self.channel_pair._idle_sequence_table] + [[(rep, index+2, jump)
                                                                              for rep, index, jump in table]
-                                                                            for table in self.sequence_tables]
+                                                                             for table in self.sequence_tables_raw]
 
         expected = list(tuple(np.asarray(d)
                               for d in zip(*table))
-                        for table in actual_sequece_tables)
+                        for table in actual_sequence_tables)
 
         np.testing.assert_equal(sequence_tables, expected)
 
