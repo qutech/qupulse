@@ -9,6 +9,7 @@ import numpy as np
 
 from qupulse.hardware.awgs.tabor import TaborAWGRepresentation, TaborChannelPair
 from qupulse._program.tabor import TaborSegment, PlottableProgram, TaborException, TableDescription, TableEntry
+from qupulse.pulses.parameters import ConstantParameter
 from typing import List, Tuple, Optional, Any
 
 class TaborSimulatorManager:
@@ -197,6 +198,12 @@ class TaborMemoryReadTests(TaborSimulatorBasedTest):
             def get_advanced_sequencer_table():
                 return advanced_sequencer_table
 
+            @staticmethod
+            def update_volatile_parameters(parameters):
+                modifications = {1: TableEntry(repetition_count=5, element_number=2, jump_flag=0),
+                                 (0, 1): TableDescription(repetition_count=50, element_id=1, jump_flag=0)}
+                return modifications
+
             markers = (None, None)
             channels = (1, 2)
 
@@ -249,4 +256,31 @@ class TaborMemoryReadTests(TaborSimulatorBasedTest):
                         for d in zip(*actual_advanced_table))
 
         advanced_table = self.channel_pair.read_advanced_sequencer_table()
+        np.testing.assert_equal(advanced_table, expected)
+
+    def test_set_volatile_parameter(self):
+        self.channel_pair._amend_segments(self.segments)
+        self.arm_program(self.sequence_tables, self.advanced_sequence_table, None, np.asarray([1, 2]))
+
+        para = {'a': ConstantParameter(5)}
+        actual_sequence_tables = [self.channel_pair._idle_sequence_table] + [[(rep, index + 2, jump)
+                                                                              for rep, index, jump in table]
+                                                                             for table in self.sequence_tables_raw]
+
+        actual_advanced_table = [(1, 1, 1)] + [(rep, idx + 1, jmp) for rep, idx, jmp in self.advanced_sequence_table]
+
+        self.channel_pair.set_volatile_parameters('dummy_program', parameters=para)
+
+        actual_sequence_tables[1][1] = (50, 3, 0)
+        actual_advanced_table[2] = (5, 3, 0)
+
+        sequence_table = self.channel_pair.read_sequence_tables()
+        expected = list(tuple(np.asarray(d)
+                              for d in zip(*table))
+                        for table in actual_sequence_tables)
+        np.testing.assert_equal(sequence_table, expected)
+
+        advanced_table = self.channel_pair.read_advanced_sequencer_table()
+        expected = list(np.asarray(d)
+                        for d in zip(*actual_advanced_table))
         np.testing.assert_equal(advanced_table, expected)
