@@ -335,3 +335,30 @@ else:
         """Fallback for typing.Collection if python 3.5
         copied from https://github.com/python/cpython/blob/3.5/Lib/typing.py"""
         __slots__ = ()
+
+
+class FrozenDict(collections.Mapping):
+    def __init__(self, *args, **kwargs):
+        self._dict = collections.OrderedDict(*args, **kwargs)
+        self._hash = functools.reduce(int.__xor__, map(hash, self._dict.items()))
+
+    def __getitem__(self, item):
+        return self._dict[item]
+
+    def __contains__(self, item):
+        return item in self._dict
+
+    def __iter__(self):
+        return iter(self._dict)
+
+    def __len__(self):
+        return len(self._dict)
+
+    def __repr__(self):
+        return '<%s %r>' % (self.__class__.__name__, self._dict)
+
+    def __hash__(self):
+        return self._hash
+
+    def __eq__(self, other):
+        return other == self._dict
