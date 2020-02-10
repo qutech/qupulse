@@ -334,10 +334,23 @@ class TaborChannelPair(AWG):
         self._sequencer_tables = None
         self._advanced_sequence_table = None
 
+        self._internal_paranoia_level = 0
+
         self.clear()
 
+    @property
+    def internal_paranoia_level(self) -> Optional[int]:
+        return self._internal_paranoia_level
+
+    @internal_paranoia_level.setter
+    def internal_paranoia_level(self, paranoia_level: Optional[int]):
+        """ Sets the paranoia level with which commands from within methods are called """
+        assert paranoia_level in (None, 0, 1, 2)
+        self._internal_paranoia_level = paranoia_level
+
     def select(self) -> None:
-        self.device.send_cmd(':INST:SEL {}'.format(self._channels[0]))
+        self.device.send_cmd(':INST:SEL {}'.format(self._channels[0]),
+                             paranoia_level=self.internal_paranoia_level)
 
     @property
     def total_capacity(self) -> int:
@@ -390,9 +403,9 @@ class TaborChannelPair(AWG):
         waveforms = []
         uploaded_waveform_indices = np.flatnonzero(self._segment_references) + 1
         for segment in uploaded_waveform_indices:
-            device.send_cmd(':TRAC:SEL {}'.format(segment))
+            device.send_cmd(':TRAC:SEL {}'.format(segment), paranoia_level=self.internal_paranoia_level)
             waveforms.append(device.read_act_seg_dat())
-        device.send_cmd(':TRAC:SEL {}'.format(old_segment))
+        device.send_cmd(':TRAC:SEL {}'.format(old_segment), paranoia_level=self.internal_paranoia_level)
         return waveforms
 
     @with_select
@@ -403,9 +416,9 @@ class TaborChannelPair(AWG):
         sequences = []
         uploaded_sequence_indices = np.arange(len(self._sequencer_tables)) + 1
         for sequence in uploaded_sequence_indices:
-            device.send_cmd(':SEQ:SEL {}'.format(sequence))
+            device.send_cmd(':SEQ:SEL {}'.format(sequence), paranoia_level=self.internal_paranoia_level)
             sequences.append(device.read_sequencer_table())
-        device.send_cmd(':SEQ:SEL {}'.format(old_sequence))
+        device.send_cmd(':SEQ:SEL {}'.format(old_sequence), paranoia_level=self.internal_paranoia_level)
         return sequences
 
     @with_select
@@ -497,13 +510,13 @@ class TaborChannelPair(AWG):
     def clear(self) -> None:
         """Delete all segments and clear memory"""
         self.device.select_channel(self._channels[0])
-        self.device.send_cmd(':TRAC:DEL:ALL')
-        self.device.send_cmd(':SOUR:SEQ:DEL:ALL')
-        self.device.send_cmd(':ASEQ:DEL')
+        self.device.send_cmd(':TRAC:DEL:ALL', paranoia_level=self.internal_paranoia_level)
+        self.device.send_cmd(':SOUR:SEQ:DEL:ALL', paranoia_level=self.internal_paranoia_level)
+        self.device.send_cmd(':ASEQ:DEL', paranoia_level=self.internal_paranoia_level)
 
-        self.device.send_cmd(':TRAC:DEF 1, 192')
-        self.device.send_cmd(':TRAC:SEL 1')
-        self.device.send_cmd(':TRAC:MODE COMB')
+        self.device.send_cmd(':TRAC:DEF 1, 192', paranoia_level=self.internal_paranoia_level)
+        self.device.send_cmd(':TRAC:SEL 1', paranoia_level=self.internal_paranoia_level)
+        self.device.send_cmd(':TRAC:MODE COMB', paranoia_level=self.internal_paranoia_level)
         self.device.send_binary_data(pref=':TRAC:DATA', bin_dat=self._idle_segment.get_as_binary())
 
         self._segment_lengths = 192*np.ones(1, dtype=np.uint32)
@@ -610,12 +623,13 @@ class TaborChannelPair(AWG):
 
         segment_no = segment_index + 1
 
-        self.device.send_cmd(':TRAC:DEF {}, {}'.format(segment_no, segment.num_points))
+        self.device.send_cmd(':TRAC:DEF {}, {}'.format(segment_no, segment.num_points),
+                             paranoia_level=self.internal_paranoia_level)
         self._segment_lengths[segment_index] = segment.num_points
 
-        self.device.send_cmd(':TRAC:SEL {}'.format(segment_no))
+        self.device.send_cmd(':TRAC:SEL {}'.format(segment_no), paranoia_level=self.internal_paranoia_level)
 
-        self.device.send_cmd(':TRAC:MODE COMB')
+        self.device.send_cmd(':TRAC:MODE COMB', paranoia_level=self.internal_paranoia_level)
         wf_data = segment.get_as_binary()
 
         self.device.send_binary_data(pref=':TRAC:DATA', bin_dat=wf_data)
@@ -632,9 +646,12 @@ class TaborChannelPair(AWG):
 
         segment_index = len(self._segment_capacity)
         first_segment_number = segment_index + 1
-        self.device.send_cmd(':TRAC:DEF {},{}'.format(first_segment_number, trac_len))
-        self.device.send_cmd(':TRAC:SEL {}'.format(first_segment_number))
-        self.device.send_cmd(':TRAC:MODE COMB')
+        self.device.send_cmd(':TRAC:DEF {},{}'.format(first_segment_number, trac_len),
+                             paranoia_level=self.internal_paranoia_level)
+        self.device.send_cmd(':TRAC:SEL {}'.format(first_segment_number),
+                             paranoia_level=self.internal_paranoia_level)
+        self.device.send_cmd(':TRAC:MODE COMB',
+                             paranoia_level=self.internal_paranoia_level)
         self.device.send_binary_data(pref=':TRAC:DATA', bin_dat=wf_data)
 
         old_to_update = np.count_nonzero(self._segment_capacity != self._segment_lengths)
@@ -645,14 +662,16 @@ class TaborChannelPair(AWG):
         if len(segments) < old_to_update:
             for i, segment in enumerate(segments):
                 current_segment_number = first_segment_number + i
-                self.device.send_cmd(':TRAC:DEF {},{}'.format(current_segment_number, segment.num_points))
+                self.device.send_cmd(':TRAC:DEF {},{}'.format(current_segment_number, segment.num_points),
+                                     paranoia_level=self.internal_paranoia_level)
         else:
             # flush the capacity
             self.device.download_segment_lengths(segment_capacity)
 
             # update non fitting lengths
             for i in np.flatnonzero(segment_capacity != segment_lengths):
-                self.device.send_cmd(':TRAC:DEF {},{}'.format(i+1, segment_lengths[i]))
+                self.device.send_cmd(':TRAC:DEF {},{}'.format(i+1, segment_lengths[i]),
+                                     paranoia_level=self.internal_paranoia_level)
 
         self._segment_capacity = segment_capacity
         self._segment_lengths = segment_lengths
@@ -678,7 +697,8 @@ class TaborChannelPair(AWG):
             chunk_size = 10
             for chunk_start in range(new_end, old_end, chunk_size):
                 self.device.send_cmd('; '.join('TRAC:DEL {}'.format(i+1)
-                                               for i in range(chunk_start, min(chunk_start+chunk_size, old_end))))
+                                               for i in range(chunk_start, min(chunk_start+chunk_size, old_end))),
+                                     paranoia_level=self.internal_paranoia_level)
         except Exception as e:
             raise TaborUndefinedState('Error during cleanup. Device is in undefined state.', device=self) from e
 
@@ -695,14 +715,26 @@ class TaborChannelPair(AWG):
 
     @with_configuration_guard
     def _execute_multiple_commands_with_config_guard(self, commands: List[str]) -> None:
+        """ Joins the given commands into one and executes it with configuration guard.
+
+        Args:
+            commands: Commands that should be executed.
+        """
         cmd_str = ";".join(commands)
-        self.device.send_cmd(cmd_str)
+        self.device.send_cmd(cmd_str, paranoia_level=self.internal_paranoia_level)
 
     def set_volatile_parameters(self, program_name: str, parameters: Mapping[str, Parameter]) -> None:
-        """Set the values of parameters which were marked as volatile on program creation."""
-        # TODO: Add documentation, increase readability
-        # When changing the tables of current program use guarded mode as it gives way smaller blips
-        # But it is slower however (184 ms vs 47 ms)
+        """ Set the values of parameters which were marked as volatile on program creation. Sets volatile parameters
+        in program memory and device's (adv.) sequence tables if program is current program.
+
+        If set_volatile_parameters needs to run faster, set CONFIG_MODE_PARANOIA_LEVEL to 0 which causes the device to
+        enter the configuration mode with paranoia level 0 (Note: paranoia level 0 does not work for the simulator)
+        and set device._is_coupled.
+
+        Args:
+            program_name: Name of program which should be changed.
+            parameters: Names of volatile parameters and respective values to which they should be set.
+        """
 
         waveform_to_segment_index, program = self._known_programs[program_name]
 
@@ -742,16 +774,16 @@ class TaborChannelPair(AWG):
             channel=self._channels[0],
             marker=(1, 2)[marker],
             active='ON' if active else 'OFF')
-        self.device.send_cmd(command_string)
+        self.device.send_cmd(command_string, paranoia_level=self.internal_paranoia_level)
 
     def set_channel_state(self, channel, active) -> None:
         command_string = ':INST:SEL {}; :OUTP {}'.format(self._channels[channel], 'ON' if active else 'OFF')
-        self.device.send_cmd(command_string)
+        self.device.send_cmd(command_string, paranoia_level=self.internal_paranoia_level)
 
     @with_select
     def arm(self, name: str) -> None:
         if self._current_program == name:
-            self.device.send_cmd('SEQ:SEL 1')
+            self.device.send_cmd('SEQ:SEL 1', paranoia_level=self.internal_paranoia_level)
         else:
             self.change_armed_program(name)
 
@@ -798,17 +830,17 @@ class TaborChannelPair(AWG):
             advanced_sequencer_table.append((1, 1, 0))
 
         # reset sequencer and advanced sequencer tables to fix bug which occurs when switching between some programs
-        self.device.send_cmd('SEQ:DEL:ALL')
+        self.device.send_cmd('SEQ:DEL:ALL', paranoia_level=self.internal_paranoia_level)
         self._sequencer_tables = []
-        self.device.send_cmd('ASEQ:DEL')
+        self.device.send_cmd('ASEQ:DEL', paranoia_level=self.internal_paranoia_level)
         self._advanced_sequence_table = []
 
         # download all sequence tables
         for i, sequencer_table in enumerate(sequencer_tables):
-            self.device.send_cmd('SEQ:SEL {}'.format(i+1))
+            self.device.send_cmd('SEQ:SEL {}'.format(i+1), paranoia_level=self.internal_paranoia_level)
             self.device.download_sequencer_table(sequencer_table)
         self._sequencer_tables = sequencer_tables
-        self.device.send_cmd('SEQ:SEL 1')
+        self.device.send_cmd('SEQ:SEL 1', paranoia_level=self.internal_paranoia_level)
 
         self.device.download_adv_seq_table(advanced_sequencer_table)
         self._advanced_sequence_table = advanced_sequencer_table
@@ -818,7 +850,7 @@ class TaborChannelPair(AWG):
     @with_select
     def run_current_program(self) -> None:
         if self._current_program:
-            self.device.send_cmd(':TRIG')
+            self.device.send_cmd(':TRIG', paranoia_level=self.internal_paranoia_level)
         else:
             raise RuntimeError('No program active')
 
@@ -841,8 +873,8 @@ class TaborChannelPair(AWG):
 
     def _enter_config_mode(self) -> None:
         """Enter the configuration mode if not already in. All outputs are set to the DC offset of the device and the
-        sequencing is disabled. The manual states this speeds up sequence validation when uploading multiple
-        sequences."""
+        sequencing is disabled. The manual states this speeds up sequence validation when uploading multiple sequences.
+        When entering and leaving the configuration mode the AWG outputs a small (~60 mV in 4 V mode) blip."""
         if self._is_in_config_mode is False:
 
             # 1. Select channel pair

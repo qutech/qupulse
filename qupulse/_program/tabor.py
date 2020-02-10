@@ -515,10 +515,11 @@ class TaborProgram(ProgramEntry):
 
     def update_volatile_parameters(self, parameters: Mapping[str, Parameter]) -> Mapping[Union[int, Tuple[int, int]],
                                                                                          Union[TableEntry, TableDescription]]:
-        """
+        """ Set the values of parameters which were marked as volatile on program creation. Sets volatile parameters
+        in program memory.
 
         Args:
-            parameters:
+            parameters: Name of volatile parameters and respective values to which they should be set.
 
         Returns:
             Mapping position of change -> (new repetition value, element_num/id, jump flag)

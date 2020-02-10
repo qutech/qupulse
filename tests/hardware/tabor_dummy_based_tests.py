@@ -198,6 +198,17 @@ class TaborChannelPairTests(TaborDummyBasedTest):
     def setUp(self):
         super().setUp()
 
+    def test__execute_multiple_commands_with_config_guard(self):
+        channel_pair = self.TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
+        # prevent entering and exiting configuration mode
+        channel_pair._configuration_guard_count = 2
+
+        given_commands = [':ASEQ:DEF 2,2,5,0', ':SEQ:SEL 2', ':SEQ:DEF 1,2,10,0']
+        expected_command = ':ASEQ:DEF 2,2,5,0;:SEQ:SEL 2;:SEQ:DEF 1,2,10,0'
+        with mock.patch.object(channel_pair.device, 'send_cmd') as send_cmd:
+            channel_pair._execute_multiple_commands_with_config_guard(given_commands)
+            send_cmd.assert_called_once_with(expected_command, paranoia_level=channel_pair.internal_paranoia_level)
+
     def test_set_volatile_parameters(self):
         channel_pair = self.TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
 
@@ -526,7 +537,7 @@ class TaborChannelPairTests(TaborDummyBasedTest):
                              ':TRAC:DEF 3, 208',
                              ':TRAC:SEL 3',
                              ':TRAC:MODE COMB']
-        expected_log = [((), dict(cmd_str=cmd, paranoia_level=None))
+        expected_log = [((), dict(cmd_str=cmd, paranoia_level=channel_pair.internal_paranoia_level))
                         for cmd in expected_commands]
         self.assertAllCommandLogsEqual(expected_log)
 
@@ -572,7 +583,7 @@ class TaborChannelPairTests(TaborDummyBasedTest):
                              ':TRAC:SEL 5',
                              ':TRAC:MODE COMB',
                              ':TRAC:DEF 3,208']
-        expected_log = [((), dict(cmd_str=cmd, paranoia_level=None))
+        expected_log = [((), dict(cmd_str=cmd, paranoia_level=channel_pair.internal_paranoia_level))
                         for cmd in expected_commands]
         self.assertAllCommandLogsEqual(expected_log)
         #self.assertEqual(expected_log, instrument.main_instrument.logged_commands)
@@ -622,7 +633,7 @@ class TaborChannelPairTests(TaborDummyBasedTest):
                              ':TRAC:MODE COMB',
                              ':TRAC:DEF 5,192',
                              ':TRAC:DEF 6,192']
-        expected_log = [((), dict(cmd_str=cmd, paranoia_level=None))
+        expected_log = [((), dict(cmd_str=cmd, paranoia_level=channel_pair.internal_paranoia_level))
                         for cmd in expected_commands]
         self.assertAllCommandLogsEqual(expected_log)
 
