@@ -6,6 +6,7 @@ import fractions
 import functools
 import warnings
 import collections
+import operator
 
 import numpy
 
@@ -337,10 +338,10 @@ else:
         __slots__ = ()
 
 
-class FrozenDict(collections.Mapping):
+class FrozenDict(typing.Mapping):
     def __init__(self, *args, **kwargs):
         self._dict = collections.OrderedDict(*args, **kwargs)
-        self._hash = functools.reduce(int.__xor__, map(hash, self._dict.items()))
+        self._hash = None
 
     def __getitem__(self, item):
         return self._dict[item]
@@ -358,6 +359,8 @@ class FrozenDict(collections.Mapping):
         return '<%s %r>' % (self.__class__.__name__, self._dict)
 
     def __hash__(self):
+        if self._hash is None:
+            self._hash = functools.reduce(operator.xor, map(hash, self._dict.items()))
         return self._hash
 
     def __eq__(self, other):
