@@ -1,4 +1,4 @@
-from typing import Optional, List, Tuple, Union, Dict, Set
+from typing import Optional, List, Tuple, Union, Dict, Set, Mapping
 from numbers import Real
 import itertools
 
@@ -23,11 +23,11 @@ class MeasurementDefiner:
                 raise ValueError('Measurement window length may not be negative')
 
     def get_measurement_windows(self,
-                                parameters: Dict[str, Real],
+                                parameters: Mapping[str, Real],
                                 measurement_mapping: Dict[str, Optional[str]]) -> List[MeasurementWindow]:
         """Calculate measurement windows with the given parameter set and rename them woth the measurement mapping"""
-        def get_val(v):
-            return v.evaluate_numeric(**parameters)
+        def get_val(v: Expression):
+            return v.evaluate_in_scope(parameters)
 
         resulting_windows = [(measurement_mapping[name], get_val(begin), get_val(length))
                              for name, begin, length in self._measurement_windows

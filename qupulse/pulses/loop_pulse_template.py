@@ -213,30 +213,22 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
                                  parent_loop: Loop) -> None:
         self.validate_scope(scope=scope)
 
-        try:
-            measurement_parameters = {parameter_name: parameters[parameter_name].get_value()
-                                      for parameter_name in self.measurement_parameters}
-            duration_parameters = {parameter_name: parameters[parameter_name].get_value()
-                                      for parameter_name in self.duration.variables}
-        except KeyError as e:
-            raise ParameterNotProvidedException(str(e)) from e
-
         if self.duration.evaluate_in_scope(scope) > 0:
-            measurements = self.get_measurement_windows(measurement_parameters, measurement_mapping)
+            measurements = self.get_measurement_windows(scope, measurement_mapping)
             if measurements:
                 parent_loop.add_measurements(measurements)
 
-            for local_parameters in self._body_parameter_generator(parameters, forward=True):
-                self.body._create_program(parameters=local_parameters,
+            for local_scope in self._body_scope_generator(scope, forward=True):
+                self.body._create_program(scope=local_scope,
                                           measurement_mapping=measurement_mapping,
                                           channel_mapping=channel_mapping,
                                           global_transformation=global_transformation,
                                           to_single_waveform=to_single_waveform,
                                           parent_loop=parent_loop)
 
-    def build_waveform(self, parameters: Dict[str, Parameter]) -> ForLoopWaveform:
-        return ForLoopWaveform([self.body.build_waveform(local_parameters)
-                                for local_parameters in self._body_parameter_generator(parameters, forward=True)])
+    def build_waveform(self, parameter_scope: Scope) -> ForLoopWaveform:
+        return ForLoopWaveform([self.body.build_waveform(local_scope)
+                                for local_scope in self._body_scope_generator(parameter_scope, forward=True)])
 
     def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
         data = super().get_serialization_data(serializer)
