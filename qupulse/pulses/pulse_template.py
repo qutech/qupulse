@@ -61,12 +61,6 @@ class PulseTemplate(Serializable, metaclass=DocStringABCMeta):
 
     @property
     @abstractmethod
-    def is_interruptable(self) -> bool:
-        """Return true, if this PulseTemplate contains points at which it can halt if interrupted.
-        """
-
-    @property
-    @abstractmethod
     def duration(self) -> ExpressionScalar:
         """An expression for the duration of this PulseTemplate."""
 
@@ -281,9 +275,6 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
                  measurements: Optional[List[MeasurementDeclaration]]):
         PulseTemplate.__init__(self, identifier=identifier)
         MeasurementDefiner.__init__(self, measurements=measurements)
-
-    def is_interruptable(self) -> bool:
-        return False
 
     @property
     def atomicity(self) -> bool:

@@ -205,10 +205,6 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
         return self.table_parameters | self.measurement_parameters | self.constrained_parameters
 
     @property
-    def is_interruptable(self) -> bool:
-        return False
-
-    @property
     def duration(self) -> ExpressionScalar:
         return self._duration
 

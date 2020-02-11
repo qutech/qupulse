@@ -113,10 +113,6 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
     def subtemplates(self) -> List[MappingPulseTemplate]:
         return self.__subtemplates
 
-    @property
-    def is_interruptable(self) -> bool:
-        return any(st.is_interruptable for st in self.subtemplates)
-
     @cached_property
     def duration(self) -> Expression:
         return sum(sub.duration for sub in self.__subtemplates)

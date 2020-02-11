@@ -272,10 +272,6 @@ class ParallelConstantChannelPulseTemplate(PulseTemplate):
         return self.template.duration
 
     @property
-    def is_interruptable(self) -> bool:
-        return self.template.is_interruptable
-
-    @property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
         integral = self._template.integral
 

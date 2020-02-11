@@ -84,10 +84,6 @@ class FunctionPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
         return self.function_parameters | self.measurement_parameters | self.constrained_parameters
 
     @property
-    def is_interruptable(self) -> bool:
-        return False
-
-    @property
     def defined_channels(self) -> Set[ChannelID]:
         return {self.__channel}
 

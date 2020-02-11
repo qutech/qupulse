@@ -40,10 +40,6 @@ class LoopPulseTemplate(PulseTemplate):
     def measurement_names(self) -> Set[str]:
         return self.__body.measurement_names
 
-    @property
-    def is_interruptable(self):
-        raise NotImplementedError()  # pragma: no cover
-
 
 class ParametrizedRange:
     """Like the builtin python range but with parameters."""
@@ -203,6 +199,7 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
         for loop_index_value in loop_range:
             local_parameters = parameters.copy()
             local_parameters[self._loop_index] = ConstantParameter(loop_index_value)
+            yield local_parameters
 
     def _internal_create_program(self, *,
                                  parameters: Dict[str, Parameter],
@@ -288,78 +285,6 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
             body_integrals[c] = ExpressionScalar(channel_integral_expr)
 
         return body_integrals
-
-
-class WhileLoopPulseTemplate(LoopPulseTemplate):
-    """Conditional looping in a pulse.
-    
-    A LoopPulseTemplate is a PulseTemplate whose body is repeated
-    during execution as long as a certain condition holds.
-    """
-    
-    def __init__(self, condition: str,
-                 body: PulseTemplate,
-                 identifier: Optional[str]=None,
-                 registry: PulseRegistryType=None) -> None:
-        """Create a new LoopPulseTemplate instance.
-
-        Args:
-            condition (str): A unique identifier for the looping condition. Will be used to obtain
-                the Condition object from the mapping passed in during the sequencing process.
-            body (PulseTemplate): The PulseTemplate which will be repeated as long as the condition
-                holds.
-            identifier (str): A unique identifier for use in serialization. (optional)
-        """
-        super().__init__(body=body, identifier=identifier)
-        self._condition = condition
-        self._register(registry=registry)
-
-    def __str__(self) -> str:
-        return "LoopPulseTemplate: Condition <{}>, Body <{}>".format(self._condition, self.body)
-
-    @property
-    def condition(self) -> str:
-        """This LoopPulseTemplate's condition."""
-        return self._condition
-
-    @property
-    def parameter_names(self) -> Set[str]:
-        return self.body.parameter_names
-
-    @property
-    def duration(self) -> ExpressionScalar:
-        return ExpressionScalar('nan')
-
-    def _internal_create_program(self, *, # pragma: no cover
-                                 parameters: Dict[str, Parameter],
-                                 measurement_mapping: Dict[str, Optional[str]],
-                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]],
-                                 parent_loop: Loop) -> None:
-        raise NotImplementedError("create_program() does not handle conditions/triggers right now and cannot "
-                                  "be meaningfully implemented for a WhileLoopPulseTemplate")
-
-    def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
-        data = super().get_serialization_data(serializer)
-        data['body'] = self.body
-
-        if serializer: # compatibility to old serialization routines, deprecated
-            data = dict()
-            data['body'] = serializer.dictify(self.body)
-
-        data['condition'] = self._condition
-
-        return data
-
-    @classmethod
-    def deserialize(cls, serializer: Optional[Serializer]=None, **kwargs) -> 'WhileLoopPulseTemplate':
-        if serializer: # compatibility to old serialization routines, deprecated
-            kwargs['body'] = serializer.deserialize(kwargs['body'])
-
-        return super().deserialize(**kwargs)
-
-    @property
-    def integral(self) -> Dict[ChannelID, ExpressionScalar]:
-        return {c: ExpressionScalar('nan') for c in self.body.defined_channels}
 
 
 class LoopIndexNotUsedException(Exception):

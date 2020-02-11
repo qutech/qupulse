@@ -417,10 +417,6 @@ class ArithmeticPulseTemplate(PulseTemplate):
         return integral
 
     @property
-    def is_interruptable(self) -> bool:
-        return self._pulse_template.is_interruptable
-
-    @property
     def measurement_names(self) -> Set[str]:
         return self._pulse_template.measurement_names
 

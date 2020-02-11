@@ -196,10 +196,6 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         return set(self.__measurement_mapping.values())
 
     @property
-    def is_interruptable(self) -> bool:
-        return self.template.is_interruptable  # pragma: no cover
-
-    @property
     def defined_channels(self) -> Set[ChannelID]:
         return {self.__channel_mapping[k] for k in self.template.defined_channels} - {None}
 
