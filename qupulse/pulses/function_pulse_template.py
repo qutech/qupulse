@@ -15,7 +15,6 @@ import sympy
 from qupulse.expressions import ExpressionScalar
 from qupulse.serialization import Serializer, PulseRegistryType
 
-from qupulse.pulses.conditions import Condition
 from qupulse.utils.types import ChannelID, TimeType, time_from_float
 from qupulse.pulses.parameters import Parameter, ParameterConstrainer, ParameterConstraint
 from qupulse.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration
@@ -114,14 +113,6 @@ class FunctionPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
         return FunctionWaveform(expression=expression,
                                 duration=duration,
                                 channel=channel_mapping[self.__channel])
-
-    def requires_stop(self,
-                      parameters: Dict[str, Parameter],
-                      conditions: Dict[str, 'Condition']) -> bool:
-        return any(
-            parameters[name].requires_stop
-            for name in parameters.keys() if (name in self.parameter_names)
-        )
 
     def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
         data = super().get_serialization_data(serializer)

@@ -15,9 +15,7 @@ from qupulse.expressions import ExpressionScalar
 from qupulse.utils import checked_int_cast
 from qupulse.pulses.parameters import Parameter, ConstantParameter, InvalidParameterNameException, ParameterConstrainer, ParameterNotProvidedException
 from qupulse.pulses.pulse_template import PulseTemplate, ChannelID, AtomicPulseTemplate
-from qupulse.pulses.conditions import Condition, ConditionMissingException
 from qupulse._program.instructions import InstructionBlock
-from qupulse.pulses.sequencing import Sequencer
 from qupulse._program.waveforms import SequenceWaveform as ForLoopWaveform
 from qupulse.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
 
@@ -206,28 +204,6 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
         for loop_index_value in loop_range:
             local_parameters = parameters.copy()
             local_parameters[self._loop_index] = ConstantParameter(loop_index_value)
-            yield local_parameters
-
-    def build_sequence(self,
-                       sequencer: Sequencer,
-                       parameters: Dict[str, Parameter],
-                       conditions: Dict[str, Condition],
-                       measurement_mapping: Dict[str, str],
-                       channel_mapping: Dict[ChannelID, ChannelID],
-                       instruction_block: InstructionBlock) -> None:
-        self.validate_parameter_constraints(parameters=parameters)
-
-        self.insert_measurement_instruction(instruction_block=instruction_block,
-                                            parameters=parameters,
-                                            measurement_mapping=measurement_mapping)
-
-        for local_parameters in self._body_parameter_generator(parameters, forward=False):
-            sequencer.push(self.body,
-                           parameters=local_parameters,
-                           conditions=conditions,
-                           window_mapping=measurement_mapping,
-                           channel_mapping=channel_mapping,
-                           target_block=instruction_block)
 
     def _internal_create_program(self, *,
                                  parameters: Dict[str, Parameter],
@@ -262,11 +238,6 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
     def build_waveform(self, parameters: Dict[str, Parameter]) -> ForLoopWaveform:
         return ForLoopWaveform([self.body.build_waveform(local_parameters)
                                 for local_parameters in self._body_parameter_generator(parameters, forward=True)])
-
-    def requires_stop(self,
-                      parameters: Dict[str, Parameter],
-                      conditions: Dict[str, 'Condition']) -> bool:
-        return any(parameters[parameter_name].requires_stop for parameter_name in self._loop_range.parameter_names)
 
     def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
         data = super().get_serialization_data(serializer)
@@ -360,28 +331,6 @@ class WhileLoopPulseTemplate(LoopPulseTemplate):
     def duration(self) -> ExpressionScalar:
         return ExpressionScalar('nan')
 
-    def __obtain_condition_object(self, conditions: Dict[str, Condition]) -> Condition:
-        try:
-            return conditions[self._condition]
-        except:
-            raise ConditionMissingException(self._condition)
-
-    def build_sequence(self,
-                       sequencer: Sequencer,
-                       parameters: Dict[str, Parameter],
-                       conditions: Dict[str, Condition],
-                       measurement_mapping: Dict[str, str],
-                       channel_mapping: Dict[ChannelID, ChannelID],
-                       instruction_block: InstructionBlock) -> None:
-        self.__obtain_condition_object(conditions).build_sequence_loop(self,
-                                                                       self.body,
-                                                                       sequencer,
-                                                                       parameters,
-                                                                       conditions,
-                                                                       measurement_mapping,
-                                                                       channel_mapping,
-                                                                       instruction_block)
-
     def _internal_create_program(self, *, # pragma: no cover
                                  parameters: Dict[str, Parameter],
                                  measurement_mapping: Dict[str, Optional[str]],
@@ -389,11 +338,6 @@ class WhileLoopPulseTemplate(LoopPulseTemplate):
                                  parent_loop: Loop) -> None:
         raise NotImplementedError("create_program() does not handle conditions/triggers right now and cannot "
                                   "be meaningfully implemented for a WhileLoopPulseTemplate")
-
-    def requires_stop(self,
-                      parameters: Dict[str, Parameter],
-                      conditions: Dict[str, Condition]) -> bool:
-        return self.__obtain_condition_object(conditions).requires_stop()
 
     def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
         data = super().get_serialization_data(serializer)

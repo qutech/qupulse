@@ -15,8 +15,6 @@ from qupulse._program._loop import Loop
 from qupulse.utils.types import MeasurementWindow, ChannelID, TimeType
 from qupulse.pulses.pulse_template import PulseTemplate, AtomicPulseTemplate
 from qupulse.pulses.parameters import Parameter, ParameterConstrainer, ParameterNotProvidedException
-from qupulse.pulses.sequencing import InstructionBlock, Sequencer
-from qupulse.pulses.conditions import Condition
 from qupulse.pulses.mapping_pulse_template import MappingPulseTemplate, MappingTuple
 from qupulse._program.waveforms import SequenceWaveform
 from qupulse.pulses.measurement import MeasurementDeclaration, MeasurementDefiner
@@ -132,13 +130,6 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
         return set.union(MeasurementDefiner.measurement_names.fget(self),
                          *(st.measurement_names for st in self.subtemplates))
 
-    def requires_stop(self,
-                      parameters: Dict[str, Parameter],
-                      conditions: Dict[str, 'Condition']) -> bool:
-        """Returns the stop requirement of the first subtemplate. If a later subtemplate requires a stop the
-        SequencePulseTemplate can be partially sequenced."""
-        return self.__subtemplates[0].requires_stop(parameters, conditions) if self.__subtemplates else False
-
     def build_waveform(self,
                        parameters: Dict[str, Real],
                        channel_mapping: Dict[ChannelID, ChannelID]) -> SequenceWaveform:
@@ -146,25 +137,6 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
         return SequenceWaveform([sub_template.build_waveform(parameters,
                                                              channel_mapping=channel_mapping)
                                  for sub_template in self.__subtemplates])
-
-    def build_sequence(self,
-                       sequencer: Sequencer,
-                       parameters: Dict[str, Parameter],
-                       conditions: Dict[str, Condition],
-                       measurement_mapping: Dict[str, str],
-                       channel_mapping: Dict['ChannelID', 'ChannelID'],
-                       instruction_block: InstructionBlock) -> None:
-        self.validate_parameter_constraints(parameters=parameters)
-        self.insert_measurement_instruction(instruction_block=instruction_block,
-                                            parameters=parameters,
-                                            measurement_mapping=measurement_mapping)
-        for subtemplate in reversed(self.subtemplates):
-            sequencer.push(subtemplate,
-                           parameters=parameters,
-                           conditions=conditions,
-                           window_mapping=measurement_mapping,
-                           channel_mapping=channel_mapping,
-                           target_block=instruction_block)
 
     def _internal_create_program(self, *,
                                  parameters: Dict[str, Parameter],

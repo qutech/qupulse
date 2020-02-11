@@ -9,7 +9,6 @@ import cached_property
 from qupulse.expressions import ExpressionScalar, ExpressionLike
 from qupulse.serialization import Serializer, PulseRegistryType
 
-from qupulse.pulses.conditions import Condition
 from qupulse.utils.types import ChannelID
 from qupulse.pulses.parameters import Parameter
 from qupulse.pulses.pulse_template import AtomicPulseTemplate, PulseTemplate
@@ -132,11 +131,6 @@ class ArithmeticAtomicPulseTemplate(AtomicPulseTemplate):
         measurements.extend(self.rhs.get_measurement_windows(parameters=parameters,
                                                              measurement_mapping=measurement_mapping))
         return measurements
-
-    def requires_stop(self,
-                      parameters: Dict[str, Parameter],
-                      conditions: Dict[str, 'Condition']) -> bool:
-        raise NotImplementedError('Easy to implement but left out for now')
 
     def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
         data = super().get_serialization_data(serializer)
@@ -372,9 +366,6 @@ class ArithmeticPulseTemplate(PulseTemplate):
 
         return data
 
-    def build_sequence(self, *args, **kwargs):
-        raise NotImplementedError('Compatibility to old sequencing routines not implemented for new type')
-
     @property
     def defined_channels(self):
         return self._pulse_template.defined_channels
@@ -428,12 +419,6 @@ class ArithmeticPulseTemplate(PulseTemplate):
     @property
     def is_interruptable(self) -> bool:
         return self._pulse_template.is_interruptable
-
-    def requires_stop(self,
-                      parameters: Dict[str, Parameter],
-                      conditions: Dict):
-        return self._pulse_template.requires_stop(parameters=parameters,
-                                                  conditions=conditions)
 
     @property
     def measurement_names(self) -> Set[str]:
