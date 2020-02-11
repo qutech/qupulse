@@ -8,7 +8,6 @@ from qupulse.utils.types import ChannelID
 from qupulse.expressions import Expression, ExpressionScalar
 from qupulse.pulses.pulse_template import PulseTemplate, MappingTuple
 from qupulse.pulses.parameters import Parameter, MappedParameter, ParameterNotProvidedException, ParameterConstrainer
-from qupulse._program.instructions import InstructionBlock
 from qupulse._program.waveforms import Waveform
 from qupulse._program._loop import Loop
 from qupulse.serialization import Serializer, PulseRegistryType

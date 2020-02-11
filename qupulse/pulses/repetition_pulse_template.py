@@ -15,8 +15,6 @@ from qupulse.expressions import ExpressionScalar
 from qupulse.utils import checked_int_cast
 from qupulse.pulses.pulse_template import PulseTemplate
 from qupulse.pulses.loop_pulse_template import LoopPulseTemplate
-from qupulse._program.instructions import InstructionBlock, InstructionPointer
-from qupulse._program.waveforms import RepetitionWaveform
 from qupulse.pulses.parameters import Parameter, ParameterConstrainer, ParameterNotProvidedException
 from qupulse.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
 

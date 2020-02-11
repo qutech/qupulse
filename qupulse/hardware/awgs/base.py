@@ -13,15 +13,13 @@ from typing import Set, Tuple, Callable, Optional
 from qupulse.hardware.util import get_sample_times
 from qupulse.utils.types import ChannelID
 from qupulse._program._loop import Loop
-from qupulse._program.waveforms import Waveform
 from qupulse.comparable import Comparable
-from qupulse._program.instructions import InstructionSequence
 from qupulse.utils.types import TimeType
 
 __all__ = ["AWG", "Program", "ProgramOverwriteException",
            "OutOfWaveformMemoryException", "AWGAmplitudeOffsetHandling"]
 
-Program = InstructionSequence
+Program = Loop
 
 
 class AWGAmplitudeOffsetHandling:
