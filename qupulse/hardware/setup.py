@@ -4,8 +4,7 @@ import warnings
 
 from qupulse.hardware.awgs.base import AWG
 from qupulse.hardware.dacs import DAC
-from qupulse._program._loop import MultiChannelProgram, Loop
-from qupulse._program.instructions import AbstractInstructionBlock
+from qupulse._program._loop import Loop
 
 from qupulse.utils.types import ChannelID
 
@@ -69,7 +68,7 @@ class MarkerChannel(_SingleChannel):
         super().__init__(awg=awg, channel_on_awg=channel_on_awg)
 
 
-RegisteredProgram = NamedTuple('RegisteredProgram', [('program', MultiChannelProgram),
+RegisteredProgram = NamedTuple('RegisteredProgram', [('program', Loop),
                                                      ('measurement_windows', Dict[str, Tuple[float, float]]),
                                                      ('run_callback', Callable),
                                                      ('awgs_to_upload_to', Set[AWG]),
@@ -91,7 +90,7 @@ class HardwareSetup:
         self._registered_programs = dict()  # type: Dict[str, RegisteredProgram]
 
     def register_program(self, name: str,
-                         instruction_block: Union[AbstractInstructionBlock, Loop],
+                         instruction_block: Loop,
                          run_callback=lambda: None, update=False) -> None:
         if not callable(run_callback):
             raise TypeError('The provided run_callback is not callable')
