@@ -15,11 +15,7 @@ from qupulse.expressions import ExpressionScalar
 from qupulse.utils import checked_int_cast
 from qupulse.pulses.pulse_template import PulseTemplate
 from qupulse.pulses.loop_pulse_template import LoopPulseTemplate
-from qupulse.pulses.sequencing import Sequencer
-from qupulse._program.instructions import InstructionBlock, InstructionPointer
-from qupulse._program.waveforms import RepetitionWaveform
 from qupulse.pulses.parameters import Parameter, ParameterConstrainer, ParameterNotProvidedException
-from qupulse.pulses.conditions import Condition
 from qupulse.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
 
 
@@ -102,32 +98,6 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
     def duration(self) -> ExpressionScalar:
         return self.repetition_count * self.body.duration
 
-    def build_sequence(self,
-                       sequencer: Sequencer,
-                       parameters: Dict[str, Parameter],
-                       conditions: Dict[str, Condition],
-                       measurement_mapping: Dict[str, Optional[str]],
-                       channel_mapping: Dict[ChannelID, Optional[ChannelID]],
-                       instruction_block: InstructionBlock) -> None:
-        self.validate_parameter_constraints(parameters=parameters)
-        try:
-            real_parameters = {v: parameters[v].get_value() for v in self._repetition_count.variables}
-        except KeyError:
-            raise ParameterNotProvidedException(next(v for v in self.repetition_count.variables if v not in parameters))
-
-        self.insert_measurement_instruction(instruction_block,
-                                            parameters=parameters,
-                                            measurement_mapping=measurement_mapping)
-
-        repetition_count = self.get_repetition_count_value(real_parameters)
-        if repetition_count > 0:
-            body_block = InstructionBlock()
-            body_block.return_ip = InstructionPointer(instruction_block, len(instruction_block))
-
-            instruction_block.add_instruction_repj(repetition_count, body_block)
-            sequencer.push(self.body, parameters=parameters, conditions=conditions,
-                           window_mapping=measurement_mapping, channel_mapping=channel_mapping, target_block=body_block)
-
     def _internal_create_program(self, *,
                                  scope: Scope,
                                  measurement_mapping: Dict[str, Optional[str]],
@@ -160,11 +130,6 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
                     parent_loop.add_measurements(measurements)
 
                 parent_loop.append_child(loop=repj_loop)
-
-    def requires_stop(self,
-                      parameters: Dict[str, Parameter],
-                      conditions: Dict[str, Condition]) -> bool:
-        return any(parameters[v].requires_stop for v in self.repetition_count.variables)
 
     def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
         data = super().get_serialization_data(serializer)

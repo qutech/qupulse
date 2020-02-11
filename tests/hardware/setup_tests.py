@@ -3,13 +3,12 @@ import itertools
 
 import numpy as np
 
-from qupulse._program.instructions import InstructionBlock, MEASInstruction
 from qupulse.hardware.setup import HardwareSetup, PlaybackChannel, MarkerChannel, MeasurementMask
 
 from tests.pulses.sequencing_dummies import DummyWaveform
 
 from tests.hardware.dummy_devices import DummyAWG, DummyDAC
-from tests._program.loop_tests import get_two_chan_test_block, WaveformGenerator
+from tests._program.loop_tests import WaveformGenerator
 
 
 class SingleChannelTests(unittest.TestCase):

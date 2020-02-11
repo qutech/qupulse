@@ -18,10 +18,7 @@ from qupulse.expressions import ExpressionScalar, Expression, ExpressionLike
 from qupulse._program._loop import Loop, to_waveform
 from qupulse._program.transformation import Transformation, IdentityTransformation, ChainedTransformation, chain_transformations
 
-
-from qupulse.pulses.conditions import Condition
 from qupulse.pulses.parameters import Parameter, ConstantParameter, ParameterNotProvidedException
-from qupulse.pulses.sequencing import Sequencer, SequencingElement, InstructionBlock
 from qupulse._program.waveforms import Waveform, TransformingWaveform
 from qupulse.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
 from qupulse.parameter_scope import Scope, DictScope
@@ -35,7 +32,7 @@ MappingTuple = Union[Tuple['PulseTemplate'],
                      Tuple['PulseTemplate', Dict, Dict, Dict]]
 
 
-class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta):
+class PulseTemplate(Serializable, metaclass=DocStringABCMeta):
     """A PulseTemplate represents the parametrized general structure of a pulse.
 
     A PulseTemplate described a pulse in an abstract way: It defines the structure of a pulse
@@ -62,12 +59,6 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
     @abstractmethod
     def measurement_names(self) -> Set[str]:
         """The set of measurement identifiers in this pulse template."""
-
-    @property
-    @abstractmethod
-    def is_interruptable(self) -> bool:
-        """Return true, if this PulseTemplate contains points at which it can halt if interrupted.
-        """
 
     @property
     @abstractmethod
@@ -291,31 +282,11 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
         PulseTemplate.__init__(self, identifier=identifier)
         MeasurementDefiner.__init__(self, measurements=measurements)
 
-    def is_interruptable(self) -> bool:
-        return False
-
     @property
     def atomicity(self) -> bool:
         return True
 
     measurement_names = MeasurementDefiner.measurement_names
-
-    def build_sequence(self,
-                       sequencer: Sequencer,
-                       parameters: Dict[str, Parameter],
-                       conditions: Dict[str, Condition],
-                       measurement_mapping: Dict[str, Optional[str]],
-                       channel_mapping: Dict[ChannelID, Optional[ChannelID]],
-                       instruction_block: InstructionBlock) -> None:
-        parameters = {parameter_name: parameter_value.get_value()
-                      for parameter_name, parameter_value in parameters.items()
-                      if parameter_name in self.parameter_names}
-        waveform = self.build_waveform(parameters=parameters,
-                                       channel_mapping=channel_mapping)
-        if waveform:
-            measurements = self.get_measurement_windows(parameters=parameters, measurement_mapping=measurement_mapping)
-            instruction_block.add_instruction_meas(measurements)
-            instruction_block.add_instruction_exec(waveform)
 
     def _internal_create_program(self, *,
                                  scope: Scope,

@@ -13,7 +13,6 @@ import warnings
 
 from qupulse.serialization import Serializer, PulseRegistryType
 
-from qupulse.pulses.conditions import Condition
 from qupulse.utils import isclose
 from qupulse.utils.sympy import almost_equal, Sympifyable
 from qupulse.utils.types import ChannelID, TimeType
@@ -167,11 +166,6 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
                                                            measurement_mapping=measurement_mapping))
         return measurements
 
-    def requires_stop(self,
-                      parameters: Dict[str, Parameter],
-                      conditions: Dict[str, 'Condition']) -> bool:
-        return any(st.requires_stop(parameters, conditions) for st in self._subtemplates)
-
     def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
         data = super().get_serialization_data(serializer)
         data['subtemplates'] = self.subtemplates
@@ -278,13 +272,6 @@ class ParallelConstantChannelPulseTemplate(PulseTemplate):
         return self.template.duration
 
     @property
-    def is_interruptable(self) -> bool:
-        return self.template.is_interruptable
-
-    def requires_stop(self, *args, **kwargs) -> bool:
-        return self.template.requires_stop(*args, **kwargs)
-
-    @property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
         integral = self._template.integral
 
@@ -301,9 +288,6 @@ class ParallelConstantChannelPulseTemplate(PulseTemplate):
         data['template'] = self._template
         data['overwritten_channels'] = self._overwritten_channels
         return data
-
-    def build_sequence(self, *args, **kwargs):
-        raise NotImplementedError('Build sequence(legacy) is not implemented for new type')
 
 
 class ChannelMappingException(Exception):

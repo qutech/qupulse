@@ -9,11 +9,8 @@ from qupulse.expressions import Expression, ExpressionScalar
 from qupulse.parameter_scope import Scope, MappedScope
 from qupulse.pulses.pulse_template import PulseTemplate, MappingTuple
 from qupulse.pulses.parameters import Parameter, MappedParameter, ParameterNotProvidedException, ParameterConstrainer
-from qupulse.pulses.sequencing import Sequencer
-from qupulse._program.instructions import InstructionBlock
 from qupulse._program.waveforms import Waveform
 from qupulse._program._loop import Loop
-from qupulse.pulses.conditions import Condition
 from qupulse.serialization import Serializer, PulseRegistryType
 
 __all__ = [
@@ -200,10 +197,6 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         return set(self.__measurement_mapping.values())
 
     @property
-    def is_interruptable(self) -> bool:
-        return self.template.is_interruptable  # pragma: no cover
-
-    @property
     def defined_channels(self) -> Set[ChannelID]:
         return {self.__channel_mapping[k] for k in self.template.defined_channels} - {None}
 
@@ -312,20 +305,6 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         return {inner_ch: None if outer_ch is None else channel_mapping[outer_ch]
                 for inner_ch, outer_ch in self.__channel_mapping.items()}
 
-    def build_sequence(self,
-                       sequencer: Sequencer,
-                       parameters: Dict[str, Parameter],
-                       conditions: Dict[str, Condition],
-                       measurement_mapping: Dict[str, str],
-                       channel_mapping: Dict[ChannelID, ChannelID],
-                       instruction_block: InstructionBlock) -> None:
-        self.template.build_sequence(sequencer,
-                                     parameters=self.map_parameter_objects(parameters),
-                                     conditions=conditions,
-                                     measurement_mapping=self.get_updated_measurement_mapping(measurement_mapping),
-                                     channel_mapping=self.get_updated_channel_mapping(channel_mapping),
-                                     instruction_block=instruction_block)
-
     def _internal_create_program(self, *,
                                  scope: Scope,
                                  measurement_mapping: Dict[str, Optional[str]],
@@ -355,14 +334,6 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         return self.template.get_measurement_windows(
             parameters=self.map_parameter_values(parameters=parameters),
             measurement_mapping=self.get_updated_measurement_mapping(measurement_mapping=measurement_mapping)
-        )
-
-    def requires_stop(self,
-                      parameters: Dict[str, Parameter],
-                      conditions: Dict[str, Condition]) -> bool:
-        return self.template.requires_stop(
-            self.map_parameter_objects(parameters),
-            conditions
         )
 
     @property

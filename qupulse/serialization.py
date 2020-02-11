@@ -472,8 +472,6 @@ class Serializable(metaclass=SerializableMeta):
         Raises:
             ValueError: If identifier is the empty string
         """
-        super().__init__()
-
         if identifier == '':
             raise ValueError("Identifier must not be empty.")
         self.__identifier = identifier

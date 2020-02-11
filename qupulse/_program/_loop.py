@@ -7,16 +7,16 @@ import warnings
 
 import numpy as np
 
+from qupulse._program.waveforms import Waveform
+
 from qupulse.utils.types import ChannelID, TimeType
-from qupulse._program.instructions import AbstractInstructionBlock, EXECInstruction, REPJInstruction, GOTOInstruction,\
-    STOPInstruction, CHANInstruction, Waveform, MEASInstruction, Instruction
 from qupulse.utils.tree import Node, is_tree_circular
 from qupulse.utils.types import MeasurementWindow
 from qupulse.utils import is_integer
 
 from qupulse._program.waveforms import SequenceWaveform, RepetitionWaveform
 
-__all__ = ['Loop', 'MultiChannelProgram', 'make_compatible', 'MakeCompatibleWarning']
+__all__ = ['Loop', 'make_compatible', 'MakeCompatibleWarning']
 
 
 class Loop(Node):
@@ -338,145 +338,6 @@ class Loop(Node):
 class ChannelSplit(Exception):
     def __init__(self, channel_sets):
         self.channel_sets = channel_sets
-
-
-class MultiChannelProgram:
-    def __init__(self, instruction_block: Union[AbstractInstructionBlock, Loop], channels: Iterable[ChannelID] = None):
-        """Channels with identifier None are ignored."""
-        self._programs = dict()
-        if isinstance(instruction_block, AbstractInstructionBlock):
-            self._init_from_instruction_block(instruction_block, channels)
-        elif isinstance(instruction_block, Loop):
-            assert channels is None
-            self._init_from_loop(loop=instruction_block)
-        else:
-            raise TypeError('Invalid program type', type(instruction_block), instruction_block)
-
-        for program in self.programs.values():
-            program.cleanup()
-
-    def _init_from_loop(self, loop: Loop):
-        first_waveform = next(loop.get_depth_first_iterator()).waveform
-
-        assert first_waveform is not None
-
-        self._programs[frozenset(first_waveform.defined_channels)] = loop
-
-    def _init_from_instruction_block(self, instruction_block, channels):
-        if channels is None:
-            def find_defined_channels(instruction_list):
-                for instruction in instruction_list:
-                    if isinstance(instruction, EXECInstruction):
-                        yield instruction.waveform.defined_channels
-                    elif isinstance(instruction, REPJInstruction):
-                        yield from find_defined_channels(
-                            instruction.target.block.instructions[instruction.target.offset:])
-                    elif isinstance(instruction, GOTOInstruction):
-                        yield from find_defined_channels(instruction.target.block.instructions[instruction.target.offset:])
-                    elif isinstance(instruction, CHANInstruction):
-                        yield itertools.chain(*instruction.channel_to_instruction_block.keys())
-                    elif isinstance(instruction, STOPInstruction):
-                        return
-                    elif isinstance(instruction, MEASInstruction):
-                        pass
-                    else:
-                        raise TypeError('Unhandled instruction type', type(instruction))
-
-            try:
-                channels = next(find_defined_channels(instruction_block.instructions))
-            except StopIteration:
-                raise ValueError('Instruction block has no defined channels')
-        else:
-            channels = set(channels)
-
-        channels = frozenset(channels - {None})
-
-        root = Loop()
-        stacks = {channels: (root, [((), deque(instruction_block.instructions))])}
-
-        while len(stacks) > 0:
-            chans, (root_loop, stack) = stacks.popitem()
-            try:
-                self._programs[chans] = MultiChannelProgram.__split_channels(chans, root_loop, stack)
-            except ChannelSplit as split:
-                for new_channel_set in split.channel_sets:
-                    assert (new_channel_set not in stacks)
-                    assert (chans.issuperset(new_channel_set))
-
-                    stacks[new_channel_set] = (root_loop.copy_tree_structure(), deepcopy(stack))
-
-        def repeat_measurements(child_loop, rep_count):
-            duration_float = float(child_loop.duration)
-            if child_loop._measurements:
-                for r in range(rep_count):
-                    for name, begin, length in child_loop._measurements:
-                        yield (name, begin+r*duration_float, length)
-
-    @property
-    def programs(self) -> Dict[FrozenSet[ChannelID], Loop]:
-        return self._programs
-
-    @property
-    def channels(self) -> Set[ChannelID]:
-        return set(itertools.chain(*self._programs.keys()))
-
-    @staticmethod
-    def __split_channels(channels: FrozenSet[ChannelID],
-                         root_loop: Loop,
-                         block_stack: List[Tuple[Tuple[int, ...],
-                                                 deque]]) -> Loop:
-        while block_stack:
-            current_loop_location, current_instruction_block = block_stack.pop()
-            current_loop = root_loop.locate(current_loop_location)
-
-            while current_instruction_block:
-                instruction = current_instruction_block.popleft()
-
-                if isinstance(instruction, EXECInstruction):
-                    if not instruction.waveform.defined_channels.issuperset(channels):
-                        raise Exception(instruction.waveform.defined_channels, channels)
-                    current_loop.append_child(waveform=instruction.waveform)
-
-                elif isinstance(instruction, REPJInstruction):
-                    if current_instruction_block:
-                        block_stack.append((current_loop_location, current_instruction_block))
-
-                    current_loop.append_child(repetition_count=instruction.count)
-                    block_stack.append(
-                        (current_loop[-1].get_location(),
-                         deque(instruction.target.block[instruction.target.offset:-1]))
-                    )
-                    break
-
-                elif isinstance(instruction, CHANInstruction):
-                    if channels in instruction.channel_to_instruction_block.keys():
-                        # push to front
-                        new_instruction_ptr = instruction.channel_to_instruction_block[channels]
-                        new_instruction_list = [*new_instruction_ptr.block[new_instruction_ptr.offset:-1]]
-                        current_instruction_block.extendleft(new_instruction_list)
-
-                    else:
-                        block_stack.append((current_loop_location, deque([instruction]) + current_instruction_block))
-
-                        raise ChannelSplit(instruction.channel_to_instruction_block.keys())
-
-                elif isinstance(instruction, MEASInstruction):
-                    current_loop.add_measurements(instruction.measurements)
-
-                else:
-                    raise Exception('Encountered unhandled instruction {} on channel(s) {}'.format(instruction, channels))
-        return root_loop
-
-    def __getitem__(self, item: Union[ChannelID, Set[ChannelID], FrozenSet[ChannelID]]) -> Loop:
-        if not isinstance(item, (set, frozenset)):
-            item = frozenset((item,))
-        elif isinstance(item, set):
-            item = frozenset(item)
-
-        for channels, program in self._programs.items():
-            if item.issubset(channels):
-                return program
-        raise KeyError(item)
 
 
 def to_waveform(program: Loop) -> Waveform:

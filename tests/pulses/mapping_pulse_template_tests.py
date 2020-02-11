@@ -7,10 +7,9 @@ from qupulse.pulses.mapping_pulse_template import MissingMappingException,\
     AmbiguousMappingException, MappingCollisionException
 from qupulse.pulses.parameters import ConstantParameter, ParameterConstraintViolation, ParameterConstraint, ParameterNotProvidedException
 from qupulse.expressions import Expression
-from qupulse._program._loop import Loop, MultiChannelProgram
-from qupulse.pulses.sequencing import Sequencer
+from qupulse._program._loop import Loop
 
-from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummySequencer, DummyInstructionBlock, MeasurementWindowTestCase, DummyWaveform
+from tests.pulses.sequencing_dummies import DummyPulseTemplate, MeasurementWindowTestCase, DummyWaveform
 from tests.serialization_tests import SerializableTests
 from tests.serialization_dummies import DummySerializer
 from tests._program.transformation_tests import TransformationStub
@@ -417,53 +416,12 @@ class MappingPulseTemplateSequencingTest(MeasurementWindowTestCase):
         self.assertEqual(0, len(program.children))
         self.assertIsNone(program._measurements)
 
-        # ensure same result as from Sequencer
-        sequencer = Sequencer()
-        sequencer.push(st, parameters=pre_parameters, conditions={}, window_mapping=pre_measurement_mapping,
-                       channel_mapping=pre_channel_mapping)
-        block = sequencer.build()
-        program_old = MultiChannelProgram(block, channels={'A'}).programs[frozenset({'A'})]
-        self.assertEqual(program_old, program)
-
     def test_same_channel_error(self):
 
         dpt = DummyPulseTemplate(defined_channels={'A', 'B'})
 
         with self.assertRaisesRegex(ValueError, 'multiple channels to the same target'):
             MappingPulseTemplate(dpt, channel_mapping={'A': 'X', 'B': 'X'})
-
-
-class MappingPulseTemplateOldSequencingTests(unittest.TestCase):
-
-    def test_build_sequence(self):
-        measurement_mapping = {'meas1': 'meas2'}
-        parameter_mapping = {'t': 'k'}
-
-        template = DummyPulseTemplate(measurement_names=set(measurement_mapping.keys()),
-                                      parameter_names=set(parameter_mapping.keys()))
-        st = MappingPulseTemplate(template, parameter_mapping=parameter_mapping, measurement_mapping=measurement_mapping)
-        sequencer = DummySequencer()
-        block = DummyInstructionBlock()
-        pre_parameters = {'k': ConstantParameter(5)}
-        pre_measurement_mapping = {'meas2': 'meas3'}
-        pre_channel_mapping = {'default': 'A'}
-        conditions = dict(a=True)
-        st.build_sequence(sequencer, pre_parameters, conditions, pre_measurement_mapping, pre_channel_mapping, block)
-
-        self.assertEqual(template.build_sequence_calls, 1)
-        forwarded_args = template.build_sequence_arguments[0]
-        self.assertEqual(forwarded_args[0], sequencer)
-        self.assertEqual(forwarded_args[1], st.map_parameters(pre_parameters))
-        self.assertEqual(forwarded_args[2], conditions)
-        self.assertEqual(forwarded_args[3],
-                         st.get_updated_measurement_mapping(pre_measurement_mapping))
-        self.assertEqual(forwarded_args[4],
-                         st.get_updated_channel_mapping(pre_channel_mapping))
-        self.assertEqual(forwarded_args[5], block)
-
-    @unittest.skip("Extend of dummy template for argument checking needed.")
-    def test_requires_stop(self):
-        pass
 
 
 class PulseTemplateParameterMappingExceptionsTests(unittest.TestCase):

@@ -2,17 +2,13 @@ import unittest
 import warnings
 from unittest import mock
 
-from qupulse._program._loop import Loop, MultiChannelProgram
+from qupulse._program._loop import Loop
 from qupulse.expressions import Expression
-from qupulse.pulses.repetition_pulse_template import RepetitionPulseTemplate,ParameterNotIntegerException, RepetitionWaveform
+from qupulse.pulses.repetition_pulse_template import RepetitionPulseTemplate,ParameterNotIntegerException
 from qupulse.pulses.parameters import ParameterNotProvidedException, ParameterConstraintViolation, ConstantParameter, \
     ParameterConstraint
-from qupulse._program.instructions import REPJInstruction, InstructionPointer
 
-from qupulse.pulses.sequencing import Sequencer
-
-from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummySequencer, DummyInstructionBlock, DummyParameter,\
-    DummyCondition, DummyWaveform, MeasurementWindowTestCase
+from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummyParameter, DummyWaveform, MeasurementWindowTestCase
 from tests.serialization_dummies import DummySerializer
 from tests.serialization_tests import SerializableTests
 from tests._program.transformation_tests import TransformationStub
@@ -53,15 +49,6 @@ class RepetitionPulseTemplateTest(unittest.TestCase):
         t = RepetitionPulseTemplate(body, 5, parameter_constraints={'foo > hugo'}, measurements=[('meas', 'd', 0)])
 
         self.assertEqual({'foo', 'bar', 'hugo', 'd'}, t.parameter_names)
-
-    @unittest.skip('is interruptable not implemented for loops')
-    def test_is_interruptable(self) -> None:
-        body = DummyPulseTemplate(is_interruptable=False)
-        t = RepetitionPulseTemplate(body, 6)
-        self.assertFalse(t.is_interruptable)
-
-        body.is_interruptable_ = True
-        self.assertTrue(t.is_interruptable)
 
     def test_str(self) -> None:
         body = DummyPulseTemplate()
@@ -173,13 +160,6 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
 
         self.assert_measurement_windows_equal({'b': ([0, 2, 4], [1, 1, 1]), 'thy': ([2], [2])}, program.get_measurement_windows())
 
-        # ensure same result as from Sequencer
-        sequencer = Sequencer()
-        sequencer.push(t, parameters=parameters, conditions={}, window_mapping=measurement_mapping, channel_mapping=channel_mapping)
-        block = sequencer.build()
-        program_old = MultiChannelProgram(block, channels={'A'}).programs[frozenset({'A'})]
-        self.assertEqual(program_old, program)
-
     def test_create_program_declaration_success(self) -> None:
         repetitions = "foo"
         body = DummyPulseTemplate(duration=2.0, waveform=DummyWaveform(duration=2, defined_channels={'A'}))
@@ -270,14 +250,6 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         self.assertEqual(body.waveform, internal_loop[0].waveform)
 
         self.assert_measurement_windows_equal({'fire': ([0], [7.1]), 'b': ([0, 2, 4], [1, 1, 1])}, program.get_measurement_windows())
-
-        # ensure same result as from Sequencer
-        sequencer = Sequencer()
-        sequencer.push(t, parameters=parameters, conditions={}, window_mapping=measurement_mapping,
-                       channel_mapping=channel_mapping)
-        block = sequencer.build()
-        program_old = MultiChannelProgram(block, channels={'A'}).programs[frozenset({'A'})]
-        self.assertEqual(program_old, program)
 
     def test_create_program_declaration_exceeds_bounds(self) -> None:
         repetitions = "foo"
@@ -414,14 +386,6 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         self.assertEqual(1, program.repetition_count)
         self.assertEqual(None, program._measurements)
 
-        # ensure same result as from Sequencer
-        sequencer = Sequencer()
-        sequencer.push(t, parameters=parameters, conditions={}, window_mapping=measurement_mapping,
-                       channel_mapping=channel_mapping)
-        block = sequencer.build()
-        program_old = MultiChannelProgram(block, channels={'A'}).programs[frozenset({'A'})]
-        self.assertEqual(program_old, program)
-
     def test_create_program_rep_count_zero_constant_with_measurement(self) -> None:
         repetitions = 0
         body_program = Loop(waveform=DummyWaveform(duration=1.0))
@@ -447,17 +411,6 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         self.assertEqual(1, program.repetition_count)
         self.assertEqual(None, program._measurements)
 
-        # ensure same result as from Sequencer
-        sequencer = Sequencer()
-        sequencer.push(t, parameters=parameters, conditions={}, window_mapping=measurement_mapping,
-                       channel_mapping=channel_mapping)
-        block = sequencer.build()
-        program_old = MultiChannelProgram(block, channels={'A'}).programs[frozenset({'A'})]
-        self.assertEqual(program_old.repetition_count, program.repetition_count)
-        self.assertEqual(program_old.waveform, program.waveform)
-        self.assertEqual(program_old.children, program.children)
-        # program_old will have measurements which program has not!
-
     def test_create_program_rep_count_zero_declaration(self) -> None:
         repetitions = "foo"
         body_program = Loop(waveform=DummyWaveform(duration=1.0))
@@ -482,14 +435,6 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         self.assertFalse(program.children)
         self.assertEqual(1, program.repetition_count)
         self.assertEqual(None, program._measurements)
-        
-        # ensure same result as from Sequencer
-        sequencer = Sequencer()
-        sequencer.push(t, parameters=parameters, conditions={}, window_mapping=measurement_mapping,
-                       channel_mapping=channel_mapping)
-        block = sequencer.build()
-        program_old = MultiChannelProgram(block, channels={'A'}).programs[frozenset({'A'})]
-        self.assertEqual(program_old, program)
 
     def test_create_program_rep_count_zero_declaration_with_measurement(self) -> None:
         repetitions = "foo"
@@ -516,17 +461,6 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         self.assertEqual(1, program.repetition_count)
         self.assertEqual(None, program._measurements)
 
-        # ensure same result as from Sequencer
-        sequencer = Sequencer()
-        sequencer.push(t, parameters=parameters, conditions={}, window_mapping=measurement_mapping,
-                       channel_mapping=channel_mapping)
-        block = sequencer.build()
-        program_old = MultiChannelProgram(block, channels={'A'}).programs[frozenset({'A'})]
-        self.assertEqual(program_old.repetition_count, program.repetition_count)
-        self.assertEqual(program_old.waveform, program.waveform)
-        self.assertEqual(program_old.children, program.children)
-        # program_old will have measurements which program has not!
-
     def test_create_program_rep_count_neg_declaration(self) -> None:
         repetitions = "foo"
         body_program = Loop(waveform=DummyWaveform(duration=1.0))
@@ -551,14 +485,6 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         self.assertFalse(program.children)
         self.assertEqual(1, program.repetition_count)
         self.assertEqual(None, program._measurements)
-
-        # ensure same result as from Sequencer
-        sequencer = Sequencer()
-        sequencer.push(t, parameters=parameters, conditions={}, window_mapping=measurement_mapping,
-                       channel_mapping=channel_mapping)
-        block = sequencer.build()
-        program_old = MultiChannelProgram(block, channels={'A'}).programs[frozenset({'A'})]
-        self.assertEqual(program_old, program)
 
     def test_create_program_rep_count_neg_declaration_with_measurements(self) -> None:
         repetitions = "foo"
@@ -585,17 +511,6 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         self.assertEqual(1, program.repetition_count)
         self.assertEqual(None, program._measurements)
 
-        # ensure same result as from Sequencer
-        sequencer = Sequencer()
-        sequencer.push(t, parameters=parameters, conditions={}, window_mapping=measurement_mapping,
-                       channel_mapping=channel_mapping)
-        block = sequencer.build()
-        program_old = MultiChannelProgram(block, channels={'A'}).programs[frozenset({'A'})]
-        self.assertEqual(program_old.repetition_count, program.repetition_count)
-        self.assertEqual(program_old.waveform, program.waveform)
-        self.assertEqual(program_old.children, program.children)
-        # program_old will have measurements which program has not!
-
     def test_create_program_none_subprogram(self) -> None:
         repetitions = "foo"
         body = DummyPulseTemplate(duration=0.0, waveform=None)
@@ -614,17 +529,6 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         self.assertEqual(1, program.repetition_count)
         self.assertEqual(None, program._measurements)
 
-        # ensure same result as from Sequencer
-        sequencer = Sequencer()
-        sequencer.push(t, parameters=parameters, conditions={}, window_mapping=measurement_mapping,
-                       channel_mapping=channel_mapping)
-        block = sequencer.build()
-        program_old = MultiChannelProgram(block, channels={'A'}).programs[frozenset({'A'})]
-        self.assertEqual(program_old.waveform, program.waveform)
-        self.assertEqual(program_old.children, program.children)
-        self.assertEqual(program_old._measurements, program._measurements)
-        # Sequencer does set a repetition count if no inner program is present; create_program does not
-
     def test_create_program_none_subprogram_with_measurement(self) -> None:
         repetitions = "foo"
         body = DummyPulseTemplate(duration=2.0, waveform=None, measurements=[('b', 2, 3)])
@@ -642,150 +546,6 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         self.assertFalse(program.children)
         self.assertEqual(1, program.repetition_count)
         self.assertEqual(None, program._measurements)
-
-        # ensure same result as from Sequencer
-        sequencer = Sequencer()
-        sequencer.push(t, parameters=parameters, conditions={}, window_mapping=measurement_mapping,
-                       channel_mapping=channel_mapping)
-        block = sequencer.build()
-        program_old = MultiChannelProgram(block, channels={'A'}).programs[frozenset({'A'})]
-        self.assertEqual(program_old.waveform, program.waveform)
-        self.assertEqual(program_old.children, program.children)
-        # program_old will have measurements which program has not!
-        # Sequencer does set a repetition count if no inner program is present; create_program does not
-
-
-class RepetitionPulseTemplateOldSequencingTests(unittest.TestCase):
-
-    def setUp(self) -> None:
-        self.body = DummyPulseTemplate()
-        self.repetitions = 'foo'
-        self.template = RepetitionPulseTemplate(self.body, self.repetitions, parameter_constraints=['foo<9'])
-        self.sequencer = DummySequencer()
-        self.block = DummyInstructionBlock()
-
-    def test_build_sequence_constant(self) -> None:
-        repetitions = 3
-        t = RepetitionPulseTemplate(self.body, repetitions)
-        parameters = {}
-        measurement_mapping = {'my': 'thy'}
-        conditions = dict(foo=DummyCondition(requires_stop=True))
-        channel_mapping = {}
-        t.build_sequence(self.sequencer, parameters, conditions, measurement_mapping, channel_mapping, self.block)
-
-        self.assertTrue(self.block.embedded_blocks)
-        body_block = self.block.embedded_blocks[0]
-        self.assertEqual({body_block}, set(self.sequencer.sequencing_stacks.keys()))
-        self.assertEqual([(self.body, parameters, conditions, measurement_mapping, channel_mapping)], self.sequencer.sequencing_stacks[body_block])
-        self.assertEqual([REPJInstruction(repetitions, InstructionPointer(body_block, 0))], self.block.instructions)
-
-    def test_build_sequence_declaration_success(self) -> None:
-        parameters = dict(foo=ConstantParameter(3))
-        conditions = dict(foo=DummyCondition(requires_stop=True))
-        measurement_mapping = dict(moth='fire')
-        channel_mapping = dict(asd='f')
-        self.template.build_sequence(self.sequencer, parameters, conditions, measurement_mapping, channel_mapping, self.block)
-
-        self.assertTrue(self.block.embedded_blocks)
-        body_block = self.block.embedded_blocks[0]
-        self.assertEqual({body_block}, set(self.sequencer.sequencing_stacks.keys()))
-        self.assertEqual([(self.body, parameters, conditions, measurement_mapping, channel_mapping)],
-                         self.sequencer.sequencing_stacks[body_block])
-        self.assertEqual([REPJInstruction(3, InstructionPointer(body_block, 0))], self.block.instructions)
-
-    def test_parameter_not_provided(self):
-        parameters = dict(foo=ConstantParameter(4))
-        conditions = dict(foo=DummyCondition(requires_stop=True))
-        measurement_mapping = dict(moth='fire')
-        channel_mapping = dict(asd='f')
-
-        template = RepetitionPulseTemplate(self.body, 'foo*bar', parameter_constraints=['foo<9'])
-
-        with self.assertRaises(ParameterNotProvidedException):
-            template.build_sequence(self.sequencer, parameters, conditions, measurement_mapping, channel_mapping,
-                                     self.block)
-
-    def test_build_sequence_declaration_exceeds_bounds(self) -> None:
-        parameters = dict(foo=ConstantParameter(9))
-        conditions = dict(foo=DummyCondition(requires_stop=True))
-        with self.assertRaises(ParameterConstraintViolation):
-            self.template.build_sequence(self.sequencer, parameters, conditions, {}, {}, self.block)
-        self.assertFalse(self.sequencer.sequencing_stacks)
-
-    def test_build_sequence_declaration_parameter_missing(self) -> None:
-        parameters = {}
-        conditions = dict(foo=DummyCondition(requires_stop=True))
-        with self.assertRaises(ParameterNotProvidedException):
-            self.template.build_sequence(self.sequencer, parameters, conditions, {}, {}, self.block)
-        self.assertFalse(self.sequencer.sequencing_stacks)
-
-    def test_build_sequence_declaration_parameter_value_not_whole(self) -> None:
-        parameters = dict(foo=ConstantParameter(3.3))
-        conditions = dict(foo=DummyCondition(requires_stop=True))
-        with self.assertRaises(ParameterNotIntegerException):
-            self.template.build_sequence(self.sequencer, parameters, conditions, {}, {}, self.block)
-        self.assertFalse(self.sequencer.sequencing_stacks)
-
-    def test_rep_count_zero_constant(self) -> None:
-        repetitions = 0
-        parameters = {}
-        measurement_mapping = {}
-        conditions = {}
-        channel_mapping = {}
-
-        # suppress warning about 0 repetitions on construction here, we are only interested in correct behavior during sequencing (i.e., do nothing)
-        with warnings.catch_warnings(record=True):
-            t = RepetitionPulseTemplate(self.body, repetitions)
-            t.build_sequence(self.sequencer, parameters, conditions, measurement_mapping, channel_mapping, self.block)
-
-            self.assertFalse(self.block.embedded_blocks) # no new blocks created
-            self.assertFalse(self.block.instructions) # no instructions added to block
-
-    def test_rep_count_zero_declaration(self) -> None:
-        t = self.template
-        parameters = dict(foo=ConstantParameter(0))
-        measurement_mapping = {}
-        conditions = {}
-        channel_mapping = {}
-        t.build_sequence(self.sequencer, parameters, conditions, measurement_mapping, channel_mapping, self.block)
-
-        self.assertFalse(self.block.embedded_blocks) # no new blocks created
-        self.assertFalse(self.block.instructions) # no instructions added to block
-
-    def test_rep_count_neg_declaration(self) -> None:
-        t = self.template
-        parameters = dict(foo=ConstantParameter(-1))
-        measurement_mapping = {}
-        conditions = {}
-        channel_mapping = {}
-        t.build_sequence(self.sequencer, parameters, conditions, measurement_mapping, channel_mapping, self.block)
-
-        self.assertFalse(self.block.embedded_blocks)  # no new blocks created
-        self.assertFalse(self.block.instructions)  # no instructions added to block
-
-    def test_requires_stop_constant(self) -> None:
-        body = DummyPulseTemplate(requires_stop=False)
-        t = RepetitionPulseTemplate(body, 2)
-        self.assertFalse(t.requires_stop({}, {}))
-        body.requires_stop_ = True
-        self.assertFalse(t.requires_stop({}, {}))
-
-    def test_requires_stop_declaration(self) -> None:
-        body = DummyPulseTemplate(requires_stop=False)
-        t = RepetitionPulseTemplate(body, 'foo')
-
-        parameter = DummyParameter()
-        parameters = dict(foo=parameter)
-        condition = DummyCondition()
-        conditions = dict(foo=condition)
-
-        for body_requires_stop in [True, False]:
-            for condition_requires_stop in [True, False]:
-                for parameter_requires_stop in [True, False]:
-                    body.requires_stop_ = body_requires_stop
-                    condition.requires_stop_ = condition_requires_stop
-                    parameter.requires_stop_ = parameter_requires_stop
-                    self.assertEqual(parameter_requires_stop, t.requires_stop(parameters, conditions))
 
 
 class RepetitionPulseTemplateSerializationTests(SerializableTests, unittest.TestCase):

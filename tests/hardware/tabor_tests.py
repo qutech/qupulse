@@ -6,12 +6,11 @@ from teawg import model_properties_dict
 
 from qupulse.hardware.awgs.tabor import TaborException, TaborProgram, \
     TaborSegment, TaborSequencing, with_configuration_guard, PlottableProgram
-from qupulse._program._loop import MultiChannelProgram, Loop
-from qupulse._program.instructions import InstructionBlock
+from qupulse._program._loop import Loop
 from qupulse.hardware.util import voltage_to_uint16
 
 from tests.pulses.sequencing_dummies import DummyWaveform
-from tests._program.loop_tests import LoopTests, WaveformGenerator, MultiChannelTests
+from tests._program.loop_tests import LoopTests, WaveformGenerator
 
 
 class TaborSegmentTests(unittest.TestCase):

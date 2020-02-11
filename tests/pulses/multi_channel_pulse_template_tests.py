@@ -8,7 +8,6 @@ from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform, Ma
     TransformingWaveform, ParallelConstantChannelTransformation
 from qupulse.pulses.parameters import ParameterConstraint, ParameterConstraintViolation, ConstantParameter
 from qupulse.expressions import ExpressionScalar, Expression
-from qupulse._program.instructions import InstructionBlock
 from qupulse._program.transformation import LinearTransformation, chain_transformations
 
 from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummyWaveform
@@ -195,18 +194,6 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
 
 
 class MultiChannelPulseTemplateSequencingTests(unittest.TestCase):
-
-    def test_requires_stop(self):
-        sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'}, parameter_names={'a', 'b'}, requires_stop=False),
-               DummyPulseTemplate(duration='t1', defined_channels={'B'}, parameter_names={'a', 'c'}, requires_stop=False)]
-
-        self.assertFalse(AtomicMultiChannelPulseTemplate(*sts).requires_stop(dict(), dict()))
-        sts = [
-            DummyPulseTemplate(duration='t1', defined_channels={'A'}, parameter_names={'a', 'b'}, requires_stop=False),
-            DummyPulseTemplate(duration='t1', defined_channels={'B'}, parameter_names={'a', 'c'}, requires_stop=True)]
-
-        self.assertTrue(AtomicMultiChannelPulseTemplate(*sts).requires_stop(dict(), dict()))
-
     def test_build_waveform(self):
         wfs = [DummyWaveform(duration=1.1, defined_channels={'A'}), DummyWaveform(duration=1.1, defined_channels={'B'})]
 
@@ -259,33 +246,6 @@ class MultiChannelPulseTemplateSequencingTests(unittest.TestCase):
         sts[0].waveform = None
         wf = pt.build_waveform(parameters, channel_mapping=channel_mapping)
         self.assertIsNone(wf)
-
-    def test_build_sequence(self):
-        wfs = [DummyWaveform(duration=1.1, defined_channels={'A'}), DummyWaveform(duration=1.1, defined_channels={'B'})]
-        sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'}, waveform=wfs[0], measurements=[('m', 0, 1)]),
-               DummyPulseTemplate(duration='t1', defined_channels={'B'}, waveform=wfs[1]),
-               DummyPulseTemplate(duration='t1', defined_channels={'C'}, waveform=None)]
-
-        pt = AtomicMultiChannelPulseTemplate(*sts, parameter_constraints=['a < b'], measurements=[('n', .1, .2)])
-
-        params = dict(a=ConstantParameter(1.0), b=ConstantParameter(1.1))
-        measurement_mapping = dict(m='foo', n='bar')
-        channel_mapping = {'A': 'A', 'B': 'B', 'C': None}
-
-        block = InstructionBlock()
-        pt.build_sequence(None, parameters=params, conditions={}, measurement_mapping=measurement_mapping,
-                          channel_mapping=channel_mapping, instruction_block=block)
-
-        expected_waveform = MultiChannelWaveform(wfs)
-
-        expected_block = InstructionBlock()
-        measurements = [('bar', .1, .2), ('foo', 0, 1)]
-        expected_block.add_instruction_meas(measurements)
-        expected_block.add_instruction_exec(waveform=expected_waveform)
-
-        self.assertEqual(len(block.instructions), len(expected_block.instructions))
-        self.assertEqual(block.instructions[0].compare_key, expected_block.instructions[0].compare_key)
-        self.assertEqual(block.instructions[1].compare_key, expected_block.instructions[1].compare_key)
 
     def test_get_measurement_windows(self):
         wfs = [DummyWaveform(duration=1.1, defined_channels={'A'}), DummyWaveform(duration=1.1, defined_channels={'B'})]
@@ -396,22 +356,10 @@ class ParallelConstantChannelPulseTemplateTests(unittest.TestCase):
         self.assertEqual({'a', 'c'}, pccpt.transformation_parameters)
         self.assertIs(template.duration, pccpt.duration)
 
-        template._is_interruptable = mock.Mock()
-        self.assertIs(pccpt.is_interruptable, template.is_interruptable)
-
-        rs_arg = object()
-        return_value = object()
-        template.requires_stop = mock.Mock(return_value=return_value)
-        self.assertIs(return_value, pccpt.requires_stop(rs_arg))
-        template.requires_stop.assert_called_once_with(rs_arg)
-
     def test_missing_implementations(self):
         pccpt = ParallelConstantChannelPulseTemplate(DummyPulseTemplate(), {})
         with self.assertRaises(NotImplementedError):
             pccpt.get_serialization_data(object())
-
-        with self.assertRaises(NotImplementedError):
-            pccpt.build_sequence()
 
     def test_integral(self):
         template = DummyPulseTemplate(duration='t1', defined_channels={'X', 'Y'}, parameter_names={'a', 'b'},

@@ -38,16 +38,6 @@ class MeasurementDefiner:
                 raise ValueError('Measurement window with negative begin or length: {}, {}'.format(begin, length))
         return resulting_windows
 
-    def insert_measurement_instruction(self,
-                                       instruction_block,
-                                       parameters: Dict[str, Parameter],
-                                       measurement_mapping: Dict[str, Optional[str]]):
-        parameters = {k: parameters[k].get_value()
-                      for k in self.measurement_parameters}
-        measurements = self.get_measurement_windows(parameters, measurement_mapping)
-        if measurements:
-            instruction_block.add_instruction_meas(measurements)
-
     @property
     def measurement_parameters(self) -> Set[str]:
         return set(var

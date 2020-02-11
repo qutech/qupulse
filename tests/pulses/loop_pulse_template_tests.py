@@ -2,18 +2,13 @@ import unittest
 from unittest import mock
 
 from qupulse.expressions import Expression, ExpressionScalar
-from qupulse.pulses.loop_pulse_template import ForLoopPulseTemplate, WhileLoopPulseTemplate,\
-    ConditionMissingException, ParametrizedRange, LoopIndexNotUsedException, LoopPulseTemplate
+from qupulse.pulses.loop_pulse_template import ForLoopPulseTemplate, ParametrizedRange,\
+    LoopIndexNotUsedException, LoopPulseTemplate
 from qupulse.pulses.parameters import ConstantParameter, InvalidParameterNameException, ParameterConstraintViolation,\
     ParameterNotProvidedException, ParameterConstraint
-from qupulse._program.instructions import MEASInstruction
 from qupulse._program._loop import Loop
 
-from qupulse._program._loop import MultiChannelProgram
-from qupulse.pulses.sequencing import Sequencer
-
-from tests.pulses.sequencing_dummies import DummyCondition, DummyPulseTemplate, DummySequencer, DummyInstructionBlock,\
-    DummyParameter, MeasurementWindowTestCase, DummyWaveform
+from tests.pulses.sequencing_dummies import DummyPulseTemplate, MeasurementWindowTestCase, DummyWaveform
 from tests.serialization_dummies import DummySerializer
 from tests.serialization_tests import SerializableTests
 from tests._program.transformation_tests import TransformationStub
@@ -332,17 +327,6 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
         self.assertEqual(1, program.repetition_count)
         self.assertEqual([], program.children)
 
-        # ensure same result as from Sequencer
-        sequencer = Sequencer()
-        sequencer.push(flt, parameters=parameters, conditions={}, window_mapping=measurement_mapping,
-                       channel_mapping=channel_mapping)
-        block = sequencer.build()
-        program_old = MultiChannelProgram(block, channels={'A'}).programs[frozenset({'A'})]
-        self.assertEqual(program_old.repetition_count, program.repetition_count)
-        self.assertEqual(program_old.children, program.children)
-        self.assertEqual(program_old.waveform, program.waveform)
-        # program_old defines measurements while program does not
-
     def test_create_program(self) -> None:
         dt = DummyPulseTemplate(parameter_names={'i'},
                                 waveform=DummyWaveform(duration=4.0, defined_channels={'A'}),
@@ -422,67 +406,6 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
 
         # not ensure same result as from Sequencer here - we're testing appending to an already existing parent loop
         # which is a use case that does not immediately arise from using Sequencer
-
-
-class ForLoopTemplateOldSequencingTests(unittest.TestCase):
-
-    def test_build_sequence_constraint_on_loop_var_exception(self):
-        """This test is to assure the status-quo behavior of ForLoopPT handling parameter constraints affecting the loop index
-        variable. Please see https://github.com/qutech/qupulse/issues/232 ."""
-
-        with self.assertWarnsRegex(UserWarning, "constraint on a variable shadowing the loop index",
-                                   msg="ForLoopPT did not issue a warning when constraining the loop index"):
-            flt = ForLoopPulseTemplate(body=DummyPulseTemplate(parameter_names={'k', 'i'}), loop_index='i',
-                                       loop_range=('a', 'b', 'c',), parameter_constraints=['k<=f', 'k>i'])
-
-        # loop index showing up in parameter_names because it appears in consraints
-        self.assertEqual(flt.parameter_names, {'f', 'k', 'a', 'b', 'c', 'i'})
-
-        parameters = {'k': ConstantParameter(1), 'a': ConstantParameter(0), 'b': ConstantParameter(2),
-                      'c': ConstantParameter(1), 'f': ConstantParameter(2)}
-        sequencer = DummySequencer()
-        block = DummyInstructionBlock()
-
-        # loop index not accessible in current build_sequence -> Exception
-        self.assertRaises(ParameterNotProvidedException, flt.build_sequence, sequencer, parameters, dict(), dict(), dict(), block)
-
-    def test_build_sequence(self):
-        dt = DummyPulseTemplate(parameter_names={'i'})
-        flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=('a', 'b', 'c'),
-                                   measurements=[('A', 0, 1)], parameter_constraints=['c > 1'])
-
-        sequencer = DummySequencer()
-        block = DummyInstructionBlock()
-        invalid_parameters = {'a': ConstantParameter(1), 'b': ConstantParameter(4), 'c': ConstantParameter(1)}
-        parameters = {'a': ConstantParameter(1), 'b': ConstantParameter(4), 'c': ConstantParameter(2)}
-        measurement_mapping = dict(A='B')
-        channel_mapping = dict(C='D')
-
-        with self.assertRaises(ParameterConstraintViolation):
-            flt.build_sequence(sequencer, invalid_parameters, dict(), measurement_mapping, channel_mapping, block)
-
-        self.assertEqual(block.instructions, [])
-        self.assertNotIn(block, sequencer.sequencing_stacks)
-
-        flt.build_sequence(sequencer, parameters, dict(), measurement_mapping, channel_mapping, block)
-
-        self.assertEqual(block.instructions, [MEASInstruction(measurements=[('B', 0, 1)])])
-
-        expected_stack = [(dt, {'i': ConstantParameter(3)}, dict(), measurement_mapping, channel_mapping),
-                          (dt, {'i': ConstantParameter(1)}, dict(), measurement_mapping, channel_mapping)]
-
-        self.assertEqual(sequencer.sequencing_stacks[block], expected_stack)
-
-    def test_requires_stop(self):
-        parameters = dict(A=DummyParameter(requires_stop=False), B=DummyParameter(requires_stop=False))
-
-        dt = DummyPulseTemplate(parameter_names={'i'})
-        flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=('A', 'B'))
-
-        self.assertFalse(flt.requires_stop(parameters, dict()))
-
-        parameters['A'] = DummyParameter(requires_stop=True)
-        self.assertTrue(flt.requires_stop(parameters, dict()))
 
 
 class ForLoopPulseTemplateSerializationTests(SerializableTests, unittest.TestCase):
@@ -612,159 +535,6 @@ class ForLoopPulseTemplateOldSerializationTests(unittest.TestCase):
             self.assertEqual(flt.loop_range.to_tuple(), ('A', 'B', 1))
             self.assertEqual(flt.measurement_declarations, measurements)
             self.assertEqual([str(c) for c in flt.parameter_constraints], parameter_constraints)
-
-
-class WhileLoopPulseTemplateTest(unittest.TestCase):
-
-    def test_parameter_names_and_declarations(self) -> None:
-        condition = DummyCondition()
-        body = DummyPulseTemplate()
-        t = WhileLoopPulseTemplate(condition, body)
-        self.assertEqual(body.parameter_names, t.parameter_names)
-
-        body.parameter_names_ = {'foo', 't', 'bar'}
-        self.assertEqual(body.parameter_names, t.parameter_names)
-
-    @unittest.skip
-    def test_is_interruptable(self) -> None:
-        condition = DummyCondition()
-        body = DummyPulseTemplate(is_interruptable=False)
-        t = WhileLoopPulseTemplate(condition, body)
-        self.assertFalse(t.is_interruptable)
-
-        body.is_interruptable_ = True
-        self.assertTrue(t.is_interruptable)
-
-    def test_str(self) -> None:
-        condition = DummyCondition()
-        body = DummyPulseTemplate()
-        t = WhileLoopPulseTemplate(condition, body)
-        self.assertIsInstance(str(t), str)
-
-    def test_integral(self) -> None:
-        condition = DummyCondition()
-        body = DummyPulseTemplate(defined_channels={'A', 'B'})
-        pulse = WhileLoopPulseTemplate(condition, body)
-        self.assertEqual({'A': ExpressionScalar('nan'), 'B': ExpressionScalar('nan')},
-                         pulse.integral)
-
-
-class WhileLoopPulseTemplateSequencingTests(unittest.TestCase):
-
-    def test_requires_stop(self) -> None:
-        condition = DummyCondition(requires_stop=False)
-        conditions = {'foo_cond': condition}
-        body = DummyPulseTemplate(requires_stop=False)
-        t = WhileLoopPulseTemplate('foo_cond', body)
-        self.assertFalse(t.requires_stop({}, conditions))
-
-        condition.requires_stop_ = True
-        self.assertTrue(t.requires_stop({}, conditions))
-
-        body.requires_stop_ = True
-        condition.requires_stop_ = False
-        self.assertFalse(t.requires_stop({}, conditions))
-
-    def test_build_sequence(self) -> None:
-        condition = DummyCondition()
-        body = DummyPulseTemplate()
-        t = WhileLoopPulseTemplate('foo_cond', body)
-        sequencer = DummySequencer()
-        block = DummyInstructionBlock()
-        parameters = {}
-        conditions = {'foo_cond': condition}
-        measurement_mapping = {'swag': 'aufdrehen'}
-        channel_mapping = {}
-        t.build_sequence(sequencer, parameters, conditions, measurement_mapping, channel_mapping, block)
-        expected_data = dict(
-            delegator=t,
-            body=body,
-            sequencer=sequencer,
-            parameters=parameters,
-            conditions=conditions,
-            measurement_mapping=measurement_mapping,
-            channel_mapping=channel_mapping,
-            instruction_block=block
-        )
-        self.assertEqual(expected_data, condition.loop_call_data)
-        self.assertFalse(condition.branch_call_data)
-        self.assertFalse(sequencer.sequencing_stacks)
-
-    def test_condition_missing(self) -> None:
-        body = DummyPulseTemplate(requires_stop=False)
-        t = WhileLoopPulseTemplate('foo_cond', body)
-        sequencer = DummySequencer()
-        block = DummyInstructionBlock()
-        with self.assertRaises(ConditionMissingException):
-            t.requires_stop({}, {})
-            t.build_sequence(sequencer, {}, {}, {}, block)
-
-
-class WhileLoopPulseTemplateSerializationTests(SerializableTests, unittest.TestCase):
-
-    @property
-    def class_to_test(self):
-        return WhileLoopPulseTemplate
-
-    def make_kwargs(self):
-        return {
-            'body': DummyPulseTemplate(),
-            'condition': 'foo_cond'
-        }
-
-    def assert_equal_instance_except_id(self, lhs: WhileLoopPulseTemplate, rhs: WhileLoopPulseTemplate):
-        self.assertIsInstance(lhs, WhileLoopPulseTemplate)
-        self.assertIsInstance(rhs, WhileLoopPulseTemplate)
-        self.assertEqual(lhs.body, rhs.body)
-        self.assertEqual(lhs.condition, rhs.condition)
-
-
-class WhileLoopPulseTemplateOldSerializationTests(unittest.TestCase):
-
-    def test_get_serialization_data_old(self) -> None:
-        # test for deprecated version during transition period, remove after final switch
-        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
-                                   msg="WhileLoopPT does not issue warning for old serialization routines."):
-            body = DummyPulseTemplate()
-            condition_name = 'foo_cond'
-            identifier = 'foo_loop'
-            t = WhileLoopPulseTemplate(condition_name, body, identifier=identifier)
-
-            serializer = DummySerializer()
-            expected_data = dict(body=str(id(body)),
-                                 condition=condition_name)
-
-            data = t.get_serialization_data(serializer)
-            self.assertEqual(expected_data, data)
-
-    def test_deserialize(self) -> None:
-        # test for deprecated version during transition period, remove after final switch
-        with self.assertWarnsRegex(DeprecationWarning, "deprecated",
-                                   msg="WhileLoopPT does not issue warning for old serialization routines."):
-            data = dict(
-                identifier='foo_loop',
-                condition='foo_cond',
-                body='bodyDummyPulse'
-            )
-
-            # prepare dependencies for deserialization
-            serializer = DummySerializer()
-            serializer.subelements[data['body']] = DummyPulseTemplate()
-
-            # deserialize
-            result = WhileLoopPulseTemplate.deserialize(serializer, **data)
-
-            # compare
-            self.assertIs(serializer.subelements[data['body']], result.body)
-            self.assertEqual(data['condition'], result.condition)
-            self.assertEqual(data['identifier'], result.identifier)
-
-
-class ConditionMissingExceptionTest(unittest.TestCase):
-
-    def test(self) -> None:
-        exc = ConditionMissingException('foo')
-        self.assertIsInstance(str(exc), str)
 
 
 class LoopIndexNotUsedExceptionTest(unittest.TestCase):
