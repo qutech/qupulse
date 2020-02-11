@@ -234,7 +234,7 @@ class ParallelConstantChannelPulseTemplate(PulseTemplate):
                 for name, value in self.overwritten_channels.items()}
 
     def _internal_create_program(self, *,
-                                 parameters: Dict[str, Parameter],
+                                 scope: Scope,
                                  global_transformation: Optional[Transformation],
                                  **kwargs):
         real_parameters = {name: parameters[name].get_value() for name in self.transformation_parameters}

@@ -8,6 +8,7 @@ import cached_property
 
 from qupulse.expressions import ExpressionScalar, ExpressionLike
 from qupulse.serialization import Serializer, PulseRegistryType
+from qupulse.parameter_scope import Scope
 
 from qupulse.pulses.conditions import Condition
 from qupulse.utils.types import ChannelID
@@ -243,8 +244,8 @@ class ArithmeticPulseTemplate(PulseTemplate):
             return operand if isinstance(operand, ExpressionScalar) else ExpressionScalar(operand)
 
     def _get_scalar_value(self,
-                          parameters: Dict[str, Real],
-                          channel_mapping: Dict[str, Optional[str]]) -> Dict[ChannelID, Real]:
+                          parameters: Mapping[str, Real],
+                          channel_mapping: Mapping[str, Optional[str]]) -> Dict[ChannelID, Real]:
         """Generate a dict of real values from the scalar operand.
 
         If the scalar operand is an ExpressionScalar all channels with non None values in channel_mapping get the same
@@ -260,13 +261,13 @@ class ArithmeticPulseTemplate(PulseTemplate):
             The evaluation of the scalar operand for all relevant channels
         """
         if isinstance(self._scalar, ExpressionScalar):
-            scalar_value = self._scalar.evaluate_numeric(**parameters)
+            scalar_value = self._scalar.evaluate_in_scope(parameters)
             return {channel_mapping[channel]: scalar_value
                     for channel in self._pulse_template.defined_channels
                     if channel_mapping[channel]}
 
         else:
-            return {channel_mapping[channel]: value.evaluate_numeric(**parameters)
+            return {channel_mapping[channel]: value.evaluate_in_scope(parameters)
                     for channel, value in self._scalar.items()
                     if channel_mapping[channel]}
 
@@ -279,8 +280,8 @@ class ArithmeticPulseTemplate(PulseTemplate):
         return self._rhs
     
     def _get_transformation(self,
-                            parameters: Dict[str, Real],
-                            channel_mapping: Dict[ChannelID, ChannelID]) -> Transformation:
+                            parameters: Mapping[str, Real],
+                            channel_mapping: Mapping[ChannelID, ChannelID]) -> Transformation:
         transformation = IdentityTransformation()
 
         scalar_value = self._get_scalar_value(parameters=parameters,
@@ -314,7 +315,7 @@ class ArithmeticPulseTemplate(PulseTemplate):
             )
 
     def _internal_create_program(self, *,
-                                 parameters: Dict[str, Parameter],
+                                 scope: Scope,
                                  measurement_mapping: Dict[str, Optional[str]],
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional[Transformation],
@@ -322,16 +323,13 @@ class ArithmeticPulseTemplate(PulseTemplate):
                                  parent_loop: 'Loop'):
         """The operation is applied by modifying the transformation the pulse template operand sees."""
 
-        scalar_operand_parameters = {parameter_name: parameters[parameter_name].get_value()
-                                     for parameter_name in self._scalar_operand_parameters}
-
         # put arithmetic into transformation
-        inner_transformation = self._get_transformation(parameters=scalar_operand_parameters,
+        inner_transformation = self._get_transformation(parameters=scope,
                                                         channel_mapping=channel_mapping)
 
         transformation = inner_transformation.chain(global_transformation)
 
-        self._pulse_template._create_program(parameters=parameters,
+        self._pulse_template._create_program(scope=scope,
                                              measurement_mapping=measurement_mapping,
                                              channel_mapping=channel_mapping,
                                              global_transformation=transformation,

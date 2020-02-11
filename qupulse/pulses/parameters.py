@@ -1,26 +1,28 @@
-"""This module defines parameters and parameter declaration for the usage in pulse modelling.
+"""This module defines parameters and parameter declaration for usage in pulse modelling.
 
 Classes:
     - Parameter: A base class representing a single pulse parameter.
     - ConstantParameter: A single parameter with a constant value.
     - MappedParameter: A parameter whose value is mathematically computed from another parameter.
     - ParameterNotProvidedException.
-    - ParameterValueIllegalException.
 """
 
 from abc import abstractmethod
-from typing import Optional, Union, Dict, Any, Iterable, Set, List
+from typing import Optional, Union, Dict, Any, Iterable, Set, List, Mapping
 from numbers import Real
+import warnings
 
 import sympy
 import numpy
 
 from qupulse.serialization import AnonymousSerializable
 from qupulse.expressions import Expression, ExpressionVariableMissingException
+from qupulse.parameter_scope import Scope
 from qupulse.utils.types import HashableNumpyArray, DocStringABCMeta
 
 __all__ = ["Parameter", "ConstantParameter",
            "ParameterNotProvidedException", "ParameterConstraintViolation", "ParameterConstraint"]
+
 
 
 class Parameter(metaclass=DocStringABCMeta):
@@ -64,6 +66,8 @@ class ConstantParameter(Parameter):
         Args:
             value (Real): The value of the parameter
         """
+        warnings.warn("ConstantParameter is deprecated. Use plain number types instead", DeprecationWarning)
+
         super().__init__()
         try:
             if isinstance(value, Real):
@@ -112,6 +116,8 @@ class MappedParameter(Parameter):
              dependencies (Dict(str -> Parameter)): Parameter objects of the dependencies. May also
                 be defined via the dependencies public property. (Optional)
         """
+        warnings.warn("MappedParameter is deprecated. There should be no interface depending on it", DeprecationWarning)
+
         super().__init__()
         self._expression = expression
         self.dependencies = dict() if dependencies is None else dependencies
@@ -172,25 +178,25 @@ class ParameterConstraint(AnonymousSerializable):
     def affected_parameters(self) -> Set[str]:
         return set(self._expression.variables)
 
-    def is_fulfilled(self, parameter: Dict[str, Any]) -> bool:
+    def is_fulfilled(self, parameter: Mapping[str, Any]) -> bool:
         if not self.affected_parameters <= set(parameter.keys()):
             raise ParameterNotProvidedException((self.affected_parameters-set(parameter.keys())).pop())
 
-        return numpy.all(self._expression.evaluate_numeric(**parameter))
+        return numpy.all(self._expression.evaluate_in_scope(parameter))
 
     @property
     def sympified_expression(self) -> sympy.Expr:
-        return self._expression.sympified_expression
+        return self._expression.underlying_expression
 
     def __eq__(self, other: 'ParameterConstraint') -> bool:
         return self._expression.underlying_expression == other._expression.underlying_expression
 
     def __str__(self) -> str:
-        if isinstance(self._expression.sympified_expression, sympy.Eq):
-            return '{}=={}'.format(self._expression.sympified_expression.lhs,
-                                   self._expression.sympified_expression.rhs)
+        if isinstance(self._expression.underlying_expression, sympy.Eq):
+            return '{}=={}'.format(self._expression.underlying_expression.lhs,
+                                   self._expression.underlying_expression.rhs)
         else:
-            return str(self._expression.sympified_expression)
+            return str(self._expression.underlying_expression)
 
     def __repr__(self):
         return 'ParameterConstraint(%s)' % repr(str(self))
@@ -223,6 +229,13 @@ class ParameterConstrainer:
             constraint_parameters = {k: v.get_value() if isinstance(v, Parameter) else v for k, v in parameters.items()}
             if not constraint.is_fulfilled(constraint_parameters):
                 raise ParameterConstraintViolation(constraint, constraint_parameters)
+
+    def validate_scope(self, scope: Mapping[str, Real]):
+        for constraint in self._parameter_constraints:
+            if not constraint.is_fulfilled(scope):
+                constrained_parameters = {parameter_name: scope[parameter_name]
+                                          for parameter_name in constraint.affected_parameters}
+                raise ParameterConstraintViolation(constraint, constrained_parameters)
 
     @property
     def constrained_parameters(self) -> Set[str]:

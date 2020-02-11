@@ -2,13 +2,17 @@
 another PulseTemplate based on a condition."""
 
 
-from typing import Dict, Set, Optional, Any, Union, Tuple, Generator, Sequence, cast, Callable
+from typing import Dict, Set, Optional, Any, Union, Tuple, Iterator, Sequence, cast, Mapping
 import warnings
+from numbers import Number
 
 import sympy
 from cached_property import cached_property
 
 from qupulse.serialization import Serializer, PulseRegistryType
+from qupulse.parameter_scope import Scope, MappedScope, DictScope
+from qupulse.utils.types import FrozenDict
+
 from qupulse._program._loop import Loop
 
 from qupulse.expressions import ExpressionScalar
@@ -86,10 +90,10 @@ class ParametrizedRange:
                 self.stop.get_serialization_data(),
                 self.step.get_serialization_data())
 
-    def to_range(self, parameters: Dict[str, Any]) -> range:
-        return range(checked_int_cast(self.start.evaluate_numeric(**parameters)),
-                     checked_int_cast(self.stop.evaluate_numeric(**parameters)),
-                     checked_int_cast(self.step.evaluate_numeric(**parameters)))
+    def to_range(self, parameters: Mapping[str, Number]) -> range:
+        return range(checked_int_cast(self.start.evaluate_in_scope(parameters)),
+                     checked_int_cast(self.stop.evaluate_in_scope(parameters)),
+                     checked_int_cast(self.step.evaluate_in_scope(parameters)))
 
     @property
     def parameter_names(self) -> Set[str]:
@@ -195,18 +199,14 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
         parameter_names.remove(self._loop_index)
         return parameter_names | self._loop_range.parameter_names | self.constrained_parameters | self.measurement_parameters
 
-    def _body_parameter_generator(self, parameters: Dict[str, Parameter], forward=True) -> Generator:
-        loop_range_parameters = dict((parameter_name, parameters[parameter_name].get_value())
-                                     for parameter_name in self._loop_range.parameter_names)
-        loop_range = self._loop_range.to_range(loop_range_parameters)
+    def _body_scope_generator(self, scope: Scope, forward=True) -> Iterator[Scope]:
+        loop_range = self._loop_range.to_range(scope)
 
-        parameters = dict((parameter_name, parameters[parameter_name])
-                          for parameter_name in self.body.parameter_names if parameter_name != self._loop_index)
         loop_range = loop_range if forward else reversed(loop_range)
+        loop_index_name = self._loop_index
+
         for loop_index_value in loop_range:
-            local_parameters = parameters.copy()
-            local_parameters[self._loop_index] = ConstantParameter(loop_index_value)
-            yield local_parameters
+            yield MappedScope(scope, FrozenDict([(loop_index_name, loop_index_value)]))
 
     def build_sequence(self,
                        sequencer: Sequencer,
@@ -221,7 +221,11 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
                                             parameters=parameters,
                                             measurement_mapping=measurement_mapping)
 
-        for local_parameters in self._body_parameter_generator(parameters, forward=False):
+        scope = DictScope(FrozenDict(parameters))
+
+        for local_scope in self._body_scope_generator(scope, forward=False):
+            local_parameters = dict(local_scope.items())
+
             sequencer.push(self.body,
                            parameters=local_parameters,
                            conditions=conditions,
@@ -230,13 +234,13 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
                            target_block=instruction_block)
 
     def _internal_create_program(self, *,
-                                 parameters: Dict[str, Parameter],
+                                 scope: Scope,
                                  measurement_mapping: Dict[str, Optional[str]],
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional['Transformation'],
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
                                  parent_loop: Loop) -> None:
-        self.validate_parameter_constraints(parameters=parameters)
+        self.validate_scope(scope=scope)
 
         try:
             measurement_parameters = {parameter_name: parameters[parameter_name].get_value()
@@ -246,7 +250,7 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
         except KeyError as e:
             raise ParameterNotProvidedException(str(e)) from e
 
-        if self.duration.evaluate_numeric(**duration_parameters) > 0:
+        if self.duration.evaluate_in_scope(scope) > 0:
             measurements = self.get_measurement_windows(measurement_parameters, measurement_mapping)
             if measurements:
                 parent_loop.add_measurements(measurements)

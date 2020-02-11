@@ -4,8 +4,9 @@ import itertools
 import numbers
 import collections
 
-from qupulse.utils.types import ChannelID
+from qupulse.utils.types import ChannelID, FrozenDict
 from qupulse.expressions import Expression, ExpressionScalar
+from qupulse.parameter_scope import Scope, MappedScope
 from qupulse.pulses.pulse_template import PulseTemplate, MappingTuple
 from qupulse.pulses.parameters import Parameter, MappedParameter, ParameterNotProvidedException, ParameterConstrainer
 from qupulse.pulses.sequencing import Sequencer
@@ -116,7 +117,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
             template = template.template
 
         self.__template = template
-        self.__parameter_mapping = parameter_mapping
+        self.__parameter_mapping = FrozenDict(parameter_mapping)
         self.__external_parameters = set(itertools.chain(*(expr.variables for expr in self.__parameter_mapping.values())))
         self.__external_parameters |= self.constrained_parameters
         self.__measurement_mapping = measurement_mapping
@@ -183,7 +184,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         return self.__measurement_mapping
 
     @property
-    def parameter_mapping(self) -> Dict[str, Expression]:
+    def parameter_mapping(self) -> FrozenDict[str, Expression]:
         return self.__parameter_mapping
 
     @property
@@ -275,6 +276,9 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                                            {name: parameters[name] for name in mapping_function.variables})
                 for (parameter, mapping_function) in self.__parameter_mapping.items()}
 
+    def map_scope(self, scope: Scope) -> MappedScope:
+        return MappedScope(scope=scope, mapping=self.__parameter_mapping)
+
     def map_parameters(self,
                        parameters: Dict[str, Union[Parameter, numbers.Real]]) -> Dict[str,
                                                                                       Union[Parameter, numbers.Real]]:
@@ -323,14 +327,14 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                                      instruction_block=instruction_block)
 
     def _internal_create_program(self, *,
-                                 parameters: Dict[str, Parameter],
+                                 scope: Scope,
                                  measurement_mapping: Dict[str, Optional[str]],
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional['Transformation'],
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
                                  parent_loop: Loop) -> None:
         # parameters are validated in map_parameters() call, no need to do it here again explicitly
-        self.template._create_program(parameters=self.map_parameter_objects(parameters),
+        self.template._create_program(scope=self.map_scope(scope),
                                       measurement_mapping=self.get_updated_measurement_mapping(measurement_mapping),
                                       channel_mapping=self.get_updated_channel_mapping(channel_mapping),
                                       global_transformation=global_transformation,

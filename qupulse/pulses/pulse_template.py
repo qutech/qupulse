@@ -10,9 +10,9 @@ from abc import abstractmethod
 from typing import Dict, Tuple, Set, Optional, Union, List, Callable, Any, Generic, TypeVar, Mapping
 import itertools
 import collections
-from numbers import Real
+from numbers import Real, Number
 
-from qupulse.utils.types import ChannelID, DocStringABCMeta
+from qupulse.utils.types import ChannelID, DocStringABCMeta, FrozenDict
 from qupulse.serialization import Serializable
 from qupulse.expressions import ExpressionScalar, Expression, ExpressionLike
 from qupulse._program._loop import Loop, to_waveform
@@ -24,6 +24,7 @@ from qupulse.pulses.parameters import Parameter, ConstantParameter, ParameterNot
 from qupulse.pulses.sequencing import Sequencer, SequencingElement, InstructionBlock
 from qupulse._program.waveforms import Waveform, TransformingWaveform
 from qupulse.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
+from qupulse.parameter_scope import Scope, DictScope
 
 __all__ = ["PulseTemplate", "AtomicPulseTemplate", "DoubleParameterNameException", "MappingTuple"]
 
@@ -101,7 +102,7 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
         """Returns an expression giving the integral over the pulse."""
 
     def create_program(self, *,
-                       parameters: Optional[Mapping[str, Union[Parameter, float, Expression, str, Real]]]=None,
+                       parameters: Optional[Mapping[str, Union[Expression, str, Number, ConstantParameter]]]=None,
                        measurement_mapping: Optional[Mapping[str, Optional[str]]]=None,
                        channel_mapping: Optional[Mapping[ChannelID, Optional[ChannelID]]]=None,
                        global_transformation: Optional[Transformation]=None,
@@ -141,13 +142,18 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
         if non_unique_targets:
             raise ValueError('The following channels are mapped to twice', non_unique_targets)
 
-        # make sure all values in the parameters dict are of type Parameter
-        parameters = {key: value if isinstance(value, Parameter) else ConstantParameter(value)
-                      for key, value in parameters.items()}
+        # make sure all values in the parameters dict are numbers
+        for parameter_name, value in parameters.items():
+            if isinstance(value, Parameter):
+                parameters[parameter_name] = value.get_value()
+            elif not isinstance(value, Number):
+                parameters[parameter_name] = Expression(value).evaluate_numeric()
+
+        scope = DictScope(values=FrozenDict(parameters))
 
         root_loop = Loop()
         # call subclass specific implementation
-        self._create_program(parameters=parameters,
+        self._create_program(scope=scope,
                              measurement_mapping=measurement_mapping,
                              channel_mapping=complete_channel_mapping,
                              global_transformation=global_transformation,
@@ -160,7 +166,7 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
 
     @abstractmethod
     def _internal_create_program(self, *,
-                                 parameters: Dict[str, Parameter],
+                                 scope: Scope,
                                  measurement_mapping: Dict[str, Optional[str]],
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional[Transformation],
@@ -181,7 +187,7 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
         remains unchanged in this case."""
 
     def _create_program(self, *,
-                        parameters: Dict[str, Parameter],
+                        scope: Scope,
                         measurement_mapping: Dict[str, Optional[str]],
                         channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                         global_transformation: Optional[Transformation],
@@ -192,7 +198,7 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
         if self.identifier in to_single_waveform or self in to_single_waveform:
             root = Loop()
 
-            self._internal_create_program(parameters=parameters,
+            self._internal_create_program(scope=scope,
                                           measurement_mapping=measurement_mapping,
                                           channel_mapping=channel_mapping,
                                           global_transformation=None,
@@ -214,7 +220,7 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
             parent_loop.append_child(waveform=waveform)
 
         else:
-            self._internal_create_program(parameters=parameters,
+            self._internal_create_program(scope=scope,
                                           measurement_mapping=measurement_mapping,
                                           channel_mapping=channel_mapping,
                                           to_single_waveform=to_single_waveform,
@@ -312,7 +318,7 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
             instruction_block.add_instruction_exec(waveform)
 
     def _internal_create_program(self, *,
-                                 parameters: Dict[str, Parameter],
+                                 scope: Scope,
                                  measurement_mapping: Dict[str, Optional[str]],
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional[Transformation],
