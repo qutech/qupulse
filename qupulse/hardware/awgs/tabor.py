@@ -766,6 +766,9 @@ class TaborChannelPair(AWG):
                                                                   entry.repetition_count, entry.jump_flag))
             self._execute_multiple_commands_with_config_guard(commands)
 
+        # Wait until AWG is finished
+        _ = self.device.main_instrument._visa_inst.query('*OPC?')
+
     def set_marker_state(self, marker: int, active: bool) -> None:
         """Sets the marker state of this channel pair.
         According to the manual one cannot turn them off/on separately."""
