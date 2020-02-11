@@ -250,8 +250,6 @@ class DummyPulseTemplateSerializationTests(SerializableTests, unittest.TestCase)
 
     def make_kwargs(self):
         return {
-            'requires_stop': True,
-            'is_interruptable': True,
             'parameter_names': {'foo', 'bar'},
             'defined_channels': {'default', 'not_default'},
             'duration': ExpressionScalar('17.3*foo+bar'),

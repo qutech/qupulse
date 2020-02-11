@@ -31,12 +31,11 @@ class AbstractPulseTemplateTests(unittest.TestCase):
             AbstractPulseTemplate(identifier='my_apt', integral={'X': 1}, defined_channels={'A'})
 
     def test_declaring(self):
-        apt = AbstractPulseTemplate(identifier='my_apt', defined_channels={'A'}, is_interruptable=True)
+        apt = AbstractPulseTemplate(identifier='my_apt', defined_channels={'A'})
 
         self.assertEqual(apt._frozen_properties, set())
-        self.assertEqual(apt._declared_properties, {'defined_channels': {'A'}, 'is_interruptable': True})
+        self.assertEqual(apt._declared_properties, {'defined_channels': {'A'}})
         self.assertEqual(apt.identifier, 'my_apt')
-        self.assertEqual(apt.is_interruptable, True)
 
     def test_freezing(self):
         apt = AbstractPulseTemplate(identifier='my_apt', defined_channels={'A'})
@@ -113,7 +112,7 @@ class AbstractPulseTemplateTests(unittest.TestCase):
         args = ([], {}, 'asd')
         kwargs = {'kw1': [], 'kw2': {}}
 
-        forwarded_methods = ['build_sequence', '_create_program', 'requires_stop']
+        forwarded_methods = ['_create_program']
 
         for method_name in forwarded_methods:
             method = getattr(apt, method_name)

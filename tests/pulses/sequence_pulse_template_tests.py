@@ -6,12 +6,9 @@ from qupulse.pulses.table_pulse_template import TablePulseTemplate
 from qupulse.pulses.sequence_pulse_template import SequencePulseTemplate, SequenceWaveform
 from qupulse.pulses.mapping_pulse_template import MappingPulseTemplate
 from qupulse.pulses.parameters import ConstantParameter, ParameterConstraint, ParameterConstraintViolation, ParameterNotProvidedException
-from qupulse._program.instructions import MEASInstruction
-from qupulse._program._loop import Loop, MultiChannelProgram
+from qupulse._program._loop import Loop
 
-from qupulse.pulses.sequencing import Sequencer
-
-from tests.pulses.sequencing_dummies import DummySequencer, DummyInstructionBlock, DummyPulseTemplate,\
+from tests.pulses.sequencing_dummies import DummyPulseTemplate,\
     DummyNoValueParameter, DummyWaveform, MeasurementWindowTestCase
 from tests.serialization_dummies import DummySerializer
 from tests.serialization_tests import SerializableTests
@@ -283,13 +280,6 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
                          loop.children)
         self.assert_measurement_windows_equal({'a': ([0], [1]), 'b': ([1], [2])}, loop.get_measurement_windows())
 
-        # ensure same result as from Sequencer
-        sequencer = Sequencer()
-        sequencer.push(seq, parameters=parameters, conditions={}, window_mapping=measurement_mapping, channel_mapping=channel_mapping)
-        block = sequencer.build()
-        old_program = MultiChannelProgram(block, channels={'A'})
-        self.assertEqual(old_program.programs[frozenset({'A'})], loop)
-
         ### test again with inverted sequence
         seq = SequencePulseTemplate(sub2, sub1, measurements=[('a', 0, 1)])
         loop = Loop()
@@ -305,13 +295,6 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
                           Loop(repetition_count=1, waveform=sub1.waveform)],
                          loop.children)
         self.assert_measurement_windows_equal({'a': ([0], [1]), 'b': ([3], [2])}, loop.get_measurement_windows())
-
-        # ensure same result as from Sequencer
-        sequencer = Sequencer()
-        sequencer.push(seq, parameters=parameters, conditions={}, window_mapping=measurement_mapping, channel_mapping=channel_mapping)
-        block = sequencer.build()
-        old_program = MultiChannelProgram(block, channels={'A'})
-        self.assertEqual(old_program.programs[frozenset({'A'})], loop)
 
     def test_internal_create_program_no_measurement_mapping(self) -> None:
         sub1 = DummyPulseTemplate(duration=3, waveform=DummyWaveform(duration=3), measurements=[('b', 1, 2)])
@@ -365,13 +348,6 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
                          loop.children)
         self.assert_measurement_windows_equal({'a': ([0], [1])}, loop.get_measurement_windows())
 
-        # ensure same result as from Sequencer
-        sequencer = Sequencer()
-        sequencer.push(seq, parameters=parameters, conditions={}, window_mapping=measurement_mapping, channel_mapping=channel_mapping)
-        block = sequencer.build()
-        old_program = MultiChannelProgram(block, channels={'A'})
-        self.assertEqual(old_program.programs[frozenset({'A'})], loop)
-
         ### test again with inverted sequence
         seq = SequencePulseTemplate(sub2, sub1, measurements=[('a', 0, 1)])
         loop = Loop()
@@ -386,13 +362,6 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
         self.assertEqual([Loop(repetition_count=1, waveform=sub2.waveform)],
                          loop.children)
         self.assert_measurement_windows_equal({'a': ([0], [1])}, loop.get_measurement_windows())
-
-        # ensure same result as from Sequencer
-        sequencer = Sequencer()
-        sequencer.push(seq, parameters=parameters, conditions={}, window_mapping=measurement_mapping, channel_mapping=channel_mapping)
-        block = sequencer.build()
-        old_program = MultiChannelProgram(block, channels={'A'})
-        self.assertEqual(old_program.programs[frozenset({'A'})], loop)
 
     def test_internal_create_program_both_children_no_duration(self) -> None:
         sub1 = DummyPulseTemplate(duration=0, waveform=None, measurements=[('b', 1, 2)], defined_channels={'A'})
@@ -413,16 +382,6 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
         self.assertIsNone(loop.waveform)
         self.assertEqual([], loop.children)
         self.assertIsNone(loop._measurements)
-
-        # ensure same result as from Sequencer
-        sequencer = Sequencer()
-        sequencer.push(seq, parameters=parameters, conditions={}, window_mapping=measurement_mapping, channel_mapping=channel_mapping)
-        block = sequencer.build()
-        old_program = MultiChannelProgram(block, channels={'A'})
-        old_loop = old_program.programs[frozenset({'A'})]
-        self.assertEqual(old_loop.waveform, loop.waveform)
-        self.assertEqual(old_loop.children, loop.children)
-        # new loop will have no measurements. old_loop still defines SequencePT measurements
 
     def test_internal_create_program_parameter_constraint_violations(self) -> None:
         sub1 = DummyPulseTemplate(duration=3, waveform=DummyWaveform(duration=3), measurements=[('b', 1, 2)])
@@ -475,107 +434,7 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
                                          parent_loop=loop)
 
 
-class SequencePulseTemplateOldSequencingTests(SequencePulseTemplateTest):
-    def test_build_sequence(self) -> None:
-        sub1 = DummyPulseTemplate(requires_stop=False)
-        sub2 = DummyPulseTemplate(requires_stop=True, parameter_names={'foo'})
-        parameters = {'foo': DummyNoValueParameter()}
-
-        sequencer = DummySequencer()
-        block = DummyInstructionBlock()
-        seq = SequencePulseTemplate(sub1, (sub2, {'foo': 'foo'}), measurements=[('a', 0, 1)])
-        seq.build_sequence(sequencer, parameters,
-                           conditions=dict(),
-                           channel_mapping={'default': 'a'},
-                           measurement_mapping={'a': 'b'},
-                           instruction_block=block)
-        self.assertEqual(2, len(sequencer.sequencing_stacks[block]))
-
-        self.assertEqual(block.instructions[0], MEASInstruction([('b', 0, 1)]))
-
-        sequencer = DummySequencer()
-        block = DummyInstructionBlock()
-        seq = SequencePulseTemplate((sub2, {'foo': 'foo'}), sub1)
-        seq.build_sequence(sequencer, parameters, {}, {}, {}, block)
-        self.assertEqual(2, len(sequencer.sequencing_stacks[block]))
-
-    @unittest.skip("Was this test faulty before? Why should the three last cases return false?")
-    def test_requires_stop(self) -> None:
-        sub1 = (DummyPulseTemplate(requires_stop=False), {}, {})
-        sub2 = (DummyPulseTemplate(requires_stop=True, parameter_names={'foo'}), {'foo': 'foo'}, {})
-        parameters = {'foo': DummyNoValueParameter()}
-
-        seq = SequencePulseTemplate(sub1)
-        self.assertFalse(seq.requires_stop(parameters, {}))
-
-        seq = SequencePulseTemplate(sub2)
-        self.assertFalse(seq.requires_stop(parameters, {}))
-
-        seq = SequencePulseTemplate(sub1, sub2)
-        self.assertFalse(seq.requires_stop(parameters, {}))
-
-        seq = SequencePulseTemplate(sub2, sub1)
-        self.assertFalse(seq.requires_stop(parameters, {}))
-
-    def test_crash(self) -> None:
-        table = TablePulseTemplate({'default': [('ta', 'va', 'hold'),
-                                                ('tb', 'vb', 'linear'),
-                                                ('tend', 0, 'jump')]}, identifier='foo')
-
-        expected_parameters = {'ta', 'tb', 'tc', 'td', 'va', 'vb', 'tend'}
-        first_mapping = {
-            'ta': 'ta',
-            'tb': 'tb',
-            'va': 'va',
-            'vb': 'vb',
-            'tend': 'tend'
-        }
-        second_mapping = {
-            'ta': 'tc',
-            'tb': 'td',
-            'va': 'vb',
-            'vb': 'va + vb',
-            'tend': '2 * tend'
-        }
-        sequence = SequencePulseTemplate((table, first_mapping, {}), (table, second_mapping, {}))
-        self.assertEqual(expected_parameters, sequence.parameter_names)
-
-        parameters = {
-            'ta': ConstantParameter(2),
-            'va': ConstantParameter(2),
-            'tb': ConstantParameter(4),
-            'vb': ConstantParameter(3),
-            'tc': ConstantParameter(5),
-            'td': ConstantParameter(11),
-            'tend': ConstantParameter(6)}
-
-        sequencer = DummySequencer()
-        block = DummyInstructionBlock()
-        self.assertFalse(sequence.requires_stop(parameters, {}))
-        sequence.build_sequence(sequencer,
-                                parameters=parameters,
-                                conditions={},
-                                measurement_mapping={},
-                                channel_mapping={'default': 'default'},
-                                instruction_block=block)
-        from qupulse.pulses.sequencing import Sequencer
-        s = Sequencer()
-        s.push(sequence, parameters, channel_mapping={'default': 'EXAMPLE_A'})
-
-
 class SequencePulseTemplateTestProperties(SequencePulseTemplateTest):
-    def test_is_interruptable(self):
-
-        self.assertTrue(
-            SequencePulseTemplate(DummyPulseTemplate(is_interruptable=True),
-                                  DummyPulseTemplate(is_interruptable=True)).is_interruptable)
-        self.assertTrue(
-            SequencePulseTemplate(DummyPulseTemplate(is_interruptable=True),
-                                  DummyPulseTemplate(is_interruptable=False)).is_interruptable)
-        self.assertFalse(
-            SequencePulseTemplate(DummyPulseTemplate(is_interruptable=False),
-                                  DummyPulseTemplate(is_interruptable=False)).is_interruptable)
-
     def test_measurement_names(self):
         d1 = DummyPulseTemplate(measurement_names={'a'})
         d2 = DummyPulseTemplate(measurement_names={'b'})

@@ -47,15 +47,7 @@ class ArithmeticAtomicPulseTemplateTest(unittest.TestCase):
         self.assertEqual(measurements, arith.measurement_declarations)
         self.assertEqual('-', arith.arithmetic_operator)
         self.assertEqual('my_arith', arith.identifier)
-    
-    def test_requires_stop(self):
-        lhs = DummyPulseTemplate(duration=4, defined_channels={'a', 'b'}, parameter_names={'x', 'y'})
-        rhs = DummyPulseTemplate(duration=4, defined_channels={'a', 'c'}, parameter_names={'x', 'z'})
 
-        arith = lhs + rhs
-        with self.assertRaises(NotImplementedError):
-            arith.requires_stop({}, {})
-    
     def test_build_waveform(self):
         a = DummyPulseTemplate(duration=4, defined_channels={'a', 'b'}, parameter_names={'x', 'y'})
         b = DummyPulseTemplate(duration=4, defined_channels={'a', 'c'}, parameter_names={'x', 'z'})
@@ -441,11 +433,10 @@ class ArithmeticPulseTemplateTest(unittest.TestCase):
 
     def test_simple_attributes(self):
         lhs = DummyPulseTemplate(defined_channels={'a', 'b'}, duration=ExpressionScalar('t_dur'),
-                                 is_interruptable=mock.Mock(), measurement_names={'m1'})
+                                 measurement_names={'m1'})
         rhs = 4
         arith = ArithmeticPulseTemplate(lhs, '+', rhs)
         self.assertIs(lhs.duration, arith.duration)
-        self.assertIs(lhs.is_interruptable, arith.is_interruptable)
         self.assertIs(lhs.measurement_names, arith.measurement_names)
 
     def test_parameter_names(self):
