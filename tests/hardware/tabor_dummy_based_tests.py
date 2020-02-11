@@ -229,7 +229,8 @@ class TaborChannelPairTests(TaborDummyBasedTest):
 
         with mock.patch.object(program_mock, 'update_volatile_parameters', return_value=modifications) as update_prog:
             with mock.patch.object(channel_pair, '_execute_multiple_commands_with_config_guard') as ex_com:
-                channel_pair.set_volatile_parameters('other_program', parameters)
+                with mock.patch.object(channel_pair.device.main_instrument._visa_inst, 'query'):
+                    channel_pair.set_volatile_parameters('other_program', parameters)
                 ex_com.assert_not_called()
                 update_prog.assert_called_once_with(parameters)
 

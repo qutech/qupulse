@@ -33,6 +33,16 @@ class dummy_pyvisa(dummy_package):
                     answers = [self.answers[q] if q in self.answers else self.default_answer
                                for q in ques]
                     return ';'.join(answers)
+
+                def query(self, *args, **kwargs):
+                    self.logged_asks.append((args, kwargs))
+                    ques = args[0].split(';')
+                    ques = [q.strip(' ?') for q in ques if q.strip().endswith('?')]
+                    answers = [self.answers[q] if q in self.answers else self.default_answer
+                               for q in ques]
+                    return ';'.join(answers)
+
+
 dummy_pyvisa.resources.MessageBasedResource = dummy_pyvisa.resources.messagebased.MessageBasedResource
 
 
