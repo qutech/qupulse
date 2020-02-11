@@ -244,33 +244,37 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         # return MappingPulseTemplate(template=serializer.deserialize(template),
         #                             **kwargs)
 
-    def _validate_parameters(self, parameters: Dict[str, Union[Parameter, numbers.Real]]):
+    def _validate_parameters(self, parameters: Dict[str, Union[Parameter, numbers.Real]], volatile: Set[str]):
         missing = set(self.__external_parameters) - set(parameters.keys())
         if missing:
             raise ParameterNotProvidedException(missing.pop())
-        self.validate_parameter_constraints(parameters=parameters)
+        self.validate_parameter_constraints(parameters=parameters, volatile=volatile)
 
-    def map_parameter_values(self, parameters: Dict[str, numbers.Real]) -> Dict[str, numbers.Real]:
+    def map_parameter_values(self, parameters: Dict[str, numbers.Real],
+                             volatile: Set[str] = frozenset()) -> Dict[str, numbers.Real]:
         """Map parameter values according to the defined mappings.
 
         Args:
             parameters: Dictionary with numeric values
+            volatile(Optional): Forwarded to `validate_parameter_constraints`
         Returns:
             A new dictionary with mapped numeric values.
         """
-        self._validate_parameters(parameters=parameters)
+        self._validate_parameters(parameters=parameters, volatile=volatile)
         return {parameter: mapping_function.evaluate_numeric(**parameters)
                 for parameter, mapping_function in self.__parameter_mapping.items()}
 
-    def map_parameter_objects(self, parameters: Dict[str, Parameter]) ->  Dict[str, Parameter]:
+    def map_parameter_objects(self, parameters: Dict[str, Parameter],
+                              volatile: Set[str] = frozenset()) -> Dict[str, Parameter]:
         """Map parameter objects (instances of Parameter class) according to the defined mappings.
 
         Args:
             parameters: Dictionary with parameter objects
+            volatile(Optional): Forwarded to `validate_parameter_constraints`
         Returns:
             A new dictionary with mapped parameter objects
         """
-        self._validate_parameters(parameters=parameters)
+        self._validate_parameters(parameters=parameters, volatile=volatile)
         return {parameter: MappedParameter(mapping_function,
                                            {name: parameters[name] for name in mapping_function.variables})
                 for (parameter, mapping_function) in self.__parameter_mapping.items()}
@@ -297,6 +301,26 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
 
         else:
             raise TypeError('Values of parameter dict are neither all Parameter nor Real')
+
+    def map_volatile(self, volatile: Set[str]) -> Set[str]:
+        """Deduce set of inner volatile parameters.
+
+        TODO: Does not handle the case of dropped dependencies i.e.:
+                x is volatile but a == 0 => y is actually not volatile
+                y = a * x + m
+
+        Args:
+            volatile: a set of outer volatile parameters
+
+        Returns:
+            Set of inner volatile parameters
+        """
+        if volatile:
+            return {parameter
+                    for parameter, mapping_function in self.__parameter_mapping.items()
+                    if volatile.intersection(mapping_function.variables)}
+        else:
+            return volatile
 
     def get_updated_measurement_mapping(self, measurement_mapping: Dict[str, str]) -> Dict[str, str]:
         return {k: measurement_mapping[v] for k, v in self.__measurement_mapping.items()}
@@ -328,14 +352,16 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional['Transformation'],
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
-                                 parent_loop: Loop) -> None:
+                                 parent_loop: Loop,
+                                 volatile: Set[str]) -> None:
         # parameters are validated in map_parameters() call, no need to do it here again explicitly
-        self.template._create_program(parameters=self.map_parameter_objects(parameters),
+        self.template._create_program(parameters=self.map_parameter_objects(parameters, volatile=volatile),
                                       measurement_mapping=self.get_updated_measurement_mapping(measurement_mapping),
                                       channel_mapping=self.get_updated_channel_mapping(channel_mapping),
                                       global_transformation=global_transformation,
                                       to_single_waveform=to_single_waveform,
-                                      parent_loop=parent_loop)
+                                      parent_loop=parent_loop,
+                                      volatile=self.map_volatile(volatile))
 
     def build_waveform(self,
                        parameters: Dict[str, numbers.Real],

@@ -135,7 +135,7 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
                                                      channel_mapping=channel_mapping,
                                                      global_transformation=global_transformation,
                                                      to_single_waveform=to_single_waveform,
-                                                     parent_loop=program)
+                                                     parent_loop=program, volatile=set())
 
                         self.assertEqual(program, expected_program)
                         body_create_program.assert_called_once_with(parameters=parameters,
@@ -143,8 +143,8 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
                                                                     channel_mapping=channel_mapping,
                                                                     global_transformation=global_transformation,
                                                                     to_single_waveform=to_single_waveform,
-                                                                    parent_loop=program.children[0])
-                        validate_parameter_constraints.assert_called_once_with(parameters=parameters)
+                                                                    parent_loop=program.children[0], volatile=set())
+                        validate_parameter_constraints.assert_called_once_with(parameters=parameters, volatile=set())
                         get_repetition_count_value.assert_called_once_with(real_relevant_parameters)
                         get_meas.assert_called_once_with(real_relevant_parameters, measurement_mapping)
 
@@ -154,6 +154,7 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         t = RepetitionPulseTemplate(body, repetitions, parameter_constraints=['foo<9'], measurements=[('my', 2, 2)])
         parameters = {'foo': 8}
         measurement_mapping = {'my': 'thy', 'b': 'b'}
+        volatile = set()
         channel_mapping = {}
         program = Loop()
         t._internal_create_program(parameters=parameters,
@@ -161,17 +162,23 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
                                    channel_mapping=channel_mapping,
                                    to_single_waveform=set(),
                                    global_transformation=None,
-                                   parent_loop=program)
+                                   parent_loop=program, volatile=volatile)
 
         self.assertEqual(1, len(program.children))
-        internal_loop = program.children[0] # type: Loop
+        internal_loop = program[0]  # type: Loop
         self.assertEqual(repetitions, internal_loop.repetition_count)
 
         self.assertEqual(1, len(internal_loop))
-        self.assertEqual((parameters, measurement_mapping, channel_mapping, internal_loop), body.create_program_calls[-1])
+        self.assertEqual((parameters, measurement_mapping, channel_mapping, internal_loop, volatile), body.create_program_calls[-1])
         self.assertEqual(body.waveform, internal_loop[0].waveform)
 
         self.assert_measurement_windows_equal({'b': ([0, 2, 4], [1, 1, 1]), 'thy': ([2], [2])}, program.get_measurement_windows())
+
+        # done in MultiChannelProgram
+        program.cleanup()
+
+        self.assert_measurement_windows_equal({'b': ([0, 2, 4], [1, 1, 1]), 'thy': ([2], [2])},
+                                              program.get_measurement_windows())
 
         # ensure same result as from Sequencer
         sequencer = Sequencer()
@@ -187,13 +194,14 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         parameters = dict(foo=ConstantParameter(3))
         measurement_mapping = dict(moth='fire')
         channel_mapping = dict(asd='f')
+        volatile = set()
         program = Loop()
         t._internal_create_program(parameters=parameters,
                                    measurement_mapping=measurement_mapping,
                                    channel_mapping=channel_mapping,
                                    to_single_waveform=set(),
                                    global_transformation=None,
-                                   parent_loop=program)
+                                   parent_loop=program, volatile=set())
 
         self.assertEqual(1, program.repetition_count)
         self.assertEqual(1, len(program.children))
@@ -201,7 +209,7 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         self.assertEqual(parameters[repetitions].get_value(), internal_loop.repetition_count)
 
         self.assertEqual(1, len(internal_loop))
-        self.assertEqual((parameters, measurement_mapping, channel_mapping, internal_loop), body.create_program_calls[-1])
+        self.assertEqual((parameters, measurement_mapping, channel_mapping, internal_loop, volatile), body.create_program_calls[-1])
         self.assertEqual(body.waveform, internal_loop[0].waveform)
 
         self.assert_measurement_windows_equal({}, program.get_measurement_windows())
@@ -217,7 +225,7 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         parameters = dict(foo=ConstantParameter(3), meas_end=ConstantParameter(7.1))
         measurement_mapping = dict(moth='fire', b='b')
         channel_mapping = dict(asd='f')
-
+        volatile = set()
         children = [Loop(waveform=DummyWaveform(duration=0))]
         program = Loop(children=children, measurements=[('a', [0], [1])], repetition_count=2)
 
@@ -226,7 +234,7 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
                                    channel_mapping=channel_mapping,
                                    to_single_waveform=set(),
                                    global_transformation=None,
-                                   parent_loop=program)
+                                   parent_loop=program, volatile=volatile)
 
         self.assertEqual(2, program.repetition_count)
         self.assertEqual(2, len(program.children))
@@ -235,7 +243,7 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         self.assertEqual(parameters[repetitions].get_value(), internal_loop.repetition_count)
 
         self.assertEqual(1, len(internal_loop))
-        self.assertEqual((parameters, measurement_mapping, channel_mapping, internal_loop), body.create_program_calls[-1])
+        self.assertEqual((parameters, measurement_mapping, channel_mapping, internal_loop, volatile), body.create_program_calls[-1])
         self.assertEqual(body.waveform, internal_loop[0].waveform)
 
         self.assert_measurement_windows_equal({'fire': ([0, 6], [7.1, 7.1]),
@@ -252,13 +260,14 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         parameters = dict(foo=ConstantParameter(3), meas_end=ConstantParameter(7.1))
         measurement_mapping = dict(moth='fire', b='b')
         channel_mapping = dict(asd='f')
+        volatile = set()
         program = Loop()
         t._internal_create_program(parameters=parameters,
                                    measurement_mapping=measurement_mapping,
                                    channel_mapping=channel_mapping,
                                    to_single_waveform=set(),
                                    global_transformation=None,
-                                   parent_loop=program)
+                                   parent_loop=program, volatile=set())
 
         self.assertEqual(1, program.repetition_count)
         self.assertEqual(1, len(program.children))
@@ -266,9 +275,13 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         self.assertEqual(parameters[repetitions].get_value(), internal_loop.repetition_count)
 
         self.assertEqual(1, len(internal_loop))
-        self.assertEqual((parameters, measurement_mapping, channel_mapping, internal_loop), body.create_program_calls[-1])
+        self.assertEqual((parameters, measurement_mapping, channel_mapping, internal_loop, volatile), body.create_program_calls[-1])
         self.assertEqual(body.waveform, internal_loop[0].waveform)
 
+        self.assert_measurement_windows_equal({'fire': ([0], [7.1]), 'b': ([0, 2, 4], [1, 1, 1])}, program.get_measurement_windows())
+
+        # MultiChannelProgram calls cleanup
+        program.cleanup()
         self.assert_measurement_windows_equal({'fire': ([0], [7.1]), 'b': ([0, 2, 4], [1, 1, 1])}, program.get_measurement_windows())
 
         # ensure same result as from Sequencer
@@ -296,10 +309,10 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
                                        channel_mapping=channel_mapping,
                                    to_single_waveform=set(),
                                    global_transformation=None,
-                                       parent_loop=program)
+                                       parent_loop=program, volatile=set())
         self.assertFalse(body.create_program_calls)
         self.assertEqual(1, program.repetition_count)
-        self.assertEqual(children, program.children)
+        self.assertEqual(children, list(program.children))
         self.assertIsNone(program.waveform)
         self.assert_measurement_windows_equal({}, program.get_measurement_windows())
 
@@ -318,7 +331,7 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
                                        channel_mapping=channel_mapping,
                                    to_single_waveform=set(),
                                    global_transformation=None,
-                                       parent_loop=program)
+                                       parent_loop=program, volatile=set())
 
         parameters = {'foo': ConstantParameter(7)}
         with self.assertRaises(ParameterNotProvidedException):
@@ -327,11 +340,11 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
                                        channel_mapping=channel_mapping,
                                    to_single_waveform=set(),
                                    global_transformation=None,
-                                       parent_loop=program)
+                                       parent_loop=program, volatile=set())
 
         self.assertFalse(body.create_program_calls)
         self.assertEqual(1, program.repetition_count)
-        self.assertEqual(children, program.children)
+        self.assertEqual(children, list(program.children))
         self.assertIsNone(program.waveform)
         self.assert_measurement_windows_equal({}, program.get_measurement_windows())
 
@@ -350,10 +363,10 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
                                        channel_mapping=channel_mapping,
                                    to_single_waveform=set(),
                                    global_transformation=None,
-                                       parent_loop=program)
+                                       parent_loop=program, volatile=set())
         self.assertFalse(body.create_program_calls)
         self.assertEqual(1, program.repetition_count)
-        self.assertEqual(children, program.children)
+        self.assertEqual(children, list(program.children))
         self.assertIsNone(program.waveform)
         self.assert_measurement_windows_equal({}, program.get_measurement_windows())
 
@@ -370,9 +383,9 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
             t._internal_create_program(parameters=parameters,
                                        measurement_mapping=measurement_mapping,
                                        channel_mapping=channel_mapping,
-                                   to_single_waveform=set(),
-                                   global_transformation=None,
-                                       parent_loop=program)
+                                       to_single_waveform=set(),
+                                       global_transformation=None,
+                                       parent_loop=program, volatile=set())
 
         # test for failure on child level
         measurement_mapping = dict(a='a')
@@ -380,12 +393,12 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
             t._internal_create_program(parameters=parameters,
                                        measurement_mapping=measurement_mapping,
                                        channel_mapping=channel_mapping,
-                                   to_single_waveform=set(),
-                                   global_transformation=None,
-                                       parent_loop=program)
+                                       to_single_waveform=set(),
+                                       global_transformation=None,
+                                       parent_loop=program, volatile=set())
         self.assertFalse(body.create_program_calls)
         self.assertEqual(1, program.repetition_count)
-        self.assertEqual(children, program.children)
+        self.assertEqual(children, list(program.children))
         self.assertIsNone(program.waveform)
         self.assert_measurement_windows_equal({}, program.get_measurement_windows())
 
@@ -408,7 +421,7 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
                                    channel_mapping=channel_mapping,
                                    to_single_waveform=set(),
                                    global_transformation=None,
-                                   parent_loop=program)
+                                   parent_loop=program, volatile=set())
         self.assertFalse(body.create_program_calls)
         self.assertFalse(program.children)
         self.assertEqual(1, program.repetition_count)
@@ -441,7 +454,7 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
                                    channel_mapping=channel_mapping,
                                    to_single_waveform=set(),
                                    global_transformation=None,
-                                   parent_loop=program)
+                                   parent_loop=program, volatile=set())
         self.assertFalse(body.create_program_calls)
         self.assertFalse(program.children)
         self.assertEqual(1, program.repetition_count)
@@ -455,7 +468,7 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         program_old = MultiChannelProgram(block, channels={'A'}).programs[frozenset({'A'})]
         self.assertEqual(program_old.repetition_count, program.repetition_count)
         self.assertEqual(program_old.waveform, program.waveform)
-        self.assertEqual(program_old.children, program.children)
+        self.assertEqual(list(program_old.children), list(program.children))
         # program_old will have measurements which program has not!
 
     def test_create_program_rep_count_zero_declaration(self) -> None:
@@ -477,7 +490,7 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
                                    channel_mapping=channel_mapping,
                                    to_single_waveform=set(),
                                    global_transformation=None,
-                                   parent_loop=program)
+                                   parent_loop=program, volatile=set())
         self.assertFalse(body.create_program_calls)
         self.assertFalse(program.children)
         self.assertEqual(1, program.repetition_count)
@@ -510,7 +523,7 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
                                    channel_mapping=channel_mapping,
                                    to_single_waveform=set(),
                                    global_transformation=None,
-                                   parent_loop=program)
+                                   parent_loop=program, volatile=set())
         self.assertFalse(body.create_program_calls)
         self.assertFalse(program.children)
         self.assertEqual(1, program.repetition_count)
@@ -524,7 +537,7 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         program_old = MultiChannelProgram(block, channels={'A'}).programs[frozenset({'A'})]
         self.assertEqual(program_old.repetition_count, program.repetition_count)
         self.assertEqual(program_old.waveform, program.waveform)
-        self.assertEqual(program_old.children, program.children)
+        self.assertEqual(list(program_old.children), list(program.children))
         # program_old will have measurements which program has not!
 
     def test_create_program_rep_count_neg_declaration(self) -> None:
@@ -546,7 +559,7 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
                                    channel_mapping=channel_mapping,
                                    to_single_waveform=set(),
                                    global_transformation=None,
-                                   parent_loop=program)
+                                   parent_loop=program, volatile=set())
         self.assertFalse(body.create_program_calls)
         self.assertFalse(program.children)
         self.assertEqual(1, program.repetition_count)
@@ -579,7 +592,7 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
                                    channel_mapping=channel_mapping,
                                    to_single_waveform=set(),
                                    global_transformation=None,
-                                   parent_loop=program)
+                                   parent_loop=program, volatile=set())
         self.assertFalse(body.create_program_calls)
         self.assertFalse(program.children)
         self.assertEqual(1, program.repetition_count)
@@ -593,7 +606,7 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         program_old = MultiChannelProgram(block, channels={'A'}).programs[frozenset({'A'})]
         self.assertEqual(program_old.repetition_count, program.repetition_count)
         self.assertEqual(program_old.waveform, program.waveform)
-        self.assertEqual(program_old.children, program.children)
+        self.assertEqual(list(program_old.children), list(program.children))
         # program_old will have measurements which program has not!
 
     def test_create_program_none_subprogram(self) -> None:
@@ -603,13 +616,14 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         parameters = dict(foo=ConstantParameter(3))
         measurement_mapping = dict(moth='fire')
         channel_mapping = dict(asd='f')
+        volatile = set()
         program = Loop()
         t._internal_create_program(parameters=parameters,
                                    measurement_mapping=measurement_mapping,
                                    channel_mapping=channel_mapping,
                                    to_single_waveform=set(),
                                    global_transformation=None,
-                                   parent_loop=program)
+                                   parent_loop=program, volatile=volatile)
         self.assertFalse(program.children)
         self.assertEqual(1, program.repetition_count)
         self.assertEqual(None, program._measurements)
@@ -621,7 +635,7 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         block = sequencer.build()
         program_old = MultiChannelProgram(block, channels={'A'}).programs[frozenset({'A'})]
         self.assertEqual(program_old.waveform, program.waveform)
-        self.assertEqual(program_old.children, program.children)
+        self.assertEqual(list(program_old.children), list(program.children))
         self.assertEqual(program_old._measurements, program._measurements)
         # Sequencer does set a repetition count if no inner program is present; create_program does not
 
@@ -632,13 +646,15 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         parameters = dict(foo=ConstantParameter(3), meas_end=ConstantParameter(7.1))
         measurement_mapping = dict(moth='fire', b='b')
         channel_mapping = dict(asd='f')
+        volatile = set()
         program = Loop()
+
         t._internal_create_program(parameters=parameters,
                                    measurement_mapping=measurement_mapping,
                                    channel_mapping=channel_mapping,
                                    to_single_waveform=set(),
                                    global_transformation=None,
-                                   parent_loop=program)
+                                   parent_loop=program, volatile=volatile)
         self.assertFalse(program.children)
         self.assertEqual(1, program.repetition_count)
         self.assertEqual(None, program._measurements)
@@ -650,7 +666,7 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         block = sequencer.build()
         program_old = MultiChannelProgram(block, channels={'A'}).programs[frozenset({'A'})]
         self.assertEqual(program_old.waveform, program.waveform)
-        self.assertEqual(program_old.children, program.children)
+        self.assertEqual(list(program_old.children), list(program.children))
         # program_old will have measurements which program has not!
         # Sequencer does set a repetition count if no inner program is present; create_program does not
 

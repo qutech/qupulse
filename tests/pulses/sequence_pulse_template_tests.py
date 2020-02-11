@@ -253,14 +253,14 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
                     mock.patch.object(sub_templates[1], '_create_program',
                                        wraps=get_appending_internal_create_program(wfs[1], True)) as create_1:
 
-                    spt._internal_create_program(**kwargs, parent_loop=program)
+                    spt._internal_create_program(**kwargs, parent_loop=program, volatile=set())
 
                     self.assertEqual(expected_program, program)
 
-                    validate_parameter_constraints.assert_called_once_with(parameters=kwargs['parameters'])
+                    validate_parameter_constraints.assert_called_once_with(parameters=kwargs['parameters'], volatile=set())
                     get_measurement_windows.assert_called_once_with(dict(a=.1, b=.2), kwargs['measurement_mapping'])
-                    create_0.assert_called_once_with(**kwargs, parent_loop=program)
-                    create_1.assert_called_once_with(**kwargs, parent_loop=program)
+                    create_0.assert_called_once_with(**kwargs, parent_loop=program, volatile=set())
+                    create_1.assert_called_once_with(**kwargs, parent_loop=program, volatile=set())
 
     def test_create_program_internal(self) -> None:
         sub1 = DummyPulseTemplate(duration=3, waveform=DummyWaveform(duration=3), measurements=[('b', 1, 2)], defined_channels={'A'})
@@ -268,6 +268,7 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
         parameters = {'foo': DummyNoValueParameter()}
         measurement_mapping = {'a': 'a', 'b': 'b'}
         channel_mapping = dict()
+        volatile = set()
         seq = SequencePulseTemplate(sub1, sub2, measurements=[('a', 0, 1)])
         loop = Loop()
         seq._internal_create_program(parameters=parameters,
@@ -275,12 +276,12 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
                                      channel_mapping=channel_mapping,
                                      global_transformation=None,
                                      to_single_waveform=set(),
-                                     parent_loop=loop)
+                                     parent_loop=loop, volatile=volatile)
         self.assertEqual(1, loop.repetition_count)
         self.assertIsNone(loop.waveform)
         self.assertEqual([Loop(repetition_count=1, waveform=sub1.waveform),
                           Loop(repetition_count=1, waveform=sub2.waveform)],
-                         loop.children)
+                         list(loop.children))
         self.assert_measurement_windows_equal({'a': ([0], [1]), 'b': ([1], [2])}, loop.get_measurement_windows())
 
         # ensure same result as from Sequencer
@@ -298,12 +299,13 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
                                      channel_mapping=channel_mapping,
                                      global_transformation=None,
                                      to_single_waveform=set(),
+                                     volatile=set(),
                                      parent_loop=loop)
         self.assertEqual(1, loop.repetition_count)
         self.assertIsNone(loop.waveform)
         self.assertEqual([Loop(repetition_count=1, waveform=sub2.waveform),
                           Loop(repetition_count=1, waveform=sub1.waveform)],
-                         loop.children)
+                         list(loop.children))
         self.assert_measurement_windows_equal({'a': ([0], [1]), 'b': ([3], [2])}, loop.get_measurement_windows())
 
         # ensure same result as from Sequencer
@@ -327,11 +329,12 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
                                          channel_mapping=dict(),
                                          global_transformation=None,
                                          to_single_waveform=set(),
+                                         volatile=set(),
                                          parent_loop=loop)
 
         self.assertFalse(sub1.create_program_calls)
         self.assertFalse(sub2.create_program_calls)
-        self.assertEqual(children, loop.children)
+        self.assertEqual(children, list(loop.children))
         self.assertEqual(1, loop.repetition_count)
         self.assertIsNone(loop.waveform)
         self.assert_measurement_windows_equal({}, loop.get_measurement_windows())
@@ -341,8 +344,9 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
             seq._internal_create_program(parameters=parameters,
                                          measurement_mapping=dict(a='a'),
                                          channel_mapping=dict(),
-                                     global_transformation=None,
-                                     to_single_waveform=set(),
+                                         global_transformation=None,
+                                         to_single_waveform=set(),
+                                         volatile=set(),
                                          parent_loop=loop)
 
     def test_internal_create_program_one_child_no_duration(self) -> None:
@@ -351,6 +355,7 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
         parameters = {'foo': DummyNoValueParameter()}
         measurement_mapping = {'a': 'a', 'b': 'b'}
         channel_mapping = dict()
+        volatile = set()
         seq = SequencePulseTemplate(sub1, sub2, measurements=[('a', 0, 1)])
         loop = Loop()
         seq._internal_create_program(parameters=parameters,
@@ -358,11 +363,15 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
                                      channel_mapping=channel_mapping,
                                      global_transformation=None,
                                      to_single_waveform=set(),
-                                     parent_loop=loop)
+                                     parent_loop=loop, volatile=volatile)
         self.assertEqual(1, loop.repetition_count)
         self.assertIsNone(loop.waveform)
         self.assertEqual([Loop(repetition_count=1, waveform=sub2.waveform)],
-                         loop.children)
+                         list(loop.children))
+        self.assert_measurement_windows_equal({'a': ([0], [1])}, loop.get_measurement_windows())
+
+        # MultiChannelProgram calls cleanup
+        loop.cleanup()
         self.assert_measurement_windows_equal({'a': ([0], [1])}, loop.get_measurement_windows())
 
         # ensure same result as from Sequencer
@@ -380,11 +389,15 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
                                      channel_mapping=channel_mapping,
                                      global_transformation=None,
                                      to_single_waveform=set(),
-                                     parent_loop=loop)
+                                     parent_loop=loop, volatile=volatile)
         self.assertEqual(1, loop.repetition_count)
         self.assertIsNone(loop.waveform)
         self.assertEqual([Loop(repetition_count=1, waveform=sub2.waveform)],
-                         loop.children)
+                         list(loop.children))
+        self.assert_measurement_windows_equal({'a': ([0], [1])}, loop.get_measurement_windows())
+
+        # MultiChannelProgram calls cleanup
+        loop.cleanup()
         self.assert_measurement_windows_equal({'a': ([0], [1])}, loop.get_measurement_windows())
 
         # ensure same result as from Sequencer
@@ -400,6 +413,7 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
         parameters = {'foo': DummyNoValueParameter()}
         measurement_mapping = {'a': 'a', 'b': 'b'}
         channel_mapping = dict()
+        volatile = set()
 
         seq = SequencePulseTemplate(sub1, sub2, measurements=[('a', 0, 1)])
         loop = Loop(measurements=None)
@@ -408,10 +422,11 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
                                      channel_mapping=channel_mapping,
                                      global_transformation=None,
                                      to_single_waveform=set(),
+                                     volatile=set(),
                                      parent_loop=loop)
         self.assertEqual(1, loop.repetition_count)
         self.assertIsNone(loop.waveform)
-        self.assertEqual([], loop.children)
+        self.assertEqual([], list(loop.children))
         self.assertIsNone(loop._measurements)
 
         # ensure same result as from Sequencer
@@ -436,6 +451,7 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
                                          channel_mapping=dict(),
                                          global_transformation=None,
                                          to_single_waveform=set(),
+                                         volatile=set(),
                                          parent_loop=loop)
 
     def test_internal_create_program_parameter_missing(self) -> None:
@@ -452,6 +468,7 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
                                          channel_mapping=dict(),
                                          global_transformation=None,
                                          to_single_waveform=set(),
+                                         volatile=set(),
                                          parent_loop=loop)
 
         # test parameter from measurements
@@ -462,6 +479,7 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
                                          channel_mapping=dict(),
                                          global_transformation=None,
                                          to_single_waveform=set(),
+                                         volatile=set(),
                                          parent_loop=loop)
 
         # test parameter from duration
@@ -472,6 +490,7 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
                                          channel_mapping=dict(),
                                          global_transformation=None,
                                          to_single_waveform=set(),
+                                         volatile=set(),
                                          parent_loop=loop)
 
 

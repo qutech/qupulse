@@ -215,7 +215,7 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
                        measurement_mapping: Dict[str, str],
                        channel_mapping: Dict[ChannelID, ChannelID],
                        instruction_block: InstructionBlock) -> None:
-        self.validate_parameter_constraints(parameters=parameters)
+        self.validate_parameter_constraints(parameters=parameters, volatile=set())
 
         self.insert_measurement_instruction(instruction_block=instruction_block,
                                             parameters=parameters,
@@ -235,8 +235,9 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional['Transformation'],
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
-                                 parent_loop: Loop) -> None:
-        self.validate_parameter_constraints(parameters=parameters)
+                                 parent_loop: Loop,
+                                 volatile: Set[str]) -> None:
+        self.validate_parameter_constraints(parameters=parameters, volatile=volatile)
 
         try:
             measurement_parameters = {parameter_name: parameters[parameter_name].get_value()
@@ -245,6 +246,8 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
                                       for parameter_name in self.duration.variables}
         except KeyError as e:
             raise ParameterNotProvidedException(str(e)) from e
+        assert not volatile.intersection(measurement_parameters.keys())
+        assert not volatile.intersection(duration_parameters.keys())
 
         if self.duration.evaluate_numeric(**duration_parameters) > 0:
             measurements = self.get_measurement_windows(measurement_parameters, measurement_mapping)
@@ -257,7 +260,8 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
                                           channel_mapping=channel_mapping,
                                           global_transformation=global_transformation,
                                           to_single_waveform=to_single_waveform,
-                                          parent_loop=parent_loop)
+                                          parent_loop=parent_loop,
+                                          volatile=volatile)
 
     def build_waveform(self, parameters: Dict[str, Parameter]) -> ForLoopWaveform:
         return ForLoopWaveform([self.body.build_waveform(local_parameters)

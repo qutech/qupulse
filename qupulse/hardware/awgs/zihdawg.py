@@ -1,6 +1,6 @@
 from pathlib import Path
 import functools
-from typing import Tuple, Set, Callable, Optional, Dict, NamedTuple, Iterator
+from typing import Tuple, Set, Callable, Optional, Mapping, NamedTuple, Iterator
 from collections import OrderedDict
 from enum import Enum
 import weakref
@@ -18,8 +18,9 @@ import time
 
 from qupulse.utils.types import ChannelID, TimeType, time_from_float
 from qupulse._program._loop import Loop, make_compatible
-from qupulse._program.seqc import HDAWGProgramManager
+from qupulse._program.seqc import HDAWGProgramManager, UserRegister
 from qupulse.hardware.awgs.base import AWG, ChannelNotFoundException, AWGAmplitudeOffsetHandling
+from qupulse.pulses.parameters import ConstantParameter
 
 
 def valid_channel(function_object):
@@ -244,7 +245,7 @@ class HDAWGChannelPair(AWG):
         self.device.api_session.setInt('/{}/awgs/{:d}/single'.format(self.device.serial, self.awg_group_index), 1)
 
         self._program_manager = HDAWGProgramManager()
-        self._required_seqc_source = ''
+        self._required_seqc_source = self._program_manager.to_seqc_program()
         self._uploaded_seqc_source = None
         self._current_program = None  # Currently armed program.
 
@@ -382,6 +383,14 @@ class HDAWGChannelPair(AWG):
         if self.awg_module.getInt('awgModule/elf/status') == 1:
             raise HDAWGUploadException()
 
+    def set_volatile_parameters(self, program_name: str, parameters: Mapping[str, ConstantParameter]):
+        """Set the values of parameters which were marked as volatile on program creation."""
+        new_register_values = self._program_manager.get_register_values_to_update_volatile_parameters(program_name,
+                                                                                                      parameters)
+        if self._current_program == program_name:
+            for register, value in new_register_values.items():
+                self.user_register(register, value)
+
     def remove(self, name: str) -> None:
         """Remove a program from the AWG.
 
@@ -400,7 +409,7 @@ class HDAWGChannelPair(AWG):
         """
         self._program_manager.clear()
         self._current_program = None
-        self._required_seqc_source = ''
+        self._required_seqc_source = self._program_manager.to_seqc_program()
         self.arm(None)
 
     def arm(self, name: Optional[str]) -> None:
@@ -416,14 +425,21 @@ class HDAWGChannelPair(AWG):
         self.user_register(self._program_manager.GLOBAL_CONSTS['TRIGGER_REGISTER'], 0)
 
         if not name:
-            self.user_register(self._program_manager.GLOBAL_CONSTS['PROG_SEL_REGISTER'] + 1,
+            self.user_register(self._program_manager.GLOBAL_CONSTS['PROG_SEL_REGISTER'],
                                self._program_manager.GLOBAL_CONSTS['PROG_SEL_NONE'])
             self._current_program = None
         else:
             if name not in self.programs:
                 raise HDAWGValueError('{} is unknown on {}'.format(name, self.identifier))
             self._current_program = name
-            self.user_register(self._program_manager.GLOBAL_CONSTS['PROG_SEL_REGISTER'] + 1,
+
+            # set the registers of initial repetition counts
+            for register, value in self._program_manager.get_register_values(name).items():
+                assert register not in (self._program_manager.GLOBAL_CONSTS['PROG_SEL_REGISTER'],
+                                        self._program_manager.GLOBAL_CONSTS['TRIGGER_REGISTER'])
+                self.user_register(register, value)
+
+            self.user_register(self._program_manager.GLOBAL_CONSTS['PROG_SEL_REGISTER'],
                                self._program_manager.name_to_index(name) | int(self._program_manager.GLOBAL_CONSTS['NO_RESET_MASK'], 2))
         self.enable(True)
 
@@ -486,11 +502,24 @@ class HDAWGChannelPair(AWG):
             self.device.api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
         return bool(self.device.api_session.getInt(node_path))
 
-    def user_register(self, reg: int, value: int = None) -> int:
-        """Query user registers (1-16) and optionally set it."""
-        if reg not in range(1, 17):
-            raise HDAWGValueError('{} not a valid (1-16) register.'.format(reg))
-        node_path = '/{}/awgs/{:d}/userregs/{:d}'.format(self.device.serial, self.awg_group_index, reg-1)
+    def user_register(self, reg: UserRegister, value: int = None) -> int:
+        """Query user registers (1-16) and optionally set it.
+
+        Args:
+            reg: User register. If it is an int, a warning is raised and it is interpreted as a one based index
+            value: Value to set
+
+        Returns:
+            User Register value after setting it
+        """
+        if isinstance(reg, int):
+            warnings.warn("User register is not a UserRegister instance. It is interpreted as one based index.")
+            reg = UserRegister(one_based_value=reg)
+
+        if reg.to_web_interface() not in range(1, 17):
+            raise HDAWGValueError('{reg:repr} not a valid (1-16) register.'.format(reg=reg))
+
+        node_path = '/{}/awgs/{:d}/userregs/{:labone}'.format(self.device.serial, self.awg_group_index, reg)
         if value is not None:
             self.device.api_session.setInt(node_path, value)
             self.device.api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
