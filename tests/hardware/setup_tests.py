@@ -1,5 +1,4 @@
 import unittest
-import itertools
 
 import numpy as np
 
@@ -200,9 +199,6 @@ class HardwareSetupTests(unittest.TestCase):
 
         setup = HardwareSetup()
 
-        #wfg = WaveformGenerator(num_channels=2, duration_generator=itertools.repeat(1))
-        #block = get_two_chan_test_block(wfg)
-        #block._InstructionBlock__instruction_list[:0] = (MEASInstruction([('m1', 0.1, 0.2)]),)
         loop, *rest = self.get_test_loops()
 
         class ProgStart:
@@ -332,22 +328,21 @@ class HardwareSetupTests(unittest.TestCase):
     def test_register_program_exceptions(self):
         setup = HardwareSetup()
 
-        wfg = WaveformGenerator(num_channels=2, duration_generator=itertools.repeat(1))
-        block = get_two_chan_test_block(wfg)
+        loop, *rest = self.get_test_loops()
 
         with self.assertRaises(TypeError):
-            setup.register_program('p1', block, 4)
+            setup.register_program('p1', loop, 4)
 
         with self.assertRaises(KeyError):
-            setup.register_program('p1', block, lambda: None)
+            setup.register_program('p1', loop, lambda: None)
 
         awg = DummyAWG(num_channels=2, num_markers=5)
 
         setup.set_channel('A', PlaybackChannel(awg, 0, lambda x: x))
         setup.set_channel('B', MarkerChannel(awg, 1))
 
-        with self.assertRaises(ValueError):
-            setup.register_program('p1', block, lambda: None)
+        with self.assertRaises(KeyError):
+            setup.register_program('p1', loop, lambda: None)
 
     def test_known_dacs(self) -> None:
         setup = HardwareSetup()
@@ -393,4 +388,3 @@ class HardwareSetupTests(unittest.TestCase):
         setup.clear_programs()
 
         self.assertFalse(setup.registered_programs)
-
