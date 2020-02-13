@@ -1,7 +1,7 @@
 import unittest
 
 from qupulse.pulses.parameters import ParameterConstraint, ParameterConstraintViolation,\
-    ParameterNotProvidedException, ParameterConstrainer, ConstantParameter
+    ParameterNotProvidedException, ParameterConstrainer, ConstantParameter, ConstrainedParameterIsVolatileWarning
 from qupulse.pulses.measurement import MeasurementDefiner
 
 
@@ -70,6 +70,7 @@ class ParameterConstrainerTest(unittest.TestCase):
     def __init__(self, *args, to_test_constructor=None, **kwargs):
         super().__init__(*args, **kwargs)
 
+        # TODO: Figure out what is going on here
         if to_test_constructor is None:
             self.to_test_constructor = lambda parameter_constraints=None:\
                 ParameterConstrainer(parameter_constraints=parameter_constraints)
@@ -88,27 +89,30 @@ class ParameterConstrainerTest(unittest.TestCase):
 
     def test_validate_parameter_constraints(self):
         to_test = self.to_test_constructor()
-        to_test.validate_parameter_constraints(dict())
-        to_test.validate_parameter_constraints(dict(a=1))
+        to_test.validate_parameter_constraints(dict(), set())
+        to_test.validate_parameter_constraints(dict(a=1), set())
 
         to_test = self.to_test_constructor(['a < b'])
         with self.assertRaises(ParameterNotProvidedException):
-            to_test.validate_parameter_constraints(dict())
+            to_test.validate_parameter_constraints(dict(), set())
         with self.assertRaises(ParameterConstraintViolation):
-            to_test.validate_parameter_constraints(dict(a=1, b=0.8))
-        to_test.validate_parameter_constraints(dict(a=1, b=2))
+            to_test.validate_parameter_constraints(dict(a=1, b=0.8), set())
+        to_test.validate_parameter_constraints(dict(a=1, b=2), set())
 
         to_test = self.to_test_constructor(['a < b', 'c < 1'])
         with self.assertRaises(ParameterNotProvidedException):
-            to_test.validate_parameter_constraints(dict(a=1, b=2))
+            to_test.validate_parameter_constraints(dict(a=1, b=2), set())
         with self.assertRaises(ParameterNotProvidedException):
-            to_test.validate_parameter_constraints(dict(c=0.5))
+            to_test.validate_parameter_constraints(dict(c=0.5), set())
 
         with self.assertRaises(ParameterConstraintViolation):
-            to_test.validate_parameter_constraints(dict(a=1, b=0.8, c=0.5))
+            to_test.validate_parameter_constraints(dict(a=1, b=0.8, c=0.5), set())
         with self.assertRaises(ParameterConstraintViolation):
-            to_test.validate_parameter_constraints(dict(a=0.5, b=0.8, c=1))
-        to_test.validate_parameter_constraints(dict(a=0.5, b=0.8, c=0.1))
+            to_test.validate_parameter_constraints(dict(a=0.5, b=0.8, c=1), set())
+        to_test.validate_parameter_constraints(dict(a=0.5, b=0.8, c=0.1), {'j'})
+
+        with self.assertWarns(ConstrainedParameterIsVolatileWarning):
+            to_test.validate_parameter_constraints(dict(a=0.5, b=0.8, c=0.1), {'a'})
 
     def test_constrained_parameters(self):
         to_test = self.to_test_constructor()

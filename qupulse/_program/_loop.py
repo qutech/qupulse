@@ -1,5 +1,5 @@
 import itertools
-from typing import Union, Dict, Set, Iterable, FrozenSet, Tuple, cast, List, Optional, DefaultDict, Generator
+from typing import Union, Dict, Set, Iterable, FrozenSet, Tuple, cast, List, Optional, DefaultDict, Generator, Mapping
 from collections import defaultdict, deque
 from copy import deepcopy
 from enum import Enum
@@ -21,38 +21,65 @@ __all__ = ['Loop', 'make_compatible', 'MakeCompatibleWarning']
 
 class Loop(Node):
     MAX_REPR_SIZE = 2000
-    __slots__ = ('_waveform', '_measurements', '_repetition_count', '_cached_body_duration')
+    __slots__ = ('_waveform', '_measurements', '_repetition_count', '_cached_body_duration', '_repetition_parameter')
 
-    """Build a loop tree. The leaves of the tree are loops with one element."""
+    """Build a loop tree. The leaves of the tree are loops with one element.
+    
+    Loop objects are equal if all children are/the waveform is equal, the repetition count is equal    
+    """
     def __init__(self,
                  parent: Union['Loop', None] = None,
                  children: Iterable['Loop'] = (),
-                 waveform: Optional[Waveform]=None,
+                 waveform: Optional[Waveform] = None,
                  measurements: Optional[List[MeasurementWindow]] = None,
-                 repetition_count=1):
+                 repetition_count: int = 1,
+                 repetition_parameter: MappedParameter = None):
+        """Initialize a new loop
+
+        Args:
+            parent: Forwarded to Node.__init__
+            children: Forwarded to Node.__init__
+            waveform: "Payload"
+            measurements:
+            repetition_count: The children / waveform are repeated this often
+            repetition_parameter: If provided, this marks the repetition count as volatile i.e. changable in the future
+        """
         super().__init__(parent=parent, children=children)
 
         self._waveform = waveform
         self._measurements = measurements
         self._repetition_count = int(repetition_count)
+        self._repetition_parameter = repetition_parameter
         self._cached_body_duration = None
 
-        if abs(self._repetition_count - repetition_count) > 1e-10:
-            raise ValueError('Repetition count was not an integer')
+        assert self._repetition_count == repetition_count, "Repetition count was not an integer: %r" % repetition_count
+        assert isinstance(waveform, (type(None), Waveform))
 
-        if not isinstance(waveform, (type(None), Waveform)):
-            raise Exception()
+    def __eq__(self, other: 'Loop') -> bool:
+        if type(self) == type(other):
+            return (self._repetition_count == other._repetition_count and
+                    self.waveform == other.waveform and
+                    (self._measurements or None) == (other._measurements or None) and
+                    self._repetition_parameter == other._repetition_parameter and
+                    len(self) == len(other) and
+                    all(self_child == other_child for self_child, other_child in zip(self, other)))
+        else:
+            return NotImplemented
 
-    @property
-    def compare_key(self) -> Tuple:
-        return self._waveform, self.repetition_count, self._measurements if self._measurements else None,\
-               super().compare_key
+    def append_child(self, loop: Optional['Loop'] = None, **kwargs) -> None:
+        """Append a child to this loop. Either an existing Loop object or a newly created from kwargs
 
-    def append_child(self, loop: Optional['Loop']=None, **kwargs) -> None:
-        # do not invalidate but update cached duration
+        Args:
+            loop: loop to append
+            **kwargs: Child is constructed with these kwargs
+
+        Raises:
+            ValueError: if called with loop and kwargs
+        """
         if loop is not None:
             if kwargs:
-                raise ValueError("Cannot pass a Loop object and Loop constructor arguments at the same time in append_child")
+                raise ValueError("Cannot pass a Loop object and Loop constructor arguments at the same time in "
+                                 "append_child")
             arg = (loop,)
         else:
             arg = (kwargs,)
@@ -71,7 +98,12 @@ class Loop(Node):
             else:
                 self.parent._invalidate_duration()
 
-    def add_measurements(self, measurements: List[MeasurementWindow]):
+    def add_measurements(self, measurements: Iterable[MeasurementWindow]):
+        """Add measurements offset by the current body duration i.e. to the END of the current loop
+
+        Args:
+            measurements: Measurements to add
+        """
         body_duration = float(self.body_duration)
         if body_duration == 0:
             measurements = measurements
@@ -82,6 +114,11 @@ class Loop(Node):
             self._measurements = list(measurements)
         else:
             self._measurements.extend(measurements)
+
+    def update_volatile_repetition(self, new_values: Mapping[str, ConstantParameter]):
+        if self._repetition_parameter is not None:
+            self._repetition_parameter.update_constants(new_values)
+            self._repetition_count = int(self._repetition_parameter.get_value())
 
     @property
     def waveform(self) -> Waveform:
@@ -99,14 +136,18 @@ class Loop(Node):
                 if self.waveform:
                     self._cached_body_duration = self.waveform.duration
                 else:
-                    self._cached_body_duration = TimeType(0)
+                    self._cached_body_duration = TimeType.from_fraction(0, 1)
             else:
                 self._cached_body_duration = sum(child.duration for child in self)
         return self._cached_body_duration
 
     @property
     def duration(self) -> TimeType:
-        return self.repetition_count*self.body_duration
+        return self.body_duration * self.repetition_count
+
+    @property
+    def repetition_parameter(self) -> Optional[MappedParameter]:
+        return self._repetition_parameter
 
     @property
     def repetition_count(self) -> int:
@@ -122,6 +163,8 @@ class Loop(Node):
     def unroll(self) -> None:
         if self.is_leaf():
             raise RuntimeError('Leaves cannot be unrolled')
+        if self.repetition_parameter is not None:
+            warnings.warn("Unrolling a Loop with volatile repetition count", VolatileModificationWarning)
 
         i = self.parent_index
         self.parent[i:i+1] = (child.copy_tree_structure(new_parent=self.parent)
@@ -134,19 +177,25 @@ class Loop(Node):
         self._invalidate_duration()
 
     def unroll_children(self) -> None:
+        if self._repetition_parameter is not None:
+            warnings.warn("Unrolling a Loop with volatile repetition count", VolatileModificationWarning)
         old_children = self.children
         self[:] = (child.copy_tree_structure()
                    for _ in range(self.repetition_count)
                    for child in old_children)
         self.repetition_count = 1
+        self._repetition_parameter = None
         self.assert_tree_integrity()
 
     def encapsulate(self) -> None:
+        """Add a nesting level by moving self to its children."""
         self[:] = [Loop(children=self,
                         repetition_count=self.repetition_count,
+                        repetition_parameter=self._repetition_parameter,
                         waveform=self._waveform,
                         measurements=self._measurements)]
         self.repetition_count = 1
+        self._repetition_parameter = None
         self._waveform = None
         self._measurements = None
         self.assert_tree_integrity()
@@ -181,10 +230,16 @@ class Loop(Node):
         return type(self)(parent=self.parent if new_parent is False else new_parent,
                           waveform=self._waveform,
                           repetition_count=self.repetition_count,
-                          measurements=self._measurements,
+                          repetition_parameter=self._repetition_parameter,
+                          measurements=None if self._measurements is None else list(self._measurements),
                           children=(child.copy_tree_structure() for child in self))
 
-    def _get_measurement_windows(self) -> DefaultDict[str, np.ndarray]:
+    def _get_measurement_windows(self) -> Mapping[str, np.ndarray]:
+        """Private implementation of get_measurement_windows with a slightly different data format for easier tiling.
+
+        Returns:
+             A dictionary (measurement_name -> array) with begin == array[:, 0] and length == array[:, 1]
+        """
         temp_meas_windows = defaultdict(list)
         if self._measurements:
             for (mw_name, begin, length) in self._measurements:
@@ -206,6 +261,9 @@ class Loop(Node):
 
             body_duration = float(offset)
 
+        # this gives us regular dict behaviour of the returned object
+        temp_meas_windows.default_factory = None
+
         # repeat and add repetition based offset
         for mw_name, begin_length_list in temp_meas_windows.items():
             temp_begin_length_array = np.concatenate(begin_length_list)
@@ -218,27 +276,49 @@ class Loop(Node):
 
             temp_meas_windows[mw_name] = begin_length_array
 
-        return temp_meas_windows
+        # the cast is here because static type analysis struggles to detect that we replace _all_ values by ndarray in
+        # the previous loop
+        return cast(Mapping[str, np.ndarray], temp_meas_windows)
 
     def get_measurement_windows(self) -> Dict[str, Tuple[np.ndarray, np.ndarray]]:
+        """Iterates over all children and collect the begin and length arrays of each measurement window.
+
+        Returns:
+            A dictionary (measurement_name -> (begin, length)) with begin and length being `ndarray`s
+        """
         return {mw_name: (begin_length_list[:, 0], begin_length_list[:, 1])
                 for mw_name, begin_length_list in self._get_measurement_windows().items()}
 
     def split_one_child(self, child_index=None) -> None:
         """Take the last child that has a repetition count larger one, decrease it's repetition count and insert a copy
         with repetition cout one after it"""
-        if child_index:
+        if child_index is not None:
             if self[child_index].repetition_count < 2:
                 raise ValueError('Cannot split child {} as the repetition count is not larger 1')
+
         else:
-            try:
-                child_index = next(i for i in reversed(range(len(self)))
-                                   if self[i].repetition_count > 1)
-            except StopIteration:
-                raise RuntimeError('There is no child with repetition count > 1')
+            # we cannot reverse enumerate
+            n_child = len(self) - 1
+            for reverse_idx, child in enumerate(reversed(self)):
+                if child.repetition_count > 1:
+                    forward_idx = n_child - reverse_idx
+                    if child.repetition_parameter is None:
+                        child_index = forward_idx
+                        break
+                    elif child_index is None:
+                        child_index = forward_idx
+            else:
+                if child_index is None:
+                    raise RuntimeError('There is no child with repetition count > 1')
+
+        if self[child_index]._repetition_parameter is not None:
+            warnings.warn("Splitting a child with volatile repetition count", VolatileModificationWarning)
+            self[child_index]._repetition_parameter = MappedParameter(expression=self[child_index]._repetition_parameter.expression - 1,
+                                                                      namespace=self[child_index]._repetition_parameter.dependencies)
 
         new_child = self[child_index].copy_tree_structure()
         new_child.repetition_count = 1
+        new_child._repetition_parameter = None
 
         self[child_index].repetition_count -= 1
 
@@ -246,10 +326,10 @@ class Loop(Node):
         self.assert_tree_integrity()
 
     def flatten_and_balance(self, depth: int) -> None:
-        """
-        Modifies the program so all tree branches have the same depth
-        :param depth: Target depth of the program
-        :return:
+        """Modifies the program so all tree branches have the same depth.
+
+        Args:
+            depth: Target depth of the program
         """
         i = 0
         while i < len(self):
@@ -257,78 +337,126 @@ class Loop(Node):
             sub_program = cast(Loop, self[i])
 
             if sub_program.depth() < depth - 1:
+                # increase nesting because the subprogram is not deep enough
                 sub_program.encapsulate()
 
             elif not sub_program.is_balanced():
+                # balance the sub program. We revisit it in the next iteration (no change of i )
+                # because it might modify self. While writing this comment I am not sure this is true. 14.01.2020 Simon
                 sub_program.flatten_and_balance(depth - 1)
 
             elif sub_program.depth() == depth - 1:
+                # subprogram is balanced with the correct depth
                 i += 1
 
-            elif len(sub_program) == 1 and len(sub_program[0]) == 1:
-                sub_sub_program = cast(Loop, sub_program[0])
-
-                sub_program.repetition_count = sub_program.repetition_count * sub_sub_program.repetition_count
-                sub_program[:] = sub_sub_program[:]
-                sub_program.waveform = sub_sub_program.waveform
+            elif sub_program._has_single_child_that_can_be_merged():
+                # subprogram is balanced but to deep and has no measurements -> we can "lift" the sub-sub-program
+                # TODO: There was a len(sub_sub_program) == 1 check here that I cannot explain
+                sub_program._merge_single_child()
 
             elif not sub_program.is_leaf():
+                # subprogram is balanced but too deep
                 sub_program.unroll()
 
             else:
                 # we land in this case if the function gets called with depth == 0 and the current subprogram is a leaf
                 i += 1
 
-    def remove_empty_loops(self):
-        new_children = []
-        for child in self:
-            if child.is_leaf():
-                if child.waveform is None:
-                    if child._measurements:
-                        warnings.warn("Dropping measurement since there is no waveform attached")
-                else:
-                    new_children.append(child)
+    def _has_single_child_that_can_be_merged(self) -> bool:
+        if len(self) == 1:
+            child = cast(Loop, self[0])
+            return not self._measurements or (child.repetition_count == 1 and child.repetition_parameter is None)
+        else:
+            return False
+
+    def _merge_single_child(self):
+        """Lift the single child to current level. Requires _has_single_child_that_can_be_merged to be true"""
+        assert len(self) == 1, "bug: _merge_single_child called on loop with len != 1"
+        child = cast(Loop, self[0])
+
+        # if the child has a fixed repetition count of 1 the measurements can be merged
+        mergable_measurements = child.repetition_count == 1 and child.repetition_parameter is None
+
+        assert not self._measurements or mergable_measurements, "bug: _merge_single_child called on loop with measurements"
+        assert not self._waveform, "bug: _merge_single_child called on loop with children and waveform"
+
+        measurements = child._measurements
+        if self._measurements:
+            if measurements:
+                measurements.extend(self._measurements)
             else:
-                child.remove_empty_loops()
-                if not child.is_leaf():
-                    new_children.append(child)
+                measurements = self._measurements
+
+        repetition_count = self.repetition_count * child.repetition_count
+
+        if self._repetition_parameter is None and child._repetition_parameter is None:
+            repetition_parameter = None
+        elif self._repetition_parameter is None:
+            repetition_parameter = MappedParameter(
+                expression=child._repetition_parameter.expression * self.repetition_count,
+                namespace=child._repetition_parameter._namespace)
+        elif child._repetition_parameter is None:
+            repetition_parameter = MappedParameter(
+                expression=self._repetition_parameter.expression * child.repetition_count,
+                namespace=self._repetition_parameter._namespace)
+        else:
+            # create a new expression that depends on both
+            expression = ExpressionScalar('parent_repetition_count * child_repetition_count')
+            namespace = dict(parent_repetition_count=self.repetition_parameter,
+                             child_repetition_count=child.repetition_parameter)
+            repetition_parameter = MappedParameter(expression=expression,
+                                                   namespace=namespace)
+
+        self[:] = iter(child)
+        self._waveform = child._waveform
+        self._repetition_parameter = repetition_parameter
+        self._repetition_count = repetition_count
+        self._measurements = measurements
+        self._invalidate_duration()
+        return True
+
+    def cleanup(self, actions=('remove_empty_loops', 'merge_single_child')):
+        """Apply the specified actions to cleanup the Loop.
+
+        remove_empty_loops: Remove loops with no children and no waveform (a DroppedMeasurementWarning is issued)
+        merge_single_child: see `_try_merge_single_child` documentation
+
+        Warnings:
+            DroppedMeasurementWarning: Likely a bug in qupulse. TODO: investigate whether there are usecases
+        """
+        if 'remove_empty_loops' in actions:
+            new_children = []
+            for child in self:
+                child = cast(Loop, child)
+                if child.is_leaf():
+                    if child.waveform is None:
+                        if child._measurements:
+                            warnings.warn("Dropping measurement since there is no waveform attached",
+                                          category=DroppedMeasurementWarning)
+                    else:
+                        new_children.append(child)
+
                 else:
-                    # all children of child were empty
-                    pass
-        self[:] = new_children
+                    child.cleanup(actions)
+                    if child.waveform or not child.is_leaf():
+                        new_children.append(child)
 
-    def cleanup(self):
-        """Remove empty loops and merge nested loops with single child"""
-        new_children = []
-        for child in self:
-            if child.is_leaf():
-                if child.waveform is None:
-                    if child._measurements:
-                        warnings.warn("Dropping measurement since there is no waveform attached")
-                else:
-                    new_children.append(child)
+                    elif child._measurements:
+                        warnings.warn("Dropping measurement since there is no waveform in children",
+                                      category=DroppedMeasurementWarning)
 
-            else:
-                child.cleanup()
-                if child.waveform or not child.is_leaf():
-                    new_children.append(child)
+            if len(self) != len(new_children):
+                self[:] = new_children
 
-                elif child._measurements:
-                    warnings.warn("Dropping measurement since there is no waveform in children")
+        else:
+            # only do the recursive call
+            for child in self:
+                child.cleanup(actions)
 
-        if len(new_children) == 1 and not self._measurements:
-            assert not self._waveform
-            only_child = new_children[0]
-
-            self._measurements = only_child._measurements
-            self.waveform = only_child.waveform
-            self.repetition_count = self.repetition_count * only_child.repetition_count
-            self[:] = only_child[:]
-
-        elif len(self) != len(new_children):
-            self[:] = new_children
+        if 'merge_single_child' in actions and self._has_single_child_that_can_be_merged():
+            self._merge_single_child()
     
-    def get_duration_structure(self) -> Tuple[int, Union[int, tuple]]:
+    def get_duration_structure(self) -> Tuple[int, Union[TimeType, tuple]]:
         if self.is_leaf():
             return self.repetition_count, self.waveform.duration
         else:
@@ -365,6 +493,9 @@ class _CompatibilityLevel(Enum):
     incompatible_fraction = 3
     incompatible_quantum = 4
 
+    def is_incompatible(self) -> bool:
+        return self in (self.incompatible_fraction, self.incompatible_quantum, self.incompatible_too_short)
+
 
 def _is_compatible(program: Loop, min_len: int, quantum: int, sample_rate: TimeType) -> _CompatibilityLevel:
     """ check whether program loop is compatible with awg requirements
@@ -386,6 +517,9 @@ def _is_compatible(program: Loop, min_len: int, quantum: int, sample_rate: TimeT
     if program.is_leaf():
         waveform_duration_in_samples = program.body_duration * sample_rate
         if waveform_duration_in_samples < min_len or (waveform_duration_in_samples / quantum).denominator != 1:
+            if program.repetition_parameter is not None:
+                warnings.warn("_is_compatible requires an action which drops volatility.",
+                              category=VolatileModificationWarning)
             return _CompatibilityLevel.action_required
         else:
             return _CompatibilityLevel.compatible
@@ -394,6 +528,9 @@ def _is_compatible(program: Loop, min_len: int, quantum: int, sample_rate: TimeT
                for sub_program in program):
             return _CompatibilityLevel.compatible
         else:
+            if program.repetition_parameter is not None:
+                warnings.warn("_is_compatible requires an action which drops volatility.",
+                              category=VolatileModificationWarning)
             return _CompatibilityLevel.action_required
 
 
@@ -401,22 +538,25 @@ def _make_compatible(program: Loop, min_len: int, quantum: int, sample_rate: Tim
     if program.is_leaf():
         program.waveform = to_waveform(program.copy_tree_structure())
         program.repetition_count = 1
+        program._repetition_parameter = None
     else:
         comp_levels = [_is_compatible(cast(Loop, sub_program), min_len, quantum, sample_rate)
                        for sub_program in program]
-        incompatible = any(comp_level in (_CompatibilityLevel.incompatible_fraction,
-                                          _CompatibilityLevel.incompatible_quantum,
-                                          _CompatibilityLevel.incompatible_too_short)
-                           for comp_level in comp_levels)
-        if incompatible:
+
+        if any(comp_level.is_incompatible() for comp_level in comp_levels):
             single_run = program.duration * sample_rate / program.repetition_count
             if (single_run / quantum).denominator == 1 and single_run >= min_len:
+                # it is enough to concatenate all children
                 new_repetition_count = program.repetition_count
+                new_repetition_parameter = program.repetition_parameter
                 program.repetition_count = 1
             else:
+                # we need to concatenate all children and unroll
                 new_repetition_count = 1
+                new_repetition_parameter = None
             program.waveform = to_waveform(program.copy_tree_structure())
             program.repetition_count = new_repetition_count
+            program._repetition_parameter = new_repetition_parameter
             program[:] = []
             return
         else:
@@ -451,6 +591,18 @@ def make_compatible(program: Loop, minimal_waveform_length: int, waveform_quantu
                          quantum=waveform_quantum,
                          sample_rate=sample_rate)
 
+    else:
+        assert comp_level == _CompatibilityLevel.compatible
+
 
 class MakeCompatibleWarning(ResourceWarning):
     pass
+
+
+class VolatileModificationWarning(RuntimeWarning):
+    """This warning is emitted if the colatile part of a program gets modified. This might imply that the volatile
+    parameter cannot be change anymore."""
+
+
+class DroppedMeasurementWarning(RuntimeWarning):
+    """This warning is emitted if a measurement was dropped because there was no waveform attached."""

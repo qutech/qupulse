@@ -239,7 +239,7 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
                        parameters: Dict[str, numbers.Real],
                        channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Union[TableWaveform,
                                                                                                 MultiChannelWaveform]]:
-        self.validate_parameter_constraints(parameters)
+        self.validate_parameter_constraints(parameters, volatile=set())
 
         if all(channel_mapping[channel] is None
                for channel in self.defined_channels):

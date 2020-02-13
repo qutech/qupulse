@@ -214,9 +214,10 @@ class DummyPulseTemplate(AtomicPulseTemplate):
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional['Transformation'],
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
-                                 parent_loop: Loop) -> None:
+                                 parent_loop: Loop,
+                                 volatile: Set[str]) -> None:
         measurements = self.get_measurement_windows(parameters, measurement_mapping)
-        self.create_program_calls.append((parameters, measurement_mapping, channel_mapping, parent_loop))
+        self.create_program_calls.append((parameters, measurement_mapping, channel_mapping, parent_loop, volatile))
         if self._program:
             parent_loop.add_measurements(measurements)
             parent_loop.append_child(waveform=self._program.waveform, children=self._program.children)

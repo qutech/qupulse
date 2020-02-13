@@ -330,6 +330,7 @@ class ArithmeticPulseTemplateTest(unittest.TestCase):
         measurement_mapping = dict(m1='m2')
         global_transformation = OffsetTransformation({'unrelated': 1.})
         to_single_waveform = {'something_else'}
+        volatile = {'some_parameter'}
         parent_loop = mock.Mock()
 
         expected_transformation = mock.Mock(spec=IdentityTransformation())
@@ -345,7 +346,8 @@ class ArithmeticPulseTemplateTest(unittest.TestCase):
                     channel_mapping=channel_mapping,
                     global_transformation=global_transformation,
                     to_single_waveform=to_single_waveform,
-                    parent_loop=parent_loop
+                    parent_loop=parent_loop,
+                    volatile=volatile
                 )
                 get_transformation.assert_called_once_with(parameters=real_parameters, channel_mapping=channel_mapping)
 
@@ -356,8 +358,20 @@ class ArithmeticPulseTemplateTest(unittest.TestCase):
                 channel_mapping=channel_mapping,
                 global_transformation=expected_transformation,
                 to_single_waveform=to_single_waveform,
-                parent_loop=parent_loop
+                parent_loop=parent_loop,
+                volatile=volatile
             )
+
+            with self.assertRaisesRegex(NotImplementedError, 'volatile'):
+                arith._internal_create_program(
+                    parameters=parameters,
+                    measurement_mapping=measurement_mapping,
+                    channel_mapping=channel_mapping,
+                    global_transformation=global_transformation,
+                    to_single_waveform=to_single_waveform,
+                    parent_loop=parent_loop,
+                    volatile={'x'}
+                )
 
     def test_integral(self):
         scalar = 'x + y'

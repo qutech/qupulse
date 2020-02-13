@@ -224,7 +224,8 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
                                           channel_mapping=channel_mapping,
                                           global_transformation=global_transformation,
                                           to_single_waveform=to_single_waveform,
-                                          parent_loop=parent_loop)
+                                          parent_loop=parent_loop,
+                                          volatile=volatile)
 
     def build_waveform(self, parameter_scope: Scope) -> ForLoopWaveform:
         return ForLoopWaveform([self.body.build_waveform(local_scope)

@@ -60,23 +60,31 @@ class MappedParameterTest(unittest.TestCase):
         hugo = DummyParameter(5.2, requires_stop=True)
         ilse = DummyParameter(2356.4, requires_stop=True)
 
-        p.dependencies = {'foo': foo, 'bar': bar, 'ilse': ilse}
+        p._namespace = {'foo': foo, 'bar': bar, 'ilse': ilse}
         with self.assertRaises(ParameterNotProvidedException):
             p.requires_stop
         with self.assertRaises(ParameterNotProvidedException):
             p.get_value()
 
-        p.dependencies = {'foo': foo, 'bar': bar, 'hugo': hugo}
+        p._namespace = {'foo': foo, 'bar': bar, 'hugo': hugo}
         self.assertTrue(p.requires_stop)
 
         hugo = DummyParameter(5.2, requires_stop=False)
-        p.dependencies = {'foo': foo, 'bar': bar, 'hugo': hugo, 'ilse': ilse}
+        p._namespace = {'foo': foo, 'bar': bar, 'hugo': hugo, 'ilse': ilse}
         self.assertFalse(p.requires_stop)
         self.assertEqual(1.5, p.get_value())
 
     def test_repr(self) -> None:
         p = MappedParameter(Expression("foo + bar * hugo"))
         self.assertIsInstance(repr(p), str)
+
+    def test_equality(self):
+        p1 = MappedParameter(Expression("foo + 1"), {'foo': ConstantParameter(3)})
+        p2 = MappedParameter(Expression("foo + 1"), {'foo': ConstantParameter(4)})
+        p3 = MappedParameter(Expression("foo + 1"), {'foo': ConstantParameter(3)})
+
+        self.assertEqual(p1, p3)
+        self.assertNotEqual(p1, p2)
 
 
 class ParameterConstraintTest(unittest.TestCase):

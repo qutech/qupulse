@@ -129,7 +129,7 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
     def build_waveform(self,
                        parameters: Dict[str, Real],
                        channel_mapping: Dict[ChannelID, ChannelID]) -> SequenceWaveform:
-        self.validate_parameter_constraints(parameters=parameters)
+        self.validate_parameter_constraints(parameters=parameters, volatile=set())
         return SequenceWaveform([sub_template.build_waveform(parameters,
                                                              channel_mapping=channel_mapping)
                                  for sub_template in self.__subtemplates])
@@ -141,23 +141,17 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                                  global_transformation: Optional['Transformation'],
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
                                  parent_loop: Loop) -> None:
-        self.validate_parameter_constraints(parameters=parameters)
+        self.validate_scope(scope)
 
-        try:
-            measurement_parameters = {parameter_name: parameters[parameter_name].get_value()
-                                      for parameter_name in self.measurement_parameters}
-            duration_parameters = {parameter_name: parameters[parameter_name].get_value()
-                                   for parameter_name in self.duration.variables}
-        except KeyError as e:
-            raise ParameterNotProvidedException(e) from e
+        assert scope.get_volatile_parameters().isdisjoint(self.measurement_parameters), "not supported"
 
-        if self.duration.evaluate_numeric(**duration_parameters) > 0:
+        if self.duration.evaluate_in_scope(scope) > 0:
             measurements = self.get_measurement_windows(measurement_parameters, measurement_mapping)
             if measurements:
                 parent_loop.add_measurements(measurements)
 
             for subtemplate in self.subtemplates:
-                subtemplate._create_program(parameters=parameters,
+                subtemplate._create_program(scope=scope,
                                             measurement_mapping=measurement_mapping,
                                             channel_mapping=channel_mapping,
                                             global_transformation=global_transformation,

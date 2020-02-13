@@ -398,7 +398,7 @@ class ParallelConstantChannelPulseTemplateTests(unittest.TestCase):
         other_kwargs = dict(measurement_mapping=measurement_mapping,
                             channel_mapping=channel_mapping,
                             to_single_waveform=to_single_waveform,
-                            parent_loop=parent_loop)
+                            parent_loop=parent_loop, volatile=set())
         pccpt = ParallelConstantChannelPulseTemplate(template, overwritten_channels)
 
         parameters = {'c': ConstantParameter(1.2), 'a': ConstantParameter(3.4)}

@@ -322,6 +322,9 @@ class TektronixAWG(AWG):
 
         self.initialize_idle_program()
 
+    def set_volatile_parameters(self, program_name: str, parameters):
+        raise NotImplementedError()
+
     @staticmethod
     def _validate_program_repetition_code(mode: str):
         if mode not in ('once', 'infinite'):

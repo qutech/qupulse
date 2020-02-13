@@ -238,33 +238,37 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         # return MappingPulseTemplate(template=serializer.deserialize(template),
         #                             **kwargs)
 
-    def _validate_parameters(self, parameters: Dict[str, Union[Parameter, numbers.Real]]):
+    def _validate_parameters(self, parameters: Dict[str, Union[Parameter, numbers.Real]], volatile: Set[str]):
         missing = set(self.__external_parameters) - set(parameters.keys())
         if missing:
             raise ParameterNotProvidedException(missing.pop())
-        self.validate_parameter_constraints(parameters=parameters)
+        self.validate_parameter_constraints(parameters=parameters, volatile=volatile)
 
-    def map_parameter_values(self, parameters: Dict[str, numbers.Real]) -> Dict[str, numbers.Real]:
+    def map_parameter_values(self, parameters: Dict[str, numbers.Real],
+                             volatile: Set[str] = frozenset()) -> Dict[str, numbers.Real]:
         """Map parameter values according to the defined mappings.
 
         Args:
             parameters: Dictionary with numeric values
+            volatile(Optional): Forwarded to `validate_parameter_constraints`
         Returns:
             A new dictionary with mapped numeric values.
         """
-        self._validate_parameters(parameters=parameters)
+        self._validate_parameters(parameters=parameters, volatile=volatile)
         return {parameter: mapping_function.evaluate_numeric(**parameters)
                 for parameter, mapping_function in self.__parameter_mapping.items()}
 
-    def map_parameter_objects(self, parameters: Dict[str, Parameter]) ->  Dict[str, Parameter]:
+    def map_parameter_objects(self, parameters: Dict[str, Parameter],
+                              volatile: Set[str] = frozenset()) -> Dict[str, Parameter]:
         """Map parameter objects (instances of Parameter class) according to the defined mappings.
 
         Args:
             parameters: Dictionary with parameter objects
+            volatile(Optional): Forwarded to `validate_parameter_constraints`
         Returns:
             A new dictionary with mapped parameter objects
         """
-        self._validate_parameters(parameters=parameters)
+        self._validate_parameters(parameters=parameters, volatile=volatile)
         return {parameter: MappedParameter(mapping_function,
                                            {name: parameters[name] for name in mapping_function.variables})
                 for (parameter, mapping_function) in self.__parameter_mapping.items()}

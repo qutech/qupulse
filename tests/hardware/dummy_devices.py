@@ -78,6 +78,9 @@ class DummyAWG(AWG):
         self._waveform_indices = {}  # dict that maps from waveform hash to memory index
         self._program_wfs = {}  # contains program names and necessary waveforms indices
 
+    def set_volatile_parameters(self, program_name: str, parameters):
+        raise NotImplementedError()
+
     def upload(self, name, program, channels, markers, voltage_transformation, force=False) -> None:
         if name in self.programs:
             if not force:

@@ -5,6 +5,9 @@ import itertools
 from string import ascii_uppercase
 
 from qupulse.utils.types import TimeType, time_from_float
+from qupulse._program._loop import Loop, MultiChannelProgram, _make_compatible, _is_compatible, _CompatibilityLevel,\
+    RepetitionWaveform, SequenceWaveform, make_compatible, MakeCompatibleWarning, DroppedMeasurementWarning, VolatileModificationWarning
+from qupulse._program.instructions import InstructionBlock, ImmutableInstructionBlock
 from qupulse._program._loop import Loop, _make_compatible, _is_compatible, _CompatibilityLevel,\
     RepetitionWaveform, SequenceWaveform, make_compatible, MakeCompatibleWarning
 from tests.pulses.sequencing_dummies import DummyWaveform
@@ -269,32 +272,6 @@ LOOP 1 times:
                                   Loop(waveform=wf3)])
         self.assertEqual(expected, root)
 
-    def test_remove_empty_loops(self):
-        wfs = [DummyWaveform(duration=i) for i in range(2)]
-
-        root = Loop(children=[
-            Loop(waveform=wfs[0]),
-            Loop(waveform=None),
-            Loop(children=[Loop(waveform=None)]),
-            Loop(children=[Loop(waveform=wfs[1])])
-        ])
-
-        expected = Loop(children=[
-            Loop(waveform=wfs[0]),
-            Loop(children=[Loop(waveform=wfs[1])])
-        ])
-
-        root.remove_empty_loops()
-
-        self.assertEqual(expected, root)
-
-        root = Loop(children=[
-            Loop(measurements=[('m', 0, 1)])
-        ])
-
-        with self.assertWarnsRegex(UserWarning, 'Dropping measurement'):
-            root.remove_empty_loops()
-
     def test_cleanup(self):
         wfs = [DummyWaveform(duration=i) for i in range(3)]
 
@@ -316,22 +293,46 @@ LOOP 1 times:
 
         self.assertEqual(expected, root)
 
+    def test_cleanup_single_rep(self):
+        wf = DummyWaveform(duration=1)
+        measurements = [('n', 0, 1)]
+
+        root = Loop(children=[Loop(waveform=wf, repetition_count=1)],
+                    measurements=measurements, repetition_count=10)
+
+        expected = Loop(waveform=wf, repetition_count=10, measurements=measurements)
+        root.cleanup()
+        self.assertEqual(expected, root)
+
     def test_cleanup_warnings(self):
         root = Loop(children=[
             Loop(measurements=[('m', 0, 1)])
         ])
 
-        with self.assertWarnsRegex(UserWarning, 'Dropping measurement'):
+        with self.assertWarnsRegex(DroppedMeasurementWarning, 'Dropping measurement'):
             root.cleanup()
 
         root = Loop(children=[
             Loop(measurements=[('m', 0, 1)], children=[Loop()])
         ])
-        with self.assertWarnsRegex(UserWarning, 'Dropping measurement since there is no waveform in children'):
+        with self.assertWarnsRegex(DroppedMeasurementWarning, 'Dropping measurement since there is no waveform in children'):
             root.cleanup()
 
 
 class ProgramWaveformCompatibilityTest(unittest.TestCase):
+    def test_is_compatible_warnings(self):
+        wf = DummyWaveform(duration=1)
+
+        volatile_leaf = Loop(waveform=wf, repetition_count=3, repetition_parameter='x')
+        with self.assertWarns(VolatileModificationWarning):
+            self.assertEqual(_CompatibilityLevel.action_required, _is_compatible(volatile_leaf, min_len=3, quantum=1,
+                                                                                 sample_rate=time_from_float(1.)))
+
+        volatile_node = Loop(children=[Loop(waveform=wf)], repetition_count=3, repetition_parameter='x')
+        with self.assertWarns(VolatileModificationWarning):
+            self.assertEqual(_CompatibilityLevel.action_required, _is_compatible(volatile_node, min_len=3, quantum=1,
+                                                                                 sample_rate=time_from_float(1.)))
+
     def test_is_compatible_incompatible(self):
         wf = DummyWaveform(duration=1.1)
 
@@ -408,7 +409,7 @@ class ProgramWaveformCompatibilityTest(unittest.TestCase):
         _make_compatible(program, min_len=5, quantum=1, sample_rate=TimeType.from_float(1.))
 
         self.assertIsInstance(program.waveform, SequenceWaveform)
-        self.assertEqual(program.children, [])
+        self.assertEqual(list(program.children), [])
         self.assertEqual(program.repetition_count, 2)
 
         self.assertEqual(len(program.waveform._sequenced_waveforms), 2)
@@ -427,7 +428,7 @@ class ProgramWaveformCompatibilityTest(unittest.TestCase):
         _make_compatible(program, min_len=5, quantum=10, sample_rate=TimeType.from_float(1.))
 
         self.assertIsInstance(program.waveform, RepetitionWaveform)
-        self.assertEqual(program.children, [])
+        self.assertEqual(list(program.children), [])
         self.assertEqual(program.repetition_count, 1)
 
         self.assertIsInstance(program.waveform, RepetitionWaveform)
