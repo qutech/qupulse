@@ -316,6 +316,8 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                                  global_transformation: Optional['Transformation'],
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
                                  parent_loop: Loop) -> None:
+        self.validate_scope(scope)
+
         # parameters are validated in map_parameters() call, no need to do it here again explicitly
         self.template._create_program(scope=self.map_scope(scope),
                                       measurement_mapping=self.get_updated_measurement_mapping(measurement_mapping),
@@ -348,20 +350,17 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         # sympy.subs() does not work if one of the mappings in the provided dict is an Expression object
         # the following is an ugly workaround
         # todo: make Expressions compatible with sympy.subs()
-        parameter_mapping = self.__parameter_mapping.copy()
-        for i in parameter_mapping:
-            if isinstance(parameter_mapping[i], ExpressionScalar):
-                parameter_mapping[i] = parameter_mapping[i].sympified_expression
+        parameter_mapping = {parameter_name: expression.underlying_expression
+                             for parameter_name, expression in self.__parameter_mapping.items()}
 
         for channel, ch_integral in internal_integral.items():
-            expr = ExpressionScalar(
+            channel_out = self.__channel_mapping.get(channel, channel)
+            if channel_out is None:
+                continue
+
+            expressions[channel_out] = ExpressionScalar(
                 ch_integral.sympified_expression.subs(parameter_mapping)
             )
-            channel_out = channel
-            if channel in self.__channel_mapping:
-                channel_out = self.__channel_mapping[channel]
-            if channel_out is not None:
-                expressions[channel_out] = expr
 
         return expressions
 

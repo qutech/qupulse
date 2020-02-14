@@ -11,7 +11,7 @@ from cached_property import cached_property
 
 from qupulse.serialization import Serializer, PulseRegistryType
 from qupulse._program._loop import Loop
-
+from qupulse.parameter_scope import Scope
 from qupulse.utils.types import MeasurementWindow, ChannelID, TimeType
 from qupulse.pulses.pulse_template import PulseTemplate, AtomicPulseTemplate
 from qupulse.pulses.parameters import Parameter, ParameterConstrainer, ParameterNotProvidedException
@@ -143,10 +143,8 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                                  parent_loop: Loop) -> None:
         self.validate_scope(scope)
 
-        assert scope.get_volatile_parameters().isdisjoint(self.measurement_parameters), "not supported"
-
         if self.duration.evaluate_in_scope(scope) > 0:
-            measurements = self.get_measurement_windows(measurement_parameters, measurement_mapping)
+            measurements = self.get_measurement_windows(scope, measurement_mapping)
             if measurements:
                 parent_loop.add_measurements(measurements)
 

@@ -15,13 +15,10 @@ from qupulse.utils.types import FrozenDict
 
 from qupulse._program._loop import Loop
 
-from qupulse.expressions import ExpressionScalar
+from qupulse.expressions import ExpressionScalar, ExpressionVariableMissingException
 from qupulse.utils import checked_int_cast
-from qupulse.pulses.parameters import Parameter, ConstantParameter, InvalidParameterNameException, ParameterConstrainer, ParameterNotProvidedException
+from qupulse.pulses.parameters import InvalidParameterNameException, ParameterConstrainer, ParameterNotProvidedException
 from qupulse.pulses.pulse_template import PulseTemplate, ChannelID, AtomicPulseTemplate
-from qupulse.pulses.conditions import Condition, ConditionMissingException
-from qupulse._program.instructions import InstructionBlock
-from qupulse.pulses.sequencing import Sequencer
 from qupulse._program.waveforms import SequenceWaveform as ForLoopWaveform
 from qupulse.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
 
@@ -202,9 +199,9 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
         loop_index_name = self._loop_index
 
         for loop_index_value in loop_range:
-            yield MappedScope(scope, FrozenDict([(loop_index_name, loop_index_value)]))
+            yield scope.overwrite({loop_index_name: loop_index_value})
 
-     def _internal_create_program(self, *,
+    def _internal_create_program(self, *,
                                  scope: Scope,
                                  measurement_mapping: Dict[str, Optional[str]],
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
@@ -213,7 +210,12 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
                                  parent_loop: Loop) -> None:
         self.validate_scope(scope=scope)
 
-        if self.duration.evaluate_in_scope(scope) > 0:
+        try:
+            duration = self.duration.evaluate_in_scope(scope)
+        except ExpressionVariableMissingException as err:
+            raise ParameterNotProvidedException(err.variable) from err
+
+        if duration > 0:
             measurements = self.get_measurement_windows(scope, measurement_mapping)
             if measurements:
                 parent_loop.add_measurements(measurements)
@@ -224,8 +226,7 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
                                           channel_mapping=channel_mapping,
                                           global_transformation=global_transformation,
                                           to_single_waveform=to_single_waveform,
-                                          parent_loop=parent_loop,
-                                          volatile=volatile)
+                                          parent_loop=parent_loop)
 
     def build_waveform(self, parameter_scope: Scope) -> ForLoopWaveform:
         return ForLoopWaveform([self.body.build_waveform(local_scope)

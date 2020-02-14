@@ -42,3 +42,14 @@ class SequenceProxyTest(unittest.TestCase):
 
         with self.assertRaises(TypeError):
             p[1] = 7
+
+
+class FrozenDict(unittest.TestCase):
+    def test_init(self):
+        raise NotImplementedError()
+
+    def test_mapping(self):
+        raise NotImplementedError()
+
+    def test_eq_and_hash(self):
+        raise NotImplementedError()

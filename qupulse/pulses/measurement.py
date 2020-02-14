@@ -4,7 +4,7 @@ import itertools
 
 from qupulse.expressions import Expression
 from qupulse.utils.types import MeasurementWindow
-from qupulse.pulses.parameters import Parameter
+from qupulse.parameter_scope import Scope
 
 MeasurementDeclaration = Tuple[str, Union[Expression, str, Real], Union[Expression, str, Real]]
 
@@ -23,19 +23,32 @@ class MeasurementDefiner:
                 raise ValueError('Measurement window length may not be negative')
 
     def get_measurement_windows(self,
-                                parameters: Mapping[str, Real],
+                                parameters: Union[Mapping[str, Real], Scope],
                                 measurement_mapping: Dict[str, Optional[str]]) -> List[MeasurementWindow]:
         """Calculate measurement windows with the given parameter set and rename them woth the measurement mapping"""
-        def get_val(v: Expression):
-            return v.evaluate_in_scope(parameters)
+        try:
+            volatile = parameters.get_volatile_parameters()
+        except AttributeError:
+            volatile = frozenset()
 
-        resulting_windows = [(measurement_mapping[name], get_val(begin), get_val(length))
-                             for name, begin, length in self._measurement_windows
-                             if measurement_mapping[name] is not None]
+        resulting_windows = []
+        for name, begin, length in self._measurement_windows:
+            name = measurement_mapping[name]
+            if name is None:
+                continue
 
-        for _, begin, length in resulting_windows:
-            if begin < 0 or length < 0:
+            assert volatile.isdisjoint(begin.variables) and volatile.isdisjoint(length.variables), "volatile measurement parameters are not supported"
+
+            begin_val = begin.evaluate_in_scope(parameters)
+            length_val = length.evaluate_in_scope(parameters)
+            if begin_val < 0 or length_val < 0:
                 raise ValueError('Measurement window with negative begin or length: {}, {}'.format(begin, length))
+
+            resulting_windows.append(
+                (name,
+                 begin_val,
+                 length_val)
+            )
         return resulting_windows
 
     @property

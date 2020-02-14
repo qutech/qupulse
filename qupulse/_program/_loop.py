@@ -7,16 +7,45 @@ import warnings
 
 import numpy as np
 
+from qupulse.parameter_scope import Scope, MappedScope, JointScope
+
 from qupulse._program.waveforms import Waveform
 
-from qupulse.utils.types import ChannelID, TimeType
+from qupulse.utils.types import ChannelID, TimeType, MeasurementWindow, FrozenDict
 from qupulse.utils.tree import Node, is_tree_circular
-from qupulse.utils.types import MeasurementWindow
+from qupulse.expressions import ExpressionScalar
 from qupulse.utils import is_integer
 
 from qupulse._program.waveforms import SequenceWaveform, RepetitionWaveform
 
 __all__ = ['Loop', 'make_compatible', 'MakeCompatibleWarning']
+
+
+class VolatileRepetitionCount:
+    def __init__(self, expression: ExpressionScalar, scope: Scope):
+        self._expression = expression
+        self._scope = scope
+
+    def __int__(self):
+        value = self._expression.evaluate_in_scope(self._scope)
+        if not is_integer(value):
+            warnings.warn("Repetition count is no integer. Rounding might lead to unexpected results.")
+        value = int(round(value))
+        if value < 0:
+            warnings.warn("Repetition count is negative. Clamping lead to unexpected results.")
+            value = 0
+        return value
+
+    @classmethod
+    def operation(cls, expression, **operands: 'VolatileRepetitionCount'):
+        expression = ExpressionScalar(expression)
+        assert set(expression.variables) == operands.keys()
+
+        scope = JointScope(FrozenDict(
+            {operand_name: MappedScope(operand._scope, FrozenDict({operand_name: operand._expression}))
+             for operand_name, operand in operands.items()}
+        ))
+        return VolatileRepetitionCount(expression, scope)
 
 
 class Loop(Node):
@@ -33,7 +62,7 @@ class Loop(Node):
                  waveform: Optional[Waveform] = None,
                  measurements: Optional[List[MeasurementWindow]] = None,
                  repetition_count: int = 1,
-                 repetition_parameter: MappedParameter = None):
+                 repetition_parameter: VolatileRepetitionCount = None):
         """Initialize a new loop
 
         Args:
@@ -115,11 +144,6 @@ class Loop(Node):
         else:
             self._measurements.extend(measurements)
 
-    def update_volatile_repetition(self, new_values: Mapping[str, ConstantParameter]):
-        if self._repetition_parameter is not None:
-            self._repetition_parameter.update_constants(new_values)
-            self._repetition_count = int(self._repetition_parameter.get_value())
-
     @property
     def waveform(self) -> Waveform:
         return self._waveform
@@ -146,7 +170,7 @@ class Loop(Node):
         return self.body_duration * self.repetition_count
 
     @property
-    def repetition_parameter(self) -> Optional[MappedParameter]:
+    def repetition_parameter(self) -> Optional[VolatileRepetitionCount]:
         return self._repetition_parameter
 
     @property
@@ -313,8 +337,10 @@ class Loop(Node):
 
         if self[child_index]._repetition_parameter is not None:
             warnings.warn("Splitting a child with volatile repetition count", VolatileModificationWarning)
-            self[child_index]._repetition_parameter = MappedParameter(expression=self[child_index]._repetition_parameter.expression - 1,
-                                                                      namespace=self[child_index]._repetition_parameter.dependencies)
+            self[child_index]._repetition_parameter = VolatileRepetitionCount(
+                expression=self[child_index]._repetition_parameter.expression - 1,
+                scope=self[child_index]._repetition_parameter.scope
+            )
 
         new_child = self[child_index].copy_tree_structure()
         new_child.repetition_count = 1
@@ -392,20 +418,19 @@ class Loop(Node):
         if self._repetition_parameter is None and child._repetition_parameter is None:
             repetition_parameter = None
         elif self._repetition_parameter is None:
-            repetition_parameter = MappedParameter(
+            repetition_parameter = VolatileRepetitionCount(
                 expression=child._repetition_parameter.expression * self.repetition_count,
-                namespace=child._repetition_parameter._namespace)
+                scope=child._repetition_parameter.scope)
         elif child._repetition_parameter is None:
-            repetition_parameter = MappedParameter(
+            repetition_parameter = VolatileRepetitionCount(
                 expression=self._repetition_parameter.expression * child.repetition_count,
-                namespace=self._repetition_parameter._namespace)
+                scope=self._repetition_parameter.scope)
         else:
             # create a new expression that depends on both
-            expression = ExpressionScalar('parent_repetition_count * child_repetition_count')
-            namespace = dict(parent_repetition_count=self.repetition_parameter,
-                             child_repetition_count=child.repetition_parameter)
-            repetition_parameter = MappedParameter(expression=expression,
-                                                   namespace=namespace)
+            expression = 'parent_repetition_count * child_repetition_count'
+            repetition_parameter = VolatileRepetitionCount.operation(expression=expression,
+                                                                     parent_repetition_count=self.repetition_parameter,
+                                                                     child_repetition_count=child.repetition_parameter)
 
         self[:] = iter(child)
         self._waveform = child._waveform

@@ -32,7 +32,7 @@ import importlib
 import warnings
 from contextlib import contextmanager
 
-from qupulse.utils.types import DocStringABCMeta
+from qupulse.utils.types import DocStringABCMeta, FrozenDict
 
 __all__ = ["StorageBackend", "FilesystemBackend", "ZipFileBackend", "CachingBackend", "Serializable", "Serializer",
            "AnonymousSerializable", "DictBackend", "PulseStorage",
@@ -1056,6 +1056,9 @@ class JSONSerializableEncoder(json.JSONEncoder):
 
         elif type(o) is set:
             return list(o)
+
+        elif type(o) is FrozenDict:
+            return dict(o.items())
 
         else:
             return super().default(o)

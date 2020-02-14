@@ -3,6 +3,7 @@ from unittest import mock
 
 import numpy
 
+from qupulse.parameter_scope import DictScope
 from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform, MappingPulseTemplate,\
     ChannelMappingException, AtomicMultiChannelPulseTemplate, ParallelConstantChannelPulseTemplate,\
     TransformingWaveform, ParallelConstantChannelTransformation
@@ -398,28 +399,28 @@ class ParallelConstantChannelPulseTemplateTests(unittest.TestCase):
         other_kwargs = dict(measurement_mapping=measurement_mapping,
                             channel_mapping=channel_mapping,
                             to_single_waveform=to_single_waveform,
-                            parent_loop=parent_loop, volatile=set())
+                            parent_loop=parent_loop)
         pccpt = ParallelConstantChannelPulseTemplate(template, overwritten_channels)
 
-        parameters = {'c': ConstantParameter(1.2), 'a': ConstantParameter(3.4)}
-        kwargs = {**other_kwargs, 'parameters': parameters.copy(), 'global_transformation': None}
+        scope = DictScope.from_kwargs(c=1.2, a=3.4)
+        kwargs = {**other_kwargs, 'scope': scope, 'global_transformation': None}
 
         expected_overwritten_channels = {'Y': 1.2, 'Z': 3.4}
         expected_transformation = ParallelConstantChannelTransformation(expected_overwritten_channels)
         expected_kwargs = {**kwargs, 'global_transformation': expected_transformation}
 
-        template._create_program = mock.Mock()
-        pccpt._internal_create_program(**kwargs)
-        template._create_program.assert_called_once_with(**expected_kwargs)
+        with mock.patch.object(template, '_create_program', spec=template._create_program) as cp_mock:
+            pccpt._internal_create_program(**kwargs)
+            cp_mock.assert_called_once_with(**expected_kwargs)
 
         global_transformation = LinearTransformation(numpy.zeros((0, 0)), [], [])
         expected_transformation = chain_transformations(global_transformation, expected_transformation)
-        kwargs = {**other_kwargs, 'parameters': parameters.copy(), 'global_transformation': global_transformation}
+        kwargs = {**other_kwargs, 'scope': scope, 'global_transformation': global_transformation}
         expected_kwargs = {**kwargs, 'global_transformation': expected_transformation}
 
-        template._create_program = mock.Mock()
-        pccpt._internal_create_program(**kwargs)
-        template._create_program.assert_called_once_with(**expected_kwargs)
+        with mock.patch.object(template, '_create_program', spec=template._create_program) as cp_mock:
+            pccpt._internal_create_program(**kwargs)
+            cp_mock.assert_called_once_with(**expected_kwargs)
 
     def test_build_waveform(self):
         template = DummyPulseTemplate(duration='t1', defined_channels={'X', 'Y'}, parameter_names={'a', 'b'},

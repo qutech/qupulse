@@ -1,6 +1,7 @@
 import unittest
 from unittest import mock
 
+from qupulse.parameter_scope import DictScope
 from qupulse.expressions import Expression, ExpressionScalar
 from qupulse.pulses.table_pulse_template import TablePulseTemplate
 from qupulse.pulses.sequence_pulse_template import SequencePulseTemplate, SequenceWaveform
@@ -227,10 +228,10 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
 
         spt = SequencePulseTemplate(*sub_templates, measurements=[('m', 'a', 'b')])
 
-        kwargs = dict(parameters=dict(t1=ConstantParameter(.4),
-                                      t2=ConstantParameter(.5),
-                                      a=ConstantParameter(.1), b=ConstantParameter(.2),
-                                      irrelevant=ConstantParameter(42)),
+        kwargs = dict(scope=DictScope.from_kwargs(t1=.4,
+                                                  t2=.5,
+                                                  a=.1, b=.2,
+                                                  irrelevant=42),
                       measurement_mapping={'m': 'l'},
                       channel_mapping={'g': 'h'},
                       global_transformation=TransformationStub(),
@@ -242,7 +243,7 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
                                           Loop(waveform=wfs[1])],
                                 measurements=[('l', .1, .2)])
 
-        with mock.patch.object(spt, 'validate_parameter_constraints') as validate_parameter_constraints:
+        with mock.patch.object(spt, 'validate_scope') as validate_scope:
             with mock.patch.object(spt, 'get_measurement_windows',
                                    return_value=[('l', .1, .2)]) as get_measurement_windows:
                 with mock.patch.object(sub_templates[0], '_create_program',
@@ -250,30 +251,29 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
                     mock.patch.object(sub_templates[1], '_create_program',
                                        wraps=get_appending_internal_create_program(wfs[1], True)) as create_1:
 
-                    spt._internal_create_program(**kwargs, parent_loop=program, volatile=set())
+                    spt._internal_create_program(**kwargs, parent_loop=program)
 
                     self.assertEqual(expected_program, program)
 
-                    validate_parameter_constraints.assert_called_once_with(parameters=kwargs['parameters'], volatile=set())
-                    get_measurement_windows.assert_called_once_with(dict(a=.1, b=.2), kwargs['measurement_mapping'])
-                    create_0.assert_called_once_with(**kwargs, parent_loop=program, volatile=set())
-                    create_1.assert_called_once_with(**kwargs, parent_loop=program, volatile=set())
+                    validate_scope.assert_called_once_with(kwargs['scope'])
+                    get_measurement_windows.assert_called_once_with(kwargs['scope'], kwargs['measurement_mapping'])
+                    create_0.assert_called_once_with(**kwargs, parent_loop=program)
+                    create_1.assert_called_once_with(**kwargs, parent_loop=program)
 
     def test_create_program_internal(self) -> None:
         sub1 = DummyPulseTemplate(duration=3, waveform=DummyWaveform(duration=3), measurements=[('b', 1, 2)], defined_channels={'A'})
         sub2 = DummyPulseTemplate(duration=2, waveform=DummyWaveform(duration=2), parameter_names={'foo'}, defined_channels={'A'})
-        parameters = {'foo': DummyNoValueParameter()}
+        scope = DictScope.from_kwargs()
         measurement_mapping = {'a': 'a', 'b': 'b'}
         channel_mapping = dict()
-        volatile = set()
         seq = SequencePulseTemplate(sub1, sub2, measurements=[('a', 0, 1)])
         loop = Loop()
-        seq._internal_create_program(parameters=parameters,
+        seq._internal_create_program(scope=scope,
                                      measurement_mapping=measurement_mapping,
                                      channel_mapping=channel_mapping,
                                      global_transformation=None,
                                      to_single_waveform=set(),
-                                     parent_loop=loop, volatile=volatile)
+                                     parent_loop=loop)
         self.assertEqual(1, loop.repetition_count)
         self.assertIsNone(loop.waveform)
         self.assertEqual([Loop(repetition_count=1, waveform=sub1.waveform),
@@ -284,12 +284,11 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
         ### test again with inverted sequence
         seq = SequencePulseTemplate(sub2, sub1, measurements=[('a', 0, 1)])
         loop = Loop()
-        seq._internal_create_program(parameters=parameters,
+        seq._internal_create_program(scope=scope,
                                      measurement_mapping=measurement_mapping,
                                      channel_mapping=channel_mapping,
                                      global_transformation=None,
                                      to_single_waveform=set(),
-                                     volatile=set(),
                                      parent_loop=loop)
         self.assertEqual(1, loop.repetition_count)
         self.assertIsNone(loop.waveform)
@@ -301,18 +300,18 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
     def test_internal_create_program_no_measurement_mapping(self) -> None:
         sub1 = DummyPulseTemplate(duration=3, waveform=DummyWaveform(duration=3), measurements=[('b', 1, 2)])
         sub2 = DummyPulseTemplate(duration=2, waveform=DummyWaveform(duration=2), parameter_names={'foo'})
-        parameters = {'foo': DummyNoValueParameter()}
+        scope = DictScope.from_kwargs()
         seq = SequencePulseTemplate(sub1, sub2, measurements=[('a', 0, 1)])
         children = [Loop(waveform=DummyWaveform())]
         loop = Loop(measurements=[], children=children)
 
         with self.assertRaises(KeyError):
-            seq._internal_create_program(parameters=parameters,
+            seq._internal_create_program(scope=scope,
                                          measurement_mapping=dict(),
                                          channel_mapping=dict(),
                                          global_transformation=None,
                                          to_single_waveform=set(),
-                                         volatile=set(),
+
                                          parent_loop=loop)
 
         self.assertFalse(sub1.create_program_calls)
@@ -324,29 +323,28 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
 
         # test for child level measurements (does not guarantee to leave parent_loop unchanged in this case)
         with self.assertRaises(KeyError):
-            seq._internal_create_program(parameters=parameters,
+            seq._internal_create_program(scope=scope,
                                          measurement_mapping=dict(a='a'),
                                          channel_mapping=dict(),
                                          global_transformation=None,
                                          to_single_waveform=set(),
-                                         volatile=set(),
+
                                          parent_loop=loop)
 
     def test_internal_create_program_one_child_no_duration(self) -> None:
         sub1 = DummyPulseTemplate(duration=0, waveform=None, measurements=[('b', 1, 2)], defined_channels={'A'})
         sub2 = DummyPulseTemplate(duration=2, waveform=DummyWaveform(duration=2), parameter_names={'foo'}, defined_channels={'A'})
-        parameters = {'foo': DummyNoValueParameter()}
+        scope = DictScope.from_kwargs()
         measurement_mapping = {'a': 'a', 'b': 'b'}
         channel_mapping = dict()
-        volatile = set()
         seq = SequencePulseTemplate(sub1, sub2, measurements=[('a', 0, 1)])
         loop = Loop()
-        seq._internal_create_program(parameters=parameters,
+        seq._internal_create_program(scope=scope,
                                      measurement_mapping=measurement_mapping,
                                      channel_mapping=channel_mapping,
                                      global_transformation=None,
                                      to_single_waveform=set(),
-                                     parent_loop=loop, volatile=volatile)
+                                     parent_loop=loop)
         self.assertEqual(1, loop.repetition_count)
         self.assertIsNone(loop.waveform)
         self.assertEqual([Loop(repetition_count=1, waveform=sub2.waveform)],
@@ -360,12 +358,12 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
         ### test again with inverted sequence
         seq = SequencePulseTemplate(sub2, sub1, measurements=[('a', 0, 1)])
         loop = Loop()
-        seq._internal_create_program(parameters=parameters,
+        seq._internal_create_program(scope=scope,
                                      measurement_mapping=measurement_mapping,
                                      channel_mapping=channel_mapping,
                                      global_transformation=None,
                                      to_single_waveform=set(),
-                                     parent_loop=loop, volatile=volatile)
+                                     parent_loop=loop)
         self.assertEqual(1, loop.repetition_count)
         self.assertIsNone(loop.waveform)
         self.assertEqual([Loop(repetition_count=1, waveform=sub2.waveform)],
@@ -379,19 +377,17 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
     def test_internal_create_program_both_children_no_duration(self) -> None:
         sub1 = DummyPulseTemplate(duration=0, waveform=None, measurements=[('b', 1, 2)], defined_channels={'A'})
         sub2 = DummyPulseTemplate(duration=0, waveform=None, parameter_names={'foo'}, defined_channels={'A'})
-        parameters = {'foo': DummyNoValueParameter()}
+        scope = DictScope.from_kwargs()
         measurement_mapping = {'a': 'a', 'b': 'b'}
         channel_mapping = dict()
-        volatile = set()
 
         seq = SequencePulseTemplate(sub1, sub2, measurements=[('a', 0, 1)])
         loop = Loop(measurements=None)
-        seq._internal_create_program(parameters=parameters,
+        seq._internal_create_program(scope=scope,
                                      measurement_mapping=measurement_mapping,
                                      channel_mapping=channel_mapping,
                                      global_transformation=None,
                                      to_single_waveform=set(),
-                                     volatile=set(),
                                      parent_loop=loop)
         self.assertEqual(1, loop.repetition_count)
         self.assertIsNone(loop.waveform)
@@ -401,16 +397,16 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
     def test_internal_create_program_parameter_constraint_violations(self) -> None:
         sub1 = DummyPulseTemplate(duration=3, waveform=DummyWaveform(duration=3), measurements=[('b', 1, 2)])
         sub2 = DummyPulseTemplate(duration=2, waveform=DummyWaveform(duration=2), parameter_names={'foo'})
-        parameters = {'foo': ConstantParameter(7)}
+        scope = DictScope.from_kwargs(foo=7)
         seq = SequencePulseTemplate(sub1, sub2, measurements=[('a', 0, 1)], parameter_constraints={'foo < 2'})
         loop = Loop()
         with self.assertRaises(ParameterConstraintViolation):
-            seq._internal_create_program(parameters=parameters,
+            seq._internal_create_program(scope=scope,
                                          measurement_mapping={'a': 'a', 'b': 'b'},
                                          channel_mapping=dict(),
                                          global_transformation=None,
                                          to_single_waveform=set(),
-                                         volatile=set(),
+
                                          parent_loop=loop)
 
     def test_internal_create_program_parameter_missing(self) -> None:
@@ -420,36 +416,33 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
         loop = Loop()
 
         # test parameter from constraints
-        parameters = {}
+        scope = DictScope.from_kwargs()
         with self.assertRaises(ParameterNotProvidedException):
-            seq._internal_create_program(parameters=parameters,
+            seq._internal_create_program(scope=scope,
                                          measurement_mapping={'a': 'a', 'b': 'b'},
                                          channel_mapping=dict(),
                                          global_transformation=None,
                                          to_single_waveform=set(),
-                                         volatile=set(),
                                          parent_loop=loop)
 
         # test parameter from measurements
-        parameters = {'foo': ConstantParameter(1)}
+        scope = DictScope.from_mapping({'foo': 1})
         with self.assertRaises(ParameterNotProvidedException):
-            seq._internal_create_program(parameters=parameters,
+            seq._internal_create_program(scope=scope,
                                          measurement_mapping={'a': 'a', 'b': 'b'},
                                          channel_mapping=dict(),
                                          global_transformation=None,
                                          to_single_waveform=set(),
-                                         volatile=set(),
                                          parent_loop=loop)
 
         # test parameter from duration
-        parameters = {'foo': ConstantParameter(1), 'bar': ConstantParameter(0)}
+        scope = DictScope.from_mapping({'foo': 1, 'bar': 0})
         with self.assertRaises(ParameterNotProvidedException):
-            seq._internal_create_program(parameters=parameters,
+            seq._internal_create_program(scope=scope,
                                          measurement_mapping={'a': 'a', 'b': 'b'},
                                          channel_mapping=dict(),
                                          global_transformation=None,
                                          to_single_waveform=set(),
-                                         volatile=set(),
                                          parent_loop=loop)
 
 

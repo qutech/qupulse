@@ -5,6 +5,7 @@ import functools
 import collections
 import itertools
 import warnings
+import operator
 
 import sympy
 import numpy
@@ -16,6 +17,10 @@ from qupulse.utils.types import HashableNumpyArray, DocStringABCMeta, Collection
 
 class Scope(Mapping[str, Number]):
     __slots__ = ()
+
+    @abstractmethod
+    def get_volatile_parameters(self) -> AbstractSet[str]:
+        pass
 
     @abstractmethod
     def __hash__(self):
@@ -30,20 +35,49 @@ class Scope(Mapping[str, Number]):
 
     @abstractmethod
     def get_parameter(self, parameter_name: str) -> Number:
-        pass
+        """
+        Args:
+            parameter_name:
+
+        Raises:
+            ParameterNotProvidedException if the parameter is not provided by this scope
+
+        Returns:
+            Parameter value
+        """
 
     @abstractmethod
     def change_constants(self, new_constants: Mapping[str, Number]) -> 'Scope':
-        """Change values of constants"""
+        """Change values of constants. Constants not present in the scope are ignored.
+
+        Args:
+            new_constants:
+
+        Warnings:
+            NonVolatileChange: if a parameter that is not in get_volatile_parameters is updated
+
+        Returns:
+            New scope instance
+        """
+
+    def overwrite(self, to_overwrite: Mapping[str, Number]) -> 'Scope':
+        """"""
+        # TODO: replace with OverwritingScope
+        return MappedScope(self, FrozenDict((name, Expression(value))
+                                            for name, value in to_overwrite.items()))
 
 
 class MappedScope(Scope):
-    __slots__ = ('_scope', '_mapping', 'get_parameter')
+    __slots__ = ('_scope', '_mapping', '_volatile_parameters', '_cache')
 
     def __init__(self, scope: Scope, mapping: FrozenDict[str, Expression]):
+        super(MappedScope, self).__init__()
         self._scope = scope
         self._mapping = mapping
-        self.get_parameter = functools.lru_cache(maxsize=None)(self.get_parameter)
+        self._volatile_parameters = None
+
+        self._cache = {}
+        # TODO use caching
 
     def keys(self) -> AbstractSet[str]:
         return self._scope.keys() | self._mapping.keys()
@@ -60,13 +94,21 @@ class MappedScope(Scope):
     def __repr__(self):
         return '%s(scope=%r, mapping=%r)' % (self.__class__.__name__, self._scope, self._mapping)
 
-    def get_parameter(self, parameter_name: str) -> Number:
+    def _calc_parameter(self, parameter_name: str) -> Number:
         expression = self._mapping.get(parameter_name, None)
-        scope_get_parameter = self._scope.get_parameter
         if expression is None:
-            return scope_get_parameter(parameter_name)
+            return self._scope.get_parameter(parameter_name)
         else:
-            return expression.evaluate_in_scope(self._scope)
+            try:
+                return expression.evaluate_in_scope(self._scope)
+            except ExpressionVariableMissingException as err:
+                raise ParameterNotProvidedException(err.variable) from err
+
+    def get_parameter(self, parameter_name: str) -> Number:
+        result = self._cache.get(parameter_name, None)
+        if result is None:
+            self._cache[parameter_name] = result = self._calc_parameter(parameter_name)
+        return result
 
     def __hash__(self):
         return hash((self._scope, self._mapping))
@@ -84,13 +126,38 @@ class MappedScope(Scope):
                 mapping=self._mapping
             )
 
+    def get_volatile_parameters(self) -> AbstractSet[str]:
+        if self._volatile_parameters is None:
+            inner_volatile = self._scope.get_volatile_parameters()
+            if inner_volatile:
+                non_volatile = set()
+                volatile = set()
+                for mapped_parameter, expression in self._mapping.items():
+                    if inner_volatile.isdisjoint(expression.variables):
+                        non_volatile.add(mapped_parameter)
+                    else:
+                        volatile.add(mapped_parameter)
+
+                result = inner_volatile - non_volatile
+                result |= volatile
+                self._volatile_parameters = frozenset(result)
+            else:
+                self._volatile_parameters = inner_volatile
+        return self._volatile_parameters
+
 
 class DictScope(Scope):
-    __slots__ = ('_values', 'keys')
+    __slots__ = ('_values', '_volatile_parameters', 'keys', 'items', 'values')
 
-    def __init__(self, values: FrozenDict[str, Number]):
+    def __init__(self, values: FrozenDict[str, Number], volatile: AbstractSet[str] = frozenset()):
+        super().__init__()
+        assert getattr(values, '__hash__', None) is not None
+
         self._values = values
-        self.keys = self._values.keys()
+        self._volatile_parameters = frozenset(volatile)
+        self.keys = self._values.keys
+        self.items = self._values.items
+        self.values = self._values.values
 
     def __contains__(self, parameter_name):
         return parameter_name in self._values
@@ -105,19 +172,101 @@ class DictScope(Scope):
         return '%s(values=%r)' % (self.__class__.__name__, self._values)
 
     def get_parameter(self, parameter_name) -> Number:
-        return self._values[parameter_name]
+        try:
+            return self._values[parameter_name]
+        except KeyError:
+            raise ParameterNotProvidedException(parameter_name)
 
     def __hash__(self):
-        return hash(self._values)
+        return hash(self._values) ^ hash(self._volatile_parameters)
 
     def __eq__(self, other: 'DictScope'):
-        return self._values == other._values
+        if type(self) is type(other):
+            return self._values == other._values and self._volatile_parameters == other._volatile_parameters
+        else:
+            return NotImplemented
 
     def change_constants(self, new_constants: Mapping[str, Number]) -> 'Scope':
-        if new_constants.keys() & self._values.keys():
+        to_update = new_constants.keys() & self._values.keys()
+        if to_update:
+            updated_non_volatile = to_update - self.get_volatile_parameters()
+            if updated_non_volatile:
+                warnings.warn(NonVolatileChange(updated_non_volatile))
+
             return DictScope(
                 values=FrozenDict((parameter_name, new_constants.get(parameter_name, old_value))
-                                  for parameter_name, old_value in self._values.items())
+                                  for parameter_name, old_value in self._values.items()),
+                volatile=self._volatile_parameters
             )
         else:
             return self
+
+    def get_volatile_parameters(self) -> AbstractSet[str]:
+        return self._volatile_parameters
+
+    @classmethod
+    def from_mapping(cls, mapping: Mapping[str, Number], volatile: AbstractSet[str] = frozenset()) -> 'DictScope':
+        return cls(FrozenDict(mapping), volatile)
+
+    @classmethod
+    def from_kwargs(cls, *, volatile: AbstractSet[str] = frozenset(), **kwargs: Number) -> 'DictScope':
+        return cls.from_mapping(kwargs, volatile)
+
+
+class JointScope(Scope):
+    __slots__ = ('_lookup', '_volatile_parameters')
+
+    def __init__(self, lookup: FrozenDict[str, Scope]):
+        self._lookup = lookup
+        self._volatile_parameters = None
+
+    def __contains__(self, parameter_name):
+        return parameter_name in self._lookup
+
+    def __iter__(self):
+        return iter(self._lookup)
+
+    def __len__(self):
+        return len(self._lookup)
+
+    def __repr__(self):
+        return '%s(lookup=%r)' % (self.__class__.__name__, self._lookup)
+
+    def get_parameter(self, parameter_name: str) -> Number:
+        return self._lookup[parameter_name].get_parameter(parameter_name)
+
+    def __hash__(self):
+        return hash(frozenset(self.items()))
+
+    def __eq__(self, other: 'JointScope'):
+        return frozenset(self.items()) == frozenset(other.items())
+
+    def change_constants(self, new_constants: Mapping[str, Number]) -> 'Scope':
+        return JointScope(FrozenDict(
+            (parameter_name, scope.change_constants(new_constants)) for parameter_name, scope in self._lookup.items()
+        ))
+
+    def get_volatile_parameters(self) -> AbstractSet[str]:
+        if self._volatile_parameters is None:
+            volatile_parameters = functools.reduce(operator.or_, (scope.get_volatile_parameters()
+                                                                  for scope in self._lookup.values()))
+            self._volatile_parameters = frozenset(self._lookup.keys() & volatile_parameters)
+        return self._volatile_parameters
+
+
+class ParameterNotProvidedException(KeyError):
+    """Indicates that a required parameter value was not provided."""
+
+    def __init__(self, parameter_name: str) -> None:
+        super().__init__(parameter_name)
+
+    @property
+    def parameter_name(self):
+        return self.args[0]
+
+    def __str__(self) -> str:
+        return "No value was provided for parameter '{0}'.".format(self.parameter_name)
+
+
+class NonVolatileChange(RuntimeWarning):
+    """Raised if a non volatile parameter is updated"""

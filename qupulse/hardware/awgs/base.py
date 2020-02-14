@@ -15,6 +15,7 @@ from collections import OrderedDict
 from qupulse.hardware.util import get_sample_times
 from qupulse.utils.types import ChannelID
 from qupulse._program._loop import Loop
+from qupulse._program.waveforms import Waveform
 from qupulse.comparable import Comparable
 from qupulse.utils.types import TimeType
 

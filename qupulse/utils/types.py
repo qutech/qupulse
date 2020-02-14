@@ -338,15 +338,24 @@ else:
         __slots__ = ()
 
 
-class FrozenDict(typing.Mapping):
-    def __init__(self, *args, **kwargs):
-        self._dict = collections.OrderedDict(*args, **kwargs)
-        self._hash = None
+_KT = typing.TypeVar('_KT')  # Key type.
+_T_co = typing.TypeVar('_T_co', covariant=True)  # Any type covariant containers.
 
-    def __getitem__(self, item):
+
+class FrozenDict(typing.Mapping[_KT, _T_co]):
+    DICT_TYPE = dict
+
+    def __init__(self, *args, **kwargs):
+        self._dict = self.DICT_TYPE(*args, **kwargs)
+        self._hash = None
+        self.keys = self._dict.keys
+        self.items = self._dict.items
+        self.values = self._dict.values
+
+    def __getitem__(self, item: _KT) -> _T_co:
         return self._dict[item]
 
-    def __contains__(self, item):
+    def __contains__(self, item: _KT):
         return item in self._dict
 
     def __iter__(self):
@@ -401,3 +410,5 @@ class SequenceProxy(collections.abc.Sequence):
                     and all(x == y for x, y in zip(self, other)))
         else:
             return NotImplemented
+
+

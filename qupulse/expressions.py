@@ -41,7 +41,11 @@ class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
         try:
             return {v: eval_args[v] for v in self.variables}
         except KeyError as key_error:
-            raise ExpressionVariableMissingException(key_error.args[0], self) from key_error
+            if type(key_error).__module__.startswith('qupulse'):
+                # we forward qupulse errors, I down like this
+                raise
+            else:
+                raise ExpressionVariableMissingException(key_error.args[0], self) from key_error
 
     def _parse_evaluate_numeric_result(self,
                                        result: Union[Number, numpy.ndarray],
@@ -79,6 +83,7 @@ class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
 
         """
         parsed_kwargs = self._parse_evaluate_numeric_arguments(scope)
+
         result, self._expression_lambda = evaluate_lambdified(self.underlying_expression, self.variables,
                                                               parsed_kwargs, lambdified=self._expression_lambda)
 

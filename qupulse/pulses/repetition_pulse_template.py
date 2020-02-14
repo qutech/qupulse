@@ -1,14 +1,14 @@
 """This module defines RepetitionPulseTemplate, a higher-order hierarchical pulse template that
 represents the n-times repetition of another PulseTemplate."""
 
-from typing import Dict, List, Set, Optional, Union, Any, Tuple, cast
+from typing import Dict, List, Set, Optional, Union, Any, Mapping, cast
 from numbers import Real
 from warnings import warn
 
 import numpy as np
 
 from qupulse.serialization import Serializer, PulseRegistryType
-from qupulse._program._loop import Loop
+from qupulse._program._loop import Loop, VolatileRepetitionCount
 from qupulse.parameter_scope import Scope
 
 from qupulse.utils.types import ChannelID
@@ -75,8 +75,8 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
         """The amount of repetitions. Either a constant integer or a ParameterDeclaration object."""
         return self._repetition_count
 
-    def get_repetition_count_value(self, parameters: Dict[str, Real]) -> int:
-        value = self._repetition_count.evaluate_numeric(**parameters)
+    def get_repetition_count_value(self, parameters: Mapping[str, Real]) -> int:
+        value = self._repetition_count.evaluate_in_scope(parameters)
         try:
             return checked_int_cast(value)
         except ValueError:
@@ -107,35 +107,26 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
                                  parent_loop: Loop) -> None:
         self.validate_scope(scope)
-        relevant_params = set(self._repetition_count.variables).union(self.measurement_parameters)
-        try:
-            real_parameters = {v: parameters[v].get_value() for v in relevant_params}
-        except KeyError as e:
-            raise ParameterNotProvidedException(str(e)) from e
 
-        repetition_count = max(0, self.get_repetition_count_value(real_parameters))
+        repetition_count = max(0, self.get_repetition_count_value(scope))
 
         # todo (2018-07-19): could in some circumstances possibly just multiply subprogram repetition count?
         # could be tricky if any repetition count is volatile ? check later and optimize if necessary
         if repetition_count > 0:
-            if volatile.intersection(self.repetition_count.variables):
-                repetition_expression = self.repetition_count.evaluate_symbolic(
-                    {parameter: value for parameter, value in real_parameters.items()
-                     if parameter not in volatile})
-                repetition_parameter = MappedParameter(repetition_expression, parameters)
+            if not scope.get_volatile_parameters().isdisjoint(self.repetition_count.variables):
+                repetition_handle = VolatileRepetitionCount(self.repetition_count, scope)
             else:
-                repetition_parameter = None
+                repetition_handle = None
 
-            repj_loop = Loop(repetition_count=repetition_count, repetition_parameter=repetition_parameter)
-            self.body._create_program(parameters=parameters,
+            repj_loop = Loop(repetition_count=repetition_count, repetition_parameter=repetition_handle)
+            self.body._create_program(scope=scope,
                                       measurement_mapping=measurement_mapping,
                                       channel_mapping=channel_mapping,
                                       global_transformation=global_transformation,
                                       to_single_waveform=to_single_waveform,
-                                      parent_loop=repj_loop,
-                                      volatile=volatile)
+                                      parent_loop=repj_loop)
             if repj_loop.waveform is not None or len(repj_loop.children) > 0:
-                measurements = self.get_measurement_windows(real_parameters, measurement_mapping)
+                measurements = self.get_measurement_windows(scope, measurement_mapping)
                 if measurements:
                     parent_loop.add_measurements(measurements)
 

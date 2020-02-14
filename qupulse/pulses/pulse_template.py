@@ -138,23 +138,28 @@ class PulseTemplate(Serializable, metaclass=DocStringABCMeta):
             raise ValueError('The following channels are mapped to twice', non_unique_targets)
 
         # make sure all values in the parameters dict are numbers
-        for parameter_name, value in parameters.items():
-            if isinstance(value, Parameter):
-                parameters[parameter_name] = value.get_value()
-            elif not isinstance(value, Number):
-                parameters[parameter_name] = Expression(value).evaluate_numeric()
+        if isinstance(parameters, Scope):
+            assert not volatile
+            scope = parameters
+        else:
+            parameters = dict(parameters)
+            for parameter_name, value in parameters.items():
+                if isinstance(value, Parameter):
+                    parameters[parameter_name] = value.get_value()
+                elif not isinstance(value, Number):
+                    parameters[parameter_name] = Expression(value).evaluate_numeric()
 
-        scope = DictScope(values=FrozenDict(parameters))
+            scope = DictScope(values=FrozenDict(parameters), volatile=volatile)
 
         root_loop = Loop()
+
         # call subclass specific implementation
         self._create_program(scope=scope,
                              measurement_mapping=measurement_mapping,
                              channel_mapping=complete_channel_mapping,
                              global_transformation=global_transformation,
                              to_single_waveform=to_single_waveform,
-                             parent_loop=root_loop,
-                             volatile=volatile)
+                             parent_loop=root_loop)
 
         if root_loop.waveform is None and len(root_loop.children) == 0:
             return None  # return None if no program
@@ -167,8 +172,7 @@ class PulseTemplate(Serializable, metaclass=DocStringABCMeta):
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional[Transformation],
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
-                                 parent_loop: Loop,
-                                 volatile: Set[str]) -> None:
+                                 parent_loop: Loop) -> None:
         """The subclass specific implementation of create_program().
 
         Receives a Loop instance parent_loop to which it should append measurements and its own Loops as children.
@@ -189,14 +193,13 @@ class PulseTemplate(Serializable, metaclass=DocStringABCMeta):
                         channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                         global_transformation: Optional[Transformation],
                         to_single_waveform: Set[Union[str, 'PulseTemplate']],
-                        parent_loop: Loop,
-                        volatile: Set[str]):
+                        parent_loop: Loop):
         """Generic part of create program. This method handles to_single_waveform and the configuration of the
         transformer."""
         if self.identifier in to_single_waveform or self in to_single_waveform:
             root = Loop()
 
-            if volatile.intersection(self.parameter_names):
+            if not scope.get_volatile_parameters().isdisjoint(self.parameter_names):
                 raise NotImplementedError('A pulse template that has volatile parameters cannot be transformed into a '
                                           'single waveform yet.')
 
@@ -205,8 +208,7 @@ class PulseTemplate(Serializable, metaclass=DocStringABCMeta):
                                           channel_mapping=channel_mapping,
                                           global_transformation=None,
                                           to_single_waveform=to_single_waveform,
-                                          parent_loop=root,
-                                          volatile=volatile)
+                                          parent_loop=root)
 
             waveform = to_waveform(root)
 
@@ -228,8 +230,7 @@ class PulseTemplate(Serializable, metaclass=DocStringABCMeta):
                                           channel_mapping=channel_mapping,
                                           to_single_waveform=to_single_waveform,
                                           global_transformation=global_transformation,
-                                          parent_loop=parent_loop,
-                                          volatile=volatile)
+                                          parent_loop=parent_loop)
 
     def __format__(self, format_spec: str):
         if format_spec == '':
@@ -307,26 +308,17 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional[Transformation],
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
-                                 parent_loop: Loop,
-                                 volatile: Set[str]) -> None:
+                                 parent_loop: Loop) -> None:
         """Parameter constraints are validated in build_waveform because build_waveform is guaranteed to be called
         during sequencing"""
         ### current behavior (same as previously): only adds EXEC Loop and measurements if a waveform exists.
         ### measurements are directly added to parent_loop (to reflect behavior of Sequencer + MultiChannelProgram)
-        # todo (2018-08-08): could move measurements into own Loop object?
+        assert scope.get_volatile_parameters().isdisjoint(self.parameter_names), "AtomicPT cannot be volatile"
 
-        # todo (2018-07-05): why are parameter constraints not validated here?
-        try:
-            parameters = {parameter_name: parameters[parameter_name].get_value()
-                          for parameter_name in self.parameter_names}
-        except KeyError as e:
-            raise ParameterNotProvidedException(str(e)) from e
-
-        assert not volatile.intersection(parameters), "not supported"
-        waveform = self.build_waveform(parameters=parameters,
+        waveform = self.build_waveform(parameters=scope,
                                        channel_mapping=channel_mapping)
         if waveform:
-            measurements = self.get_measurement_windows(parameters=parameters,
+            measurements = self.get_measurement_windows(parameters=scope,
                                                         measurement_mapping=measurement_mapping)
 
             if global_transformation:
@@ -337,7 +329,7 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
 
     @abstractmethod
     def build_waveform(self,
-                       parameters: Dict[str, Real],
+                       parameters: Mapping[str, Real],
                        channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Waveform]:
         """Translate this PulseTemplate into a waveform according to the given parameters.
 

@@ -8,7 +8,7 @@ Classes:
 """
 
 from abc import abstractmethod
-from typing import Optional, Union, Dict, Any, Iterable, Set, List, Mapping
+from typing import Optional, Union, Dict, Any, Iterable, Set, List, Mapping, AbstractSet
 from numbers import Real
 import warnings
 
@@ -17,12 +17,11 @@ import numpy
 
 from qupulse.serialization import AnonymousSerializable
 from qupulse.expressions import Expression, ExpressionVariableMissingException
-from qupulse.parameter_scope import Scope
+from qupulse.parameter_scope import Scope, ParameterNotProvidedException
 from qupulse.utils.types import HashableNumpyArray, DocStringABCMeta
 
 __all__ = ["Parameter", "ConstantParameter",
            "ParameterNotProvidedException", "ParameterConstraintViolation", "ParameterConstraint"]
-
 
 
 class Parameter(metaclass=DocStringABCMeta):
@@ -195,11 +194,26 @@ class ParameterConstraint(AnonymousSerializable):
     def affected_parameters(self) -> Set[str]:
         return set(self._expression.variables)
 
-    def is_fulfilled(self, parameter: Mapping[str, Any]) -> bool:
-        if not self.affected_parameters <= set(parameter.keys()):
-            raise ParameterNotProvidedException((self.affected_parameters-set(parameter.keys())).pop())
+    def is_fulfilled(self, parameters: Mapping[str, Any], volatile: AbstractSet[str] = frozenset()) -> bool:
+        """
+        Args:
+            parameters: These parameters are checked.
+            volatile: For each of these parameters a warning is raised if they appear in a constraint
 
-        return numpy.all(self._expression.evaluate_in_scope(parameter))
+        Raises:
+            ParameterNotProvidedException: if a parameter is missing
+
+        Warnings:
+            ConstrainedParameterIsVolatileWarning: if a constrained parameter is volatile
+        """
+        affected_parameters = self.affected_parameters
+        if not affected_parameters.issubset(parameters.keys()):
+            raise ParameterNotProvidedException((affected_parameters-parameters.keys()).pop())
+
+        for parameter in volatile & affected_parameters:
+            warnings.warn(ConstrainedParameterIsVolatileWarning(parameter_name=parameter, constraint=self))
+
+        return numpy.all(self._expression.evaluate_in_scope(parameters))
 
     @property
     def sympified_expression(self) -> sympy.Expr:
@@ -249,20 +263,18 @@ class ParameterConstrainer:
             ParameterConstraintViolation: if one of the constraints is violated.
 
         Warnings:
-            ConstrainedParameterIsVolatileWarning: if a constrained parameter is volatile
+            ConstrainedParameterIsVolatileWarning: via `ParameterConstraint.is_fulfilled`
         """
         for constraint in self._parameter_constraints:
             constraint_parameters = {k: v.get_value() if isinstance(v, Parameter) else v for k, v in parameters.items()}
-            if not constraint.is_fulfilled(constraint_parameters):
+            if not constraint.is_fulfilled(constraint_parameters, volatile=volatile):
                 raise ParameterConstraintViolation(constraint, constraint_parameters)
 
-            # warn for every parameter to allow custom filtering
-            for parameter in volatile.intersection(constraint_parameters):
-                warnings.warn(ConstrainedParameterIsVolatileWarning(parameter_name=parameter, constraint=constraint))
+    def validate_scope(self, scope: Scope):
+        volatile = scope.get_volatile_parameters()
 
-    def validate_scope(self, scope: Mapping[str, Real]):
         for constraint in self._parameter_constraints:
-            if not constraint.is_fulfilled(scope):
+            if not constraint.is_fulfilled(scope, volatile=volatile):
                 constrained_parameters = {parameter_name: scope[parameter_name]
                                           for parameter_name in constraint.affected_parameters}
                 raise ParameterConstraintViolation(constraint, constrained_parameters)
@@ -280,17 +292,6 @@ class ParameterConstraintViolation(Exception):
         super().__init__("The constraint '{}' is not fulfilled.\nParameters: {}".format(constraint, parameters))
         self.constraint = constraint
         self.parameters = parameters
-
-
-class ParameterNotProvidedException(Exception):
-    """Indicates that a required parameter value was not provided."""
-    
-    def __init__(self, parameter_name: str) -> None:
-        super().__init__()
-        self.parameter_name = parameter_name
-        
-    def __str__(self) -> str:
-        return "No value was provided for parameter '{0}'.".format(self.parameter_name)
 
 
 class InvalidParameterNameException(Exception):

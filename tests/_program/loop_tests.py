@@ -5,9 +5,8 @@ import itertools
 from string import ascii_uppercase
 
 from qupulse.utils.types import TimeType, time_from_float
-from qupulse._program._loop import Loop, MultiChannelProgram, _make_compatible, _is_compatible, _CompatibilityLevel,\
+from qupulse._program._loop import Loop, _make_compatible, _is_compatible, _CompatibilityLevel,\
     RepetitionWaveform, SequenceWaveform, make_compatible, MakeCompatibleWarning, DroppedMeasurementWarning, VolatileModificationWarning
-from qupulse._program.instructions import InstructionBlock, ImmutableInstructionBlock
 from qupulse._program._loop import Loop, _make_compatible, _is_compatible, _CompatibilityLevel,\
     RepetitionWaveform, SequenceWaveform, make_compatible, MakeCompatibleWarning
 from tests.pulses.sequencing_dummies import DummyWaveform
