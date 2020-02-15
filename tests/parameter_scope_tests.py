@@ -2,6 +2,7 @@ import unittest
 from unittest import mock
 
 from qupulse.parameter_scope import Scope, DictScope, MappedScope, ParameterNotProvidedException, NonVolatileChange
+from qupulse.expressions import ExpressionScalar
 
 from qupulse.utils.types import FrozenDict
 
@@ -107,5 +108,37 @@ class DictScopeTests(unittest.TestCase):
 
 
 class MappedScopeTests(unittest.TestCase):
-    def test_init(self):
+    def test_mapping(self):
+        ds = DictScope.from_kwargs(a=1, b=2, c=3)
+        ms = MappedScope(ds, FrozenDict(x=ExpressionScalar('a * b'),
+                                        c=ExpressionScalar('a - b')))
+
+        self.assertEqual(4, len(ms))
+        self.assertEqual(set('abcx'), set(ms.keys()))
+        self.assertEqual([-1, 1, 2, 2], sorted(ms.values()))
+        self.assertEqual({('a', 1), ('b', 2), ('c', -1), ('x', 2)}, set(ms.items()))
+        self.assertEqual(set(ms), set(ms.keys()))
+
+        self.assertIn('a', ms)
+        self.assertIn('c', ms)
+        self.assertIn('x', ms)
+
+        self.assertNotIn('d', ms)
+        self.assertEqual(-1, ms['c'])
+        self.assertEqual(1, ms['a'])
+        self.assertEqual(2, ms['x'])
+
+        with self.assertRaises(TypeError):
+            ms['d'] = 9
+
+        with self.assertRaisesRegex(KeyError, 'd'):
+            _ = ms['d']
+
+    def test_parameter(self):
+        raise NotImplementedError()
+
+    def test_update_constants(self):
+        raise NotImplementedError()
+
+    def test_volatile_parameters(self):
         raise NotImplementedError()

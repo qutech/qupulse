@@ -68,13 +68,13 @@ class Scope(Mapping[str, Number]):
 
 
 class MappedScope(Scope):
-    __slots__ = ('_scope', '_mapping', '_volatile_parameters', '_cache')
+    __slots__ = ('_scope', '_mapping', '_cache', '_volatile_parameters_cache')
 
     def __init__(self, scope: Scope, mapping: FrozenDict[str, Expression]):
         super(MappedScope, self).__init__()
         self._scope = scope
         self._mapping = mapping
-        self._volatile_parameters = None
+        self._volatile_parameters_cache = None
 
         self._cache = {}
         # TODO use caching
@@ -126,24 +126,27 @@ class MappedScope(Scope):
                 mapping=self._mapping
             )
 
-    def get_volatile_parameters(self) -> AbstractSet[str]:
-        if self._volatile_parameters is None:
-            inner_volatile = self._scope.get_volatile_parameters()
-            if inner_volatile:
-                non_volatile = set()
-                volatile = set()
-                for mapped_parameter, expression in self._mapping.items():
-                    if inner_volatile.isdisjoint(expression.variables):
-                        non_volatile.add(mapped_parameter)
-                    else:
-                        volatile.add(mapped_parameter)
+    def _collect_volatile_parameters(self) -> AbstractSet[str]:
+        inner_volatile = self._scope.get_volatile_parameters()
+        if inner_volatile:
+            non_volatile = set()
+            volatile = set()
+            for mapped_parameter, expression in self._mapping.items():
+                if inner_volatile.isdisjoint(expression.variables):
+                    non_volatile.add(mapped_parameter)
+                else:
+                    volatile.add(mapped_parameter)
 
-                result = inner_volatile - non_volatile
-                result |= volatile
-                self._volatile_parameters = frozenset(result)
-            else:
-                self._volatile_parameters = inner_volatile
-        return self._volatile_parameters
+            result = inner_volatile - non_volatile
+            result |= volatile
+            return frozenset(result)
+        else:
+            return inner_volatile
+
+    def get_volatile_parameters(self) -> AbstractSet[str]:
+        if self._volatile_parameters_cache is None:
+            self._volatile_parameters_cache = self._collect_volatile_parameters()
+        return self._volatile_parameters_cache
 
 
 class DictScope(Scope):
@@ -178,7 +181,7 @@ class DictScope(Scope):
             raise ParameterNotProvidedException(parameter_name)
 
     def __hash__(self):
-        return hash(self._values) ^ hash(self._volatile_parameters)
+        return hash((self._values, self._volatile_parameters))
 
     def __eq__(self, other: 'DictScope'):
         if type(self) is type(other):
