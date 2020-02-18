@@ -135,10 +135,64 @@ class MappedScopeTests(unittest.TestCase):
             _ = ms['d']
 
     def test_parameter(self):
-        raise NotImplementedError()
+        mock_a = mock.Mock(wraps=1)
+        mock_result = mock.Mock()
+
+        ds = DictScope.from_kwargs(a=mock_a, b=2, c=3)
+        ms = MappedScope(ds, FrozenDict(x=ExpressionScalar('a * b'),
+                                        c=ExpressionScalar('a - b'),
+                                        d=ExpressionScalar('y')))
+
+        self.assertIs(mock_a, ms._calc_parameter('a'))
+
+        with self.assertRaises(ParameterNotProvidedException):
+            ms._calc_parameter('d')
+
+        with mock.patch.object(ms._mapping['x'], 'evaluate_in_scope', return_value=mock_result) as evaluate_in_scope:
+            self.assertIs(mock_result, ms._calc_parameter('x'))
+            evaluate_in_scope.assert_called_once_with(ds)
+
+        # effective caching tests
+        with mock.patch.object(ms._mapping['x'], 'evaluate_in_scope', return_value=mock_result) as evaluate_in_scope:
+            self.assertIs(mock_result, ms.get_parameter('x'))
+            self.assertIs(mock_result, ms.get_parameter('x'))
+            evaluate_in_scope.assert_called_once_with(ds)
 
     def test_update_constants(self):
-        raise NotImplementedError()
+        ds = DictScope.from_kwargs(a=1, b=2, c=3, volatile={'c'})
+        ds2 = DictScope.from_kwargs(a=1, b=2, c=4, volatile={'c'})
+        ms = MappedScope(ds, FrozenDict(x=ExpressionScalar('a * b'),
+                                        c=ExpressionScalar('a - b')))
+        ms2 = MappedScope(ds2, ms._mapping)
+
+        self.assertIs(ms, ms.change_constants({'f': 1}))
+
+        changes = {'c': 4}
+        ms_result = ms.change_constants(changes)
+        self.assertEqual(ms2, ms_result)
 
     def test_volatile_parameters(self):
-        raise NotImplementedError()
+        ds = DictScope.from_kwargs(a=1, b=2, c=3, d=4, volatile={'c', 'd'})
+        ms = MappedScope(ds, FrozenDict(x=ExpressionScalar('a * b'),
+                                        c=ExpressionScalar('a - b'),
+                                        y=ExpressionScalar('c - a')))
+        expected_volatile = frozenset('dy')
+        self.assertEqual(expected_volatile, ms.get_volatile_parameters())
+        self.assertIs(ms.get_volatile_parameters(), ms.get_volatile_parameters())
+
+    def test_eq(self):
+        ds1 = DictScope.from_kwargs(a=1, b=2, c=3, d=4)
+        ds2 = DictScope.from_kwargs(a=1, b=2, c=3, d=5)
+
+        mapping1 = FrozenDict(x=ExpressionScalar('a * b'),
+                              c=ExpressionScalar('a - b'),
+                              y=ExpressionScalar('c - a'))
+
+        mapping2 = FrozenDict(x=ExpressionScalar('a * b'),
+                              c=ExpressionScalar('a - b'),
+                              y=ExpressionScalar('d - a'))
+
+        self.assertEqual(MappedScope(ds1, mapping1), MappedScope(ds1, mapping1))
+        self.assertNotEqual(MappedScope(ds1, mapping1), MappedScope(ds1, mapping2))
+        self.assertNotEqual(MappedScope(ds2, mapping1), MappedScope(ds1, mapping1))
+        self.assertEqual(MappedScope(ds1, mapping2), MappedScope(ds1, mapping2))
