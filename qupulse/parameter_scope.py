@@ -12,7 +12,8 @@ import numpy
 
 from qupulse.serialization import AnonymousSerializable
 from qupulse.expressions import Expression, ExpressionVariableMissingException
-from qupulse.utils.types import HashableNumpyArray, DocStringABCMeta, Collection, SingletonABCMeta, FrozenDict
+from qupulse.utils.types import HashableNumpyArray, DocStringABCMeta, Collection, SingletonABCMeta, FrozenMapping,\
+    FrozenDict
 
 
 class Scope(Mapping[str, Number]):
@@ -70,7 +71,7 @@ class Scope(Mapping[str, Number]):
 class MappedScope(Scope):
     __slots__ = ('_scope', '_mapping', '_cache', '_volatile_parameters_cache')
 
-    def __init__(self, scope: Scope, mapping: FrozenDict[str, Expression]):
+    def __init__(self, scope: Scope, mapping: FrozenMapping[str, Expression]):
         super(MappedScope, self).__init__()
         self._scope = scope
         self._mapping = mapping
@@ -152,7 +153,7 @@ class MappedScope(Scope):
 class DictScope(Scope):
     __slots__ = ('_values', '_volatile_parameters', 'keys', 'items', 'values')
 
-    def __init__(self, values: FrozenDict[str, Number], volatile: AbstractSet[str] = frozenset()):
+    def __init__(self, values: FrozenMapping[str, Number], volatile: AbstractSet[str] = frozenset()):
         super().__init__()
         assert getattr(values, '__hash__', None) is not None
 
@@ -219,7 +220,7 @@ class DictScope(Scope):
 class JointScope(Scope):
     __slots__ = ('_lookup', '_volatile_parameters')
 
-    def __init__(self, lookup: FrozenDict[str, Scope]):
+    def __init__(self, lookup: FrozenMapping[str, Scope]):
         self._lookup = lookup
         self._volatile_parameters = None
 

@@ -338,9 +338,10 @@ else:
         __slots__ = ()
 
 
-_KT = typing.TypeVar('_KT')  # Key type.
-_T_co = typing.TypeVar('_T_co', covariant=True)  # Any type covariant containers.
+_KT_hash = typing.TypeVar('_KT_hash', bound=typing.Hashable)  # Key type.
+_T_co_hash = typing.TypeVar('_T_co_hash', bound=typing.Hashable, covariant=True)  # Any type covariant containers.
 
+FrozenMapping = typing.Mapping[_KT_hash, _T_co_hash]
 
 class FrozenDict(typing.Mapping[_KT, _T_co]):
     DICT_TYPE = dict
