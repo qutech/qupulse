@@ -173,23 +173,24 @@ class TaborProgramTests(unittest.TestCase):
                                                          duration_generator=itertools.repeat(1)))
 
     def test_init(self):
-        prog = MultiChannelProgram(MultiChannelTests().root_block)
-        tabor_program = TaborProgram(prog['A'], self.instr_props, ('A', None), (None, None), **self.program_entry_kwargs)
+        prog = self.root_loop
+        tabor_program = TaborProgram(prog, self.instr_props, ('A', None), (None, None), **self.program_entry_kwargs)
 
         self.assertEqual(tabor_program.channels, ('A', None))
         self.assertEqual(tabor_program.markers, (None, None))
-        self.assertIs(prog['A'], tabor_program.program)
+        self.assertIs(prog, tabor_program.program)
         self.assertIs(self.instr_props, tabor_program._device_properties)
         self.assertEqual(frozenset('A'), tabor_program._used_channels)
         self.assertEqual(TaborSequencing.ADVANCED, tabor_program._mode)
 
         with self.assertRaises(KeyError):
-            TaborProgram(prog['A'], self.instr_props, ('A', 'B'), (None, None), **self.program_entry_kwargs)
+            # C not in prog
+            TaborProgram(prog, self.instr_props, ('A', 'C'), (None, None), **self.program_entry_kwargs)
 
         with self.assertRaises(TaborException):
-            TaborProgram(prog['A'], self.instr_props, ('A', 'B'), (None, None, None), **self.program_entry_kwargs)
+            TaborProgram(prog, self.instr_props, ('A', 'B'), (None, None, None), **self.program_entry_kwargs)
         with self.assertRaises(TaborException):
-            TaborProgram(prog['A'], self.instr_props, ('A', 'B', 'C'), (None, None), **self.program_entry_kwargs)
+            TaborProgram(prog, self.instr_props, ('A', 'B', 'C'), (None, None), **self.program_entry_kwargs)
 
     def test_depth_0_single_waveform(self):
         program = Loop(waveform=DummyWaveform(defined_channels={'A'}, duration=1), repetition_count=3)
@@ -333,17 +334,12 @@ class TaborProgramTests(unittest.TestCase):
                 duration_generator=itertools.repeat(1/200),
                 num_channels=4))
 
-            mcp = MultiChannelProgram(InstructionBlock(), tuple())
-            mcp.programs[frozenset(('A', 'B', 'C', 'D'))] = root_loop
             TaborProgram(root_loop, self.instr_props, ('A', 'B'), (None, None), **self.program_entry_kwargs)
 
         root_loop = LoopTests.get_test_loop(WaveformGenerator(
             waveform_data_generator=my_gen(self.waveform_data_generator),
             duration_generator=itertools.repeat(1),
             num_channels=4))
-
-        mcp = MultiChannelProgram(InstructionBlock(), tuple())
-        mcp.programs[frozenset(('A', 'B', 'C', 'D'))] = root_loop
 
         prog = TaborProgram(root_loop, self.instr_props, ('A', 'B'), (None, None), **self.program_entry_kwargs)
 

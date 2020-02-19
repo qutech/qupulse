@@ -53,21 +53,21 @@ class TaborSegment:
     __slots__ = ('_data', '_hash')
 
     @staticmethod
-    def _data_a_view(data: np.ndarray) -> np.ndarray:
+    def _data_a_view(data: np.ndarray, writable: bool) -> np.ndarray:
         view = data[:, 1, :]
-        assert view.base is data
+        assert not writable or view.base is data
         return view
 
     @staticmethod
-    def _data_b_view(data: np.ndarray) -> np.ndarray:
+    def _data_b_view(data: np.ndarray, writable: bool) -> np.ndarray:
         view = data[:, 0, :]
-        assert view.base is data
+        assert not writable or view.base is data
         return view
 
     @staticmethod
-    def _marker_data_view(data: np.ndarray) -> np.ndarray:
+    def _marker_data_view(data: np.ndarray, writable: bool) -> np.ndarray:
         view = data.reshape((-1, 2, 2, 8))[:, 1, 1, :]
-        assert view.base is data
+        assert not writable or view.base is data
         return view
 
     def __init__(self, *,
@@ -94,11 +94,11 @@ class TaborSegment:
 
     @property
     def data_a(self) -> np.ndarray:
-        return self._data_a_view(self._data).reshape(-1)
+        return self._data_a_view(self._data, writable=False).reshape(-1)
 
     @property
     def data_b(self) -> np.ndarray:
-        return self._data_b_view(self._data).reshape(-1)
+        return self._data_b_view(self._data, writable=False).reshape(-1)
 
     @classmethod
     def from_sampled(cls,
@@ -133,9 +133,9 @@ class TaborSegment:
         assert num_points % cls.QUANTUM == 0
 
         data = np.full((num_points // cls.QUANTUM, 2, cls.QUANTUM), cls.ZERO_VAL, dtype=np.uint16)
-        data_a = cls._data_a_view(data)
-        data_b = cls._data_b_view(data)
-        marker_view = cls._marker_data_view(data)
+        data_a = cls._data_a_view(data, writable=True)
+        data_b = cls._data_b_view(data, writable=True)
+        marker_view = cls._marker_data_view(data, writable=True)
 
         if ch_a is not None:
             data_a[:] = ch_a.reshape((-1, cls.QUANTUM))
@@ -165,12 +165,12 @@ class TaborSegment:
 
     @property
     def marker_a(self) -> np.ndarray:
-        marker_data = self._marker_data_view(self._data)
+        marker_data = self._marker_data_view(self._data, writable=False)
         return np.bitwise_and(marker_data, self.MARKER_A_MASK).astype(bool).reshape(-1)
 
     @property
     def marker_b(self) -> np.ndarray:
-        marker_data = self._marker_data_view(self._data)
+        marker_data = self._marker_data_view(self._data, writable=False)
         return np.bitwise_and(marker_data, self.MARKER_B_MASK).astype(bool).reshape(-1)
 
     @classmethod
@@ -180,8 +180,8 @@ class TaborSegment:
         assert data_a.size % 16 == 0
 
         data = np.empty((data_a.size // 16, 2, 16), dtype=np.uint16)
-        cls._data_a_view(data)[:] = data_a.reshape((-1, 16))
-        cls._data_b_view(data)[:] = data_b.reshape((-1, 16))
+        cls._data_a_view(data, writable=True)[:] = data_a.reshape((-1, 16))
+        cls._data_b_view(data, writable=True)[:] = data_b.reshape((-1, 16))
 
         return cls(data=data)
 
