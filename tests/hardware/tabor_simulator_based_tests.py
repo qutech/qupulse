@@ -7,9 +7,8 @@ import os
 import pytabor
 import numpy as np
 
-from qupulse.hardware.awgs.tabor import TaborAWGRepresentation, TaborChannelPair
-from qupulse._program.tabor import TaborSegment, PlottableProgram, TaborException, TableDescription, TableEntry
-from typing import List, Tuple, Optional, Any
+from qupulse.hardware.awgs.old_tabor import TaborDevice, TaborException, TaborSegment, TaborChannelTuple, PlottableProgram
+
 
 class TaborSimulatorManager:
     def __init__(self,
@@ -56,9 +55,9 @@ class TaborSimulatorManager:
             time.sleep(0.1)
 
     def connect(self):
-        self.instrument = TaborAWGRepresentation('127.0.0.1',
-                                                 reset=True,
-                                                 paranoia_level=2)
+        self.instrument = TaborDevice('127.0.0.1',
+                                      reset=True,
+                                      paranoia_level=2)
 
         if self.instrument.main_instrument.visa_inst is None:
             raise RuntimeError('Could not connect to simulator')
@@ -186,6 +185,7 @@ class TaborMemoryReadTests(TaborSimulatorBasedTest):
         self.advanced_sequence_table = self.to_new_advanced_sequencer_table(self.advanced_sequence_table)
 
         self.channel_pair = TaborChannelPair(self.instrument, (1, 2), 'tabor_unit_test')
+
 
     def arm_program(self, sequencer_tables, advanced_sequencer_table, mode, waveform_to_segment_index):
         class DummyProgram:

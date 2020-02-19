@@ -10,3 +10,6 @@ doc/source/examples/.ipynb_checkpoints/*
 **.asv
 *.orig
 .idea/
+.mypy_cache/*
+.gitignore
+tests/hardware/WX2184C.exe

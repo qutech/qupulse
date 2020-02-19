@@ -24,7 +24,7 @@ from qupulse.hardware.awgs.old_base import AWG, AWGAmplitudeOffsetHandling
 assert(sys.byteorder == 'little')
 
 
-__all__ = ['TaborAWGRepresentation', 'TaborChannelPair']
+__all__ = ['TaborDevice', 'TaborChannelTuple']
 
 
 class TaborSegment:
@@ -367,7 +367,7 @@ class TaborProgram:
         return self.__waveform_mode
 
 
-class TaborAWGRepresentation:
+class TaborDevice:
     def __init__(self, instr_addr=None, paranoia_level=1, external_trigger=False, reset=False, mirror_addresses=()):
         """
         :param instr_addr:        Instrument address that is forwarded to teawag
@@ -389,15 +389,15 @@ class TaborAWGRepresentation:
 
         self.initialize()
 
-        self._channel_pair_AB = TaborChannelPair(self, (1, 2), str(instr_addr) + '_AB')
-        self._channel_pair_CD = TaborChannelPair(self, (3, 4), str(instr_addr) + '_CD')
+        self._channel_pair_AB = TaborChannelTuple(self, (1, 2), str(instr_addr) + '_AB')
+        self._channel_pair_CD = TaborChannelTuple(self, (3, 4), str(instr_addr) + '_CD')
 
     @property
-    def channel_pair_AB(self) -> 'TaborChannelPair':
+    def channel_pair_AB(self) -> 'TaborChannelTuple':
         return self._channel_pair_AB
 
     @property
-    def channel_pair_CD(self) -> 'TaborChannelPair':
+    def channel_pair_CD(self) -> 'TaborChannelTuple':
         return self._channel_pair_CD
 
     @property
@@ -608,11 +608,12 @@ TaborProgramMemory = NamedTuple('TaborProgramMemory', [('waveform_to_segment', n
                                                        ('program', TaborProgram)])
 
 
-def with_configuration_guard(function_object: Callable[['TaborChannelPair', Any], Any]) -> Callable[['TaborChannelPair'],
-                                                                                               Any]:
+def with_configuration_guard(function_object: Callable[['TaborChannelTuple', Any], Any]) -> Callable[[
+                                                                                                         'TaborChannelTuple'],
+                                                                                                     Any]:
     """This decorator assures that the AWG is in configuration mode while the decorated method runs."""
     @functools.wraps(function_object)
-    def guarding_method(channel_pair: 'TaborChannelPair', *args, **kwargs) -> Any:
+    def guarding_method(channel_pair: 'TaborChannelTuple', *args, **kwargs) -> Any:
         if channel_pair._configuration_guard_count == 0:
             channel_pair._enter_config_mode()
         channel_pair._configuration_guard_count += 1
@@ -627,10 +628,10 @@ def with_configuration_guard(function_object: Callable[['TaborChannelPair', Any]
     return guarding_method
 
 
-def with_select(function_object: Callable[['TaborChannelPair', Any], Any]) -> Callable[['TaborChannelPair'], Any]:
+def with_select(function_object: Callable[['TaborChannelTuple', Any], Any]) -> Callable[['TaborChannelTuple'], Any]:
     """Asserts the channel pair is selcted when the wrapped function is called"""
     @functools.wraps(function_object)
-    def selector(channel_pair: 'TaborChannelPair', *args, **kwargs) -> Any:
+    def selector(channel_pair: 'TaborChannelTuple', *args, **kwargs) -> Any:
         channel_pair.select()
         return function_object(channel_pair, *args, **kwargs)
 
@@ -764,8 +765,8 @@ class PlottableProgram:
         return cls(waveforms, data['seq_tables'], data['adv_seq_table'])
 
 
-class TaborChannelPair(AWG):
-    def __init__(self, tabor_device: TaborAWGRepresentation, channels: Tuple[int, int], identifier: str):
+class TaborChannelTuple(AWG):
+    def __init__(self, tabor_device: TaborDevice, channels: Tuple[int, int], identifier: str):
         super().__init__(identifier)
         self._device =  weakref.ref(tabor_device)
 
@@ -805,7 +806,7 @@ class TaborChannelPair(AWG):
         return int(self.device.dev_properties['max_arb_mem']) // 2
 
     @property
-    def device(self) -> TaborAWGRepresentation:
+    def device(self) -> TaborDevice:
         return self._device()
 
     def free_program(self, name: str) -> TaborProgramMemory:
@@ -1321,12 +1322,12 @@ class TaborUndefinedState(TaborException):
     """If this exception is raised the attached tabor device is in an undefined state.
     It is highly recommended to call reset it."""
 
-    def __init__(self, *args, device: Union[TaborAWGRepresentation, TaborChannelPair]):
+    def __init__(self, *args, device: Union[TaborDevice, TaborChannelTuple]):
         super().__init__(*args)
         self.device = device
 
     def reset_device(self):
-        if  isinstance(self.device, TaborAWGRepresentation):
+        if  isinstance(self.device, TaborDevice):
             self.device.reset()
-        elif isinstance(self.device, TaborChannelPair):
+        elif isinstance(self.device, TaborChannelTuple):
             self.device.clear()
