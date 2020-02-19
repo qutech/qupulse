@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Optional, Union, Dict, Any, Iterable, Set, List, Mapping, AbstractSet
+from typing import Optional, Union, Dict, Any, Iterable, Set, List, Mapping, AbstractSet, ValuesView, Tuple
 from numbers import Number
 import functools
 import collections
@@ -17,7 +17,15 @@ from qupulse.utils.types import HashableNumpyArray, DocStringABCMeta, Collection
 
 
 class Scope(Mapping[str, Number]):
-    __slots__ = ()
+    """
+
+    Equality: Scopes may not be equal even if type and abstract properties are equal. If you need semantic equality use
+    as_dict"""
+
+    __slots__ = ('_as_dict',)
+
+    def __init__(self):
+        self._as_dict = None
 
     @abstractmethod
     def get_volatile_parameters(self) -> AbstractSet[str]:
@@ -67,6 +75,11 @@ class Scope(Mapping[str, Number]):
         return MappedScope(self, FrozenDict((name, Expression(value))
                                             for name, value in to_overwrite.items()))
 
+    def as_dict(self) -> FrozenDict[str, Number]:
+        if self._as_dict is None:
+            self._as_dict = FrozenDict(self.items())
+        return self._as_dict
+
 
 class MappedScope(Scope):
     __slots__ = ('_scope', '_mapping', '_cache', '_volatile_parameters_cache')
@@ -78,10 +91,22 @@ class MappedScope(Scope):
         self._volatile_parameters_cache = None
 
         self._cache = {}
-        # TODO use caching
 
     def keys(self) -> AbstractSet[str]:
-        return self._scope.keys() | self._mapping.keys()
+        return self._mapping.keys() | self._scope.keys()
+
+    def items(self) -> AbstractSet[Tuple[str, Number]]:
+        return self.as_dict().items()
+
+    def values(self) -> ValuesView[Number]:
+        return self.as_dict().values()
+
+    def as_dict(self) -> FrozenDict[str, Number]:
+        if self._as_dict is None:
+            self._as_dict = FrozenDict((parameter_name, self.get_parameter(parameter_name))
+                                       for parameter_name in self.keys())
+            self._cache = self._as_dict
+        return self._as_dict
 
     def __contains__(self, item):
         return item in self._mapping or item in self._scope
@@ -117,7 +142,7 @@ class MappedScope(Scope):
     def __eq__(self, other: 'MappedScope'):
         return self._scope == other._scope and self._mapping == other._mapping
 
-    def change_constants(self, new_constants: Mapping[str, Number]) -> 'Scope':
+    def change_constants(self, new_constants: Mapping[str, Number]) -> 'MappedScope':
         scope = self._scope.change_constants(new_constants)
         if scope is self._scope:
             return self
@@ -158,6 +183,7 @@ class DictScope(Scope):
         assert getattr(values, '__hash__', None) is not None
 
         self._values = values
+        self._as_dict = values
         self._volatile_parameters = frozenset(volatile)
         self.keys = self._values.keys
         self.items = self._values.items
@@ -240,12 +266,13 @@ class JointScope(Scope):
         return self._lookup[parameter_name].get_parameter(parameter_name)
 
     def __hash__(self):
-        return hash(frozenset(self.items()))
+        return hash(self._lookup)
 
     def __eq__(self, other: 'JointScope'):
-        return frozenset(self.items()) == frozenset(other.items())
+        return self._lookup == other._lookup
 
-    def change_constants(self, new_constants: Mapping[str, Number]) -> 'Scope':
+    def change_constants(self, new_constants: Mapping[str, Number]) -> 'JointScope':
+        # TODO: Inefficient if the same scope is present multiple times
         return JointScope(FrozenDict(
             (parameter_name, scope.change_constants(new_constants)) for parameter_name, scope in self._lookup.items()
         ))
