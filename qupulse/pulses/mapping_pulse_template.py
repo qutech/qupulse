@@ -4,7 +4,7 @@ import itertools
 import numbers
 import collections
 
-from qupulse.utils.types import ChannelID, FrozenDict
+from qupulse.utils.types import ChannelID, FrozenDict, FrozenMapping
 from qupulse.expressions import Expression, ExpressionScalar
 from qupulse.parameter_scope import Scope, MappedScope
 from qupulse.pulses.pulse_template import PulseTemplate, MappingTuple
@@ -181,7 +181,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         return self.__measurement_mapping
 
     @property
-    def parameter_mapping(self) -> FrozenDict[str, Expression]:
+    def parameter_mapping(self) -> FrozenMapping[str, Expression]:
         return self.__parameter_mapping
 
     @property
