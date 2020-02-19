@@ -6,7 +6,6 @@ from qupulse.pulses.parameters import Parameter, ConstantParameter
 from qupulse.hardware.awgs.base import AWG
 from qupulse.hardware.dacs import DAC
 from qupulse._program._loop import Loop
-from qupulse._program.instructions import AbstractInstructionBlock
 
 from qupulse.utils.types import ChannelID
 

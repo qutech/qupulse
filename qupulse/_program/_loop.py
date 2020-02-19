@@ -7,17 +7,45 @@ import warnings
 
 import numpy as np
 
-from qupulse.utils.types import ChannelID, TimeType
-from qupulse._program.instructions import AbstractInstructionBlock, EXECInstruction, REPJInstruction, GOTOInstruction,\
-    STOPInstruction, CHANInstruction, Waveform, MEASInstruction, Instruction
+from qupulse.parameter_scope import Scope, MappedScope, JointScope
+
+from qupulse._program.waveforms import Waveform
+
+from qupulse.utils.types import ChannelID, TimeType, MeasurementWindow, FrozenDict
 from qupulse.utils.tree import Node, is_tree_circular
-from qupulse.utils.types import MeasurementWindow
-from qupulse.pulses.parameters import MappedParameter, ConstantParameter
 from qupulse.expressions import ExpressionScalar
+from qupulse.utils import is_integer
 
 from qupulse._program.waveforms import SequenceWaveform, RepetitionWaveform
 
-__all__ = ['Loop', 'MultiChannelProgram', 'make_compatible', 'MakeCompatibleWarning']
+__all__ = ['Loop', 'make_compatible', 'MakeCompatibleWarning']
+
+
+class VolatileRepetitionCount:
+    def __init__(self, expression: ExpressionScalar, scope: Scope):
+        self._expression = expression
+        self._scope = scope
+
+    def __int__(self):
+        value = self._expression.evaluate_in_scope(self._scope)
+        if not is_integer(value):
+            warnings.warn("Repetition count is no integer. Rounding might lead to unexpected results.")
+        value = int(round(value))
+        if value < 0:
+            warnings.warn("Repetition count is negative. Clamping lead to unexpected results.")
+            value = 0
+        return value
+
+    @classmethod
+    def operation(cls, expression, **operands: 'VolatileRepetitionCount'):
+        expression = ExpressionScalar(expression)
+        assert set(expression.variables) == operands.keys()
+
+        scope = JointScope(FrozenDict(
+            {operand_name: MappedScope(operand._scope, FrozenDict({operand_name: operand._expression}))
+             for operand_name, operand in operands.items()}
+        ))
+        return VolatileRepetitionCount(expression, scope)
 
 
 class Loop(Node):
@@ -34,7 +62,7 @@ class Loop(Node):
                  waveform: Optional[Waveform] = None,
                  measurements: Optional[List[MeasurementWindow]] = None,
                  repetition_count: int = 1,
-                 repetition_parameter: MappedParameter = None):
+                 repetition_parameter: VolatileRepetitionCount = None):
         """Initialize a new loop
 
         Args:
@@ -116,11 +144,6 @@ class Loop(Node):
         else:
             self._measurements.extend(measurements)
 
-    def update_volatile_repetition(self, new_values: Mapping[str, ConstantParameter]):
-        if self._repetition_parameter is not None:
-            self._repetition_parameter.update_constants(new_values)
-            self._repetition_count = int(self._repetition_parameter.get_value())
-
     @property
     def waveform(self) -> Waveform:
         return self._waveform
@@ -147,7 +170,7 @@ class Loop(Node):
         return self.body_duration * self.repetition_count
 
     @property
-    def repetition_parameter(self) -> Optional[MappedParameter]:
+    def repetition_parameter(self) -> Optional[VolatileRepetitionCount]:
         return self._repetition_parameter
 
     @property
@@ -314,8 +337,10 @@ class Loop(Node):
 
         if self[child_index]._repetition_parameter is not None:
             warnings.warn("Splitting a child with volatile repetition count", VolatileModificationWarning)
-            self[child_index]._repetition_parameter = MappedParameter(expression=self[child_index]._repetition_parameter.expression - 1,
-                                                                      namespace=self[child_index]._repetition_parameter.dependencies)
+            self[child_index]._repetition_parameter = VolatileRepetitionCount(
+                expression=self[child_index]._repetition_parameter.expression - 1,
+                scope=self[child_index]._repetition_parameter.scope
+            )
 
         new_child = self[child_index].copy_tree_structure()
         new_child.repetition_count = 1
@@ -393,20 +418,19 @@ class Loop(Node):
         if self._repetition_parameter is None and child._repetition_parameter is None:
             repetition_parameter = None
         elif self._repetition_parameter is None:
-            repetition_parameter = MappedParameter(
+            repetition_parameter = VolatileRepetitionCount(
                 expression=child._repetition_parameter.expression * self.repetition_count,
-                namespace=child._repetition_parameter._namespace)
+                scope=child._repetition_parameter.scope)
         elif child._repetition_parameter is None:
-            repetition_parameter = MappedParameter(
+            repetition_parameter = VolatileRepetitionCount(
                 expression=self._repetition_parameter.expression * child.repetition_count,
-                namespace=self._repetition_parameter._namespace)
+                scope=self._repetition_parameter.scope)
         else:
             # create a new expression that depends on both
-            expression = ExpressionScalar('parent_repetition_count * child_repetition_count')
-            namespace = dict(parent_repetition_count=self.repetition_parameter,
-                             child_repetition_count=child.repetition_parameter)
-            repetition_parameter = MappedParameter(expression=expression,
-                                                   namespace=namespace)
+            expression = 'parent_repetition_count * child_repetition_count'
+            repetition_parameter = VolatileRepetitionCount.operation(expression=expression,
+                                                                     parent_repetition_count=self.repetition_parameter,
+                                                                     child_repetition_count=child.repetition_parameter)
 
         self[:] = iter(child)
         self._waveform = child._waveform
@@ -467,138 +491,6 @@ class Loop(Node):
 class ChannelSplit(Exception):
     def __init__(self, channel_sets):
         self.channel_sets = channel_sets
-
-
-class MultiChannelProgram:
-    def __init__(self, instruction_block: Union[AbstractInstructionBlock, Loop], channels: Iterable[ChannelID] = None):
-        """Channels with identifier None are ignored."""
-        self._programs = dict()
-        if isinstance(instruction_block, AbstractInstructionBlock):
-            self._init_from_instruction_block(instruction_block, channels)
-        elif isinstance(instruction_block, Loop):
-            assert channels is None
-            self._init_from_loop(loop=instruction_block)
-        else:
-            raise TypeError('Invalid program type', type(instruction_block), instruction_block)
-
-        for program in self.programs.values():
-            program.cleanup()
-
-    def _init_from_loop(self, loop: Loop):
-        first_waveform = next(loop.get_depth_first_iterator()).waveform
-
-        assert first_waveform is not None
-
-        self._programs[frozenset(first_waveform.defined_channels)] = loop
-
-    def _init_from_instruction_block(self, instruction_block, channels):
-        if channels is None:
-            def find_defined_channels(instruction_list):
-                for instruction in instruction_list:
-                    if isinstance(instruction, EXECInstruction):
-                        yield instruction.waveform.defined_channels
-                    elif isinstance(instruction, REPJInstruction):
-                        yield from find_defined_channels(
-                            instruction.target.block.instructions[instruction.target.offset:])
-                    elif isinstance(instruction, GOTOInstruction):
-                        yield from find_defined_channels(instruction.target.block.instructions[instruction.target.offset:])
-                    elif isinstance(instruction, CHANInstruction):
-                        yield itertools.chain(*instruction.channel_to_instruction_block.keys())
-                    elif isinstance(instruction, STOPInstruction):
-                        return
-                    elif isinstance(instruction, MEASInstruction):
-                        pass
-                    else:
-                        raise TypeError('Unhandled instruction type', type(instruction))
-
-            try:
-                channels = next(find_defined_channels(instruction_block.instructions))
-            except StopIteration:
-                raise ValueError('Instruction block has no defined channels')
-        else:
-            channels = set(channels)
-
-        channels = frozenset(channels - {None})
-
-        root = Loop()
-        stacks = {channels: (root, [((), deque(instruction_block.instructions))])}
-
-        while len(stacks) > 0:
-            chans, (root_loop, stack) = stacks.popitem()
-            try:
-                self._programs[chans] = MultiChannelProgram.__split_channels(chans, root_loop, stack)
-            except ChannelSplit as split:
-                for new_channel_set in split.channel_sets:
-                    assert (new_channel_set not in stacks)
-                    assert (chans.issuperset(new_channel_set))
-
-                    stacks[new_channel_set] = (root_loop.copy_tree_structure(), deepcopy(stack))
-
-    @property
-    def programs(self) -> Dict[FrozenSet[ChannelID], Loop]:
-        return self._programs
-
-    @property
-    def channels(self) -> Set[ChannelID]:
-        return set(itertools.chain(*self._programs.keys()))
-
-    @staticmethod
-    def __split_channels(channels: FrozenSet[ChannelID],
-                         root_loop: Loop,
-                         block_stack: List[Tuple[Tuple[int, ...],
-                                                 deque]]) -> Loop:
-        while block_stack:
-            current_loop_location, current_instruction_block = block_stack.pop()
-            current_loop = root_loop.locate(current_loop_location)
-
-            while current_instruction_block:
-                instruction = current_instruction_block.popleft()
-
-                if isinstance(instruction, EXECInstruction):
-                    if not instruction.waveform.defined_channels.issuperset(channels):
-                        raise Exception(instruction.waveform.defined_channels, channels)
-                    current_loop.append_child(waveform=instruction.waveform)
-
-                elif isinstance(instruction, REPJInstruction):
-                    if current_instruction_block:
-                        block_stack.append((current_loop_location, current_instruction_block))
-
-                    current_loop.append_child(repetition_count=instruction.count)
-                    block_stack.append(
-                        (current_loop[-1].get_location(),
-                         deque(instruction.target.block[instruction.target.offset:-1]))
-                    )
-                    break
-
-                elif isinstance(instruction, CHANInstruction):
-                    if channels in instruction.channel_to_instruction_block.keys():
-                        # push to front
-                        new_instruction_ptr = instruction.channel_to_instruction_block[channels]
-                        new_instruction_list = [*new_instruction_ptr.block[new_instruction_ptr.offset:-1]]
-                        current_instruction_block.extendleft(new_instruction_list)
-
-                    else:
-                        block_stack.append((current_loop_location, deque([instruction]) + current_instruction_block))
-
-                        raise ChannelSplit(instruction.channel_to_instruction_block.keys())
-
-                elif isinstance(instruction, MEASInstruction):
-                    current_loop.add_measurements(instruction.measurements)
-
-                else:
-                    raise Exception('Encountered unhandled instruction {} on channel(s) {}'.format(instruction, channels))
-        return root_loop
-
-    def __getitem__(self, item: Union[ChannelID, Set[ChannelID], FrozenSet[ChannelID]]) -> Loop:
-        if not isinstance(item, (set, frozenset)):
-            item = frozenset((item,))
-        elif isinstance(item, set):
-            item = frozenset(item)
-
-        for channels, program in self._programs.items():
-            if item.issubset(channels):
-                return program
-        raise KeyError(item)
 
 
 def to_waveform(program: Loop) -> Waveform:

@@ -164,6 +164,9 @@ class dummy_teawg(dummy_package):
             self._download_sequencer_table_calls = []
 
         @property
+        def is_simulator(self):
+            return False
+        @property
         def visa_inst(self):
             return self._visa_inst
         def send_cmd(self, *args, **kwargs):

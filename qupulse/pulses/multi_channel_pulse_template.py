@@ -12,8 +12,8 @@ import numbers
 import warnings
 
 from qupulse.serialization import Serializer, PulseRegistryType
+from qupulse.parameter_scope import Scope
 
-from qupulse.pulses.conditions import Condition
 from qupulse.utils import isclose
 from qupulse.utils.sympy import almost_equal, Sympifyable
 from qupulse.utils.types import ChannelID, TimeType
@@ -167,11 +167,6 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
                                                            measurement_mapping=measurement_mapping))
         return measurements
 
-    def requires_stop(self,
-                      parameters: Dict[str, Parameter],
-                      conditions: Dict[str, 'Condition']) -> bool:
-        return any(st.requires_stop(parameters, conditions) for st in self._subtemplates)
-
     def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
         data = super().get_serialization_data(serializer)
         data['subtemplates'] = self.subtemplates
@@ -228,23 +223,22 @@ class ParallelConstantChannelPulseTemplate(PulseTemplate):
         return self._overwritten_channels
 
     def _get_overwritten_channels_values(self,
-                                         parameters: Dict[str, Union[numbers.Real]]
+                                         parameters: Mapping[str, Union[numbers.Real]]
                                          ) -> Dict[str, numbers.Real]:
-        return {name: value.evaluate_numeric(**parameters)
+        return {name: value.evaluate_in_scope(parameters)
                 for name, value in self.overwritten_channels.items()}
 
     def _internal_create_program(self, *,
-                                 parameters: Dict[str, Parameter],
+                                 scope: Scope,
                                  global_transformation: Optional[Transformation],
                                  **kwargs):
-        real_parameters = {name: parameters[name].get_value() for name in self.transformation_parameters}
-        overwritten_channels = self._get_overwritten_channels_values(parameters=real_parameters)
+        overwritten_channels = self._get_overwritten_channels_values(parameters=scope)
         transformation = ParallelConstantChannelTransformation(overwritten_channels)
 
         if global_transformation is not None:
             transformation = chain_transformations(global_transformation, transformation)
 
-        self._template._create_program(parameters=parameters,
+        self._template._create_program(scope=scope,
                                        global_transformation=transformation,
                                        **kwargs)
 
@@ -278,13 +272,6 @@ class ParallelConstantChannelPulseTemplate(PulseTemplate):
         return self.template.duration
 
     @property
-    def is_interruptable(self) -> bool:
-        return self.template.is_interruptable
-
-    def requires_stop(self, *args, **kwargs) -> bool:
-        return self.template.requires_stop(*args, **kwargs)
-
-    @property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
         integral = self._template.integral
 
@@ -301,9 +288,6 @@ class ParallelConstantChannelPulseTemplate(PulseTemplate):
         data['template'] = self._template
         data['overwritten_channels'] = self._overwritten_channels
         return data
-
-    def build_sequence(self, *args, **kwargs):
-        raise NotImplementedError('Build sequence(legacy) is not implemented for new type')
 
 
 class ChannelMappingException(Exception):
