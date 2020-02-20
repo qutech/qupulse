@@ -10,9 +10,11 @@ import numpy as np
 from qupulse.parameter_scope import Scope, MappedScope, JointScope
 
 from qupulse._program.waveforms import Waveform
+from qupulse._program.volatile import VolatileRepetitionCount, VolatileProperty
 
 from qupulse.utils.types import ChannelID, TimeType, MeasurementWindow, FrozenDict
 from qupulse.utils.tree import Node, is_tree_circular
+
 from qupulse.expressions import ExpressionScalar
 from qupulse.utils import is_integer
 
@@ -21,36 +23,9 @@ from qupulse._program.waveforms import SequenceWaveform, RepetitionWaveform
 __all__ = ['Loop', 'make_compatible', 'MakeCompatibleWarning']
 
 
-class VolatileRepetitionCount:
-    def __init__(self, expression: ExpressionScalar, scope: Scope):
-        self._expression = expression
-        self._scope = scope
-
-    def __int__(self):
-        value = self._expression.evaluate_in_scope(self._scope)
-        if not is_integer(value):
-            warnings.warn("Repetition count is no integer. Rounding might lead to unexpected results.")
-        value = int(round(value))
-        if value < 0:
-            warnings.warn("Repetition count is negative. Clamping lead to unexpected results.")
-            value = 0
-        return value
-
-    @classmethod
-    def operation(cls, expression, **operands: 'VolatileRepetitionCount'):
-        expression = ExpressionScalar(expression)
-        assert set(expression.variables) == operands.keys()
-
-        scope = JointScope(FrozenDict(
-            {operand_name: MappedScope(operand._scope, FrozenDict({operand_name: operand._expression}))
-             for operand_name, operand in operands.items()}
-        ))
-        return VolatileRepetitionCount(expression, scope)
-
-
 class Loop(Node):
     MAX_REPR_SIZE = 2000
-    __slots__ = ('_waveform', '_measurements', '_repetition_count', '_cached_body_duration', '_repetition_parameter')
+    __slots__ = ('_waveform', '_measurements', '_repetition_definition', '_cached_body_duration')
 
     """Build a loop tree. The leaves of the tree are loops with one element.
     
@@ -61,8 +36,7 @@ class Loop(Node):
                  children: Iterable['Loop'] = (),
                  waveform: Optional[Waveform] = None,
                  measurements: Optional[List[MeasurementWindow]] = None,
-                 repetition_count: int = 1,
-                 repetition_parameter: VolatileRepetitionCount = None):
+                 repetition_count: Union[int, VolatileRepetitionCount] = 1):
         """Initialize a new loop
 
         Args:
@@ -71,25 +45,21 @@ class Loop(Node):
             waveform: "Payload"
             measurements:
             repetition_count: The children / waveform are repeated this often
-            repetition_parameter: If provided, this marks the repetition count as volatile i.e. changable in the future
         """
         super().__init__(parent=parent, children=children)
 
         self._waveform = waveform
         self._measurements = measurements
-        self._repetition_count = int(repetition_count)
-        self._repetition_parameter = repetition_parameter
+        self._repetition_definition = repetition_count
         self._cached_body_duration = None
-
-        assert self._repetition_count == repetition_count, "Repetition count was not an integer: %r" % repetition_count
+        assert isinstance(repetition_count, VolatileRepetitionCount) or is_integer(repetition_count)
         assert isinstance(waveform, (type(None), Waveform))
 
     def __eq__(self, other: 'Loop') -> bool:
         if type(self) == type(other):
-            return (self._repetition_count == other._repetition_count and
+            return (self._repetition_definition == other._repetition_definition and
                     self.waveform == other.waveform and
                     (self._measurements or None) == (other._measurements or None) and
-                    self._repetition_parameter == other._repetition_parameter and
                     len(self) == len(other) and
                     all(self_child == other_child for self_child, other_child in zip(self, other)))
         else:
@@ -167,27 +137,36 @@ class Loop(Node):
 
     @property
     def duration(self) -> TimeType:
-        return self.body_duration * self.repetition_count
+        return self.body_duration * TimeType.from_fraction(self.repetition_count, 1)
 
     @property
-    def repetition_parameter(self) -> Optional[VolatileRepetitionCount]:
-        return self._repetition_parameter
+    def volatile_repetition(self) -> Optional[VolatileProperty]:
+        return getattr(self._repetition_definition, 'volatile_property', None)
+
+    @property
+    def repetition_definition(self) -> Union[int, VolatileRepetitionCount]:
+        return self._repetition_definition
+
+    @repetition_definition.setter
+    def repetition_definition(self, new_definition: Union[int, VolatileRepetitionCount]):
+        self._repetition_definition = new_definition
 
     @property
     def repetition_count(self) -> int:
-        return self._repetition_count
+        return int(self._repetition_definition)
 
     @repetition_count.setter
-    def repetition_count(self, val) -> None:
+    def repetition_count(self, val: int) -> None:
+        assert isinstance(val, (int, float))
         new_repetition = int(val)
         if abs(new_repetition - val) > 1e-10:
             raise ValueError('Repetition count was not an integer')
-        self._repetition_count = new_repetition
+        self._repetition_definition = new_repetition
 
     def unroll(self) -> None:
         if self.is_leaf():
             raise RuntimeError('Leaves cannot be unrolled')
-        if self.repetition_parameter is not None:
+        if self.volatile_repetition:
             warnings.warn("Unrolling a Loop with volatile repetition count", VolatileModificationWarning)
 
         i = self.parent_index
@@ -201,25 +180,22 @@ class Loop(Node):
         self._invalidate_duration()
 
     def unroll_children(self) -> None:
-        if self._repetition_parameter is not None:
+        if self.volatile_repetition:
             warnings.warn("Unrolling a Loop with volatile repetition count", VolatileModificationWarning)
         old_children = self.children
         self[:] = (child.copy_tree_structure()
                    for _ in range(self.repetition_count)
                    for child in old_children)
         self.repetition_count = 1
-        self._repetition_parameter = None
         self.assert_tree_integrity()
 
     def encapsulate(self) -> None:
         """Add a nesting level by moving self to its children."""
         self[:] = [Loop(children=self,
-                        repetition_count=self.repetition_count,
-                        repetition_parameter=self._repetition_parameter,
+                        repetition_count=self._repetition_definition,
                         waveform=self._waveform,
                         measurements=self._measurements)]
         self.repetition_count = 1
-        self._repetition_parameter = None
         self._waveform = None
         self._measurements = None
         self.assert_tree_integrity()
@@ -253,8 +229,7 @@ class Loop(Node):
     def copy_tree_structure(self, new_parent: Union['Loop', bool]=False) -> 'Loop':
         return type(self)(parent=self.parent if new_parent is False else new_parent,
                           waveform=self._waveform,
-                          repetition_count=self.repetition_count,
-                          repetition_parameter=self._repetition_parameter,
+                          repetition_count=self._repetition_definition,
                           measurements=None if self._measurements is None else list(self._measurements),
                           children=(child.copy_tree_structure() for child in self))
 
@@ -326,7 +301,7 @@ class Loop(Node):
             for reverse_idx, child in enumerate(reversed(self)):
                 if child.repetition_count > 1:
                     forward_idx = n_child - reverse_idx
-                    if child.repetition_parameter is None:
+                    if not child.volatile_repetition:
                         child_index = forward_idx
                         break
                     elif child_index is None:
@@ -335,16 +310,11 @@ class Loop(Node):
                 if child_index is None:
                     raise RuntimeError('There is no child with repetition count > 1')
 
-        if self[child_index]._repetition_parameter is not None:
+        if self[child_index].volatile_repetition:
             warnings.warn("Splitting a child with volatile repetition count", VolatileModificationWarning)
-            self[child_index]._repetition_parameter = VolatileRepetitionCount(
-                expression=self[child_index]._repetition_parameter.expression - 1,
-                scope=self[child_index]._repetition_parameter.scope
-            )
 
         new_child = self[child_index].copy_tree_structure()
         new_child.repetition_count = 1
-        new_child._repetition_parameter = None
 
         self[child_index].repetition_count -= 1
 
@@ -391,7 +361,7 @@ class Loop(Node):
     def _has_single_child_that_can_be_merged(self) -> bool:
         if len(self) == 1:
             child = cast(Loop, self[0])
-            return not self._measurements or (child.repetition_count == 1 and child.repetition_parameter is None)
+            return not self._measurements or (child.repetition_count == 1 and not child.volatile_repetition)
         else:
             return False
 
@@ -401,7 +371,7 @@ class Loop(Node):
         child = cast(Loop, self[0])
 
         # if the child has a fixed repetition count of 1 the measurements can be merged
-        mergable_measurements = child.repetition_count == 1 and child.repetition_parameter is None
+        mergable_measurements = child.repetition_count == 1 and not child.volatile_repetition
 
         assert not self._measurements or mergable_measurements, "bug: _merge_single_child called on loop with measurements"
         assert not self._waveform, "bug: _merge_single_child called on loop with children and waveform"
@@ -413,29 +383,24 @@ class Loop(Node):
             else:
                 measurements = self._measurements
 
-        repetition_count = self.repetition_count * child.repetition_count
-
-        if self._repetition_parameter is None and child._repetition_parameter is None:
-            repetition_parameter = None
-        elif self._repetition_parameter is None:
-            repetition_parameter = VolatileRepetitionCount(
-                expression=child._repetition_parameter.expression * self.repetition_count,
-                scope=child._repetition_parameter.scope)
-        elif child._repetition_parameter is None:
-            repetition_parameter = VolatileRepetitionCount(
-                expression=self._repetition_parameter.expression * child.repetition_count,
-                scope=self._repetition_parameter.scope)
+        if not self.volatile_repetition and not child.volatile_repetition:
+            # simple integer multiplication
+            repetition_definition = self.repetition_count * child.repetition_count
+        elif not self.volatile_repetition:
+            repetition_definition = child._repetition_definition * self.repetition_count
+        elif not child.volatile_repetition:
+            repetition_definition = self._repetition_definition * child.repetition_count
         else:
             # create a new expression that depends on both
             expression = 'parent_repetition_count * child_repetition_count'
-            repetition_parameter = VolatileRepetitionCount.operation(expression=expression,
-                                                                     parent_repetition_count=self.repetition_parameter,
-                                                                     child_repetition_count=child.repetition_parameter)
+            repetition_definition = VolatileRepetitionCount.operation(
+                expression=expression,
+                parent_repetition_count=self._repetition_definition,
+                child_repetition_count=child._repetition_definition)
 
         self[:] = iter(child)
         self._waveform = child._waveform
-        self._repetition_parameter = repetition_parameter
-        self._repetition_count = repetition_count
+        self._repetition_definition = repetition_definition
         self._measurements = measurements
         self._invalidate_duration()
         return True
@@ -542,7 +507,7 @@ def _is_compatible(program: Loop, min_len: int, quantum: int, sample_rate: TimeT
     if program.is_leaf():
         waveform_duration_in_samples = program.body_duration * sample_rate
         if waveform_duration_in_samples < min_len or (waveform_duration_in_samples / quantum).denominator != 1:
-            if program.repetition_parameter is not None:
+            if program.volatile_repetition:
                 warnings.warn("_is_compatible requires an action which drops volatility.",
                               category=VolatileModificationWarning)
             return _CompatibilityLevel.action_required
@@ -553,7 +518,7 @@ def _is_compatible(program: Loop, min_len: int, quantum: int, sample_rate: TimeT
                for sub_program in program):
             return _CompatibilityLevel.compatible
         else:
-            if program.repetition_parameter is not None:
+            if program.volatile_repetition:
                 warnings.warn("_is_compatible requires an action which drops volatility.",
                               category=VolatileModificationWarning)
             return _CompatibilityLevel.action_required
@@ -563,7 +528,6 @@ def _make_compatible(program: Loop, min_len: int, quantum: int, sample_rate: Tim
     if program.is_leaf():
         program.waveform = to_waveform(program.copy_tree_structure())
         program.repetition_count = 1
-        program._repetition_parameter = None
     else:
         comp_levels = [_is_compatible(cast(Loop, sub_program), min_len, quantum, sample_rate)
                        for sub_program in program]
@@ -572,16 +536,14 @@ def _make_compatible(program: Loop, min_len: int, quantum: int, sample_rate: Tim
             single_run = program.duration * sample_rate / program.repetition_count
             if (single_run / quantum).denominator == 1 and single_run >= min_len:
                 # it is enough to concatenate all children
-                new_repetition_count = program.repetition_count
-                new_repetition_parameter = program.repetition_parameter
+                new_repetition_definition = program.repetition_definition
                 program.repetition_count = 1
             else:
                 # we need to concatenate all children and unroll
-                new_repetition_count = 1
-                new_repetition_parameter = None
+                new_repetition_definition = 1
+
             program.waveform = to_waveform(program.copy_tree_structure())
-            program.repetition_count = new_repetition_count
-            program._repetition_parameter = new_repetition_parameter
+            program.repetition_definition = new_repetition_definition
             program[:] = []
             return
         else:

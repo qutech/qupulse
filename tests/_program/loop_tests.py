@@ -4,7 +4,11 @@ import itertools
 
 from string import ascii_uppercase
 
+from qupulse.expressions import ExpressionScalar
+from qupulse.parameter_scope import DictScope
+
 from qupulse.utils.types import TimeType, time_from_float
+from qupulse._program.volatile import VolatileRepetitionCount
 from qupulse._program._loop import Loop, _make_compatible, _is_compatible, _CompatibilityLevel,\
     RepetitionWaveform, SequenceWaveform, make_compatible, MakeCompatibleWarning, DroppedMeasurementWarning, VolatileModificationWarning
 from qupulse._program._loop import Loop, _make_compatible, _is_compatible, _CompatibilityLevel,\
@@ -321,13 +325,15 @@ LOOP 1 times:
 class ProgramWaveformCompatibilityTest(unittest.TestCase):
     def test_is_compatible_warnings(self):
         wf = DummyWaveform(duration=1)
+        volatile_repetition_count = VolatileRepetitionCount(ExpressionScalar('x'),
+                                                            DictScope.from_kwargs(x=3, volatile={'x'}))
 
-        volatile_leaf = Loop(waveform=wf, repetition_count=3, repetition_parameter='x')
+        volatile_leaf = Loop(waveform=wf, repetition_count=volatile_repetition_count)
         with self.assertWarns(VolatileModificationWarning):
             self.assertEqual(_CompatibilityLevel.action_required, _is_compatible(volatile_leaf, min_len=3, quantum=1,
                                                                                  sample_rate=time_from_float(1.)))
 
-        volatile_node = Loop(children=[Loop(waveform=wf)], repetition_count=3, repetition_parameter='x')
+        volatile_node = Loop(children=[Loop(waveform=wf)], repetition_count=volatile_repetition_count)
         with self.assertWarns(VolatileModificationWarning):
             self.assertEqual(_CompatibilityLevel.action_required, _is_compatible(volatile_node, min_len=3, quantum=1,
                                                                                  sample_rate=time_from_float(1.)))

@@ -199,7 +199,7 @@ class PulseTemplate(Serializable, metaclass=DocStringABCMeta):
         if self.identifier in to_single_waveform or self in to_single_waveform:
             root = Loop()
 
-            if not scope.get_volatile_parameters().isdisjoint(self.parameter_names):
+            if not scope.get_volatile_parameters().keys().isdisjoint(self.parameter_names):
                 raise NotImplementedError('A pulse template that has volatile parameters cannot be transformed into a '
                                           'single waveform yet.')
 
@@ -313,7 +313,7 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
         during sequencing"""
         ### current behavior (same as previously): only adds EXEC Loop and measurements if a waveform exists.
         ### measurements are directly added to parent_loop (to reflect behavior of Sequencer + MultiChannelProgram)
-        assert scope.get_volatile_parameters().isdisjoint(self.parameter_names), "AtomicPT cannot be volatile"
+        assert not scope.get_volatile_parameters().keys() & self.parameter_names, "AtomicPT cannot be volatile"
 
         waveform = self.build_waveform(parameters=scope,
                                        channel_mapping=channel_mapping)

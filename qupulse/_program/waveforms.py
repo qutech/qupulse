@@ -7,7 +7,7 @@ Classes:
 import itertools
 from abc import ABCMeta, abstractmethod
 from weakref import WeakValueDictionary, ref
-from typing import Union, Set, Sequence, NamedTuple, Tuple, Any, Iterable, FrozenSet, Optional, Mapping
+from typing import Union, Set, Sequence, NamedTuple, Tuple, Any, Iterable, FrozenSet, Optional, Mapping, AbstractSet
 import operator
 
 import numpy as np
@@ -109,10 +109,10 @@ class Waveform(Comparable, metaclass=ABCMeta):
             :func:`~qupulse.pulses.instructions.get_measurement_windows` to get a waveform for a subset of these."""
 
     @abstractmethod
-    def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> 'Waveform':
+    def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> 'Waveform':
         """Unsafe version of :func:`~qupulse.pulses.instructions.get_measurement_windows`."""
 
-    def get_subset_for_channels(self, channels: Set[ChannelID]) -> 'Waveform':
+    def get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> 'Waveform':
         """Get a waveform that only describes the channels contained in `channels`.
 
         Args:
@@ -228,7 +228,7 @@ class TableWaveform(Waveform):
     def defined_channels(self) -> Set[ChannelID]:
         return {self._channel_id}
 
-    def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> 'Waveform':
+    def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> 'Waveform':
         return self
 
 
@@ -276,7 +276,7 @@ class FunctionWaveform(Waveform):
         output_array[:] = self._expression.evaluate_numeric(t=sample_times)
         return output_array
 
-    def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> Waveform:
+    def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> Waveform:
         return self
 
 
@@ -338,7 +338,7 @@ class SequenceWaveform(Waveform):
     def duration(self) -> TimeType:
         return self._duration
 
-    def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> 'Waveform':
+    def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> 'Waveform':
         return SequenceWaveform(
             sub_waveform.unsafe_get_subset_for_channels(channels & sub_waveform.defined_channels)
             for sub_waveform in self._sequenced_waveforms if sub_waveform.defined_channels & channels)
@@ -451,7 +451,7 @@ class MultiChannelWaveform(Waveform):
                       output_array: Union[np.ndarray, None]=None) -> np.ndarray:
         return self[channel].unsafe_sample(channel, sample_times, output_array)
 
-    def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> 'Waveform':
+    def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> 'Waveform':
         relevant_sub_waveforms = tuple(swf for swf in self._sub_waveforms if swf.defined_channels & channels)
         if len(relevant_sub_waveforms) == 1:
             return relevant_sub_waveforms[0].get_subset_for_channels(channels)
@@ -498,9 +498,9 @@ class RepetitionWaveform(Waveform):
 
     @property
     def duration(self) -> TimeType:
-        return self._body.duration*self._repetition_count
+        return self._body.duration * self._repetition_count
 
-    def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> 'RepetitionWaveform':
+    def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> 'RepetitionWaveform':
         return RepetitionWaveform(body=self._body.unsafe_get_subset_for_channels(channels),
                                   repetition_count=self._repetition_count)
 

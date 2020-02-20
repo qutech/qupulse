@@ -8,10 +8,13 @@ import sys
 import numpy as np
 
 from qupulse.expressions import ExpressionScalar
+from qupulse.parameter_scope import DictScope
+
 from qupulse.pulses.parameters import MappedParameter, ConstantParameter
 from qupulse._program._loop import Loop
 from qupulse._program.seqc import BinaryWaveform, loop_to_seqc, WaveformPlayback, Repeat, SteppingRepeat, Scope,\
     to_node_clusters, find_sharable_waveforms, mark_sharable_waveforms, UserRegisterManager, HDAWGProgramManager, UserRegister
+from qupulse._program.volatile import VolatileRepetitionCount
 
 from tests.pulses.sequencing_dummies import DummyWaveform
 
@@ -65,8 +68,9 @@ def complex_program_as_loop(unique_wfs, wf_same):
     root.append_child(waveform=unique_wfs[0], repetition_count=21)
     root.append_child(waveform=wf_same, repetition_count=23)
 
-    mapped = MappedParameter(ExpressionScalar('n + 4'), {'n': ConstantParameter(3)})
-    root.append_child(waveform=wf_same, repetition_count=7, repetition_parameter=mapped)
+    volatile_repetition = VolatileRepetitionCount(ExpressionScalar('n + 4'),
+                                                  DictScope.from_kwargs(n=3, volatile={'n'}))
+    root.append_child(waveform=wf_same, repetition_count=volatile_repetition)
 
     return root
 
