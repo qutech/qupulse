@@ -410,28 +410,44 @@ class TaborProgramTests(unittest.TestCase):
         wf_1 = DummyWaveform(defined_channels={'A'}, duration=1)
         wf_2 = DummyWaveform(defined_channels={'A'}, duration=1)
 
-        program = Loop(children=[Loop(waveform=wf_1, repetition_count=seq.get_value(), repetition_parameter=seq),
-                                 Loop(waveform=wf_2, repetition_count=4),
-                                 Loop(waveform=wf_1, repetition_count=1)],
-                       repetition_count=aseq.get_value(), repetition_parameter=aseq)
+        program = Loop(children=[Loop(children=[Loop(waveform=wf_1, repetition_count=seq.get_value(),
+                                                     repetition_parameter=seq),
+                                                Loop(waveform=wf_2, repetition_count=4),
+                                                Loop(waveform=wf_1, repetition_count=2)],
+                                      repetition_count=4),
+                                 Loop(children=[Loop(waveform=wf_2, repetition_count=5),
+                                                Loop(waveform=wf_1, repetition_count=seq.get_value(),
+                                                     repetition_parameter=seq),
+                                                Loop(waveform=wf_2, repetition_count=5)],
+                                      repetition_count=aseq.get_value(), repetition_parameter=aseq)],
+                       repetition_count=1)
 
         t_program = TaborProgram(program, channels=(None, 'A'), markers=(None, None),
                                  device_properties=self.instr_props, **self.program_entry_kwargs)
 
         self.assertEqual(t_program.get_sequencer_tables(), [[(TableDescription(3, 0, 0), seq),
                                                              (TableDescription(4, 1, 0), None),
-                                                             (TableDescription(1, 0, 0), None)]])
-        self.assertEqual(t_program.get_advanced_sequencer_table(), [TableDescription(5, 1, 0)])
+                                                             (TableDescription(2, 0, 0), None)],
+                                                            [(TableDescription(5, 1, 0), None),
+                                                             (TableDescription(3, 0, 0), seq),
+                                                             (TableDescription(5, 1, 0), None)]
+                                                            ])
+        self.assertEqual(t_program.get_advanced_sequencer_table(), [TableEntry(4, 1, 0), TableEntry(5, 2, 0)])
 
         modifications = t_program.update_volatile_parameters(parameters)
 
         expected_seq = MappedParameter(ExpressionScalar('seq'), {'seq': ConstantParameter(10)})
-        expected_modifications = {(0, 0): TableDescription(10, 0, 0), 0: TableEntry(2, 1, 0)}
+        expected_modifications = {(0, 0): TableDescription(10, 0, 0), (1, 1): TableDescription(10, 0, 0),
+                                  1: TableEntry(2, 2, 0)}
 
         self.assertEqual(t_program.get_sequencer_tables(), [[(TableDescription(10, 0, 0), expected_seq),
                                                              (TableDescription(4, 1, 0), None),
-                                                             (TableDescription(1, 0, 0), None)]])
-        self.assertEqual(t_program.get_advanced_sequencer_table(), [TableDescription(2, 1, 0)])
+                                                             (TableDescription(2, 0, 0), None)],
+                                                            [(TableDescription(5, 1, 0), None),
+                                                             (TableDescription(10, 0, 0), expected_seq),
+                                                             (TableDescription(5, 1, 0), None)]
+                                                            ])
+        self.assertEqual(t_program.get_advanced_sequencer_table(), [TableEntry(4, 1, 0), TableEntry(2, 2, 0)])
         self.assertEqual(modifications, expected_modifications)
 
 
