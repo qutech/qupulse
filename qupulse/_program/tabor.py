@@ -1,18 +1,20 @@
 import sys
-from typing import NamedTuple, Optional, List, Generator, Tuple, Sequence, Mapping, Union, Dict, FrozenSet
+from typing import NamedTuple, Optional, List, Generator, Tuple, Sequence, Mapping, Union, Dict, FrozenSet, cast
 from enum import Enum
 import operator
 from collections import OrderedDict
 import itertools
+import numbers
 
 import numpy as np
 
 from qupulse.utils.types import ChannelID, TimeType
 from qupulse.hardware.awgs.base import ProgramEntry
 from qupulse.hardware.util import get_sample_times, voltage_to_uint16
-from qupulse.pulses.parameters import Parameter, MappedParameter
+from qupulse.pulses.parameters import Parameter
 from qupulse._program.waveforms import Waveform
 from qupulse._program._loop import Loop
+from qupulse._program.volatile import VolatileRepetitionCount, VolatileProperty
 
 assert(sys.byteorder == 'little')
 
@@ -53,21 +55,21 @@ class TaborSegment:
     __slots__ = ('_data', '_hash')
 
     @staticmethod
-    def _data_a_view(data: np.ndarray) -> np.ndarray:
+    def _data_a_view(data: np.ndarray, writable: bool) -> np.ndarray:
         view = data[:, 1, :]
-        assert view.base is data
+        assert not writable or view.base is data
         return view
 
     @staticmethod
-    def _data_b_view(data: np.ndarray) -> np.ndarray:
+    def _data_b_view(data: np.ndarray, writable: bool) -> np.ndarray:
         view = data[:, 0, :]
-        assert view.base is data
+        assert not writable or view.base is data
         return view
 
     @staticmethod
-    def _marker_data_view(data: np.ndarray) -> np.ndarray:
+    def _marker_data_view(data: np.ndarray, writable: bool) -> np.ndarray:
         view = data.reshape((-1, 2, 2, 8))[:, 1, 1, :]
-        assert view.base is data
+        assert not writable or view.base is data
         return view
 
     def __init__(self, *,
@@ -94,11 +96,11 @@ class TaborSegment:
 
     @property
     def data_a(self) -> np.ndarray:
-        return self._data_a_view(self._data).reshape(-1)
+        return self._data_a_view(self._data, writable=False).reshape(-1)
 
     @property
     def data_b(self) -> np.ndarray:
-        return self._data_b_view(self._data).reshape(-1)
+        return self._data_b_view(self._data, writable=False).reshape(-1)
 
     @classmethod
     def from_sampled(cls,
@@ -133,9 +135,9 @@ class TaborSegment:
         assert num_points % cls.QUANTUM == 0
 
         data = np.full((num_points // cls.QUANTUM, 2, cls.QUANTUM), cls.ZERO_VAL, dtype=np.uint16)
-        data_a = cls._data_a_view(data)
-        data_b = cls._data_b_view(data)
-        marker_view = cls._marker_data_view(data)
+        data_a = cls._data_a_view(data, writable=True)
+        data_b = cls._data_b_view(data, writable=True)
+        marker_view = cls._marker_data_view(data, writable=True)
 
         if ch_a is not None:
             data_a[:] = ch_a.reshape((-1, cls.QUANTUM))
@@ -165,12 +167,12 @@ class TaborSegment:
 
     @property
     def marker_a(self) -> np.ndarray:
-        marker_data = self._marker_data_view(self._data)
+        marker_data = self._marker_data_view(self._data, writable=False)
         return np.bitwise_and(marker_data, self.MARKER_A_MASK).astype(bool).reshape(-1)
 
     @property
     def marker_b(self) -> np.ndarray:
-        marker_data = self._marker_data_view(self._data)
+        marker_data = self._marker_data_view(self._data, writable=False)
         return np.bitwise_and(marker_data, self.MARKER_B_MASK).astype(bool).reshape(-1)
 
     @classmethod
@@ -180,8 +182,8 @@ class TaborSegment:
         assert data_a.size % 16 == 0
 
         data = np.empty((data_a.size // 16, 2, 16), dtype=np.uint16)
-        cls._data_a_view(data)[:] = data_a.reshape((-1, 16))
-        cls._data_b_view(data)[:] = data_b.reshape((-1, 16))
+        cls._data_a_view(data, writable=True)[:] = data_a.reshape((-1, 16))
+        cls._data_b_view(data, writable=True)[:] = data_b.reshape((-1, 16))
 
         return cls(data=data)
 
@@ -513,7 +515,7 @@ class TaborProgram(ProgramEntry):
     def get_sampled_segments(self) -> Tuple[Sequence[TaborSegment], Sequence[int]]:
         return self._sampled_segments
 
-    def update_volatile_parameters(self, parameters: Mapping[str, Parameter]) -> Mapping[Union[int, Tuple[int, int]],
+    def update_volatile_parameters(self, parameters: Mapping[str, numbers.Number]) -> Mapping[Union[int, Tuple[int, int]],
                                                                                          Union[TableEntry, TableDescription]]:
         """ Set the values of parameters which were marked as volatile on program creation. Sets volatile parameters
         in program memory.
@@ -526,31 +528,28 @@ class TaborProgram(ProgramEntry):
         """
         modifications = {}
 
-        for position, parameter in self._parsed_program.volatile_parameter_positions.items():
+        for position, volatile_repetition in self._parsed_program.volatile_parameter_positions.items():
             if isinstance(position, int):
                 old_rep_count, element_num, jump_flag = self._parsed_program.advanced_sequencer_table[position]
-                parameter.update_constants(parameters)
-                new_value = int(parameter.get_value())
-                self._parsed_program.advanced_sequencer_table[position] = TableEntry(new_value, element_num, jump_flag)
+                new_value = volatile_repetition.update_volatile_dependencies(parameters)
+
                 if new_value != old_rep_count:
-                    modifications[position] = TableEntry(repetition_count=new_value,
-                                                         element_number=element_num, jump_flag=jump_flag)
-                self._loop[position].repetition_count = new_value
+                    new_entry = TableEntry(repetition_count=new_value, element_number=element_num, jump_flag=jump_flag)
+                    self._parsed_program.advanced_sequencer_table[position] = new_entry
+                    modifications[position] = new_entry
             else:
                 adv_idx, seq_pos = position
                 adv_pos = self._parsed_program.advanced_sequencer_table[adv_idx].element_number - 1
-                ((old_rep_count, element_id, jump_flag), param) = self._parsed_program.sequencer_tables[adv_pos][seq_pos]
-                parameter.update_constants(parameters)
-                new_value = int(parameter.get_value())
-                self._parsed_program.sequencer_tables[adv_pos][seq_pos] = (TableDescription(new_value, element_id,
-                                                                                            jump_flag), param)
+                sequencer_table = self._parsed_program.sequencer_tables[adv_pos]
+                ((old_rep_count, element_id, jump_flag), param) = sequencer_table[seq_pos]
+
+                new_value = volatile_repetition.update_volatile_dependencies(parameters)
                 if new_value != old_rep_count:
+                    new_description = TableDescription(repetition_count=new_value,
+                                                       element_id=element_id, jump_flag=jump_flag)
+                    sequencer_table[seq_pos] = (new_description, param)
                     modifications[position] = TableDescription(repetition_count=new_value,
                                                                element_id=element_id, jump_flag=jump_flag)
-                if self._loop.depth() == 1:
-                    self._loop[seq_pos].repetition_count = new_value
-                else:
-                    self._loop[adv_idx][seq_pos].repetition_count = new_value
 
         return modifications
 
@@ -577,7 +576,7 @@ def _check_merge_with_next(program, n, max_seq_len):
 
 def _check_partial_unroll(program, n, min_seq_len):
     st = program[n]
-    if st.repetition_parameter is not None:
+    if st.volatile_repetition:
         return False
 
     if sum(entry.repetition_count for entry in st) * st.repetition_count >= min_seq_len:
@@ -631,8 +630,8 @@ def prepare_program_for_advanced_sequence_mode(program: Loop, min_seq_len: int, 
                       and len(program[i]) + len(program[i + 1]) < max_seq_len):
                     program[i][len(program[i]):] = program[i + 1].copy_tree_structure()[:]
                     program[i + 1].repetition_count -= 1
-                    if program[i + 1].repetition_parameter is not None:
-                        program[i + 1].repetition_parameter = program[i + 1].repetition_parameter - 1
+                    if program[i + 1].volatile_repetition:
+                        program[i + 1].volatile_repetition = program[i + 1].volatile_repetition - 1
 
                 else:
                     raise TaborException('The algorithm is not smart enough to make this sequence table longer')
@@ -644,50 +643,50 @@ def prepare_program_for_advanced_sequence_mode(program: Loop, min_seq_len: int, 
             i += 1
 
 
-ParsedProgram = NamedTuple('ParsedProgram', [('advanced_sequencer_table', List[TableEntry]),
-                                                 ('sequencer_tables', List[List[Tuple[TableDescription,
-                                                                                      Optional[MappedParameter]]]]),
+ParsedProgram = NamedTuple('ParsedProgram', [('advanced_sequencer_table', Sequence[TableEntry]),
+                                                 ('sequencer_tables', Sequence[Sequence[
+                                                     Tuple[TableDescription, Optional[VolatileProperty]]]]),
                                                  ('waveforms', Tuple[Waveform, ...]),
                                                  ('volatile_parameter_positions', Dict[Union[int, Tuple[int, int]],
-                                                                                       MappedParameter])])
+                                                                                       VolatileRepetitionCount])])
 
 
 def parse_aseq_program(program: Loop, used_channels: FrozenSet[ChannelID]) -> ParsedProgram:
     volatile_parameter_positions = {}
 
     advanced_sequencer_table = []
-    sequencer_tables = []
+    # we use an ordered dict here to avoid O(n**2) behaviour while looking for duplicates
+    sequencer_tables = OrderedDict()
     waveforms = OrderedDict()
     for adv_position, sequencer_table_loop in enumerate(program):
         current_sequencer_table = []
-        for position, (waveform, repetition_count, repetition_parameter) in enumerate(
+        for position, (waveform, repetition_definition, volatile_repetition) in enumerate(
                 (waveform_loop.waveform.get_subset_for_channels(used_channels),
-                 waveform_loop.repetition_count, waveform_loop.repetition_parameter)
-                for waveform_loop in sequencer_table_loop):
-            if waveform in waveforms:
-                wf_index = waveforms[waveform]
-            else:
-                wf_index = len(waveforms)
-                waveforms[waveform] = wf_index
+                 waveform_loop.repetition_definition, waveform_loop.volatile_repetition)
+                for waveform_loop in cast(Sequence[Loop], sequencer_table_loop)):
 
-            # TODO: use hashable parameter representation and use an ordered dict
-            current_sequencer_table.append((TableDescription(repetition_count=repetition_count,
+            wf_index = waveforms.setdefault(waveform, len(waveforms))
+            current_sequencer_table.append((TableDescription(repetition_count=int(repetition_definition),
                                                              element_id=wf_index, jump_flag=0),
-                                            repetition_parameter))
+                                            volatile_repetition))
 
-            if repetition_parameter is not None:
-                volatile_parameter_positions[(adv_position, position)] = repetition_parameter
+            if volatile_repetition:
+                assert not isinstance(repetition_definition, int)
+                volatile_parameter_positions[(adv_position, position)] = repetition_definition
 
-        if current_sequencer_table in sequencer_tables:
-            sequence_no = sequencer_tables.index(current_sequencer_table) + 1
+        # make hashable
+        current_sequencer_table = tuple(current_sequencer_table)
 
-        else:
-            sequence_no = len(sequencer_tables) + 1
-            sequencer_tables.append(current_sequencer_table)
+        sequence_index = sequencer_tables.setdefault(current_sequencer_table, len(sequencer_tables))
+        sequence_no = sequence_index + 1
 
-        advanced_sequencer_table.append(TableEntry(sequencer_table_loop.repetition_count, sequence_no, 0))
-        if sequencer_table_loop.repetition_parameter is not None:
-            volatile_parameter_positions[adv_position] = sequencer_table_loop.repetition_parameter
+        advanced_sequencer_table.append(TableEntry(repetition_count=sequencer_table_loop.repetition_count,
+                                                   element_number=sequence_no, jump_flag=0))
+        if sequencer_table_loop.volatile_repetition:
+            volatile_parameter_positions[adv_position] = sequencer_table_loop.volatile_repetition
+
+    # transform sequencer_tables in lists to make it indexable and mutable
+    sequencer_tables = list(map(list, sequencer_tables))
 
     return ParsedProgram(
         advanced_sequencer_table=advanced_sequencer_table,
@@ -704,9 +703,9 @@ def parse_single_seq_program(program: Loop, used_channels: FrozenSet[ChannelID])
     waveforms = OrderedDict()
     volatile_parameter_positions = {}
 
-    for position, (waveform, repetition_count, repetition_parameter) in enumerate(
+    for position, (waveform, repetition_definition, volatile_repetition) in enumerate(
             (waveform_loop.waveform.get_subset_for_channels(used_channels),
-             waveform_loop.repetition_count, waveform_loop.repetition_parameter)
+             waveform_loop.repetition_definition, waveform_loop.volatile_repetition)
             for waveform_loop in program):
         if waveform in waveforms:
             waveform_index = waveforms[waveform]
@@ -714,11 +713,11 @@ def parse_single_seq_program(program: Loop, used_channels: FrozenSet[ChannelID])
             waveform_index = len(waveforms)
             waveforms[waveform] = waveform_index
 
-        sequencer_table.append((TableDescription(repetition_count=repetition_count,
+        sequencer_table.append((TableDescription(repetition_count=int(repetition_definition),
                                                  element_id=waveform_index,
-                                                 jump_flag=0), repetition_parameter))
-        if repetition_parameter is not None:
-            volatile_parameter_positions[(0, position)] = repetition_parameter
+                                                 jump_flag=0), volatile_repetition))
+        if volatile_repetition is not None:
+            volatile_parameter_positions[(0, position)] = repetition_definition
 
     return ParsedProgram(
         advanced_sequencer_table=[TableEntry(repetition_count=program.repetition_count, element_number=1, jump_flag=0)],

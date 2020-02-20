@@ -19,7 +19,6 @@ class AbstractPulseTemplate(PulseTemplate):
                  measurement_names: Optional[Set[str]]=None,
                  integral: Optional[Dict[ChannelID, ExpressionScalar]]=None,
                  duration: Optional[ExpressionScalar]=None,
-                 is_interruptable: Optional[bool]=None,
                  registry: Optional[PulseRegistryType]=None):
         """This pulse template can be used as a place holder for a pulse template with a defined interface. Pulse
         template properties like `defined_channels` can be passed on initialization to declare those properties who make
@@ -44,7 +43,6 @@ class AbstractPulseTemplate(PulseTemplate):
             measurement_names: Optional property
             integral: Optional property
             duration: Optional property
-            is_interruptable: Optional property
             registry: Instance is registered here if specified
         """
         super().__init__(identifier=identifier)
@@ -69,9 +67,6 @@ class AbstractPulseTemplate(PulseTemplate):
 
         if duration:
             self._declared_properties['duration'] = ExpressionScalar(duration)
-
-        if is_interruptable is not None:
-            self._declared_properties['is_interruptable'] = bool(is_interruptable)
 
         self._linked_target = None
         self.serialize_linked = False
@@ -138,10 +133,7 @@ class AbstractPulseTemplate(PulseTemplate):
         raise NotImplementedError('this should never be called as we overrode _create_program')  # pragma: no cover
 
     _create_program = partialmethod(_forward_if_linked, '_create_program')
-    build_sequence = partialmethod(_forward_if_linked, 'build_sequence')
-    requires_stop = partialmethod(_forward_if_linked, 'requires_stop')
 
-    is_interruptable = property(partial(_get_property, property_name='is_interruptable'))
     defined_channels = property(partial(_get_property, property_name='defined_channels'))
     duration = property(partial(_get_property, property_name='duration'))
     measurement_names = property(partial(_get_property, property_name='measurement_names'))

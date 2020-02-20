@@ -24,6 +24,7 @@ import hashlib
 from collections import OrderedDict
 import string
 import warnings
+import numbers
 
 import numpy as np
 from pathlib import Path
@@ -32,8 +33,8 @@ from qupulse.utils.types import ChannelID, TimeType
 from qupulse.utils import replace_multiple
 from qupulse._program.waveforms import Waveform
 from qupulse._program._loop import Loop
+from qupulse._program.volatile import VolatileRepetitionCount, VolatileProperty
 from qupulse.hardware.awgs.base import ProgramEntry
-from qupulse.pulses.parameters import MappedParameter, ConstantParameter
 
 try:
     import zhinst.utils
@@ -504,7 +505,7 @@ class HDAWGProgramEntry(ProgramEntry):
                           self._trigger_wait_code,
                           self._seqc_source])
 
-    def volatile_repetition_counts(self) -> Iterable[Tuple[UserRegister, MappedParameter]]:
+    def volatile_repetition_counts(self) -> Iterable[Tuple[UserRegister, VolatileRepetitionCount]]:
         """
         Returns:
             An iterator over the register and parameter
@@ -605,11 +606,13 @@ class HDAWGProgramManager:
         self._programs[name] = program_entry
 
     def get_register_values(self, name: str) -> Mapping[UserRegister, int]:
-        return {register: int(parameter.get_value())
+        return {register: int(parameter)
                 for register, parameter in self._programs[name].volatile_repetition_counts()}
 
     def get_register_values_to_update_volatile_parameters(self, name: str,
-                                                          parameters: Mapping[str, ConstantParameter]) -> Mapping[UserRegister, int]:
+                                                          parameters: Mapping[str,
+                                                                              numbers.Number]) -> Mapping[UserRegister,
+                                                                                                          int]:
         """
 
         Args:
@@ -621,16 +624,9 @@ class HDAWGProgramManager:
         """
         program_entry = self._programs[name]
         result = {}
-        for register, parameter in program_entry.volatile_repetition_counts():
-            old_value = int(parameter.get_value())
-            parameter.update_constants(parameters)
-            new_value = parameter.get_value()
-            if int(new_value) != new_value:
-                warnings.warn("Rounding {} to {}".format(new_value, int(new_value)), RuntimeWarning)
-            new_value = int(new_value)
-
-            if new_value != old_value:
-                result[register] = new_value
+        for register, volatile_repetition in program_entry.volatile_repetition_counts():
+            new_value = volatile_repetition.update_volatile_dependencies(parameters)
+            result[register] = new_value
         return result
 
     @property
@@ -788,8 +784,8 @@ def loop_to_seqc(loop: Loop,
 
         node = Scope(seqc_nodes)
 
-    if loop.repetition_parameter is not None:
-        register_var = user_registers.request(loop.repetition_parameter)
+    if loop.volatile_repetition:
+        register_var = user_registers.request(loop.repetition_definition)
         return Repeat(scope=node, repetition_count=register_var)
 
     elif loop.repetition_count != 1:

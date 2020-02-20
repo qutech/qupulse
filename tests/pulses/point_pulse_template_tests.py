@@ -6,7 +6,7 @@ from qupulse.pulses.parameters import ParameterNotProvidedException
 
 from qupulse.pulses.point_pulse_template import PointPulseTemplate, PointWaveform, InvalidPointDimension, PointPulseEntry, PointWaveformEntry
 from tests.pulses.measurement_tests import ParameterConstrainerTest, MeasurementDefinerTest
-from tests.pulses.sequencing_dummies import DummyParameter, DummyCondition
+from tests.pulses.sequencing_dummies import DummyParameter
 from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
 from qupulse.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy
 from qupulse.expressions import Expression, ExpressionScalar
@@ -99,25 +99,6 @@ class PointPulseTemplateTests(unittest.TestCase):
 
 
 class PointPulseTemplateSequencingTests(unittest.TestCase):
-
-    def test_requires_stop_missing_param(self) -> None:
-        table = PointPulseTemplate([('foo', 'v')], [0])
-        with self.assertRaises(ParameterNotProvidedException):
-            table.requires_stop({'foo': DummyParameter(0, False)}, {})
-
-    def test_requires_stop(self) -> None:
-        point = PointPulseTemplate([('foo', 'v'), ('bar', 0)], [0])
-        test_sets = [(False, {'foo': DummyParameter(0, False), 'bar': DummyParameter(0, False), 'v': DummyParameter(0, False)}, {'foo': DummyCondition(False)}),
-                     (False, {'foo': DummyParameter(0, False), 'bar': DummyParameter(0, False), 'v': DummyParameter(0, False)}, {'foo': DummyCondition(True)}),
-                     (True, {'foo': DummyParameter(0, True), 'bar': DummyParameter(0, False), 'v': DummyParameter(0, False)}, {'foo': DummyCondition(False)}),
-                     (True, {'foo': DummyParameter(0, True), 'bar': DummyParameter(0, False), 'v': DummyParameter(0, False)}, {'foo': DummyCondition(True)}),
-                     (True, {'foo': DummyParameter(0, False), 'bar': DummyParameter(0, False), 'v': DummyParameter(0, True)}, {'foo': DummyCondition(False)}),
-                     (True, {'foo': DummyParameter(0, False), 'bar': DummyParameter(0, False), 'v': DummyParameter(0, True)}, {'foo': DummyCondition(True)}),
-                     (True, {'foo': DummyParameter(0, True), 'bar': DummyParameter(0, True), 'v': DummyParameter(0, True)}, {'foo': DummyCondition(False)}),
-                     (True, {'foo': DummyParameter(0, True), 'bar': DummyParameter(0, True), 'v': DummyParameter(0, True)}, {'foo': DummyCondition(True)})]
-        for expected_result, parameter_set, condition_set in test_sets:
-            self.assertEqual(expected_result, point.requires_stop(parameter_set, condition_set))
-
     def test_build_waveform_empty(self):
         self.assertIsNone(PointPulseTemplate([('t1', 'A')], [0]).build_waveform(parameters={'t1': 0, 'A': 1},
                                                                                 channel_mapping={0: 1}))

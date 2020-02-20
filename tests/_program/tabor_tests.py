@@ -11,16 +11,15 @@ except ImportError:
 from teawg import model_properties_dict
 
 from qupulse._program.tabor import TaborException, TaborProgram, \
-    TaborSegment, TaborSequencing, PlottableProgram, TableDescription, TableEntry, make_combined_wave
-from qupulse._program._loop import MultiChannelProgram, Loop
-from qupulse._program.instructions import InstructionBlock
+    TaborSegment, TaborSequencing, PlottableProgram, TableDescription, make_combined_wave, TableEntry
+from qupulse._program._loop import Loop
 from qupulse.hardware.util import voltage_to_uint16
 from qupulse.utils.types import TimeType
 from qupulse.expressions import ExpressionScalar
 from qupulse.pulses.parameters import MappedParameter, ConstantParameter
 
 from tests.pulses.sequencing_dummies import DummyWaveform
-from tests._program.loop_tests import LoopTests, WaveformGenerator, MultiChannelTests
+from tests._program.loop_tests import LoopTests, WaveformGenerator
 
 from tests.hardware import dummy_modules
 
@@ -176,23 +175,24 @@ class TaborProgramTests(unittest.TestCase):
                                                          duration_generator=itertools.repeat(1)))
 
     def test_init(self):
-        prog = MultiChannelProgram(MultiChannelTests().root_block)
-        tabor_program = TaborProgram(prog['A'], self.instr_props, ('A', None), (None, None), **self.program_entry_kwargs)
+        prog = self.root_loop
+        tabor_program = TaborProgram(prog, self.instr_props, ('A', None), (None, None), **self.program_entry_kwargs)
 
         self.assertEqual(tabor_program.channels, ('A', None))
         self.assertEqual(tabor_program.markers, (None, None))
-        self.assertIs(prog['A'], tabor_program.program)
+        self.assertIs(prog, tabor_program.program)
         self.assertIs(self.instr_props, tabor_program._device_properties)
         self.assertEqual(frozenset('A'), tabor_program._used_channels)
         self.assertEqual(TaborSequencing.ADVANCED, tabor_program._mode)
 
         with self.assertRaises(KeyError):
-            TaborProgram(prog['A'], self.instr_props, ('A', 'B'), (None, None), **self.program_entry_kwargs)
+            # C not in prog
+            TaborProgram(prog, self.instr_props, ('A', 'C'), (None, None), **self.program_entry_kwargs)
 
         with self.assertRaises(TaborException):
-            TaborProgram(prog['A'], self.instr_props, ('A', 'B'), (None, None, None), **self.program_entry_kwargs)
+            TaborProgram(prog, self.instr_props, ('A', 'B'), (None, None, None), **self.program_entry_kwargs)
         with self.assertRaises(TaborException):
-            TaborProgram(prog['A'], self.instr_props, ('A', 'B', 'C'), (None, None), **self.program_entry_kwargs)
+            TaborProgram(prog, self.instr_props, ('A', 'B', 'C'), (None, None), **self.program_entry_kwargs)
 
     def test_depth_0_single_waveform(self):
         program = Loop(waveform=DummyWaveform(defined_channels={'A'}, duration=1), repetition_count=3)
@@ -268,7 +268,7 @@ class TaborProgramTests(unittest.TestCase):
         self.assertEqual(t_program.get_sequencer_tables(), [[(TableDescription(3, 0, 0), None),
                                                              (TableDescription(3, 1, 0), None),
                                                              (TableDescription(1, 1, 0), None)]])
-        self.assertEqual(t_program.get_advanced_sequencer_table(), [TableDescription(5, 1, 0)])
+        self.assertEqual(t_program.get_advanced_sequencer_table(), [TableEntry(5, 1, 0)])
 
     def test_depth_1_advanced_sequence(self):
         wf_1 = DummyWaveform(defined_channels={'A'}, duration=1)
@@ -288,7 +288,7 @@ class TaborProgramTests(unittest.TestCase):
         self.assertEqual(t_program.get_sequencer_tables(), [[(TableDescription(3, 0, 0), None),
                                                              (TableDescription(4, 1, 0), None),
                                                              (TableDescription(1, 0, 0), None)]])
-        self.assertEqual(t_program.get_advanced_sequencer_table(), [TableDescription(5, 1, 0)])
+        self.assertEqual(t_program.get_advanced_sequencer_table(), [TableEntry(5, 1, 0)])
 
     def test_advanced_sequence_exceptions(self):
         temp_properties = self.instr_props.copy()

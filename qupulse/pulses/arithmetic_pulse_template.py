@@ -8,8 +8,8 @@ import cached_property
 
 from qupulse.expressions import ExpressionScalar, ExpressionLike
 from qupulse.serialization import Serializer, PulseRegistryType
+from qupulse.parameter_scope import Scope
 
-from qupulse.pulses.conditions import Condition
 from qupulse.utils.types import ChannelID
 from qupulse.pulses.parameters import Parameter
 from qupulse.pulses.pulse_template import AtomicPulseTemplate, PulseTemplate
@@ -133,11 +133,6 @@ class ArithmeticAtomicPulseTemplate(AtomicPulseTemplate):
                                                              measurement_mapping=measurement_mapping))
         return measurements
 
-    def requires_stop(self,
-                      parameters: Dict[str, Parameter],
-                      conditions: Dict[str, 'Condition']) -> bool:
-        raise NotImplementedError('Easy to implement but left out for now')
-
     def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
         data = super().get_serialization_data(serializer)
         data['rhs'] = self.rhs
@@ -243,8 +238,8 @@ class ArithmeticPulseTemplate(PulseTemplate):
             return operand if isinstance(operand, ExpressionScalar) else ExpressionScalar(operand)
 
     def _get_scalar_value(self,
-                          parameters: Dict[str, Real],
-                          channel_mapping: Dict[str, Optional[str]]) -> Dict[ChannelID, Real]:
+                          parameters: Mapping[str, Real],
+                          channel_mapping: Mapping[str, Optional[str]]) -> Dict[ChannelID, Real]:
         """Generate a dict of real values from the scalar operand.
 
         If the scalar operand is an ExpressionScalar all channels with non None values in channel_mapping get the same
@@ -260,13 +255,13 @@ class ArithmeticPulseTemplate(PulseTemplate):
             The evaluation of the scalar operand for all relevant channels
         """
         if isinstance(self._scalar, ExpressionScalar):
-            scalar_value = self._scalar.evaluate_numeric(**parameters)
+            scalar_value = self._scalar.evaluate_in_scope(parameters)
             return {channel_mapping[channel]: scalar_value
                     for channel in self._pulse_template.defined_channels
                     if channel_mapping[channel]}
 
         else:
-            return {channel_mapping[channel]: value.evaluate_numeric(**parameters)
+            return {channel_mapping[channel]: value.evaluate_in_scope(parameters)
                     for channel, value in self._scalar.items()
                     if channel_mapping[channel]}
 
@@ -279,8 +274,8 @@ class ArithmeticPulseTemplate(PulseTemplate):
         return self._rhs
     
     def _get_transformation(self,
-                            parameters: Dict[str, Real],
-                            channel_mapping: Dict[ChannelID, ChannelID]) -> Transformation:
+                            parameters: Mapping[str, Real],
+                            channel_mapping: Mapping[ChannelID, ChannelID]) -> Transformation:
         transformation = IdentityTransformation()
 
         scalar_value = self._get_scalar_value(parameters=parameters,
@@ -314,33 +309,28 @@ class ArithmeticPulseTemplate(PulseTemplate):
             )
 
     def _internal_create_program(self, *,
-                                 parameters: Dict[str, Parameter],
+                                 scope: Scope,
                                  measurement_mapping: Dict[str, Optional[str]],
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional[Transformation],
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
-                                 parent_loop: 'Loop',
-                                 volatile: Set[str]):
+                                 parent_loop: 'Loop'):
         """The operation is applied by modifying the transformation the pulse template operand sees."""
-        if volatile.intersection(self._scalar_operand_parameters):
+        if not scope.get_volatile_parameters().keys().isdisjoint(self._scalar_operand_parameters):
             raise NotImplementedError('The scalar operand of arithmetic pulse template cannot be volatile')
 
-        scalar_operand_parameters = {parameter_name: parameters[parameter_name].get_value()
-                                     for parameter_name in self._scalar_operand_parameters}
-
         # put arithmetic into transformation
-        inner_transformation = self._get_transformation(parameters=scalar_operand_parameters,
+        inner_transformation = self._get_transformation(parameters=scope,
                                                         channel_mapping=channel_mapping)
 
         transformation = inner_transformation.chain(global_transformation)
 
-        self._pulse_template._create_program(parameters=parameters,
+        self._pulse_template._create_program(scope=scope,
                                              measurement_mapping=measurement_mapping,
                                              channel_mapping=channel_mapping,
                                              global_transformation=transformation,
                                              to_single_waveform=to_single_waveform,
-                                             parent_loop=parent_loop,
-                                             volatile=volatile)
+                                             parent_loop=parent_loop)
 
     def build_waveform(self,
                        parameters: Dict[str, Real],
@@ -374,9 +364,6 @@ class ArithmeticPulseTemplate(PulseTemplate):
         data['arithmetic_operator'] = self._arithmetic_operator
 
         return data
-
-    def build_sequence(self, *args, **kwargs):
-        raise NotImplementedError('Compatibility to old sequencing routines not implemented for new type')
 
     @property
     def defined_channels(self):
@@ -427,16 +414,6 @@ class ArithmeticPulseTemplate(PulseTemplate):
         for channel, value in integral.items():
             integral[channel] = ExpressionScalar(value)
         return integral
-
-    @property
-    def is_interruptable(self) -> bool:
-        return self._pulse_template.is_interruptable
-
-    def requires_stop(self,
-                      parameters: Dict[str, Parameter],
-                      conditions: Dict):
-        return self._pulse_template.requires_stop(parameters=parameters,
-                                                  conditions=conditions)
 
     @property
     def measurement_names(self) -> Set[str]:
