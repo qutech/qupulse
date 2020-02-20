@@ -372,6 +372,9 @@ class _FrozenDictByInheritance(dict):
     def copy(self):
         return self
 
+    def to_dict(self) -> typing.Dict[_KT_hash, _T_co_hash]:
+        return super().copy()
+
     def __hash__(self):
         # faster than functools.reduce(operator.xor, map(hash, self.items())) but takes more memory
         # TODO: investigate caching
@@ -412,7 +415,7 @@ class _FrozenDictByWrapping(FrozenMapping):
 
     def __init__(self, *args, **kwargs):
         inner_dict = dict(*args, **kwargs)
-        self._dict = inner_dict  # type: typing.Mapping[_KT_hash, _T_co_hash]
+        self._dict = inner_dict  # type: typing.Dict[_KT_hash, _T_co_hash]
         self._hash = None
 
         self.__getitem__ = inner_dict.__getitem__
@@ -445,6 +448,9 @@ class _FrozenDictByWrapping(FrozenMapping):
 
     def copy(self):
         return self
+
+    def to_dict(self) -> typing.Dict[_KT_hash, _T_co_hash]:
+        return self._dict.copy()
 
 
 FrozenDict = _FrozenDictByWrapping

@@ -316,7 +316,7 @@ class ArithmeticPulseTemplate(PulseTemplate):
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
                                  parent_loop: 'Loop'):
         """The operation is applied by modifying the transformation the pulse template operand sees."""
-        if not scope.get_volatile_parameters().isdisjoint(self._scalar_operand_parameters):
+        if not scope.get_volatile_parameters().keys().isdisjoint(self._scalar_operand_parameters):
             raise NotImplementedError('The scalar operand of arithmetic pulse template cannot be volatile')
 
         # put arithmetic into transformation

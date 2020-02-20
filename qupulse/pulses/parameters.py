@@ -271,7 +271,7 @@ class ParameterConstrainer:
                 raise ParameterConstraintViolation(constraint, constraint_parameters)
 
     def validate_scope(self, scope: Scope):
-        volatile = scope.get_volatile_parameters()
+        volatile = scope.get_volatile_parameters().keys()
 
         for constraint in self._parameter_constraints:
             if not constraint.is_fulfilled(scope, volatile=volatile):

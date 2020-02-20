@@ -11,7 +11,7 @@ except ImportError:
 from teawg import model_properties_dict
 
 from qupulse._program.tabor import TaborException, TaborProgram, \
-    TaborSegment, TaborSequencing, PlottableProgram, TableDescription, make_combined_wave
+    TaborSegment, TaborSequencing, PlottableProgram, TableDescription, make_combined_wave, TableEntry
 from qupulse._program._loop import Loop
 from qupulse.hardware.util import voltage_to_uint16
 from qupulse.utils.types import TimeType
@@ -266,7 +266,7 @@ class TaborProgramTests(unittest.TestCase):
         self.assertEqual(t_program.get_sequencer_tables(), [[(TableDescription(3, 0, 0), None),
                                                              (TableDescription(3, 1, 0), None),
                                                              (TableDescription(1, 1, 0), None)]])
-        self.assertEqual(t_program.get_advanced_sequencer_table(), [TableDescription(5, 1, 0)])
+        self.assertEqual(t_program.get_advanced_sequencer_table(), [TableEntry(5, 1, 0)])
 
     def test_depth_1_advanced_sequence(self):
         wf_1 = DummyWaveform(defined_channels={'A'}, duration=1)
@@ -286,7 +286,7 @@ class TaborProgramTests(unittest.TestCase):
         self.assertEqual(t_program.get_sequencer_tables(), [[(TableDescription(3, 0, 0), None),
                                                              (TableDescription(4, 1, 0), None),
                                                              (TableDescription(1, 0, 0), None)]])
-        self.assertEqual(t_program.get_advanced_sequencer_table(), [TableDescription(5, 1, 0)])
+        self.assertEqual(t_program.get_advanced_sequencer_table(), [TableEntry(5, 1, 0)])
 
     def test_advanced_sequence_exceptions(self):
         temp_properties = self.instr_props.copy()

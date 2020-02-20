@@ -27,7 +27,7 @@ class MeasurementDefiner:
                                 measurement_mapping: Dict[str, Optional[str]]) -> List[MeasurementWindow]:
         """Calculate measurement windows with the given parameter set and rename them woth the measurement mapping"""
         try:
-            volatile = parameters.get_volatile_parameters()
+            volatile = parameters.get_volatile_parameters().keys()
         except AttributeError:
             volatile = frozenset()
 

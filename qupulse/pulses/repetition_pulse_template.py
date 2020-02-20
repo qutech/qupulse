@@ -113,12 +113,13 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
         # todo (2018-07-19): could in some circumstances possibly just multiply subprogram repetition count?
         # could be tricky if any repetition count is volatile ? check later and optimize if necessary
         if repetition_count > 0:
-            if not scope.get_volatile_parameters().isdisjoint(self.repetition_count.variables):
-                repetition_handle = VolatileRepetitionCount(self.repetition_count, scope)
+            if scope.get_volatile_parameters().keys() & self.repetition_count.variables:
+                repetition_definition = VolatileRepetitionCount(self.repetition_count, scope)
+                assert int(repetition_definition) == repetition_count
             else:
-                repetition_handle = None
+                repetition_definition = repetition_count
 
-            repj_loop = Loop(repetition_count=repetition_count, repetition_parameter=repetition_handle)
+            repj_loop = Loop(repetition_count=repetition_definition)
             self.body._create_program(scope=scope,
                                       measurement_mapping=measurement_mapping,
                                       channel_mapping=channel_mapping,

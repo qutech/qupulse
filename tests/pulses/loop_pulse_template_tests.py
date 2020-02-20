@@ -2,11 +2,14 @@ import unittest
 from unittest import mock
 
 from qupulse.parameter_scope import DictScope
+from qupulse.utils.types import FrozenDict
+
 from qupulse.expressions import Expression, ExpressionScalar
 from qupulse.pulses.loop_pulse_template import ForLoopPulseTemplate, ParametrizedRange,\
     LoopIndexNotUsedException, LoopPulseTemplate
 from qupulse.pulses.parameters import ConstantParameter, InvalidParameterNameException, ParameterConstraintViolation,\
     ParameterNotProvidedException, ParameterConstraint
+
 from qupulse._program._loop import Loop
 
 from tests.pulses.sequencing_dummies import DummyPulseTemplate, MeasurementWindowTestCase, DummyWaveform
@@ -115,11 +118,12 @@ class ForLoopPulseTemplateTest(unittest.TestCase):
 
         forward_scopes = list(flt._body_scope_generator(outer_scope, forward=True))
         backward_scopes = list(flt._body_scope_generator(outer_scope, forward=False))
+        volatile_dict = FrozenDict(j=ExpressionScalar('j'))
 
         self.assertEqual(forward_scopes, list(reversed(backward_scopes)))
 
         for scope, i in zip(forward_scopes, expected_range):
-            self.assertEqual(scope.get_volatile_parameters(), frozenset('j'))
+            self.assertEqual(volatile_dict, scope.get_volatile_parameters())
 
             expected_dict_equivalent = dict(k=5, i=i,
                                             a=expected_range.start,

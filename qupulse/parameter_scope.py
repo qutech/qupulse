@@ -28,7 +28,7 @@ class Scope(Mapping[str, Number]):
         self._as_dict = None
 
     @abstractmethod
-    def get_volatile_parameters(self) -> AbstractSet[str]:
+    def get_volatile_parameters(self) -> FrozenDict[str, Expression]:
         pass
 
     @abstractmethod
@@ -152,20 +152,24 @@ class MappedScope(Scope):
                 mapping=self._mapping
             )
 
-    def _collect_volatile_parameters(self) -> AbstractSet[str]:
+    def _collect_volatile_parameters(self) -> FrozenDict[str, Expression]:
         inner_volatile = self._scope.get_volatile_parameters()
         if inner_volatile:
-            non_volatile = set()
-            volatile = set()
+            volatile = inner_volatile.to_dict()
             for mapped_parameter, expression in self._mapping.items():
-                if inner_volatile.isdisjoint(expression.variables):
-                    non_volatile.add(mapped_parameter)
+                volatile_expr_dep = inner_volatile.keys() & expression.variables
+                if volatile_expr_dep:
+                    subs_vals = {}
+                    for variable in expression.variables:
+                        if variable in volatile_expr_dep:
+                            subs_vals[variable] = inner_volatile[variable]
+                        else:
+                            subs_vals[variable] = self[variable]
+                    volatile[mapped_parameter] = expression.evaluate_symbolic(subs_vals)
                 else:
-                    volatile.add(mapped_parameter)
+                    volatile.pop(mapped_parameter, None)
 
-            result = inner_volatile - non_volatile
-            result |= volatile
-            return frozenset(result)
+            return FrozenDict(volatile)
         else:
             return inner_volatile
 
@@ -184,7 +188,7 @@ class DictScope(Scope):
 
         self._values = values
         self._as_dict = values
-        self._volatile_parameters = frozenset(volatile)
+        self._volatile_parameters = FrozenDict({v: Expression(v) for v in volatile})
         self.keys = self._values.keys
         self.items = self._values.items
         self.values = self._values.values
@@ -219,7 +223,7 @@ class DictScope(Scope):
     def change_constants(self, new_constants: Mapping[str, Number]) -> 'Scope':
         to_update = new_constants.keys() & self._values.keys()
         if to_update:
-            updated_non_volatile = to_update - self.get_volatile_parameters()
+            updated_non_volatile = to_update - self.get_volatile_parameters().keys()
             if updated_non_volatile:
                 warnings.warn(NonVolatileChange(updated_non_volatile))
 
@@ -231,7 +235,7 @@ class DictScope(Scope):
         else:
             return self
 
-    def get_volatile_parameters(self) -> AbstractSet[str]:
+    def get_volatile_parameters(self) -> FrozenDict[str, Expression]:
         return self._volatile_parameters
 
     @classmethod
@@ -247,6 +251,7 @@ class JointScope(Scope):
     __slots__ = ('_lookup', '_volatile_parameters')
 
     def __init__(self, lookup: FrozenMapping[str, Scope]):
+        super().__init__()
         self._lookup = lookup
         self._volatile_parameters = None
 
@@ -277,11 +282,14 @@ class JointScope(Scope):
             (parameter_name, scope.change_constants(new_constants)) for parameter_name, scope in self._lookup.items()
         ))
 
-    def get_volatile_parameters(self) -> AbstractSet[str]:
+    def get_volatile_parameters(self) -> FrozenDict[str, Expression]:
         if self._volatile_parameters is None:
-            volatile_parameters = functools.reduce(operator.or_, (scope.get_volatile_parameters()
-                                                                  for scope in self._lookup.values()))
-            self._volatile_parameters = frozenset(self._lookup.keys() & volatile_parameters)
+            volatile_parameters = {}
+            for parameter_name, scope in self._lookup:
+                inner_volatile = scope.get_volatile_parameters()
+                if parameter_name in inner_volatile:
+                    volatile_parameters[parameter_name] = inner_volatile[parameter_name]
+            self._volatile_parameters = FrozenDict(volatile_parameters)
         return self._volatile_parameters
 
 

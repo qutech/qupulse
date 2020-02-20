@@ -14,12 +14,12 @@ class DictScopeTests(unittest.TestCase):
         fd = FrozenDict({'a': 2})
         ds = DictScope(fd)
         self.assertIs(fd, ds._values)
-        self.assertIs(frozenset(), ds._volatile_parameters)
+        self.assertEqual(FrozenDict(), ds._volatile_parameters)
 
         vp = frozenset('a')
         ds = DictScope(fd, vp)
         self.assertIs(fd, ds._values)
-        self.assertIs(vp, ds._volatile_parameters)
+        self.assertEqual(FrozenDict(a=ExpressionScalar('a')), ds._volatile_parameters)
 
     def test_mapping(self):
         ds = DictScope(FrozenDict({'a': 1, 'b': 2}))
@@ -42,14 +42,15 @@ class DictScopeTests(unittest.TestCase):
 
     def test_change_constants(self):
         volatile = frozenset('b')
+        volatile_dict = FrozenDict(b=ExpressionScalar('b'))
         ds = DictScope(FrozenDict({'a': 1, 'b': 2}), volatile=volatile)
 
         changes = {'b': 3, 'c': 4}
         ds2 = ds.change_constants(changes)
         self.assertEqual({'a': 1, 'b': 2}, dict(ds))
-        self.assertEqual(volatile, ds.get_volatile_parameters())
+        self.assertEqual(volatile_dict, ds.get_volatile_parameters())
         self.assertEqual({'a': 1, 'b': 3}, dict(ds2))
-        self.assertEqual(volatile, ds2.get_volatile_parameters())
+        self.assertEqual(volatile_dict, ds2.get_volatile_parameters())
 
         with self.assertWarns(NonVolatileChange):
             ds.change_constants({'a': 2, 'b': 3, 'c': 4})
@@ -66,8 +67,9 @@ class DictScopeTests(unittest.TestCase):
 
     def test_get_volatile(self):
         volatile = frozenset('ab')
+        volatile_dict = FrozenDict(a=ExpressionScalar('a'), b=ExpressionScalar('b'))
         ds = DictScope(FrozenDict({'a': 1, 'b': 2}), volatile=volatile)
-        self.assertEqual(volatile, ds.get_volatile_parameters())
+        self.assertEqual(volatile_dict, ds.get_volatile_parameters())
 
     def test_eq(self):
         ds = DictScope(FrozenDict({'a': 1, 'b': 2}), volatile=frozenset('a'))
@@ -92,7 +94,7 @@ class DictScopeTests(unittest.TestCase):
         volatile = {'a'}
         ds = DictScope.from_mapping(m.copy())
         self.assertEqual(m, dict(ds))
-        self.assertEqual(frozenset(), ds.get_volatile_parameters())
+        self.assertEqual(FrozenDict(), ds.get_volatile_parameters())
 
         ds = DictScope.from_mapping(m.copy(), volatile=volatile.copy())
         self.assertEqual(DictScope(FrozenDict(m), frozenset(volatile)), ds)
@@ -176,7 +178,7 @@ class MappedScopeTests(unittest.TestCase):
         ms = MappedScope(ds, FrozenDict(x=ExpressionScalar('a * b'),
                                         c=ExpressionScalar('a - b'),
                                         y=ExpressionScalar('c - a')))
-        expected_volatile = frozenset('dy')
+        expected_volatile = FrozenDict(d=ExpressionScalar('d'), y=ExpressionScalar('c - 1'))
         self.assertEqual(expected_volatile, ms.get_volatile_parameters())
         self.assertIs(ms.get_volatile_parameters(), ms.get_volatile_parameters())
 
