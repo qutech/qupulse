@@ -11,11 +11,13 @@ except ImportError:
 from teawg import model_properties_dict
 
 from qupulse._program.tabor import TaborException, TaborProgram, \
-    TaborSegment, TaborSequencing, PlottableProgram, TableDescription, make_combined_wave
+    TaborSegment, TaborSequencing, PlottableProgram, TableDescription, TableEntry, make_combined_wave
 from qupulse._program._loop import MultiChannelProgram, Loop
 from qupulse._program.instructions import InstructionBlock
 from qupulse.hardware.util import voltage_to_uint16
 from qupulse.utils.types import TimeType
+from qupulse.expressions import ExpressionScalar
+from qupulse.pulses.parameters import MappedParameter, ConstantParameter
 
 from tests.pulses.sequencing_dummies import DummyWaveform
 from tests._program.loop_tests import LoopTests, WaveformGenerator, MultiChannelTests
@@ -368,6 +370,69 @@ class TaborProgramTests(unittest.TestCase):
 
             np.testing.assert_equal(sampled_seg.ch_a, data[0])
             np.testing.assert_equal(sampled_seg.ch_b, data[1])
+
+    def test_update_volatile_parameters_with_depth1(self):
+        parameters = {'seq': ConstantParameter(10), 'not': ConstantParameter(13)}
+        seq = MappedParameter(ExpressionScalar('seq'), {'seq': ConstantParameter(3)})
+
+        wf_1 = DummyWaveform(defined_channels={'A'}, duration=1)
+        wf_2 = DummyWaveform(defined_channels={'A'}, duration=1)
+
+        program = Loop(children=[Loop(waveform=wf_1, repetition_count=seq.get_value(), repetition_parameter=seq),
+                                 Loop(waveform=wf_2, repetition_count=4),
+                                 Loop(waveform=wf_1, repetition_count=1)],
+                       repetition_count=1)
+
+        t_program = TaborProgram(program, channels=(None, 'A'), markers=(None, None),
+                                 device_properties=self.instr_props, **self.program_entry_kwargs)
+
+        self.assertEqual(t_program.get_sequencer_tables(), [[(TableDescription(3, 0, 0), seq),
+                                                             (TableDescription(4, 1, 0), None),
+                                                             (TableDescription(1, 0, 0), None)]])
+        self.assertEqual(t_program.get_advanced_sequencer_table(), [TableDescription(1, 1, 0)])
+
+        modifications = t_program.update_volatile_parameters(parameters)
+
+        expected_seq = MappedParameter(ExpressionScalar('seq'), {'seq': ConstantParameter(10)})
+        expected_modifications = {(0, 0): TableDescription(10, 0, 0)}
+
+        self.assertEqual(t_program.get_sequencer_tables(), [[(TableDescription(10, 0, 0), expected_seq),
+                                                             (TableDescription(4, 1, 0), None),
+                                                             (TableDescription(1, 0, 0), None)]])
+        self.assertEqual(t_program.get_advanced_sequencer_table(), [TableDescription(1, 1, 0)])
+        self.assertEqual(modifications, expected_modifications)
+
+    def test_update_volatile_parameters_with_depth2(self):
+        parameters = {'seq': ConstantParameter(10), 'aseq': ConstantParameter(2), 'not': ConstantParameter(13)}
+        seq = MappedParameter(ExpressionScalar('seq'), {'seq': ConstantParameter(3)})
+        aseq = MappedParameter(ExpressionScalar('aseq'), {'aseq': ConstantParameter(5)})
+
+        wf_1 = DummyWaveform(defined_channels={'A'}, duration=1)
+        wf_2 = DummyWaveform(defined_channels={'A'}, duration=1)
+
+        program = Loop(children=[Loop(waveform=wf_1, repetition_count=seq.get_value(), repetition_parameter=seq),
+                                 Loop(waveform=wf_2, repetition_count=4),
+                                 Loop(waveform=wf_1, repetition_count=1)],
+                       repetition_count=aseq.get_value(), repetition_parameter=aseq)
+
+        t_program = TaborProgram(program, channels=(None, 'A'), markers=(None, None),
+                                 device_properties=self.instr_props, **self.program_entry_kwargs)
+
+        self.assertEqual(t_program.get_sequencer_tables(), [[(TableDescription(3, 0, 0), seq),
+                                                             (TableDescription(4, 1, 0), None),
+                                                             (TableDescription(1, 0, 0), None)]])
+        self.assertEqual(t_program.get_advanced_sequencer_table(), [TableDescription(5, 1, 0)])
+
+        modifications = t_program.update_volatile_parameters(parameters)
+
+        expected_seq = MappedParameter(ExpressionScalar('seq'), {'seq': ConstantParameter(10)})
+        expected_modifications = {(0, 0): TableDescription(10, 0, 0), 0: TableEntry(2, 1, 0)}
+
+        self.assertEqual(t_program.get_sequencer_tables(), [[(TableDescription(10, 0, 0), expected_seq),
+                                                             (TableDescription(4, 1, 0), None),
+                                                             (TableDescription(1, 0, 0), None)]])
+        self.assertEqual(t_program.get_advanced_sequencer_table(), [TableDescription(2, 1, 0)])
+        self.assertEqual(modifications, expected_modifications)
 
 
 class TaborSegmentTests(unittest.TestCase):
