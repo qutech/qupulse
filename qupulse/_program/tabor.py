@@ -644,11 +644,11 @@ def prepare_program_for_advanced_sequence_mode(program: Loop, min_seq_len: int, 
 
 
 ParsedProgram = NamedTuple('ParsedProgram', [('advanced_sequencer_table', Sequence[TableEntry]),
-                                                 ('sequencer_tables', Sequence[Sequence[
+                                             ('sequencer_tables', Sequence[Sequence[
                                                      Tuple[TableDescription, Optional[VolatileProperty]]]]),
-                                                 ('waveforms', Tuple[Waveform, ...]),
-                                                 ('volatile_parameter_positions', Dict[Union[int, Tuple[int, int]],
-                                                                                       VolatileRepetitionCount])])
+                                             ('waveforms', Tuple[Waveform, ...]),
+                                             ('volatile_parameter_positions', Dict[Union[int, Tuple[int, int]],
+                                                                                   VolatileRepetitionCount])])
 
 
 def parse_aseq_program(program: Loop, used_channels: FrozenSet[ChannelID]) -> ParsedProgram:
@@ -683,7 +683,7 @@ def parse_aseq_program(program: Loop, used_channels: FrozenSet[ChannelID]) -> Pa
         advanced_sequencer_table.append(TableEntry(repetition_count=sequencer_table_loop.repetition_count,
                                                    element_number=sequence_no, jump_flag=0))
         if sequencer_table_loop.volatile_repetition:
-            volatile_parameter_positions[adv_position] = sequencer_table_loop.volatile_repetition
+            volatile_parameter_positions[adv_position] = sequencer_table_loop.repetition_definition
 
     # transform sequencer_tables in lists to make it indexable and mutable
     sequencer_tables = list(map(list, sequencer_tables))
