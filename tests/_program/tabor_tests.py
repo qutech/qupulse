@@ -335,20 +335,15 @@ class TaborProgramTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "non integer length"):
             root_loop = LoopTests.get_test_loop(WaveformGenerator(
                 waveform_data_generator=my_gen(self.waveform_data_generator),
-                duration_generator=itertools.repeat(1/200),
+                duration_generator=itertools.repeat(1 / 200),
                 num_channels=4))
 
-            mcp = MultiChannelProgram(InstructionBlock(), tuple())
-            mcp.programs[frozenset(('A', 'B', 'C', 'D'))] = root_loop
             TaborProgram(root_loop, self.instr_props, ('A', 'B'), (None, None), **self.program_entry_kwargs)
 
         root_loop = LoopTests.get_test_loop(WaveformGenerator(
             waveform_data_generator=my_gen(self.waveform_data_generator),
             duration_generator=itertools.repeat(1),
             num_channels=4))
-
-        mcp = MultiChannelProgram(InstructionBlock(), tuple())
-        mcp.programs[frozenset(('A', 'B', 'C', 'D'))] = root_loop
 
         prog = TaborProgram(root_loop, self.instr_props, ('A', 'B'), (None, None), **self.program_entry_kwargs)
 
