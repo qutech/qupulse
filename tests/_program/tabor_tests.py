@@ -1,6 +1,7 @@
 import unittest
 import itertools
 import numpy as np
+from qupulse.utils.types import FrozenDict
 from unittest import mock
 
 try:
@@ -13,10 +14,11 @@ from teawg import model_properties_dict
 from qupulse._program.tabor import TaborException, TaborProgram, \
     TaborSegment, TaborSequencing, PlottableProgram, TableDescription, make_combined_wave, TableEntry
 from qupulse._program._loop import Loop
+from qupulse._program.volatile import VolatileRepetitionCount
 from qupulse.hardware.util import voltage_to_uint16
 from qupulse.utils.types import TimeType
 from qupulse.expressions import ExpressionScalar
-from qupulse.pulses.parameters import MappedParameter, ConstantParameter
+from qupulse.parameter_scope import DictScope
 
 from tests.pulses.sequencing_dummies import DummyWaveform
 from tests._program.loop_tests import LoopTests, WaveformGenerator
@@ -372,13 +374,14 @@ class TaborProgramTests(unittest.TestCase):
             np.testing.assert_equal(sampled_seg.ch_b, data[1])
 
     def test_update_volatile_parameters_with_depth1(self):
-        parameters = {'seq': ConstantParameter(10), 'not': ConstantParameter(13)}
-        seq = MappedParameter(ExpressionScalar('seq'), {'seq': ConstantParameter(3)})
+        parameters = {'s': 10, 'not': 13}
+        s = VolatileRepetitionCount(expression=ExpressionScalar('s'), scope=DictScope(values=FrozenDict(s=3),
+                                                                                      volatile=set('s')))
 
         wf_1 = DummyWaveform(defined_channels={'A'}, duration=1)
         wf_2 = DummyWaveform(defined_channels={'A'}, duration=1)
 
-        program = Loop(children=[Loop(waveform=wf_1, repetition_count=seq.get_value(), repetition_parameter=seq),
+        program = Loop(children=[Loop(waveform=wf_1, repetition_count=s),
                                  Loop(waveform=wf_2, repetition_count=4),
                                  Loop(waveform=wf_1, repetition_count=1)],
                        repetition_count=1)
@@ -386,65 +389,66 @@ class TaborProgramTests(unittest.TestCase):
         t_program = TaborProgram(program, channels=(None, 'A'), markers=(None, None),
                                  device_properties=self.instr_props, **self.program_entry_kwargs)
 
-        self.assertEqual(t_program.get_sequencer_tables(), [[(TableDescription(3, 0, 0), seq),
+        self.assertEqual(t_program.get_sequencer_tables(), [[(TableDescription(3, 0, 0), s.volatile_property),
                                                              (TableDescription(4, 1, 0), None),
                                                              (TableDescription(1, 0, 0), None)]])
         self.assertEqual(t_program.get_advanced_sequencer_table(), [TableDescription(1, 1, 0)])
 
         modifications = t_program.update_volatile_parameters(parameters)
 
-        expected_seq = MappedParameter(ExpressionScalar('seq'), {'seq': ConstantParameter(10)})
+        expected_seq = VolatileRepetitionCount(expression=ExpressionScalar('s'), scope=DictScope(values=FrozenDict(s=10), volatile=set('s')))
         expected_modifications = {(0, 0): TableDescription(10, 0, 0)}
 
-        self.assertEqual(t_program.get_sequencer_tables(), [[(TableDescription(10, 0, 0), expected_seq),
+        self.assertEqual(t_program.get_sequencer_tables(), [[(TableDescription(10, 0, 0), expected_seq.volatile_property),
                                                              (TableDescription(4, 1, 0), None),
                                                              (TableDescription(1, 0, 0), None)]])
         self.assertEqual(t_program.get_advanced_sequencer_table(), [TableDescription(1, 1, 0)])
         self.assertEqual(modifications, expected_modifications)
 
     def test_update_volatile_parameters_with_depth2(self):
-        parameters = {'seq': ConstantParameter(10), 'aseq': ConstantParameter(2), 'not': ConstantParameter(13)}
-        seq = MappedParameter(ExpressionScalar('seq'), {'seq': ConstantParameter(3)})
-        aseq = MappedParameter(ExpressionScalar('aseq'), {'aseq': ConstantParameter(5)})
+        parameters = {'s': 10, 'a': 2, 'not': 13}
+        s = VolatileRepetitionCount(expression=ExpressionScalar('s'),
+                                    scope=DictScope(values=FrozenDict(s=3), volatile=set('s')))
+        a = VolatileRepetitionCount(expression=ExpressionScalar('a'),
+                                    scope=DictScope(values=FrozenDict(a=5), volatile=set('a')))
 
         wf_1 = DummyWaveform(defined_channels={'A'}, duration=1)
         wf_2 = DummyWaveform(defined_channels={'A'}, duration=1)
 
-        program = Loop(children=[Loop(children=[Loop(waveform=wf_1, repetition_count=seq.get_value(),
-                                                     repetition_parameter=seq),
+        program = Loop(children=[Loop(children=[Loop(waveform=wf_1, repetition_count=s),
                                                 Loop(waveform=wf_2, repetition_count=4),
                                                 Loop(waveform=wf_1, repetition_count=2)],
                                       repetition_count=4),
                                  Loop(children=[Loop(waveform=wf_2, repetition_count=5),
-                                                Loop(waveform=wf_1, repetition_count=seq.get_value(),
-                                                     repetition_parameter=seq),
+                                                Loop(waveform=wf_1, repetition_count=s),
                                                 Loop(waveform=wf_2, repetition_count=5)],
-                                      repetition_count=aseq.get_value(), repetition_parameter=aseq)],
+                                      repetition_count=a)],
                        repetition_count=1)
 
         t_program = TaborProgram(program, channels=(None, 'A'), markers=(None, None),
                                  device_properties=self.instr_props, **self.program_entry_kwargs)
 
-        self.assertEqual(t_program.get_sequencer_tables(), [[(TableDescription(3, 0, 0), seq),
+        self.assertEqual(t_program.get_sequencer_tables(), [[(TableDescription(3, 0, 0), s.volatile_property),
                                                              (TableDescription(4, 1, 0), None),
                                                              (TableDescription(2, 0, 0), None)],
                                                             [(TableDescription(5, 1, 0), None),
-                                                             (TableDescription(3, 0, 0), seq),
+                                                             (TableDescription(3, 0, 0), s.volatile_property),
                                                              (TableDescription(5, 1, 0), None)]
                                                             ])
         self.assertEqual(t_program.get_advanced_sequencer_table(), [TableEntry(4, 1, 0), TableEntry(5, 2, 0)])
 
         modifications = t_program.update_volatile_parameters(parameters)
 
-        expected_seq = MappedParameter(ExpressionScalar('seq'), {'seq': ConstantParameter(10)})
+        expected_seq = VolatileRepetitionCount(expression=ExpressionScalar('s'),
+                                               scope=DictScope(values=FrozenDict(s=10), volatile=set('s')))
         expected_modifications = {(0, 0): TableDescription(10, 0, 0), (1, 1): TableDescription(10, 0, 0),
                                   1: TableEntry(2, 2, 0)}
 
-        self.assertEqual(t_program.get_sequencer_tables(), [[(TableDescription(10, 0, 0), expected_seq),
+        self.assertEqual(t_program.get_sequencer_tables(), [[(TableDescription(10, 0, 0), expected_seq.volatile_property),
                                                              (TableDescription(4, 1, 0), None),
                                                              (TableDescription(2, 0, 0), None)],
                                                             [(TableDescription(5, 1, 0), None),
-                                                             (TableDescription(10, 0, 0), expected_seq),
+                                                             (TableDescription(10, 0, 0), expected_seq.volatile_property),
                                                              (TableDescription(5, 1, 0), None)]
                                                             ])
         self.assertEqual(t_program.get_advanced_sequencer_table(), [TableEntry(4, 1, 0), TableEntry(2, 2, 0)])
