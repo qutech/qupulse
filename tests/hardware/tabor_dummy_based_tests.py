@@ -212,7 +212,7 @@ class TaborChannelPairTests(TaborDummyBasedTest):
     def test_set_volatile_parameters(self):
         channel_pair = self.TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
 
-        parameters = {'var': ConstantParameter(2)}
+        parameters = {'var': 2}
         modifications = {1: TableEntry(repetition_count=5, element_number=1, jump_flag=0),
                          (0, 1): TableDescription(repetition_count=10, element_id=0, jump_flag=0)}
         invalid_modification = {1: TableEntry(repetition_count=0, element_number=1, jump_flag=0)}

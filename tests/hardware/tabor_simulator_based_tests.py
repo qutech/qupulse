@@ -262,7 +262,7 @@ class TaborMemoryReadTests(TaborSimulatorBasedTest):
         self.channel_pair._amend_segments(self.segments)
         self.arm_program(self.sequence_tables, self.advanced_sequence_table, None, np.asarray([1, 2]))
 
-        para = {'a': ConstantParameter(5)}
+        para = {'a': 5}
         actual_sequence_tables = [self.channel_pair._idle_sequence_table] + [[(rep, index + 2, jump)
                                                                               for rep, index, jump in table]
                                                                              for table in self.sequence_tables_raw]

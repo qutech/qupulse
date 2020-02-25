@@ -2,6 +2,7 @@ import fractions
 import functools
 import weakref
 import logging
+import numbers
 from typing import List, Tuple, Set, Callable, Optional, Any, Sequence, cast, Union, Dict, Mapping, NamedTuple
 from collections import OrderedDict
 
@@ -15,7 +16,6 @@ from qupulse.utils.types import ChannelID
 from qupulse._program._loop import Loop, make_compatible
 from qupulse.hardware.util import voltage_to_uint16, find_positions
 from qupulse.hardware.awgs.base import AWG, AWGAmplitudeOffsetHandling
-from qupulse.pulses.parameters import Parameter
 from qupulse._program.tabor import TaborSegment, TaborException, TaborProgram, PlottableProgram, TaborSequencing,\
     make_combined_wave
 
@@ -723,7 +723,7 @@ class TaborChannelPair(AWG):
         cmd_str = ";".join(commands)
         self.device.send_cmd(cmd_str, paranoia_level=self.internal_paranoia_level)
 
-    def set_volatile_parameters(self, program_name: str, parameters: Mapping[str, Parameter]) -> None:
+    def set_volatile_parameters(self, program_name: str, parameters: Mapping[str, numbers.Number]) -> None:
         """ Set the values of parameters which were marked as volatile on program creation. Sets volatile parameters
         in program memory and device's (adv.) sequence tables if program is current program.
 
