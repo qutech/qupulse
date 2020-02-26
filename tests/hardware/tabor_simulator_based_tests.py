@@ -9,7 +9,6 @@ import numpy as np
 
 from qupulse.hardware.awgs.tabor import TaborAWGRepresentation, TaborChannelPair
 from qupulse._program.tabor import TaborSegment, PlottableProgram, TaborException, TableDescription, TableEntry
-from qupulse.pulses.parameters import ConstantParameter
 from typing import List, Tuple, Optional, Any
 
 class TaborSimulatorManager:

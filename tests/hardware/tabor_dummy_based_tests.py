@@ -11,7 +11,6 @@ import numpy as np
 from qupulse.hardware.awgs.base import AWGAmplitudeOffsetHandling
 from qupulse.hardware.awgs.tabor import TaborProgram, TaborAWGRepresentation, TaborProgramMemory
 from qupulse._program.tabor import TableDescription, TimeType, TableEntry
-from qupulse.pulses.parameters import ConstantParameter
 from tests.hardware.dummy_modules import import_package
 
 

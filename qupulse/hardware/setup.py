@@ -287,7 +287,7 @@ class HardwareSetup:
 
         for parameter_name, value in parameters.items():
             if not isinstance(value, Parameter):
-                parameters[parameter_name] = ConstantParameter(value)
+                parameters[parameter_name] = value
 
         for awg in self.known_awgs:
             if awg in awgs:
