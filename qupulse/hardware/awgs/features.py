@@ -34,8 +34,9 @@ class ProgramManagement(AWGChannelTupleFeature, ABC):
                channels: Tuple[Optional[ChannelID], ...],
                markers: Tuple[Optional[ChannelID], ...],
                voltage_transformation: Tuple[Optional[Callable], ...],
-               force: bool=False) -> None:
-        """Upload a program to the AWG.
+               force: bool = False) -> None:
+        """
+        Upload a program to the AWG.
 
         Physically uploads all waveforms required by the program - excluding those already present -
         to the device and sets up playback sequences accordingly.
@@ -56,7 +57,8 @@ class ProgramManagement(AWGChannelTupleFeature, ABC):
 
     @abstractmethod
     def remove(self, name: str) -> None:
-        """Remove a program from the AWG.
+        """
+        Remove a program from the AWG.
 
         Also discards all waveforms referenced only by the program identified by name.
 
@@ -67,7 +69,8 @@ class ProgramManagement(AWGChannelTupleFeature, ABC):
 
     @abstractmethod
     def clear(self) -> None:
-        """Removes all programs and waveforms from the AWG.
+        """
+        Removes all programs and waveforms from the AWG.
 
         Caution: This affects all programs and waveforms on the AWG, not only those uploaded using qupulse!
         """
@@ -125,8 +128,10 @@ class OffsetAmplitude(AWGChannelFeature):
     @property
     @abstractmethod
     def amplitude_offset_handling(self) -> str:
-        """Gets the amplitude and offset handling of this channel. The amplitude-offset controls if the amplitude and
-        offset settings are constant or if these should be optimized by the driver"""
+        """
+        Gets the amplitude and offset handling of this channel. The amplitude-offset controls if the amplitude and
+        offset settings are constant or if these should be optimized by the driver
+        """
         raise NotImplementedError()
 
     @amplitude_offset_handling.setter
@@ -134,5 +139,21 @@ class OffsetAmplitude(AWGChannelFeature):
     def amplitude_offset_handling(self, amp_offs_handling: str) -> None:
         """
         amp_offs_handling: See possible values at `AWGAmplitudeOffsetHandling`
+        """
+        raise NotImplementedError()
+
+
+class ActivatableChannels(AWGChannelFeature):
+    @property
+    @abstractmethod
+    def status(self) -> bool:
+        raise NotImplementedError()
+
+    @status.setter
+    @abstractmethod
+    def status(self, channel_status: bool) -> None:
+        """
+        Sets the current state of a channel
+        channel_state: the new state of a channel
         """
         raise NotImplementedError()

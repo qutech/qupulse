@@ -18,7 +18,7 @@ class AWGDeviceFeature(Feature, ABC):
 class AWGChannelFeature(Feature, ABC):
     """Base class for features that are used for `AWGChannel`s"""
     def __init__(self):
-        super().__init__(AWGChannel)
+        super().__init__(_BaseAWGChannel)
 
 
 class AWGChannelTupleFeature(Feature, ABC):
@@ -121,7 +121,7 @@ class AWGChannelTuple(FeatureAble[AWGChannelTupleFeature], ABC):
         raise NotImplementedError()
 
 
-class _BaseAWGChannel(ABC):
+class _BaseAWGChannel(FeatureAble[AWGChannelFeature], ABC):
     """Base class for a single channel of an AWG"""
 
     def __init__(self, idn: int):
@@ -160,7 +160,7 @@ class _BaseAWGChannel(ABC):
         raise NotImplementedError()
 
 
-class AWGChannel(_BaseAWGChannel, FeatureAble[AWGChannelFeature], ABC):
+class AWGChannel(_BaseAWGChannel, ABC):
     """Base class for a single channel of an AWG"""
     @property
     def name(self) -> str:
