@@ -1,22 +1,17 @@
-import itertools
-from typing import Union, Dict, Set, Iterable, FrozenSet, Tuple, cast, List, Optional, DefaultDict, Generator, Mapping
-from collections import defaultdict, deque
-from copy import deepcopy
+from typing import Union, Dict, Iterable, Tuple, cast, List, Optional, Generator, Mapping
+from collections import defaultdict
 from enum import Enum
 import warnings
 
 import numpy as np
 
-from qupulse.parameter_scope import Scope, MappedScope, JointScope
 
 from qupulse._program.waveforms import Waveform
 from qupulse._program.volatile import VolatileRepetitionCount, VolatileProperty
 
-from qupulse.utils.types import ChannelID, TimeType, MeasurementWindow, FrozenDict
-from qupulse.utils.tree import Node, is_tree_circular
-
-from qupulse.expressions import ExpressionScalar
 from qupulse.utils import is_integer
+from qupulse.utils.types import TimeType, MeasurementWindow
+from qupulse.utils.tree import Node, is_tree_circular
 
 from qupulse._program.waveforms import SequenceWaveform, RepetitionWaveform
 
@@ -27,9 +22,10 @@ class Loop(Node):
     MAX_REPR_SIZE = 2000
     __slots__ = ('_waveform', '_measurements', '_repetition_definition', '_cached_body_duration')
 
-    """Build a loop tree. The leaves of the tree are loops with one element.
+    """This class represents a initialized (sub-)program as a tree. Each Loop of a valid program has a repetition count
+    and either a waveform or a sequence of loops as children.
     
-    Loop objects are equal if all children are/the waveform is equal, the repetition count is equal    
+    A Loop can have associated measurements which are also repeated.
     """
     def __init__(self,
                  parent: Union['Loop', None] = None,
@@ -43,7 +39,7 @@ class Loop(Node):
             parent: Forwarded to Node.__init__
             children: Forwarded to Node.__init__
             waveform: "Payload"
-            measurements:
+            measurements: Associated measurements
             repetition_count: The children / waveform are repeated this often
         """
         super().__init__(parent=parent, children=children)
