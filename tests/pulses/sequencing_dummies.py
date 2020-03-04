@@ -6,16 +6,14 @@ import numpy
 import unittest
 
 """LOCAL IMPORTS"""
+from qupulse.parameter_scope import Scope
 from qupulse._program._loop import Loop
 from qupulse.utils.types import MeasurementWindow, ChannelID, TimeType, time_from_float
 from qupulse.serialization import Serializer
 from qupulse._program.waveforms import Waveform
-from qupulse._program.instructions import Instruction, CJMPInstruction, GOTOInstruction, REPJInstruction
-from qupulse.pulses.sequencing import Sequencer, InstructionBlock, SequencingElement
 from qupulse.pulses.parameters import Parameter
 from qupulse.pulses.pulse_template import AtomicPulseTemplate
 from qupulse.pulses.interpolation import InterpolationStrategy
-from qupulse.pulses.conditions import Condition
 from qupulse.expressions import Expression, ExpressionScalar
 
 
@@ -73,77 +71,6 @@ class DummyNoValueParameter(Parameter):
 
     def __hash__(self):
         return 0
-
-class DummySequencingElement(SequencingElement):
-
-    def __init__(self, requires_stop: bool = False, push_elements: Tuple[InstructionBlock, List[SequencingElement]] = None) -> None:
-        super().__init__()
-        self.build_call_counter = 0
-        self.requires_stop_call_counter = 0
-        self.target_block = None
-        self.parameters = None
-        self.conditions = None
-        self.window_mapping = None
-        self.channel_mapping =  None
-        self.requires_stop_ = requires_stop
-        self.push_elements = push_elements
-        self.parameter_names = set()
-        self.condition_names = set()
-        self.atomicity_ = False
-
-    def build_sequence(self,
-                       sequencer: Sequencer,
-                       parameters: Dict[str, Parameter],
-                       conditions: Dict[str, 'Condition'],
-                       measurement_mapping: Optional[Dict[str, str]],
-                       channel_mapping: Dict['ChannelID', 'ChannelID'],
-                       instruction_block: InstructionBlock) -> None:
-        self.build_call_counter += 1
-        self.target_block = instruction_block
-        instruction_block.add_instruction(DummyInstruction(self))
-        self.parameters = parameters
-        self.conditions = conditions
-        self.window_mapping = measurement_mapping
-        self.channel_mapping = channel_mapping
-        if self.push_elements is not None:
-            for element in self.push_elements[1]:
-                sequencer.push(element, parameters, conditions,
-                               window_mapping=measurement_mapping,
-                               channel_mapping=channel_mapping,
-                               target_block=self.push_elements[0])
-
-    def requires_stop(self, parameters: Dict[str, Parameter], conditions: Dict[str, 'Conditions']) -> bool:
-        self.requires_stop_call_counter += 1
-        self.parameters = parameters
-        self.conditions = conditions
-        return self.requires_stop_
-
-    @property
-    def atomicity(self):
-        return self.atomicity_
-
-
-class DummyInstruction(Instruction):
-
-    def __init__(self, elem: DummySequencingElement = None) -> None:
-        super().__init__()
-        self.elem = elem
-
-    @property
-    def compare_key(self) -> Any:
-        return self.elem
-
-
-class DummyInstructionBlock(InstructionBlock):
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.embedded_blocks = [] # type: Collection[InstructionBlock]
-
-    def add_instruction(self, instruction: Instruction) -> None:
-        super().add_instruction(instruction)
-        if isinstance(instruction, (CJMPInstruction, GOTOInstruction, REPJInstruction)):
-            self.embedded_blocks.append(instruction.target.block)
 
 
 class DummyWaveform(Waveform):
@@ -216,35 +143,6 @@ class DummyWaveform(Waveform):
         return self.defined_channels_
 
 
-class DummySequencer(Sequencer):
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.sequencing_stacks = {} #type: Dict[InstructionBlock, List[StackElement]]
-
-    def push(self,
-             sequencing_element: SequencingElement,
-             parameters: Dict[str, Parameter],
-             conditions: Dict[str, 'Condition'],
-             window_mapping: Optional[Dict[str, str]] = None,
-             channel_mapping: Dict['ChannelID', 'ChannelID'] = dict(),
-             target_block: InstructionBlock = None) -> None:
-        if target_block is None:
-            target_block = self.__main_block
-
-        if target_block not in self.sequencing_stacks:
-            self.sequencing_stacks[target_block] = []
-
-        self.sequencing_stacks[target_block].append((sequencing_element, parameters, conditions, window_mapping,
-                                                     channel_mapping))
-
-    def build(self) -> InstructionBlock:
-        raise NotImplementedError()
-
-    def has_finished(self):
-        raise NotImplementedError()
-
-
 class DummyInterpolationStrategy(InterpolationStrategy):
 
     def __init__(self) -> None:
@@ -266,65 +164,10 @@ class DummyInterpolationStrategy(InterpolationStrategy):
         raise NotImplementedError()
 
 
-class DummyCondition(Condition):
-
-    def __init__(self, requires_stop: bool=False):
-        super().__init__()
-        self.requires_stop_ = requires_stop
-        self.loop_call_data = {}
-        self.branch_call_data = {}
-
-    def requires_stop(self) -> bool:
-        return self.requires_stop_
-
-    def build_sequence_loop(self,
-                            delegator: SequencingElement,
-                            body: SequencingElement,
-                            sequencer: Sequencer,
-                            parameters: Dict[str, Parameter],
-                            conditions: Dict[str, Condition],
-                            measurement_mapping: Dict[str, str],
-                            channel_mapping: Dict['ChannelID', 'ChannelID'],
-                            instruction_block: InstructionBlock) -> None:
-        self.loop_call_data = dict(
-            delegator=delegator,
-            body=body,
-            sequencer=sequencer,
-            parameters=parameters,
-            conditions=conditions,
-            measurement_mapping=measurement_mapping,
-            channel_mapping=channel_mapping,
-            instruction_block=instruction_block
-        )
-
-    def build_sequence_branch(self,
-                              delegator: SequencingElement,
-                              if_branch: SequencingElement,
-                              else_branch: SequencingElement,
-                              sequencer: Sequencer,
-                              parameters: Dict[str, Parameter],
-                              conditions: Dict[str, Condition],
-                              measurement_mapping: Dict[str, str],
-                              channel_mapping: Dict['ChannelID', 'ChannelID'],
-                              instruction_block: InstructionBlock) -> None:
-        self.branch_call_data = dict(
-            delegator=delegator,
-            if_branch=if_branch,
-            else_branch=else_branch,
-            sequencer=sequencer,
-            parameters=parameters,
-            conditions=conditions,
-            measurement_mapping=measurement_mapping,
-            channel_mapping=channel_mapping,
-            instruction_block=instruction_block
-        )
-
-
 class DummyPulseTemplate(AtomicPulseTemplate):
 
     def __init__(self,
                  requires_stop: bool=False,
-                 is_interruptable: bool=False,
                  parameter_names: Set[str]={},
                  defined_channels: Set[ChannelID]={'default'},
                  duration: Any=0,
@@ -339,9 +182,7 @@ class DummyPulseTemplate(AtomicPulseTemplate):
         self.requires_stop_ = requires_stop
         self.requires_stop_arguments = []
 
-        self.is_interruptable_ = is_interruptable
         self.parameter_names_ = parameter_names
-        self.build_sequence_arguments = []
         self.defined_channels_ = defined_channels
         self._duration = Expression(duration)
         self.waveform = waveform
@@ -361,14 +202,6 @@ class DummyPulseTemplate(AtomicPulseTemplate):
         return set(self.parameter_names_)
 
     @property
-    def build_sequence_calls(self):
-        return len(self.build_sequence_arguments)
-
-    @property
-    def is_interruptable(self) -> bool:
-        return self.is_interruptable_
-
-    @property
     def defined_channels(self) -> Set[ChannelID]:
         return set(self.defined_channels_)
 
@@ -376,35 +209,15 @@ class DummyPulseTemplate(AtomicPulseTemplate):
     def measurement_names(self) -> Set[str]:
         return self.measurement_names_
 
-    def build_sequence(self,
-                       sequencer: Sequencer,
-                       parameters: Dict[str, Parameter],
-                       conditions: Dict[str, Condition],
-                       measurement_mapping: Dict[str, str],
-                       channel_mapping: Dict['ChannelID', 'ChannelID'],
-                       instruction_block: InstructionBlock):
-        self.build_sequence_arguments.append((sequencer,parameters,conditions, measurement_mapping, channel_mapping, instruction_block))
-        measurements = self.get_measurement_windows(parameters, measurement_mapping)
-        if self.waveform:
-            instruction_block.add_instruction_meas(measurements)
-            instruction_block.add_instruction_exec(waveform=self.waveform)
-
-    # def create_program(self, *,
-    #                    parameters: Dict[str, Parameter],
-    #                    measurement_mapping: Dict[str, Optional[str]],
-    #                    channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Loop]:
-    #     self.create_program_calls.append((parameters, measurement_mapping, channel_mapping))
-    #     return self._program
-
     def _internal_create_program(self, *,
-                                 parameters: Dict[str, Parameter],
+                                 scope: Scope,
                                  measurement_mapping: Dict[str, Optional[str]],
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional['Transformation'],
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
                                  parent_loop: Loop) -> None:
-        measurements = self.get_measurement_windows(parameters, measurement_mapping)
-        self.create_program_calls.append((parameters, measurement_mapping, channel_mapping, parent_loop))
+        measurements = self.get_measurement_windows(scope, measurement_mapping)
+        self.create_program_calls.append((scope, measurement_mapping, channel_mapping, parent_loop))
         if self._program:
             parent_loop.add_measurements(measurements)
             parent_loop.append_child(waveform=self._program.waveform, children=self._program.children)
@@ -420,16 +233,10 @@ class DummyPulseTemplate(AtomicPulseTemplate):
             return self.waveform
         return DummyWaveform(duration=self.duration.evaluate_numeric(**parameters), defined_channels=self.defined_channels)
 
-    def requires_stop(self, parameters: Dict[str, Parameter], conditions: Dict[str, Condition]) -> bool:
-        self.requires_stop_arguments.append((parameters,conditions))
-        return self.requires_stop_
-
     def get_serialization_data(self, serializer: Optional['Serializer']=None) -> Dict[str, Any]:
         data = super().get_serialization_data(serializer=serializer)
         if serializer: # compatibility with old serialization routines
             data = dict()
-        data['requires_stop'] = self.requires_stop_
-        data['is_interruptable'] = self.is_interruptable
         data['parameter_names'] = self.parameter_names
         data['defined_channels'] = self.defined_channels
         data['duration'] = self.duration
@@ -443,5 +250,5 @@ class DummyPulseTemplate(AtomicPulseTemplate):
 
     @property
     def compare_key(self) -> Tuple[Any, ...]:
-        return (self.requires_stop_, self.is_interruptable, self.parameter_names,
+        return (self.requires_stop_, self.parameter_names,
                 self.defined_channels, self.duration, self.waveform, self.measurement_names, self.integral)

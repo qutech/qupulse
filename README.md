@@ -24,7 +24,7 @@ The current feature list is as follows:
 - Serialization of pulses (to allow storing into permanent storage)
 - Hardware model representation (prototype, work in progress)
 - High-level pulse to hardware configuration and waveform translation routines 
-- Hardware drivers for Tabor Electronics AWGs and AlazarTech Digitizers
+- Hardware drivers for Tabor Electronics, Tektronix and Zurich Instruments AWGs and AlazarTech Digitizers
 - MATLAB interface to access qupulse functionality
 
 ## Installation
@@ -45,7 +45,7 @@ We intentionally did not restrict versions of dependencies in the install script
 newer releases of dependencies that might be compatible. However, if qupulse does encounter problems with a particular dependency version,
 try installing the version listed in `requirements.txt`.   
 
-The backend for TaborAWGs requires packages that can be found [here](https://git.rwth-aachen.de/qutech/python-TaborDriver).
+The backend for TaborAWGs requires packages that can be found [here](https://git.rwth-aachen.de/qutech/python-TaborDriver). As a shortcut you can install it from the python interpreter via `qupulse.hardware.awgs.install_requirements('tabor')`.
 
 The data acquisition backend for AlazarTech cards needs a package that unfortunately is not open source (yet). If you need it or have questions contact <simon.humpohl@rwth-aachen.de>.
 
@@ -62,7 +62,7 @@ The repository primarily consists of the folders `qupulse` (toolkit core code) a
 - `pulses` which contains all modules related to pulse representation.
 - `hardware` containing classes for hardware representation as well as hardware drivers
 - `utils` containing miscellaneous utility modules or wrapping code for external libraries
-
+- `_program` contains general and hardware specific representations of instantiated (parameter free) pulses. It is private because there is no stability guarantee.
 
 Contents of `tests` mirror the structure of `qupulse`. For every `<module>` somewhere in `qupulse` there should exist a `<module>Tests.py` in the corresponding subdirectory of `tests`.
 

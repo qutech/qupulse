@@ -1,8 +1,10 @@
-## pending/current ##
+## 0.5 ##
 
  - General:
    - Improve `TimeType` consistency by leveraging str(float) for rounding by default.
    - Add support for sympy==1.5
+   - Add volatile parameters. Repetition counts can now be changed at runtime in some cases (useful for DNP). See
+     `volatile` kwarg of `creat_program`
 
  - Hardware:
    - Add a `measure_program` method to the DAC interface. This method is used by the QCoDeS integration.
@@ -24,6 +26,17 @@
 
 - Expressions:
     - Expressions can now be formatted as floats if they do not have free variables
+
+- Parameters:
+    - Replace Parameter class with Scope
+    - Parameter class is now deprecated
+
+- Backward incompatible changes:
+    - Removed deprecated classes:
+      - Sequencer: Replaced by PulseTemplate.create_program method
+      - Condition: Never used
+      - InstructionBlock: Old representation of programs. Replaced by Loop
+      - MultiChannelProgram: Was required in the instruction block framework
 
 ## 0.4 ##
 

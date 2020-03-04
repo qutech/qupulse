@@ -4,15 +4,13 @@ import itertools
 import numbers
 import collections
 
-from qupulse.utils.types import ChannelID
+from qupulse.utils.types import ChannelID, FrozenDict, FrozenMapping
 from qupulse.expressions import Expression, ExpressionScalar
+from qupulse.parameter_scope import Scope, MappedScope
 from qupulse.pulses.pulse_template import PulseTemplate, MappingTuple
 from qupulse.pulses.parameters import Parameter, MappedParameter, ParameterNotProvidedException, ParameterConstrainer
-from qupulse.pulses.sequencing import Sequencer
-from qupulse._program.instructions import InstructionBlock
 from qupulse._program.waveforms import Waveform
 from qupulse._program._loop import Loop
-from qupulse.pulses.conditions import Condition
 from qupulse.serialization import Serializer, PulseRegistryType
 
 __all__ = [
@@ -116,7 +114,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
             template = template.template
 
         self.__template = template
-        self.__parameter_mapping = parameter_mapping
+        self.__parameter_mapping = FrozenDict(parameter_mapping)
         self.__external_parameters = set(itertools.chain(*(expr.variables for expr in self.__parameter_mapping.values())))
         self.__external_parameters |= self.constrained_parameters
         self.__measurement_mapping = measurement_mapping
@@ -183,7 +181,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         return self.__measurement_mapping
 
     @property
-    def parameter_mapping(self) -> Dict[str, Expression]:
+    def parameter_mapping(self) -> FrozenMapping[str, Expression]:
         return self.__parameter_mapping
 
     @property
@@ -197,10 +195,6 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
     @property
     def measurement_names(self) -> Set[str]:
         return set(self.__measurement_mapping.values())
-
-    @property
-    def is_interruptable(self) -> bool:
-        return self.template.is_interruptable  # pragma: no cover
 
     @property
     def defined_channels(self) -> Set[ChannelID]:
@@ -244,36 +238,43 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         # return MappingPulseTemplate(template=serializer.deserialize(template),
         #                             **kwargs)
 
-    def _validate_parameters(self, parameters: Dict[str, Union[Parameter, numbers.Real]]):
+    def _validate_parameters(self, parameters: Dict[str, Union[Parameter, numbers.Real]], volatile: Set[str]):
         missing = set(self.__external_parameters) - set(parameters.keys())
         if missing:
             raise ParameterNotProvidedException(missing.pop())
-        self.validate_parameter_constraints(parameters=parameters)
+        self.validate_parameter_constraints(parameters=parameters, volatile=volatile)
 
-    def map_parameter_values(self, parameters: Dict[str, numbers.Real]) -> Dict[str, numbers.Real]:
+    def map_parameter_values(self, parameters: Dict[str, numbers.Real],
+                             volatile: Set[str] = frozenset()) -> Dict[str, numbers.Real]:
         """Map parameter values according to the defined mappings.
 
         Args:
             parameters: Dictionary with numeric values
+            volatile(Optional): Forwarded to `validate_parameter_constraints`
         Returns:
             A new dictionary with mapped numeric values.
         """
-        self._validate_parameters(parameters=parameters)
+        self._validate_parameters(parameters=parameters, volatile=volatile)
         return {parameter: mapping_function.evaluate_numeric(**parameters)
                 for parameter, mapping_function in self.__parameter_mapping.items()}
 
-    def map_parameter_objects(self, parameters: Dict[str, Parameter]) ->  Dict[str, Parameter]:
+    def map_parameter_objects(self, parameters: Dict[str, Parameter],
+                              volatile: Set[str] = frozenset()) -> Dict[str, Parameter]:
         """Map parameter objects (instances of Parameter class) according to the defined mappings.
 
         Args:
             parameters: Dictionary with parameter objects
+            volatile(Optional): Forwarded to `validate_parameter_constraints`
         Returns:
             A new dictionary with mapped parameter objects
         """
-        self._validate_parameters(parameters=parameters)
+        self._validate_parameters(parameters=parameters, volatile=volatile)
         return {parameter: MappedParameter(mapping_function,
                                            {name: parameters[name] for name in mapping_function.variables})
                 for (parameter, mapping_function) in self.__parameter_mapping.items()}
+
+    def map_scope(self, scope: Scope) -> MappedScope:
+        return MappedScope(scope=scope, mapping=self.__parameter_mapping)
 
     def map_parameters(self,
                        parameters: Dict[str, Union[Parameter, numbers.Real]]) -> Dict[str,
@@ -308,29 +309,17 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         return {inner_ch: None if outer_ch is None else channel_mapping[outer_ch]
                 for inner_ch, outer_ch in self.__channel_mapping.items()}
 
-    def build_sequence(self,
-                       sequencer: Sequencer,
-                       parameters: Dict[str, Parameter],
-                       conditions: Dict[str, Condition],
-                       measurement_mapping: Dict[str, str],
-                       channel_mapping: Dict[ChannelID, ChannelID],
-                       instruction_block: InstructionBlock) -> None:
-        self.template.build_sequence(sequencer,
-                                     parameters=self.map_parameter_objects(parameters),
-                                     conditions=conditions,
-                                     measurement_mapping=self.get_updated_measurement_mapping(measurement_mapping),
-                                     channel_mapping=self.get_updated_channel_mapping(channel_mapping),
-                                     instruction_block=instruction_block)
-
     def _internal_create_program(self, *,
-                                 parameters: Dict[str, Parameter],
+                                 scope: Scope,
                                  measurement_mapping: Dict[str, Optional[str]],
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional['Transformation'],
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
                                  parent_loop: Loop) -> None:
+        self.validate_scope(scope)
+
         # parameters are validated in map_parameters() call, no need to do it here again explicitly
-        self.template._create_program(parameters=self.map_parameter_objects(parameters),
+        self.template._create_program(scope=self.map_scope(scope),
                                       measurement_mapping=self.get_updated_measurement_mapping(measurement_mapping),
                                       channel_mapping=self.get_updated_channel_mapping(channel_mapping),
                                       global_transformation=global_transformation,
@@ -353,14 +342,6 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
             measurement_mapping=self.get_updated_measurement_mapping(measurement_mapping=measurement_mapping)
         )
 
-    def requires_stop(self,
-                      parameters: Dict[str, Parameter],
-                      conditions: Dict[str, Condition]) -> bool:
-        return self.template.requires_stop(
-            self.map_parameter_objects(parameters),
-            conditions
-        )
-
     @property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
         internal_integral = self.__template.integral
@@ -369,20 +350,17 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         # sympy.subs() does not work if one of the mappings in the provided dict is an Expression object
         # the following is an ugly workaround
         # todo: make Expressions compatible with sympy.subs()
-        parameter_mapping = self.__parameter_mapping.copy()
-        for i in parameter_mapping:
-            if isinstance(parameter_mapping[i], ExpressionScalar):
-                parameter_mapping[i] = parameter_mapping[i].sympified_expression
+        parameter_mapping = {parameter_name: expression.underlying_expression
+                             for parameter_name, expression in self.__parameter_mapping.items()}
 
         for channel, ch_integral in internal_integral.items():
-            expr = ExpressionScalar(
+            channel_out = self.__channel_mapping.get(channel, channel)
+            if channel_out is None:
+                continue
+
+            expressions[channel_out] = ExpressionScalar(
                 ch_integral.sympified_expression.subs(parameter_mapping)
             )
-            channel_out = channel
-            if channel in self.__channel_mapping:
-                channel_out = self.__channel_mapping[channel]
-            if channel_out is not None:
-                expressions[channel_out] = expr
 
         return expressions
 

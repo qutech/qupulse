@@ -9,7 +9,6 @@ import numpy as np
 from qupulse.utils.sympy import Broadcast
 from qupulse.utils.types import ChannelID
 from qupulse.expressions import Expression, ExpressionScalar
-from qupulse.pulses.conditions import Condition
 from qupulse._program.waveforms import TableWaveform, TableWaveformEntry
 from qupulse.pulses.parameters import Parameter, ParameterNotProvidedException, ParameterConstraint,\
     ParameterConstrainer
@@ -66,7 +65,7 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
     def build_waveform(self,
                        parameters: Dict[str, Real],
                        channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[TableWaveform]:
-        self.validate_parameter_constraints(parameters)
+        self.validate_parameter_constraints(parameters=parameters, volatile=set())
 
         if all(channel_mapping[channel] is None
                for channel in self.defined_channels):
@@ -134,17 +133,6 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
     @property
     def parameter_names(self) -> Set[str]:
         return self.point_parameters | self.measurement_parameters | self.constrained_parameters
-
-    def requires_stop(self,
-                      parameters: Dict[str, Parameter],
-                      conditions: Dict[str, Condition]) -> bool:
-        try:
-            return any(
-                parameters[name].requires_stop
-                for name in self.parameter_names
-            )
-        except KeyError as key_error:
-            raise ParameterNotProvidedException(str(key_error)) from key_error
 
     @property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:

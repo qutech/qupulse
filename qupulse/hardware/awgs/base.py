@@ -8,20 +8,23 @@ Classes:
 """
 
 from abc import abstractmethod
-from typing import Set, Tuple, Callable, Optional
+from numbers import Real
+from typing import Set, Tuple, Callable, Optional, Mapping, Sequence, List
+from collections import OrderedDict
 
 from qupulse.hardware.util import get_sample_times
 from qupulse.utils.types import ChannelID
 from qupulse._program._loop import Loop
 from qupulse._program.waveforms import Waveform
 from qupulse.comparable import Comparable
-from qupulse._program.instructions import InstructionSequence
 from qupulse.utils.types import TimeType
+
+import numpy
 
 __all__ = ["AWG", "Program", "ProgramOverwriteException",
            "OutOfWaveformMemoryException", "AWGAmplitudeOffsetHandling"]
 
-Program = InstructionSequence
+Program = Loop
 
 
 class AWGAmplitudeOffsetHandling:
@@ -137,6 +140,10 @@ class AWG(Comparable):
         are ot equal"""
         return id(self)
 
+    @abstractmethod
+    def set_volatile_parameters(self, program_name: str, parameters: Mapping[str, Real]):
+        """Set the values of parameters which were marked as volatile on program creation."""
+
     def __copy__(self) -> None:
         raise NotImplementedError()
 
@@ -164,7 +171,21 @@ class ProgramEntry:
                  amplitudes: Tuple[float, ...],
                  offsets: Tuple[float, ...],
                  voltage_transformations: Tuple[Optional[Callable], ...],
-                 sample_rate: TimeType):
+                 sample_rate: TimeType,
+                 waveforms: Sequence[Waveform] = None):
+        """
+
+        Args:
+            loop:
+            channels:
+            markers:
+            amplitudes:
+            offsets:
+            voltage_transformations:
+            sample_rate:
+            waveforms: These waveforms are sampled and stored in _waveforms. If None the waveforms are extracted from
+            loop
+        """
         assert len(channels) == len(amplitudes) == len(offsets) == len(voltage_transformations)
 
         self._channels = tuple(channels)
@@ -176,32 +197,52 @@ class ProgramEntry:
         self._sample_rate = sample_rate
 
         self._loop = loop
-        self._waveforms = {node.waveform: None for node in loop.get_depth_first_iterator() if node.is_leaf()}
 
-        time_array, segment_lengths = get_sample_times(self._waveforms.keys(), sample_rate)
+        if waveforms is None:
+            waveforms = OrderedDict((node.waveform, None)
+                                    for node in loop.get_depth_first_iterator() if node.is_leaf()).keys()
+        if waveforms:
+            self._waveforms = OrderedDict(zip(waveforms, self._sample_waveforms(waveforms)))
+        else:
+            self._waveforms = OrderedDict()
 
-        for waveform, segment_length in zip(self._waveforms.keys(), segment_lengths):
+    def _sample_empty_channel(self, time: numpy.ndarray) -> Optional[numpy.ndarray]:
+        """Override this in derived class to change how """
+        return None
+
+    def _sample_empty_marker(self, time: numpy.ndarray) -> Optional[numpy.ndarray]:
+        return None
+
+    def _sample_waveforms(self, waveforms: Sequence[Waveform]) -> List[Tuple[Tuple[numpy.ndarray, ...],
+                                                                             Tuple[numpy.ndarray, ...]]]:
+        sampled_waveforms = []
+
+        time_array, segment_lengths = get_sample_times(waveforms, self._sample_rate)
+        for waveform, segment_length in zip(waveforms, segment_lengths):
             wf_time = time_array[:segment_length]
 
             sampled_channels = []
-            for channel, trafo, amplitude, offset in zip(channels, voltage_transformations, amplitudes, offsets):
+            for channel, trafo, amplitude, offset in zip(self._channels, self._voltage_transformations,
+                                                         self._amplitudes, self._offsets):
                 if channel is None:
-                    sampled_channels.append(None)
+                    sampled_channels.append(self._sample_empty_channel())
                 else:
                     sampled = waveform.get_sampled(channel, wf_time)
-                    if trafo:
+                    if trafo is not None:
                         sampled = trafo(sampled)
                     sampled = sampled - offset
                     sampled /= amplitude
                     sampled_channels.append(waveform.get_sampled(channel, wf_time))
 
             sampled_markers = []
-            for marker in markers:
+            for marker in self._markers:
                 if marker is None:
                     sampled_markers.append(None)
                 else:
                     sampled_markers.append(waveform.get_sampled(marker, wf_time) != 0)
-            self._waveforms[waveform] = (tuple(sampled_channels), tuple(sampled_markers))
+
+            sampled_waveforms.append((tuple(sampled_channels), tuple(sampled_markers)))
+        return sampled_waveforms
 
 
 class OutOfWaveformMemoryException(Exception):

@@ -2,15 +2,15 @@ import unittest
 from unittest import mock
 import itertools
 
+from qupulse.parameter_scope import DictScope, MappedScope
 from qupulse.pulses.mapping_pulse_template import MissingMappingException,\
     UnnecessaryMappingException, MappingPulseTemplate,\
     AmbiguousMappingException, MappingCollisionException
 from qupulse.pulses.parameters import ConstantParameter, ParameterConstraintViolation, ParameterConstraint, ParameterNotProvidedException
 from qupulse.expressions import Expression
-from qupulse._program._loop import Loop, MultiChannelProgram
-from qupulse.pulses.sequencing import Sequencer
+from qupulse._program._loop import Loop
 
-from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummySequencer, DummyInstructionBlock, MeasurementWindowTestCase, DummyWaveform
+from tests.pulses.sequencing_dummies import DummyPulseTemplate, MeasurementWindowTestCase, DummyWaveform
 from tests.serialization_tests import SerializableTests
 from tests.serialization_dummies import DummySerializer
 from tests._program.transformation_tests import TransformationStub
@@ -271,19 +271,20 @@ class MappingPulseTemplateSequencingTest(MeasurementWindowTestCase):
         global_transformation = TransformationStub()
         to_single_waveform = {'tom', 'jerry'}
 
-        template = DummyPulseTemplate(measurements=[('meas1', 0, 1)], measurement_names={'meas1'}, defined_channels={'B'},
+        template = DummyPulseTemplate(measurements=[('meas1', 0, 1)], measurement_names={'meas1'},
+                                      defined_channels={'B'},
                                       waveform=DummyWaveform(duration=2.0),
                                       duration=2,
                                       parameter_names={'t'})
         st = MappingPulseTemplate(template, parameter_mapping=parameter_mapping,
                                   measurement_mapping=measurement_mapping, channel_mapping=channel_mapping)
 
-        pre_parameters = {'k': ConstantParameter(5)}
+        pre_scope = DictScope.from_kwargs(k=5)
         pre_measurement_mapping = {'meas2': 'meas3'}
         pre_channel_mapping = {'default': 'A'}
 
         program = Loop()
-        expected_inner_args = dict(parameters=st.map_parameters(pre_parameters),
+        expected_inner_args = dict(scope=st.map_scope(pre_scope),
                                    measurement_mapping=st.get_updated_measurement_mapping(pre_measurement_mapping),
                                    channel_mapping=st.get_updated_channel_mapping(pre_channel_mapping),
                                    to_single_waveform=to_single_waveform,
@@ -291,7 +292,7 @@ class MappingPulseTemplateSequencingTest(MeasurementWindowTestCase):
                                    parent_loop=program)
 
         with mock.patch.object(template, '_create_program') as inner_create_program:
-            st._internal_create_program(parameters=pre_parameters,
+            st._internal_create_program(scope=pre_scope,
                                         measurement_mapping=pre_measurement_mapping,
                                         channel_mapping=pre_channel_mapping,
                                         to_single_waveform=to_single_waveform,
@@ -315,43 +316,17 @@ class MappingPulseTemplateSequencingTest(MeasurementWindowTestCase):
         st = MappingPulseTemplate(template, parameter_mapping=parameter_mapping,
                                   measurement_mapping=measurement_mapping, channel_mapping=channel_mapping)
 
-        pre_parameters = {'k': ConstantParameter(5)}
+        pre_scope = DictScope.from_kwargs(k=5)
         pre_measurement_mapping = {}
         pre_channel_mapping = {'default': 'A'}
 
         program = Loop()
         with self.assertRaises(KeyError):
-            st._internal_create_program(parameters=pre_parameters,
+            st._internal_create_program(scope=pre_scope,
                                         measurement_mapping=pre_measurement_mapping,
                                         channel_mapping=pre_channel_mapping,
                                         to_single_waveform=set(),
                                         global_transformation=None,
-                                        parent_loop=program)
-
-    def test_create_program_missing_params(self) -> None:
-        measurement_mapping = {'meas1': 'meas2'}
-        parameter_mapping = {'t': 'k'}
-        channel_mapping = {'B': 'default'}
-
-        template = DummyPulseTemplate(measurements=[('meas1', 0, 1)], measurement_names={'meas1'},
-                                      defined_channels={'B'},
-                                      waveform=DummyWaveform(duration=2.0),
-                                      duration=2,
-                                      parameter_names={'t'})
-        st = MappingPulseTemplate(template, parameter_mapping=parameter_mapping,
-                                  measurement_mapping=measurement_mapping, channel_mapping=channel_mapping)
-
-        pre_parameters = {}
-        pre_measurement_mapping = {'meas2': 'meas3'}
-        pre_channel_mapping = {'default': 'A'}
-
-        program = Loop()
-        with self.assertRaises(ParameterNotProvidedException):
-            st._internal_create_program(parameters=pre_parameters,
-                                        measurement_mapping=pre_measurement_mapping,
-                                        channel_mapping=pre_channel_mapping,
-                                       to_single_waveform=set(),
-                                       global_transformation=None,
                                         parent_loop=program)
 
     def test_create_program_parameter_constraint_violation(self) -> None:
@@ -368,16 +343,16 @@ class MappingPulseTemplateSequencingTest(MeasurementWindowTestCase):
                                   measurement_mapping=measurement_mapping, channel_mapping=channel_mapping,
                                   parameter_constraints={'k > 6'})
 
-        pre_parameters = {'k': ConstantParameter(5)}
+        pre_scope = DictScope.from_kwargs(k=5)
         pre_measurement_mapping = {'meas2': 'meas3'}
         pre_channel_mapping = {'default': 'A'}
 
         program = Loop()
         with self.assertRaises(ParameterConstraintViolation):
-            st._internal_create_program(parameters=pre_parameters,
+            st._internal_create_program(scope=pre_scope,
                                         measurement_mapping=pre_measurement_mapping,
                                         channel_mapping=pre_channel_mapping,
-                                      to_single_waveform=set(),
+                                        to_single_waveform=set(),
                                         global_transformation=None,
                                         parent_loop=program)
 
@@ -385,6 +360,7 @@ class MappingPulseTemplateSequencingTest(MeasurementWindowTestCase):
         measurement_mapping = {'meas1': 'meas2'}
         parameter_mapping = {'t': 'k'}
         channel_mapping = {'B': 'default'}
+        volatile = {'t'}
 
         template = DummyPulseTemplate(measurements=[('meas1', 0, 1)], measurement_names={'meas1'},
                                       defined_channels={'B'},
@@ -394,12 +370,12 @@ class MappingPulseTemplateSequencingTest(MeasurementWindowTestCase):
         st = MappingPulseTemplate(template, parameter_mapping=parameter_mapping,
                                   measurement_mapping=measurement_mapping, channel_mapping=channel_mapping)
 
-        pre_parameters = {'k': ConstantParameter(5)}
+        pre_scope = DictScope.from_kwargs(k=5, volatile=volatile)
         pre_measurement_mapping = {'meas2': 'meas3'}
         pre_channel_mapping = {'default': 'A'}
 
         program = Loop()
-        st._internal_create_program(parameters=pre_parameters,
+        st._internal_create_program(scope=pre_scope,
                                     measurement_mapping=pre_measurement_mapping,
                                     channel_mapping=pre_channel_mapping,
                                     to_single_waveform=set(),
@@ -407,7 +383,7 @@ class MappingPulseTemplateSequencingTest(MeasurementWindowTestCase):
                                     parent_loop=program)
 
         self.assertEqual(1, len(template.create_program_calls))
-        self.assertEqual((st.map_parameters(pre_parameters),
+        self.assertEqual((st.map_scope(pre_scope),
                           st.get_updated_measurement_mapping(pre_measurement_mapping),
                           st.get_updated_channel_mapping(pre_channel_mapping),
                           program),
@@ -417,53 +393,12 @@ class MappingPulseTemplateSequencingTest(MeasurementWindowTestCase):
         self.assertEqual(0, len(program.children))
         self.assertIsNone(program._measurements)
 
-        # ensure same result as from Sequencer
-        sequencer = Sequencer()
-        sequencer.push(st, parameters=pre_parameters, conditions={}, window_mapping=pre_measurement_mapping,
-                       channel_mapping=pre_channel_mapping)
-        block = sequencer.build()
-        program_old = MultiChannelProgram(block, channels={'A'}).programs[frozenset({'A'})]
-        self.assertEqual(program_old, program)
-
     def test_same_channel_error(self):
 
         dpt = DummyPulseTemplate(defined_channels={'A', 'B'})
 
         with self.assertRaisesRegex(ValueError, 'multiple channels to the same target'):
             MappingPulseTemplate(dpt, channel_mapping={'A': 'X', 'B': 'X'})
-
-
-class MappingPulseTemplateOldSequencingTests(unittest.TestCase):
-
-    def test_build_sequence(self):
-        measurement_mapping = {'meas1': 'meas2'}
-        parameter_mapping = {'t': 'k'}
-
-        template = DummyPulseTemplate(measurement_names=set(measurement_mapping.keys()),
-                                      parameter_names=set(parameter_mapping.keys()))
-        st = MappingPulseTemplate(template, parameter_mapping=parameter_mapping, measurement_mapping=measurement_mapping)
-        sequencer = DummySequencer()
-        block = DummyInstructionBlock()
-        pre_parameters = {'k': ConstantParameter(5)}
-        pre_measurement_mapping = {'meas2': 'meas3'}
-        pre_channel_mapping = {'default': 'A'}
-        conditions = dict(a=True)
-        st.build_sequence(sequencer, pre_parameters, conditions, pre_measurement_mapping, pre_channel_mapping, block)
-
-        self.assertEqual(template.build_sequence_calls, 1)
-        forwarded_args = template.build_sequence_arguments[0]
-        self.assertEqual(forwarded_args[0], sequencer)
-        self.assertEqual(forwarded_args[1], st.map_parameters(pre_parameters))
-        self.assertEqual(forwarded_args[2], conditions)
-        self.assertEqual(forwarded_args[3],
-                         st.get_updated_measurement_mapping(pre_measurement_mapping))
-        self.assertEqual(forwarded_args[4],
-                         st.get_updated_channel_mapping(pre_channel_mapping))
-        self.assertEqual(forwarded_args[5], block)
-
-    @unittest.skip("Extend of dummy template for argument checking needed.")
-    def test_requires_stop(self):
-        pass
 
 
 class PulseTemplateParameterMappingExceptionsTests(unittest.TestCase):
@@ -571,7 +506,7 @@ class MappingPulseTemplateRegressionTests(unittest.TestCase):
         input_variables = {'period': float(gates_template.duration), 'uptime': 0}
         marker_sequence = (TablePT({'m': [(0, 1), ('uptime', 0), ('period', 0)]}), input_variables)
 
-        combined_template = AtomicMultiChannelPT(gates_template, marker_sequence )
+        combined_template = AtomicMultiChannelPT(gates_template, marker_sequence)
         combined_template.create_program()
 
         marker_sequence2 = TablePT({'m': [(0, 1), (0, 0), (gates_template.duration, 0)]})

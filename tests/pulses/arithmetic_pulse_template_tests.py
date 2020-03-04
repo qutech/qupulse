@@ -5,6 +5,7 @@ import warnings
 import numpy as np
 import sympy
 
+from qupulse.parameter_scope import DictScope
 from qupulse.expressions import ExpressionScalar
 from qupulse.pulses.parameters import ConstantParameter
 from qupulse.pulses.arithmetic_pulse_template import ArithmeticAtomicPulseTemplate, ArithmeticPulseTemplate,\
@@ -47,15 +48,7 @@ class ArithmeticAtomicPulseTemplateTest(unittest.TestCase):
         self.assertEqual(measurements, arith.measurement_declarations)
         self.assertEqual('-', arith.arithmetic_operator)
         self.assertEqual('my_arith', arith.identifier)
-    
-    def test_requires_stop(self):
-        lhs = DummyPulseTemplate(duration=4, defined_channels={'a', 'b'}, parameter_names={'x', 'y'})
-        rhs = DummyPulseTemplate(duration=4, defined_channels={'a', 'c'}, parameter_names={'x', 'z'})
 
-        arith = lhs + rhs
-        with self.assertRaises(NotImplementedError):
-            arith.requires_stop({}, {})
-    
     def test_build_waveform(self):
         a = DummyPulseTemplate(duration=4, defined_channels={'a', 'b'}, parameter_names={'x', 'y'})
         b = DummyPulseTemplate(duration=4, defined_channels={'a', 'c'}, parameter_names={'x', 'z'})
@@ -332,8 +325,7 @@ class ArithmeticPulseTemplateTest(unittest.TestCase):
         rhs = DummyPulseTemplate(defined_channels={'u', 'v', 'w'})
         arith = ArithmeticPulseTemplate(lhs, '-', rhs)
 
-        parameters = dict(x=ConstantParameter(3), y=ConstantParameter(5), z=ConstantParameter(8))
-        real_parameters = dict(x=3, y=5)
+        scope = DictScope.from_kwargs(x=3, y=5, z=8, volatile={'some_parameter'})
         channel_mapping = dict(u='a', v='b', w=None)
         measurement_mapping = dict(m1='m2')
         global_transformation = OffsetTransformation({'unrelated': 1.})
@@ -348,24 +340,34 @@ class ArithmeticPulseTemplateTest(unittest.TestCase):
         with mock.patch.object(rhs, '_create_program') as inner_create_program:
             with mock.patch.object(arith, '_get_transformation', return_value=inner_trafo) as get_transformation:
                 arith._internal_create_program(
-                    parameters=parameters,
+                    scope=scope,
                     measurement_mapping=measurement_mapping,
                     channel_mapping=channel_mapping,
                     global_transformation=global_transformation,
                     to_single_waveform=to_single_waveform,
                     parent_loop=parent_loop
                 )
-                get_transformation.assert_called_once_with(parameters=real_parameters, channel_mapping=channel_mapping)
+                get_transformation.assert_called_once_with(parameters=scope, channel_mapping=channel_mapping)
 
             inner_trafo.chain.assert_called_once_with(global_transformation)
             inner_create_program.assert_called_once_with(
-                parameters=parameters,
+                scope=scope,
                 measurement_mapping=measurement_mapping,
                 channel_mapping=channel_mapping,
                 global_transformation=expected_transformation,
                 to_single_waveform=to_single_waveform,
                 parent_loop=parent_loop
             )
+
+            with self.assertRaisesRegex(NotImplementedError, 'volatile'):
+                arith._internal_create_program(
+                    scope=DictScope.from_kwargs(x=3, y=5, z=8, volatile={'x'}),
+                    measurement_mapping=measurement_mapping,
+                    channel_mapping=channel_mapping,
+                    global_transformation=global_transformation,
+                    to_single_waveform=to_single_waveform,
+                    parent_loop=parent_loop
+                )
 
     def test_integral(self):
         scalar = 'x + y'
@@ -441,11 +443,10 @@ class ArithmeticPulseTemplateTest(unittest.TestCase):
 
     def test_simple_attributes(self):
         lhs = DummyPulseTemplate(defined_channels={'a', 'b'}, duration=ExpressionScalar('t_dur'),
-                                 is_interruptable=mock.Mock(), measurement_names={'m1'})
+                                 measurement_names={'m1'})
         rhs = 4
         arith = ArithmeticPulseTemplate(lhs, '+', rhs)
         self.assertIs(lhs.duration, arith.duration)
-        self.assertIs(lhs.is_interruptable, arith.is_interruptable)
         self.assertIs(lhs.measurement_names, arith.measurement_names)
 
     def test_parameter_names(self):
