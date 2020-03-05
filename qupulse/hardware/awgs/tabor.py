@@ -614,7 +614,6 @@ class TaborDevice(AWGDevice):
 
     def send_cmd(self, cmd_str, paranoia_level=None):
         for instr in self.all_devices:
-            print(instr)
             instr.send_cmd(cmd_str=cmd_str, paranoia_level=paranoia_level)
 
     def send_query(self, query_str, query_mirrors=False) -> Any:
