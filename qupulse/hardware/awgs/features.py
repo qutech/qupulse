@@ -78,8 +78,10 @@ class ProgramManagement(AWGChannelTupleFeature, ABC):
 
     @abstractmethod
     def arm(self, name: Optional[str]) -> None:
-        """Load the program 'name' and arm the device for running it. If name is None the awg will "dearm" its current
-        program."""
+        """
+        Load the program 'name' and arm the device for running it. If name is None the awg will "dearm" its current
+        program.
+        """
         raise NotImplementedError()
 
     @property
@@ -147,13 +149,18 @@ class ActivatableChannels(AWGChannelFeature):
     @property
     @abstractmethod
     def status(self) -> bool:
+        """
+        Returns the the state a channel has at the moment. A channel is either activated or deactivated
+        """
         raise NotImplementedError()
 
     @status.setter
     @abstractmethod
     def status(self, channel_status: bool) -> None:
         """
-        Sets the current state of a channel
-        channel_state: the new state of a channel
+        Sets the current state of a channel.
+
+        Args:
+            channel_status: the new state of a channel
         """
         raise NotImplementedError()

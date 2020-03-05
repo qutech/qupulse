@@ -1,6 +1,7 @@
 import fractions
 import functools
 import sys
+import weakref
 from enum import Enum
 from typing import Optional, Set, Tuple, Callable, Dict, Union, Any, Iterable, List, NamedTuple, cast
 from collections import OrderedDict
@@ -45,7 +46,7 @@ assert (sys.byteorder == 'little')
 assert (sys.byteorder == "little")
 
 # Anpassen
-__all__ = ["TaborDevice", "TaborChannelTuple"]
+__all__ = ["TaborDevice", "TaborChannelTuple", "TaborChannel"]
 
 
 class TaborSegment:
@@ -469,7 +470,6 @@ class TaborProgram:
     @property
     def waveform_mode(self) -> str:
         return self.__waveform_mode
-        # TODO: typing
 
 
 # TODO: How does this work?
@@ -498,12 +498,16 @@ def with_select(function_object: Callable[["TaborChannelTuple", Any], Any]) -> C
     """Asserts the channel pair is selcted when the wrapped function is called"""
 
     @functools.wraps(function_object)
-    def selector(channel_pair: "TaborChannelTuple", *args, **kwargs) -> Any:
-        channel_pair.select()
-        return function_object(channel_pair, *args, **kwargs)
+    def selector(channel_tuple: "TaborChannelTuple", *args, **kwargs) -> Any:
+        channel_tuple.select()
+        return function_object(channel_tuple, *args, **kwargs)
 
     return selector
 
+class PlottableProgram:
+    TableEntry = NamedTuple('TableEntry', [('repetition_count', int),
+                                           ('element_number', int),
+                                           ('jump_flag', int)])
 
 TaborProgramMemory = NamedTuple("TaborProgramMemory", [("waveform_to_segment", np.ndarray),
                                                        ("program", TaborProgram)])
@@ -535,7 +539,7 @@ class TaborDevice(AWGDevice):
         :param paranoia_level:    Paranoia level that is forwarded to teawg
         :param external_trigger:  Not supported yet
         :param reset:
-        :param mirror_addresses:  addresses of multiple device which can be controlled at once
+        :param mirror_addresses:  addresses of multiple device which can be controlled at once. For example you can a simulator and a real Device at once
         """
 
         super().__init__(device_name)
@@ -553,11 +557,13 @@ class TaborDevice(AWGDevice):
         # ChannelMarker
         self._channel_marker = [TaborMarkerChannel(i + 1, self) for i in range(4)]
 
-        # ChannelTuple TODO: ChannelMarker fehlen / bzw. Liste leer
+        # ChannelTuple
 
         self._channel_tuples = []
         self._channel_tuples.append(TaborChannelTuple(1, self, self.channels[0:2], self.marker_channels[0:2]))
         self._channel_tuples.append(TaborChannelTuple(2, self, self.channels[2:4], self.marker_channels[2:4]))
+
+
 
         if external_trigger:
             raise NotImplementedError()  # pragma: no cover
@@ -566,18 +572,8 @@ class TaborDevice(AWGDevice):
 
     def cleanup(self) -> None:
         """This will be called automatically in __del__"""
-        # TODO: this method shoud be called in __del__
-        # for tuple in self.channel_tuples:
-        #    tuple.cleanup()
-        # for channel in self.channels:
-        #    channel.clear()
-        # for marker_ch in self.marker_channels:
-        #    marker_ch.clear()
-
-        # is this needed?
-        # self.channels.clear()
-        # self.marker_channels.clear()
-        # self.channel_tuples.clear()
+        for channel_tuple in self.channel_tuples:
+            channel_tuple.cleanup() #TODO: Fehler mit dem letzten Unit Test der aber ignoriert wird
 
     @property
     def channels(self) -> Collection["TaborChannel"]:
@@ -617,8 +613,8 @@ class TaborDevice(AWGDevice):
         return (self._instr,) + self._mirrors
 
     def send_cmd(self, cmd_str, paranoia_level=None):
-        print(cmd_str)
         for instr in self.all_devices:
+            print(instr)
             instr.send_cmd(cmd_str=cmd_str, paranoia_level=paranoia_level)
 
     def send_query(self, query_str, query_mirrors=False) -> Any:
@@ -713,9 +709,7 @@ class TaborDevice(AWGDevice):
         for ch in (1, 2, 3, 4):
             # TODO: select Channel und Marker fehlen im Device
             self.channels[ch - 1].select()
-            # self._select_channel(ch)
             self.marker_channels[(ch - 1) % 2].select()
-            # self.select_marker((ch - 1) % 2 + 1)
             for name, query, dtype in name_query_type_list:
                 data[name].append(dtype(self.send_query(query)))
         return data
@@ -723,30 +717,6 @@ class TaborDevice(AWGDevice):
     @property
     def is_open(self) -> bool:
         return self._instr.visa_inst is not None  # pragma: no cover
-
-    # # TODO: soll man ein Channel Objekt oder eine ChannelNummer mitgeben? -> intern, das was am besten fuer die Umsetzung ist
-    # def _select_channel(self, channel_nr: int) -> None:
-    #     if channel_nr not in range(1, len(self.channels)):
-    #         raise TaborException("Invalid channel: {}".format(channel_nr))
-    #
-    #     self.send_cmd(":INST:SEL {channel}".format(channel=channel_nr))
-    #
-    # def _select_marker(self, marker_nr: int) -> None:
-    #     # TODO: right name for the parameter?
-    #     """Select marker a marker of the currently active channel pair."""
-    #     if marker_nr not in range(1, len(self.channel_tuples[1].marker_channels)):
-    #         raise TaborException("Invalid marker: {}".format(marker_nr))
-    #
-    #     self.send_cmd(":SOUR:MARK:SEL {marker}".format(marker=marker_nr))
-
-    # wird die Methode noch gebraucht?
-    def _sample_rate(self, channel_nr: int) -> int:
-        if channel_nr not in range(1, len(self.channels)):
-            raise TaborException("Invalid channel: {}".format(channel_nr))
-
-        return int(self.channels[channel_nr].channel_tuple.sample_rate)
-
-    # TODO: setter_sample_rate implementieren?
 
     def enable(self) -> None:
         self.send_cmd(":ENAB")
@@ -909,8 +879,7 @@ class TaborProgramManagement(ProgramManagement):
             raise ValueError("Wrong number of voltage transformations")
 
         # adjust program to fit criteria
-        # TODO: samplerate wird jetzt anders verwendet, also nicht mehr im device selber - Ist die sample rate ueber alle Channel gleich oder wieso wird oft die von channel[0] benutzt
-        sample_rate = self._parent.device.sample_rate(self._channels[0])
+        sample_rate = self._parent.device.channel_tuples[0].sample_rate
         make_compatible(program,
                         minimal_waveform_length=192,
                         waveform_quantum=16,
@@ -931,7 +900,6 @@ class TaborProgramManagement(ProgramManagement):
     def clear(self) -> None:
         """Delete all segments and clear memory"""
 
-        # self._parent.device.select_channel(self._channels[0])
         self._parent.device.channels[0].select()
         self._parent.device.send_cmd(':TRAC:DEL:ALL')
         self._parent.device.send_cmd(':SOUR:SEQ:DEL:ALL')
@@ -953,8 +921,6 @@ class TaborProgramManagement(ProgramManagement):
         self._parent._known_programs = dict()
         self._parent.change_armed_program(None)
 
-        pass  # TODO: check/finish implementation
-
     @with_select
     def arm(self, name: Optional[str]) -> None:
         if self._parent._current_program == name:
@@ -966,18 +932,12 @@ class TaborProgramManagement(ProgramManagement):
 class TaborChannelTuple(AWGChannelTuple):
     def __init__(self, idn: int, device: TaborDevice, channels: Iterable["TaborChannel"],
                  marker_channels: Iterable["TaborMarkerChannel"]):
-        # TODO: hat das weglassen des alten String identifier Auswirkungen?
-        # TODO: zugeordneter MarkerChannel
-
         super().__init__(idn)
         self._device = device  # TODO: weakref.ref(device) can't be used like in  the old driver
 
         self._configuration_guard_count = 0
         self._is_in_config_mode = False
 
-        # TODO: Ueberpreufung macht keinen Sinn
-        # if channels not in self._device.channel_tuples:
-        #    raise ValueError("Invalid channel pair: {}".format(channels))
         self._channels = tuple(channels)
         self._marker_channels = tuple(marker_channels)
 
@@ -987,8 +947,6 @@ class TaborChannelTuple(AWGChannelTuple):
             marker_ch._set_channel_tuple(self)
 
         self.add_feature(TaborProgramManagement(self))
-
-        # TODO: Kommentar beenden
 
         self._idle_segment = TaborSegment(voltage_to_uint16(voltage=np.zeros(192),
                                                             output_amplitude=0.5,
@@ -1033,13 +991,8 @@ class TaborChannelTuple(AWGChannelTuple):
 
     @property
     def sample_rate(self) -> float:
-        # haben wirklich alle Channel eines Tupels die selbe sample rate?
+        #TODO: keep sample_rate in tuple or put it in the channel
         return self.device.send_query(":INST:SEL {channel}; :FREQ:RAST?".format(channel=self.channels[0].idn))
-
-    """
-    def select(self) -> None:
-        pass  # TODO: to implement
-    """
 
     @property
     def total_capacity(self) -> int:
@@ -1097,7 +1050,7 @@ class TaborChannelTuple(AWGChannelTuple):
 
         old_sequence = device.send_query(":SEQ:SEL?")
         sequences = []
-        uploaded_sequence_indices = np.arange(len(self._sequencer_tables)) + 1  # array ist im alten Treiber gleich
+        uploaded_sequence_indices = np.arange(len(self._sequencer_tables)) + 1
         for sequence in uploaded_sequence_indices:
             device.send_cmd(':SEQ:SEL {}'.format(sequence), paranoia_level=self.internal_paranoia_level)
             sequences.append(device.read_sequencer_table())
@@ -1108,6 +1061,7 @@ class TaborChannelTuple(AWGChannelTuple):
     def read_advanced_sequencer_table(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         return self.device.get_readable_device(simulator=True).read_adv_seq_table()
 
+
     # upload im Feature
 
     def read_complete_program(self) -> PlottableProgram:
@@ -1116,6 +1070,7 @@ class TaborChannelTuple(AWGChannelTuple):
                                                self.read_advanced_sequencer_table())
 
     # clear im Feature
+
 
     def _find_place_for_segments_in_memory(self, segments: Sequence, segment_lengths: Sequence) -> Tuple[
         np.ndarray, np.ndarray, np.ndarray]:
@@ -1128,9 +1083,6 @@ class TaborChannelTuple(AWGChannelTuple):
         :param segment_lengths:
         :return:
         """
-
-        # TODO: ueberpreufen
-
         segment_hashes = np.fromiter((hash(segment) for segment in segments), count=len(segments), dtype=np.int64)
 
         waveform_to_segment = find_positions(self._segment_hashes, segment_hashes)
@@ -1209,7 +1161,6 @@ class TaborChannelTuple(AWGChannelTuple):
     @with_select
     @with_configuration_guard
     def _upload_segment(self, segment_index: int, segment: TaborSegment) -> None:
-        #  TODO: Why is the proptery for device not used?
         if self._segment_references[segment_index] > 0:
             raise ValueError("Reference count not zero")
         if segment.num_points > self._segment_capacity[segment_index]:
@@ -1217,7 +1168,6 @@ class TaborChannelTuple(AWGChannelTuple):
 
         segment_no = segment_index + 1
 
-<<<<<<< HEAD
         self.device.send_cmd(':TRAC:DEF {}, {}'.format(segment_no, segment.num_points),
                              paranoia_level=self.internal_paranoia_level)
         self._segment_lengths[segment_index] = segment.num_points
@@ -1507,11 +1457,6 @@ class TaborChannelTuple(AWGChannelTuple):
                 cmd = cmd + ":INST:SEL {}; :OUTP ON;".format(channel.idn)
             self.device.send_cmd(cmd[:-1])
 
-            # self.device.send_cmd(":INST:SEL {}; :OUTP ON; :INST:SEL {}; :OUTP ON".format(*self._channels))
-
-        #self.marker_channels[0][TaborMarkerChannelActivatable].status = True  # TODO: Fehler hier wird nichts gemacht!!!
-        #self.marker_channels[1][TaborMarkerChannelActivatable].status = True
-
         for marker_ch in self.marker_channels:
             marker_ch[TaborMarkerChannelActivatable].status = True
 
@@ -1536,8 +1481,7 @@ class TaborMarkerChannelActivatable(ActivatableChannels):
         command_string = ":INST:SEL {channel}; :SOUR:MARK:SEL {marker}; :SOUR:MARK:SOUR USER; :SOUR:MARK:STAT {active}"
         command_string = command_string.format(
             channel=self._parent.channel_tuple.channels[0].idn,
-            # TODO: Bearbeiten - self._parent.channel_tuple.channels[0].idn, device durch channel_tuple ersetzt
-            marker=self._parent.channel_tuple.marker_channels.index(self._parent)+1,  # marker=self._parent.idn, TODO: bei
+            marker=self._parent.channel_tuple.marker_channels.index(self._parent)+1,
             active="ON" if channel_state else "OFF")
         self._parent.device.send_cmd(command_string)
 

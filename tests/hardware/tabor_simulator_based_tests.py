@@ -292,3 +292,4 @@ class TaborMemoryReadTests(TaborSimulatorBasedTest):
         expected = list(np.asarray(d)
                         for d in zip(*actual_advanced_table))
         np.testing.assert_equal(advanced_table, expected)
+
