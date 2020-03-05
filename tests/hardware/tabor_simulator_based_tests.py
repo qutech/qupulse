@@ -132,9 +132,6 @@ class TaborAWGRepresentationTests(TaborSimulatorBasedTest):
         # TODO: int or float self.assertEqual(2300000000, self.instrument.channel_tuples[0].sample_rate)
 
     def test_amplitude(self):
-        # for ch in (1, 2, 3, 4):
-        #    self.assertIsInstance(self.instrument.amplitude(ch), float)
-
         for channel in self.instrument.channels:
             self.assertIsInstance(channel[TaborOffsetAmplitude].amplitude, float)
 
@@ -191,6 +188,7 @@ class TaborMemoryReadTests(TaborSimulatorBasedTest):
 
         # TODO: darf man das so ersetzen
         # self.channel_pair = TaborChannelTuple(self.instrument, (1, 2), 'tabor_unit_test')
+
         self.channel_pair = self.instrument.channel_tuples[0]
 
 

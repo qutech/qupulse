@@ -504,10 +504,12 @@ def with_select(function_object: Callable[["TaborChannelTuple", Any], Any]) -> C
 
     return selector
 
+
 class PlottableProgram:
     TableEntry = NamedTuple('TableEntry', [('repetition_count', int),
                                            ('element_number', int),
                                            ('jump_flag', int)])
+
 
 TaborProgramMemory = NamedTuple("TaborProgramMemory", [("waveform_to_segment", np.ndarray),
                                                        ("program", TaborProgram)])
@@ -559,11 +561,10 @@ class TaborDevice(AWGDevice):
 
         # ChannelTuple
 
-        self._channel_tuples = []
-        self._channel_tuples.append(TaborChannelTuple(1, self, self.channels[0:2], self.marker_channels[0:2]))
-        self._channel_tuples.append(TaborChannelTuple(2, self, self.channels[2:4], self.marker_channels[2:4]))
-
-
+        self._channel_tuples = [
+            TaborChannelTuple(1, self, self.channels[0:2], self.marker_channels[0:2]),
+            TaborChannelTuple(2, self, self.channels[2:4], self.marker_channels[2:4])
+        ]
 
         if external_trigger:
             raise NotImplementedError()  # pragma: no cover
@@ -573,7 +574,7 @@ class TaborDevice(AWGDevice):
     def cleanup(self) -> None:
         """This will be called automatically in __del__"""
         for channel_tuple in self.channel_tuples:
-            channel_tuple.cleanup() #TODO: Fehler mit dem letzten Unit Test der aber ignoriert wird
+            channel_tuple.cleanup()  # TODO: Fehler mit dem letzten Unit Test der aber ignoriert wird
 
     @property
     def channels(self) -> Collection["TaborChannel"]:
@@ -990,7 +991,7 @@ class TaborChannelTuple(AWGChannelTuple):
 
     @property
     def sample_rate(self) -> float:
-        #TODO: keep sample_rate in tuple or put it in the channel
+        # TODO: keep sample_rate in tuple or put it in the channel
         return self.device.send_query(":INST:SEL {channel}; :FREQ:RAST?".format(channel=self.channels[0].idn))
 
     @property
@@ -1480,7 +1481,7 @@ class TaborMarkerChannelActivatable(ActivatableChannels):
         command_string = ":INST:SEL {channel}; :SOUR:MARK:SEL {marker}; :SOUR:MARK:SOUR USER; :SOUR:MARK:STAT {active}"
         command_string = command_string.format(
             channel=self._parent.channel_tuple.channels[0].idn,
-            marker=self._parent.channel_tuple.marker_channels.index(self._parent)+1,
+            marker=self._parent.channel_tuple.marker_channels.index(self._parent) + 1,
             active="ON" if channel_state else "OFF")
         self._parent.device.send_cmd(command_string)
 
