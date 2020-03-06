@@ -38,8 +38,8 @@ class AWGDevice(FeatureAble[AWGDeviceFeature], ABC):
         super().__init__()
         self._name = name
 
-    def __del__(self):
-        self.cleanup()
+    #def __del__(self):
+    #    self.cleanup()
 
     @property
     def name(self) -> str:
