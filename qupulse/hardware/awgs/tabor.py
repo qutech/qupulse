@@ -1098,7 +1098,7 @@ class TaborProgramManagement(ProgramManagement):
     @with_select
     def arm(self, name: Optional[str]) -> None:
         """
-        The program 'name' armed
+        The program 'name' gets armed
 
         Args:
             name (str): the program the device should change to

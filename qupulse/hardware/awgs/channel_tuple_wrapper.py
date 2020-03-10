@@ -24,7 +24,7 @@ class ChannelTupleAdapter(AWG):
         return self.m_identifier
 
     def num_channels(self) -> int:
-        return self.m_num_channels()
+        return self.m_num_channels
 
     def num_markers(self) -> int:
         return self.m_num_marker
