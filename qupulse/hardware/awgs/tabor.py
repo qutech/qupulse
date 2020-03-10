@@ -10,6 +10,8 @@ import numpy as np
 from qupulse import ChannelID
 from qupulse._program._loop import Loop, make_compatible
 from qupulse._program.waveforms import MultiChannelWaveform
+from qupulse.hardware.awgs import channel_tuple_wrapper
+from qupulse.hardware.awgs.channel_tuple_wrapper import ChannelTupleAdapter
 from qupulse.hardware.awgs.features import ChannelSynchronization, AmplitudeOffsetHandling, OffsetAmplitude, \
     ProgramManagement, ActivatableChannels
 from qupulse.hardware.util import voltage_to_uint16, make_combined_wave, find_positions, get_sample_times
@@ -1152,6 +1154,22 @@ class TaborChannelTuple(AWGChannelTuple):
 
         self[TaborProgramManagement].clear()
 
+        self._channel_tuple_adapter = ChannelTupleAdapter(
+            self.name,
+            self.num_channels,
+            self.num_markers,
+            self[TaborProgramManagement].upload,
+            self[TaborProgramManagement].remove,
+            self[TaborProgramManagement].clear,
+            self[TaborProgramManagement].arm,
+            self.programs,
+            self.sample_rate
+        )
+
+    @property
+    def channel_tuple_adapter(self) -> channel_tuple_wrapper:
+        return self._channel_tuple_adapter
+
     def select(self) -> None:
         """The channel tuple is selected, which means that the first channel of the channel tuple is selected"""
         self.channels[0].select()
@@ -1174,6 +1192,7 @@ class TaborChannelTuple(AWGChannelTuple):
 
     @property
     def sample_rate(self) -> float:
+        """Returns the sample rate that the channels of a channel tuple have"""
         return self.device.send_query(":INST:SEL {channel}; :FREQ:RAST?".format(channel=self.channels[0].idn))
 
     @property

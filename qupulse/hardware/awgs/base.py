@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Optional
 
+from qupulse.hardware.awgs import channel_tuple_wrapper
 from qupulse.hardware.awgs.base_features import Feature, FeatureAble
 from qupulse.utils.types import Collection
 
@@ -81,6 +82,11 @@ class AWGChannelTuple(FeatureAble[AWGChannelTupleFeature], ABC):
         super().__init__()
 
         self._idn = idn
+
+    @property
+    @abstractmethod
+    def channel_tuple_adapter(self) -> channel_tuple_wrapper:
+        pass
 
     @property
     def idn(self) -> int:
