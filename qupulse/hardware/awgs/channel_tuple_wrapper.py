@@ -3,7 +3,6 @@ from typing import Tuple, Optional, Callable, Set
 from qupulse._program._loop import Loop
 from qupulse.hardware.awgs import TaborChannelTuple
 from qupulse.hardware.awgs.old_base import AWG
-from qupulse.hardware.awgs.features import ProgramManagement
 
 
 class ChannelTupleAdapter(AWG):
