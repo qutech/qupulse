@@ -10,7 +10,6 @@ import numpy as np
 from qupulse import ChannelID
 from qupulse._program._loop import Loop, make_compatible
 from qupulse._program.waveforms import MultiChannelWaveform
-from qupulse.hardware.awgs import channel_tuple_wrapper
 from qupulse.hardware.awgs.channel_tuple_wrapper import ChannelTupleAdapter
 from qupulse.hardware.awgs.features import ChannelSynchronization, AmplitudeOffsetHandling, OffsetAmplitude, \
     ProgramManagement, ActivatableChannels
@@ -1154,20 +1153,10 @@ class TaborChannelTuple(AWGChannelTuple):
 
         self[TaborProgramManagement].clear()
 
-        self._channel_tuple_adapter = ChannelTupleAdapter(
-            self.name,
-            self.num_channels,
-            self.num_markers,
-            self[TaborProgramManagement].upload,
-            self[TaborProgramManagement].remove,
-            self[TaborProgramManagement].clear,
-            self[TaborProgramManagement].arm,
-            self.programs,
-            self.sample_rate
-        )
+        self._channel_tuple_adapter = ChannelTupleAdapter(self)
 
     @property
-    def channel_tuple_adapter(self) -> channel_tuple_wrapper:
+    def channel_tuple_adapter(self) -> ChannelTupleAdapter:
         return self._channel_tuple_adapter
 
     def select(self) -> None:

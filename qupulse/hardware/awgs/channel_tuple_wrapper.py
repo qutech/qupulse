@@ -1,33 +1,26 @@
 from typing import Tuple, Optional, Callable, Set
 
 from qupulse._program._loop import Loop
+from qupulse.hardware.awgs import TaborChannelTuple
 from qupulse.hardware.awgs.old_base import AWG
+from qupulse.hardware.awgs.features import ProgramManagement
 
 
 class ChannelTupleAdapter(AWG):
     def __copy__(self) -> None:
         pass
 
-    def __init__(self, method_identifier, method_num_channels, method_num_marker, method_upload, method_remove,
-                 method_clear, method_arm, method_programs, method_sample_rate):
-        self.m_identifier = method_identifier
-        self.m_num_channels = method_num_channels
-        self.m_num_marker = method_num_marker
-        self.m_upload = method_upload
-        self.m_remove = method_remove
-        self.m_clear = method_clear
-        self.m_arm = method_arm
-        self.m_programs = method_programs
-        self.m_sample_rate = method_sample_rate
+    def __init__(self, channel_tuple: TaborChannelTuple):
+        self._channel_tuple = channel_tuple
 
     def identifier(self) -> str:
-        return self.m_identifier
+        return self._channel_tuple.name
 
     def num_channels(self) -> int:
-        return self.m_num_channels
+        return self._channel_tuple.num_channels
 
     def num_markers(self) -> int:
-        return self.m_num_marker
+        return self._channel_tuple.num_markers
 
     def upload(self, name: str,
                program: Loop,
@@ -35,19 +28,24 @@ class ChannelTupleAdapter(AWG):
                markers: Tuple[Optional["ChannelID"], ...],
                voltage_transformation: Tuple[Optional[Callable], ...],
                force: bool = False) -> None:
-        return self.m_upload(name, program, channels, markers, voltage_transformation, force)
+        from qupulse.hardware.awgs.tabor import TaborProgramManagement
+        return self._channel_tuple[TaborProgramManagement].upload(name, program, channels, markers,
+                                                                  voltage_transformation, force)
 
     def remove(self, name: str) -> None:
-        return self.m_remove(name)
+        from qupulse.hardware.awgs.tabor import TaborProgramManagement
+        return self._channel_tuple[TaborProgramManagement].remove(name)
 
     def clear(self) -> None:
-        return self.m_clear
+        from qupulse.hardware.awgs.tabor import TaborProgramManagement
+        return self._channel_tuple[TaborProgramManagement].clear()
 
     def arm(self, name: Optional[str]) -> None:
-        return self.m_arm(name)
+        from qupulse.hardware.awgs.tabor import TaborProgramManagement
+        return self._channel_tuple[TaborProgramManagement].arm(name)
 
     def programs(self) -> Set[str]:
-        return self.m_programs
+        return self._channel_tuple.programs
 
     def sample_rate(self) -> float:
-        return self.m_sample_rate
+        return self._channel_tuple.sample_rate
