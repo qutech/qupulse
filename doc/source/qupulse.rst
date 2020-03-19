@@ -1,8 +1,7 @@
 qupulse package
 ===============
 
-Subpackages
------------
+
 
 .. toctree::
 
@@ -11,8 +10,7 @@ Subpackages
     qupulse.pulses
     qupulse.utils
 
-Submodules
-----------
+
 
 qupulse\.comparable module
 --------------------------

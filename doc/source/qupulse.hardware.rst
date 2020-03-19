@@ -1,38 +1,36 @@
-qupulse\.hardware package
-=========================
+qupulse.hardware package
+========================
 
-Subpackages
------------
+.. automodule:: qupulse.hardware
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:
+
+
 
 .. toctree::
 
-    qupulse.hardware.awgs
-    qupulse.hardware.dacs
+   qupulse.hardware.awgs
+   qupulse.hardware.dacs
 
-Submodules
-----------
 
-qupulse\.hardware\.setup module
--------------------------------
+
+qupulse.hardware.setup module
+-----------------------------
 
 .. automodule:: qupulse.hardware.setup
-    :members:
-    :undoc-members:
-    :show-inheritance:
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:
 
-qupulse\.hardware\.util module
-------------------------------
+qupulse.hardware.util module
+----------------------------
 
 .. automodule:: qupulse.hardware.util
-    :members:
-    :undoc-members:
-    :show-inheritance:
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:
 
-
-Module contents
----------------
-
-.. automodule:: qupulse.hardware
-    :members:
-    :undoc-members:
-    :show-inheritance:

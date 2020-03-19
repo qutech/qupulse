@@ -1,133 +1,155 @@
-qupulse\.pulses package
-=======================
-
-Module contents
----------------
+qupulse.pulses package
+======================
 
 .. automodule:: qupulse.pulses
-    :members:
-    :undoc-members:
-    :show-inheritance:
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:
 
-Submodules
-----------
 
-qupulse\.pulses\.conditions module
-----------------------------------
 
-.. automodule:: qupulse.pulses.conditions
-    :members:
-    :undoc-members:
-    :show-inheritance:
+qupulse.pulses.abstract\_pulse\_template module
+-----------------------------------------------
 
-qupulse\.pulses\.function\_pulse\_template module
+.. automodule:: qupulse.pulses.abstract_pulse_template
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:
+
+qupulse.pulses.arithmetic\_pulse\_template module
 -------------------------------------------------
+
+.. automodule:: qupulse.pulses.arithmetic_pulse_template
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:
+
+qupulse.pulses.function\_pulse\_template module
+-----------------------------------------------
 
 .. automodule:: qupulse.pulses.function_pulse_template
-    :members:
-    :undoc-members:
-    :show-inheritance:
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:
 
-qupulse\.pulses\.interpolation module
--------------------------------------
-
-.. automodule:: qupulse.pulses.interpolation
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-qupulse\.pulses\.loop\_pulse\_template module
----------------------------------------------
-
-.. automodule:: qupulse.pulses.loop_pulse_template
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-qupulse\.pulses\.measurement module
+qupulse.pulses.interpolation module
 -----------------------------------
 
-.. automodule:: qupulse.pulses.measurement
-    :members:
-    :undoc-members:
-    :show-inheritance:
+.. automodule:: qupulse.pulses.interpolation
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:
 
-qupulse\.pulses\.multi\_channel\_pulse\_template module
--------------------------------------------------------
+qupulse.pulses.loop\_pulse\_template module
+-------------------------------------------
 
-.. automodule:: qupulse.pulses.multi_channel_pulse_template
-    :members:
-    :undoc-members:
-    :show-inheritance:
+.. automodule:: qupulse.pulses.loop_pulse_template
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:
 
-qupulse\.pulses\.parameters module
-----------------------------------
-
-.. automodule:: qupulse.pulses.parameters
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-qupulse\.pulses\.plotting module
---------------------------------
-
-.. automodule:: qupulse.pulses.plotting
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-qupulse\.pulses\.point\_pulse\_template module
+qupulse.pulses.mapping\_pulse\_template module
 ----------------------------------------------
-
-.. automodule:: qupulse.pulses.point_pulse_template
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-qupulse\.pulses\.pulse\_template module
----------------------------------------
-
-.. automodule:: qupulse.pulses.pulse_template
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-qupulse\.pulses\.mapping\_pulse\_template module
-------------------------------------------------
 
 .. automodule:: qupulse.pulses.mapping_pulse_template
-    :members:
-    :undoc-members:
-    :show-inheritance:
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:
 
-qupulse\.pulses\.repetition\_pulse\_template module
----------------------------------------------------
+qupulse.pulses.measurement module
+---------------------------------
 
-.. automodule:: qupulse.pulses.repetition_pulse_template
-    :members:
-    :undoc-members:
-    :show-inheritance:
+.. automodule:: qupulse.pulses.measurement
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:
 
-qupulse\.pulses\.sequence\_pulse\_template module
+qupulse.pulses.multi\_channel\_pulse\_template module
+-----------------------------------------------------
+
+.. automodule:: qupulse.pulses.multi_channel_pulse_template
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:
+
+qupulse.pulses.parameters module
+--------------------------------
+
+.. automodule:: qupulse.pulses.parameters
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:
+
+qupulse.pulses.plotting module
+------------------------------
+
+.. automodule:: qupulse.pulses.plotting
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:
+
+qupulse.pulses.point\_pulse\_template module
+--------------------------------------------
+
+.. automodule:: qupulse.pulses.point_pulse_template
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:
+
+qupulse.pulses.pulse\_template module
+-------------------------------------
+
+.. automodule:: qupulse.pulses.pulse_template
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:
+
+qupulse.pulses.pulse\_template\_parameter\_mapping module
+---------------------------------------------------------
+
+.. automodule:: qupulse.pulses.pulse_template_parameter_mapping
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:
+
+qupulse.pulses.repetition\_pulse\_template module
 -------------------------------------------------
 
+.. automodule:: qupulse.pulses.repetition_pulse_template
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:
+
+qupulse.pulses.sequence\_pulse\_template module
+-----------------------------------------------
+
 .. automodule:: qupulse.pulses.sequence_pulse_template
-    :members:
-    :undoc-members:
-    :show-inheritance:
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:
 
-qupulse\.pulses\.sequencing module
-----------------------------------
-
-.. automodule:: qupulse.pulses.sequencing
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-qupulse\.pulses\.table\_pulse\_template module
-----------------------------------------------
+qupulse.pulses.table\_pulse\_template module
+--------------------------------------------
 
 .. automodule:: qupulse.pulses.table_pulse_template
-    :members:
-    :undoc-members:
-    :show-inheritance:
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:
+

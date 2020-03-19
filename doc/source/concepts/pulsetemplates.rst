@@ -3,7 +3,7 @@
 Pulse Templates
 ---------------
 
-qupulse represents pulses as abstract pulse templates. A pulse template can be understood as a class of pulses that share a similar structure but differ in the concrete amplitude or duration of voltage levels. To this end, pulse templates are parameterizable. Pulse templates are also designed to feature easy reusability of existing templates. The process of plugging in values for a pulse templates parameters is called instantiation.
+qupulse represents pulses as abstract pulse templates. A pulse template can be understood as a class of pulses that share a similar structure but differ in the concrete amplitude or duration of voltage levels or repetition counts. To this end, pulse templates are parameterizable. Pulse templates are also designed to feature easy reusability of existing templates. The process of plugging in values for a pulse templates parameters is called instantiation. This is done via :meth:`~.PulseTemplate.create_program`. The result is a deterministic description of all voltages at all times and is called a program.
 
 There are multiple types of different pulse template classes, briefly explained in the following.
 
