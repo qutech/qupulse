@@ -56,7 +56,8 @@ extensions = [
 
 autodoc_default_flags = ['members', 'undoc-members', 'show-inheritance']  # 'private-members', 'special-members', 'inherited-members'
 
-autosummary_mock_imports = autodoc_mock_imports = ['atsaverage', 'zhinst', 'tewag']
+autosummary_mock_imports = autodoc_mock_imports = ['atsaverage', 'zhinst', 'teawg', 'tek_awg', 'matplotlib']
+
 autoclass_content = 'both'
 autosummary_generate = True
 napoleon_include_init_with_doc = True
