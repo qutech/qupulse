@@ -216,9 +216,7 @@ class HDAWGModulationMode(Enum):
 
 class HDAWGChannelPair(AWG):
     """Represents a channel pair of the Zurich Instruments HDAWG as an independent AWG entity.
-    It represents a set of channels that have to have(hardware enforced) the same:
-        -control flow
-        -sample rate
+    It represents a set of channels that have to have(hardware enforced) the same control flow and sample rate.
 
     It keeps track of the AWG state and manages waveforms and programs on the hardware.
     """

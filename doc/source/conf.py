@@ -54,7 +54,11 @@ extensions = [
     'nbsphinx'
 ]
 
-autodoc_default_flags = ['members', 'undoc-members', 'show-inheritance']  # 'private-members', 'special-members', 'inherited-members'
+autodoc_default_options = {
+    'members': None,
+    'undoc-members': None,
+    'show-inheritance': None
+}
 
 autosummary_mock_imports = autodoc_mock_imports = ['atsaverage', 'zhinst', 'teawg', 'tek_awg', 'matplotlib']
 
@@ -318,7 +322,7 @@ texinfo_documents = [
 
 # Example configuration for intersphinx: refer to the Python standard library.
 intersphinx_mapping = {
-    'python': ('https://docs.python.org/3.5', None),
+    'python': ('https://docs.python.org/', None),
     'numpy': ('http://docs.scipy.org/doc/numpy/', None)
 }
 

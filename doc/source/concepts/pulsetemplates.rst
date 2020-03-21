@@ -14,7 +14,7 @@ All other pulse template classes are then used to construct arbitrarily complex 
 :class:`.SequencePulseTemplate` enables the user to specify a sequence of existing pulse templates (subtemplates) and modify parameter values using a mapping function.
 :class:`.RepetitionPulseTemplate` is used to simply repeat one existing pulse template a given number of times.
 :class:`.ForLoopPulseTemplate` is similar but allows a parametrization of the loop body with the loop index.
-One special pulse template is the :class:`.MappingPulseTemplate` which allows the renaming of channels and measurements as well as mapping parameters by mathematical expressions.
+One special pulse template is the :class:`.mapping_pulse_template.MappingPulseTemplate` which allows the renaming of channels and measurements as well as mapping parameters by mathematical expressions.
 
 In some cases, it is desired to write a pulse which partly consists of placeholder pulses. For this the :class:`.AbstractPulseTemplate` was included.
 
@@ -35,7 +35,7 @@ As mentioned above, all pulse templates may depend on parameters. During pulse t
 
 The mathematical expressions (for parameter transformation or as the function of the :class:`.FunctionPulseTemplate`) are encapsulated into an :class:`.Expression` class which wraps `sympy <http://www.sympy.org/en/index.html>`_ for string evaluation.
 
-Parameters can be mapped to arbitrary expressions via :class:`.MappingPulseTemplate`. One use case can be deriving pulse parameters from physical quantities.
+Parameters can be mapped to arbitrary expressions via :class:`.mapping_pulse_template.MappingPulseTemplate`. One use case can be deriving pulse parameters from physical quantities.
 
 On instantiation the parameters are evaluated via parameter scopes which are defined in :py:mod:`~qupulse.parameter_scope`. This is currently only relevant for internal usage but might be useful if you want to develop a more sophisticated parameter management.
 
@@ -68,7 +68,7 @@ Examples demonstrating the construction of pulse templates and parameters from v
 * :ref:`/examples/03xComposedPulses.ipynb`
 * :ref:`/examples/05MappingTemplate.ipynb`
 * :ref:`/examples/07MultiChannelTemplates.ipynb`
-* :ref:`/examples/14ArithmeticWithPulseTemplates`
+* :ref:`/examples/14ArithmeticWithPulseTemplates.ipynb`
 
 :ref:`/examples/09ParameterConstraints.ipynb` demonstrates the mentioned parameter constraints.
 

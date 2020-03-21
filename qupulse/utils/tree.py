@@ -1,6 +1,7 @@
+"""This module contains a tree implementation."""
+
 from typing import Iterable, Union, List, Generator, Tuple, TypeVar, Optional, Sequence
 from collections import deque, namedtuple
-from copy import copy as shallow_copy
 import weakref
 
 from qupulse.utils.types import SequenceProxy

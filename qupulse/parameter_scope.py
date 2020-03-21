@@ -1,26 +1,24 @@
+"""Contains various implementations of the parameter lookup interface :class:`.Scope`"""
+
 from abc import abstractmethod
-from typing import Optional, Union, Dict, Any, Iterable, Set, List, Mapping, AbstractSet, ValuesView, Tuple
+from typing import Mapping, AbstractSet, ValuesView, Tuple
 from numbers import Number
-import functools
-import collections
-import itertools
 import warnings
-import operator
 
-import sympy
-import numpy
-
-from qupulse.serialization import AnonymousSerializable
 from qupulse.expressions import Expression, ExpressionVariableMissingException
-from qupulse.utils.types import HashableNumpyArray, DocStringABCMeta, Collection, SingletonABCMeta, FrozenMapping,\
-    FrozenDict
+from qupulse.utils.types import FrozenMapping, FrozenDict
 
 
 class Scope(Mapping[str, Number]):
-    """
+    """Abstract parameter lookup. Scopes are immutable. Internally it holds all dependencies of parameters and keeps
+     track which had been marked as volatile. This allows creating a new scope with different volatile dependencies.
+
+     Parameter: A key, value pair in this Mapping
+     Constant: A
+     Volatile constant:
 
     Equality: Scopes may not be equal even if type and abstract properties are equal. If you need semantic equality use
-    as_dict"""
+    :meth:`.Scope.as_dict`"""
 
     __slots__ = ('_as_dict',)
 
@@ -29,7 +27,10 @@ class Scope(Mapping[str, Number]):
 
     @abstractmethod
     def get_volatile_parameters(self) -> FrozenDict[str, Expression]:
-        pass
+        """
+        Returns:
+            A mapping where the keys are the volatile parameters and the
+        """
 
     @abstractmethod
     def __hash__(self):
@@ -70,7 +71,6 @@ class Scope(Mapping[str, Number]):
         """
 
     def overwrite(self, to_overwrite: Mapping[str, Number]) -> 'Scope':
-        """"""
         # TODO: replace with OverwritingScope
         return MappedScope(self, FrozenDict((name, Expression(value))
                                             for name, value in to_overwrite.items()))
