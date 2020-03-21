@@ -28,8 +28,8 @@ with open(os.path.join('..', '..', 'qupulse', '__init__.py')) as qupulse_init:
                               qupulse_init.read(), re.M)
     if version_match:
         release = version = version_match.group(1)
-
-    raise RuntimeError("Unable to find version string.")
+    else:
+        raise RuntimeError("Unable to find version string.")
 
 # -- General configuration ------------------------------------------------
 
@@ -56,7 +56,7 @@ extensions = [
 
 autodoc_default_flags = ['members', 'undoc-members', 'show-inheritance']  # 'private-members', 'special-members', 'inherited-members'
 
-autodoc_mock_imports = ['atsaverage', 'zhinst', 'tewag']
+autosummary_mock_imports = autodoc_mock_imports = ['atsaverage', 'zhinst', 'tewag']
 autoclass_content = 'both'
 autosummary_generate = True
 napoleon_include_init_with_doc = True
@@ -316,7 +316,10 @@ texinfo_documents = [
 
 
 # Example configuration for intersphinx: refer to the Python standard library.
-intersphinx_mapping = {'https://docs.python.org/': None}
+intersphinx_mapping = {
+    'python': ('https://docs.python.org/3.5', None),
+    'numpy': ('http://docs.scipy.org/doc/numpy/', None)
+}
 
 
 def skip(app, what, name, obj, skip, options):
