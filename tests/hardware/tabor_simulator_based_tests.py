@@ -142,25 +142,25 @@ class TaborAWGRepresentationTests(TaborSimulatorBasedTest):
 
     def test_select_marker(self):
         with self.assertRaises(IndexError):
-            self.instrument.marker_channels[6].select()
+            self.instrument.marker_channels[6]._select()
 
-        self.instrument.marker_channels[1].select()
-        selected = self.instrument.send_query(':SOUR:MARK:SEL?')
+        self.instrument.marker_channels[1]._select()
+        selected = self.instrument._send_query(':SOUR:MARK:SEL?')
         self.assertEqual(selected, '2')
 
-        self.instrument.marker_channels[0].select()
-        selected = self.instrument.send_query(':SOUR:MARK:SEL?')
+        self.instrument.marker_channels[0]._select()
+        selected = self.instrument._send_query(':SOUR:MARK:SEL?')
         self.assertEqual(selected, '1')
 
     def test_select_channel(self):
         with self.assertRaises(IndexError):
-            self.instrument.channels[6].select()
+            self.instrument.channels[6]._select()
 
-        self.instrument.channels[0].select()
-        self.assertEqual(self.instrument.send_query(':INST:SEL?'), '1')
+        self.instrument.channels[0]._select()
+        self.assertEqual(self.instrument._send_query(':INST:SEL?'), '1')
 
-        self.instrument.channels[3].select()
-        self.assertEqual(self.instrument.send_query(':INST:SEL?'), '4')
+        self.instrument.channels[3]._select()
+        self.assertEqual(self.instrument._send_query(':INST:SEL?'), '4')
 
 
 class TaborMemoryReadTests(TaborSimulatorBasedTest):

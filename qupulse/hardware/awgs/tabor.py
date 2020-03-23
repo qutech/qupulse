@@ -283,12 +283,12 @@ class TaborProgram:
 
     @property
     def markers(self):
-        return self._markers
+        return self._markers  # TODO (LuL): Uncomment the instantiation of self._channels
         # TODO: typing
 
     @property
     def channels(self):
-        return self._channels
+        return self._channels  # TODO (LuL): Uncomment the instantiation of self._channels
         # TODO: typing
 
     def sampled_segments(self,
@@ -518,7 +518,7 @@ def with_select(function_object: Callable[["TaborChannelTuple", Any], Any]) -> C
 
     @functools.wraps(function_object)
     def selector(channel_tuple: "TaborChannelTuple", *args, **kwargs) -> Any:
-        channel_tuple.select()
+        channel_tuple._select()  # TODO (LuL): make the select-function private, because it only should be called from here
         return function_object(channel_tuple, *args, **kwargs)
 
     return selector
@@ -659,6 +659,9 @@ TaborProgramMemory = NamedTuple("TaborProgramMemory", [("waveform_to_segment", n
 ########################################################################################################################
 # Features
 # TODO: maybe implement Synchronization Feature for Tabor Devices
+# TODO (LuL): Not just maybe. Use the TaborChannelSynchronization for channel synchronization, but you can
+#  raise an error if the the group-size is not 2. Groups of 4 can be implemented later, but you should
+#  prepare the class for this.
 
 """
 class TaborChannelSynchronization(ChannelSynchronization):
@@ -687,7 +690,7 @@ class TaborDevice(AWGDevice):
             mirror_addresses:        list of devices on which the same things as on the main device are done. For example you can a simulator and a real Device at once
 
         """
-
+        # TODO (LuL): I don't think None would work for instr_addr. If so, remove the default value to make it mandatory
         super().__init__(device_name)
         self._instr = teawg.TEWXAwg(instr_addr, paranoia_level)
         self._mirrors = tuple(teawg.TEWXAwg(address, paranoia_level) for address in mirror_addresses)
@@ -704,6 +707,7 @@ class TaborDevice(AWGDevice):
         self._channel_marker = [TaborMarkerChannel(i + 1, self) for i in range(4)]
 
         # ChannelTuple
+        # TODO (LuL): Use the ChannelSynchronization-feature to set up the ChannelTuple's
         self._channel_tuples = [
             TaborChannelTuple(1, self, self.channels[0:2], self.marker_channels[0:2]),
             TaborChannelTuple(2, self, self.channels[2:4], self.marker_channels[2:4])
@@ -712,7 +716,7 @@ class TaborDevice(AWGDevice):
         if external_trigger:
             raise NotImplementedError()  # pragma: no cover
 
-        self.initialize()  # TODO: change for synchronisation-feature
+        self._initialize()  # TODO: change for synchronisation-feature
 
     def cleanup(self) -> None:
         # TODO: split cleanup in to two different methods
@@ -757,28 +761,29 @@ class TaborDevice(AWGDevice):
         return (self._instr,) + self._mirrors
 
     def send_cmd(self, cmd_str, paranoia_level=None):
+        # TODO (LuL): This function should be private
         for instr in self.all_devices:
             instr.send_cmd(cmd_str=cmd_str, paranoia_level=paranoia_level)
 
-    def send_query(self, query_str, query_mirrors=False) -> Any:
+    def _send_query(self, query_str, query_mirrors=False) -> Any:
         if query_mirrors:
             return tuple(instr.send_query(query_str) for instr in self.all_devices)
         else:
             return self._instr.send_query(query_str)
 
-    def send_binary_data(self, pref, bin_dat, paranoia_level=None):
+    def _send_binary_data(self, pref, bin_dat, paranoia_level=None):
         for instr in self.all_devices:
             instr.send_binary_data(pref, bin_dat=bin_dat, paranoia_level=paranoia_level)
 
-    def download_segment_lengths(self, seg_len_list, pref=":SEGM:DATA", paranoia_level=None):
+    def _download_segment_lengths(self, seg_len_list, pref=":SEGM:DATA", paranoia_level=None):
         for instr in self.all_devices:
             instr.download_segment_lengths(seg_len_list, pref=pref, paranoia_level=paranoia_level)
 
-    def download_sequencer_table(self, seq_table, pref=":SEQ:DATA", paranoia_level=None):
+    def _download_sequencer_table(self, seq_table, pref=":SEQ:DATA", paranoia_level=None):
         for instr in self.all_devices:
             instr.download_sequencer_table(seq_table, pref=pref, paranoia_level=paranoia_level)
 
-    def download_adv_seq_table(self, seq_table, pref=":ASEQ:DATA", paranoia_level=None):
+    def _download_adv_seq_table(self, seq_table, pref=":ASEQ:DATA", paranoia_level=None):
         for instr in self.all_devices:
             instr.download_adv_seq_table(seq_table, pref=pref, paranoia_level=paranoia_level)
 
@@ -849,10 +854,10 @@ class TaborDevice(AWGDevice):
 
         data = OrderedDict((name, []) for name, *_ in name_query_type_list)
         for ch in (1, 2, 3, 4):
-            self.channels[ch - 1].select()
-            self.marker_channels[(ch - 1) % 2].select()
+            self.channels[ch - 1]._select()
+            self.marker_channels[(ch - 1) % 2]._select()
             for name, query, dtype in name_query_type_list:
-                data[name].append(dtype(self.send_query(query)))
+                data[name].append(dtype(self._send_query(query)))
         return data
 
     @property
@@ -864,6 +869,7 @@ class TaborDevice(AWGDevice):
         This method immediately generates the selected output waveform, if the device is in continuous and armed
         run mode.
         """
+        # TODO (LuL): Can make a feature for this?
         self.send_cmd(":ENAB")
 
     def abort(self) -> None:
@@ -871,9 +877,10 @@ class TaborDevice(AWGDevice):
         With abort you can terminate the current generation of the output waveform. When the output waveform is
         terminated the output starts generating an idle waveform.
         """
+        # TODO (LuL): Can make a feature for this?
         self.send_cmd(":ABOR")
 
-    def initialize(self) -> None:
+    def _initialize(self) -> None:
         # 1. Select channel
         # 2. Turn off gated mode
         # 3. continous mode
@@ -895,6 +902,7 @@ class TaborDevice(AWGDevice):
         Resetting the whole device. A command for resetting is send to the Device, the device is initialized again and
         all channel tuples are cleared.
         """
+        # TODO (LuL): Can make a feature for this?
         self.send_cmd(':RES')
         self._coupled = None
 
@@ -903,6 +911,7 @@ class TaborDevice(AWGDevice):
             channel_tuple[TaborProgramManagement].clear()
 
     def trigger(self) -> None:
+        # TODO (LuL): Can make a feature for this?
         self.send_cmd(":TRIG")
 
     def get_readable_device(self, simulator=True) -> teawg.TEWXAwg:
@@ -938,7 +947,7 @@ class TaborOffsetAmplitude(OffsetAmplitude):
     @property
     def offset(self) -> float:
         return float(
-            self._parent.device.send_query(":INST:SEL {channel}; :VOLT:OFFS?".format(channel=self._parent.idn)))
+            self._parent.device._send_query(":INST:SEL {channel}; :VOLT:OFFS?".format(channel=self._parent.idn)))
 
     @offset.setter
     def offset(self, offset: float) -> None:
@@ -946,11 +955,11 @@ class TaborOffsetAmplitude(OffsetAmplitude):
 
     @property
     def amplitude(self) -> float:
-        coupling = self._parent.device.send_query(":INST:SEL {channel}; :OUTP:COUP?".format(channel=self._parent.idn))
+        coupling = self._parent.device._send_query(":INST:SEL {channel}; :OUTP:COUP?".format(channel=self._parent.idn))
         if coupling == "DC":
-            return float(self._parent.device.send_query(":VOLT?"))
+            return float(self._parent.device._send_query(":VOLT?"))
         elif coupling == "HV":
-            return float(self._parent.device.send_query(":VOLT:HV?"))
+            return float(self._parent.device._send_query(":VOLT:HV?"))
         else:
             raise TaborException("Unknown coupling: {}".format(coupling))
 
@@ -969,6 +978,9 @@ class TaborOffsetAmplitude(OffsetAmplitude):
 
 
 class TaborChannelActivatable(ActivatableChannels):
+    # TODO (LuL): Wouldn't it be better, to have a property named "active" or "enabled" instead of "status"
+    #  and not a setter for that property, but functions like "activate"/"deactivate" or "enable"/"disable"?
+    #  I think this would be more innovative
     def __init__(self, marker_channel: "TaborMarkerChannel"):
         super().__init__()
         self.parent = marker_channel
@@ -1015,7 +1027,7 @@ class TaborChannel(AWGChannel):
         """
         self._channel_tuple = channel_tuple
 
-    def select(self) -> None:
+    def _select(self) -> None:  # TODO (LuL): This may be private
         self.device.send_cmd(":INST:SEL {channel}".format(channel=self.idn))
 
 
@@ -1073,7 +1085,7 @@ class TaborProgramManagement(ProgramManagement):
     def clear(self) -> None:
         """Delete all segments and clear memory"""
 
-        self._parent.device.channels[0].select()
+        self._parent.device.channels[0]._select()
         self._parent.device.send_cmd(":TRAC:DEL:ALL")
         self._parent.device.send_cmd(":SOUR:SEQ:DEL:ALL")
         self._parent.device.send_cmd(":ASEQ:DEL")
@@ -1081,7 +1093,7 @@ class TaborProgramManagement(ProgramManagement):
         self._parent.device.send_cmd(":TRAC:DEF 1, 192")
         self._parent.device.send_cmd(":TRAC:SEL 1")
         self._parent.device.send_cmd(":TRAC:MODE COMB")
-        self._parent.device.send_binary_data(pref=":TRAC:DATA", bin_dat=self._parent._idle_segment.get_as_binary())
+        self._parent.device._send_binary_data(pref=":TRAC:DATA", bin_dat=self._parent._idle_segment.get_as_binary())
 
         self._parent._segment_lengths = 192 * np.ones(1, dtype=np.uint32)
         self._parent._segment_capacity = 192 * np.ones(1, dtype=np.uint32)
@@ -1106,6 +1118,11 @@ class TaborProgramManagement(ProgramManagement):
             self._parent.device.send_cmd("SEQ:SEL 1")
         else:
             self._parent.change_armed_program(name)
+
+    @property
+    def programs(self) -> Set[str]:
+        """The set of program names that can currently be executed on the hardware AWG."""
+        return set(program.name for program in self._parent._known_programs.keys())
 
 
 class TaborChannelTuple(AWGChannelTuple):
@@ -1153,15 +1170,17 @@ class TaborChannelTuple(AWGChannelTuple):
 
         self[TaborProgramManagement].clear()
 
-        self._channel_tuple_adapter = ChannelTupleAdapter(self)
+        self._channel_tuple_adapter: ChannelTupleAdapter
 
     @property
     def channel_tuple_adapter(self) -> ChannelTupleAdapter:
+        if self._channel_tuple_adapter is None:
+            self._channel_tuple_adapter = ChannelTupleAdapter(self)
         return self._channel_tuple_adapter
 
-    def select(self) -> None:
+    def _select(self) -> None:
         """The channel tuple is selected, which means that the first channel of the channel tuple is selected"""
-        self.channels[0].select()
+        self.channels[0]._select()
 
     @property
     def device(self) -> TaborDevice:
@@ -1182,7 +1201,7 @@ class TaborChannelTuple(AWGChannelTuple):
     @property
     def sample_rate(self) -> float:
         """Returns the sample rate that the channels of a channel tuple have"""
-        return self.device.send_query(":INST:SEL {channel}; :FREQ:RAST?".format(channel=self.channels[0].idn))
+        return self.device._send_query(":INST:SEL {channel}; :FREQ:RAST?".format(channel=self.channels[0].idn))
 
     @property
     def total_capacity(self) -> int:
@@ -1372,7 +1391,7 @@ class TaborChannelTuple(AWGChannelTuple):
         self.device.send_cmd(':TRAC:MODE COMB', paranoia_level=self.internal_paranoia_level)
         wf_data = segment.get_as_binary()
 
-        self.device.send_binary_data(pref=":TRAC:DATA", bin_dat=wf_data)
+        self.device._send_binary_data(pref=":TRAC:DATA", bin_dat=wf_data)
         self._segment_references[segment_index] = 1
         self._segment_hashes[segment_index] = hash(segment)
 
@@ -1386,6 +1405,7 @@ class TaborChannelTuple(AWGChannelTuple):
 
         segment_index = len(self._segment_capacity)
         first_segment_number = segment_index + 1
+
         self.device.send_cmd(':TRAC:DEF {},{}'.format(first_segment_number, trac_len),
                              paranoia_level=self.internal_paranoia_level)
         self.device.send_cmd(':TRAC:SEL {}'.format(first_segment_number),
@@ -1407,7 +1427,7 @@ class TaborChannelTuple(AWGChannelTuple):
                                      paranoia_level=self.internal_paranoia_level)
         else:
             # flush the capacity
-            self.device.download_segment_lengths(segment_capacity)
+            self.device._download_segment_lengths(segment_capacity)
 
             # update non fitting lengths
             for i in np.flatnonzero(segment_capacity != segment_lengths):
@@ -1520,7 +1540,7 @@ class TaborChannelTuple(AWGChannelTuple):
 
     @with_select
     @with_configuration_guard
-    def change_armed_program(self, name: Optional[str]) -> None:
+    def change_armed_program(self, name: Optional[str]) -> None:  # TODO (LuL): Add this to ProgramManagement
         """The armed program of the channel tuple is change to the program with the name 'name'"""
         if name is None:
             sequencer_tables = [self._idle_sequence_table]
@@ -1564,17 +1584,17 @@ class TaborChannelTuple(AWGChannelTuple):
         # download all sequence tables
         for i, sequencer_table in enumerate(sequencer_tables):
             self.device.send_cmd("SEQ:SEL {}".format(i + 1))
-            self.device.download_sequencer_table(sequencer_table)
+            self.device._download_sequencer_table(sequencer_table)
         self._sequencer_tables = sequencer_tables
         self.device.send_cmd("SEQ:SEL 1")
 
-        self.device.download_adv_seq_table(advanced_sequencer_table)
+        self.device._download_adv_seq_table(advanced_sequencer_table)
         self._advanced_sequence_table = advanced_sequencer_table
 
         self._current_program = name
 
     @with_select
-    def run_current_program(self) -> None:
+    def run_current_program(self) -> None:  # TODO (LuL): Add this to ProgramManagement
         """
         This method starts running the active program
 
@@ -1591,15 +1611,14 @@ class TaborChannelTuple(AWGChannelTuple):
         """The set of program names that can currently be executed on the hardware AWG."""
         return set(program for program in self._known_programs.keys())
 
-    @property
-    def num_channels(self) -> int:
+    def num_channels(self) -> int:  # TODO (LuL): This is not needed, the caller can call len(...) hisself
         """
         Returns the number of channels that belong to the channel tuple
         """
         return len(self.channels)
 
     @property
-    def num_markers(self) -> int:
+    def num_markers(self) -> int:  # TODO (LuL): This is not needed, the caller can call len(...) hisself
         """
         Returns the number of marker channels that belong to the channel tuple
         """
@@ -1614,6 +1633,7 @@ class TaborChannelTuple(AWGChannelTuple):
             # 1. Selct channel pair
             # 2. Select DC as function shape
             # 3. Select build-in waveform mode
+
 
             if self.device.is_coupled():
                 out_cmd = ':OUTP:ALL OFF'
@@ -1641,7 +1661,7 @@ class TaborChannelTuple(AWGChannelTuple):
 
         # TODO: change implementation for channel synchronisation feature
 
-        if self.device.send_query(":INST:COUP:STAT?") == "ON":
+        if self.device._send_query(":INST:COUP:STAT?") == "ON":
             # Coupled -> switch all channels at once
             other_channel_tuple: TaborChannelTuple
             if self.channels == self.device.channel_tuples[0].channels:
@@ -1722,7 +1742,7 @@ class TaborMarkerChannel(AWGMarkerChannel):
         """
         self._channel_tuple = channel_tuple
 
-    def select(self) -> None:
+    def _select(self) -> None:
         """
         This marker channel is selected and is now the active channel marker of the device
         """

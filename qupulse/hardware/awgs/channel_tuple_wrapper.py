@@ -1,15 +1,20 @@
 from typing import Tuple, Optional, Callable, Set
 
 from qupulse._program._loop import Loop
-from qupulse.hardware.awgs import TaborChannelTuple
+from qupulse.hardware.awgs import TaborChannelTuple  # TODO (LuL): Not Tabor, but base class: ChannelTuple
 from qupulse.hardware.awgs.old_base import AWG
 
 
 class ChannelTupleAdapter(AWG):
+    """
+
+    """
+    # TODO (LuL): Doc strings
+
     def __copy__(self) -> None:
         pass
 
-    def __init__(self, channel_tuple: TaborChannelTuple):
+    def __init__(self, channel_tuple: TaborChannelTuple):  # TODO (LuL): Not Tabor, but base class: ChannelTuple
         self._channel_tuple = channel_tuple
 
     def identifier(self) -> str:
@@ -44,7 +49,8 @@ class ChannelTupleAdapter(AWG):
         return self._channel_tuple[TaborProgramManagement].arm(name)
 
     def programs(self) -> Set[str]:
-        return self._channel_tuple.programs
+        from qupulse.hardware.awgs.tabor import TaborProgramManagement
+        return self._channel_tuple[TaborProgramManagement].programs
 
     def sample_rate(self) -> float:
         return self._channel_tuple.sample_rate
