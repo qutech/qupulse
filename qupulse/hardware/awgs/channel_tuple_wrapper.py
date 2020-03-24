@@ -1,7 +1,7 @@
 from typing import Tuple, Optional, Callable, Set
 
 from qupulse._program._loop import Loop
-from qupulse.hardware.awgs import TaborChannelTuple  # TODO (LuL): Not Tabor, but base class: ChannelTuple
+from qupulse.hardware.awgs.base import AWGChannelTuple
 from qupulse.hardware.awgs.old_base import AWG
 
 
@@ -14,7 +14,7 @@ class ChannelTupleAdapter(AWG):
     def __copy__(self) -> None:
         pass
 
-    def __init__(self, channel_tuple: TaborChannelTuple):  # TODO (LuL): Not Tabor, but base class: ChannelTuple
+    def __init__(self, channel_tuple: AWGChannelTuple):  # TODO (LuL): Not Tabor, but base class: ChannelTuple
         self._channel_tuple = channel_tuple
 
     def identifier(self) -> str:
