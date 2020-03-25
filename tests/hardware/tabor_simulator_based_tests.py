@@ -3,10 +3,12 @@ import subprocess
 import time
 import platform
 import os
+from typing import List, Tuple, Optional, Any
 
 import pytabor
 import numpy as np
 
+from qupulse._program.tabor import TableDescription, TableEntry
 from qupulse.hardware.awgs.tabor import TaborDevice, TaborException, TaborSegment, TaborChannelTuple, \
     TaborOffsetAmplitude
 

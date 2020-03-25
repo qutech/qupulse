@@ -16,7 +16,7 @@ from qupulse.utils.types import ChannelID
 from qupulse._program._loop import Loop, make_compatible
 from qupulse.hardware.util import voltage_to_uint16, find_positions
 from qupulse.hardware.awgs.old_base import AWG, AWGAmplitudeOffsetHandling
-from qupulse._program.tabor import TaborSegment, TaborException, TaborProgram, PlottableProgram, TaborSequencing,\
+from qupulse._program.old_tabor import TaborSegment, TaborException, TaborProgram, PlottableProgram, TaborSequencing,\
     make_combined_wave
 
 

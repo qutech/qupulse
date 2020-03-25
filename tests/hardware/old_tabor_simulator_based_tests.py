@@ -8,7 +8,7 @@ import pytabor
 import numpy as np
 
 from qupulse.hardware.awgs.old_tabor import TaborAWGRepresentation, TaborChannelPair
-from qupulse._program.tabor import TaborSegment, PlottableProgram, TaborException, TableDescription, TableEntry
+from qupulse._program.old_tabor import TaborSegment, PlottableProgram, TaborException, TableDescription, TableEntry
 from typing import List, Tuple, Optional, Any
 
 class TaborSimulatorManager:

@@ -1,10 +1,12 @@
 import fractions
 import functools
 import itertools
+import numbers
 import operator
 import sys
 from enum import Enum
-from typing import Optional, Set, Tuple, Callable, Dict, Union, Any, Iterable, List, NamedTuple, cast, Generator
+from typing import List, Tuple, Set, Callable, Optional, Any, Sequence, cast, Union, Dict, Mapping, NamedTuple, \
+    Generator, Iterable
 from collections import OrderedDict
 import numpy as np
 from qupulse import ChannelID
@@ -13,10 +15,12 @@ from qupulse._program.waveforms import MultiChannelWaveform
 from qupulse.hardware.awgs.channel_tuple_wrapper import ChannelTupleAdapter
 from qupulse.hardware.awgs.features import ChannelSynchronization, AmplitudeOffsetHandling, OffsetAmplitude, \
     ProgramManagement, ActivatableChannels
-from qupulse.hardware.util import voltage_to_uint16, make_combined_wave, find_positions, get_sample_times
+from qupulse.hardware.util import voltage_to_uint16, find_positions, get_sample_times
 from qupulse.utils.types import Collection
 from qupulse.hardware.awgs.base import AWGChannelTuple, AWGChannel, AWGDevice, AWGMarkerChannel
 from typing import Sequence
+from qupulse._program.tabor import TaborSegment, TaborException, TaborProgram, PlottableProgram, TaborSequencing, \
+    make_combined_wave
 
 # Provided by Tabor electronics for python 2.7
 # a python 3 version is in a private repository on https://git.rwth-aachen.de/qutech
@@ -1248,8 +1252,6 @@ class TaborChannelTuple(AWGChannelTuple):
     def read_advanced_sequencer_table(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         return self.device.get_readable_device(simulator=True).read_adv_seq_table()
 
-
-
     # upload im Feature
 
     def read_complete_program(self) -> PlottableProgram:
@@ -1392,7 +1394,6 @@ class TaborChannelTuple(AWGChannelTuple):
                              paranoia_level=self.internal_paranoia_level)
         self.device.send_binary_data(pref=':TRAC:DATA', bin_dat=wf_data)
 
-
         old_to_update = np.count_nonzero(self._segment_capacity != self._segment_lengths)
         segment_capacity = np.concatenate((self._segment_capacity, new_lengths))
         segment_lengths = np.concatenate((self._segment_lengths, new_lengths))
@@ -1461,9 +1462,7 @@ class TaborChannelTuple(AWGChannelTuple):
             program_name: Name of program which should be changed.
             parameters: Names of volatile parameters and respective values to which they should be set.
         """
-
         waveform_to_segment_index, program = self._known_programs[program_name]
-
         modifications = program.update_volatile_parameters(parameters)
 
         self.logger.debug("parameter modifications: %r" % modifications)
