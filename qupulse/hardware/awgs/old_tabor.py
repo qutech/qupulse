@@ -93,9 +93,12 @@ class TaborAWGRepresentation:
             instr.send_cmd(cmd_str=cmd_str, paranoia_level=paranoia_level)
 
     def send_query(self, query_str, query_mirrors=False) -> Any:
+        print("Querry - " + query_str)
         if query_mirrors:
+            print("RESULT - " + tuple(instr.send_query(query_str) for instr in self.all_devices))
             return tuple(instr.send_query(query_str) for instr in self.all_devices)
         else:
+            print("RESULT - " + self._instr.send_query(query_str))
             return self._instr.send_query(query_str)
 
     def send_binary_data(self, pref, bin_dat, paranoia_level=None):
