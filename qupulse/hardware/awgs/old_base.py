@@ -257,4 +257,3 @@ class ChannelNotFoundException(Exception):
 
     def __str__(self) -> str:
         return 'Marker or channel not found: {}'.format(self.channel)
-

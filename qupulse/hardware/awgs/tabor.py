@@ -22,27 +22,6 @@ from typing import Sequence
 # a python 3 version is in a private repository on https://git.rwth-aachen.de/qutech
 # Beware of the string encoding change!
 import teawg
-import numpy as np
-
-from qupulse.hardware.awgs.features.amplitude_offset_feature import ChannelAmplitudeOffsetFeature
-from qupulse.hardware.awgs.features.device_mirror_feature import DeviceMirrorFeature
-from qupulse.utils.types import ChannelID
-from qupulse._program._loop import Loop, make_compatible
-from qupulse.hardware.util import voltage_to_uint16, make_combined_wave, find_positions, get_sample_times
-from qupulse.hardware.awgs.old_base import AWG, AWGAmplitudeOffsetHandling
-
-
-from qupulse.hardware.awgs.base import AWGDevice, AWGChannel, AWGChannelTuple
-
-
-# TODO: ???
-assert (sys.byteorder == 'little')
-
-
-# TODO: ???
-# __all__ = ['TaborAWGRepresentation', 'TaborChannelPair']
-
-########################################################################################################################
 
 # What does this mean?
 assert (sys.byteorder == "little")
@@ -1192,7 +1171,6 @@ class TaborChannelTuple(AWGChannelTuple):
         """Returns all channels of the channel tuple"""
         return self._channels
 
-
     @property
     def marker_channels(self) -> Collection["TaborMarkerChannel"]:
         """Returns all marker channels of the channel tuple"""
@@ -1634,7 +1612,6 @@ class TaborChannelTuple(AWGChannelTuple):
             # 2. Select DC as function shape
             # 3. Select build-in waveform mode
 
-
             if self.device.is_coupled():
                 out_cmd = ':OUTP:ALL OFF'
             else:
@@ -1647,7 +1624,6 @@ class TaborChannelTuple(AWGChannelTuple):
                 marker_ch[TaborMarkerChannelActivatable].status = False
 
             self.device.send_cmd(":SOUR:FUNC:MODE FIX")
-
 
             wf_mode_cmd = ':SOUR:FUNC:MODE FIX'
 

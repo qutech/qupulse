@@ -1,7 +1,7 @@
 from typing import Tuple, Optional, Callable, Set
 
 from qupulse._program._loop import Loop
-from qupulse.hardware.awgs.base import AWGChannelTuple
+from qupulse.hardware.awgs import AWGChannelTuple  # TODO (LuL): Not Tabor, but base class: ChannelTuple
 from qupulse.hardware.awgs.old_base import AWG
 
 
