@@ -1,4 +1,5 @@
 import unittest
+from unittest import mock
 
 import numpy as np
 
@@ -362,6 +363,33 @@ class HardwareSetupTests(unittest.TestCase):
         setup.set_channel('M1', MarkerChannel(awg2, 0))
         expected = {awg1, awg2}
         self.assertEqual(expected, setup.known_awgs)
+
+    def test_update_parameters(self) -> None:
+        setup = HardwareSetup()
+        awg1 = DummyAWG(num_channels=2, num_markers=0)
+        awg2 = DummyAWG(num_channels=1, num_markers=1)
+        dac1 = DummyDAC()
+        dac2 = DummyDAC()
+        setup.set_channel('A', PlaybackChannel(awg1, 0))
+        setup.set_channel('B', PlaybackChannel(awg1, 1))
+        setup.set_channel('C', PlaybackChannel(awg2, 0))
+        setup.set_measurement('m1', MeasurementMask(dac1, 'DAC_1'))
+        setup.set_measurement('m2', MeasurementMask(dac2, 'DAC_2'))
+        loop1, loop2, _ = self.get_test_loops()
+        name1 = 'prog1'
+        name2 = 'prog2'
+        setup.register_program(name1, loop1)
+        setup.register_program(name2, loop2)
+
+        parameters = dict(a=1, b=5)
+
+        with mock.patch.object(DummyAWG, 'set_volatile_parameters') as setpara:
+            setup.update_parameters(name1, parameters)
+            setpara.assert_called_once_with(name1, parameters)
+        with mock.patch.object(DummyAWG, 'set_volatile_parameters') as setpara:
+            setup.update_parameters(name2, parameters)
+            assert setpara.call_count == 2
+            setpara.assert_called_with(name2, parameters)
 
     def test_clear_programs(self) -> None:
         setup = HardwareSetup()

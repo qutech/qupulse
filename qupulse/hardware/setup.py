@@ -1,8 +1,8 @@
-from typing import NamedTuple, Set, Callable, Dict, Tuple, Union, Iterable, Any
+from typing import NamedTuple, Set, Callable, Dict, Tuple, Union, Iterable, Any, Mapping
 from collections import defaultdict
 import warnings
+import numbers
 
-from qupulse.pulses.parameters import Parameter, ConstantParameter
 from qupulse.hardware.awgs.base import AWG
 from qupulse.hardware.dacs import DAC
 from qupulse._program._loop import Loop
@@ -282,12 +282,8 @@ class HardwareSetup:
     def registered_channels(self) -> Dict[ChannelID, Set[_SingleChannel]]:
         return self._channel_map
 
-    def update_parameters(self, name: str, parameters):
+    def update_parameters(self, name: str, parameters: Mapping[str, numbers.Real]):
         *_, awgs, dacs = self._registered_programs[name]
-
-        for parameter_name, value in parameters.items():
-            if not isinstance(value, Parameter):
-                parameters[parameter_name] = ConstantParameter(value)
 
         for awg in self.known_awgs:
             if awg in awgs:

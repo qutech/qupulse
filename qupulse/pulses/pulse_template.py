@@ -32,7 +32,7 @@ MappingTuple = Union[Tuple['PulseTemplate'],
                      Tuple['PulseTemplate', Dict, Dict, Dict]]
 
 
-class PulseTemplate(Serializable, metaclass=DocStringABCMeta):
+class PulseTemplate(Serializable):
     """A PulseTemplate represents the parametrized general structure of a pulse.
 
     A PulseTemplate described a pulse in an abstract way: It defines the structure of a pulse
