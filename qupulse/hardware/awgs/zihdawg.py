@@ -355,56 +355,6 @@ class HDAWGChannelPair(AWG):
             time.sleep(.1)
         self._uploaded_seqc_source = self._required_seqc_source
 
-    def __wait_for_compilation(self) -> int:
-        while True:
-            status = self.awg_module.getInt('awgModule/compiler/status')
-            assert status in (-1, 0, 1, 2), "Unknown compile status"
-
-            if status == -1:
-                logger.debug(self.awg_module.getString('compiler/statusstring'))
-                logger.debug("awgModule/progress: {:.2f}".format(self.awg_module.getDouble('awgModule/progress')))
-                time.sleep(0.1)
-                continue
-
-            if status == 0:
-                logger.info('Compilation successful')
-
-            elif status == 1:
-                msg = self.awg_module.getString('awgModule/compiler/statusstring')
-                logger.error(msg)
-                raise HDAWGCompilationException(msg)
-
-            elif status == 2:
-                msg = self.awg_module.getString('awgModule/compiler/statusstring')
-                logger.warning(msg)
-            return status
-
-    def __wait_for_upload(self):
-        while True:
-            status = self.awg_module.getInt('awgModule/elf/status')
-            assert status in (-1, 0, 1, 2)
-
-            if status == -1:
-                logger.warning("No upload in progress")
-                return
-
-            elif status == 0:
-                self._uploaded_seqc_source = self._required_seqc_source
-                logger.info('Upload complete')
-                return
-
-            elif status == 1:
-                raise HDAWGUploadException()
-
-            elif status == 2:
-                logger.info('Upload in progress')
-                time.sleep(.2)
-
-    def __wait_for_sync(self):
-        if self._uploaded_seqc_source != self._required_seqc_source:
-            self._wait_for_compilation()
-            self._wait_for_upload()
-
     def set_volatile_parameters(self, program_name: str, parameters: Mapping[str, ConstantParameter]):
         """Set the values of parameters which were marked as volatile on program creation."""
         new_register_values = self._program_manager.get_register_values_to_update_volatile_parameters(program_name,
