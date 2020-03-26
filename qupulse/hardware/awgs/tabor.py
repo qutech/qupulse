@@ -1,6 +1,7 @@
 import fractions
 import functools
 import itertools
+import logging
 import numbers
 import operator
 import sys
@@ -33,446 +34,8 @@ assert (sys.byteorder == "little")
 __all__ = ["TaborDevice", "TaborChannelTuple", "TaborChannel"]
 
 
-class TaborSegment:
-    # __slots__ = ("channel_list", "marker_list")
-    #
-    # def __init__(self, channel_list: List[Optional[np.ndarray]], marker_list: List[Optional[np.ndarray]]):
-    #     """
-    #     :param channel_list:
-    #     :param marker_list:
-    #     ??? Beides Listen mit jeweils Spannungswerten zu den einzelden Channlen/Markern
-    #     """
-    #
-    #     # TODO: check if the channel and the marker count is valid
-    #
-    #     # Check if at least on channel is not None
-    #     ch_not_empty = False
-    #     for channel in channel_list:
-    #         if channel is not None:
-    #             ch_not_empty = True
-    #             break
-    #     if ch_not_empty:
-    #         raise TaborException("Empty TaborSegments are not allowed")
-    #
-    #     # Check if all channels that aren"t None are the same length
-    #     comparison_length = self.num_points
-    #     for channel in channel_list:
-    #         if channel is not None:
-    #             comparison_length = len(channel)
-    #             break
-    #     for channel in channel_list:
-    #         if channel is not None:
-    #             if not (len(channel) == comparison_length):  # can be ignored. this case isn"t possible
-    #                 raise TaborException("Channel entries to have to have the same length")
-    #
-    #     self.channel_list = List[np.asarray(Optional[np.ndarray], dtype=np.uint16)]
-    #     self.marker_list = List[np.asarray(Optional[np.ndarray], dtype=bool)]
-    #     # TODO: is it possible like that. It"s only possible when python works with references
-    #     for channel in channel_list:
-    #         self.channel_list.add(None if channel is None else np.asarray(channel, dtype=np.uint16))
-    #     for marker in marker_list:
-    #         self.marker_list.add(None if marker is None else np.asarray(marker, dtype=bool))
-    #
-    #     # Check all markers have half the length of the channels
-    #     for idx, marker in enumerate(marker_list):
-    #         if marker is not None and len(marker) * 2 != self.num_points:
-    #             raise TaborException("Marker {} has to have half of the channels length".format(idx + 1))
-    #             # +1 to match the idn of the marker channel objects
-    #
-    # @classmethod
-    # def from_binary_segment(cls, segment_data: np.ndarray) -> "TaborSegment":
-    #     pass  # TODO: to implement
-    #
-    # @classmethod
-    # def from_binary_data(cls, date_list: List[np.ndarray]) -> "TaborSegment":
-    #     channel_list: List[Optional[np.ndarray]]
-    #     marker_list: List[Optional[np.ndarray]]
-    #
-    #     # TODO: to implement
-    #
-    #     return cls(channel_list, marker_list)
-    #
-    # def __hash__(self) -> int:
-    #     # TODO: is this possible?
-    #     return hash(tuple((self.channel_list, self.marker_list)))
-    #
-    # def __eq__(self, other: "TaborSegment"):
-    #     pass  # TODO: to implement
-    #
-    # def data(self, data_nr: int):
-    #     pass  # TODO: to implement
-    #
-    # @property
-    # def num_points(self) -> int:
-    #     """
-    #     Method that returns the length of the first Channel that is not None
-    #     :return: length of the first Channel that is not None
-    #     """
-    #     for channel in self.channel_list:
-    #         if channel is not None:
-    #             return len(channel)
-    #
-    # def get_as_binary(self) -> np.ndarray:
-    #     pass  # TODO: to implement
-
-    """Represents one segment of two channels on the device. Convenience class."""
-
-    __slots__ = ("ch_a", "ch_b", "marker_a", "marker_b")
-
-    def __init__(self,
-                 ch_a: Optional[np.ndarray],
-                 ch_b: Optional[np.ndarray],
-                 marker_a: Optional[np.ndarray],
-                 marker_b: Optional[np.ndarray]):
-        if ch_a is None and ch_b is None:
-            raise TaborException("Empty TaborSegments are not allowed")
-        if ch_a is not None and ch_b is not None and len(ch_a) != len(ch_b):
-            raise TaborException("Channel entries to have to have the same length")
-
-        self.ch_a = None if ch_a is None else np.asarray(ch_a, dtype=np.uint16)
-        self.ch_b = None if ch_b is None else np.asarray(ch_b, dtype=np.uint16)
-
-        self.marker_a = None if marker_a is None else np.asarray(marker_a, dtype=bool)
-        self.marker_b = None if marker_b is None else np.asarray(marker_b, dtype=bool)
-
-        if marker_a is not None and len(marker_a) * 2 != self.num_points:
-            raise TaborException("Marker A has to have half of the channels length")
-        if marker_b is not None and len(marker_b) * 2 != self.num_points:
-            raise TaborException("Marker A has to have half of the channels length")
-
-    @classmethod
-    def from_binary_segment(cls, segment_data: np.ndarray) -> "TaborSegment":
-        data_a = segment_data.reshape((-1, 16))[1::2, :].reshape((-1,))
-        data_b = segment_data.reshape((-1, 16))[0::2, :].ravel()
-        return cls.from_binary_data(data_a, data_b)
-
-    @classmethod
-    def from_binary_data(cls, data_a: np.ndarray, data_b: np.ndarray) -> "TaborSegment":
-        ch_b = data_b
-
-        channel_mask = np.uint16(2 ** 14 - 1)
-        ch_a = np.bitwise_and(data_a, channel_mask)
-
-        marker_a_mask = np.uint16(2 ** 14)
-        marker_b_mask = np.uint16(2 ** 15)
-        marker_data = data_a.reshape(-1, 8)[1::2, :].reshape((-1,))
-
-        marker_a = np.bitwise_and(marker_data, marker_a_mask)
-        marker_b = np.bitwise_and(marker_data, marker_b_mask)
-
-        return cls(ch_a=ch_a,
-                   ch_b=ch_b,
-                   marker_a=marker_a,
-                   marker_b=marker_b)
-
-    def __hash__(self) -> int:
-        return hash(tuple(0 if data is None else bytes(data)
-                          for data in (self.ch_a, self.ch_b, self.marker_a, self.marker_b)))
-
-    def __eq__(self, other: "TaborSegment"):
-        def compare_markers(marker_1, marker_2):
-            if marker_1 is None:
-                if marker_2 is None:
-                    return True
-                else:
-                    return not np.any(marker_2)
-
-            elif marker_2 is None:
-                return not np.any(marker_1)
-
-            else:
-                return np.array_equal(marker_1, marker_2)
-
-        return (np.array_equal(self.ch_a, other.ch_a) and
-                np.array_equal(self.ch_b, other.ch_b) and
-                compare_markers(self.marker_a, other.marker_a) and
-                compare_markers(self.marker_b, other.marker_b))
-
-    @property
-    def data_a(self) -> np.ndarray:
-        """channel_data and marker data"""
-        if self.marker_a is None and self.marker_b is None:
-            return self.ch_a
-
-        if self.ch_a is None:
-            raise NotImplementedError("What data should be used in a?")
-
-        # copy channel information
-        data = np.array(self.ch_a)
-
-        if self.marker_a is not None:
-            data.reshape(-1, 8)[1::2, :].flat |= (1 << 14) * self.marker_a.astype(np.uint16)
-
-        if self.marker_b is not None:
-            data.reshape(-1, 8)[1::2, :].flat |= (1 << 15) * self.marker_b.astype(np.uint16)
-
-        return data
-
-    @property
-    def data_b(self) -> np.ndarray:
-        """channel_data and marker data"""
-        return self.ch_b
-
-    @property
-    def num_points(self) -> int:
-        return len(self.ch_b) if self.ch_a is None else len(self.ch_a)
-
-    def get_as_binary(self) -> np.ndarray:
-        assert not (self.ch_a is None or self.ch_b is None)
-        return make_combined_wave([self])
-
-
-class TaborSequencing(Enum):
-    SINGLE = 1
-    ADVANCED = 2
-
-
-class TaborProgram:
-    def __init__(self,
-                 program: Loop,
-                 device_properties,
-                 channels,
-                 markers):
-        # TODO: entspricht channels und markers den Vorgaben der device_properties + kommentare entfernen bzw. Code ersetzen
-
-        # channel_set = frozenset(channel for channel in channels if channel is not None) | frozenset(marker
-        #                                                                                            for marker in
-        #                                                                                            markers if
-        #                                                                                            marker is not None)
-
-        self._program = program
-
-        self.__waveform_mode = None
-        # self._channels = tuple(channels)
-        # self._markers = tuple(markers)
-        # self.__used_channels = channel_set
-        self.__device_properties = device_properties
-
-        self._waveforms = List["MultiChannelWaveform"]
-        self._sequencer_tables = []
-        self._advanced_sequencer_table = []
-
-        if self.program.repetition_count > 1:
-            self.program.encapsulate()
-
-        if self.program.depth() > 1:
-            self.setup_advanced_sequence_mode()
-            self.__waveform_mode = TaborSequencing.ADVANCED
-        else:
-            if self.program.depth() == 0:
-                self.program.encapsulate()
-            self.setup_single_sequence_mode()
-            self.__waveform_mode = TaborSequencing.SINGLE
-
-    @property
-    def markers(self):
-        return self._markers  # TODO (LuL): Uncomment the instantiation of self._channels
-        # TODO: typing
-
-    @property
-    def channels(self):
-        return self._channels  # TODO (LuL): Uncomment the instantiation of self._channels
-        # TODO: typing
-
-    def sampled_segments(self,
-                         sample_rate: fractions.Fraction,
-                         voltage_amplitude: Tuple[float, float],
-                         voltage_offset: Tuple[float, float],
-                         voltage_transformation: Tuple[Callable, Callable]) -> Tuple[Sequence[TaborSegment],
-                                                                                     Sequence[int]]:
-        sample_rate = fractions.Fraction(sample_rate, 10 ** 9)
-
-        time_array, segment_lengths = get_sample_times(self._waveforms, sample_rate)
-
-        if np.any(segment_lengths % 16 > 0) or np.any(segment_lengths < 192):
-            raise TaborException("At least one waveform has a length that is smaller 192 or not a multiple of 16")
-
-        def voltage_to_data(waveform, time, channel):
-            if self._channels[channel]:
-                return voltage_to_uint16(
-                    voltage_transformation[channel](
-                        waveform.get_sampled(channel=self._channels[channel],
-                                             sample_times=time)),
-                    voltage_amplitude[channel],
-                    voltage_offset[channel],
-                    resolution=14)
-            else:
-                return np.full_like(time, 8192, dtype=np.uint16)
-
-        def get_marker_data(waveform: MultiChannelWaveform, time, marker):
-            if self._markers[marker]:
-                markerID = self._markers[marker]
-                return waveform.get_sampled(channel=markerID, sample_times=time) != 0
-            else:
-                return np.full_like(time, False, dtype=bool)
-
-        segments = np.empty_like(self._waveforms, dtype=TaborSegment)
-        for i, waveform in enumerate(self._waveforms):
-            t = time_array[:segment_lengths[i]]
-            marker_time = t[::2]
-            segment_a = voltage_to_data(waveform, t, 0)
-            segment_b = voltage_to_data(waveform, t, 1)
-            assert (len(segment_a) == len(t))
-            assert (len(segment_b) == len(t))
-            marker_a = get_marker_data(waveform, marker_time, 0)
-            marker_b = get_marker_data(waveform, marker_time, 1)
-            segments[i] = TaborSegment(ch_a=segment_a,
-                                       ch_b=segment_b,
-                                       marker_a=marker_a,
-                                       marker_b=marker_b)
-        return segments, segment_lengths
-
-    def setup_single_sequence_mode(self) -> None:
-        # TODO: comment missing
-        """
-
-        """
-        assert self.program.depth() == 1
-
-        sequencer_table = []
-        waveforms = OrderedDict()
-
-        for waveform, repetition_count in ((waveform_loop.waveform.get_subset_for_channels(self.__used_channels),
-                                            waveform_loop.repetition_count)
-                                           for waveform_loop in self.program):
-            if waveform in waveforms:
-                waveform_index = waveforms[waveform]
-            else:
-                waveform_index = len(waveforms)
-                waveforms[waveform] = waveform_index
-            sequencer_table.append((repetition_count, waveform_index, 0))
-
-        self._waveforms = tuple(waveforms.keys())
-        self._sequencer_tables = [sequencer_table]
-        self._advanced_sequencer_table = [(self.program.repetition_count, 1, 0)]
-
-    def setup_advanced_sequence_mode(self) -> None:
-        # TODO: comment missing
-        """
-
-        """
-        assert self.program.depth() > 1
-        assert self.program.repetition_count == 1
-
-        self.program.flatten_and_balance(2)
-
-        min_seq_len = self.__device_properties["min_seq_len"]
-        max_seq_len = self.__device_properties["max_seq_len"]
-
-        def check_merge_with_next(program, n):
-            if (program[n].repetition_count == 1 and program[n + 1].repetition_count == 1 and
-                    len(program[n]) + len(program[n + 1]) < max_seq_len):
-                program[n][len(program[n]):] = program[n + 1][:]
-                program[n + 1:n + 2] = []
-                return True
-            return False
-
-        def check_partial_unroll(program, n):
-            st = program[n]
-            if sum(entry.repetition_count for entry in st) * st.repetition_count >= min_seq_len:
-                if sum(entry.repetition_count for entry in st) < min_seq_len:
-                    st.unroll_children()
-                while len(st) < min_seq_len:
-                    st.split_one_child()
-                return True
-            return False
-
-        i = 0
-        while i < len(self.program):
-            self.program[i].assert_tree_integrity()
-            if len(self.program[i]) > max_seq_len:
-                raise TaborException("The algorithm is not smart enough to make sequence tables shorter")
-            elif len(self.program[i]) < min_seq_len:
-                assert self.program[i].repetition_count > 0
-                if self.program[i].repetition_count == 1:
-                    # check if merging with neighbour is possible
-                    if i > 0 and check_merge_with_next(self.program, i - 1):
-                        pass
-                    elif i + 1 < len(self.program) and check_merge_with_next(self.program, i):
-                        pass
-
-                    # check if (partial) unrolling is possible
-                    elif check_partial_unroll(self.program, i):
-                        i += 1
-
-                    # check if sequence table can be extended by unrolling a neighbor
-                    elif (i > 0
-                          and self.program[i - 1].repetition_count > 1
-                          and len(self.program[i]) + len(self.program[i - 1]) < max_seq_len):
-                        self.program[i][:0] = self.program[i - 1].copy_tree_structure()[:]
-                        self.program[i - 1].repetition_count -= 1
-
-                    elif (i + 1 < len(self.program)
-                          and self.program[i + 1].repetition_count > 1
-                          and len(self.program[i]) + len(self.program[i + 1]) < max_seq_len):
-                        self.program[i][len(self.program[i]):] = self.program[i + 1].copy_tree_structure()[:]
-                        self.program[i + 1].repetition_count -= 1
-
-                    else:
-                        raise TaborException("The algorithm is not smart enough to make this sequence table longer")
-                elif check_partial_unroll(self.program, i):
-                    i += 1
-                else:
-                    raise TaborException("The algorithm is not smart enough to make this sequence table longer")
-            else:
-                i += 1
-
-        for sequence_table in self.program:
-            assert len(sequence_table) >= self.__device_properties["min_seq_len"]
-            assert len(sequence_table) <= self.__device_properties["max_seq_len"]
-
-        advanced_sequencer_table = []
-        sequencer_tables = []
-        waveforms = OrderedDict()
-        for sequencer_table_loop in self.program:
-            current_sequencer_table = []
-            for waveform, repetition_count in ((waveform_loop.waveform.get_subset_for_channels(self.__used_channels),
-                                                waveform_loop.repetition_count)
-                                               for waveform_loop in sequencer_table_loop):
-                if waveform in waveforms:
-                    wf_index = waveforms[waveform]
-                else:
-                    wf_index = len(waveforms)
-                    waveforms[waveform] = wf_index
-                current_sequencer_table.append((repetition_count, wf_index, 0))
-
-            if current_sequencer_table in sequencer_tables:
-                sequence_no = sequencer_tables.index(current_sequencer_table) + 1
-            else:
-                sequence_no = len(sequencer_tables) + 1
-                sequencer_tables.append(current_sequencer_table)
-
-            advanced_sequencer_table.append((sequencer_table_loop.repetition_count, sequence_no, 0))
-
-        self._advanced_sequencer_table = advanced_sequencer_table
-        self._sequencer_tables = sequencer_tables
-        self._waveforms = tuple(waveforms.keys())
-
-    @property
-    def program(self) -> Loop:
-        return self._program
-
-    def get_sequencer_tables(self) -> List[Tuple[int, int, int]]:
-        # TODO: comment missing
-        """
-
-        """
-        return self._sequencer_tables
-
-    def get_advanced_sequencer_table(self) -> List[Tuple[int, int, int]]:
-        # TODO: comment missing
-        """
-
-        """
-        return self._advanced_sequencer_table
-
-    @property
-    def waveform_mode(self) -> str:
-        # TODO: comment missing
-        """
-
-        """
-        return self.__waveform_mode
+TaborProgramMemory = NamedTuple('TaborProgramMemory', [('waveform_to_segment', np.ndarray),
+                                                       ('program', TaborProgram)])
 
 
 # TODO: How does this work?
@@ -501,141 +64,11 @@ def with_select(function_object: Callable[["TaborChannelTuple", Any], Any]) -> C
 
     @functools.wraps(function_object)
     def selector(channel_tuple: "TaborChannelTuple", *args, **kwargs) -> Any:
-        channel_tuple._select()  # TODO (LuL): make the select-function private, because it only should be called from here
+        channel_tuple._select()
         return function_object(channel_tuple, *args, **kwargs)
 
     return selector
 
-
-class PlottableProgram:
-    TableEntry = NamedTuple("TableEntry", [("repetition_count", int),
-                                           ("element_number", int),
-                                           ("jump_flag", int)])
-
-    def __init__(self,
-                 segments: List[TaborSegment],
-                 sequence_tables: List[List[Tuple[int, int, int]]],
-                 advanced_sequence_table: List[Tuple[int, int, int]]):
-        self._segments = segments
-        self._sequence_tables = [[self.TableEntry(*sequence_table_entry)
-                                  for sequence_table_entry in sequence_table]
-                                 for sequence_table in sequence_tables]
-        self._advanced_sequence_table = [self.TableEntry(*adv_seq_entry)
-                                         for adv_seq_entry in advanced_sequence_table]
-
-    @classmethod
-    def from_read_data(cls, waveforms: List[np.ndarray],
-                       sequence_tables: List[Tuple[np.ndarray, np.ndarray, np.ndarray]],
-                       advanced_sequence_table: Tuple[np.ndarray, np.ndarray, np.ndarray]) -> 'PlottableProgram':
-        return cls([TaborSegment.from_binary_segment(wf) for wf in waveforms],
-                   [cls._reformat_rep_seg_jump(seq_table) for seq_table in sequence_tables],
-                   cls._reformat_rep_seg_jump(advanced_sequence_table))
-
-    @classmethod
-    def _reformat_rep_seg_jump(cls, rep_seg_jump_tuple: Tuple[np.ndarray, np.ndarray, np.ndarray]) -> List[TableEntry]:
-        return list(cls.TableEntry(int(rep), int(seg_no), int(jump))
-                    for rep, seg_no, jump in zip(*rep_seg_jump_tuple))
-
-    def _get_advanced_sequence_table(self, with_first_idle=False, with_last_idles=False) -> List[TableEntry]:
-        if not with_first_idle and self._advanced_sequence_table[0] == (1, 1, 1):
-            adv_seq_tab = self._advanced_sequence_table[1:]
-        else:
-            adv_seq_tab = self._advanced_sequence_table
-
-        #  remove idle pulse at end
-        if with_last_idles:
-            return adv_seq_tab
-        else:
-            while adv_seq_tab[-1] == (1, 1, 0):
-                adv_seq_tab = adv_seq_tab[:-1]
-            return adv_seq_tab
-
-    def _iter_segment_table_entry(self,
-                                  with_first_idle=False,
-                                  with_last_idles=False) -> Generator[TableEntry, None, None]:
-        for sequence_repeat, sequence_no, _ in self._get_advanced_sequence_table(with_first_idle, with_last_idles):
-            for _ in range(sequence_repeat):
-                yield from self._sequence_tables[sequence_no - 1]
-
-    def iter_waveforms_and_repetitions(self,
-                                       channel: int,
-                                       with_first_idle=False,
-                                       with_last_idles=False) -> Generator[Tuple[np.ndarray, int], None, None]:
-        ch_getter = (operator.attrgetter('ch_a'), operator.attrgetter('ch_b'))[channel]
-        for segment_repeat, segment_no, _ in self._iter_segment_table_entry(with_first_idle, with_last_idles):
-            yield ch_getter(self._segments[segment_no - 1]), segment_repeat
-
-    def iter_samples(self, channel: int,
-                     with_first_idle=False,
-                     with_last_idles=False) -> Generator[np.uint16, None, None]:
-        for waveform, repetition in self.iter_waveforms_and_repetitions(channel, with_first_idle, with_last_idles):
-            waveform = list(waveform)
-            for _ in range(repetition):
-                yield from waveform
-
-    def get_as_single_waveform(self, channel: int,
-                               max_total_length: int = 10 ** 9,
-                               with_marker: bool = False) -> Optional[np.ndarray]:
-        waveforms = self.get_waveforms(channel, with_marker=with_marker)
-        repetitions = self.get_repetitions()
-        waveform_lengths = np.fromiter((wf.size for wf in waveforms), count=len(waveforms), dtype=np.uint64)
-
-        total_length = (repetitions * waveform_lengths).sum()
-        if total_length > max_total_length:
-            return None
-
-        result = np.empty(total_length, dtype=np.uint16)
-        c_idx = 0
-        for wf, rep in zip(waveforms, repetitions):
-            mem = wf.size * rep
-            target = result[c_idx:c_idx + mem]
-
-            target = target.reshape((rep, wf.size))
-            target[:, :] = wf[np.newaxis, :]
-            c_idx += mem
-        return result
-
-    def get_waveforms(self, channel: int, with_marker: bool = False) -> List[np.ndarray]:
-        if with_marker:
-            ch_getter = (operator.attrgetter('data_a'), operator.attrgetter('data_b'))[channel]
-        else:
-            ch_getter = (operator.attrgetter('ch_a'), operator.attrgetter('ch_b'))[channel]
-        return [ch_getter(self._segments[segment_no - 1])
-                for _, segment_no, _ in self._iter_segment_table_entry()]
-
-    def get_segment_waveform(self, channel: int, segment_no: int) -> np.ndarray:
-        ch_getter = (operator.attrgetter('ch_a'), operator.attrgetter('ch_b'))[channel]
-        return [ch_getter(self._segments[segment_no - 1])]
-
-    def get_repetitions(self) -> np.ndarray:
-        return np.fromiter((segment_repeat
-                            for segment_repeat, *_ in self._iter_segment_table_entry()), dtype=np.uint32)
-
-    def __eq__(self, other):
-        for ch in (0, 1):
-            for x, y in itertools.zip_longest(self.iter_samples(ch, True, False),
-                                              other.iter_samples(ch, True, False)):
-                if x != y:
-                    return False
-        return True
-
-    def to_builtin(self) -> dict:
-        waveforms = [[wf.data_a.tolist() for wf in self._segments],
-                     [wf.data_b.tolist() for wf in self._segments]]
-        return {'waveforms': waveforms,
-                'seq_tables': self._sequence_tables,
-                'adv_seq_table': self._advanced_sequence_table}
-
-    @classmethod
-    def from_builtin(cls, data: dict) -> 'PlottableProgram':
-        waveforms = data['waveforms']
-        waveforms = [TaborSegment.from_binary_data(np.array(data_a, dtype=np.uint16), np.array(data_b, dtype=np.uint16))
-                     for data_a, data_b in zip(*waveforms)]
-        return cls(waveforms, data['seq_tables'], data['adv_seq_table'])
-
-
-TaborProgramMemory = NamedTuple("TaborProgramMemory", [("waveform_to_segment", np.ndarray),
-                                                       ("program", TaborProgram)])
 
 ########################################################################################################################
 # Device
@@ -700,6 +133,12 @@ class TaborDevice(AWGDevice):
             raise NotImplementedError()  # pragma: no cover
 
         self._initialize()  # TODO: change for synchronisation-feature
+
+    def is_coupled(self) -> bool:
+        if self._coupled is None:
+            return self._send_query(':INST:COUP:STAT?') == 'ON'
+        else:
+            return self._coupled
 
     def cleanup(self) -> None:
         # TODO: split cleanup in to two different methods
@@ -889,7 +328,7 @@ class TaborDevice(AWGDevice):
         self.send_cmd(':RES')
         self._coupled = None
 
-        self.initialize()
+        self._initialize()
         for channel_tuple in self.channel_tuples:
             channel_tuple[TaborProgramManagement].clear()
 
@@ -971,6 +410,14 @@ class TaborChannelActivatable(ActivatableChannels):
     @property
     def status(self) -> bool:
         pass  # TODO: to implement
+
+    def enable(self):
+        command_string = ":INST:SEL {ch_id}; :OUTP ON".format(ch_id=self.parent.idn)
+        self.parent.device.send_cmd(command_string)
+
+    def disable(self):
+        command_string = ":INST:SEL {ch_id}; :OUTP OFF".format(ch_id=self.parent.idn)
+        self.parent.device.send_cmd(command_string)
 
     @status.setter
     def status(self, channel_status: bool) -> None:
@@ -1109,6 +556,8 @@ class TaborProgramManagement(ProgramManagement):
 
 
 class TaborChannelTuple(AWGChannelTuple):
+    CONFIG_MODE_PARANOIA_LEVEL = None
+
     def __init__(self, idn: int, device: TaborDevice, channels: Iterable["TaborChannel"],
                  marker_channels: Iterable["TaborMarkerChannel"]):
         super().__init__(idn)
@@ -1129,13 +578,13 @@ class TaborChannelTuple(AWGChannelTuple):
         # adding Features
         self.add_feature(TaborProgramManagement(self))
 
-        self._idle_segment = TaborSegment(voltage_to_uint16(voltage=np.zeros(192),
-                                                            output_amplitude=0.5,
-                                                            output_offset=0., resolution=14),
-                                          voltage_to_uint16(voltage=np.zeros(192),
-                                                            output_amplitude=0.5,
-                                                            output_offset=0., resolution=14), None, None)
-
+        self._idle_segment = TaborSegment.from_sampled(voltage_to_uint16(voltage=np.zeros(192),
+                                                                         output_amplitude=0.5,
+                                                                         output_offset=0., resolution=14),
+                                                       voltage_to_uint16(voltage=np.zeros(192),
+                                                                         output_amplitude=0.5,
+                                                                         output_offset=0., resolution=14),
+                                                       None, None)
         self._idle_sequence_table = [(1, 1, 0), (1, 1, 0), (1, 1, 0)]
 
         self._known_programs = dict()  # type: Dict[str, TaborProgramMemory]
@@ -1154,6 +603,14 @@ class TaborChannelTuple(AWGChannelTuple):
         self[TaborProgramManagement].clear()
 
         self._channel_tuple_adapter: ChannelTupleAdapter
+
+    @property
+    def internal_paranoia_level(self) -> Optional[int]:
+        return self._internal_paranoia_level
+
+    @property
+    def logger(self):
+        return logging.getLogger("qupulse.tabor")
 
     @property
     def channel_tuple_adapter(self) -> ChannelTupleAdapter:
@@ -1392,7 +849,7 @@ class TaborChannelTuple(AWGChannelTuple):
                              paranoia_level=self.internal_paranoia_level)
         self.device.send_cmd(':TRAC:MODE COMB',
                              paranoia_level=self.internal_paranoia_level)
-        self.device.send_binary_data(pref=':TRAC:DATA', bin_dat=wf_data)
+        self.device._send_binary_data(pref=':TRAC:DATA', bin_dat=wf_data)
 
         old_to_update = np.count_nonzero(self._segment_capacity != self._segment_lengths)
         segment_capacity = np.concatenate((self._segment_capacity, new_lengths))
@@ -1528,7 +985,7 @@ class TaborChannelTuple(AWGChannelTuple):
 
             # translate waveform number to actual segment
             sequencer_tables = [[(rep_count, waveform_to_segment_number[wf_index], jump_flag)
-                                 for (rep_count, wf_index, jump_flag) in sequencer_table]
+                                 for ((rep_count, wf_index, jump_flag), _) in sequencer_table]
                                 for sequencer_table in program.get_sequencer_tables()]
 
             # insert idle sequence
@@ -1553,17 +1010,17 @@ class TaborChannelTuple(AWGChannelTuple):
             advanced_sequencer_table.append((1, 1, 0))
 
         # reset sequencer and advanced sequencer tables to fix bug which occurs when switching between some programs
-        self.device.send_cmd("SEQ:DEL:ALL")
+        self.device.send_cmd("SEQ:DEL:ALL", paranoia_level=self.internal_paranoia_level)
         self._sequencer_tables = []
-        self.device.send_cmd("ASEQ:DEL")
+        self.device.send_cmd("ASEQ:DEL", paranoia_level=self.internal_paranoia_level)
         self._advanced_sequence_table = []
 
         # download all sequence tables
         for i, sequencer_table in enumerate(sequencer_tables):
-            self.device.send_cmd("SEQ:SEL {}".format(i + 1))
+            self.device.send_cmd("SEQ:SEL {}".format(i + 1), paranoia_level=self.internal_paranoia_level)
             self.device._download_sequencer_table(sequencer_table)
         self._sequencer_tables = sequencer_tables
-        self.device.send_cmd("SEQ:SEL 1")
+        self.device.send_cmd("SEQ:SEL 1", paranoia_level=self.internal_paranoia_level)
 
         self.device._download_adv_seq_table(advanced_sequencer_table)
         self._advanced_sequence_table = advanced_sequencer_table
@@ -1614,15 +1071,15 @@ class TaborChannelTuple(AWGChannelTuple):
             if self.device.is_coupled():
                 out_cmd = ':OUTP:ALL OFF'
             else:
-                cmd = ""
+                out_cmd = ""
                 for channel in self.channels:
-                    cmd = cmd + ":INST:SEL {ch_id}; :OUTP OFF;".format(ch_id=channel.idn)
-                self.device.send_cmd(cmd[:-1])
+                    out_cmd = out_cmd + ":INST:SEL {ch_id}; :OUTP OFF".format(ch_id=channel.idn)
 
-            for marker_ch in self.marker_channels:
-                marker_ch[TaborMarkerChannelActivatable].status = False
-
-            self.device.send_cmd(":SOUR:FUNC:MODE FIX")
+            marker_0_cmd = ':SOUR:MARK:SEL 1;:SOUR:MARK:SOUR USER;:SOUR:MARK:STAT OFF'
+            marker_1_cmd = ':SOUR:MARK:SEL 2;:SOUR:MARK:SOUR USER;:SOUR:MARK:STAT OFF'
+            #TODO: würde diese ersetzung reichen? - maybe change for synchronisationsfeature
+            #for marker_ch in self.marker_channels:
+            #    marker_ch[TaborMarkerChannelActivatable].status = False
 
             wf_mode_cmd = ':SOUR:FUNC:MODE FIX'
 
