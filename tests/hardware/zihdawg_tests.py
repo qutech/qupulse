@@ -145,3 +145,14 @@ class HDAWGChannelPairTests(unittest.TestCase):
                 channel_pair.upload('bar', mock_loop, ('A', None), (None, 'A', None, None), voltage_trafos[:1])
 
             # TODO: draw the rest of the owl
+
+
+class ELFManagerTests(unittest.TestCase):
+    def test_init(self):
+        raise NotImplementedError()
+
+    def test_upload(self):
+        raise NotImplementedError()
+
+    def test_compile(self):
+        raise NotImplementedError()

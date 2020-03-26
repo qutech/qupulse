@@ -1,11 +1,13 @@
 from pathlib import Path
 import functools
-from typing import Tuple, Set, Callable, Optional, Mapping, NamedTuple, Iterator
-from collections import OrderedDict
+from typing import Tuple, Set, Callable, Optional, Mapping, Generator
 from enum import Enum
 import weakref
 import logging
 import warnings
+import pathlib
+import hashlib
+import argparse
 
 try:
     import zhinst.ziPython
@@ -250,9 +252,11 @@ class HDAWGChannelPair(AWG):
         self.device.api_session.setInt('/{}/awgs/{:d}/single'.format(self.device.serial, self.awg_group_index), 1)
 
         self._program_manager = HDAWGProgramManager()
+        self._elf_manager = ELFManager(self.awg_module)
         self._required_seqc_source = self._program_manager.to_seqc_program()
         self._uploaded_seqc_source = None
         self._current_program = None  # Currently armed program.
+        self._upload_generator = ()
 
     @property
     def num_channels(self) -> int:
@@ -340,9 +344,18 @@ class HDAWGChannelPair(AWG):
         self._program_manager.waveform_memory.sync_to_file_system(Path(self.user_directory).joinpath('awg', 'waves'))
 
         # start compiling the source (non-blocking)
-        self.awg_module.set('awgModule/compiler/sourcestring', self._required_seqc_source)
+        self._start_compile_and_upload()
 
-    def _wait_for_compilation(self) -> int:
+    def _start_compile_and_upload(self):
+        self._upload_generator = self._elf_manager.upload(self._required_seqc_source)
+
+    def _wait_for_compile_and_upload(self):
+        for state in self._upload_generator:
+            logger.debug("wait_for_compile_and_upload: %r", state)
+            time.sleep(.1)
+        self._uploaded_seqc_source = self._required_seqc_source
+
+    def __wait_for_compilation(self) -> int:
         while True:
             status = self.awg_module.getInt('awgModule/compiler/status')
             assert status in (-1, 0, 1, 2), "Unknown compile status"
@@ -366,7 +379,7 @@ class HDAWGChannelPair(AWG):
                 logger.warning(msg)
             return status
 
-    def _wait_for_upload(self):
+    def __wait_for_upload(self):
         while True:
             status = self.awg_module.getInt('awgModule/elf/status')
             assert status in (-1, 0, 1, 2)
@@ -387,59 +400,10 @@ class HDAWGChannelPair(AWG):
                 logger.info('Upload in progress')
                 time.sleep(.2)
 
-    def _wait_for_sync(self):
+    def __wait_for_sync(self):
         if self._uploaded_seqc_source != self._required_seqc_source:
             self._wait_for_compilation()
             self._wait_for_upload()
-
-    def __upload_sourcestring(self, sourcestring: str) -> None:
-        """Transfer AWG sequencer program as string to HDAWG and block till compilation and upload finish.
-        Allows upload without access to data server file system."""
-        if not sourcestring:
-            raise HDAWGTypeError('sourcestring must not be empty or compilation will not start.')
-        logger = logging.getLogger('ziHDAWG')
-
-        # Transfer the AWG sequence program. Compilation starts automatically if sourcestring is set.
-        self.awg_module.set('awgModule/compiler/sourcestring', sourcestring)
-        self._poll_compile_and_upload_finished(logger)
-        self._uploaded_seqc_source = sourcestring
-
-    def __poll_compile_and_upload_finished(self, logger: logging.Logger) -> None:
-        """Blocks till compilation on data server and upload to HDAWG succeed,
-        if process takes less time than timeout."""
-        time_start = time.time()
-        logger.info('Compilation started')
-        while self.awg_module.getInt('awgModule/compiler/status') == -1:
-            time.sleep(0.1)
-        if time.time() - time_start > self.timeout:
-            raise HDAWGTimeoutError("Compilation timeout out")
-
-        if self.awg_module.getInt('awgModule/compiler/status') == 1:
-            msg = self.awg_module.getString('awgModule/compiler/statusstring')
-            logger.error(msg)
-            raise HDAWGCompilationException(msg)
-
-        if self.awg_module.getInt('awgModule/compiler/status') == 0:
-            logger.info('Compilation successful')
-        if self.awg_module.getInt('awgModule/compiler/status') == 2:
-            msg = self.awg_module.getString('awgModule/compiler/statusstring')
-            logger.warning(msg)
-
-        i = 0
-        while ((self.awg_module.getDouble('awgModule/progress') < 1.0) and
-               (self.awg_module.getInt('awgModule/elf/status') != 1)):
-            time.sleep(0.2)
-            logger.info("{} awgModule/progress: {:.2f}".format(i, self.awg_module.getDouble('awgModule/progress')))
-            i = i + 1
-            if time.time() - time_start > self.timeout:
-                raise HDAWGTimeoutError("Upload timeout out")
-        logger.info("{} awgModule/progress: {:.2f}".format(i, self.awg_module.getDouble('awgModule/progress')))
-
-        if self.awg_module.getInt('awgModule/elf/status') == 0:
-            logger.info('Upload to the instrument successful')
-            logger.info('Process took {:.3f} seconds'.format(time.time()-time_start))
-        if self.awg_module.getInt('awgModule/elf/status') == 1:
-            raise HDAWGUploadException()
 
     def set_volatile_parameters(self, program_name: str, parameters: Mapping[str, ConstantParameter]):
         """Set the values of parameters which were marked as volatile on program creation."""
@@ -468,6 +432,7 @@ class HDAWGChannelPair(AWG):
         self._program_manager.clear()
         self._current_program = None
         self._required_seqc_source = self._program_manager.to_seqc_program()
+        self._start_compile_and_upload()
         self.arm(None)
 
     def arm(self, name: Optional[str]) -> None:
@@ -478,7 +443,7 @@ class HDAWGChannelPair(AWG):
         `waitDigTrigger` to do that.
         """
         if self._required_seqc_source != self._uploaded_seqc_source:
-            self._wait_for_sync()
+            self._wait_for_compile_and_upload()
 
         self.user_register(self._program_manager.GLOBAL_CONSTS['TRIGGER_REGISTER'], 0)
 
@@ -502,7 +467,7 @@ class HDAWGChannelPair(AWG):
 
         # this is a workaround for problems in the past and should be re-thought in case of a re-write
         for ch_pair in self.device.channel_tuples:
-            ch_pair._wait_for_sync()
+            ch_pair._wait_for_compile_and_upload()
         self.enable(True)
 
     def run_current_program(self) -> None:
@@ -599,15 +564,21 @@ class HDAWGChannelPair(AWG):
         return self.device.api_session.getDouble(node_path)
 
 
-import pathlib
-
-
 class ELFManager:
     def __init__(self, awg_module: zhinst.ziPython.AwgModule):
         self.awg_module = awg_module
 
-        self._compile_job = None
+        # automatically upload after successful compilation
+        self.awg_module.set('compiler/upload', True)
+
+        self._compile_job = None  # type: Optional[Union[str, Tuple[str, int, str]]]
         self._upload_job = None
+
+    @staticmethod
+    def _source_hash(source_string: str) -> str:
+        hasher = hashlib.sha512()
+        hasher.update(bytes(source_string, 'utf-8'))
+        return hasher.hexdigest()
 
     @property
     def src_dir(self) -> pathlib.Path:
@@ -617,30 +588,108 @@ class ELFManager:
     def elf_dir(self) -> pathlib.Path:
         return pathlib.Path(self.awg_module.getString('directory'), 'awg', 'elf')
 
-    def upload(self, source_string: str):
-        seqc_file_name = '%r.seqc' % hash(source_string)
+    def update_compile_job_status(self):
+        compiler_start = self.awg_module.getInt('compiler/start')
+        if self._compile_job is None:
+            assert compiler_start == 0
+
+        elif isinstance(self._compile_job, str):
+            if compiler_start:
+                # compilation is running
+                pass
+
+            else:
+                compiler_status = self.awg_module.getInt('compiler/status')
+                compiler_statusstring = self.awg_module.getString('awgModule/compiler/statusstring')
+                assert compiler_status in (-1, 0, 1, 2)
+                if compiler_status == -1:
+                    raise RuntimeError('Compile job is set but no compilation is running', compiler_statusstring)
+                elif compiler_status == 2:
+                    logger.warning("Compilation finished with warning: %s", compiler_statusstring)
+                self._compile_job = (self._compile_job, compiler_status, compiler_statusstring)
+
+    def _start_compile_job(self, source_file):
+        logger.debug("Starting compilation of %r", source_file)
+        self.update_compile_job_status()
+        assert not isinstance(self._compile_job, str)
+        self.awg_module.set('compiler/sourcefile', source_file)
+        self.awg_module.set('compiler/start', True)
+        self._compile_job = source_file
+        logger.debug("Compilation of %r started", source_file)
+
+    def _compile(self, source_file) -> Generator[str, str, None]:
+        self._start_compile_job(source_file)
+
+        while True:
+            self.update_compile_job_status()
+            if not isinstance(self._compile_job, str):
+                # finished compiling
+                logger.debug("Compilation of %r finished", source_file)
+                break
+            cmd = yield 'compiling'
+            if cmd:
+                if cmd == 'abort':
+                    raise NotImplementedError()
+                else:
+                    raise RuntimeError('Unknown command', cmd)
+
+        _, status_int, status_str = self._compile_job
+        if status_int == 1:
+            raise RuntimeError('Compilation failed', status_str)
+        logger.info("Compilation of %r successful", source_file)
+
+    def _upload(self, elf_file) -> Generator[str, str, None]:
+        logger.debug("Uploading %r", elf_file)
+        current_elf = self.awg_module.getString('elf/file')
+        if current_elf != elf_file:
+            logger.info("Overwriting elf file")
+            self.awg_module.set('elf/file', elf_file)
+
+        while True:
+            elf_upload = self.awg_module.getInt('elf/upload')
+            if elf_upload == 0:
+                elf_status = self.awg_module.getInt('elf/status')
+                assert elf_status in (-1, 0, 1)
+                if elf_status == 1:
+                    raise RuntimeError('ELF upload failed')
+                else:
+                    break
+
+            progress = self.awg_module.getDouble('progress')
+            logger.debug('Upload progress is %d%%', progress*100)
+
+            cmd = yield 'uploading'
+            if cmd:
+                if cmd == 'abort':
+                    raise NotImplementedError()
+                else:
+                    raise RuntimeError('Unknown command', cmd)
+        self.awg_module.set('elf/file', '')
+
+    def upload(self, source_string: str) -> Generator[str, str, None]:
+        self.update_compile_job_status()
+        if isinstance(self._compile_job, str):
+            raise NotImplementedError('cannot upload: compilation in progress')
+
+        source_hash = self._source_hash(source_string)
+
+        seqc_file_name = '%s.seqc' % source_hash
+        elf_file_name = '%s.elf' % source_hash
 
         full_source_name = self.src_dir.joinpath(seqc_file_name)
-        full_elf_name = self.elf_dir.joinpath('%r.elf' % hash(source_string))
+        full_elf_name = self.elf_dir.joinpath(elf_file_name)
 
         if not full_source_name.exists():
             full_source_name.write_text(source_string, 'ascii')
 
-        if not full_elf_name.exists() and self._compile_job != source_string:
-            self.awg_module.setString('compiler/sourcefile', seqc_file_name)
-            self.awg_module.setInt('compiler/start', True)
-            self._compile_job = source_string
+        # we assume same source == same program here
+        if not full_elf_name.exists():
+            yield from self._compile(seqc_file_name)
 
+        else:
+            yield 'already compiled'
 
-
-
-
-
-
-
-
-
-
+        yield from self._upload(elf_file_name)
 
 
 class HDAWGException(Exception):
@@ -681,13 +730,13 @@ class HDAWGUploadException(HDAWGException):
         return "Upload to the instrument failed."
 
 
-if __name__ == "__main__":
+def example_upload(**kwargs):
     from qupulse.pulses import TablePT, SequencePT, RepetitionPT
-    hdawg = HDAWGRepresentation(device_serial='dev8075', device_interface='USB')
+    hdawg = HDAWGRepresentation(**kwargs)
 
-    entry_list1 = [(0, 0), (20, .2, 'hold'), (40, .3, 'linear'), (80, 0, 'jump')]
-    entry_list2 = [(0, 0), (20, -.2, 'hold'), (40, -.3, 'linear'), (50, 0, 'jump')]
-    entry_list3 = [(0, 0), (20, -.2, 'linear'), (50, -.3, 'linear'), (70, 0, 'jump')]
+    entry_list1 = [(0, 0), (200, .2, 'hold'), (400, .3, 'linear'), (800, 0, 'jump')]
+    entry_list2 = [(0, 0), (200, -.2, 'hold'), (400, -.3, 'linear'), (480, 0, 'jump')]
+    entry_list3 = [(0, 0), (200, -.2, 'linear'), (500, -.3, 'linear'), (640, 0, 'jump')]
     tpt1 = TablePT({0: entry_list1, 1: entry_list2}, measurements=[('m', 20, 30)])
     tpt2 = TablePT({0: entry_list2, 1: entry_list1})
     tpt3 = TablePT({0: entry_list3, 1: entry_list2}, measurements=[('m', 10, 50)])
@@ -698,12 +747,14 @@ if __name__ == "__main__":
     p = spt2.create_program()
 
     ch = (0, 1)
-    mk = (0, None)
+    mk = (0, None, None, None)
     vt = (lambda x: x, lambda x: x)
     hdawg.channel_pair_AB.upload('table_pulse_test1', p, ch, mk, vt)
+    hdawg.channel_pair_AB.arm('table_pulse_test1')
+    hdawg.channel_pair_AB.run_current_program()
 
-    entry_list_zero = [(0, 0), (100, 0, 'hold')]
-    entry_list_step = [(0, 0), (50, .5, 'hold'), (100, 0, 'hold')]
+    entry_list_zero = [(0, 0), (96*4, 0, 'hold')]
+    entry_list_step = [(0, 0), (48*4, .5, 'hold'), (96*4, 0, 'hold')]
     marker_start = TablePT({'P1': entry_list_zero, 'marker': entry_list_step})
     tpt1 = TablePT({'P1': entry_list_zero, 'marker': entry_list_zero})
     spt2 = SequencePT(marker_start, tpt1)
@@ -711,7 +762,19 @@ if __name__ == "__main__":
     p = spt2.create_program()
 
     ch = ('P1', None)
-    mk = ('marker', None)
+    mk = ('marker', None, None, None)
     voltage_transform = (lambda x: x,) * len(ch)
     hdawg.channel_pair_AB.upload('table_pulse_test2', p, ch, mk, voltage_transform)
+    hdawg.channel_pair_AB.arm('table_pulse_test2')
 
+
+if __name__ == "__main__":
+    import sys
+    args = argparse.ArgumentParser('Upload an example pulse to a HDAWG')
+    args.add_argument('device_serial', help='device serial of the form dev1234')
+    args.add_argument('device_interface', help='device interface', choices=['USB', '1GbE'], default='1GbE', nargs='?')
+    parsed = vars(args.parse_args())
+
+    logging.basicConfig(stream=sys.stdout)
+    logger.setLevel(logging.DEBUG)
+    example_upload(**parsed)
