@@ -515,6 +515,8 @@ class HDAWGChannelPair(AWG):
 
 
 class ELFManager:
+    """This class handles compiling and uploading of compiled programs. The source code file is named based on the code
+    hash to cache compilation results. This requires that the waveform names are unique."""
     def __init__(self, awg_module: zhinst.ziPython.AwgModule):
         self.awg_module = awg_module
 
@@ -617,6 +619,21 @@ class ELFManager:
         self.awg_module.set('elf/file', '')
 
     def upload(self, source_string: str) -> Generator[str, str, None]:
+        """The source code is saved to a file determined by the source hash, compiled and uploaded to the instrument.
+        The function returns a generator that yields the current state of the progress. The generator is empty iff the
+        upload is complete. An exception is raised if there is an error.
+
+        Example:
+            >>> for state in elf_manager.upload(my_source):
+            >>>     print('Current state:', state)
+            >>>     time.sleep(1)
+
+        Args:
+            source_string: Source code to compile
+
+        Returns:
+            Generator object
+        """
         self.update_compile_job_status()
         if isinstance(self._compile_job, str):
             raise NotImplementedError('cannot upload: compilation in progress')
