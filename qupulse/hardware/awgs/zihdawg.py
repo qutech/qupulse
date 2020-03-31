@@ -1,6 +1,6 @@
 from pathlib import Path
 import functools
-from typing import Tuple, Set, Callable, Optional, Mapping, Generator
+from typing import Tuple, Set, Callable, Optional, Mapping, Generator, Union
 from enum import Enum
 import weakref
 import logging
@@ -347,7 +347,7 @@ class HDAWGChannelPair(AWG):
         self._start_compile_and_upload()
 
     def _start_compile_and_upload(self):
-        self._upload_generator = self._elf_manager.upload(self._required_seqc_source)
+        self._upload_generator = self._elf_manager.compile_and_upload(self._required_seqc_source)
 
     def _wait_for_compile_and_upload(self):
         for state in self._upload_generator:
@@ -397,7 +397,7 @@ class HDAWGChannelPair(AWG):
 
         self.user_register(self._program_manager.GLOBAL_CONSTS['TRIGGER_REGISTER'], 0)
 
-        if not name:
+        if name is None:
             self.user_register(self._program_manager.GLOBAL_CONSTS['PROG_SEL_REGISTER'],
                                self._program_manager.GLOBAL_CONSTS['PROG_SEL_NONE'])
             self._current_program = None
@@ -515,16 +515,80 @@ class HDAWGChannelPair(AWG):
 
 
 class ELFManager:
-    """This class handles compiling and uploading of compiled programs. The source code file is named based on the code
-    hash to cache compilation results. This requires that the waveform names are unique."""
+    class AWGModule:
+        def __init__(self, awg_module: zhinst.ziPython.AwgModule):
+            """Provide an easily mockable interface to the zhinst AwgModule object"""
+            self._module = awg_module
+
+        @property
+        def src_dir(self) -> pathlib.Path:
+            return pathlib.Path(self._module.getString('directory'), 'awg', 'src')
+
+        @property
+        def elf_dir(self) -> pathlib.Path:
+            return pathlib.Path(self._module.getString('directory'), 'awg', 'elf')
+
+        @property
+        def compiler_start(self) -> bool:
+            """True if the compiler is running"""
+            return self._module.getInt('compiler/start') == 1
+
+        @compiler_start.setter
+        def compiler_start(self, value: bool):
+            """Set true to start the compiler"""
+            self._module.set('compiler/start', value)
+
+        @property
+        def compiler_status(self) -> Tuple[int, str]:
+            return self._module.getInt('compiler/status'), self._module.getString('compiler/statusstring')
+
+        @property
+        def compiler_source_file(self) -> str:
+            return self._module.getString('compiler/sourcefile')
+
+        @compiler_source_file.setter
+        def compiler_source_file(self, source_file: str):
+            self._module.set('compiler/sourcefile', source_file)
+
+        @property
+        def compiler_upload(self) -> bool:
+            """auto upload after compiling"""
+            return self._module.getInt('compiler/upload') == 1
+
+        @compiler_upload.setter
+        def compiler_upload(self, value: bool):
+            self._module.set('compiler/upload', value)
+
+        @property
+        def elf_file(self) -> str:
+            return self._module.getString('elf/file')
+
+        @elf_file.setter
+        def elf_file(self, elf_file: str):
+            self._module.set('elf/file', elf_file)
+
+        @property
+        def elf_upload(self) -> bool:
+            return self._module.getInt('elf/upload') == 1
+
+        @elf_upload.setter
+        def elf_upload(self, value: bool):
+            self._module.set('elf/upload', value)
+
+        @property
+        def elf_status(self) -> Tuple[int, float]:
+            return self._module.getInt('elf/status'), self._module.getString('progress')
+
     def __init__(self, awg_module: zhinst.ziPython.AwgModule):
-        self.awg_module = awg_module
+        """This class handles compiling and uploading of compiled programs. The source code file is named based on the
+        code hash to cache compilation results. This requires that the waveform names are unique."""
+        self.awg_module = self.AWGModule(awg_module)
 
         # automatically upload after successful compilation
-        self.awg_module.set('compiler/upload', True)
+        self.awg_module.compiler_upload = True
 
         self._compile_job = None  # type: Optional[Union[str, Tuple[str, int, str]]]
-        self._upload_job = None
+        self._upload_job = None  # type: Optional[Union[Tuple[str, float], Tuple[str, int]]]
 
     @staticmethod
     def _source_hash(source_string: str) -> str:
@@ -532,16 +596,9 @@ class ELFManager:
         hasher.update(bytes(source_string, 'utf-8'))
         return hasher.hexdigest()
 
-    @property
-    def src_dir(self) -> pathlib.Path:
-        return pathlib.Path(self.awg_module.getString('directory'), 'awg', 'src')
-
-    @property
-    def elf_dir(self) -> pathlib.Path:
-        return pathlib.Path(self.awg_module.getString('directory'), 'awg', 'elf')
-
-    def update_compile_job_status(self):
-        compiler_start = self.awg_module.getInt('compiler/start')
+    def _update_compile_job_status(self):
+        """Store current compile status in self._compile_job"""
+        compiler_start = self.awg_module.compiler_start
         if self._compile_job is None:
             assert compiler_start == 0
 
@@ -551,21 +608,20 @@ class ELFManager:
                 pass
 
             else:
-                compiler_status = self.awg_module.getInt('compiler/status')
-                compiler_statusstring = self.awg_module.getString('awgModule/compiler/statusstring')
+                compiler_status, status_string = self.awg_module.compiler_status
                 assert compiler_status in (-1, 0, 1, 2)
                 if compiler_status == -1:
-                    raise RuntimeError('Compile job is set but no compilation is running', compiler_statusstring)
+                    raise RuntimeError('Compile job is set but no compilation is running', status_string)
                 elif compiler_status == 2:
-                    logger.warning("Compilation finished with warning: %s", compiler_statusstring)
-                self._compile_job = (self._compile_job, compiler_status, compiler_statusstring)
+                    logger.warning("Compilation finished with warning: %s", status_string)
+                self._compile_job = (self._compile_job, compiler_status, status_string)
 
     def _start_compile_job(self, source_file):
         logger.debug("Starting compilation of %r", source_file)
-        self.update_compile_job_status()
+        self._update_compile_job_status()
         assert not isinstance(self._compile_job, str)
-        self.awg_module.set('compiler/sourcefile', source_file)
-        self.awg_module.set('compiler/start', True)
+        self.awg_module.compiler_source_file = source_file
+        self.awg_module.compiler_start = True
         self._compile_job = source_file
         logger.debug("Compilation of %r started", source_file)
 
@@ -573,7 +629,7 @@ class ELFManager:
         self._start_compile_job(source_file)
 
         while True:
-            self.update_compile_job_status()
+            self._update_compile_job_status()
             if not isinstance(self._compile_job, str):
                 # finished compiling
                 logger.debug("Compilation of %r finished", source_file)
@@ -590,51 +646,85 @@ class ELFManager:
             raise RuntimeError('Compilation failed', status_str)
         logger.info("Compilation of %r successful", source_file)
 
-    def _upload(self, elf_file) -> Generator[str, str, None]:
+    def _start_elf_upload(self, elf_file):
         logger.debug("Uploading %r", elf_file)
-        current_elf = self.awg_module.getString('elf/file')
+        current_elf = self.awg_module.elf_file
         if current_elf != elf_file:
             logger.info("Overwriting elf file")
-            self.awg_module.set('elf/file', elf_file)
+            self.awg_module.elf_file = elf_file
+        self._upload_job = elf_file
+
+    def _update_upload_job_status(self):
+        elf_upload = self.awg_module.elf_upload
+        if self._upload_job is None:
+            assert elf_upload == 0
+            return
+        else:
+            elf_file, old_status = self._upload_job
+            assert self.awg_module.elf_file == elf_file
+
+        if isinstance(old_status, float):
+            status_int, progress = self.awg_module.elf_status
+            if status_int == 2:
+                # in progress
+                assert elf_upload == 1
+                self._upload_job = elf_file, progress
+            else:
+                # fetch new value here
+                assert self.awg_module.elf_upload == 0
+                self._upload_job = elf_file, status_int
+
+        else:
+            logger.debug('_update_upload_job_status called on finished upload')
+            assert elf_upload == 0
+
+    def _upload(self, elf_file) -> Generator[str, str, None]:
+        self._start_elf_upload(elf_file)
 
         while True:
-            elf_upload = self.awg_module.getInt('elf/upload')
-            if elf_upload == 0:
-                elf_status = self.awg_module.getInt('elf/status')
-                assert elf_status in (-1, 0, 1)
-                if elf_status == 1:
+            self._update_upload_job_status()
+            _, status = self._upload_job
+            if isinstance(status, int):
+                assert status in (-1, 0, 1)
+                if status == 1:
                     raise RuntimeError('ELF upload failed')
                 else:
                     break
+            else:
+                progress = status
+                logger.debug('Upload progress is %d%%', progress*100)
 
-            progress = self.awg_module.getDouble('progress')
-            logger.debug('Upload progress is %d%%', progress*100)
+                cmd = yield 'uploading @ %d%%' % (100*progress)
+                if cmd:
+                    if cmd == 'abort':
+                        raise NotImplementedError()
+                    else:
+                        raise RuntimeError('Unknown command', cmd)
 
-            cmd = yield 'uploading'
-            if cmd:
-                if cmd == 'abort':
-                    raise NotImplementedError()
-                else:
-                    raise RuntimeError('Unknown command', cmd)
-        self.awg_module.set('elf/file', '')
+        # enable auto upload on compilation again
+        # TODO: research whether this is necessary
+        self.awg_module.elf_file = ''
 
-    def upload(self, source_string: str) -> Generator[str, str, None]:
+    def compile_and_upload(self, source_string: str) -> Generator[str, str, None]:
         """The source code is saved to a file determined by the source hash, compiled and uploaded to the instrument.
         The function returns a generator that yields the current state of the progress. The generator is empty iff the
         upload is complete. An exception is raised if there is an error.
 
+        To abort send 'abort' to the generator.
+
         Example:
-            >>> for state in elf_manager.upload(my_source):
-            >>>     print('Current state:', state)
-            >>>     time.sleep(1)
+            >>> my_source = 'playWave("my_wave");'
+            >>> for state in elf_manager.compile_and_upload(my_source):
+            ...     print('Current state:', state)
+            ...     time.sleep(1)
 
         Args:
             source_string: Source code to compile
 
         Returns:
-            Generator object
+            Generator object that needs to be consumed
         """
-        self.update_compile_job_status()
+        self._update_compile_job_status()
         if isinstance(self._compile_job, str):
             raise NotImplementedError('cannot upload: compilation in progress')
 
@@ -643,18 +733,17 @@ class ELFManager:
         seqc_file_name = '%s.seqc' % source_hash
         elf_file_name = '%s.elf' % source_hash
 
-        full_source_name = self.src_dir.joinpath(seqc_file_name)
-        full_elf_name = self.elf_dir.joinpath(elf_file_name)
+        full_source_name = self.awg_module.src_dir.joinpath(seqc_file_name)
+        full_elf_name = self.awg_module.elf_dir.joinpath(elf_file_name)
 
         if not full_source_name.exists():
-            full_source_name.write_text(source_string, 'ascii')
+            full_source_name.write_text(source_string, 'utf-8')
 
         # we assume same source == same program here
         if not full_elf_name.exists():
             yield from self._compile(seqc_file_name)
-
         else:
-            yield 'already compiled'
+            logger.info('Already compiled. ELF: %r', elf_file_name)
 
         yield from self._upload(elf_file_name)
 
