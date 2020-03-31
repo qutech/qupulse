@@ -130,6 +130,7 @@ class BinaryWaveform:
         return hash(bytes(self.data))
 
     def fingerprint(self) -> str:
+        """This fingerprint is runtime independent"""
         return hashlib.sha256(self.data).hexdigest()
 
     def to_csv_compatible_table(self):
@@ -149,8 +150,8 @@ class BinaryWaveform:
 
 
 class ConcatenatedWaveform:
-    """Handle the concatenation of multiple binary waveforms to create a big indexable waveform."""
     def __init__(self):
+        """Handle the concatenation of multiple binary waveforms to create a big indexable waveform."""
         self._concatenated = []
         self._as_binary = None
 
