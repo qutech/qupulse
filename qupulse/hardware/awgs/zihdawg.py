@@ -231,6 +231,7 @@ class HDAWGChannelPair(AWG):
     """
 
     MIN_WAVEFORM_LEN = 192
+    WAVEFORM_LEN_QUANTUM = 16
 
     def __init__(self, hdawg_device: HDAWGRepresentation,
                  channels: Tuple[int, int],
@@ -315,7 +316,7 @@ class HDAWGChannelPair(AWG):
         # Adjust program to fit criteria.
         make_compatible(program,
                         minimal_waveform_length=self.MIN_WAVEFORM_LEN,
-                        waveform_quantum=16,  # 8 samples for single, 4 for dual channel waveforms.
+                        waveform_quantum=self.WAVEFORM_LEN_QUANTUM,
                         sample_rate=q_sample_rate)
 
         if self._amplitude_offset_handling == AWGAmplitudeOffsetHandling.IGNORE_OFFSET:
@@ -580,8 +581,12 @@ class ELFManager:
             return self._module.getInt('elf/status'), self._module.getString('progress')
 
     def __init__(self, awg_module: zhinst.ziPython.AwgModule):
-        """This class handles compiling and uploading of compiled programs. The source code file is named based on the
-        code hash to cache compilation results. This requires that the waveform names are unique."""
+        """This class organizes compiling and uploading of compiled programs. The source code file is named based on the
+        code hash to cache compilation results. This requires that the waveform names are unique.
+
+        The compilation and upload itself are done asynchronously by zhinst.ziPython. To avoid spawning a useless
+        thread for updating the status the method :py:meth:`~ELFManager.compile_and_upload` returns a generator which
+        talks to the undelying library when needed."""
         self.awg_module = self.AWGModule(awg_module)
 
         # automatically upload after successful compilation
@@ -592,12 +597,19 @@ class ELFManager:
 
     @staticmethod
     def _source_hash(source_string: str) -> str:
-        hasher = hashlib.sha512()
-        hasher.update(bytes(source_string, 'utf-8'))
-        return hasher.hexdigest()
+        """Calulate the SHA512 hash of the given source.
+
+        Args:
+            source_string: seqc source code
+
+        Returns:
+            hex representation of SHA512 `source_string` hash
+        """
+        # use utf-16 because str is UTF16 on most relevant machines (Windows)
+        return hashlib.sha512(bytes(source_string, 'utf-16')).hexdigest()
 
     def _update_compile_job_status(self):
-        """Store current compile status in self._compile_job"""
+        """Store current compile status in self._compile_job."""
         compiler_start = self.awg_module.compiler_start
         if self._compile_job is None:
             assert compiler_start == 0
@@ -635,15 +647,16 @@ class ELFManager:
                 logger.debug("Compilation of %r finished", source_file)
                 break
             cmd = yield 'compiling'
-            if cmd:
-                if cmd == 'abort':
-                    raise NotImplementedError()
-                else:
-                    raise RuntimeError('Unknown command', cmd)
+            if cmd is None:
+                logger.debug('No command received during compiling')
+            elif cmd == 'abort':
+                raise NotImplementedError('clean abort not implemented')
+            else:
+                raise HDAWGValueError('Unknown command', cmd)
 
         _, status_int, status_str = self._compile_job
         if status_int == 1:
-            raise RuntimeError('Compilation failed', status_str)
+            raise HDAWGRuntimeError('Compilation failed', status_str)
         logger.info("Compilation of %r successful", source_file)
 
     def _start_elf_upload(self, elf_file):
@@ -659,9 +672,9 @@ class ELFManager:
         if self._upload_job is None:
             assert elf_upload == 0
             return
-        else:
-            elf_file, old_status = self._upload_job
-            assert self.awg_module.elf_file == elf_file
+
+        elf_file, old_status = self._upload_job
+        assert self.awg_module.elf_file == elf_file
 
         if isinstance(old_status, float):
             status_int, progress = self.awg_module.elf_status
@@ -695,11 +708,14 @@ class ELFManager:
                 logger.debug('Upload progress is %d%%', progress*100)
 
                 cmd = yield 'uploading @ %d%%' % (100*progress)
-                if cmd:
-                    if cmd == 'abort':
-                        raise NotImplementedError()
-                    else:
-                        raise RuntimeError('Unknown command', cmd)
+                if cmd is None:
+                    logger.debug("No command received during upload")
+                if cmd == 'abort':
+                    # TODO: check if this stops the upload
+                    self.awg_module.elf_upload = False
+                    raise NotImplementedError('Abort upload not cleanly implemented')
+                else:
+                    raise HDAWGValueError('Unknown command', cmd)
 
         # enable auto upload on compilation again
         # TODO: research whether this is necessary
@@ -786,42 +802,68 @@ class HDAWGUploadException(HDAWGException):
         return "Upload to the instrument failed."
 
 
-def example_upload(**kwargs):
+def example_upload(hdawg_kwargs: dict, channels: Set[int]):
     from qupulse.pulses import TablePT, SequencePT, RepetitionPT
-    hdawg = HDAWGRepresentation(**kwargs)
+    if isinstance(hdawg_kwargs, dict):
+        hdawg = HDAWGRepresentation(**hdawg_kwargs)
+    else:
+        hdawg = hdawg_kwargs
 
-    entry_list1 = [(0, 0), (200, .2, 'hold'), (400, .3, 'linear'), (800, 0, 'jump')]
-    entry_list2 = [(0, 0), (200, -.2, 'hold'), (400, -.3, 'linear'), (480, 0, 'jump')]
-    entry_list3 = [(0, 0), (200, -.2, 'linear'), (500, -.3, 'linear'), (640, 0, 'jump')]
-    tpt1 = TablePT({0: entry_list1, 1: entry_list2}, measurements=[('m', 20, 30)])
-    tpt2 = TablePT({0: entry_list2, 1: entry_list1})
-    tpt3 = TablePT({0: entry_list3, 1: entry_list2}, measurements=[('m', 10, 50)])
+    assert not set(channels) - set(range(8)), "Channels must be in 0..=7"
+    channels = sorted(channels)
+
+    channel_tuples = [ct for i, ct in enumerate(hdawg.channel_tuples) if i*2 in channels or i*2+1 in channels]
+    assert channel_tuples
+
+    # choose length based on minimal sample rate
+    min_sr = min(ct.sample_rate for ct in channel_tuples)
+    min_t = channel_tuples[0].MIN_WAVEFORM_LEN / min_sr
+    quant_t = channel_tuples[0].WAVEFORM_LEN_QUANTUM / min_sr
+
+    assert min_t > 4 * quant_t, "Example not updated"
+
+    entry_list1 = [(0, 0), (quant_t * 2, .2, 'hold'),    (min_t,  .3, 'linear'),   (min_t + 3*quant_t, 0, 'jump')]
+    entry_list2 = [(0, 0), (quant_t * 3, -.2, 'hold'),   (min_t, -.3, 'linear'),  (min_t + 4*quant_t, 0, 'jump')]
+    entry_list3 = [(0, 0), (quant_t * 1, -.2, 'linear'), (min_t, -.3, 'linear'), (2*min_t, 0, 'jump')]
+    entry_lists = [entry_list1, entry_list2, entry_list3]
+
+    entry_dict1 = {ch: entry_lists[:2][i % 2] for i, ch in enumerate(channels)}
+    entry_dict2 = {ch: entry_lists[1::-1][i % 2] for i, ch in enumerate(channels)}
+    entry_dict3 = {ch: entry_lists[2:0:-1][i % 2] for i, ch in enumerate(channels)}
+
+    tpt1 = TablePT(entry_dict1, measurements=[('m', 20, 30)])
+    tpt2 = TablePT(entry_dict2)
+    tpt3 = TablePT(entry_dict3, measurements=[('m', 10, 50)])
     rpt = RepetitionPT(tpt1, 4)
     spt = SequencePT(tpt2, rpt)
     rpt2 = RepetitionPT(spt, 2)
     spt2 = SequencePT(rpt2, tpt3)
     p = spt2.create_program()
 
-    ch = (0, 1)
-    mk = (0, None, None, None)
-    vt = (lambda x: x, lambda x: x)
-    hdawg.channel_pair_AB.upload('table_pulse_test1', p, ch, mk, vt)
-    hdawg.channel_pair_AB.arm('table_pulse_test1')
-    hdawg.channel_pair_AB.run_current_program()
+    # use HardwareSetup for this
+    for i, ct in enumerate(channel_tuples):
+        ch = tuple(ch if ch in channels else None for ch in (2*i, 2*i+1))
+        mk = (None, None, None, None)
+        vt = (lambda x: x, lambda x: x)
+        ct.upload('table_pulse_test1', p, ch, mk, vt)
+        ct.arm('table_pulse_test1')
 
-    entry_list_zero = [(0, 0), (96*4, 0, 'hold')]
-    entry_list_step = [(0, 0), (48*4, .5, 'hold'), (96*4, 0, 'hold')]
-    marker_start = TablePT({'P1': entry_list_zero, 'marker': entry_list_step})
-    tpt1 = TablePT({'P1': entry_list_zero, 'marker': entry_list_zero})
-    spt2 = SequencePT(marker_start, tpt1)
+    channel_tuples[0].run_current_program()
 
-    p = spt2.create_program()
+    if False:
+        entry_list_zero = [(0, 0), (96*4, 0, 'hold')]
+        entry_list_step = [(0, 0), (48*4, .5, 'hold'), (96*4, 0, 'hold')]
+        marker_start = TablePT({'P1': entry_list_zero, 'marker': entry_list_step})
+        tpt1 = TablePT({'P1': entry_list_zero, 'marker': entry_list_zero})
+        spt2 = SequencePT(marker_start, tpt1)
 
-    ch = ('P1', None)
-    mk = ('marker', None, None, None)
-    voltage_transform = (lambda x: x,) * len(ch)
-    hdawg.channel_pair_AB.upload('table_pulse_test2', p, ch, mk, voltage_transform)
-    hdawg.channel_pair_AB.arm('table_pulse_test2')
+        p = spt2.create_program()
+
+        ch = ('P1', None)
+        mk = ('marker', None, None, None)
+        voltage_transform = (lambda x: x,) * len(ch)
+        hdawg.channel_pair_AB.upload('table_pulse_test2', p, ch, mk, voltage_transform)
+        hdawg.channel_pair_AB.arm('table_pulse_test2')
 
 
 if __name__ == "__main__":
@@ -829,8 +871,11 @@ if __name__ == "__main__":
     args = argparse.ArgumentParser('Upload an example pulse to a HDAWG')
     args.add_argument('device_serial', help='device serial of the form dev1234')
     args.add_argument('device_interface', help='device interface', choices=['USB', '1GbE'], default='1GbE', nargs='?')
+    args.add_argument('--channels', help='channels to use', choices=range(8), default=[0, 1], type=int, nargs='+')
     parsed = vars(args.parse_args())
+
+    channels = parsed.pop('channels')
 
     logging.basicConfig(stream=sys.stdout)
     logger.setLevel(logging.DEBUG)
-    example_upload(**parsed)
+    example_upload(hdawg_kwargs=parsed, channels=channels)
