@@ -8,8 +8,10 @@ from copy import copy, deepcopy
 
 import numpy as np
 
+from qupulse._program.tabor import TableDescription, TableEntry
 from qupulse.hardware.awgs.old_base import AWGAmplitudeOffsetHandling
-from qupulse.hardware.awgs.old_tabor import TaborProgram, TaborDevice
+from qupulse.hardware.awgs.tabor import TaborProgram, TaborDevice, TaborProgramMemory
+from qupulse.utils.types import TimeType
 from tests.hardware.dummy_modules import import_package
 
 
@@ -95,7 +97,7 @@ class TaborDummyBasedTest(unittest.TestCase):
         cls.restore_packages()
 
     def setUp(self):
-        from qupulse.hardware.awgs.tabor import TaborAWGRepresentation
+        from qupulse.hardware.awgs.old_tabor import TaborAWGRepresentation
         self.instrument = TaborAWGRepresentation('main_instrument',
                                                  reset=True,
                                                  paranoia_level=2,
@@ -174,14 +176,14 @@ class TaborChannelPairTests(TaborDummyBasedTest):
     def setUpClass(cls):
         super().setUpClass()
 
-        from qupulse.hardware.awgs.tabor import TaborChannelPair, TaborProgramMemory, TaborSegment, TaborSequencing
+        from qupulse.hardware.awgs.old_tabor import TaborChannelPair, TaborProgramMemory, TaborSegment, TaborSequencing
         from qupulse.pulses.table_pulse_template import TableWaveform
         from qupulse.pulses.interpolation import HoldInterpolationStrategy
         from qupulse._program._loop import Loop
 
         from tests.pulses.sequencing_dummies import DummyWaveform
 
-        from qupulse._program.old_tabor import make_combined_wave
+        from qupulse._program.tabor import make_combined_wave
 
         cls.DummyWaveform = DummyWaveform
         cls.TaborChannelPair = TaborChannelPair

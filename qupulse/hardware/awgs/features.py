@@ -23,6 +23,36 @@ class ChannelSynchronization(AWGDeviceFeature, ABC):
         raise NotImplementedError()
 
 
+class DeviceControl(AWGDeviceFeature, ABC):
+    #TODO (toCheck): is this Feature ok like this?
+    @abstractmethod
+    def enable(self) -> None:
+        """This method generates the selected output waveform."""
+        raise NotImplementedError()
+
+    @abstractmethod
+    def abort(self) -> None:
+        """This method terminates the current generation of the output waveform."""
+        raise NotImplementedError()
+
+    @abstractmethod
+    def reset(self) -> None:
+        """
+        Resetting the whole device. A command for resetting is send to the Device, the device is initialized again and
+        all channel tuples are cleared.
+        """
+        raise NotImplementedError()
+
+    @abstractmethod
+    def trigger(self) -> None:
+        # TODO (toDo): Docstring missing
+        """
+
+        """
+        raise NotImplementedError()
+
+
+
 ########################################################################################################################
 # channel tuple features
 ########################################################################################################################
@@ -90,6 +120,16 @@ class ProgramManagement(AWGChannelTupleFeature, ABC):
         """The set of program names that can currently be executed on the hardware AWG."""
         raise NotImplementedError()
 
+    @abstractmethod
+    def run_current_program(self) -> None:
+        raise NotImplementedError()
+
+    #TODO: change_armed_program hierhin verschieben
+    """
+    @abstractmethod
+    def change_armed_program(self) -> None:
+        raise NotImplementedError()
+    """
 
 ########################################################################################################################
 # channel features

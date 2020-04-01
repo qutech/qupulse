@@ -1,11 +1,9 @@
 import fractions
 import functools
-import itertools
 import logging
 import numbers
-import operator
 import sys
-from enum import Enum
+import weakref
 from typing import List, Tuple, Set, Callable, Optional, Any, Sequence, cast, Union, Dict, Mapping, NamedTuple, \
     Generator, Iterable
 from collections import OrderedDict
@@ -15,7 +13,7 @@ from qupulse._program._loop import Loop, make_compatible
 from qupulse._program.waveforms import MultiChannelWaveform
 from qupulse.hardware.awgs.channel_tuple_wrapper import ChannelTupleAdapter
 from qupulse.hardware.awgs.features import ChannelSynchronization, AmplitudeOffsetHandling, OffsetAmplitude, \
-    ProgramManagement, ActivatableChannels
+    ProgramManagement, ActivatableChannels, DeviceControl
 from qupulse.hardware.util import voltage_to_uint16, find_positions, get_sample_times
 from qupulse.utils.types import Collection
 from qupulse.hardware.awgs.base import AWGChannelTuple, AWGChannel, AWGDevice, AWGMarkerChannel
@@ -74,21 +72,60 @@ def with_select(function_object: Callable[["TaborChannelTuple", Any], Any]) -> C
 # Device
 ########################################################################################################################
 # Features
-# TODO: maybe implement Synchronization Feature for Tabor Devices
-# TODO (LuL): Not just maybe. Use the TaborChannelSynchronization for channel synchronization, but you can
-#  raise an error if the the group-size is not 2. Groups of 4 can be implemented later, but you should
-#  prepare the class for this.
 
-"""
 class TaborChannelSynchronization(ChannelSynchronization):
     def __init__(self, device: "TaborDevice"):
         super().__init__()
         self._parent = device
 
     def synchronize_channels(self, group_size: int) -> None:
-        pass  # TODO: to implement
-"""
+        if group_size == 2:
+            i = 0
+            while i < group_size:
+                self._parent._channel_tuples.append(
+                    TaborChannelTuple((i+1),
+                                      self._parent,
+                                      self._parent.channels[(i*group_size):((i*group_size) + group_size)],
+                                      self._parent.marker_channels[(i*group_size):((i*group_size) + group_size)])
+                )
+                i = i + 1
+        else:
+            raise NotImplementedError()
 
+
+class TaborDeviceControl(DeviceControl):
+    def __init__(self, device: "TaborDevice"):
+        super().__init__()
+        self._parent = device
+
+    def enable(self) -> None:
+        """
+        This method immediately generates the selected output waveform, if the device is in continuous and armed
+        run mode.
+        """
+        self._parent.send_cmd(":ENAB")
+
+    def abort(self) -> None:
+        """
+        With abort you can terminate the current generation of the output waveform. When the output waveform is
+        terminated the output starts generating an idle waveform.
+        """
+        self._parent.send_cmd(":ABOR")
+
+    def reset(self) -> None:
+        """
+        Resetting the whole device. A command for resetting is send to the Device, the device is initialized again and
+        all channel tuples are cleared.
+        """
+        self._parent.send_cmd(':RES')
+        self._parent._coupled = None
+
+        self._parent._initialize()
+        for channel_tuple in self._parent.channel_tuples:
+            channel_tuple[TaborProgramManagement].clear()
+
+    def trigger(self) -> None:
+        self.send_cmd(":TRIG")
 
 # Implementation
 class TaborDevice(AWGDevice):
@@ -106,12 +143,11 @@ class TaborDevice(AWGDevice):
             mirror_addresses:        list of devices on which the same things as on the main device are done. For example you can a simulator and a real Device at once
 
         """
-        # TODO (LuL): I don't think None would work for instr_addr. If so, remove the default value to make it mandatory
         super().__init__(device_name)
         self._instr = teawg.TEWXAwg(instr_addr, paranoia_level)
         self._mirrors = tuple(teawg.TEWXAwg(address, paranoia_level) for address in mirror_addresses)
         self._coupled = None
-        self._clock_marker = [0, 0, 0, 0]  # TODO: What are clock markers used for?
+        self._clock_marker = [0, 0, 0, 0]
 
         if reset:
             self.send_cmd(":RES")
@@ -123,11 +159,11 @@ class TaborDevice(AWGDevice):
         self._channel_marker = [TaborMarkerChannel(i + 1, self) for i in range(4)]
 
         # ChannelTuple
-        # TODO (LuL): Use the ChannelSynchronization-feature to set up the ChannelTuple's
-        self._channel_tuples = [
-            TaborChannelTuple(1, self, self.channels[0:2], self.marker_channels[0:2]),
-            TaborChannelTuple(2, self, self.channels[2:4], self.marker_channels[2:4])
-        ]
+        self._channel_tuples = []
+
+        self.add_feature(TaborDeviceControl(self))
+        self.add_feature(TaborChannelSynchronization(self))
+        self[TaborChannelSynchronization].synchronize_channels(2)
 
         if external_trigger:
             raise NotImplementedError()  # pragma: no cover
@@ -286,22 +322,6 @@ class TaborDevice(AWGDevice):
     def is_open(self) -> bool:
         return self._instr.visa_inst is not None  # pragma: no cover
 
-    def enable(self) -> None:
-        """
-        This method immediately generates the selected output waveform, if the device is in continuous and armed
-        run mode.
-        """
-        # TODO (LuL): Can make a feature for this?
-        self.send_cmd(":ENAB")
-
-    def abort(self) -> None:
-        """
-        With abort you can terminate the current generation of the output waveform. When the output waveform is
-        terminated the output starts generating an idle waveform.
-        """
-        # TODO (LuL): Can make a feature for this?
-        self.send_cmd(":ABOR")
-
     def _initialize(self) -> None:
         # 1. Select channel
         # 2. Turn off gated mode
@@ -318,23 +338,6 @@ class TaborDevice(AWGDevice):
         self.send_cmd(setup_command)
         self.send_cmd(":INST:SEL 3")
         self.send_cmd(setup_command)
-
-    def reset(self) -> None:
-        """
-        Resetting the whole device. A command for resetting is send to the Device, the device is initialized again and
-        all channel tuples are cleared.
-        """
-        # TODO (LuL): Can make a feature for this?
-        self.send_cmd(':RES')
-        self._coupled = None
-
-        self._initialize()
-        for channel_tuple in self.channel_tuples:
-            channel_tuple[TaborProgramManagement].clear()
-
-    def trigger(self) -> None:
-        # TODO (LuL): Can make a feature for this?
-        self.send_cmd(":TRIG")
 
     def get_readable_device(self, simulator=True) -> teawg.TEWXAwg:
         """
@@ -405,25 +408,25 @@ class TaborChannelActivatable(ActivatableChannels):
     #  I think this would be more innovative
     def __init__(self, marker_channel: "TaborMarkerChannel"):
         super().__init__()
-        self.parent = marker_channel
+        self._parent = weakref.ref(marker_channel)
 
     @property
     def status(self) -> bool:
         pass  # TODO: to implement
 
     def enable(self):
-        command_string = ":INST:SEL {ch_id}; :OUTP ON".format(ch_id=self.parent.idn)
-        self.parent.device.send_cmd(command_string)
+        command_string = ":INST:SEL {ch_id}; :OUTP ON".format(ch_id=self._parent().idn)
+        self._parent().device.send_cmd(command_string)
 
     def disable(self):
-        command_string = ":INST:SEL {ch_id}; :OUTP OFF".format(ch_id=self.parent.idn)
-        self.parent.device.send_cmd(command_string)
+        command_string = ":INST:SEL {ch_id}; :OUTP OFF".format(ch_id=self._parent().idn)
+        self._parent().device.send_cmd(command_string)
 
     @status.setter
     def status(self, channel_status: bool) -> None:
-        command_string = ":INST:SEL {ch_id}; :OUTP {output}".format(ch_id=self.parent.idn,
+        command_string = ":INST:SEL {ch_id}; :OUTP {output}".format(ch_id=self._parent().idn,
                                                                     output="ON" if channel_status else "OFF")
-        self.parent.device.send_cmd(command_string)
+        self._parent().device.send_cmd(command_string)
 
 
 # Implementation
@@ -431,7 +434,7 @@ class TaborChannel(AWGChannel):
     def __init__(self, idn: int, device: TaborDevice):
         super().__init__(idn)
 
-        self._device = device
+        self._device = weakref.ref(device)
 
         # adding Features
         self.add_feature(TaborOffsetAmplitude(self))
@@ -441,12 +444,12 @@ class TaborChannel(AWGChannel):
     @property
     def device(self) -> TaborDevice:
         """Returns the device that the channel belongs to"""
-        return self._device
+        return self._device()
 
     @property
     def channel_tuple(self) -> Optional[AWGChannelTuple]:
         """Returns the channel tuple that this channel belongs to"""
-        return self._channel_tuple
+        return self._channel_tuple()
 
     def _set_channel_tuple(self, channel_tuple) -> None:
         """
@@ -455,9 +458,10 @@ class TaborChannel(AWGChannel):
         Args:
             channel_tuple (TaborChannelTuple): the channel tuple that this channel belongs to
         """
-        self._channel_tuple = channel_tuple
+        #TODO: problem with the _?
+        self._channel_tuple = weakref.ref(channel_tuple)
 
-    def _select(self) -> None:  # TODO (LuL): This may be private
+    def _select(self) -> None:
         self.device.send_cmd(":INST:SEL {channel}".format(channel=self.idn))
 
 
@@ -474,7 +478,8 @@ class TaborProgramManagement(ProgramManagement):
 
     @property
     def programs(self) -> Set[str]:
-        pass  # TODO: to implement
+        """The set of program names that can currently be executed on the hardware AWG."""
+        return set(program.name for program in self._parent._known_programs.keys())
 
     @with_configuration_guard
     @with_select
@@ -549,10 +554,19 @@ class TaborProgramManagement(ProgramManagement):
         else:
             self._parent.change_armed_program(name)
 
-    @property
-    def programs(self) -> Set[str]:
-        """The set of program names that can currently be executed on the hardware AWG."""
-        return set(program.name for program in self._parent._known_programs.keys())
+    # TODO Does this work fine with @with_select?
+    @with_select
+    def run_current_program(self) -> None:
+        """
+        This method starts running the active program
+
+        Throws:
+            RuntimeError: This exception is thrown if there is no active program for this device
+        """
+        if self._parent._current_program:
+            self._parent.device.send_cmd(':TRIG', paranoia_level=self._parent.internal_paranoia_level)
+        else:
+            raise RuntimeError("No program active")
 
 
 class TaborChannelTuple(AWGChannelTuple):
@@ -561,7 +575,7 @@ class TaborChannelTuple(AWGChannelTuple):
     def __init__(self, idn: int, device: TaborDevice, channels: Iterable["TaborChannel"],
                  marker_channels: Iterable["TaborMarkerChannel"]):
         super().__init__(idn)
-        self._device = device  # TODO: weakref.ref(device) can't be used like in  the old driver
+        self._device = weakref.ref(device)
 
         self._configuration_guard_count = 0
         self._is_in_config_mode = False
@@ -625,7 +639,7 @@ class TaborChannelTuple(AWGChannelTuple):
     @property
     def device(self) -> TaborDevice:
         """Returns the device that the channel tuple belongs to"""
-        return self._device
+        return self._device()
 
     @property
     def channels(self) -> Collection["TaborChannel"]:
@@ -709,14 +723,10 @@ class TaborChannelTuple(AWGChannelTuple):
     def read_advanced_sequencer_table(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         return self.device.get_readable_device(simulator=True).read_adv_seq_table()
 
-    # upload im Feature
-
     def read_complete_program(self) -> PlottableProgram:
         return PlottableProgram.from_read_data(self.read_waveforms(),
                                                self.read_sequence_tables(),
                                                self.read_advanced_sequencer_table())
-
-    # clear im Feature
 
     def _find_place_for_segments_in_memory(self, segments: Sequence, segment_lengths: Sequence) -> \
             Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -1027,36 +1037,10 @@ class TaborChannelTuple(AWGChannelTuple):
 
         self._current_program = name
 
-    @with_select
-    def run_current_program(self) -> None:  # TODO (LuL): Add this to ProgramManagement
-        """
-        This method starts running the active program
-
-        Throws:
-            RuntimeError: This exception is thrown if there is no active program for this device
-        """
-        if self._current_program:
-            self.device.send_cmd(':TRIG', paranoia_level=self.internal_paranoia_level)
-        else:
-            raise RuntimeError("No program active")
-
     @property
     def programs(self) -> Set[str]:
         """The set of program names that can currently be executed on the hardware AWG."""
         return set(program for program in self._known_programs.keys())
-
-    def num_channels(self) -> int:  # TODO (LuL): This is not needed, the caller can call len(...) hisself
-        """
-        Returns the number of channels that belong to the channel tuple
-        """
-        return len(self.channels)
-
-    @property
-    def num_markers(self) -> int:  # TODO (LuL): This is not needed, the caller can call len(...) hisself
-        """
-        Returns the number of marker channels that belong to the channel tuple
-        """
-        return len(self.marker_channels)
 
     def _enter_config_mode(self) -> None:
         """Enter the configuration mode if not already in. All outputs are set to the DC offset of the device and the
@@ -1148,7 +1132,7 @@ class TaborMarkerChannelActivatable(ActivatableChannels):
 class TaborMarkerChannel(AWGMarkerChannel):
     def __init__(self, idn: int, device: TaborDevice):
         super().__init__(idn)
-        self._device = device
+        self._device = weakref.ref(device)
 
         # adding Features
         self.add_feature(TaborMarkerChannelActivatable(self))
@@ -1158,21 +1142,21 @@ class TaborMarkerChannel(AWGMarkerChannel):
     @property
     def device(self) -> TaborDevice:
         """Returns the device that this marker channel belongs to"""
-        return self._device
+        return self._device()
 
     @property
     def channel_tuple(self) -> Optional[TaborChannelTuple]:
         """Returns the channel tuple that this marker channel belongs to"""
-        return self._channel_tuple
+        return self._channel_tuple()
 
-    def _set_channel_tuple(self, channel_tuple: TaborChannelTuple) -> None:
+    def _set_channel_tuple(self, channel_tuple) -> None:
         """
         The channel tuple 'channel_tuple' is assigned to this marker channel
 
         Args:
             channel_tuple (TaborChannelTuple): the channel tuple that this marker channel belongs to
         """
-        self._channel_tuple = channel_tuple
+        self._channel_tuple = weakref.ref(channel_tuple)
 
     def _select(self) -> None:
         """

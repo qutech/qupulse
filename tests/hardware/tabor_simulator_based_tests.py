@@ -9,8 +9,9 @@ import pytabor
 import numpy as np
 
 from qupulse._program.tabor import TableDescription, TableEntry
+from qupulse.hardware.awgs.features import DeviceControl
 from qupulse.hardware.awgs.tabor import TaborDevice, TaborException, TaborSegment, TaborChannelTuple, \
-    TaborOffsetAmplitude
+    TaborOffsetAmplitude, TaborDeviceControl
 
 
 class TaborSimulatorManager:
@@ -82,7 +83,6 @@ class TaborSimulatorBasedTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # self.instrument = None
         self.instrument: TaborDevice
 
     @classmethod
@@ -101,7 +101,7 @@ class TaborSimulatorBasedTest(unittest.TestCase):
         self.instrument = self.simulator_manager.connect()
 
     def tearDown(self):
-        self.instrument.reset()
+        self.instrument[TaborDeviceControl].reset()
         self.simulator_manager.disconnect()
 
     @staticmethod

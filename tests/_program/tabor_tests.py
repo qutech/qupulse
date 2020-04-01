@@ -11,7 +11,7 @@ except ImportError:
 
 from teawg import model_properties_dict
 
-from qupulse._program.old_tabor import TaborException, TaborProgram, \
+from qupulse._program.tabor import TaborException, TaborProgram, \
     TaborSegment, TaborSequencing, PlottableProgram, TableDescription, make_combined_wave, TableEntry
 from qupulse._program._loop import Loop
 from qupulse._program.volatile import VolatileRepetitionCount

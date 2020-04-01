@@ -1,20 +1,21 @@
 from typing import Tuple, Optional, Callable, Set
 
 from qupulse._program._loop import Loop
-from qupulse.hardware.awgs.base import AWGChannelTuple  # TODO (LuL): Not Tabor, but base class: ChannelTuple
+from qupulse.hardware.awgs.base import AWGChannelTuple
 from qupulse.hardware.awgs.old_base import AWG
 
 
 class ChannelTupleAdapter(AWG):
+    # TODO (toCheck): is this DocString okay like this?
     """
-
+    This class serves as an adapter between the old Class AWG and the new driver abstraction. It routes all the methods
+    the AWG class to the corresponding methods of the new driver.
     """
-    # TODO (LuL): Doc strings
 
     def __copy__(self) -> None:
         pass
 
-    def __init__(self, channel_tuple: AWGChannelTuple):  # TODO (LuL): Not Tabor, but base class: ChannelTuple
+    def __init__(self, channel_tuple: AWGChannelTuple):
         self._channel_tuple = channel_tuple
 
     def identifier(self) -> str:
