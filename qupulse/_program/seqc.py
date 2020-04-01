@@ -18,7 +18,7 @@ from types import MappingProxyType
 import abc
 import itertools
 import inspect
-import glob
+import logging
 import os.path
 import hashlib
 from collections import OrderedDict
@@ -185,6 +185,42 @@ class ConcatenatedWaveform:
         self._as_binary = None
 
 
+class WaveformFS:
+    logger = logging.getLogger('qupulse.hdawg.waveforms')
+
+    def __init__(self, path: Path):
+        """This class coordinates multiple AWGs (channel pairs) using the same file system to store the waveforms"""
+        self._required = {}
+        self._path = path
+
+    def sync(self, client: 'WaveformMemory', waveforms: Mapping[str, BinaryWaveform]):
+        self._required[id(client)] = waveforms
+        self._sync()
+
+    def _sync(self, delete=True, write_all=False):
+        to_save = {self._path.joinpath(file_name): binary
+                   for d in self._required.values()
+                   for file_name, binary in d.items()}
+
+        for existing_file in self._path.glob('*.csv'):
+            if existing_file in to_save:
+                if not write_all:
+                    self.logger.debug('Skipping %r', existing_file.name)
+                    to_save.pop(existing_file)
+            elif delete:
+                try:
+                    self.logger.debug('Deleting %r', existing_file.name)
+                    existing_file.unlink()
+                except OSError:
+                    # TODO: log
+                    pass
+
+        for file_name, binary_waveform in to_save.items():
+            table = binary_waveform.to_csv_compatible_table()
+            np.savetxt(file_name, table, '%u')
+            self.logger.debug('Wrote %r', file_name)
+
+
 class WaveformMemory:
     """Global waveform "memory" representation (currently the file system)"""
     CONCATENATED_WAVEFORM_TEMPLATE = '{program_name}_concatenated_waveform'
@@ -255,25 +291,12 @@ class WaveformMemory:
             )
         return '\n'.join(declarations)
 
-    def sync_to_file_system(self, path: Path, delete=True, write_all=False):
-        to_save = {path.joinpath(wave_info.file_name): wave_info.binary_waveform
+    def sync_to_file_system(self, file_system: WaveformFS):
+
+        to_save = {wave_info.file_name: wave_info.binary_waveform
                    for wave_info in itertools.chain(self._concatenated_waveforms_iter(),
                                                     self._shared_waveforms_iter())}
-
-        for file_name in glob.glob(os.path.join(path, '*.csv')):
-            if file_name in to_save:
-                if not write_all:
-                    to_save.pop(file_name)
-            elif delete:
-                try:
-                    os.remove(file_name)
-                except OSError:
-                    # TODO: log
-                    pass
-
-        for file_name, binary_waveform in to_save.items():
-            table = binary_waveform.to_csv_compatible_table()
-            np.savetxt(file_name, table, '%u')
+        file_system.sync(self, to_save)
 
 
 class ProgramWaveformManager:

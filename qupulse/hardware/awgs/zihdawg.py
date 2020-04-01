@@ -8,6 +8,7 @@ import warnings
 import pathlib
 import hashlib
 import argparse
+import re
 
 try:
     import zhinst.ziPython
@@ -20,7 +21,7 @@ import time
 
 from qupulse.utils.types import ChannelID, TimeType, time_from_float
 from qupulse._program._loop import Loop, make_compatible
-from qupulse._program.seqc import HDAWGProgramManager, UserRegister
+from qupulse._program.seqc import HDAWGProgramManager, UserRegister, WaveformFS
 from qupulse.hardware.awgs.base import AWG, ChannelNotFoundException, AWGAmplitudeOffsetHandling
 from qupulse.pulses.parameters import ConstantParameter
 
@@ -73,10 +74,16 @@ class HDAWGRepresentation:
 
         self._initialize()
 
+        waveform_path = pathlib.Path(self.api_session.awgModule().getString('directory'), 'awg', 'waves')
+        self._waveform_file_system = WaveformFS(waveform_path)
         self._channel_pair_AB = HDAWGChannelPair(self, (1, 2), str(self.serial) + '_AB', timeout)
         self._channel_pair_CD = HDAWGChannelPair(self, (3, 4), str(self.serial) + '_CD', timeout)
         self._channel_pair_EF = HDAWGChannelPair(self, (5, 6), str(self.serial) + '_EF', timeout)
         self._channel_pair_GH = HDAWGChannelPair(self, (7, 8), str(self.serial) + '_GH', timeout)
+
+    @property
+    def waveform_file_system(self) -> WaveformFS:
+        return self._waveform_file_system
 
     @property
     def channel_tuples(self) -> Tuple['HDAWGChannelPair', ...]:
@@ -342,7 +349,7 @@ class HDAWGChannelPair(AWG):
                                           offsets=voltage_offsets)
 
         self._required_seqc_source = self._program_manager.to_seqc_program()
-        self._program_manager.waveform_memory.sync_to_file_system(Path(self.user_directory).joinpath('awg', 'waves'))
+        self._program_manager.waveform_memory.sync_to_file_system(self.device.waveform_file_system)
 
         # start compiling the source (non-blocking)
         self._start_compile_and_upload()
@@ -355,6 +362,7 @@ class HDAWGChannelPair(AWG):
             logger.debug("wait_for_compile_and_upload: %r", state)
             time.sleep(.1)
         self._uploaded_seqc_source = self._required_seqc_source
+        logger.debug("AWG %d: wait_for_compile_and_upload has finished", self.awg_group_index)
 
     def set_volatile_parameters(self, program_name: str, parameters: Mapping[str, ConstantParameter]):
         """Set the values of parameters which were marked as volatile on program creation."""
@@ -570,7 +578,7 @@ class ELFManager:
 
         @property
         def elf_upload(self) -> bool:
-            return self._module.getInt('elf/upload') == 1
+            return bool(self._module.getInt('elf/upload'))
 
         @elf_upload.setter
         def elf_upload(self, value: bool):
@@ -578,7 +586,11 @@ class ELFManager:
 
         @property
         def elf_status(self) -> Tuple[int, float]:
-            return self._module.getInt('elf/status'), self._module.getString('progress')
+            return self._module.getInt('elf/status'), self._module.getDouble('progress')
+
+        @property
+        def index(self) -> int:
+            return self._module.getInt('index')
 
     def __init__(self, awg_module: zhinst.ziPython.AwgModule):
         """This class organizes compiling and uploading of compiled programs. The source code file is named based on the
@@ -594,6 +606,19 @@ class ELFManager:
 
         self._compile_job = None  # type: Optional[Union[str, Tuple[str, int, str]]]
         self._upload_job = None  # type: Optional[Union[Tuple[str, float], Tuple[str, int]]]
+
+    def clear(self):
+        """Deletes all files with a SHA512 hash name"""
+        src_regex = re.compile('[a-z0-9]{128}\.seqc')
+        elf_regex = re.compile('[a-z0-9]{128}\.elf')
+
+        for p in self.awg_module.src_dir.iterdir():
+            if src_regex.match(p.name):
+                p.unlink()
+
+        for p in self.awg_module.elf_dir.iterdir():
+            if elf_regex.match(p.name):
+                p.unlink()
 
     @staticmethod
     def _source_hash(source_string: str) -> str:
@@ -625,7 +650,7 @@ class ELFManager:
                 if compiler_status == -1:
                     raise RuntimeError('Compile job is set but no compilation is running', status_string)
                 elif compiler_status == 2:
-                    logger.warning("Compilation finished with warning: %s", status_string)
+                    logger.warning("AWG %d: Compilation finished with warning: %s", self.awg_module.index, status_string)
                 self._compile_job = (self._compile_job, compiler_status, status_string)
 
     def _start_compile_job(self, source_file):
@@ -635,7 +660,7 @@ class ELFManager:
         self.awg_module.compiler_source_file = source_file
         self.awg_module.compiler_start = True
         self._compile_job = source_file
-        logger.debug("Compilation of %r started", source_file)
+        logger.debug("AWG %d: Compilation of %r started", self.awg_module.index, source_file)
 
     def _compile(self, source_file) -> Generator[str, str, None]:
         self._start_compile_job(source_file)
@@ -644,7 +669,7 @@ class ELFManager:
             self._update_compile_job_status()
             if not isinstance(self._compile_job, str):
                 # finished compiling
-                logger.debug("Compilation of %r finished", source_file)
+                logger.debug("AWG %d: Compilation of %r finished", self.awg_module.index, source_file)
                 break
             cmd = yield 'compiling'
             if cmd is None:
@@ -657,26 +682,28 @@ class ELFManager:
         _, status_int, status_str = self._compile_job
         if status_int == 1:
             raise HDAWGRuntimeError('Compilation failed', status_str)
-        logger.info("Compilation of %r successful", source_file)
+        logger.info("AWG %d: Compilation of %r successful", self.awg_module.index, source_file)
 
     def _start_elf_upload(self, elf_file):
         logger.debug("Uploading %r", elf_file)
         current_elf = self.awg_module.elf_file
         if current_elf != elf_file:
-            logger.info("Overwriting elf file")
+            logger.info("AWG %d: Overwriting elf file", self.awg_module.index)
             self.awg_module.elf_file = elf_file
-        self._upload_job = elf_file
+            self.awg_module.elf_upload = True
+        self._upload_job = (elf_file, None)
+        time.sleep(.001)
 
     def _update_upload_job_status(self):
         elf_upload = self.awg_module.elf_upload
         if self._upload_job is None:
-            assert elf_upload == 0
+            assert not elf_upload
             return
 
         elf_file, old_status = self._upload_job
         assert self.awg_module.elf_file == elf_file
 
-        if isinstance(old_status, float):
+        if isinstance(old_status, float) or old_status is None:
             status_int, progress = self.awg_module.elf_status
             if status_int == 2:
                 # in progress
@@ -684,11 +711,10 @@ class ELFManager:
                 self._upload_job = elf_file, progress
             else:
                 # fetch new value here
-                assert self.awg_module.elf_upload == 0
                 self._upload_job = elf_file, status_int
 
         else:
-            logger.debug('_update_upload_job_status called on finished upload')
+            logger.debug('AWG %d: _update_upload_job_status called on finished upload', self.awg_module.index)
             assert elf_upload == 0
 
     def _upload(self, elf_file) -> Generator[str, str, None]:
@@ -705,7 +731,7 @@ class ELFManager:
                     break
             else:
                 progress = status
-                logger.debug('Upload progress is %d%%', progress*100)
+                logger.debug('AWG %d: Upload progress is %d%%', self.awg_module.index, progress*100)
 
                 cmd = yield 'uploading @ %d%%' % (100*progress)
                 if cmd is None:
@@ -719,7 +745,7 @@ class ELFManager:
 
         # enable auto upload on compilation again
         # TODO: research whether this is necessary
-        self.awg_module.elf_file = ''
+        # self.awg_module.elf_file = ''
 
     def compile_and_upload(self, source_string: str) -> Generator[str, str, None]:
         """The source code is saved to a file determined by the source hash, compiled and uploaded to the instrument.
@@ -759,6 +785,8 @@ class ELFManager:
         if not full_elf_name.exists():
             yield from self._compile(seqc_file_name)
         else:
+            # set this so the web interface shows the correct source
+            # self.awg_module.compiler_source_file = seqc_file_name
             logger.info('Already compiled. ELF: %r', elf_file_name)
 
         yield from self._upload(elf_file_name)
@@ -816,7 +844,7 @@ def example_upload(hdawg_kwargs: dict, channels: Set[int], markers: Set[Tuple[in
     assert channel_tuples
 
     # choose length based on minimal sample rate
-    min_sr = min(ct.sample_rate for ct in channel_tuples)
+    min_sr = min(ct.sample_rate for ct in channel_tuples) / 10**9
     min_t = channel_tuples[0].MIN_WAVEFORM_LEN / min_sr
     quant_t = channel_tuples[0].WAVEFORM_LEN_QUANTUM / min_sr
 
@@ -847,59 +875,47 @@ def example_upload(hdawg_kwargs: dict, channels: Set[int], markers: Set[Tuple[in
         mk = (None, None, None, None)
         vt = (lambda x: x, lambda x: x)
         ct.upload('pulse_test1', p, ch, mk, vt)
-        ct.arm('pulse_test1')
-
-    channel_tuples[0].run_current_program()
-
-    markers = sorted(markers)
-    assert len(markers) == len(set(markers))
-
-    channel_tuples = []
-    for ch, m in markers:
-        assert ch in range(8)
-        assert m in (0, 1)
-        ct = hdawg.channel_tuples[ch//2]
-        if ct not in channel_tuples:
-            channel_tuples.append(ct)
-
-    full_on = [(0, 1), (min_t, 1)]
-    two_3rd = [(0, 1), (min_t*2/3, 0), (min_t, 0)]
-    one_3rd = [(0, 0), (min_t*2/3, 1), (min_t, 1)]
-
-    marker_start = TablePT({'m1': full_on, 'm2': full_on})
-    marker_body = TablePT({'m1': two_3rd, 'm2': one_3rd})
-
-    marker_test_pulse = marker_start @ RepetitionPT(marker_body, 10000)
-
-    marker_program = marker_test_pulse.create_program()
 
     for ct in channel_tuples:
-        i = hdawg.channel_tuples.index(ct)
-        ch = (None, None)
-        mk = ('m1' if (i*2, 0) in markers else None,
-              'm2' if (i*2, 1) in markers else None,
-              'm1' if (i*2 + 1, 0) in markers else None,
-              'm2' if (i*2 + 1, 1) in markers else None)
-        vt = (lambda x: x, lambda x: x)
-        ct.upload('marker_test', marker_program, ch, mk, vt)
-        ct.arm('marker_test')
+        ct.arm('pulse_test1')
 
-    channel_tuples[0].run_current_program()
+    # channel_tuples[0].run_current_program()
 
-    if False:
-        entry_list_zero = [(0, 0), (96*4, 0, 'hold')]
-        entry_list_step = [(0, 0), (48*4, .5, 'hold'), (96*4, 0, 'hold')]
-        marker_start = TablePT({'P1': entry_list_zero, 'marker': entry_list_step})
-        tpt1 = TablePT({'P1': entry_list_zero, 'marker': entry_list_zero})
-        spt2 = SequencePT(marker_start, tpt1)
+    if markers:
+        markers = sorted(markers)
+        assert len(markers) == len(set(markers))
 
-        p = spt2.create_program()
+        channel_tuples = []
+        for ch, m in markers:
+            assert ch in range(8)
+            assert m in (0, 1)
+            ct = hdawg.channel_tuples[ch//2]
+            if ct not in channel_tuples:
+                channel_tuples.append(ct)
 
-        ch = ('P1', None)
-        mk = ('marker', None, None, None)
-        voltage_transform = (lambda x: x,) * len(ch)
-        hdawg.channel_pair_AB.upload('table_pulse_test2', p, ch, mk, voltage_transform)
-        hdawg.channel_pair_AB.arm('table_pulse_test2')
+        full_on = [(0, 1), (min_t, 1)]
+        two_3rd = [(0, 1), (min_t*2/3, 0), (min_t, 0)]
+        one_3rd = [(0, 0), (min_t*2/3, 1), (min_t, 1)]
+
+        marker_start = TablePT({'m1': full_on, 'm2': full_on})
+        marker_body = TablePT({'m1': two_3rd, 'm2': one_3rd})
+
+        marker_test_pulse = marker_start @ RepetitionPT(marker_body, 10000)
+
+        marker_program = marker_test_pulse.create_program()
+
+        for ct in channel_tuples:
+            i = hdawg.channel_tuples.index(ct)
+            ch = (None, None)
+            mk = ('m1' if (i*2, 0) in markers else None,
+                  'm2' if (i*2, 1) in markers else None,
+                  'm1' if (i*2 + 1, 0) in markers else None,
+                  'm2' if (i*2 + 1, 1) in markers else None)
+            vt = (lambda x: x, lambda x: x)
+            ct.upload('marker_test', marker_program, ch, mk, vt)
+            ct.arm('marker_test')
+
+        channel_tuples[0].run_current_program()
 
 
 if __name__ == "__main__":
@@ -908,10 +924,12 @@ if __name__ == "__main__":
     args.add_argument('device_serial', help='device serial of the form dev1234')
     args.add_argument('device_interface', help='device interface', choices=['USB', '1GbE'], default='1GbE', nargs='?')
     args.add_argument('--channels', help='channels to use', choices=range(8), default=[0, 1], type=int, nargs='+')
+    args.add_argument('--markers', help='markers to use', choices=range(8*2), default=[], type=int, nargs='*')
     parsed = vars(args.parse_args())
 
     channels = parsed.pop('channels')
+    markers = [(m // 2, m % 2) for m in parsed.pop('markers')]
 
     logging.basicConfig(stream=sys.stdout)
     logger.setLevel(logging.DEBUG)
-    example_upload(hdawg_kwargs=parsed, channels=channels)
+    example_upload(hdawg_kwargs=parsed, channels=channels, markers=markers)
