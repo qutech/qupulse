@@ -802,7 +802,7 @@ class HDAWGUploadException(HDAWGException):
         return "Upload to the instrument failed."
 
 
-def example_upload(hdawg_kwargs: dict, channels: Set[int]):
+def example_upload(hdawg_kwargs: dict, channels: Set[int], markers: Set[Tuple[int, int]]):
     from qupulse.pulses import TablePT, SequencePT, RepetitionPT
     if isinstance(hdawg_kwargs, dict):
         hdawg = HDAWGRepresentation(**hdawg_kwargs)
@@ -841,12 +841,48 @@ def example_upload(hdawg_kwargs: dict, channels: Set[int]):
     p = spt2.create_program()
 
     # use HardwareSetup for this
-    for i, ct in enumerate(channel_tuples):
+    for ct in channel_tuples:
+        i = hdawg.channel_tuples.index(ct)
         ch = tuple(ch if ch in channels else None for ch in (2*i, 2*i+1))
         mk = (None, None, None, None)
         vt = (lambda x: x, lambda x: x)
-        ct.upload('table_pulse_test1', p, ch, mk, vt)
-        ct.arm('table_pulse_test1')
+        ct.upload('pulse_test1', p, ch, mk, vt)
+        ct.arm('pulse_test1')
+
+    channel_tuples[0].run_current_program()
+
+    markers = sorted(markers)
+    assert len(markers) == len(set(markers))
+
+    channel_tuples = []
+    for ch, m in markers:
+        assert ch in range(8)
+        assert m in (0, 1)
+        ct = hdawg.channel_tuples[ch//2]
+        if ct not in channel_tuples:
+            channel_tuples.append(ct)
+
+    full_on = [(0, 1), (min_t, 1)]
+    two_3rd = [(0, 1), (min_t*2/3, 0), (min_t, 0)]
+    one_3rd = [(0, 0), (min_t*2/3, 1), (min_t, 1)]
+
+    marker_start = TablePT({'m1': full_on, 'm2': full_on})
+    marker_body = TablePT({'m1': two_3rd, 'm2': one_3rd})
+
+    marker_test_pulse = marker_start @ RepetitionPT(marker_body, 10000)
+
+    marker_program = marker_test_pulse.create_program()
+
+    for ct in channel_tuples:
+        i = hdawg.channel_tuples.index(ct)
+        ch = (None, None)
+        mk = ('m1' if (i*2, 0) in markers else None,
+              'm2' if (i*2, 1) in markers else None,
+              'm1' if (i*2 + 1, 0) in markers else None,
+              'm2' if (i*2 + 1, 1) in markers else None)
+        vt = (lambda x: x, lambda x: x)
+        ct.upload('marker_test', marker_program, ch, mk, vt)
+        ct.arm('marker_test')
 
     channel_tuples[0].run_current_program()
 
