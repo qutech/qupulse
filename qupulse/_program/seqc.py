@@ -185,25 +185,32 @@ class ConcatenatedWaveform:
         self._as_binary = None
 
 
-class WaveformFS:
+class WaveformFileSystem:
     logger = logging.getLogger('qupulse.hdawg.waveforms')
 
     def __init__(self, path: Path):
-        """This class coordinates multiple AWGs (channel pairs) using the same file system to store the waveforms"""
+        """This class coordinates multiple AWGs (channel pairs) using the same file system to store the waveforms.
+
+        Args:
+            path: Waveforms are stored here
+        """
         self._required = {}
         self._path = path
 
-    def sync(self, client: 'WaveformMemory', waveforms: Mapping[str, BinaryWaveform]):
+    def sync(self, client: 'WaveformMemory', waveforms: Mapping[str, BinaryWaveform], **kwargs):
+        """Write the required waveforms to the filesystem."""
         self._required[id(client)] = waveforms
-        self._sync()
+        self._sync(**kwargs)
 
     def _sync(self, delete=True, write_all=False):
         to_save = {self._path.joinpath(file_name): binary
                    for d in self._required.values()
                    for file_name, binary in d.items()}
 
-        for existing_file in self._path.glob('*.csv'):
-            if existing_file in to_save:
+        for existing_file in self._path.iterdir():
+            if not existing_file.is_file():
+                pass
+            elif existing_file in to_save:
                 if not write_all:
                     self.logger.debug('Skipping %r', existing_file.name)
                     to_save.pop(existing_file)
@@ -212,8 +219,7 @@ class WaveformFS:
                     self.logger.debug('Deleting %r', existing_file.name)
                     existing_file.unlink()
                 except OSError:
-                    # TODO: log
-                    pass
+                    self.logger.exception("Error deleting: %r", existing_file.name)
 
         for file_name, binary_waveform in to_save.items():
             table = binary_waveform.to_csv_compatible_table()
@@ -291,7 +297,7 @@ class WaveformMemory:
             )
         return '\n'.join(declarations)
 
-    def sync_to_file_system(self, file_system: WaveformFS):
+    def sync_to_file_system(self, file_system: WaveformFileSystem):
 
         to_save = {wave_info.file_name: wave_info.binary_waveform
                    for wave_info in itertools.chain(self._concatenated_waveforms_iter(),

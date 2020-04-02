@@ -21,7 +21,7 @@ import time
 
 from qupulse.utils.types import ChannelID, TimeType, time_from_float
 from qupulse._program._loop import Loop, make_compatible
-from qupulse._program.seqc import HDAWGProgramManager, UserRegister, WaveformFS
+from qupulse._program.seqc import HDAWGProgramManager, UserRegister, WaveformFileSystem
 from qupulse.hardware.awgs.base import AWG, ChannelNotFoundException, AWGAmplitudeOffsetHandling
 from qupulse.pulses.parameters import ConstantParameter
 
@@ -75,14 +75,14 @@ class HDAWGRepresentation:
         self._initialize()
 
         waveform_path = pathlib.Path(self.api_session.awgModule().getString('directory'), 'awg', 'waves')
-        self._waveform_file_system = WaveformFS(waveform_path)
+        self._waveform_file_system = WaveformFileSystem(waveform_path)
         self._channel_pair_AB = HDAWGChannelPair(self, (1, 2), str(self.serial) + '_AB', timeout)
         self._channel_pair_CD = HDAWGChannelPair(self, (3, 4), str(self.serial) + '_CD', timeout)
         self._channel_pair_EF = HDAWGChannelPair(self, (5, 6), str(self.serial) + '_EF', timeout)
         self._channel_pair_GH = HDAWGChannelPair(self, (7, 8), str(self.serial) + '_GH', timeout)
 
     @property
-    def waveform_file_system(self) -> WaveformFS:
+    def waveform_file_system(self) -> WaveformFileSystem:
         return self._waveform_file_system
 
     @property
