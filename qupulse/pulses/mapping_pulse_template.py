@@ -1,4 +1,3 @@
-
 from typing import Optional, Set, Dict, Union, List, Any, Tuple
 import itertools
 import numbers
