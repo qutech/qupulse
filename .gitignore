@@ -9,4 +9,3 @@ dist/*
 doc/source/examples/.ipynb_checkpoints/*
 **.asv
 *.orig
-/doc/source/_autosummary/*

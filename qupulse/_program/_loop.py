@@ -279,7 +279,7 @@ class Loop(Node):
         """Iterates over all children and collect the begin and length arrays of each measurement window.
 
         Returns:
-            A dictionary (measurement_name -> (begin, length)) with begin and length being :class:`numpy.ndarray`
+            A dictionary (measurement_name -> (begin, length)) with begin and length being `ndarray`s
         """
         return {mw_name: (begin_length_list[:, 0], begin_length_list[:, 1])
                 for mw_name, begin_length_list in self._get_measurement_windows().items()}

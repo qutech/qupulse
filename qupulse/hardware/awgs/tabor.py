@@ -114,6 +114,8 @@ class TaborAWGRepresentation:
         for instr in self.all_devices:
             instr.download_adv_seq_table(seq_table, pref=pref, paranoia_level=paranoia_level)
 
+    make_combined_wave = staticmethod(teawg.TEWXAwg.make_combined_wave)
+
     def _send_cmd(self, cmd_str, paranoia_level=None) -> Any:
         """Overwrite send_cmd for paranoia_level > 3"""
         if paranoia_level is None:

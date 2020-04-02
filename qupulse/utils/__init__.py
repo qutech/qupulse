@@ -1,5 +1,3 @@
-"""This package contains utility functions and classes as well as custom sympy extensions(hacks)."""
-
 from typing import Union, Iterable, Any, Tuple, Mapping
 import itertools
 import re

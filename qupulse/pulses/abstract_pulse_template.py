@@ -4,7 +4,7 @@ import warnings
 
 from qupulse import ChannelID
 from qupulse.expressions import ExpressionScalar
-from qupulse.serialization import PulseRegistryType, Serializable
+from qupulse.serialization import PulseRegistryType
 from qupulse.pulses.pulse_template import PulseTemplate
 
 
@@ -12,9 +12,6 @@ __all__ = ["AbstractPulseTemplate", "UnlinkWarning"]
 
 
 class AbstractPulseTemplate(PulseTemplate):
-    _PROPERTY_DOC = """Abstraction of :py:attr:`.PulseTemplate.{name}`. Raises :class:`.NotSpecifiedError` if the
-    abstract template is unlinked or the property was not specified."""
-
     def __init__(self, identifier: str,
                  *,
                  defined_channels: Optional[Set[ChannelID]]=None,
@@ -24,9 +21,9 @@ class AbstractPulseTemplate(PulseTemplate):
                  duration: Optional[ExpressionScalar]=None,
                  registry: Optional[PulseRegistryType]=None):
         """This pulse template can be used as a place holder for a pulse template with a defined interface. Pulse
-        template properties like :func:`defined_channels` can be passed on initialization to declare those properties who make
-        up the interface. Omitted properties raise an :class:`.NotSpecifiedError` exception if accessed. Properties
-        which have been accessed are marked as "frozen".
+        template properties like `defined_channels` can be passed on initialization to declare those properties who make
+        up the interface. Omitted properties raise an `NotSpecifiedError` exception if accessed. Properties which have
+        been accessed are marked as "frozen".
 
         The abstract pulse template can be linked to another pulse template by calling the `link_to` member. The target
         has to have the same properties for all properties marked as "frozen". This ensures a property always returns
@@ -35,7 +32,8 @@ class AbstractPulseTemplate(PulseTemplate):
         Example:
             >>> abstract_readout = AbstractPulseTemplate('readout', defined_channels={'X', 'Y'})
             >>> assert abstract_readout.defined_channels == {'X', 'Y'}
-            >>> # This will raise an exception because duration is not specified
+
+            This will raise an exception
             >>> print(abstract_readout.duration)
 
         Args:
@@ -136,16 +134,11 @@ class AbstractPulseTemplate(PulseTemplate):
 
     _create_program = partialmethod(_forward_if_linked, '_create_program')
 
-    defined_channels = property(partial(_get_property, property_name='defined_channels'),
-                                doc=_PROPERTY_DOC.format(name='defined_channels'))
-    duration = property(partial(_get_property, property_name='duration'),
-                        doc=_PROPERTY_DOC.format(name='duration'))
-    measurement_names = property(partial(_get_property, property_name='measurement_names'),
-                                 doc=_PROPERTY_DOC.format(name='measurement_names'))
-    integral = property(partial(_get_property, property_name='integral'),
-                        doc=_PROPERTY_DOC.format(name='integral'))
-    parameter_names = property(partial(_get_property, property_name='parameter_names'),
-                               doc=_PROPERTY_DOC.format(name='parameter_names'))
+    defined_channels = property(partial(_get_property, property_name='defined_channels'))
+    duration = property(partial(_get_property, property_name='duration'))
+    measurement_names = property(partial(_get_property, property_name='measurement_names'))
+    integral = property(partial(_get_property, property_name='integral'))
+    parameter_names = property(partial(_get_property, property_name='parameter_names'))
 
 
 class NotSpecifiedError(RuntimeError):

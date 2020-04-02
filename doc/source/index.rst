@@ -14,10 +14,7 @@ Contents:
 
    concepts/concepts
    examples/examples
-   qupulse
-
-
-.. qupulse API Documentation <qupulse>
+   qupulse API Documentation <qupulse>
 
 Indices and tables
 ==================

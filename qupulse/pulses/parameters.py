@@ -53,14 +53,13 @@ class Parameter(metaclass=DocStringABCMeta):
         
         
 class ConstantParameter(Parameter):
+    """A pulse parameter with a constant value."""
+    
     def __init__(self, value: Union[Real, numpy.ndarray, Expression, str, sympy.Expr]) -> None:
-        """
-        .. deprecated:: 0.5
-
-        A pulse parameter with a constant value.
+        """Create a ConstantParameter instance.
 
         Args:
-            value: The value of the parameter
+            value (Real): The value of the parameter
         """
         warnings.warn("ConstantParameter is deprecated. Use plain number types instead", DeprecationWarning)
 
@@ -202,7 +201,7 @@ class ParameterConstraint(AnonymousSerializable):
             volatile: For each of these parameters a warning is raised if they appear in a constraint
 
         Raises:
-            :class:`qupulse.parameter_scope.ParameterNotProvidedException`: if a parameter is missing
+            ParameterNotProvidedException: if a parameter is missing
 
         Warnings:
             ConstrainedParameterIsVolatileWarning: if a constrained parameter is volatile
