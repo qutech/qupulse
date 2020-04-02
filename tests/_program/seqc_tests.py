@@ -4,16 +4,18 @@ import time
 from more_itertools import take
 from itertools import zip_longest
 import sys
+import tempfile
+import pathlib
 
 import numpy as np
 
 from qupulse.expressions import ExpressionScalar
 from qupulse.parameter_scope import DictScope
 
-from qupulse.pulses.parameters import MappedParameter, ConstantParameter
 from qupulse._program._loop import Loop
 from qupulse._program.seqc import BinaryWaveform, loop_to_seqc, WaveformPlayback, Repeat, SteppingRepeat, Scope,\
-    to_node_clusters, find_sharable_waveforms, mark_sharable_waveforms, UserRegisterManager, HDAWGProgramManager, UserRegister
+    to_node_clusters, find_sharable_waveforms, mark_sharable_waveforms, UserRegisterManager, HDAWGProgramManager,\
+    UserRegister, WaveformFileSystem
 from qupulse._program.volatile import VolatileRepetitionCount
 
 from tests.pulses.sequencing_dummies import DummyWaveform
@@ -103,6 +105,67 @@ class DummyWfManager:
     def request_concatenated(self, wf):
         self.concatenated.append(wf)
         return 0
+
+
+class WaveformFileSystemTests(TestCase):
+    def setUp(self) -> None:
+        clients = [mock.Mock(), mock.Mock()]
+        bin_waveforms = [mock.Mock(), mock.Mock(), mock.Mock()]
+        table_data = [np.ones(1, dtype=np.uint16) * i for i, _ in enumerate(bin_waveforms)]
+        for bin_wf, tab in zip(bin_waveforms, table_data):
+            bin_wf.to_csv_compatible_table.return_value = tab
+
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.table_data = table_data
+        self.clients = clients
+        self.waveforms = [
+            {'0': bin_waveforms[0], '1': bin_waveforms[1]},
+            {'1': bin_waveforms[1], '2': bin_waveforms[2]}
+        ]
+        self.fs = WaveformFileSystem(pathlib.Path(self.temp_dir.name))
+
+    def read_files(self) -> dict:
+        return {
+            p.name: p.read_text().strip() for p in self.fs._path.iterdir()
+        }
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def test_pub_sync(self):
+        with mock.patch.object(self.fs, '_sync') as mock_sync:
+            self.fs.sync(self.clients[0], self.waveforms[0], hallo=0)
+            mock_sync.assert_called_once_with(hallo=0)
+
+            self.assertEqual({id(self.clients[0]): self.waveforms[0]}, self.fs._required)
+
+    def test_sync(self):
+        self.fs.sync(self.clients[0], self.waveforms[0])
+        self.assertEqual({'0': '0', '1': '1'}, self.read_files())
+
+        self.fs.sync(self.clients[0], self.waveforms[1])
+        self.assertEqual({'2': '2', '1': '1'}, self.read_files())
+
+        self.fs.sync(self.clients[1], self.waveforms[0])
+        self.assertEqual({'2': '2', '1': '1', '0': '0'}, self.read_files())
+
+    def test_sync_write_all(self):
+        self.fs.sync(self.clients[0], self.waveforms[0])
+        self.assertEqual({'0': '0', '1': '1'}, self.read_files())
+
+        self.table_data[0][:] = 7
+        self.fs.sync(self.clients[0], self.waveforms[0])
+        self.assertEqual({'0': '0', '1': '1'}, self.read_files())
+
+        self.fs.sync(self.clients[0], self.waveforms[0], write_all=True)
+        self.assertEqual({'0': '7', '1': '1'}, self.read_files())
+
+    def test_sync_no_delete(self):
+        self.fs.sync(self.clients[0], self.waveforms[0])
+        self.assertEqual({'0': '0', '1': '1'}, self.read_files())
+
+        self.fs.sync(self.clients[0], self.waveforms[1], delete=False)
+        self.assertEqual({'2': '2', '1': '1', '0': '0'}, self.read_files())
 
 
 class SEQCNodeTests(TestCase):

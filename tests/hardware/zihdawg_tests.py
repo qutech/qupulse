@@ -8,7 +8,7 @@ from qupulse.utils.types import TimeType
 from qupulse._program._loop import Loop
 from tests.pulses.sequencing_dummies import DummyWaveform
 from qupulse.hardware.awgs.zihdawg import HDAWGChannelPair, HDAWGRepresentation, HDAWGValueError, UserRegister,\
-    ConstantParameter
+    ConstantParameter, ELFManager
 
 
 class HDAWGRepresentationTests(unittest.TestCase):
@@ -25,11 +25,16 @@ class HDAWGRepresentationTests(unittest.TestCase):
                 mock.patch('zhinst.ziPython.ziDAQServer') as mock_daq_server, \
                 mock.patch('qupulse.hardware.awgs.zihdawg.HDAWGRepresentation._initialize') as mock_init, \
                 mock.patch('qupulse.hardware.awgs.zihdawg.HDAWGChannelPair') as mock_channel_pair,\
-                mock.patch('zhinst.utils.disable_everything') as mock_reset:
+                mock.patch('zhinst.utils.disable_everything') as mock_reset,\
+                mock.patch('pathlib.Path') as mock_path:
 
             representation = HDAWGRepresentation(device_serial,
                                                  device_interface,
                                                  data_server_addr, data_server_port, api_level_number, False, 1.3)
+
+            mock_daq_server.return_value.awgModule.return_value.getString.assert_called_once_with('directory')
+            module_dir = mock_daq_server.return_value.awgModule.return_value.getString.return_value
+            mock_path.assert_called_once_with(module_dir, 'awg', 'waves')
 
             self.assertIs(representation.api_session, mock_daq_server.return_value)
             mock_daq_server.assert_called_once_with(data_server_addr, data_server_port, api_level_number)
@@ -145,3 +150,24 @@ class HDAWGChannelPairTests(unittest.TestCase):
                 channel_pair.upload('bar', mock_loop, ('A', None), (None, 'A', None, None), voltage_trafos[:1])
 
             # TODO: draw the rest of the owl
+
+
+@mock.patch('qupulse.hardware.awgs.zihdawg.ELFManager.AWGModule.compiler_upload', new_callable=mock.PropertyMock)
+class ELFManagerTests(unittest.TestCase):
+    def test_init(self, compiler_upload):
+        manager = ELFManager(None)
+        compiler_upload.assert_called_once_with(True)
+        self.assertIsNone(manager._compile_job)
+        self.assertIsNone(manager._upload_job)
+
+    @unittest.skip("Write test after more hardware tests")
+    def test_upload(self, compiler_upload):
+        raise NotImplementedError()
+
+    @unittest.skip("Write test after more hardware tests")
+    def test_update_compile_job_status(self, compiler_upload):
+        raise NotImplementedError()
+
+    @unittest.skip("Write test after more hardware tests")
+    def test_compile(self, compiler_upload):
+        raise NotImplementedError()
