@@ -31,7 +31,6 @@ assert (sys.byteorder == "little")
 
 __all__ = ["TaborDevice", "TaborChannelTuple", "TaborChannel"]
 
-
 TaborProgramMemory = NamedTuple('TaborProgramMemory', [('waveform_to_segment', np.ndarray),
                                                        ('program', TaborProgram)])
 
@@ -43,6 +42,7 @@ def with_configuration_guard(function_object: Callable[["TaborChannelTuple", Any
 
     @functools.wraps(function_object)
     def guarding_method(channel_pair: "TaborChannelTuple", *args, **kwargs) -> Any:
+
         if channel_pair._configuration_guard_count == 0:
             channel_pair._enter_config_mode()
         channel_pair._configuration_guard_count += 1
@@ -55,7 +55,6 @@ def with_configuration_guard(function_object: Callable[["TaborChannelTuple", Any
                 channel_pair._exit_config_mode()
 
     return guarding_method
-
 
 def with_select(function_object: Callable[["TaborChannelTuple", Any], Any]) -> Callable[["TaborChannelTuple"], Any]:
     """Asserts the channel pair is selcted when the wrapped function is called"""
@@ -83,10 +82,10 @@ class TaborChannelSynchronization(ChannelSynchronization):
             i = 0
             while i < group_size:
                 self._parent._channel_tuples.append(
-                    TaborChannelTuple((i+1),
+                    TaborChannelTuple((i + 1),
                                       self._parent,
-                                      self._parent.channels[(i*group_size):((i*group_size) + group_size)],
-                                      self._parent.marker_channels[(i*group_size):((i*group_size) + group_size)])
+                                      self._parent.channels[(i * group_size):((i * group_size) + group_size)],
+                                      self._parent.marker_channels[(i * group_size):((i * group_size) + group_size)])
                 )
                 i = i + 1
         else:
@@ -125,7 +124,8 @@ class TaborDeviceControl(DeviceControl):
             channel_tuple[TaborProgramManagement].clear()
 
     def trigger(self) -> None:
-        self.send_cmd(":TRIG")
+        self._parent.send_cmd(":TRIG")
+
 
 # Implementation
 class TaborDevice(AWGDevice):
@@ -140,8 +140,8 @@ class TaborDevice(AWGDevice):
             paranoia_level (int):    Paranoia level that is forwarded to teawg
             external_trigger (bool): Not supported yet
             reset (bool):
-            mirror_addresses:        list of devices on which the same things as on the main device are done. For example you can a simulator and a real Device at once
-
+            mirror_addresses:        list of devices on which the same things as on the main device are done.
+                                     For example you can a simulator and a real Device at once
         """
         super().__init__(device_name)
         self._instr = teawg.TEWXAwg(instr_addr, paranoia_level)
@@ -403,15 +403,12 @@ class TaborOffsetAmplitude(OffsetAmplitude):
 
 
 class TaborChannelActivatable(ActivatableChannels):
-    # TODO (LuL): Wouldn't it be better, to have a property named "active" or "enabled" instead of "status"
-    #  and not a setter for that property, but functions like "activate"/"deactivate" or "enable"/"disable"?
-    #  I think this would be more innovative
     def __init__(self, marker_channel: "TaborMarkerChannel"):
         super().__init__()
         self._parent = weakref.ref(marker_channel)
 
     @property
-    def status(self) -> bool:
+    def active(self) -> bool:
         pass  # TODO: to implement
 
     def enable(self):
@@ -420,12 +417,6 @@ class TaborChannelActivatable(ActivatableChannels):
 
     def disable(self):
         command_string = ":INST:SEL {ch_id}; :OUTP OFF".format(ch_id=self._parent().idn)
-        self._parent().device.send_cmd(command_string)
-
-    @status.setter
-    def status(self, channel_status: bool) -> None:
-        command_string = ":INST:SEL {ch_id}; :OUTP {output}".format(ch_id=self._parent().idn,
-                                                                    output="ON" if channel_status else "OFF")
         self._parent().device.send_cmd(command_string)
 
 
@@ -458,7 +449,7 @@ class TaborChannel(AWGChannel):
         Args:
             channel_tuple (TaborChannelTuple): the channel tuple that this channel belongs to
         """
-        #TODO: problem with the _?
+        # TODO (toCheck): problem with the _?
         self._channel_tuple = weakref.ref(channel_tuple)
 
     def _select(self) -> None:
@@ -476,6 +467,8 @@ class TaborProgramManagement(ProgramManagement):
         self._armed_program = None
         self._parent = channel_tuple
 
+        self._idle_sequence_table = [(1, 1, 0), (1, 1, 0), (1, 1, 0)]
+
     @property
     def programs(self) -> Set[str]:
         """The set of program names that can currently be executed on the hardware AWG."""
@@ -491,6 +484,7 @@ class TaborProgramManagement(ProgramManagement):
 
         The policy is to prefer amending the unknown waveforms to overwriting old ones.
         """
+        # TODO: Change this if statements because num methods are deleted
         if len(channels) != self.num_channels:
             raise ValueError("Channel ID not specified")
         if len(markers) != self.num_markers:
@@ -539,7 +533,7 @@ class TaborProgramManagement(ProgramManagement):
         self._parent._sequencer_tables = []
 
         self._parent._known_programs = dict()
-        self._parent.change_armed_program(None)
+        self._parent[TaborProgramManagement].change_armed_program(None)
 
     @with_select
     def arm(self, name: Optional[str]) -> None:
@@ -552,7 +546,7 @@ class TaborProgramManagement(ProgramManagement):
         if self._parent._current_program == name:
             self._parent.device.send_cmd("SEQ:SEL 1")
         else:
-            self._parent.change_armed_program(name)
+            self._parent[TaborProgramManagement].change_armed_program(name)
 
     # TODO Does this work fine with @with_select?
     @with_select
@@ -567,6 +561,79 @@ class TaborProgramManagement(ProgramManagement):
             self._parent.device.send_cmd(':TRIG', paranoia_level=self._parent.internal_paranoia_level)
         else:
             raise RuntimeError("No program active")
+
+    @with_select
+    @with_configuration_guard
+    def change_armed_program(self, name: Optional[str]) -> None:
+        """The armed program of the channel tuple is change to the program with the name 'name'"""
+        if name is None:
+            sequencer_tables = [self._idle_sequence_table]
+            advanced_sequencer_table = [(1, 1, 0)]
+        else:
+            waveform_to_segment_index, program = self._parent._known_programs[name]
+            waveform_to_segment_number = waveform_to_segment_index + 1
+
+            # translate waveform number to actual segment
+            sequencer_tables = [[(rep_count, waveform_to_segment_number[wf_index], jump_flag)
+                                 for ((rep_count, wf_index, jump_flag), _) in sequencer_table]
+                                for sequencer_table in program.get_sequencer_tables()]
+
+            # insert idle sequence
+            sequencer_tables = [self._idle_sequence_table] + sequencer_tables
+
+            # adjust advanced sequence table entries by idle sequence table offset
+            advanced_sequencer_table = [(rep_count, seq_no + 1, jump_flag)
+                                        for rep_count, seq_no, jump_flag in program.get_advanced_sequencer_table()]
+
+            if program.waveform_mode == TaborSequencing.SINGLE:
+                assert len(advanced_sequencer_table) == 1
+                assert len(sequencer_tables) == 2
+
+                while len(sequencer_tables[1]) < self._parent.device.dev_properties["min_seq_len"]:
+                    assert advanced_sequencer_table[0][0] == 1
+                    sequencer_tables[1].append((1, 1, 0))
+
+        # insert idle sequence in advanced sequence table
+        advanced_sequencer_table = [(1, 1, 1)] + advanced_sequencer_table
+
+        while len(advanced_sequencer_table) < self._parent.device.dev_properties["min_aseq_len"]:
+            advanced_sequencer_table.append((1, 1, 0))
+
+        self._parent.device.send_cmd("SEQ:DEL:ALL", paranoia_level=self._parent.internal_paranoia_level)
+        self._sequencer_tables = []
+        self._parent.device.send_cmd("ASEQ:DEL", paranoia_level=self._parent.internal_paranoia_level)
+        self._advanced_sequence_table = []
+
+        # download all sequence tables
+        for i, sequencer_table in enumerate(sequencer_tables):
+            self._parent.device.send_cmd("SEQ:SEL {}".format(i + 1), paranoia_level=self._parent.internal_paranoia_level)
+            self._parent.device._download_sequencer_table(sequencer_table)
+        self._sequencer_tables = sequencer_tables
+        self._parent.device.send_cmd("SEQ:SEL 1", paranoia_level=self._parent.internal_paranoia_level)
+
+        self._parent.device._download_adv_seq_table(advanced_sequencer_table)
+        self._advanced_sequence_table = advanced_sequencer_table
+
+        self._current_program = name
+
+
+    def _select(self):
+        self._parent.channels[0]._select()
+
+    @property
+    def _configuration_guard_count(self):
+        return self._parent._configuration_guard_count
+
+    @_configuration_guard_count.setter
+    def _configuration_guard_count(self, configuration_guard_count):
+        self._parent._configuration_guard_count = configuration_guard_count
+
+    def _enter_config_mode(self):
+        self._parent._enter_config_mode()
+
+    def _exit_config_mode(self):
+        self._parent._exit_config_mode()
+
 
 
 class TaborChannelTuple(AWGChannelTuple):
@@ -666,7 +733,7 @@ class TaborChannelTuple(AWGChannelTuple):
         program = self._known_programs.pop(name)
         self._segment_references[program.waveform_to_segment] -= 1
         if self._current_program == name:
-            self.change_armed_program(None)
+            self[TaborProgramManagement].change_armed_program(None)
         return program
 
     def _restore_program(self, name: str, program: TaborProgram) -> None:
@@ -972,7 +1039,7 @@ class TaborChannelTuple(AWGChannelTuple):
         if self._current_program == name:
             self.device.send_cmd('SEQ:SEL 1', paranoia_level=self.internal_paranoia_level)
         else:
-            self.change_armed_program(name)
+            self[TaborProgramManagement].change_armed_program(name)
 
     # arm im Feature
 
@@ -985,7 +1052,6 @@ class TaborChannelTuple(AWGChannelTuple):
     @with_select
     @with_configuration_guard
     def change_armed_program(self, name: Optional[str]) -> None:  # TODO (LuL): Add this to ProgramManagement
-        """The armed program of the channel tuple is change to the program with the name 'name'"""
         if name is None:
             sequencer_tables = [self._idle_sequence_table]
             advanced_sequencer_table = [(1, 1, 0)]
@@ -1061,8 +1127,8 @@ class TaborChannelTuple(AWGChannelTuple):
 
             marker_0_cmd = ':SOUR:MARK:SEL 1;:SOUR:MARK:SOUR USER;:SOUR:MARK:STAT OFF'
             marker_1_cmd = ':SOUR:MARK:SEL 2;:SOUR:MARK:SOUR USER;:SOUR:MARK:STAT OFF'
-            #TODO: würde diese ersetzung reichen? - maybe change for synchronisationsfeature
-            #for marker_ch in self.marker_channels:
+            # TODO: würde diese ersetzung reichen? - maybe change for synchronisationsfeature
+            # for marker_ch in self.marker_channels:
             #    marker_ch[TaborMarkerChannelActivatable].status = False
 
             wf_mode_cmd = ':SOUR:FUNC:MODE FIX'

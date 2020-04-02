@@ -122,14 +122,13 @@ class ProgramManagement(AWGChannelTupleFeature, ABC):
 
     @abstractmethod
     def run_current_program(self) -> None:
+        """This method starts running the active program"""
         raise NotImplementedError()
 
-    #TODO: change_armed_program hierhin verschieben
-    """
     @abstractmethod
     def change_armed_program(self) -> None:
         raise NotImplementedError()
-    """
+
 
 ########################################################################################################################
 # channel features

@@ -11,7 +11,6 @@ class ChannelTupleAdapter(AWG):
     This class serves as an adapter between the old Class AWG and the new driver abstraction. It routes all the methods
     the AWG class to the corresponding methods of the new driver.
     """
-
     def __copy__(self) -> None:
         pass
 

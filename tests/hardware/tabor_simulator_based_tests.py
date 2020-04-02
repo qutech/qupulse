@@ -11,7 +11,7 @@ import numpy as np
 from qupulse._program.tabor import TableDescription, TableEntry
 from qupulse.hardware.awgs.features import DeviceControl
 from qupulse.hardware.awgs.tabor import TaborDevice, TaborException, TaborSegment, TaborChannelTuple, \
-    TaborOffsetAmplitude, TaborDeviceControl
+    TaborOffsetAmplitude, TaborDeviceControl, TaborProgramManagement
 
 
 class TaborSimulatorManager:
@@ -216,7 +216,7 @@ class TaborMemoryReadTests(TaborSimulatorBasedTest):
             waveform_mode = mode
 
         self.channel_pair._known_programs['dummy_program'] = (waveform_to_segment_index, DummyProgram)
-        self.channel_pair.change_armed_program('dummy_program')
+        self.channel_pair[TaborProgramManagement].change_armed_program('dummy_program') #TODO: change - change_armed_program in the feature doesnt work yet
 
     def test_read_waveforms(self):
         self.channel_pair._amend_segments(self.segments)
@@ -274,6 +274,7 @@ class TaborMemoryReadTests(TaborSimulatorBasedTest):
         actual_sequence_tables = [self.channel_pair._idle_sequence_table] + [[(rep, index + 2, jump)
                                                                               for rep, index, jump in table]
                                                                              for table in self.sequence_tables_raw]
+
 
         actual_advanced_table = [(1, 1, 1)] + [(rep, idx + 1, jmp) for rep, idx, jmp in self.advanced_sequence_table]
 
