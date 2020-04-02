@@ -467,7 +467,7 @@ class TaborProgramManagement(ProgramManagement):
         self._armed_program = None
         self._parent = channel_tuple
 
-        self._idle_sequence_table = [(1, 1, 0), (1, 1, 0), (1, 1, 0)]
+        #self._idle_sequence_table = [(1, 1, 0), (1, 1, 0), (1, 1, 0)]
 
     @property
     def programs(self) -> Set[str]:
@@ -567,7 +567,7 @@ class TaborProgramManagement(ProgramManagement):
     def change_armed_program(self, name: Optional[str]) -> None:
         """The armed program of the channel tuple is change to the program with the name 'name'"""
         if name is None:
-            sequencer_tables = [self._idle_sequence_table]
+            sequencer_tables = [self._parent._idle_sequence_table]
             advanced_sequencer_table = [(1, 1, 0)]
         else:
             waveform_to_segment_index, program = self._parent._known_programs[name]
@@ -579,7 +579,7 @@ class TaborProgramManagement(ProgramManagement):
                                 for sequencer_table in program.get_sequencer_tables()]
 
             # insert idle sequence
-            sequencer_tables = [self._idle_sequence_table] + sequencer_tables
+            sequencer_tables = [self._parent._idle_sequence_table] + sequencer_tables
 
             # adjust advanced sequence table entries by idle sequence table offset
             advanced_sequencer_table = [(rep_count, seq_no + 1, jump_flag)
@@ -600,21 +600,21 @@ class TaborProgramManagement(ProgramManagement):
             advanced_sequencer_table.append((1, 1, 0))
 
         self._parent.device.send_cmd("SEQ:DEL:ALL", paranoia_level=self._parent.internal_paranoia_level)
-        self._sequencer_tables = []
+        self._parent._sequencer_tables = []
         self._parent.device.send_cmd("ASEQ:DEL", paranoia_level=self._parent.internal_paranoia_level)
-        self._advanced_sequence_table = []
+        self._parent._advanced_sequence_table = []
 
         # download all sequence tables
         for i, sequencer_table in enumerate(sequencer_tables):
             self._parent.device.send_cmd("SEQ:SEL {}".format(i + 1), paranoia_level=self._parent.internal_paranoia_level)
             self._parent.device._download_sequencer_table(sequencer_table)
-        self._sequencer_tables = sequencer_tables
+        self._parent._sequencer_tables = sequencer_tables
         self._parent.device.send_cmd("SEQ:SEL 1", paranoia_level=self._parent.internal_paranoia_level)
 
         self._parent.device._download_adv_seq_table(advanced_sequencer_table)
-        self._advanced_sequence_table = advanced_sequencer_table
+        self._parent._advanced_sequence_table = advanced_sequencer_table
 
-        self._current_program = name
+        self._parent._current_program = name
 
 
     def _select(self):
@@ -1095,7 +1095,7 @@ class TaborChannelTuple(AWGChannelTuple):
         for i, sequencer_table in enumerate(sequencer_tables):
             self.device.send_cmd("SEQ:SEL {}".format(i + 1), paranoia_level=self.internal_paranoia_level)
             self.device._download_sequencer_table(sequencer_table)
-        self._sequencer_tables = sequencer_tables
+        self._parent._sequencer_tables = sequencer_tables
         self.device.send_cmd("SEQ:SEL 1", paranoia_level=self.internal_paranoia_level)
 
         self.device._download_adv_seq_table(advanced_sequencer_table)

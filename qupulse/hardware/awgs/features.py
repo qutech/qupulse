@@ -11,6 +11,7 @@ from qupulse.utils.types import ChannelID
 ########################################################################################################################
 
 class ChannelSynchronization(AWGDeviceFeature, ABC):
+    """This Feature is used to synchronise a certain ammount of channels"""
     @abstractmethod
     def synchronize_channels(self, group_size: int) -> None:
         """
@@ -24,6 +25,7 @@ class ChannelSynchronization(AWGDeviceFeature, ABC):
 
 
 class DeviceControl(AWGDeviceFeature, ABC):
+    """This feature is used for basic communication with a AWG"""
     #TODO (toCheck): is this Feature ok like this?
     @abstractmethod
     def enable(self) -> None:
