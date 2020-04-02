@@ -25,11 +25,16 @@ class HDAWGRepresentationTests(unittest.TestCase):
                 mock.patch('zhinst.ziPython.ziDAQServer') as mock_daq_server, \
                 mock.patch('qupulse.hardware.awgs.zihdawg.HDAWGRepresentation._initialize') as mock_init, \
                 mock.patch('qupulse.hardware.awgs.zihdawg.HDAWGChannelPair') as mock_channel_pair,\
-                mock.patch('zhinst.utils.disable_everything') as mock_reset:
+                mock.patch('zhinst.utils.disable_everything') as mock_reset,\
+                mock.patch('pathlib.Path') as mock_path:
 
             representation = HDAWGRepresentation(device_serial,
                                                  device_interface,
                                                  data_server_addr, data_server_port, api_level_number, False, 1.3)
+
+            mock_daq_server.return_value.awgModule.return_value.getString.assert_called_once_with('directory')
+            module_dir = mock_daq_server.return_value.awgModule.return_value.getString.return_value
+            mock_path.assert_called_once_with(module_dir, 'awg', 'waves')
 
             self.assertIs(representation.api_session, mock_daq_server.return_value)
             mock_daq_server.assert_called_once_with(data_server_addr, data_server_port, api_level_number)
