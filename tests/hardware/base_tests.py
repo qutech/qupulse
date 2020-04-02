@@ -80,8 +80,8 @@ class ProgramEntryTests(unittest.TestCase):
             sample_waveforms.assert_called_once_with(self.waveforms[:1])
 
     def test_sample_waveforms(self):
-        empty_ch = mock.Mock()
-        empty_m = mock.Mock()
+        empty_ch = np.array([1, 2, 3])
+        empty_m = np.array([0, 1, 0])
         expected_sampled = [
             ((self.sampled[0]['A'], empty_ch, self.sampled[0]['C']), (empty_m, self.sampled[0]['M'] != 0)),
             ((self.sampled[1]['A'], empty_ch, self.sampled[1]['C']), (empty_m, self.sampled[1]['M'] != 0))
