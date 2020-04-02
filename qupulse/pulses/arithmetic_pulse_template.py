@@ -11,7 +11,7 @@ from qupulse.serialization import Serializer, PulseRegistryType
 from qupulse.parameter_scope import Scope
 
 from qupulse.utils.types import ChannelID
-from qupulse.pulses.measurement import MeasurementWindow
+from qupulse.pulses.parameters import Parameter
 from qupulse.pulses.pulse_template import AtomicPulseTemplate, PulseTemplate
 from qupulse._program.waveforms import Waveform, ArithmeticWaveform, TransformingWaveform
 from qupulse._program.transformation import Transformation, ScalingTransformation, OffsetTransformation,\
@@ -123,7 +123,7 @@ class ArithmeticAtomicPulseTemplate(AtomicPulseTemplate):
 
     def get_measurement_windows(self,
                                 parameters: Dict[str, Real],
-                                measurement_mapping: Dict[str, Optional[str]]) -> List[MeasurementWindow]:
+                                measurement_mapping: Dict[str, Optional[str]]) -> List['MeasurementWindow']:
         measurements = super().get_measurement_windows(parameters=parameters,
                                                        measurement_mapping=measurement_mapping)
         measurements.extend(self.lhs.get_measurement_windows(parameters=parameters,

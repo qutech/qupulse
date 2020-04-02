@@ -3,7 +3,7 @@
 Pulse Templates
 ---------------
 
-qupulse represents pulses as abstract pulse templates. A pulse template can be understood as a class of pulses that share a similar structure but differ in the concrete amplitude or duration of voltage levels or repetition counts. To this end, pulse templates are parameterizable. Pulse templates are also designed to feature easy reusability of existing templates. The process of plugging in values for a pulse templates parameters is called instantiation. This is done via :meth:`~.PulseTemplate.create_program`. The result is a deterministic description of all voltages at all times and is called a program.
+qupulse represents pulses as abstract pulse templates. A pulse template can be understood as a class of pulses that share a similar structure but differ in the concrete amplitude or duration of voltage levels. To this end, pulse templates are parameterizable. Pulse templates are also designed to feature easy reusability of existing templates. The process of plugging in values for a pulse templates parameters is called instantiation.
 
 There are multiple types of different pulse template classes, briefly explained in the following.
 
@@ -14,13 +14,8 @@ All other pulse template classes are then used to construct arbitrarily complex 
 :class:`.SequencePulseTemplate` enables the user to specify a sequence of existing pulse templates (subtemplates) and modify parameter values using a mapping function.
 :class:`.RepetitionPulseTemplate` is used to simply repeat one existing pulse template a given number of times.
 :class:`.ForLoopPulseTemplate` is similar but allows a parametrization of the loop body with the loop index.
-One special pulse template is the :class:`.mapping_pulse_template.MappingPulseTemplate` which allows the renaming of channels and measurements as well as mapping parameters by mathematical expressions.
-
-In some cases, it is desired to write a pulse which partly consists of placeholder pulses. For this the :class:`.AbstractPulseTemplate` was included.
-
-You can do some simple arithmetic with pulses which is implemented via :class:`.ArithmeticPulseTemplate` and :class:`.ArithmeticAtomicPulseTemplate`. The relevant arithmetic operators are overloaded so you do not need to use these classes directly.
-
-In the future might be pulse templates that allow conditional execution like a `BranchPulseTemplate` or a `WhileLoopPulseTemplate`.
+In the future there will be pulse templates that allow conditional execution like :class:`.BranchPulseTemplate` and :class:`.WhileLoopPulseTemplate`.
+One special pulse template is the :class:`.MappingPulseTemplate` which allows the renaming of channels and measurements as well as mapping parameters by mathematical expressions.
 
 All of these pulse template variants can be similarly accessed through the common interface declared by the :class:`.PulseTemplate` base class. [#pattern]_
 
@@ -31,13 +26,11 @@ Each pulse template can be stored persistently in a human-readable JSON file. :r
 Parameters
 ^^^^^^^^^^
 
-As mentioned above, all pulse templates may depend on parameters. During pulse template initialization the parameters simply are the free variables of expressions that occur in the pulse template. For example the :class:`.FunctionPulseTemplate` has expressions for its duration and the voltage time dependency i.e. the underlying function. Some pulse templates provided means to constrain parameters by accepting a list of :class:`.ParameterConstraint` which encapsulate comparative expressions that must evaluate to true for a given parameter set to successfully instantiate a pulse from the pulse template. This can be used to encode physical or logical parameter boundaries at pulse level.
+As mentioned above, all pulse templates may depend on parameters. During pulse template initialization the parameters simply are the free variables of expressions that occur in the pulse template. For example the :class:`.FunctionPulseTemplate` has expressions for its duration and the voltage time dependency (i.e., the underlying function). Some pulse templates provided means to constrain parameters by accepting a list of :class:`.ParameterConstraint` which encapsulate comparative expressions that must evaluate to true for a given parameter set to successfully instantiate a pulse from the pulse template.
 
 The mathematical expressions (for parameter transformation or as the function of the :class:`.FunctionPulseTemplate`) are encapsulated into an :class:`.Expression` class which wraps `sympy <http://www.sympy.org/en/index.html>`_ for string evaluation.
 
-Parameters can be mapped to arbitrary expressions via :class:`.mapping_pulse_template.MappingPulseTemplate`. One use case can be deriving pulse parameters from physical quantities.
-
-On instantiation the parameters are evaluated via parameter scopes which are defined in :py:mod:`~qupulse.parameter_scope`. This is currently only relevant for internal usage but might be useful if you want to develop a more sophisticated parameter management.
+In the future, it will be possible to have parameters dependent on measurement outcomes or other events. This is the reason :class:`.Parameter` objects are passed through on pulse instantiation.
 
 Measurements
 ^^^^^^^^^^^^
@@ -48,7 +41,7 @@ After the pulse templates are instantiated, uploading the resulting pulses to th
 Obtaining a Concrete Pulse (Pulse Instantiation)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-To obtain a pulse ready for execution on the hardware from a pulse template, the user has to specify parameter values (if parameters were used in the pulse templates in question). Parameters can be marked as volatile. This will make the instrument drivers upload the program in such a way that the parameters can easily be updated. This restricts the parameters that can be marked as volatile. qupulse should raise a meaningful exception if the required changes are too complex or not supported on the used instrument.
+To obtain a pulse ready for execution on the hardware from a pulse template, the user has to specify parameter values (if parameters were used in the pulse templates in question). In the simplest case, parameters are constant values that can be provided as plain float values. Other cases may require parameter values to be computed based on some measurement values obtained during preceding executions. If so, a subclass of the :class:`.Parameter` class which performs this computations when queried for a value can be provided.
 
 In order to translate the object structures that encode the pulse template in the software into a (sequential) representation of the concrete pulse with the given parameter values that is understandable by the hardware, we proceed in several steps.
 
@@ -68,7 +61,6 @@ Examples demonstrating the construction of pulse templates and parameters from v
 * :ref:`/examples/03xComposedPulses.ipynb`
 * :ref:`/examples/05MappingTemplate.ipynb`
 * :ref:`/examples/07MultiChannelTemplates.ipynb`
-* :ref:`/examples/14ArithmeticWithPulseTemplates.ipynb`
 
 :ref:`/examples/09ParameterConstraints.ipynb` demonstrates the mentioned parameter constraints.
 

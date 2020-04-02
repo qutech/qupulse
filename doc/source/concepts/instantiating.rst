@@ -36,7 +36,9 @@ is reached. Additionally, the AWG requires waveforms to have a minimal length. A
 by the driver with its neighbors in the execution sequence until the minimum waveform length is reached. Further
 optimizations and merges (or splits) of waveforms for performance are also possible.
 
-In contrast, the Zurich Instruments HDAWG allows arbitrary nesting levels and is only limited by the instruction cache.
+In contrast, there might also be devices that allow more nesting levels, allowing for greater flexibility in waveform uploads
+when reparameterizing, or devices that cannot deal with nested sequences at all, requiring a full unraveling of the entire
+program tree.
 
 However, as already mentioned, the user does not have to be concerned about this in regular use of qupulse, since this
 is dealt with transparently in the hardware backend.

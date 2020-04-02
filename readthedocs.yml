@@ -1,12 +1,6 @@
-version: 2
-
+requirements_file: doc/requirements.txt
 python:
-   version: 3.7
-   install:
-      - requirements: doc/requirements.txt
-      - method: setuptools
-        path: .
-
-sphinx:
-   builder: html
-   configuration: doc/source/conf.py
+    setup_py_install: true
+    version: 3
+formats:
+    - none

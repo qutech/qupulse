@@ -62,14 +62,14 @@ class Waveform(Comparable, metaclass=ABCMeta):
         """A wrapper to the unsafe_sample method which caches the result. This method enforces the constrains
         unsafe_sample expects and caches the result to save memory.
 
-        Args:
+        Args/Result:
             sample_times: Times at which this Waveform will be sampled.
-            output_array: Has to be either None or an array of the same size and type as sample_times. If an array is
-                given, the sampled values will be written into the given array and it will be returned. Otherwise, a new
-                array will be created and cached to save memory.
+            output_array: Has to be either None or an array of the same size and type as sample_times.
+                If an array is given, the sampled values will be written into the given array and it will be returned.
+                Otherwise, a new array will be created and cached to save memory.
 
         Result:
-            The sampled values of this Waveform at the provided sample times. Is `output_array` if provided
+            The sampled values of this Waveform at the provided sample times.
         """
         if len(sample_times) == 0:
             if output_array is None:
