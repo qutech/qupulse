@@ -467,7 +467,7 @@ class TaborProgramManagement(ProgramManagement):
         self._armed_program = None
         self._parent = channel_tuple
 
-        #self._idle_sequence_table = [(1, 1, 0), (1, 1, 0), (1, 1, 0)]
+        self._idle_sequence_table = [(1, 1, 0), (1, 1, 0), (1, 1, 0)]
 
     @property
     def programs(self) -> Set[str]:
@@ -548,7 +548,6 @@ class TaborProgramManagement(ProgramManagement):
         else:
             self._parent[TaborProgramManagement].change_armed_program(name)
 
-    # TODO Does this work fine with @with_select?
     @with_select
     def run_current_program(self) -> None:
         """
@@ -567,7 +566,7 @@ class TaborProgramManagement(ProgramManagement):
     def change_armed_program(self, name: Optional[str]) -> None:
         """The armed program of the channel tuple is change to the program with the name 'name'"""
         if name is None:
-            sequencer_tables = [self._parent._idle_sequence_table]
+            sequencer_tables = [self._idle_sequence_table]
             advanced_sequencer_table = [(1, 1, 0)]
         else:
             waveform_to_segment_index, program = self._parent._known_programs[name]
@@ -579,7 +578,7 @@ class TaborProgramManagement(ProgramManagement):
                                 for sequencer_table in program.get_sequencer_tables()]
 
             # insert idle sequence
-            sequencer_tables = [self._parent._idle_sequence_table] + sequencer_tables
+            sequencer_tables = [self._idle_sequence_table] + sequencer_tables
 
             # adjust advanced sequence table entries by idle sequence table offset
             advanced_sequencer_table = [(rep_count, seq_no + 1, jump_flag)
@@ -616,7 +615,6 @@ class TaborProgramManagement(ProgramManagement):
 
         self._parent._current_program = name
 
-
     def _select(self):
         self._parent.channels[0]._select()
 
@@ -633,7 +631,6 @@ class TaborProgramManagement(ProgramManagement):
 
     def _exit_config_mode(self):
         self._parent._exit_config_mode()
-
 
 
 class TaborChannelTuple(AWGChannelTuple):
@@ -666,7 +663,6 @@ class TaborChannelTuple(AWGChannelTuple):
                                                                          output_amplitude=0.5,
                                                                          output_offset=0., resolution=14),
                                                        None, None)
-        self._idle_sequence_table = [(1, 1, 0), (1, 1, 0), (1, 1, 0)]
 
         self._known_programs = dict()  # type: Dict[str, TaborProgramMemory]
         self._current_program = None
@@ -1049,59 +1045,6 @@ class TaborChannelTuple(AWGChannelTuple):
     def set_program_sequence_table(self, name, new_sequence_table):
         self._known_programs[name][1]._sequencer_tables = new_sequence_table
 
-    @with_select
-    @with_configuration_guard
-    def change_armed_program(self, name: Optional[str]) -> None:  # TODO (LuL): Add this to ProgramManagement
-        if name is None:
-            sequencer_tables = [self._idle_sequence_table]
-            advanced_sequencer_table = [(1, 1, 0)]
-        else:
-            waveform_to_segment_index, program = self._known_programs[name]
-            waveform_to_segment_number = waveform_to_segment_index + 1
-
-            # translate waveform number to actual segment
-            sequencer_tables = [[(rep_count, waveform_to_segment_number[wf_index], jump_flag)
-                                 for ((rep_count, wf_index, jump_flag), _) in sequencer_table]
-                                for sequencer_table in program.get_sequencer_tables()]
-
-            # insert idle sequence
-            sequencer_tables = [self._idle_sequence_table] + sequencer_tables
-
-            # adjust advanced sequence table entries by idle sequence table offset
-            advanced_sequencer_table = [(rep_count, seq_no + 1, jump_flag)
-                                        for rep_count, seq_no, jump_flag in program.get_advanced_sequencer_table()]
-
-            if program.waveform_mode == TaborSequencing.SINGLE:
-                assert len(advanced_sequencer_table) == 1
-                assert len(sequencer_tables) == 2
-
-                while len(sequencer_tables[1]) < self.device.dev_properties["min_seq_len"]:
-                    assert advanced_sequencer_table[0][0] == 1
-                    sequencer_tables[1].append((1, 1, 0))
-
-        # insert idle sequence in advanced sequence table
-        advanced_sequencer_table = [(1, 1, 1)] + advanced_sequencer_table
-
-        while len(advanced_sequencer_table) < self.device.dev_properties["min_aseq_len"]:
-            advanced_sequencer_table.append((1, 1, 0))
-
-        # reset sequencer and advanced sequencer tables to fix bug which occurs when switching between some programs
-        self.device.send_cmd("SEQ:DEL:ALL", paranoia_level=self.internal_paranoia_level)
-        self._sequencer_tables = []
-        self.device.send_cmd("ASEQ:DEL", paranoia_level=self.internal_paranoia_level)
-        self._advanced_sequence_table = []
-
-        # download all sequence tables
-        for i, sequencer_table in enumerate(sequencer_tables):
-            self.device.send_cmd("SEQ:SEL {}".format(i + 1), paranoia_level=self.internal_paranoia_level)
-            self.device._download_sequencer_table(sequencer_table)
-        self._parent._sequencer_tables = sequencer_tables
-        self.device.send_cmd("SEQ:SEL 1", paranoia_level=self.internal_paranoia_level)
-
-        self.device._download_adv_seq_table(advanced_sequencer_table)
-        self._advanced_sequence_table = advanced_sequencer_table
-
-        self._current_program = name
 
     @property
     def programs(self) -> Set[str]:

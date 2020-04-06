@@ -243,7 +243,7 @@ class TaborMemoryReadTests(TaborSimulatorBasedTest):
 
         sequence_tables = self.channel_pair.read_sequence_tables()
 
-        actual_sequence_tables = [self.channel_pair._idle_sequence_table] + [[(rep, index+2, jump)
+        actual_sequence_tables = [self.channel_pair[TaborProgramManagement]._idle_sequence_table] + [[(rep, index+2, jump)
                                                                              for rep, index, jump in table]
                                                                              for table in self.sequence_tables_raw]
 
@@ -271,7 +271,7 @@ class TaborMemoryReadTests(TaborSimulatorBasedTest):
         self.arm_program(self.sequence_tables, self.advanced_sequence_table, None, np.asarray([1, 2]))
 
         para = {'a': 5}
-        actual_sequence_tables = [self.channel_pair._idle_sequence_table] + [[(rep, index + 2, jump)
+        actual_sequence_tables = [self.channel_pair[TaborProgramManagement]._idle_sequence_table] + [[(rep, index + 2, jump)
                                                                               for rep, index, jump in table]
                                                                              for table in self.sequence_tables_raw]
 
