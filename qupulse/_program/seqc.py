@@ -18,12 +18,13 @@ from types import MappingProxyType
 import abc
 import itertools
 import inspect
-import glob
+import logging
 import os.path
 import hashlib
 from collections import OrderedDict
 import string
 import warnings
+import numbers
 
 import numpy as np
 from pathlib import Path
@@ -32,6 +33,7 @@ from qupulse.utils.types import ChannelID, TimeType
 from qupulse.utils import replace_multiple
 from qupulse._program.waveforms import Waveform
 from qupulse._program._loop import Loop
+from qupulse._program.volatile import VolatileRepetitionCount, VolatileProperty
 from qupulse.hardware.awgs.base import ProgramEntry
 from qupulse.hardware.util import zhinst_voltage_to_uint16
 from qupulse.pulses.parameters import MappedParameter, ConstantParameter
@@ -117,6 +119,7 @@ class BinaryWaveform:
         return hash(bytes(self.data))
 
     def fingerprint(self) -> str:
+        """This fingerprint is runtime independent"""
         return hashlib.sha256(self.data).hexdigest()
 
     def to_csv_compatible_table(self) -> np.ndarray:
@@ -136,8 +139,8 @@ class BinaryWaveform:
 
 
 class ConcatenatedWaveform:
-    """Handle the concatenation of multiple binary waveforms to create a big indexable waveform."""
     def __init__(self):
+        """Handle the concatenation of multiple binary waveforms to create a big indexable waveform."""
         self._concatenated = []
         self._as_binary = None
 
@@ -169,6 +172,48 @@ class ConcatenatedWaveform:
         else:
             self._concatenated.clear()
         self._as_binary = None
+
+
+class WaveformFileSystem:
+    logger = logging.getLogger('qupulse.hdawg.waveforms')
+
+    def __init__(self, path: Path):
+        """This class coordinates multiple AWGs (channel pairs) using the same file system to store the waveforms.
+
+        Args:
+            path: Waveforms are stored here
+        """
+        self._required = {}
+        self._path = path
+
+    def sync(self, client: 'WaveformMemory', waveforms: Mapping[str, BinaryWaveform], **kwargs):
+        """Write the required waveforms to the filesystem."""
+        self._required[id(client)] = waveforms
+        self._sync(**kwargs)
+
+    def _sync(self, delete=True, write_all=False):
+        to_save = {self._path.joinpath(file_name): binary
+                   for d in self._required.values()
+                   for file_name, binary in d.items()}
+
+        for existing_file in self._path.iterdir():
+            if not existing_file.is_file():
+                pass
+            elif existing_file in to_save:
+                if not write_all:
+                    self.logger.debug('Skipping %r', existing_file.name)
+                    to_save.pop(existing_file)
+            elif delete:
+                try:
+                    self.logger.debug('Deleting %r', existing_file.name)
+                    existing_file.unlink()
+                except OSError:
+                    self.logger.exception("Error deleting: %r", existing_file.name)
+
+        for file_name, binary_waveform in to_save.items():
+            table = binary_waveform.to_csv_compatible_table()
+            np.savetxt(file_name, table, '%u')
+            self.logger.debug('Wrote %r', file_name)
 
 
 class WaveformMemory:
@@ -241,25 +286,12 @@ class WaveformMemory:
             )
         return '\n'.join(declarations)
 
-    def sync_to_file_system(self, path: Path, delete=True, write_all=False):
-        to_save = {path.joinpath(wave_info.file_name): wave_info.binary_waveform
+    def sync_to_file_system(self, file_system: WaveformFileSystem):
+
+        to_save = {wave_info.file_name: wave_info.binary_waveform
                    for wave_info in itertools.chain(self._concatenated_waveforms_iter(),
                                                     self._shared_waveforms_iter())}
-
-        for file_name in glob.glob(os.path.join(path, '*.csv')):
-            if file_name in to_save:
-                if not write_all:
-                    to_save.pop(file_name)
-            elif delete:
-                try:
-                    os.remove(file_name)
-                except OSError:
-                    # TODO: log
-                    pass
-
-        for file_name, binary_waveform in to_save.items():
-            table = binary_waveform.to_csv_compatible_table()
-            np.savetxt(file_name, table, '%u')
+        file_system.sync(self, to_save)
 
 
 class ProgramWaveformManager:
@@ -306,16 +338,83 @@ class ProgramWaveformManager:
         del self._memory.concatenated_waveforms[self._program_name]
 
 
+class UserRegister:
+    """This class is a helper class to avoid errors due to 0 and 1 based register indexing"""
+    __slots__ = ('_zero_based_value',)
+
+    def __init__(self, *, zero_based_value: int = None, one_based_value: int = None):
+        assert None in (zero_based_value, one_based_value)
+        assert isinstance(zero_based_value, int) or isinstance(one_based_value, int)
+
+        if one_based_value is not None:
+            assert one_based_value > 0, "A one based value needs to be larger zero"
+            self._zero_based_value = one_based_value - 1
+        else:
+            self._zero_based_value = zero_based_value
+
+    @classmethod
+    def from_seqc(cls, value: int) -> 'UserRegister':
+        return cls(zero_based_value=value)
+
+    def to_seqc(self) -> int:
+        return self._zero_based_value
+
+    @classmethod
+    def from_labone(cls, value: int) -> 'UserRegister':
+        return cls(zero_based_value=value)
+
+    def to_labone(self) -> int:
+        return self._zero_based_value
+
+    @classmethod
+    def from_web_interface(cls, value: int) -> 'UserRegister':
+        return cls(one_based_value=value)
+
+    def to_web_interface(self) -> int:
+        return self._zero_based_value + 1
+
+    def __hash__(self):
+        return hash(self._zero_based_value)
+
+    def __eq__(self, other):
+        return self._zero_based_value == getattr(other, '_zero_based_value', None)
+
+    def __repr__(self):
+        return 'UserRegister(zero_based_value={zero_based_value})'.format(zero_based_value=self._zero_based_value)
+
+    def __format__(self, format_spec: str) -> str:
+        if format_spec in ('zero_based', 'seqc', 'labone', 'lab_one'):
+            return str(self.to_seqc())
+        elif format_spec in ('one_based', 'web', 'web_interface'):
+            return str(self.to_web_interface())
+        elif format_spec in ('repr', 'r'):
+            return repr(self)
+        else:
+            raise ValueError('Invalid format spec for UserRegister: ', format_spec)
+
+
 class UserRegisterManager:
     """This class keeps track of the user registered that are used in a certain context"""
-    def __init__(self, available: Iterable[int], name_template: str):
+    def __init__(self, available: Iterable[UserRegister], name_template: str):
         assert 'register' in (x[1] for x in string.Formatter().parse(name_template))
 
         self._available = set(available)
         self._name_template = name_template
         self._used = {}
 
-    def require(self, obj) -> str:
+    def request(self, obj) -> str:
+        """Request a user register name to store object. If an object that evaluates equal to obj was requested before
+        the name name is returned.
+
+        Args:
+            obj: Object to store
+
+        Returns:
+            Name of the variable with the user register
+
+        Raises:
+            Value error if no register is available
+        """
         for register, registered_obj in self._used.items():
             if obj == registered_obj:
                 return self._name_template.format(register=register)
@@ -326,7 +425,7 @@ class UserRegisterManager:
         else:
             raise ValueError("No register available for %r" % obj)
 
-    def iter_used_register_names(self) -> Iterator[Tuple[int, str]]:
+    def iter_used_register_names(self) -> Iterator[Tuple[UserRegister, str]]:
         """
 
         Returns:
@@ -334,12 +433,12 @@ class UserRegisterManager:
         """
         return ((register, self._name_template.format(register=register)) for register in self._used.keys())
 
-    def iter_used_register_values(self) -> Iterable[Tuple[int, Any]]:
+    def iter_used_register_values(self) -> Iterable[Tuple[UserRegister, Any]]:
         return self._used.items()
 
 
 class HDAWGProgramEntry(ProgramEntry):
-    USER_REG_NAME_TEMPLATE = 'user_reg_{register}'
+    USER_REG_NAME_TEMPLATE = 'user_reg_{register:seqc}'
 
     def __init__(self, loop: Loop, selection_index: int, waveform_memory: WaveformMemory, program_name: str,
                  channels: Tuple[Optional[ChannelID], Optional[ChannelID]],
@@ -370,7 +469,7 @@ class HDAWGProgramEntry(ProgramEntry):
                 min_repetitions_for_shared_wf: int,
                 indentation: str,
                 trigger_wait_code: str,
-                available_registers: Iterable[int]):
+                available_registers: Iterable[UserRegister]):
         """Compile the loop representation to an internal sequencing c one using `loop_to_seqc`
 
         Args:
@@ -398,7 +497,7 @@ class HDAWGProgramEntry(ProgramEntry):
         self._user_register_source = '\n'.join(
             '{indentation}var {user_reg_name} = getUserReg({register});'.format(indentation=indentation,
                                                                                 user_reg_name=user_reg_name,
-                                                                                register=register)
+                                                                                register=register.to_seqc())
             for register, user_reg_name in user_registers.iter_used_register_names()
         )
         self._user_registers = user_registers
@@ -425,7 +524,7 @@ class HDAWGProgramEntry(ProgramEntry):
                           self._trigger_wait_code,
                           self._seqc_source])
 
-    def volatile_repetition_counts(self) -> Iterable[Tuple[int, MappedParameter]]:
+    def volatile_repetition_counts(self) -> Iterable[Tuple[UserRegister, VolatileRepetitionCount]]:
         """
         Returns:
             An iterator over the register and parameter
@@ -454,7 +553,8 @@ class HDAWGProgramManager:
     """This class contains everything that is needed to create the final seqc program and provides an interface to write
     the required waveforms to the file system. It does not talk to the device."""
 
-    GLOBAL_CONSTS = dict(PROG_SEL_REGISTER=0, TRIGGER_REGISTER=1,
+    GLOBAL_CONSTS = dict(PROG_SEL_REGISTER=UserRegister(zero_based_value=0),
+                         TRIGGER_REGISTER=UserRegister(zero_based_value=1),
                          TRIGGER_RESET_MASK=bin(1 << 15),
                          PROG_SEL_NONE=0,
                          NO_RESET_MASK=bin(1 << 15),
@@ -513,7 +613,7 @@ class HDAWGProgramManager:
         selection_index = self._get_low_unused_index()
 
         # TODO: verify total number of registers
-        available_registers = range(2, 16)
+        available_registers = [UserRegister.from_seqc(idx) for idx in range(2, 16)]
 
         program_entry = HDAWGProgramEntry(loop, selection_index, self._waveform_memory, name,
                                           channels, markers, amplitudes, offsets, voltage_transformations, sample_rate)
@@ -524,12 +624,14 @@ class HDAWGProgramManager:
 
         self._programs[name] = program_entry
 
-    def get_register_values(self, name: str) -> Mapping[int, int]:
-        return {register: int(parameter.get_value())
+    def get_register_values(self, name: str) -> Mapping[UserRegister, int]:
+        return {register: int(parameter)
                 for register, parameter in self._programs[name].volatile_repetition_counts()}
 
     def get_register_values_to_update_volatile_parameters(self, name: str,
-                                                          parameters: Mapping[str, ConstantParameter]) -> Mapping[int, int]:
+                                                          parameters: Mapping[str,
+                                                                              numbers.Number]) -> Mapping[UserRegister,
+                                                                                                          int]:
         """
 
         Args:
@@ -537,20 +639,13 @@ class HDAWGProgramManager:
             parameters: new values for volatile parameters
 
         Returns:
-            A dict register->value that reflects the new parameter values
+            A dict user_register->value that reflects the new parameter values
         """
         program_entry = self._programs[name]
         result = {}
-        for register, parameter in program_entry.volatile_repetition_counts():
-            old_value = int(parameter.get_value())
-            parameter.update_constants(parameters)
-            new_value = parameter.get_value()
-            if int(new_value) != new_value:
-                warnings.warn("Rounding {} to {}".format(new_value, int(new_value)), RuntimeWarning)
-            new_value = int(new_value)
-
-            if new_value != old_value:
-                result[register] = new_value
+        for register, volatile_repetition in program_entry.volatile_repetition_counts():
+            new_value = volatile_repetition.update_volatile_dependencies(parameters)
+            result[register] = new_value
         return result
 
     @property
@@ -569,8 +664,13 @@ class HDAWGProgramManager:
         return self._programs[name].selection_index
 
     def to_seqc_program(self) -> str:
-        lines = ['const {const_name} = {const_val};'.format(const_name=const_name, const_val=const_val)
-                 for const_name, const_val in self.GLOBAL_CONSTS.items()]
+        lines = []
+        for const_name, const_val in self.GLOBAL_CONSTS.items():
+            if isinstance(const_val, (int, str)):
+                const_repr = str(const_val)
+            else:
+                const_repr = const_val.to_seqc()
+            lines.append('const {const_name} = {const_repr};'.format(const_name=const_name, const_repr=const_repr))
 
         lines.append(self._waveform_memory.waveform_declaration())
 
@@ -703,8 +803,8 @@ def loop_to_seqc(loop: Loop,
 
         node = Scope(seqc_nodes)
 
-    if loop.repetition_parameter is not None:
-        register_var = user_registers.require(loop.repetition_parameter)
+    if loop.volatile_repetition:
+        register_var = user_registers.request(loop.repetition_definition)
         return Repeat(scope=node, repetition_count=register_var)
 
     elif loop.repetition_count != 1:

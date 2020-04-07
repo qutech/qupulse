@@ -16,8 +16,8 @@ def validate_programs(program_AB, program_CD, loaded_data: dict, parameters):
     for_C = loaded_data['for_C']
     for_D = loaded_data['for_D']
 
-    meas_time_multiplier = parameters["charge_scan___meas_time_multiplier"].get_value()
-    rep_count = parameters['charge_scan___rep_count'].get_value()
+    meas_time_multiplier = parameters["charge_scan___meas_time_multiplier"]
+    rep_count = parameters['charge_scan___rep_count']
 
     expected_samples_A = np.tile(for_A, (meas_time_multiplier * 192, 1, rep_count)).T.ravel()
     set_ignored_marker_data_to_zero(expected_samples_A)

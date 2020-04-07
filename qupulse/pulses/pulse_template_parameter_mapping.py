@@ -1,3 +1,6 @@
+"""..deprecated:: 0.1
+"""
+
 from qupulse.pulses.mapping_pulse_template import MappingPulseTemplate
 
 __all__ = ["MappingPulseTemplate"]

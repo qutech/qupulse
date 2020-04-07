@@ -352,6 +352,7 @@ class TektronixAWGTests(unittest.TestCase):
             self.assertEqual(tek_awg.default_program_repetition_mode, 'infinite')
             self.assertIs(tek_awg.device, dummy)
 
+    @unittest.skip("Not implemented yet")
     def test_set_volatile_parameters(self):
         raise NotImplementedError()
 

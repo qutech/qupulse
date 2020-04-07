@@ -32,7 +32,7 @@ import importlib
 import warnings
 from contextlib import contextmanager
 
-from qupulse.utils.types import DocStringABCMeta
+from qupulse.utils.types import DocStringABCMeta, FrozenDict
 
 __all__ = ["StorageBackend", "FilesystemBackend", "ZipFileBackend", "CachingBackend", "Serializable", "Serializer",
            "AnonymousSerializable", "DictBackend", "PulseStorage",
@@ -472,8 +472,6 @@ class Serializable(metaclass=SerializableMeta):
         Raises:
             ValueError: If identifier is the empty string
         """
-        super().__init__()
-
         if identifier == '':
             raise ValueError("Identifier must not be empty.")
         self.__identifier = identifier
@@ -1058,6 +1056,9 @@ class JSONSerializableEncoder(json.JSONEncoder):
 
         elif type(o) is set:
             return list(o)
+
+        elif type(o) is FrozenDict:
+            return dict(o.items())
 
         else:
             return super().default(o)

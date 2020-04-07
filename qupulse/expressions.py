@@ -2,7 +2,7 @@
 This module defines the class Expression to represent mathematical expression as well as
 corresponding exception classes.
 """
-from typing import Any, Dict, Union, Sequence, Callable, TypeVar, Type
+from typing import Any, Dict, Union, Sequence, Callable, TypeVar, Type, Mapping
 from numbers import Number
 import warnings
 import functools
@@ -17,7 +17,7 @@ from qupulse.utils.sympy import sympify, to_numpy, recursive_substitution, evalu
     get_most_simple_representation, get_variables
 from qupulse.utils.types import TimeType
 
-__all__ = ["Expression", "ExpressionVariableMissingException", "ExpressionScalar", "ExpressionVector"]
+__all__ = ["Expression", "ExpressionVariableMissingException", "ExpressionScalar", "ExpressionVector", "ExpressionLike"]
 
 
 _ExpressionType = TypeVar('_ExpressionType', bound='Expression')
@@ -37,11 +37,15 @@ class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
     def __init__(self, *args, **kwargs):
         self._expression_lambda = None
 
-    def _parse_evaluate_numeric_arguments(self, eval_args: Dict[str, Number]) -> Dict[str, Number]:
+    def _parse_evaluate_numeric_arguments(self, eval_args: Mapping[str, Number]) -> Dict[str, Number]:
         try:
             return {v: eval_args[v] for v in self.variables}
         except KeyError as key_error:
-            raise ExpressionVariableMissingException(key_error.args[0], self) from key_error
+            if type(key_error).__module__.startswith('qupulse'):
+                # we forward qupulse errors, I down like this
+                raise
+            else:
+                raise ExpressionVariableMissingException(key_error.args[0], self) from key_error
 
     def _parse_evaluate_numeric_result(self,
                                        result: Union[Number, numpy.ndarray],
@@ -69,6 +73,22 @@ class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
         else:
             raise NonNumericEvaluation(self, result, call_arguments)
 
+    def evaluate_in_scope(self, scope: Mapping) -> Union[Number, numpy.ndarray]:
+        """Evaluate the expression by taking the variables from the given scope (typically of type Scope but it can be
+        any mapping.)
+        Args:
+            scope:
+
+        Returns:
+
+        """
+        parsed_kwargs = self._parse_evaluate_numeric_arguments(scope)
+
+        result, self._expression_lambda = evaluate_lambdified(self.underlying_expression, self.variables,
+                                                              parsed_kwargs, lambdified=self._expression_lambda)
+
+        return self._parse_evaluate_numeric_result(result, scope)
+
     def evaluate_numeric(self, **kwargs) -> Union[Number, numpy.ndarray]:
         parsed_kwargs = self._parse_evaluate_numeric_arguments(kwargs)
 
@@ -84,7 +104,7 @@ class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
             e = self.evaluate_numeric()
             return float(e)
     
-    def evaluate_symbolic(self, substitutions: Dict[Any, Any]) -> 'Expression':
+    def evaluate_symbolic(self, substitutions: Mapping[Any, Any]) -> 'Expression':
         return Expression.make(recursive_substitution(sympify(self.underlying_expression), substitutions))
 
     @property
@@ -306,6 +326,9 @@ class ExpressionScalar(Expression):
     def __neg__(self) -> 'ExpressionScalar':
         return self.make(self._sympified_expression.__neg__())
 
+    def __pos__(self):
+        return self.make(self._sympified_expression.__pos__())
+
     @property
     def original_expression(self) -> Union[str, Number]:
         return self._original_expression
@@ -366,3 +389,6 @@ class NonNumericEvaluation(Exception):
             dtype = type(self.non_numeric_result)
         return "The result of evaluate_numeric is of type {} " \
                "which is not a number".format(dtype)
+
+
+ExpressionLike = TypeVar('ExpressionLike', str, Number, sympy.Expr, ExpressionScalar)

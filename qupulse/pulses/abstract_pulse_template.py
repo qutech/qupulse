@@ -4,7 +4,7 @@ import warnings
 
 from qupulse import ChannelID
 from qupulse.expressions import ExpressionScalar
-from qupulse.serialization import PulseRegistryType
+from qupulse.serialization import PulseRegistryType, Serializable
 from qupulse.pulses.pulse_template import PulseTemplate
 
 
@@ -12,6 +12,9 @@ __all__ = ["AbstractPulseTemplate", "UnlinkWarning"]
 
 
 class AbstractPulseTemplate(PulseTemplate):
+    _PROPERTY_DOC = """Abstraction of :py:attr:`.PulseTemplate.{name}`. Raises :class:`.NotSpecifiedError` if the
+    abstract template is unlinked or the property was not specified."""
+
     def __init__(self, identifier: str,
                  *,
                  defined_channels: Optional[Set[ChannelID]]=None,
@@ -19,12 +22,11 @@ class AbstractPulseTemplate(PulseTemplate):
                  measurement_names: Optional[Set[str]]=None,
                  integral: Optional[Dict[ChannelID, ExpressionScalar]]=None,
                  duration: Optional[ExpressionScalar]=None,
-                 is_interruptable: Optional[bool]=None,
                  registry: Optional[PulseRegistryType]=None):
         """This pulse template can be used as a place holder for a pulse template with a defined interface. Pulse
-        template properties like `defined_channels` can be passed on initialization to declare those properties who make
-        up the interface. Omitted properties raise an `NotSpecifiedError` exception if accessed. Properties which have
-        been accessed are marked as "frozen".
+        template properties like :func:`defined_channels` can be passed on initialization to declare those properties who make
+        up the interface. Omitted properties raise an :class:`.NotSpecifiedError` exception if accessed. Properties
+        which have been accessed are marked as "frozen".
 
         The abstract pulse template can be linked to another pulse template by calling the `link_to` member. The target
         has to have the same properties for all properties marked as "frozen". This ensures a property always returns
@@ -33,8 +35,7 @@ class AbstractPulseTemplate(PulseTemplate):
         Example:
             >>> abstract_readout = AbstractPulseTemplate('readout', defined_channels={'X', 'Y'})
             >>> assert abstract_readout.defined_channels == {'X', 'Y'}
-
-            This will raise an exception
+            >>> # This will raise an exception because duration is not specified
             >>> print(abstract_readout.duration)
 
         Args:
@@ -44,7 +45,6 @@ class AbstractPulseTemplate(PulseTemplate):
             measurement_names: Optional property
             integral: Optional property
             duration: Optional property
-            is_interruptable: Optional property
             registry: Instance is registered here if specified
         """
         super().__init__(identifier=identifier)
@@ -69,9 +69,6 @@ class AbstractPulseTemplate(PulseTemplate):
 
         if duration:
             self._declared_properties['duration'] = ExpressionScalar(duration)
-
-        if is_interruptable is not None:
-            self._declared_properties['is_interruptable'] = bool(is_interruptable)
 
         self._linked_target = None
         self.serialize_linked = False
@@ -138,15 +135,17 @@ class AbstractPulseTemplate(PulseTemplate):
         raise NotImplementedError('this should never be called as we overrode _create_program')  # pragma: no cover
 
     _create_program = partialmethod(_forward_if_linked, '_create_program')
-    build_sequence = partialmethod(_forward_if_linked, 'build_sequence')
-    requires_stop = partialmethod(_forward_if_linked, 'requires_stop')
 
-    is_interruptable = property(partial(_get_property, property_name='is_interruptable'))
-    defined_channels = property(partial(_get_property, property_name='defined_channels'))
-    duration = property(partial(_get_property, property_name='duration'))
-    measurement_names = property(partial(_get_property, property_name='measurement_names'))
-    integral = property(partial(_get_property, property_name='integral'))
-    parameter_names = property(partial(_get_property, property_name='parameter_names'))
+    defined_channels = property(partial(_get_property, property_name='defined_channels'),
+                                doc=_PROPERTY_DOC.format(name='defined_channels'))
+    duration = property(partial(_get_property, property_name='duration'),
+                        doc=_PROPERTY_DOC.format(name='duration'))
+    measurement_names = property(partial(_get_property, property_name='measurement_names'),
+                                 doc=_PROPERTY_DOC.format(name='measurement_names'))
+    integral = property(partial(_get_property, property_name='integral'),
+                        doc=_PROPERTY_DOC.format(name='integral'))
+    parameter_names = property(partial(_get_property, property_name='parameter_names'),
+                               doc=_PROPERTY_DOC.format(name='parameter_names'))
 
 
 class NotSpecifiedError(RuntimeError):

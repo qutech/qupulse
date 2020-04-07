@@ -3,14 +3,20 @@ from unittest import TestCase, mock
 import time
 from more_itertools import take
 from itertools import zip_longest
+import sys
+import tempfile
+import pathlib
 
 import numpy as np
 
 from qupulse.expressions import ExpressionScalar
-from qupulse.pulses.parameters import MappedParameter, ConstantParameter
+from qupulse.parameter_scope import DictScope
+
 from qupulse._program._loop import Loop
 from qupulse._program.seqc import BinaryWaveform, loop_to_seqc, WaveformPlayback, Repeat, SteppingRepeat, Scope,\
-    to_node_clusters, find_sharable_waveforms, mark_sharable_waveforms, UserRegisterManager, HDAWGProgramManager
+    to_node_clusters, find_sharable_waveforms, mark_sharable_waveforms, UserRegisterManager, HDAWGProgramManager,\
+    UserRegister, WaveformFileSystem
+from qupulse._program.volatile import VolatileRepetitionCount
 
 from tests.pulses.sequencing_dummies import DummyWaveform
 
@@ -64,8 +70,9 @@ def complex_program_as_loop(unique_wfs, wf_same):
     root.append_child(waveform=unique_wfs[0], repetition_count=21)
     root.append_child(waveform=wf_same, repetition_count=23)
 
-    mapped = MappedParameter(ExpressionScalar('n + 4'), {'n': ConstantParameter(3)})
-    root.append_child(waveform=wf_same, repetition_count=7, repetition_parameter=mapped)
+    volatile_repetition = VolatileRepetitionCount(ExpressionScalar('n + 4'),
+                                                  DictScope.from_kwargs(n=3, volatile={'n'}))
+    root.append_child(waveform=wf_same, repetition_count=volatile_repetition)
 
     return root
 
@@ -98,6 +105,67 @@ class DummyWfManager:
     def request_concatenated(self, wf):
         self.concatenated.append(wf)
         return 0
+
+
+class WaveformFileSystemTests(TestCase):
+    def setUp(self) -> None:
+        clients = [mock.Mock(), mock.Mock()]
+        bin_waveforms = [mock.Mock(), mock.Mock(), mock.Mock()]
+        table_data = [np.ones(1, dtype=np.uint16) * i for i, _ in enumerate(bin_waveforms)]
+        for bin_wf, tab in zip(bin_waveforms, table_data):
+            bin_wf.to_csv_compatible_table.return_value = tab
+
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.table_data = table_data
+        self.clients = clients
+        self.waveforms = [
+            {'0': bin_waveforms[0], '1': bin_waveforms[1]},
+            {'1': bin_waveforms[1], '2': bin_waveforms[2]}
+        ]
+        self.fs = WaveformFileSystem(pathlib.Path(self.temp_dir.name))
+
+    def read_files(self) -> dict:
+        return {
+            p.name: p.read_text().strip() for p in self.fs._path.iterdir()
+        }
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def test_pub_sync(self):
+        with mock.patch.object(self.fs, '_sync') as mock_sync:
+            self.fs.sync(self.clients[0], self.waveforms[0], hallo=0)
+            mock_sync.assert_called_once_with(hallo=0)
+
+            self.assertEqual({id(self.clients[0]): self.waveforms[0]}, self.fs._required)
+
+    def test_sync(self):
+        self.fs.sync(self.clients[0], self.waveforms[0])
+        self.assertEqual({'0': '0', '1': '1'}, self.read_files())
+
+        self.fs.sync(self.clients[0], self.waveforms[1])
+        self.assertEqual({'2': '2', '1': '1'}, self.read_files())
+
+        self.fs.sync(self.clients[1], self.waveforms[0])
+        self.assertEqual({'2': '2', '1': '1', '0': '0'}, self.read_files())
+
+    def test_sync_write_all(self):
+        self.fs.sync(self.clients[0], self.waveforms[0])
+        self.assertEqual({'0': '0', '1': '1'}, self.read_files())
+
+        self.table_data[0][:] = 7
+        self.fs.sync(self.clients[0], self.waveforms[0])
+        self.assertEqual({'0': '0', '1': '1'}, self.read_files())
+
+        self.fs.sync(self.clients[0], self.waveforms[0], write_all=True)
+        self.assertEqual({'0': '7', '1': '1'}, self.read_files())
+
+    def test_sync_no_delete(self):
+        self.fs.sync(self.clients[0], self.waveforms[0])
+        self.assertEqual({'0': '0', '1': '1'}, self.read_files())
+
+        self.fs.sync(self.clients[0], self.waveforms[1], delete=False)
+        self.assertEqual({'2': '2', '1': '1', '0': '0'}, self.read_files())
 
 
 class SEQCNodeTests(TestCase):
@@ -617,20 +685,49 @@ repeat(12) {
         self.assertEqual(expected, seqc_code)
 
 
+class UserRegisterTest(unittest.TestCase):
+    def test_conversions(self):
+        reg = UserRegister(zero_based_value=3)
+        self.assertEqual(3, reg.to_seqc())
+        self.assertEqual(3, reg.to_labone())
+        self.assertEqual(4, reg.to_web_interface())
+
+        reg = UserRegister(one_based_value=4)
+        self.assertEqual(3, reg.to_seqc())
+        self.assertEqual(3, reg.to_labone())
+        self.assertEqual(4, reg.to_web_interface())
+
+        self.assertEqual(reg, UserRegister.from_seqc(3))
+        self.assertEqual(reg, UserRegister.from_labone(3))
+        self.assertEqual(reg, UserRegister.from_web_interface(4))
+
+    def test_formatting(self):
+        reg = UserRegister.from_seqc(3)
+
+        with self.assertRaises(ValueError):
+            '{}'.format(reg)
+
+        self.assertEqual('3', '{:seqc}'.format(reg))
+        self.assertEqual('4', '{:web}'.format(reg))
+        self.assertEqual('UserRegister(zero_based_value=3)', repr(reg))
+        self.assertEqual(repr(reg), '{:r}'.format(reg))
+
+
 class UserRegisterManagerTest(unittest.TestCase):
     def test_require(self):
         manager = UserRegisterManager([7, 8, 9], 'test{register}')
 
-        required = [manager.require(0), manager.require(1), manager.require(2)]
+        required = [manager.request(0), manager.request(1), manager.request(2)]
 
         self.assertEqual({'test7', 'test8', 'test9'}, set(required))
-        self.assertEqual(required[1], manager.require(1))
+        self.assertEqual(required[1], manager.request(1))
 
         with self.assertRaisesRegex(ValueError, "No register"):
-            manager.require(3)
+            manager.request(3)
 
 
 class HDAWGProgramManagerTest(unittest.TestCase):
+    @unittest.skipIf(sys.version_info.minor < 6, "This test requires dict to be ordered.")
     def test_full_run(self):
         defined_channels = frozenset(['A', 'B', 'C'])
 
@@ -654,7 +751,7 @@ class HDAWGProgramManagerTest(unittest.TestCase):
 
         manager.add_program('test', root, channels, markers, amplitudes, offsets, volatage_transformations, sample_rate)
 
-        self.assertEqual({2: 7}, manager.get_register_values('test'))
+        self.assertEqual({UserRegister(zero_based_value=2): 7}, manager.get_register_values('test'))
         seqc_program = manager.to_seqc_program()
         expected_program = """const PROG_SEL_REGISTER = 0;
 const TRIGGER_REGISTER = 1;

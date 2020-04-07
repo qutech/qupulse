@@ -33,6 +33,16 @@ class dummy_pyvisa(dummy_package):
                     answers = [self.answers[q] if q in self.answers else self.default_answer
                                for q in ques]
                     return ';'.join(answers)
+
+                def query(self, *args, **kwargs):
+                    self.logged_asks.append((args, kwargs))
+                    ques = args[0].split(';')
+                    ques = [q.strip(' ?') for q in ques if q.strip().endswith('?')]
+                    answers = [self.answers[q] if q in self.answers else self.default_answer
+                               for q in ques]
+                    return ';'.join(answers)
+
+
 dummy_pyvisa.resources.MessageBasedResource = dummy_pyvisa.resources.messagebased.MessageBasedResource
 
 
@@ -153,6 +163,9 @@ class dummy_teawg(dummy_package):
             self._download_adv_seq_table_calls = []
             self._download_sequencer_table_calls = []
 
+        @property
+        def is_simulator(self):
+            return False
         @property
         def visa_inst(self):
             return self._visa_inst

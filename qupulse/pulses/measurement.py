@@ -1,10 +1,10 @@
-from typing import Optional, List, Tuple, Union, Dict, Set
+from typing import Optional, List, Tuple, Union, Dict, Set, Mapping
 from numbers import Real
 import itertools
 
 from qupulse.expressions import Expression
 from qupulse.utils.types import MeasurementWindow
-from qupulse.pulses.parameters import Parameter
+from qupulse.parameter_scope import Scope
 
 MeasurementDeclaration = Tuple[str, Union[Expression, str, Real], Union[Expression, str, Real]]
 
@@ -23,30 +23,33 @@ class MeasurementDefiner:
                 raise ValueError('Measurement window length may not be negative')
 
     def get_measurement_windows(self,
-                                parameters: Dict[str, Real],
+                                parameters: Union[Mapping[str, Real], Scope],
                                 measurement_mapping: Dict[str, Optional[str]]) -> List[MeasurementWindow]:
         """Calculate measurement windows with the given parameter set and rename them woth the measurement mapping"""
-        def get_val(v):
-            return v.evaluate_numeric(**parameters)
+        try:
+            volatile = parameters.get_volatile_parameters().keys()
+        except AttributeError:
+            volatile = frozenset()
 
-        resulting_windows = [(measurement_mapping[name], get_val(begin), get_val(length))
-                             for name, begin, length in self._measurement_windows
-                             if measurement_mapping[name] is not None]
+        resulting_windows = []
+        for name, begin, length in self._measurement_windows:
+            name = measurement_mapping[name]
+            if name is None:
+                continue
 
-        for _, begin, length in resulting_windows:
-            if begin < 0 or length < 0:
+            assert volatile.isdisjoint(begin.variables) and volatile.isdisjoint(length.variables), "volatile measurement parameters are not supported"
+
+            begin_val = begin.evaluate_in_scope(parameters)
+            length_val = length.evaluate_in_scope(parameters)
+            if begin_val < 0 or length_val < 0:
                 raise ValueError('Measurement window with negative begin or length: {}, {}'.format(begin, length))
-        return resulting_windows
 
-    def insert_measurement_instruction(self,
-                                       instruction_block,
-                                       parameters: Dict[str, Parameter],
-                                       measurement_mapping: Dict[str, Optional[str]]):
-        parameters = {k: parameters[k].get_value()
-                      for k in self.measurement_parameters}
-        measurements = self.get_measurement_windows(parameters, measurement_mapping)
-        if measurements:
-            instruction_block.add_instruction_meas(measurements)
+            resulting_windows.append(
+                (name,
+                 begin_val,
+                 length_val)
+            )
+        return resulting_windows
 
     @property
     def measurement_parameters(self) -> Set[str]:

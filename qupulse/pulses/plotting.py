@@ -6,7 +6,7 @@ Functions:
     - plot: Plot a pulse using matplotlib.
 """
 
-from typing import Dict, Tuple, Any, Generator, Optional, Set, List, Union
+from typing import Dict, Tuple, Any, Optional, Set, List, Union
 from numbers import Real
 
 import numpy as np
@@ -14,99 +14,17 @@ import warnings
 import operator
 import itertools
 
-from qupulse.utils.types import ChannelID, MeasurementWindow, has_type_interface, TimeType
+from qupulse.utils.types import ChannelID, MeasurementWindow, has_type_interface
 from qupulse.pulses.pulse_template import PulseTemplate
 from qupulse.pulses.parameters import Parameter
-from qupulse._program.waveforms import Waveform, SequenceWaveform
-from qupulse._program.instructions import EXECInstruction, STOPInstruction, AbstractInstructionBlock, \
-    REPJInstruction, MEASInstruction, GOTOInstruction, InstructionPointer
+from qupulse._program.waveforms import Waveform
 from qupulse._program._loop import Loop, to_waveform
 
 
 __all__ = ["render", "plot", "PlottingNotPossibleException"]
 
 
-def iter_waveforms(instruction_block: AbstractInstructionBlock,
-                   expected_return: Optional[InstructionPointer]=None) -> Generator[Waveform, None, None]:
-    # todo [2018-08-30]: seems to be unused.. remove?
-    for i, instruction in enumerate(instruction_block):
-        if isinstance(instruction, EXECInstruction):
-            yield instruction.waveform
-        elif isinstance(instruction, REPJInstruction):
-            expected_repj_return = InstructionPointer(instruction_block, i+1)
-            repj_instructions = instruction.target.block.instructions[instruction.target.offset:]
-            for _ in range(instruction.count):
-                yield from iter_waveforms(repj_instructions, expected_repj_return)
-        elif isinstance(instruction, MEASInstruction):
-            continue
-        elif isinstance(instruction, GOTOInstruction):
-            if instruction.target != expected_return:
-                raise NotImplementedError("Instruction block contains an unexpected GOTO instruction.")
-            return
-        elif isinstance(instruction, STOPInstruction):
-            return
-        else:
-            raise NotImplementedError('Rendering cannot handle instructions of type {}.'.format(type(instruction)))
-
-
-def iter_instruction_block(instruction_block: AbstractInstructionBlock,
-                           extract_measurements: bool) -> Tuple[list, list, TimeType]:
-    """Iterates over the instructions contained in an InstructionBlock (thus simulating execution).
-
-    In effect, this function simulates the execution of the control flow represented by the passed InstructionBlock
-    and returns all waveforms in the order they would be executed on the hardware, along with all measurements that
-    would be made during that execution (if the extract_measurement argument is True). The waveforms are passed back
-    as Waveform objects (and are not sampled at anytime during the execution of this function).
-
-    Args:
-        instruction_block: The InstructionBlock to iterate over.
-        extract_measurements: If True, a list of all measurement simulated during block iteration will be returned.
-
-    Returns:
-        A tuple (waveforms, measurements, time) where waveforms is a sequence of Waveform objects in the order they
-        would be executed according to the given InstructionBlock, measurements is a similar sequence of measurements
-        that would be made (where each measurement is represented by a tuple (name, start_time, duration)) and time is
-        the total execution duration of the block (i.e. the accumulated duration of all waveforms).
-        measurements is an empty list if extract_measurements is not True.
-    """
-    block_stack = [(enumerate(instruction_block), None)]
-    waveforms = []
-    measurements = []
-    time = TimeType(0)
-
-    while block_stack:
-        block, expected_return = block_stack.pop()
-
-        for i, instruction in block:
-            if isinstance(instruction, EXECInstruction):
-                waveforms.append(instruction.waveform)
-                time += instruction.waveform.duration
-            elif isinstance(instruction, REPJInstruction):
-                expected_repj_return = InstructionPointer(instruction_block, i+1)
-                repj_instructions = instruction.target.block.instructions[instruction.target.offset:]
-
-                block_stack.append((block, expected_return))
-                block_stack.extend((enumerate(repj_instructions), expected_repj_return)
-                                   for _ in range(instruction.count))
-                break
-            elif isinstance(instruction, MEASInstruction):
-                if extract_measurements:
-                    measurements.extend((name, begin+time, length)
-                                        for name, begin, length in instruction.measurements)
-            elif isinstance(instruction, GOTOInstruction):
-                if instruction.target != expected_return:
-                    raise NotImplementedError("Instruction block contains an unexpected GOTO instruction.")
-                break
-            elif isinstance(instruction, STOPInstruction):
-                block_stack.clear()
-                break
-            else:
-                raise NotImplementedError('Rendering cannot handle instructions of type {}.'.format(type(instruction)))
-
-    return waveforms, measurements, time
-
-
-def render(program: Union[AbstractInstructionBlock, Loop],
+def render(program: Union[Loop],
            sample_rate: Real = 10.0,
            render_measurements: bool = False,
            time_slice: Tuple[Real, Real] = None,
@@ -133,11 +51,6 @@ def render(program: Union[AbstractInstructionBlock, Loop],
         """
     if has_type_interface(program, Loop):
         waveform, measurements = _render_loop(program, render_measurements=render_measurements)
-    elif has_type_interface(program, AbstractInstructionBlock):
-        warnings.warn("InstructionBlock API is deprecated", DeprecationWarning)
-        if time_slice is not None:
-            raise ValueError("Keyword argument time_slice is not supported when rendering instruction blocks")
-        waveform, measurements = _render_instruction_block(program, render_measurements=render_measurements)
     else:
         raise ValueError('Cannot render an object of type %r' % type(program), program)
 
@@ -167,8 +80,8 @@ def render(program: Union[AbstractInstructionBlock, Loop],
     if sample_count < 2:
         raise PlottingNotPossibleException(pulse=None,
                                            description='cannot render sequence with less than 2 data points')
-    if not float(sample_count).is_integer():
-        warnings.warn("Sample count is not an integer. Will be rounded (this changes the sample rate).")
+    if not round(float(sample_count), 10).is_integer():
+        warnings.warn("Sample count {sample_count} is not an integer. Will be rounded (this changes the sample rate).".format(sample_count=sample_count))
 
     times = np.linspace(float(start_time), float(end_time), num=int(sample_count), dtype=float)
     times[-1] = np.nextafter(times[-1], times[-2])
@@ -179,19 +92,6 @@ def render(program: Union[AbstractInstructionBlock, Loop],
         waveform.get_sampled(channel=ch, sample_times=times, output_array=ch_voltage)
 
     return times, voltages, measurements
-
-
-def _render_instruction_block(sequence: AbstractInstructionBlock,
-                              render_measurements=False) -> Tuple[Optional[Waveform], List[MeasurementWindow]]:
-    """Transform program into single waveform and measurement windows. The specific implementation of render for
-    InstructionBlock arguments."""
-
-    waveforms, measurements, total_time = iter_instruction_block(sequence, render_measurements)
-    if not waveforms:
-        return None, measurements
-    sequence_waveform = SequenceWaveform(waveforms)
-
-    return sequence_waveform, measurements
 
 
 def _render_loop(loop: Loop,

@@ -1,6 +1,9 @@
+"""This package contains utility functions and classes as well as custom sympy extensions(hacks)."""
+
 from typing import Union, Iterable, Any, Tuple, Mapping
 import itertools
 import re
+import numbers
 from collections import OrderedDict
 
 import numpy
@@ -26,7 +29,7 @@ def checked_int_cast(x: Union[float, int, numpy.ndarray], epsilon: float=1e-6) -
     return int_x
 
 
-def is_integer(x: Union[float, int], epsilon: float=1e-6) -> bool:
+def is_integer(x: numbers.Real, epsilon: float=1e-6) -> bool:
     return abs(x - int(round(x))) < epsilon
 
 
