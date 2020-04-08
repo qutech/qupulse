@@ -9,7 +9,7 @@ import pytabor
 import numpy as np
 
 from qupulse._program.tabor import TableDescription, TableEntry
-from qupulse.hardware.awgs.features import DeviceControl
+from qupulse.hardware.awgs.features import DeviceControl, OffsetAmplitude, ProgramManagement
 from qupulse.hardware.awgs.tabor import TaborDevice, TaborException, TaborSegment, TaborChannelTuple, \
     TaborOffsetAmplitude, TaborDeviceControl, TaborProgramManagement
 
@@ -101,7 +101,7 @@ class TaborSimulatorBasedTest(unittest.TestCase):
         self.instrument = self.simulator_manager.connect()
 
     def tearDown(self):
-        self.instrument[TaborDeviceControl].reset()
+        self.instrument[DeviceControl].reset()
         self.simulator_manager.disconnect()
 
     @staticmethod
@@ -135,12 +135,12 @@ class TaborAWGRepresentationTests(TaborSimulatorBasedTest):
 
     def test_amplitude(self):
         for channel in self.instrument.channels:
-            self.assertIsInstance(channel[TaborOffsetAmplitude].amplitude, float)
+            self.assertIsInstance(channel[OffsetAmplitude].amplitude, float)
 
         self.instrument.send_cmd(':INST:SEL 1; :OUTP:COUP DC')
         self.instrument.send_cmd(':VOLT 0.7')
 
-        self.assertAlmostEqual(.7, self.instrument.channels[0][TaborOffsetAmplitude].amplitude)
+        self.assertAlmostEqual(.7, self.instrument.channels[0][OffsetAmplitude].amplitude)
 
     def test_select_marker(self):
         with self.assertRaises(IndexError):
@@ -216,7 +216,7 @@ class TaborMemoryReadTests(TaborSimulatorBasedTest):
             waveform_mode = mode
 
         self.channel_pair._known_programs['dummy_program'] = (waveform_to_segment_index, DummyProgram)
-        self.channel_pair[TaborProgramManagement].change_armed_program('dummy_program') #TODO: change - change_armed_program in the feature doesnt work yet
+        self.channel_pair[ProgramManagement].change_armed_program('dummy_program') #TODO: change - change_armed_program in the feature doesnt work yet
 
     def test_read_waveforms(self):
         self.channel_pair._amend_segments(self.segments)
@@ -243,7 +243,7 @@ class TaborMemoryReadTests(TaborSimulatorBasedTest):
 
         sequence_tables = self.channel_pair.read_sequence_tables()
 
-        actual_sequence_tables = [self.channel_pair[TaborProgramManagement]._idle_sequence_table] + [[(rep, index+2, jump)
+        actual_sequence_tables = [self.channel_pair[ProgramManagement]._idle_sequence_table] + [[(rep, index+2, jump)
                                                                              for rep, index, jump in table]
                                                                              for table in self.sequence_tables_raw]
 
@@ -271,7 +271,7 @@ class TaborMemoryReadTests(TaborSimulatorBasedTest):
         self.arm_program(self.sequence_tables, self.advanced_sequence_table, None, np.asarray([1, 2]))
 
         para = {'a': 5}
-        actual_sequence_tables = [self.channel_pair[TaborProgramManagement]._idle_sequence_table] + [[(rep, index + 2, jump)
+        actual_sequence_tables = [self.channel_pair[ProgramManagement]._idle_sequence_table] + [[(rep, index + 2, jump)
                                                                               for rep, index, jump in table]
                                                                              for table in self.sequence_tables_raw]
 
@@ -293,4 +293,3 @@ class TaborMemoryReadTests(TaborSimulatorBasedTest):
         expected = list(np.asarray(d)
                         for d in zip(*actual_advanced_table))
         np.testing.assert_equal(advanced_table, expected)
-

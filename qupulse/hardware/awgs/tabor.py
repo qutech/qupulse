@@ -75,17 +75,17 @@ def with_select(function_object: Callable[["TaborChannelTuple", Any], Any]) -> C
 class TaborChannelSynchronization(ChannelSynchronization):
     def __init__(self, device: "TaborDevice"):
         super().__init__()
-        self._parent = device
+        self._parent = weakref.ref(device)
 
     def synchronize_channels(self, group_size: int) -> None:
         if group_size == 2:
             i = 0
             while i < group_size:
-                self._parent._channel_tuples.append(
+                self._parent()._channel_tuples.append(
                     TaborChannelTuple((i + 1),
-                                      self._parent,
-                                      self._parent.channels[(i * group_size):((i * group_size) + group_size)],
-                                      self._parent.marker_channels[(i * group_size):((i * group_size) + group_size)])
+                                      self._parent(),
+                                      self._parent().channels[(i * group_size):((i * group_size) + group_size)],
+                                      self._parent().marker_channels[(i * group_size):((i * group_size) + group_size)])
                 )
                 i = i + 1
         else:
@@ -95,36 +95,36 @@ class TaborChannelSynchronization(ChannelSynchronization):
 class TaborDeviceControl(DeviceControl):
     def __init__(self, device: "TaborDevice"):
         super().__init__()
-        self._parent = device
+        self._parent = weakref.ref(device)
 
     def enable(self) -> None:
         """
         This method immediately generates the selected output waveform, if the device is in continuous and armed
         run mode.
         """
-        self._parent.send_cmd(":ENAB")
+        self._parent().send_cmd(":ENAB")
 
     def abort(self) -> None:
         """
         With abort you can terminate the current generation of the output waveform. When the output waveform is
         terminated the output starts generating an idle waveform.
         """
-        self._parent.send_cmd(":ABOR")
+        self._parent().send_cmd(":ABOR")
 
     def reset(self) -> None:
         """
         Resetting the whole device. A command for resetting is send to the Device, the device is initialized again and
         all channel tuples are cleared.
         """
-        self._parent.send_cmd(':RES')
-        self._parent._coupled = None
+        self._parent().send_cmd(':RES')
+        self._parent()._coupled = None
 
-        self._parent._initialize()
-        for channel_tuple in self._parent.channel_tuples:
+        self._parent()._initialize()
+        for channel_tuple in self._parent().channel_tuples:
             channel_tuple[TaborProgramManagement].clear()
 
     def trigger(self) -> None:
-        self._parent.send_cmd(":TRIG")
+        self._parent().send_cmd(":TRIG")
 
 
 # Implementation
@@ -367,12 +367,12 @@ class TaborDevice(AWGDevice):
 class TaborOffsetAmplitude(OffsetAmplitude):
     def __init__(self, channel: "TaborChannel"):
         super().__init__()
-        self._parent = channel
+        self._parent = weakref.ref(channel)
 
     @property
     def offset(self) -> float:
         return float(
-            self._parent.device._send_query(":INST:SEL {channel}; :VOLT:OFFS?".format(channel=self._parent.idn)))
+            self._parent.device._send_query(":INST:SEL {channel}; :VOLT:OFFS?".format(channel=self._parent().idn)))
 
     @offset.setter
     def offset(self, offset: float) -> None:
@@ -380,18 +380,18 @@ class TaborOffsetAmplitude(OffsetAmplitude):
 
     @property
     def amplitude(self) -> float:
-        coupling = self._parent.device._send_query(":INST:SEL {channel}; :OUTP:COUP?".format(channel=self._parent.idn))
+        coupling = self._parent().device._send_query(":INST:SEL {channel}; :OUTP:COUP?".format(channel=self._parent().idn))
         if coupling == "DC":
-            return float(self._parent.device._send_query(":VOLT?"))
+            return float(self._parent().device._send_query(":VOLT?"))
         elif coupling == "HV":
-            return float(self._parent.device._send_query(":VOLT:HV?"))
+            return float(self._parent().device._send_query(":VOLT:HV?"))
         else:
             raise TaborException("Unknown coupling: {}".format(coupling))
 
     @amplitude.setter
     def amplitude(self, amplitude: float) -> None:
-        self._parent.device.send_cmd(":INST:SEL {channel}; :OUTP:COUP DC".format(channel=self._parent.idn))
-        self._parent.device.send_cmd(":VOLT {amp}".format(amp=amplitude))
+        self._parent().device.send_cmd(":INST:SEL {channel}; :OUTP:COUP DC".format(channel=self._parent().idn))
+        self._parent().device.send_cmd(":VOLT {amp}".format(amp=amplitude))
 
     @property
     def amplitude_offset_handling(self) -> str:
@@ -402,13 +402,13 @@ class TaborOffsetAmplitude(OffsetAmplitude):
         pass  # TODO: to implement
 
 
-class TaborChannelActivatable(ActivatableChannels):
+class TaborActivatableChannels(ActivatableChannels):
     def __init__(self, marker_channel: "TaborMarkerChannel"):
         super().__init__()
         self._parent = weakref.ref(marker_channel)
 
     @property
-    def active(self) -> bool:
+    def enabled(self) -> bool:
         pass  # TODO: to implement
 
     def enable(self):
@@ -465,14 +465,14 @@ class TaborProgramManagement(ProgramManagement):
         super().__init__()
         self._programs = {}
         self._armed_program = None
-        self._parent = channel_tuple
+        self._parent = weakref.ref(channel_tuple)
 
         self._idle_sequence_table = [(1, 1, 0), (1, 1, 0), (1, 1, 0)]
 
     @property
     def programs(self) -> Set[str]:
         """The set of program names that can currently be executed on the hardware AWG."""
-        return set(program.name for program in self._parent._known_programs.keys())
+        return set(program.name for program in self._parent()._known_programs.keys())
 
     @with_configuration_guard
     @with_select
@@ -493,7 +493,7 @@ class TaborProgramManagement(ProgramManagement):
             raise ValueError("Wrong number of voltage transformations")
 
         # adjust program to fit criteria
-        sample_rate = self._parent.device.channel_tuples[0].sample_rate
+        sample_rate = self._parent().device.channel_tuples[0].sample_rate
         make_compatible(program,
                         minimal_waveform_length=192,
                         waveform_quantum=16,
@@ -508,32 +508,32 @@ class TaborProgramManagement(ProgramManagement):
         Args:
             name (str): The name of the program to remove.
         """
-        self._parent.free_program(name)
-        self._parent.cleanup()
+        self._parent().free_program(name)
+        self._parent().cleanup()
 
     def clear(self) -> None:
         """Delete all segments and clear memory"""
 
-        self._parent.device.channels[0]._select()
-        self._parent.device.send_cmd(":TRAC:DEL:ALL")
-        self._parent.device.send_cmd(":SOUR:SEQ:DEL:ALL")
-        self._parent.device.send_cmd(":ASEQ:DEL")
+        self._parent().device.channels[0]._select()
+        self._parent().device.send_cmd(":TRAC:DEL:ALL")
+        self._parent().device.send_cmd(":SOUR:SEQ:DEL:ALL")
+        self._parent().device.send_cmd(":ASEQ:DEL")
 
-        self._parent.device.send_cmd(":TRAC:DEF 1, 192")
-        self._parent.device.send_cmd(":TRAC:SEL 1")
-        self._parent.device.send_cmd(":TRAC:MODE COMB")
-        self._parent.device._send_binary_data(pref=":TRAC:DATA", bin_dat=self._parent._idle_segment.get_as_binary())
+        self._parent().device.send_cmd(":TRAC:DEF 1, 192")
+        self._parent().device.send_cmd(":TRAC:SEL 1")
+        self._parent().device.send_cmd(":TRAC:MODE COMB")
+        self._parent().device._send_binary_data(pref=":TRAC:DATA", bin_dat=self._parent()._idle_segment.get_as_binary())
 
-        self._parent._segment_lengths = 192 * np.ones(1, dtype=np.uint32)
-        self._parent._segment_capacity = 192 * np.ones(1, dtype=np.uint32)
-        self._parent._segment_hashes = np.ones(1, dtype=np.int64) * hash(self._parent._idle_segment)
-        self._parent._segment_references = np.ones(1, dtype=np.uint32)
+        self._parent()._segment_lengths = 192 * np.ones(1, dtype=np.uint32)
+        self._parent()._segment_capacity = 192 * np.ones(1, dtype=np.uint32)
+        self._parent()._segment_hashes = np.ones(1, dtype=np.int64) * hash(self._parent()._idle_segment)
+        self._parent()._segment_references = np.ones(1, dtype=np.uint32)
 
-        self._parent._advanced_sequence_table = []
-        self._parent._sequencer_tables = []
+        self._parent()._advanced_sequence_table = []
+        self._parent()._sequencer_tables = []
 
-        self._parent._known_programs = dict()
-        self._parent[TaborProgramManagement].change_armed_program(None)
+        self._parent()._known_programs = dict()
+        self.change_armed_program(None)
 
     @with_select
     def arm(self, name: Optional[str]) -> None:
@@ -543,10 +543,10 @@ class TaborProgramManagement(ProgramManagement):
         Args:
             name (str): the program the device should change to
         """
-        if self._parent._current_program == name:
-            self._parent.device.send_cmd("SEQ:SEL 1")
+        if self._parent()._current_program == name:
+            self._parent().device.send_cmd("SEQ:SEL 1")
         else:
-            self._parent[TaborProgramManagement].change_armed_program(name)
+            self.change_armed_program(name)
 
     @with_select
     def run_current_program(self) -> None:
@@ -556,8 +556,8 @@ class TaborProgramManagement(ProgramManagement):
         Throws:
             RuntimeError: This exception is thrown if there is no active program for this device
         """
-        if self._parent._current_program:
-            self._parent.device.send_cmd(':TRIG', paranoia_level=self._parent.internal_paranoia_level)
+        if self._parent()._current_program:
+            self._parent().device.send_cmd(':TRIG', paranoia_level=self._parent().internal_paranoia_level)
         else:
             raise RuntimeError("No program active")
 
@@ -569,7 +569,7 @@ class TaborProgramManagement(ProgramManagement):
             sequencer_tables = [self._idle_sequence_table]
             advanced_sequencer_table = [(1, 1, 0)]
         else:
-            waveform_to_segment_index, program = self._parent._known_programs[name]
+            waveform_to_segment_index, program = self._parent()._known_programs[name]
             waveform_to_segment_number = waveform_to_segment_index + 1
 
             # translate waveform number to actual segment
@@ -588,49 +588,49 @@ class TaborProgramManagement(ProgramManagement):
                 assert len(advanced_sequencer_table) == 1
                 assert len(sequencer_tables) == 2
 
-                while len(sequencer_tables[1]) < self._parent.device.dev_properties["min_seq_len"]:
+                while len(sequencer_tables[1]) < self._parent().device.dev_properties["min_seq_len"]:
                     assert advanced_sequencer_table[0][0] == 1
                     sequencer_tables[1].append((1, 1, 0))
 
         # insert idle sequence in advanced sequence table
         advanced_sequencer_table = [(1, 1, 1)] + advanced_sequencer_table
 
-        while len(advanced_sequencer_table) < self._parent.device.dev_properties["min_aseq_len"]:
+        while len(advanced_sequencer_table) < self._parent().device.dev_properties["min_aseq_len"]:
             advanced_sequencer_table.append((1, 1, 0))
 
-        self._parent.device.send_cmd("SEQ:DEL:ALL", paranoia_level=self._parent.internal_paranoia_level)
-        self._parent._sequencer_tables = []
-        self._parent.device.send_cmd("ASEQ:DEL", paranoia_level=self._parent.internal_paranoia_level)
-        self._parent._advanced_sequence_table = []
+        self._parent().device.send_cmd("SEQ:DEL:ALL", paranoia_level=self._parent().internal_paranoia_level)
+        self._parent()._sequencer_tables = []
+        self._parent().device.send_cmd("ASEQ:DEL", paranoia_level=self._parent().internal_paranoia_level)
+        self._parent()._advanced_sequence_table = []
 
         # download all sequence tables
         for i, sequencer_table in enumerate(sequencer_tables):
-            self._parent.device.send_cmd("SEQ:SEL {}".format(i + 1), paranoia_level=self._parent.internal_paranoia_level)
-            self._parent.device._download_sequencer_table(sequencer_table)
-        self._parent._sequencer_tables = sequencer_tables
-        self._parent.device.send_cmd("SEQ:SEL 1", paranoia_level=self._parent.internal_paranoia_level)
+            self._parent().device.send_cmd("SEQ:SEL {}".format(i + 1), paranoia_level=self._parent().internal_paranoia_level)
+            self._parent().device._download_sequencer_table(sequencer_table)
+        self._parent()._sequencer_tables = sequencer_tables
+        self._parent().device.send_cmd("SEQ:SEL 1", paranoia_level=self._parent().internal_paranoia_level)
 
-        self._parent.device._download_adv_seq_table(advanced_sequencer_table)
-        self._parent._advanced_sequence_table = advanced_sequencer_table
+        self._parent().device._download_adv_seq_table(advanced_sequencer_table)
+        self._parent()._advanced_sequence_table = advanced_sequencer_table
 
-        self._parent._current_program = name
+        self._parent()._current_program = name
 
     def _select(self):
-        self._parent.channels[0]._select()
+        self._parent().channels[0]._select()
 
     @property
     def _configuration_guard_count(self):
-        return self._parent._configuration_guard_count
+        return self._parent()._configuration_guard_count
 
     @_configuration_guard_count.setter
     def _configuration_guard_count(self, configuration_guard_count):
-        self._parent._configuration_guard_count = configuration_guard_count
+        self._parent()._configuration_guard_count = configuration_guard_count
 
     def _enter_config_mode(self):
-        self._parent._enter_config_mode()
+        self._parent()._enter_config_mode()
 
     def _exit_config_mode(self):
-        self._parent._exit_config_mode()
+        self._parent()._exit_config_mode()
 
 
 class TaborChannelTuple(AWGChannelTuple):
@@ -1121,7 +1121,7 @@ class TaborChannelTuple(AWGChannelTuple):
 class TaborMarkerChannelActivatable(ActivatableChannels):
     def __init__(self, marker_channel: "TaborMarkerChannel"):
         super().__init__()
-        self._parent = marker_channel
+        self._parent = weakref.ref(marker_channel)
 
     @property
     def status(self) -> bool:
@@ -1131,10 +1131,10 @@ class TaborMarkerChannelActivatable(ActivatableChannels):
     def status(self, channel_state: bool) -> None:
         command_string = ":INST:SEL {channel}; :SOUR:MARK:SEL {marker}; :SOUR:MARK:SOUR USER; :SOUR:MARK:STAT {active}"
         command_string = command_string.format(
-            channel=self._parent.channel_tuple.channels[0].idn,
-            marker=self._parent.channel_tuple.marker_channels.index(self._parent) + 1,
+            channel=self._parent().channel_tuple.channels[0].idn,
+            marker=self._parent().channel_tuple.marker_channels.index(self._parent()) + 1,
             active="ON" if channel_state else "OFF")
-        self._parent.device.send_cmd(command_string)
+        self._parent().device.send_cmd(command_string)
 
 
 # Implementation

@@ -32,25 +32,25 @@ class ChannelTupleAdapter(AWG):
                markers: Tuple[Optional["ChannelID"], ...],
                voltage_transformation: Tuple[Optional[Callable], ...],
                force: bool = False) -> None:
-        from qupulse.hardware.awgs.tabor import TaborProgramManagement
-        return self._channel_tuple[TaborProgramManagement].upload(name, program, channels, markers,
+        from qupulse.hardware.awgs.tabor import ProgramManagement
+        return self._channel_tuple[ProgramManagement].upload(name, program, channels, markers,
                                                                   voltage_transformation, force)
 
     def remove(self, name: str) -> None:
-        from qupulse.hardware.awgs.tabor import TaborProgramManagement
-        return self._channel_tuple[TaborProgramManagement].remove(name)
+        from qupulse.hardware.awgs.tabor import ProgramManagement
+        return self._channel_tuple[ProgramManagement].remove(name)
 
     def clear(self) -> None:
-        from qupulse.hardware.awgs.tabor import TaborProgramManagement
-        return self._channel_tuple[TaborProgramManagement].clear()
+        from qupulse.hardware.awgs.tabor import ProgramManagement
+        return self._channel_tuple[ProgramManagement].clear()
 
     def arm(self, name: Optional[str]) -> None:
-        from qupulse.hardware.awgs.tabor import TaborProgramManagement
-        return self._channel_tuple[TaborProgramManagement].arm(name)
+        from qupulse.hardware.awgs.tabor import ProgramManagement
+        return self._channel_tuple[ProgramManagement].arm(name)
 
     def programs(self) -> Set[str]:
-        from qupulse.hardware.awgs.tabor import TaborProgramManagement
-        return self._channel_tuple[TaborProgramManagement].programs
+        from qupulse.hardware.awgs.tabor import ProgramManagement
+        return self._channel_tuple[ProgramManagement].programs
 
     def sample_rate(self) -> float:
         return self._channel_tuple.sample_rate
