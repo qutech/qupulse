@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Callable, Optional, Set, Tuple
+from typing import Callable, Optional, Set, Tuple, Dict, Union
 
 from qupulse._program._loop import Loop
 from qupulse.hardware.awgs.base import AWGDeviceFeature, AWGChannelFeature, AWGChannelTupleFeature
@@ -12,6 +12,7 @@ from qupulse.utils.types import ChannelID
 
 class ChannelSynchronization(AWGDeviceFeature, ABC):
     """This Feature is used to synchronise a certain ammount of channels"""
+
     @abstractmethod
     def synchronize_channels(self, group_size: int) -> None:
         """
@@ -26,7 +27,8 @@ class ChannelSynchronization(AWGDeviceFeature, ABC):
 
 class DeviceControl(AWGDeviceFeature, ABC):
     """This feature is used for basic communication with a AWG"""
-    #TODO (toCheck): is this Feature ok like this?
+
+    # TODO (toCheck): is this Feature ok like this?
     @abstractmethod
     def enable(self) -> None:
         """This method generates the selected output waveform."""
@@ -53,6 +55,16 @@ class DeviceControl(AWGDeviceFeature, ABC):
         """
         raise NotImplementedError()
 
+
+class StatusTable(AWGDeviceFeature, ABC):
+    def get_status_table(self) -> Dict[str, Union[str, float, int]]:
+        """
+        Send a lot of queries to the AWG about its settings. A good way to visualize is using pandas.DataFrame
+
+        Returns:
+            An ordered dictionary with the results
+        """
+        raise NotImplementedError()
 
 
 ########################################################################################################################
@@ -189,19 +201,18 @@ class OffsetAmplitude(AWGChannelFeature):
 class ActivatableChannels(AWGChannelFeature):
     @property
     @abstractmethod
-    def status(self) -> bool:
+    def enabled(self) -> bool:
         """
         Returns the the state a channel has at the moment. A channel is either activated or deactivated
         """
         raise NotImplementedError()
 
-    @status.setter
     @abstractmethod
-    def status(self, channel_status: bool) -> None:
-        """
-        Sets the current state of a channel.
+    def enable(self):
+        """Disables the output of a certain channel"""
+        raise NotImplementedError()
 
-        Args:
-            channel_status: the new state of a channel
-        """
+    @abstractmethod
+    def disable(self):
+        """Enables the output of a certain channel"""
         raise NotImplementedError()
