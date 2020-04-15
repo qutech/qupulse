@@ -15,7 +15,7 @@ from qupulse.hardware.awgs.channel_tuple_wrapper import ChannelTupleAdapter
 from qupulse.hardware.awgs.features import ChannelSynchronization, AmplitudeOffsetHandling, OffsetAmplitude, \
     ProgramManagement, ActivatableChannels, DeviceControl, StatusTable
 from qupulse.hardware.util import voltage_to_uint16, find_positions, get_sample_times
-from qupulse.utils.types import Collection
+from qupulse.utils.types import Collection, TimeType
 from qupulse.hardware.awgs.base import AWGChannelTuple, AWGChannel, AWGDevice, AWGMarkerChannel
 from typing import Sequence
 from qupulse._program.tabor import TaborSegment, TaborException, TaborProgram, PlottableProgram, TaborSequencing, \
@@ -725,7 +725,7 @@ class TaborChannelTuple(AWGChannelTuple):
         return self._marker_channels
 
     @property
-    def sample_rate(self) -> float:
+    def sample_rate(self) -> TimeType:
         """Returns the sample rate that the channels of a channel tuple have"""
         return self.device._send_query(":INST:SEL {channel}; :FREQ:RAST?".format(channel=self.channels[0].idn))
 
@@ -1045,25 +1045,11 @@ class TaborChannelTuple(AWGChannelTuple):
         # Wait until AWG is finished
         _ = self.device.main_instrument._visa_inst.query('*OPC?')
 
-    @with_select
-    def _arm(self, name: str) -> None:
-        if self._current_program == name:
-            self.device.send_cmd('SEQ:SEL 1', paranoia_level=self.internal_paranoia_level)
-        else:
-            self[TaborProgramManagement].change_armed_program(name)
-
-    # arm im Feature
-
     def set_program_advanced_sequence_table(self, name, new_advanced_sequence_table):
         self._known_programs[name][1]._advanced_sequencer_table = new_advanced_sequence_table
 
     def set_program_sequence_table(self, name, new_sequence_table):
         self._known_programs[name][1]._sequencer_tables = new_sequence_table
-
-    @property
-    def programs(self) -> Set[str]:
-        """The set of program names that can currently be executed on the hardware AWG."""
-        return set(program for program in self._known_programs.keys())
 
     def _enter_config_mode(self) -> None:
         """Enter the configuration mode if not already in. All outputs are set to the DC offset of the device and the
@@ -1086,7 +1072,7 @@ class TaborChannelTuple(AWGChannelTuple):
             marker_1_cmd = ':SOUR:MARK:SEL 2;:SOUR:MARK:SOUR USER;:SOUR:MARK:STAT OFF'
             # TODO: würde diese ersetzung reichen? - maybe change for synchronisationsfeature
             # for marker_ch in self.marker_channels:
-            #    marker_ch[TaborMarkerChannelActivatable].status = False
+            #    marker_ch[TaborMarkerChannelActivatable].disable()
 
             wf_mode_cmd = ':SOUR:FUNC:MODE FIX'
 
@@ -1100,7 +1086,7 @@ class TaborChannelTuple(AWGChannelTuple):
 
         # TODO: change implementation for channel synchronisation feature
 
-        if self.device._send_query(":INST:COUP:STAT?") == "ON":
+        if self.device.is_coupled():
             # Coupled -> switch all channels at once
             other_channel_tuple: TaborChannelTuple
             if self.channels == self.device.channel_tuples[0].channels:
