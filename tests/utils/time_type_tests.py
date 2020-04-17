@@ -128,10 +128,10 @@ class TestTimeType(unittest.TestCase):
         self.assert_from_float_exact_works(self.fallback_qutypes.TimeType)
 
     def test_from_float_exceptions(self):
-        with self.assertRaisesRegex(ValueError, 'at least 0'):
+        with self.assertRaisesRegex(ValueError, '> 0'):
             qutypes.time_from_float(.8, -1)
 
-        with self.assertRaisesRegex(ValueError, 'smaller 1'):
+        with self.assertRaisesRegex(ValueError, '<= 1'):
             qutypes.time_from_float(.8, 2)
 
 
