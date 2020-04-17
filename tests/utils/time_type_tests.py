@@ -87,6 +87,8 @@ class TestTimeType(unittest.TestCase):
     def assert_fraction_time_from_float_with_precision_works(self, time_type):
         self.assertEqual(time_type.from_float(1000000 / 1000001, 1e-5),
                          fractions.Fraction(1))
+        self.assertEqual(time_type.from_float(2.50000000000008, absolute_error=1e-10),
+                         time_type.from_fraction(5, 2))
 
     def test_fraction_time_from_float_with_precision(self):
         self.assert_fraction_time_from_float_with_precision_works(qutypes.TimeType)
