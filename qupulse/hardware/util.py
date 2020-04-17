@@ -165,10 +165,16 @@ def _zhinst_voltage_to_uint16_numba(size: int, ch1: Optional[np.ndarray], ch2: O
 
     scale = float(2**15 - 1)
 
+    invalid_value = None
+
     for i in range(size):
         if ch1 is not None:
+            if not abs(ch1[i]) <= 1:
+                invalid_value = ch1[i]
             data[i, 0] = ch1[i] * scale
         if ch2 is not None:
+            if not abs(ch2[i]) <= 1:
+                invalid_value = ch2[i]
             data[i, 1] = ch2[i] * scale
         if m1_front is not None:
             data[i, 2] |= (m1_front[i] != 0)
@@ -178,6 +184,10 @@ def _zhinst_voltage_to_uint16_numba(size: int, ch1: Optional[np.ndarray], ch2: O
             data[i, 2] |= (m2_front[i] != 0) << 2
         if m2_back is not None:
             data[i, 2] |= (m2_back[i] != 0) << 3
+
+    if invalid_value is not None:
+        raise ValueError('Encountered an invalid value in channel data (not in [-1, 1])', invalid_value)
+
     return data.ravel()
 
 
@@ -187,10 +197,20 @@ def _zhinst_voltage_to_uint16_numpy(size: int, ch1: Optional[np.ndarray], ch2: O
     """Fallback implementation if numba is not available"""
     markers = (m1_front, m1_back, m2_front, m2_back)
 
+    def check_invalid_values(ch_data):
+        # like this to catch NaN
+        invalid = ~(np.abs(ch_data) <= 1)
+        if np.any(invalid):
+            raise ValueError('Encountered an invalid value in channel data (not in [-1, 1])', ch_data[invalid][-1])
+
     if ch1 is None:
         ch1 = np.zeros(size)
+    else:
+        check_invalid_values(ch1)
     if ch2 is None:
         ch2 = np.zeros(size)
+    else:
+        check_invalid_values(ch1)
     marker_data = np.zeros(size, dtype=np.uint16)
     for idx, marker in enumerate(markers):
         if marker is not None:
@@ -218,8 +238,6 @@ def zhinst_voltage_to_uint16(ch1: Optional[np.ndarray], ch2: Optional[np.ndarray
     assert len(size) == 1, "Inputs have incompatible dimension"
     size, = size
     size = int(size)
-
-    raise NotImplementedError('Check voltage range')
 
     if numba:
         return _zhinst_voltage_to_uint16_numba(size, *all_input)
