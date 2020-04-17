@@ -10,6 +10,8 @@ import operator
 
 import numpy
 
+import qupulse.utils.numeric as qupulse_numeric
+
 __all__ = ["MeasurementWindow", "ChannelID", "HashableNumpyArray", "TimeType", "time_from_float", "DocStringABCMeta",
            "SingletonABCMeta", "SequenceProxy"]
 
@@ -18,6 +20,8 @@ ChannelID = typing.Union[str, int]
 
 try:
     import gmpy2
+    qupulse_numeric.FractionType = gmpy2.mpq
+
 except ImportError:
     gmpy2 = None
 
@@ -203,10 +207,7 @@ class TimeType:
         elif absolute_error > 1:
             raise ValueError('absolute_error needs to be smaller 1')
         else:
-            if cls._InternalType is fractions.Fraction:
-                return fractions.Fraction(value).limit_denominator(int(1 / absolute_error))
-            else:
-                return cls(gmpy2.f2q(value, absolute_error))
+            return cls(qupulse_numeric.approximate_double(value, absolute_error))
 
     @classmethod
     def from_fraction(cls, numerator: int, denominator: int) -> 'TimeType':
