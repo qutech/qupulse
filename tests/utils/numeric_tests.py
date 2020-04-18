@@ -82,6 +82,16 @@ class ApproximationTests(unittest.TestCase):
                 result = approximate_rational(x + offset, abs_err, Fraction)
                 self.assertEqual(expected, result)
 
+        with self.assertRaises(ValueError):
+            approximate_rational(Fraction(3, 1), Fraction(0, 100), Fraction)
+
+        with self.assertRaises(ValueError):
+            approximate_rational(Fraction(3, 1), Fraction(-1, 100), Fraction)
+
+        x = Fraction(3, 1)
+        abs_err = Fraction(1, 100)
+        self.assertIs(x, approximate_rational(x, abs_err, Fraction))
+
     def test_approximate_double(self):
         test_values = [
             ((.1, .05), Fraction(1, 7)),
