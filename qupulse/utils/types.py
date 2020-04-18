@@ -10,6 +10,8 @@ import operator
 
 import numpy
 
+import qupulse.utils.numeric as qupulse_numeric
+
 __all__ = ["MeasurementWindow", "ChannelID", "HashableNumpyArray", "TimeType", "time_from_float", "DocStringABCMeta",
            "SingletonABCMeta", "SequenceProxy"]
 
@@ -18,6 +20,8 @@ ChannelID = typing.Union[str, int]
 
 try:
     import gmpy2
+    qupulse_numeric.FractionType = gmpy2.mpq
+
 except ImportError:
     gmpy2 = None
 
@@ -182,31 +186,31 @@ class TimeType:
             absolute_error:
                 - :obj:`None`: Use `str(value)` as a proxy to get consistent precision
                 - 0: Return the exact value of the float i.e. float(0.8) == 3602879701896397 / 4503599627370496
-                - 0 < `absolute_error` <= 1: Use `absolute_error` to limit the denominator
+                - 0 < `absolute_error` <= 1: Return the best approximation to `value` within `(value - absolute_error,
+                value + absolute_error)`. The best approximation is defined as the fraction with the smallest
+                denominator.
 
         Raises:
             ValueError: If `absolute_error` is not None and not 0 <= `absolute_error` <=  1
         """
         # gmpy2 is at least an order of magnitude faster than fractions.Fraction
         if absolute_error is None:
-            # this method utilizes the 'print as many digits as necessary to destinguish between all floats'
+            # this method utilizes the 'print as many digits as necessary to distinguish between all floats'
             # functionality of str
             if type(value) in (cls, cls._InternalType, fractions.Fraction):
                 return cls(value)
             else:
-                return cls(cls._to_internal(str(value).replace('e', 'E')))
+                # .upper() is a bit faster than replace('e', 'E') which gmpy2.mpq needs
+                return cls(cls._to_internal(str(value).upper()))
 
         elif absolute_error == 0:
             return cls(cls._to_internal(value))
         elif absolute_error < 0:
-            raise ValueError('absolute_error needs to be at least 0')
+            raise ValueError('absolute_error needs to be > 0')
         elif absolute_error > 1:
-            raise ValueError('absolute_error needs to be smaller 1')
+            raise ValueError('absolute_error needs to be <= 1')
         else:
-            if cls._InternalType is fractions.Fraction:
-                return fractions.Fraction(value).limit_denominator(int(1 / absolute_error))
-            else:
-                return cls(gmpy2.f2q(value, absolute_error))
+            return cls(qupulse_numeric.approximate_double(value, absolute_error, fraction_type=cls._InternalType))
 
     @classmethod
     def from_fraction(cls, numerator: int, denominator: int) -> 'TimeType':
