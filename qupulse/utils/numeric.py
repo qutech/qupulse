@@ -1,9 +1,6 @@
-from typing import Tuple
+from typing import Tuple, Type
 from numbers import Rational
-from fractions import Fraction
 from math import gcd
-
-FractionType = Fraction
 
 
 def lcm(a: int, b: int):
@@ -71,7 +68,7 @@ def _approximate_int(alpha_num: int, d_num: int, den: int) -> Tuple[int, int]:
         to_left = not to_left
 
 
-def approximate_rational(x: Rational, abs_err: Rational) -> Rational:
+def approximate_rational(x: Rational, abs_err: Rational, fraction_type: Type[Rational]) -> Rational:
     """Return the fraction with the smallest denominator in (x - abs_err, x + abs_err)"""
     if abs_err <= 0:
         raise ValueError('abs_err must be > 0')
@@ -95,9 +92,9 @@ def approximate_rational(x: Rational, abs_err: Rational) -> Rational:
     else:
         p, q = _approximate_int(alpha_num, d_num, den)
 
-    return FractionType(p + n * q, q)
+    return fraction_type(p + n * q, q)
 
 
-def approximate_double(x: float, abs_err: float) -> Rational:
+def approximate_double(x: float, abs_err: float, fraction_type: Type[Rational]) -> Rational:
     """Return the fraction with the smallest denominator in (x - abs_err, x + abs_err)."""
-    return approximate_rational(FractionType(x), FractionType(abs_err))
+    return approximate_rational(fraction_type(x), fraction_type(abs_err), fraction_type=fraction_type)
