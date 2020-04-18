@@ -5,7 +5,7 @@ from fractions import Fraction
 from collections import deque
 from itertools import islice
 
-from qupulse.utils.numeric import approximate_rational
+from qupulse.utils.numeric import approximate_rational, approximate_double
 
 
 def stern_brocot_sequence() -> Iterator[int]:
@@ -79,5 +79,22 @@ class ApproximationTests(unittest.TestCase):
         for offset in (-2, -1, 0, 1, 2):
             for (x, abs_err), result in test_pairs:
                 expected = result + offset
-                result = approximate_rational(x + offset, abs_err)
+                result = approximate_rational(x + offset, abs_err, Fraction)
                 self.assertEqual(expected, result)
+
+    def test_approximate_double(self):
+        test_values = [
+            ((.1, .05), Fraction(1, 7)),
+            ((.12, .005), Fraction(2, 17)),
+            ((.15, .005), Fraction(2, 13)),
+            ((.111_111_12, 0.000_000_005), Fraction(888890, 8000009)),
+            ((.111125, 0.0000005), Fraction(859, 7730)),
+            ((2.50000000008, .1), Fraction(5, 2))
+        ]
+
+        for (x, err), expected in test_values:
+            result = approximate_double(x, err, Fraction)
+            self.assertEqual(expected, result, msg='{x} ± {err} results in {result} '
+                                                   'which is not the expected {expected}'.format(x=x, err=err,
+                                                                                                 result=result,
+                                                                                                 expected=expected))
