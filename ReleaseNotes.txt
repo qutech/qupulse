@@ -1,7 +1,7 @@
-## pending/current ##
+## 0.5.1 ##
 
  - General:
-    - Unify `TimeType.from_float` between fractions and gmpy2 backend behaviour.
+    - Unify `TimeType.from_float` between fractions and gmpy2 backend behaviour (fixes issue 529).
 
 ## 0.5 ##
 
