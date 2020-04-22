@@ -78,6 +78,13 @@ class TaborChannelSynchronization(ChannelSynchronization):
         self._parent = weakref.ref(device)
 
     def synchronize_channels(self, group_size: int) -> None:
+        """
+        Synchronize in groups of `group_size` channels. Groups of synchronized channels will be provided as
+        AWGChannelTuples. The channel_size must be evenly dividable by the number of channels
+
+        Args:
+            group_size: Number of channels per channel tuple
+        """
         if group_size == 2:
             for i in range((int)(len(self._parent().channels) / group_size)):
                 self._parent()._channel_tuples.append(
@@ -122,6 +129,10 @@ class TaborDeviceControl(DeviceControl):
             channel_tuple[TaborProgramManagement].clear()
 
     def trigger(self) -> None:
+        """
+        This method triggers a device remotely
+        """
+        # TODO: comment is missing
         self._parent().send_cmd(":TRIG")
 
 
@@ -216,6 +227,7 @@ class TaborDevice(AWGDevice):
         self._initialize()  # TODO: change for synchronisation-feature
 
     def _is_coupled(self) -> bool:
+        # TODO: comment is missing
         if self._coupled is None:
             return self._send_query(":INST:COUP:STAT?") == "ON"
         else:
@@ -228,14 +240,17 @@ class TaborDevice(AWGDevice):
 
     @property
     def channels(self) -> Collection["TaborChannel"]:
+        """Returns a list of all channels of a Device"""
         return self._channels
 
     @property
     def marker_channels(self) -> Collection["TaborMarkerChannel"]:
+        """Returns a list of all marker channels of a device. The collection may be empty"""
         return self._channel_marker
 
     @property
     def channel_tuples(self) -> Collection["TaborChannelTuple"]:
+        """Returns a list of all channel tuples of a list"""
         return self._channel_tuples
 
     @property
@@ -375,15 +390,18 @@ class TaborOffsetAmplitude(OffsetAmplitude):
 
     @property
     def offset(self) -> float:
+        """Get offset of AWG channel"""
         return float(
             self._parent().device._send_query(":INST:SEL {channel}; :VOLT:OFFS?".format(channel=self._parent().idn)))
 
     @offset.setter
     def offset(self, offset: float) -> None:
+        """Set offset for AWG channel"""
         pass  # TODO: to implement
 
     @property
     def amplitude(self) -> float:
+        """Get amplitude of AWG channel"""
         coupling = self._parent().device._send_query(
             ":INST:SEL {channel}; :OUTP:COUP?".format(channel=self._parent().idn))
         if coupling == "DC":
@@ -395,15 +413,23 @@ class TaborOffsetAmplitude(OffsetAmplitude):
 
     @amplitude.setter
     def amplitude(self, amplitude: float) -> None:
+        """Set amplitude for AWG channel"""
         self._parent().device.send_cmd(":INST:SEL {channel}; :OUTP:COUP DC".format(channel=self._parent().idn))
         self._parent().device.send_cmd(":VOLT {amp}".format(amp=amplitude))
 
     @property
     def amplitude_offset_handling(self) -> str:
+        """
+        Gets the amplitude and offset handling of this channel. The amplitude-offset controls if the amplitude and
+        offset settings are constant or if these should be optimized by the driver
+        """
         return self._parent()._amplitude_offset_handling
 
     @amplitude_offset_handling.setter
     def amplitude_offset_handling(self, amp_offs_handling: str) -> None:
+        """
+        amp_offs_handling: See possible values at `AWGAmplitudeOffsetHandling`
+        """
         if amp_offs_handling == AmplitudeOffsetHandling.CONSIDER_OFFSET or amp_offs_handling == AmplitudeOffsetHandling.IGNORE_OFFSET:
             self._parent()._amplitude_offset_handling = amp_offs_handling
         else:
@@ -417,13 +443,18 @@ class TaborActivatableChannels(ActivatableChannels):
 
     @property
     def enabled(self) -> bool:
+        """
+        Returns the the state a channel has at the moment. A channel is either activated or deactivated
+        """
         pass  # TODO: to implement
 
     def enable(self):
+        """Enables the output of a certain channel"""
         command_string = ":INST:SEL {ch_id}; :OUTP ON".format(ch_id=self._parent().idn)
         self._parent().device.send_cmd(command_string)
 
     def disable(self):
+        """Disables the output of a certain channel"""
         command_string = ":INST:SEL {ch_id}; :OUTP OFF".format(ch_id=self._parent().idn)
         self._parent().device.send_cmd(command_string)
 

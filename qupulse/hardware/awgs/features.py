@@ -209,10 +209,10 @@ class ActivatableChannels(AWGChannelFeature):
 
     @abstractmethod
     def enable(self):
-        """Disables the output of a certain channel"""
+        """Enables the output of a certain channel"""
         raise NotImplementedError()
 
     @abstractmethod
     def disable(self):
-        """Enables the output of a certain channel"""
+        """Disables the output of a certain channel"""
         raise NotImplementedError()
