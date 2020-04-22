@@ -58,7 +58,7 @@ class TestOffsetAmplitudeFeature(OffsetAmplitude):
         return self._parent._ampl_offs_handling
 
     @amplitude_offset_handling.setter
-    def amplitude_offset_handling(self, ampl_offs_handling: float) -> None:
+    def amplitude_offset_handling(self, ampl_offs_handling: str) -> None:
         """Set amplitude-offset-handling of TestAWGChannel"""
         self._parent._ampl_offs_handling = ampl_offs_handling
 

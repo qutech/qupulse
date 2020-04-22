@@ -31,11 +31,10 @@ assert (sys.byteorder == "little")
 
 __all__ = ["TaborDevice", "TaborChannelTuple", "TaborChannel"]
 
-TaborProgramMemory = NamedTuple('TaborProgramMemory', [('waveform_to_segment', np.ndarray),
-                                                       ('program', TaborProgram)])
+TaborProgramMemory = NamedTuple("TaborProgramMemory", [("waveform_to_segment", np.ndarray),
+                                                       ("program", TaborProgram)])
 
 
-# TODO: How does this work?
 def with_configuration_guard(function_object: Callable[["TaborChannelTuple", Any], Any]) -> Callable[
     ["TaborChannelTuple"], Any]:
     """This decorator assures that the AWG is in configuration mode while the decorated method runs."""
@@ -115,7 +114,7 @@ class TaborDeviceControl(DeviceControl):
         Resetting the whole device. A command for resetting is send to the Device, the device is initialized again and
         all channel tuples are cleared.
         """
-        self._parent().send_cmd(':RES')
+        self._parent().send_cmd(":RES")
         self._parent()._coupled = None
 
         self._parent()._initialize()
@@ -216,10 +215,9 @@ class TaborDevice(AWGDevice):
 
         self._initialize()  # TODO: change for synchronisation-feature
 
-    # TODO: auslagern?
-    def is_coupled(self) -> bool:
+    def _is_coupled(self) -> bool:
         if self._coupled is None:
-            return self._send_query(':INST:COUP:STAT?') == 'ON'
+            return self._send_query(":INST:COUP:STAT?") == "ON"
         else:
             return self._coupled
 
@@ -324,7 +322,6 @@ class TaborDevice(AWGDevice):
 
             assert len(answers) == 0
 
-    # TODO: auslagern?
     @property
     def is_open(self) -> bool:
         return self._instr.visa_inst is not None  # pragma: no cover
@@ -403,11 +400,14 @@ class TaborOffsetAmplitude(OffsetAmplitude):
 
     @property
     def amplitude_offset_handling(self) -> str:
-        pass  # TODO: to implement
+        return self._parent()._amplitude_offset_handling
 
     @amplitude_offset_handling.setter
     def amplitude_offset_handling(self, amp_offs_handling: str) -> None:
-        pass  # TODO: to implement
+        if amp_offs_handling == AmplitudeOffsetHandling.CONSIDER_OFFSET or amp_offs_handling == AmplitudeOffsetHandling.IGNORE_OFFSET:
+            self._parent()._amplitude_offset_handling = amp_offs_handling
+        else:
+            raise ValueError('{} is invalid as AWGAmplitudeOffsetHandling'.format(amp_offs_handling))
 
 
 class TaborActivatableChannels(ActivatableChannels):
@@ -434,11 +434,10 @@ class TaborChannel(AWGChannel):
         super().__init__(idn)
 
         self._device = weakref.ref(device)
+        self._amplitude_offset_handling = AmplitudeOffsetHandling.IGNORE_OFFSET
 
         # adding Features
         self.add_feature(TaborOffsetAmplitude(self))
-
-    _channel_tuple: "TaborChannelTuple"
 
     @property
     def device(self) -> TaborDevice:
@@ -446,13 +445,13 @@ class TaborChannel(AWGChannel):
         return self._device()
 
     @property
-    def channel_tuple(self) -> Optional[AWGChannelTuple]:
+    def channel_tuple(self) -> "TaborChannelTuple":
         """Returns the channel tuple that this channel belongs to"""
         return self._channel_tuple()
 
-    def _set_channel_tuple(self, channel_tuple) -> None:
+    def _set_channel_tuple(self, channel_tuple: "TaborChannelTuple") -> None:
         """
-        The channel tuple 'channel_tuple' is assigned to this channel
+        The channel tuple "channel_tuple" is assigned to this channel
 
         Args:
             channel_tuple (TaborChannelTuple): the channel tuple that this channel belongs to
@@ -484,8 +483,11 @@ class TaborProgramManagement(ProgramManagement):
 
     @with_configuration_guard
     @with_select
-    def upload(self, name: str, program: Loop, channels: Tuple[Optional[ChannelID], ...],
-               markers: Tuple[Optional[ChannelID], ...], voltage_transformation: Tuple[Optional[Callable], ...],
+    def upload(self, name: str,
+               program: Loop,
+               channels: Tuple[Optional[ChannelID], Optional[ChannelID]],
+               markers: Tuple[Optional[ChannelID], Optional[ChannelID]],
+               voltage_transformation: Tuple[Callable, Callable],
                force: bool = False) -> None:
         """
         Upload a program to the AWG.
@@ -493,11 +495,13 @@ class TaborProgramManagement(ProgramManagement):
         The policy is to prefer amending the unknown waveforms to overwriting old ones.
         """
         # TODO: Change this if statements because num methods are deleted
+        """
         if len(channels) != self.num_channels:
             raise ValueError("Channel ID not specified")
         if len(markers) != self.num_markers:
             raise ValueError("Markers not specified")
-        if len(voltage_transformation) != self.num_channels:
+        """
+        if len(voltage_transformation) != len(self._parent().channels):
             raise ValueError("Wrong number of voltage transformations")
 
         # adjust program to fit criteria
@@ -506,6 +510,73 @@ class TaborProgramManagement(ProgramManagement):
                         minimal_waveform_length=192,
                         waveform_quantum=16,
                         sample_rate=fractions.Fraction(sample_rate, 10 ** 9))
+
+        if name in self._parent()._known_programs:
+            if force:
+                self._parent().free_program(name)
+            else:
+                raise ValueError('{} is already known on {}'.format(name, self._parent().idn))
+
+        # They call the peak to peak range amplitude
+        # TODO: Are the replacments for a variable size of channel tuples okay?
+        ranges = []
+        for channel in self._parent().channels:
+            ranges.append(channel[OffsetAmplitude].amplitude)
+        ranges = tuple(ranges)
+
+        """
+        ranges = (self.device.amplitude(self._channels[0]),
+                  self.device.amplitude(self._channels[1]))
+        """
+
+        voltage_amplitudes = []
+        for range in ranges:
+            voltage_amplitudes.append(range / 2)
+        voltage_amplitudes = tuple(voltage_amplitudes)
+
+        """
+        voltage_amplitudes = (ranges[0] / 2, ranges[1] / 2)
+        """
+
+        voltage_offsets = []
+        for channel in self._parent().channels:
+            if channel._amplitude_offset_handling == self._parent().AmplitudeOffsetHandling.IGNORE_OFFSET:
+                voltage_offsets.append(0)
+            elif channel._amplitude_offset_handling == self._parent().AmplitudeOffsetHandling.CONSIDER_OFFSET:
+                voltage_offsets.append(channel[OffsetAmplitude].offset)
+            else:
+                raise ValueError(
+                    '{} is invalid as AWGAmplitudeOffsetHandling'.format(channel._amplitude_offset_handling))
+        voltage_offsets = tuple(voltage_offsets)
+
+        # parse to tabor program
+        tabor_program = TaborProgram(program,
+                                     channels=tuple(channels),
+                                     markers=markers,
+                                     device_properties=self._parent().device.dev_properties,
+                                     sample_rate=sample_rate / 10 ** 9,
+                                     amplitudes=voltage_amplitudes,
+                                     offsets=voltage_offsets,
+                                     voltage_transformations=voltage_transformation)
+
+        segments, segment_lengths = tabor_program.get_sampled_segments()
+
+        waveform_to_segment, to_amend, to_insert = self._parent()._find_place_for_segments_in_memory(segments,
+                                                                                                     segment_lengths)
+
+        self._parent()._segment_references[waveform_to_segment[waveform_to_segment >= 0]] += 1
+
+        for wf_index in np.flatnonzero(to_insert > 0):
+            segment_index = to_insert[wf_index]
+            self._parent()._upload_segment(to_insert[wf_index], segments[wf_index])
+            waveform_to_segment[wf_index] = segment_index
+
+        if np.any(to_amend):
+            segments_to_amend = [segments[idx] for idx in np.flatnonzero(to_amend)]
+            waveform_to_segment[to_amend] = self._parent()._amend_segments(segments_to_amend)
+
+        self._parent()._known_programs[name] = TaborProgramMemory(waveform_to_segment=waveform_to_segment,
+                                                                  program=tabor_program)
 
     def remove(self, name: str) -> None:
         """
@@ -546,7 +617,7 @@ class TaborProgramManagement(ProgramManagement):
     @with_select
     def arm(self, name: Optional[str]) -> None:
         """
-        The program 'name' gets armed
+        The program "name" gets armed
 
         Args:
             name (str): the program the device should change to
@@ -729,12 +800,10 @@ class TaborChannelTuple(AWGChannelTuple):
         """Returns the sample rate that the channels of a channel tuple have"""
         return self.device._send_query(":INST:SEL {channel}; :FREQ:RAST?".format(channel=self.channels[0].idn))
 
-    # TODO: auslagern?
     @property
     def total_capacity(self) -> int:
         return int(self.device.dev_properties["max_arb_mem"]) // 2
 
-    # TODO: auslagern?
     def free_program(self, name: str) -> TaborProgramMemory:
         if name is None:
             raise TaborException("Removing 'None' program is forbidden.")
@@ -744,24 +813,20 @@ class TaborChannelTuple(AWGChannelTuple):
             self[TaborProgramManagement].change_armed_program(None)
         return program
 
-    # TODO: auslagern?
     def _restore_program(self, name: str, program: TaborProgram) -> None:
         if name in self._known_programs:
             raise ValueError("Program cannot be restored as it is already known.")
         self._segment_references[program.waveform_to_segment] += 1
         self._known_programs[name] = program
 
-    # TODO: auslagern?
     @property
     def _segment_reserved(self) -> np.ndarray:
         return self._segment_references > 0
 
-    # TODO: auslagern?
     @property
     def _free_points_in_total(self) -> int:
         return self.total_capacity - np.sum(self._segment_capacity[self._segment_reserved])
 
-    # TODO: auslagern?
     @property
     def _free_points_at_end(self) -> int:
         reserved_index = np.flatnonzero(self._segment_reserved)
@@ -780,12 +845,11 @@ class TaborChannelTuple(AWGChannelTuple):
             self._segment_references) + 1
 
         for segment in uploaded_waveform_indices:
-            device.send_cmd(':TRAC:SEL {}'.format(segment), paranoia_level=self.internal_paranoia_level)
+            device.send_cmd(":TRAC:SEL {}".format(segment), paranoia_level=self.internal_paranoia_level)
             waveforms.append(device.read_act_seg_dat())
-        device.send_cmd(':TRAC:SEL {}'.format(old_segment), paranoia_level=self.internal_paranoia_level)
+        device.send_cmd(":TRAC:SEL {}".format(old_segment), paranoia_level=self.internal_paranoia_level)
         return waveforms
 
-    # TODO: auslagern?
     @with_select
     def read_sequence_tables(self) -> List[Tuple[np.ndarray, np.ndarray, np.ndarray]]:
         device = self.device._get_readable_device(simulator=True)
@@ -794,23 +858,20 @@ class TaborChannelTuple(AWGChannelTuple):
         sequences = []
         uploaded_sequence_indices = np.arange(len(self._sequencer_tables)) + 1
         for sequence in uploaded_sequence_indices:
-            device.send_cmd(':SEQ:SEL {}'.format(sequence), paranoia_level=self.internal_paranoia_level)
+            device.send_cmd(":SEQ:SEL {}".format(sequence), paranoia_level=self.internal_paranoia_level)
             sequences.append(device.read_sequencer_table())
-        device.send_cmd(':SEQ:SEL {}'.format(old_sequence), paranoia_level=self.internal_paranoia_level)
+        device.send_cmd(":SEQ:SEL {}".format(old_sequence), paranoia_level=self.internal_paranoia_level)
         return sequences
 
-    # TODO: auslagern?
     @with_select
     def read_advanced_sequencer_table(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         return self.device._get_readable_device(simulator=True).read_adv_seq_table()
 
-    # TODO: auslagern?
     def read_complete_program(self) -> PlottableProgram:
         return PlottableProgram.from_read_data(self.read_waveforms(),
                                                self.read_sequence_tables(),
                                                self.read_advanced_sequencer_table())
 
-    # TODO: auslagern?
     def _find_place_for_segments_in_memory(self, segments: Sequence, segment_lengths: Sequence) -> \
             Tuple[np.ndarray, np.ndarray, np.ndarray]:
         # TODO: comment was not finished
@@ -912,13 +973,13 @@ class TaborChannelTuple(AWGChannelTuple):
 
         segment_no = segment_index + 1
 
-        self.device.send_cmd(':TRAC:DEF {}, {}'.format(segment_no, segment.num_points),
+        self.device.send_cmd(":TRAC:DEF {}, {}".format(segment_no, segment.num_points),
                              paranoia_level=self.internal_paranoia_level)
         self._segment_lengths[segment_index] = segment.num_points
 
-        self.device.send_cmd(':TRAC:SEL {}'.format(segment_no), paranoia_level=self.internal_paranoia_level)
+        self.device.send_cmd(":TRAC:SEL {}".format(segment_no), paranoia_level=self.internal_paranoia_level)
 
-        self.device.send_cmd(':TRAC:MODE COMB', paranoia_level=self.internal_paranoia_level)
+        self.device.send_cmd(":TRAC:MODE COMB", paranoia_level=self.internal_paranoia_level)
         wf_data = segment.get_as_binary()
 
         self.device._send_binary_data(pref=":TRAC:DATA", bin_dat=wf_data)
@@ -936,13 +997,13 @@ class TaborChannelTuple(AWGChannelTuple):
         segment_index = len(self._segment_capacity)
         first_segment_number = segment_index + 1
 
-        self.device.send_cmd(':TRAC:DEF {},{}'.format(first_segment_number, trac_len),
+        self.device.send_cmd(":TRAC:DEF {},{}".format(first_segment_number, trac_len),
                              paranoia_level=self.internal_paranoia_level)
-        self.device.send_cmd(':TRAC:SEL {}'.format(first_segment_number),
+        self.device.send_cmd(":TRAC:SEL {}".format(first_segment_number),
                              paranoia_level=self.internal_paranoia_level)
-        self.device.send_cmd(':TRAC:MODE COMB',
+        self.device.send_cmd(":TRAC:MODE COMB",
                              paranoia_level=self.internal_paranoia_level)
-        self.device._send_binary_data(pref=':TRAC:DATA', bin_dat=wf_data)
+        self.device._send_binary_data(pref=":TRAC:DATA", bin_dat=wf_data)
 
         old_to_update = np.count_nonzero(self._segment_capacity != self._segment_lengths)
         segment_capacity = np.concatenate((self._segment_capacity, new_lengths))
@@ -952,7 +1013,7 @@ class TaborChannelTuple(AWGChannelTuple):
         if len(segments) < old_to_update:
             for i, segment in enumerate(segments):
                 current_segment_number = first_segment_number + i
-                self.device.send_cmd(':TRAC:DEF {},{}'.format(current_segment_number, segment.num_points),
+                self.device.send_cmd(":TRAC:DEF {},{}".format(current_segment_number, segment.num_points),
                                      paranoia_level=self.internal_paranoia_level)
         else:
             # flush the capacity
@@ -1000,7 +1061,6 @@ class TaborChannelTuple(AWGChannelTuple):
         cmd_str = ";".join(commands)
         self.device.send_cmd(cmd_str, paranoia_level=self.internal_paranoia_level)
 
-    # TODO: auslagern?
     def set_volatile_parameters(self, program_name: str, parameters: Mapping[str, numbers.Number]) -> None:
         """ Set the values of parameters which were marked as volatile on program creation. Sets volatile parameters
         in program memory and device's (adv.) sequence tables if program is current program.
@@ -1029,7 +1089,7 @@ class TaborChannelTuple(AWGChannelTuple):
 
             for position, entry in modifications.items():
                 if not entry.repetition_count > 0:
-                    raise ValueError('Repetition must be > 0')
+                    raise ValueError("Repetition must be > 0")
 
                 if isinstance(position, int):
                     commands.append(":ASEQ:DEF {},{},{},{}".format(position + 1, entry.element_number + 1,
@@ -1043,7 +1103,7 @@ class TaborChannelTuple(AWGChannelTuple):
             self._execute_multiple_commands_with_config_guard(commands)
 
         # Wait until AWG is finished
-        _ = self.device.main_instrument._visa_inst.query('*OPC?')
+        _ = self.device.main_instrument._visa_inst.query("*OPC?")
 
     def set_program_advanced_sequence_table(self, name, new_advanced_sequence_table):
         self._known_programs[name][1]._advanced_sequencer_table = new_advanced_sequence_table
@@ -1052,31 +1112,33 @@ class TaborChannelTuple(AWGChannelTuple):
         self._known_programs[name][1]._sequencer_tables = new_sequence_table
 
     def _enter_config_mode(self) -> None:
-        """Enter the configuration mode if not already in. All outputs are set to the DC offset of the device and the
+        """
+        Enter the configuration mode if not already in. All outputs are set to the DC offset of the device and the
         sequencing is disabled. The manual states this speeds up sequence validation when uploading multiple sequences.
-        When entering and leaving the configuration mode the AWG outputs a small (~60 mV in 4 V mode) blip."""
+        When entering and leaving the configuration mode the AWG outputs a small (~60 mV in 4 V mode) blip.
+        """
         if self._is_in_config_mode is False:
 
             # 1. Selct channel pair
             # 2. Select DC as function shape
             # 3. Select build-in waveform mode
 
-            if self.device.is_coupled():
-                out_cmd = ':OUTP:ALL OFF'
+            if self.device._is_coupled():
+                out_cmd = ":OUTP:ALL OFF"
             else:
                 out_cmd = ""
                 for channel in self.channels:
                     out_cmd = out_cmd + ":INST:SEL {ch_id}; :OUTP OFF".format(ch_id=channel.idn)
 
-            marker_0_cmd = ':SOUR:MARK:SEL 1;:SOUR:MARK:SOUR USER;:SOUR:MARK:STAT OFF'
-            marker_1_cmd = ':SOUR:MARK:SEL 2;:SOUR:MARK:SOUR USER;:SOUR:MARK:STAT OFF'
+            marker_0_cmd = ":SOUR:MARK:SEL 1;:SOUR:MARK:SOUR USER;:SOUR:MARK:STAT OFF"
+            marker_1_cmd = ":SOUR:MARK:SEL 2;:SOUR:MARK:SOUR USER;:SOUR:MARK:STAT OFF"
             # TODO: würde diese ersetzung reichen? - maybe change for synchronisationsfeature
             # for marker_ch in self.marker_channels:
             #    marker_ch[TaborMarkerChannelActivatable].disable()
 
-            wf_mode_cmd = ':SOUR:FUNC:MODE FIX'
+            wf_mode_cmd = ":SOUR:FUNC:MODE FIX"
 
-            cmd = ';'.join([out_cmd, marker_0_cmd, marker_1_cmd, wf_mode_cmd])
+            cmd = ";".join([out_cmd, marker_0_cmd, marker_1_cmd, wf_mode_cmd])
             self.device.send_cmd(cmd, paranoia_level=self.CONFIG_MODE_PARANOIA_LEVEL)
             self._is_in_config_mode = True
 
@@ -1086,7 +1148,7 @@ class TaborChannelTuple(AWGChannelTuple):
 
         # TODO: change implementation for channel synchronisation feature
 
-        if self.device.is_coupled():
+        if self.device._is_coupled():
             # Coupled -> switch all channels at once
             other_channel_tuple: TaborChannelTuple
             if self.channels == self.device.channel_tuples[0].channels:
