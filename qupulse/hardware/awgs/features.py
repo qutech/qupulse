@@ -49,9 +49,8 @@ class DeviceControl(AWGDeviceFeature, ABC):
 
     @abstractmethod
     def trigger(self) -> None:
-        # TODO (toDo): Docstring missing
         """
-
+        This method triggers a device remotely.
         """
         raise NotImplementedError()
 
@@ -141,6 +140,7 @@ class ProgramManagement(AWGChannelTupleFeature, ABC):
 
     @abstractmethod
     def change_armed_program(self) -> None:
+        """The armed program is changed to the program with the name 'name'"""
         raise NotImplementedError()
 
 

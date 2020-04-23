@@ -73,6 +73,8 @@ def with_select(function_object: Callable[["TaborChannelTuple", Any], Any]) -> C
 # Features
 
 class TaborChannelSynchronization(ChannelSynchronization):
+    """This Feature is used to synchronise a certain ammount of channels"""
+
     def __init__(self, device: "TaborDevice"):
         super().__init__()
         self._parent = weakref.ref(device)
@@ -86,6 +88,7 @@ class TaborChannelSynchronization(ChannelSynchronization):
             group_size: Number of channels per channel tuple
         """
         if group_size == 2:
+            self._parent()._channel_tuples = []
             for i in range((int)(len(self._parent().channels) / group_size)):
                 self._parent()._channel_tuples.append(
                     TaborChannelTuple((i + 1),
@@ -98,6 +101,8 @@ class TaborChannelSynchronization(ChannelSynchronization):
 
 
 class TaborDeviceControl(DeviceControl):
+    """This feature is used for basic communication with a AWG"""
+
     def __init__(self, device: "TaborDevice"):
         super().__init__()
         self._parent = weakref.ref(device)
@@ -130,7 +135,7 @@ class TaborDeviceControl(DeviceControl):
 
     def trigger(self) -> None:
         """
-        This method triggers a device remotely
+        This method triggers a device remotely.
         """
         # TODO: comment is missing
         self._parent().send_cmd(":TRIG")
@@ -262,6 +267,10 @@ class TaborDevice(AWGDevice):
         return self._mirrors
 
     @property
+    def all_devices(self) -> Sequence[teawg.TEWXAwg]:
+        return (self._instr,) + self._mirrors
+
+    @property
     def paranoia_level(self) -> int:
         return self._instr.paranoia_level
 
@@ -273,10 +282,6 @@ class TaborDevice(AWGDevice):
     @property
     def dev_properties(self) -> dict:
         return self._instr.dev_properties
-
-    @property
-    def all_devices(self) -> Sequence[teawg.TEWXAwg]:
-        return (self._instr,) + self._mirrors
 
     def send_cmd(self, cmd_str, paranoia_level=None):
         # TODO (LuL): This function should be private
@@ -389,10 +394,11 @@ class TaborOffsetAmplitude(OffsetAmplitude):
         self._parent = weakref.ref(channel)
 
     @property
+    @with_select
     def offset(self) -> float:
         """Get offset of AWG channel"""
         return float(
-            self._parent().device._send_query(":INST:SEL {channel}; :VOLT:OFFS?".format(channel=self._parent().idn)))
+            self._parent().device._send_query(":VOLT:OFFS?".format(channel=self._parent().idn)))
 
     @offset.setter
     def offset(self, offset: float) -> None:
@@ -400,10 +406,10 @@ class TaborOffsetAmplitude(OffsetAmplitude):
         pass  # TODO: to implement
 
     @property
+    @with_select
     def amplitude(self) -> float:
         """Get amplitude of AWG channel"""
-        coupling = self._parent().device._send_query(
-            ":INST:SEL {channel}; :OUTP:COUP?".format(channel=self._parent().idn))
+        coupling = self._parent().device._send_query(":OUTP:COUP?")
         if coupling == "DC":
             return float(self._parent().device._send_query(":VOLT?"))
         elif coupling == "HV":
@@ -412,9 +418,10 @@ class TaborOffsetAmplitude(OffsetAmplitude):
             raise TaborException("Unknown coupling: {}".format(coupling))
 
     @amplitude.setter
+    @with_select
     def amplitude(self, amplitude: float) -> None:
         """Set amplitude for AWG channel"""
-        self._parent().device.send_cmd(":INST:SEL {channel}; :OUTP:COUP DC".format(channel=self._parent().idn))
+        self._parent().device.send_cmd(":OUTP:COUP DC".format(channel=self._parent().idn))
         self._parent().device.send_cmd(":VOLT {amp}".format(amp=amplitude))
 
     @property
@@ -435,6 +442,9 @@ class TaborOffsetAmplitude(OffsetAmplitude):
         else:
             raise ValueError('{} is invalid as AWGAmplitudeOffsetHandling'.format(amp_offs_handling))
 
+    def _select(self) -> None:
+        self._parent()._select()
+
 
 class TaborActivatableChannels(ActivatableChannels):
     def __init__(self, marker_channel: "TaborMarkerChannel"):
@@ -448,15 +458,20 @@ class TaborActivatableChannels(ActivatableChannels):
         """
         pass  # TODO: to implement
 
+    @with_select
     def enable(self):
         """Enables the output of a certain channel"""
-        command_string = ":INST:SEL {ch_id}; :OUTP ON".format(ch_id=self._parent().idn)
+        command_string = ":OUTP ON".format(ch_id=self._parent().idn)
         self._parent().device.send_cmd(command_string)
 
+    @with_select
     def disable(self):
         """Disables the output of a certain channel"""
-        command_string = ":INST:SEL {ch_id}; :OUTP OFF".format(ch_id=self._parent().idn)
+        command_string = ":OUTP OFF".format(ch_id=self._parent().idn)
         self._parent().device.send_cmd(command_string)
+
+    def _select(self) -> None:
+        self._parent()._select()
 
 
 # Implementation
@@ -469,6 +484,7 @@ class TaborChannel(AWGChannel):
 
         # adding Features
         self.add_feature(TaborOffsetAmplitude(self))
+        self.add_feature(TaborActivatableChannels(self))
 
     @property
     def device(self) -> TaborDevice:
@@ -506,11 +522,6 @@ class TaborProgramManagement(ProgramManagement):
         self._parent = weakref.ref(channel_tuple)
 
         self._idle_sequence_table = [(1, 1, 0), (1, 1, 0), (1, 1, 0)]
-
-    @property
-    def programs(self) -> Set[str]:
-        """The set of program names that can currently be executed on the hardware AWG."""
-        return set(program.name for program in self._parent()._known_programs.keys())
 
     @with_configuration_guard
     @with_select
@@ -550,24 +561,10 @@ class TaborProgramManagement(ProgramManagement):
 
         # They call the peak to peak range amplitude
         # TODO: Are the replacments for a variable size of channel tuples okay?
-        ranges = []
-        for channel in self._parent().channels:
-            ranges.append(channel[OffsetAmplitude].amplitude)
-        ranges = tuple(ranges)
 
-        """
-        ranges = (self.device.amplitude(self._channels[0]),
-                  self.device.amplitude(self._channels[1]))
-        """
+        ranges = tuple(ch[OffsetAmplitude].amplitude for ch in self._parent().channels)
 
-        voltage_amplitudes = []
-        for range in ranges:
-            voltage_amplitudes.append(range / 2)
-        voltage_amplitudes = tuple(voltage_amplitudes)
-
-        """
-        voltage_amplitudes = (ranges[0] / 2, ranges[1] / 2)
-        """
+        voltage_amplitudes = tuple(range / 2 for range in ranges)
 
         voltage_offsets = []
         for channel in self._parent().channels:
@@ -622,7 +619,11 @@ class TaborProgramManagement(ProgramManagement):
         self._parent().cleanup()
 
     def clear(self) -> None:
-        """Delete all segments and clear memory"""
+        """
+        Removes all programs and waveforms from the AWG.
+
+        Caution: This affects all programs and waveforms on the AWG, not only those uploaded using qupulse!
+        """
 
         self._parent().device.channels[0]._select()
         self._parent().device.send_cmd(":TRAC:DEL:ALL")
@@ -647,8 +648,9 @@ class TaborProgramManagement(ProgramManagement):
 
     @with_select
     def arm(self, name: Optional[str]) -> None:
+        # TODO: does dearm work?
         """
-        The program "name" gets armed
+        Load the program 'name' and arm the device for running it.
 
         Args:
             name (str): the program the device should change to
@@ -657,6 +659,11 @@ class TaborProgramManagement(ProgramManagement):
             self._parent().device.send_cmd("SEQ:SEL 1")
         else:
             self.change_armed_program(name)
+
+    @property
+    def programs(self) -> Set[str]:
+        """The set of program names that can currently be executed on the hardware AWG."""
+        return set(program.name for program in self._parent()._known_programs.keys())
 
     @with_select
     def run_current_program(self) -> None:
@@ -674,7 +681,7 @@ class TaborProgramManagement(ProgramManagement):
     @with_select
     @with_configuration_guard
     def change_armed_program(self, name: Optional[str]) -> None:
-        """The armed program of the channel tuple is change to the program with the name 'name'"""
+        """The armed program of the channel tuple is changed to the program with the name 'name'"""
         if name is None:
             sequencer_tables = [self._idle_sequence_table]
             advanced_sequencer_table = [(1, 1, 0)]
@@ -827,9 +834,10 @@ class TaborChannelTuple(AWGChannelTuple):
         return self._marker_channels
 
     @property
+    @with_select
     def sample_rate(self) -> TimeType:
         """Returns the sample rate that the channels of a channel tuple have"""
-        return self.device._send_query(":INST:SEL {channel}; :FREQ:RAST?".format(channel=self.channels[0].idn))
+        return self.device._send_query(":FREQ:RAST?".format(channel=self.channels[0].idn))
 
     @property
     def total_capacity(self) -> int:
@@ -1198,7 +1206,7 @@ class TaborChannelTuple(AWGChannelTuple):
 
             cmd = ""
             for channel in self.channels:
-                cmd = cmd + ":INST:SEL {}; :OUTP ON;".format(channel.idn)
+                channel[ActivatableChannels].enable()
             self.device.send_cmd(cmd[:-1])
 
         for marker_ch in self.marker_channels:
@@ -1220,19 +1228,24 @@ class TaborMarkerChannelActivatable(ActivatableChannels):
     def enabled(self) -> bool:
         pass  # TODO: to implement
 
+    @with_select
     def enable(self):
-        command_string = ":INST:SEL {channel}; :SOUR:MARK:SEL {marker}; :SOUR:MARK:SOUR USER; :SOUR:MARK:STAT ON"
+        command_string = ":SOUR:MARK:SEL {marker}; :SOUR:MARK:SOUR USER; :SOUR:MARK:STAT ON"
         command_string = command_string.format(
             channel=self._parent().channel_tuple.channels[0].idn,
             marker=self._parent().channel_tuple.marker_channels.index(self._parent()) + 1)
         self._parent().device.send_cmd(command_string)
 
+    @with_select
     def disable(self):
-        command_string = ":INST:SEL {channel}; :SOUR:MARK:SEL {marker}; :SOUR:MARK:SOUR USER; :SOUR:MARK:STAT OFF"
+        command_string = ":SOUR:MARK:SEL {marker}; :SOUR:MARK:SOUR USER; :SOUR:MARK:STAT OFF"
         command_string = command_string.format(
             channel=self._parent().channel_tuple.channels[0].idn,
             marker=self._parent().channel_tuple.marker_channels.index(self._parent()) + 1)
         self._parent().device.send_cmd(command_string)
+
+    def _select(self) -> None:
+        self._parent()._select()
 
 
 # Implementation
