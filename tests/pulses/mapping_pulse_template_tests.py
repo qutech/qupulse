@@ -253,6 +253,15 @@ class MappingTemplateTests(unittest.TestCase):
 
         self.assertEqual({'a': Expression('2*f'), 'B': Expression('-3.2*f+2.3')}, pulse.integral)
 
+    def test_duration(self):
+        seconds2ns = 1e9
+        pulse_duration = 1.0765001496284785e-07
+
+        dpt = DummyPulseTemplate(duration=Expression('duration'), parameter_names={'duration'},
+                                   defined_channels={'A'})
+        mpt = MappingPulseTemplate(dpt, parameter_mapping={'duration': seconds2ns * pulse_duration})
+        self.assertEqual(seconds2ns * pulse_duration, mpt.duration)
+
     def test_drop_channel(self):
         dummy = DummyPulseTemplate(defined_channels={'A', 'B', 'C', 'D'},
                                    parameter_names={'k', 'f', 'b'})
