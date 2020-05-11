@@ -201,7 +201,10 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
 
     @property
     def duration(self) -> Expression:
-        return self.__template.duration.evaluate_symbolic(self.__parameter_mapping)
+        return self.__template.duration.evaluate_symbolic(
+            {parameter_name: expression.underlying_expression
+             for parameter_name, expression in self.__parameter_mapping.items()}
+        )
 
     def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
         data = super().get_serialization_data(serializer)
