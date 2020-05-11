@@ -15,6 +15,7 @@ import numpy as np
 from qupulse import ChannelID
 from qupulse.utils import checked_int_cast, isclose
 from qupulse.utils.types import TimeType, time_from_float
+from qupulse.utils.numeric import are_durations_compatible
 from qupulse.comparable import Comparable
 from qupulse.expressions import ExpressionScalar
 from qupulse.pulses.interpolation import InterpolationStrategy
@@ -409,10 +410,9 @@ class MultiChannelWaveform(Waveform):
                                  waveform.defined_channels & self.__defined_channels)
             self.__defined_channels |= waveform.defined_channels
 
-        if not all(isclose(waveform.duration, self._sub_waveforms[0].duration) for waveform in self._sub_waveforms[1:]):
-            # meaningful error message:
+        durations = list(subwaveform.duration for subwaveform in self._sub_waveforms)
+        if not are_durations_compatible(*durations):
             durations = {}
-
             for waveform in self._sub_waveforms:
                 for duration, channels in durations.items():
                     if isclose(waveform.duration, duration):

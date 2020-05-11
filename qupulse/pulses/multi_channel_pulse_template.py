@@ -17,6 +17,7 @@ from qupulse.parameter_scope import Scope
 from qupulse.utils import isclose
 from qupulse.utils.sympy import almost_equal, Sympifyable
 from qupulse.utils.types import ChannelID, TimeType
+from qupulse.utils.numeric import are_durations_compatible
 from qupulse._program.waveforms import MultiChannelWaveform, Waveform, TransformingWaveform
 from qupulse._program.transformation import ParallelConstantChannelTransformation, Transformation, chain_transformations
 from qupulse.pulses.pulse_template import PulseTemplate, AtomicPulseTemplate
@@ -87,13 +88,21 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
                           category=DeprecationWarning)
 
         if not duration:
-            duration = self._subtemplates[0].duration
-            for subtemplate in self._subtemplates[1:]:
-                if almost_equal(duration.sympified_expression, subtemplate.duration.sympified_expression):
-                    continue
-                else:
-                    raise ValueError('Could not assert duration equality of {} and {}'.format(duration,
-                                                                                              subtemplate.duration))
+            durations = list(subtemplate.duration for subtemplate in subtemplates)
+            are_compatible = are_durations_compatible(*durations)
+
+            if are_compatible is False:
+                # durations definitely not compatible
+                raise ValueError('Could not assert duration equality of {} and {}'.format(repr(duration),
+                                                                                          repr(subtemplate.duration)))
+            elif are_compatible is None:
+                # cannot assert compatibility
+                raise ValueError('Could not assert duration equality of {} and {}'.format(repr(duration),
+                                                                                          repr(subtemplate.duration)))
+
+            else:
+                assert are_compatible is True
+
             self._duration = None
         elif duration is True:
             self._duration = None
