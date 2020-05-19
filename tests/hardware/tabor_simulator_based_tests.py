@@ -9,9 +9,9 @@ import pytabor
 import numpy as np
 
 from qupulse._program.tabor import TableDescription, TableEntry
-from qupulse.hardware.awgs.features import DeviceControl, OffsetAmplitude, ProgramManagement
+from qupulse.hardware.awgs.features import DeviceControl, VoltageRange, ProgramManagement, SCPI, VolatileParameters
 from qupulse.hardware.awgs.tabor import TaborDevice, TaborException, TaborSegment, TaborChannelTuple, \
-    TaborOffsetAmplitude, TaborDeviceControl, TaborProgramManagement
+    TaborVoltageRange, TaborDeviceControl, TaborProgramManagement
 
 
 class TaborSimulatorManager:
@@ -135,23 +135,23 @@ class TaborAWGRepresentationTests(TaborSimulatorBasedTest):
 
     def test_amplitude(self):
         for channel in self.instrument.channels:
-            self.assertIsInstance(channel[OffsetAmplitude].amplitude, float)
+            self.assertIsInstance(channel[VoltageRange].amplitude, float)
 
         self.instrument.send_cmd(':INST:SEL 1; :OUTP:COUP DC')
         self.instrument.send_cmd(':VOLT 0.7')
 
-        self.assertAlmostEqual(.7, self.instrument.channels[0][OffsetAmplitude].amplitude)
+        self.assertAlmostEqual(.7, self.instrument.channels[0][VoltageRange].amplitude)
 
     def test_select_marker(self):
         with self.assertRaises(IndexError):
             self.instrument.marker_channels[6]._select()
 
         self.instrument.marker_channels[1]._select()
-        selected = self.instrument._send_query(':SOUR:MARK:SEL?')
+        selected = self.instrument[SCPI].send_query(':SOUR:MARK:SEL?')
         self.assertEqual(selected, '2')
 
         self.instrument.marker_channels[0]._select()
-        selected = self.instrument._send_query(':SOUR:MARK:SEL?')
+        selected = self.instrument[SCPI].send_query(':SOUR:MARK:SEL?')
         self.assertEqual(selected, '1')
 
     def test_select_channel(self):
@@ -159,10 +159,10 @@ class TaborAWGRepresentationTests(TaborSimulatorBasedTest):
             self.instrument.channels[6]._select()
 
         self.instrument.channels[0]._select()
-        self.assertEqual(self.instrument._send_query(':INST:SEL?'), '1')
+        self.assertEqual(self.instrument[SCPI].send_query(':INST:SEL?'), '1')
 
         self.instrument.channels[3]._select()
-        self.assertEqual(self.instrument._send_query(':INST:SEL?'), '4')
+        self.assertEqual(self.instrument[SCPI].send_query(':INST:SEL?'), '4')
 
 
 class TaborMemoryReadTests(TaborSimulatorBasedTest):
@@ -216,7 +216,7 @@ class TaborMemoryReadTests(TaborSimulatorBasedTest):
             waveform_mode = mode
 
         self.channel_pair._known_programs['dummy_program'] = (waveform_to_segment_index, DummyProgram)
-        self.channel_pair[ProgramManagement].change_armed_program('dummy_program') #TODO: change - change_armed_program in the feature doesnt work yet
+        self.channel_pair[ProgramManagement]._change_armed_program('dummy_program') #TODO: change - change_armed_program in the feature doesnt work yet
 
     def test_read_waveforms(self):
         self.channel_pair._amend_segments(self.segments)
@@ -278,7 +278,7 @@ class TaborMemoryReadTests(TaborSimulatorBasedTest):
 
         actual_advanced_table = [(1, 1, 1)] + [(rep, idx + 1, jmp) for rep, idx, jmp in self.advanced_sequence_table]
 
-        self.channel_pair.set_volatile_parameters('dummy_program', parameters=para)
+        self.channel_pair[VolatileParameters].set_volatile_parameters('dummy_program', parameters=para)
 
         actual_sequence_tables[1][1] = (50, 3, 0)
         actual_advanced_table[2] = (5, 3, 0)

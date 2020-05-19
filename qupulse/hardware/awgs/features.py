@@ -9,6 +9,15 @@ from qupulse.utils.types import ChannelID
 ########################################################################################################################
 # device features
 ########################################################################################################################
+class SCPI(AWGDeviceFeature, ABC):
+    @abstractmethod
+    def send_cmd(self, cmd_str):
+        pass
+
+    @abstractmethod
+    def send_query(self, query_str):
+        pass
+
 
 class ChannelSynchronization(AWGDeviceFeature, ABC):
     """This Feature is used to synchronise a certain ammount of channels"""
@@ -27,17 +36,6 @@ class ChannelSynchronization(AWGDeviceFeature, ABC):
 
 class DeviceControl(AWGDeviceFeature, ABC):
     """This feature is used for basic communication with a AWG"""
-
-    # TODO (toCheck): is this Feature ok like this?
-    @abstractmethod
-    def enable(self) -> None:
-        """This method generates the selected output waveform."""
-        raise NotImplementedError()
-
-    @abstractmethod
-    def abort(self) -> None:
-        """This method terminates the current generation of the output waveform."""
-        raise NotImplementedError()
 
     @abstractmethod
     def reset(self) -> None:
@@ -69,6 +67,16 @@ class StatusTable(AWGDeviceFeature, ABC):
 ########################################################################################################################
 # channel tuple features
 ########################################################################################################################
+
+class ReadProgram(AWGChannelTupleFeature, ABC):
+    @abstractmethod
+    def read_complete_program(self):
+        pass
+
+class VolatileParameters(AWGChannelTupleFeature, ABC):
+    @abstractmethod
+    def set_volatile_parameters(self, program_name, parameters) -> None:
+        raise NotImplementedError()
 
 class ProgramManagement(AWGChannelTupleFeature, ABC):
     @abstractmethod
@@ -138,12 +146,6 @@ class ProgramManagement(AWGChannelTupleFeature, ABC):
         """This method starts running the active program"""
         raise NotImplementedError()
 
-    @abstractmethod
-    def change_armed_program(self) -> None:
-        """The armed program is changed to the program with the name 'name'"""
-        raise NotImplementedError()
-
-
 ########################################################################################################################
 # channel features
 ########################################################################################################################
@@ -155,29 +157,17 @@ class AmplitudeOffsetHandling:
     _valid = (IGNORE_OFFSET, CONSIDER_OFFSET)
 
 
-class OffsetAmplitude(AWGChannelFeature):
+class VoltageRange(AWGChannelFeature):
     @property
     @abstractmethod
     def offset(self) -> float:
         """Get offset of AWG channel"""
         raise NotImplementedError()
 
-    @offset.setter
-    @abstractmethod
-    def offset(self, offset: float) -> None:
-        """Set offset for AWG channel"""
-        raise NotImplementedError()
-
     @property
     @abstractmethod
     def amplitude(self) -> float:
         """Get amplitude of AWG channel"""
-        raise NotImplementedError()
-
-    @amplitude.setter
-    @abstractmethod
-    def amplitude(self, amplitude: float) -> None:
-        """Set amplitude for AWG channel"""
         raise NotImplementedError()
 
     @property
@@ -216,3 +206,7 @@ class ActivatableChannels(AWGChannelFeature):
     def disable(self):
         """Disables the output of a certain channel"""
         raise NotImplementedError()
+
+
+class RepetionMode(AWGChannelFeature):
+    pass

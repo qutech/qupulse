@@ -5,7 +5,7 @@ import warnings
 from qupulse import ChannelID
 from qupulse._program._loop import Loop
 from qupulse.hardware.awgs.base import AWGDevice, AWGChannel, AWGChannelTuple, AWGMarkerChannel
-from qupulse.hardware.awgs.features import ChannelSynchronization, ProgramManagement, OffsetAmplitude, \
+from qupulse.hardware.awgs.features import ChannelSynchronization, ProgramManagement, VoltageRange, \
     AmplitudeOffsetHandling
 from qupulse.utils.types import Collection
 
@@ -27,7 +27,7 @@ class TestSynchronizeChannelsFeature(ChannelSynchronization):
         self._parent.synchronize_channels(group_size)
 
 
-class TestOffsetAmplitudeFeature(OffsetAmplitude):
+class TestVoltageRangeFeature(VoltageRange):
     def __init__(self, channel: "TestAWGChannel"):
         super().__init__()
         self._parent = channel
@@ -191,7 +191,7 @@ class TestAWGChannel(AWGChannel):
 
         # Add feature to this object (self)
         # During this call, all functions of the feature are dynamically added to this object
-        self.add_feature(TestOffsetAmplitudeFeature(self))
+        self.add_feature(TestVoltageRangeFeature(self))
 
         self._device = device
         self._channel_tuple = None
@@ -225,17 +225,17 @@ class TestBaseClasses(unittest.TestCase):
     def test_channels(self):
         for i, channel in enumerate(self.device.channels):
             self.assertEqual(channel.idn, i), "Invalid channel id"
-            self.assertEqual(channel[OffsetAmplitude].offset, 0, "Invalid default offset for channel {}".format(i))
-            self.assertEqual(channel[OffsetAmplitude].amplitude, 5.0,
+            self.assertEqual(channel[VoltageRange].offset, 0, "Invalid default offset for channel {}".format(i))
+            self.assertEqual(channel[VoltageRange].amplitude, 5.0,
                              "Invalid default amplitude for channel {}".format(i))
 
             offs = -0.1 * i
             ampl = 0.5 + 3 * i
-            channel[OffsetAmplitude].offset = offs
-            channel[OffsetAmplitude].amplitude = ampl
+            channel[VoltageRange].offset = offs
+            channel[VoltageRange].amplitude = ampl
 
-            self.assertEqual(channel[OffsetAmplitude].offset, offs, "Invalid offset for channel {}".format(i))
-            self.assertEqual(channel[OffsetAmplitude].amplitude, ampl, "Invalid amplitude for channel {}".format(i))
+            self.assertEqual(channel[VoltageRange].offset, offs, "Invalid offset for channel {}".format(i))
+            self.assertEqual(channel[VoltageRange].amplitude, ampl, "Invalid amplitude for channel {}".format(i))
 
     def test_channel_tuples(self):
         for group_size in [2, 4, 8]:
