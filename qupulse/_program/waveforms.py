@@ -9,12 +9,13 @@ from abc import ABCMeta, abstractmethod
 from weakref import WeakValueDictionary, ref
 from typing import Union, Set, Sequence, NamedTuple, Tuple, Any, Iterable, FrozenSet, Optional, Mapping, AbstractSet
 import operator
+import collections
 
 import numpy as np
 
 from qupulse import ChannelID
 from qupulse.utils import checked_int_cast, isclose
-from qupulse.utils.types import TimeType, time_from_float
+from qupulse.utils.types import TimeType, FrozenDict
 from qupulse.utils.numeric import are_durations_compatible
 from qupulse.comparable import Comparable
 from qupulse.expressions import ExpressionScalar
@@ -142,6 +143,11 @@ class Waveform(Comparable, metaclass=ABCMeta):
 
     def __pos__(self):
         return self
+
+    def last_value(self, channel) -> float:
+        """Get the last value of the waveform"""
+        # TODO: Optimize this
+        return self.unsafe_sample(channel, np.array([float(self.duration)]))[0]
 
 
 class TableWaveformEntry(NamedTuple('TableWaveformEntry', [('t', float),
@@ -353,120 +359,178 @@ class SequenceWaveform(Waveform):
 
 class MultiChannelWaveform(Waveform):
     """A MultiChannelWaveform is a Waveform object that allows combining arbitrary Waveform objects
-    to into a single waveform defined for several channels.
+    to into a single waveform defined for several channels. Most of the time you want to use
+    :py:meth:`MultiChannelWaveform.from_iterable` to construct a MultiChannelWaveform.
 
-    The number of channels used by the MultiChannelWaveform object is the sum of the channels used
-    by the Waveform objects it consists of.
+    Automatic padding and truncation:
+    The duration of the overall waveform is specified by the `duration` argument (None means maximum sub-waveform
+    duration). All channels that are not in `pad_values` need to be compatible with this duration (determined with
+    :func:`are_durations_compatible`). Channels that are in `pad_values` are truncated or padded with
+    the specified value to the required duration. A `None` value is replaced by the result of
+    `sub_waveform.last_sample(channel_id)`.
 
-    MultiChannelWaveform allows an arbitrary mapping of channels defined by the Waveforms it
-    consists of and the channels it defines. For example, if the MultiChannelWaveform consists
-    of a two Waveform objects A and B which define two channels each, then the channels of the
-    MultiChannelWaveform may be 0: A.1, 1: B.0, 2: B.1, 3: A.0 where A.0 means channel 0 of Waveform
-    object A.
-
-    The following constraints must hold:
-     - The durations of all Waveform objects must be equal.
-     - The channel mapping must be sane, i.e., no channel of the MultiChannelWaveform must be
-        assigned more than one channel of any Waveform object it consists of
+    Implementation detail:
+    Channels that have compatible durations are handled as if their pad_value entry is None. This is only relevant
+    in numeric corner cases to be always well behaved.
     """
 
-    def __init__(self, sub_waveforms: Iterable[Waveform]) -> None:
-        """Create a new MultiChannelWaveform instance.
+    def __init__(self,
+                 sub_waveforms: Mapping[ChannelID, Waveform],
+                 pad_values: Mapping[ChannelID, Optional[float]],
+                 duration: TimeType) -> None:
+        super().__init__()
+        assert sub_waveforms
 
-        Requires a list of subwaveforms in the form (Waveform, List(int)) where the list defines
-        the channel mapping, i.e., a value y at index x in the list means that channel x of the
-        subwaveform will be mapped to channel y of this MultiChannelWaveform object.
+        wf_pad_dict = {}
+        for ch, waveform in sub_waveforms.items():
+            assert ch in waveform.defined_channels
 
+            if ch not in pad_values:
+                assert are_durations_compatible(duration, waveform.duration)
+
+            # add default pad that is only required in corner cases of numeric accuracy
+            pad_value = pad_values.get(ch, None)
+            if pad_value is None:
+                pad_value = waveform.last_value(ch)
+
+            wf_pad_dict[ch] = (waveform, pad_value)
+
+        self._wf_pad = FrozenDict(wf_pad_dict)
+        self._duration = duration
+
+    @classmethod
+    def from_iterable(cls,
+                      sub_waveforms: Iterable[Waveform],
+                      pad_values: Optional[Mapping[ChannelID, Optional[float]]] = None,
+                      duration: Optional[TimeType] = None
+                      ) -> 'MultiChannelWaveform':
+        """Construct a MultiChannelWaveform from an iterable of Waveforms.
         Args:
             sub_waveforms (Iterable( Waveform )): The list of sub waveforms of this
                 MultiChannelWaveform
+            pad_values: Value for padding if desired. None implies :py:meth:`Waveform.last_value`. Channels not
+                mentioned must have a compatible duration.
+            duration: Duration of this waveform. None implies the maximum subwaveform duration.
         Raises:
-            ValueError, if a channel mapping is out of bounds of the channels defined by this
-                MultiChannelWaveform
-            ValueError, if several subwaveform channels are assigned to a single channel of this
-                MultiChannelWaveform
-            ValueError, if subwaveforms have inconsistent durations
+            ValueError, if `sub_waveforms` is empty
+            ValueError, if the defined channels several subwaveform overlap
+            ValueError, if subwaveforms have incompatible durations and are not padded
+            ValueError, if a channel is padded that is not defined in a subwaveform
         """
-        super().__init__()
         if not sub_waveforms:
             raise ValueError(
                 "MultiChannelWaveform cannot be constructed without channel waveforms."
             )
+        if pad_values is None:
+            pad_values = {}
 
-        # avoid unnecessary multi channel nesting
-        def flatten_sub_waveforms(to_flatten):
-            for sub_waveform in to_flatten:
-                if isinstance(sub_waveform, MultiChannelWaveform):
-                    yield from sub_waveform._sub_waveforms
-                else:
-                    yield sub_waveform
+        duration = max(sub_waveform.duration for sub_waveform in sub_waveforms) if duration is None else duration
+        defined_channels = collections.Counter()
 
-        # sort the waveforms with their defined channels to make compare key reproducible
-        def get_sub_waveform_sort_key(waveform):
-            return tuple(sorted(tuple('{}_stringified_numeric_channel'.format(ch) if isinstance(ch, int) else ch
-                                      for ch in waveform.defined_channels)))
+        flattened_wf = {}
+        flattened_pad = {}
 
-        self._sub_waveforms = tuple(sorted(flatten_sub_waveforms(sub_waveforms),
-                                           key=get_sub_waveform_sort_key))
+        incompatible_durations = {}
+        for waveform in sub_waveforms:
+            # if pad is not defined the sub waveform duration needs to be compatible with the overall duration
+            undefined_pad = waveform.defined_channels - pad_values.keys()
+            if undefined_pad and not are_durations_compatible(duration, waveform.duration):
+                # prepare error message
+                incompatible_durations.setdefault(waveform.duration, set()).intersection_update(undefined_pad)
 
-        self.__defined_channels = set()
-        for waveform in self._sub_waveforms:
-            if waveform.defined_channels & self.__defined_channels:
-                raise ValueError('Channel may not be defined in multiple waveforms',
-                                 waveform.defined_channels & self.__defined_channels)
-            self.__defined_channels |= waveform.defined_channels
+            defined_channels.update(waveform.defined_channels)
 
-        durations = list(subwaveform.duration for subwaveform in self._sub_waveforms)
-        if not are_durations_compatible(*durations):
-            durations = {}
-            for waveform in self._sub_waveforms:
-                for duration, channels in durations.items():
-                    if isclose(waveform.duration, duration):
-                        channels.update(waveform.defined_channels)
-                        break
-                else:
-                    durations[waveform.duration] = set(waveform.defined_channels)
+            if isinstance(waveform, MultiChannelWaveform) and are_durations_compatible(waveform.duration, duration):
+                for ch, (wf, pad) in waveform._wf_pad.items():
+                    flattened_wf[ch] = wf
+                    flattened_pad[ch] = pad
+            else:
+                for ch in waveform.defined_channels:
+                    flattened_wf[ch] = waveform
 
+        if incompatible_durations:
             raise ValueError(
-                "MultiChannelWaveform cannot be constructed from channel waveforms of different durations.",
-                durations
+                "MultiChannelWaveform cannot be constructed from channel waveforms of incompatible durations.",
+                incompatible_durations
             )
+        if defined_channels.most_common()[0][1] > 1:
+            multi_defined = {ch for ch, count in defined_channels.items() if count > 1}
+            raise ValueError('Channel may not be defined in multiple waveforms',
+                             multi_defined)
+        if pad_values.keys() - defined_channels.keys():
+            raise ValueError('pad_values contains channels not defined in subwaveforms',
+                             pad_values.keys() - defined_channels.keys())
+
+        return cls(flattened_wf,
+                   {**pad_values, **flattened_pad},
+                   duration)
 
     @property
     def duration(self) -> TimeType:
-        return self._sub_waveforms[0].duration
+        return self._duration
 
     def __getitem__(self, key: ChannelID) -> Waveform:
-        for waveform in self._sub_waveforms:
-            if key in waveform.defined_channels:
-                return waveform
-        raise KeyError('Unknown channel ID: {}'.format(key), key)
+        try:
+            return self._wf_pad[key][0]
+        except KeyError:
+            raise KeyError('Unknown channel ID: {}'.format(key), key)
 
     @property
     def defined_channels(self) -> Set[ChannelID]:
-        return self.__defined_channels
+        return self._wf_pad.keys()
 
     @property
     def compare_key(self) -> Any:
-        # sort with channels
-        return self._sub_waveforms
+        return self._duration, self._wf_pad
 
     def unsafe_sample(self,
                       channel: ChannelID,
                       sample_times: np.ndarray,
                       output_array: Union[np.ndarray, None]=None) -> np.ndarray:
-        return self[channel].unsafe_sample(channel, sample_times, output_array)
+        """Pad with last value to length of longest waveform"""
+        sub_waveform, pad_value = self._wf_pad[channel]
+        max_idx = np.searchsorted(sample_times, float(sub_waveform.duration), 'right')
+        if max_idx < len(sample_times):
+            # we need to pad in the output
+            if output_array is None:
+                output_array = alloc_for_sample(sample_times.size)
+            inner_output_array = output_array[:max_idx]
+
+            sub_waveform.unsafe_sample(channel, sample_times, output_array=inner_output_array)
+            output_array[max_idx:] = pad_value
+            return output_array
+
+        else:
+            return sub_waveform.unsafe_sample(channel, sample_times, output_array=output_array)
 
     def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> 'Waveform':
-        relevant_sub_waveforms = tuple(swf for swf in self._sub_waveforms if swf.defined_channels & channels)
-        if len(relevant_sub_waveforms) == 1:
-            return relevant_sub_waveforms[0].get_subset_for_channels(channels)
-        elif len(relevant_sub_waveforms) > 1:
-            return MultiChannelWaveform(
-                sub_waveform.get_subset_for_channels(channels & sub_waveform.defined_channels)
-                for sub_waveform in relevant_sub_waveforms)
-        else:
-            raise KeyError('Unknown channels: {}'.format(channels))
+        # TODO: is the optimization to detect if the result can be expressed as a sub-waveform worth it?
+        # need to check duration compatibility then for consistent padding / truncation
+        self_duration = self.duration
+        waveforms = {}
+        pad_values = {}
+        padding = False
+
+        for ch in channels:
+            wf, pad = self._wf_pad[ch]
+            padding = padding or wf.duration != self_duration
+            waveforms[ch] = wf
+            pad_values[ch] = pad
+
+        if not padding:
+            single_waveform = None
+            if len(waveforms) == 1:
+                single_waveform, = waveforms.values()
+            elif len(set(waveforms.values())) == 1:
+                _, single_waveform = waveforms.popitem()
+            if single_waveform is not None:
+                return single_waveform.get_subset_for_channels(channels)
+
+        return MultiChannelWaveform(
+            {ch: self._wf_pad[ch][0] for ch in channels},
+            {ch: self._wf_pad[ch][1] for ch in channels},
+            self._duration
+        )
 
 
 class RepetitionWaveform(Waveform):
