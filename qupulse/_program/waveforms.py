@@ -26,6 +26,12 @@ __all__ = ["Waveform", "TableWaveform", "TableWaveformEntry", "FunctionWaveform"
            "MultiChannelWaveform", "RepetitionWaveform", "TransformingWaveform", "ArithmeticWaveform"]
 
 
+def alloc_for_sample(size: int) -> np.ndarray:
+    """All "preallocation" happens via this function. It uses NaN by default to make incomplete initialization better
+    visible."""
+    return np.full(shape=size, fill_value=np.nan)
+
+
 class Waveform(Comparable, metaclass=ABCMeta):
     """Represents an instantiated PulseTemplate which can be sampled to retrieve arrays of voltage
     values for the hardware."""
@@ -216,7 +222,7 @@ class TableWaveform(Waveform):
                       sample_times: np.ndarray,
                       output_array: Union[np.ndarray, None]=None) -> np.ndarray:
         if output_array is None:
-            output_array = np.empty_like(sample_times)
+            output_array = alloc_for_sample(sample_times.size)
 
         for entry1, entry2 in zip(self._table[:-1], self._table[1:]):
             indices = slice(np.searchsorted(sample_times, entry1.t, 'left'),
@@ -273,7 +279,7 @@ class FunctionWaveform(Waveform):
                       sample_times: np.ndarray,
                       output_array: Union[np.ndarray, None] = None) -> np.ndarray:
         if output_array is None:
-            output_array = np.empty(len(sample_times))
+            output_array = alloc_for_sample(sample_times.size)
         output_array[:] = self._expression.evaluate_numeric(t=sample_times)
         return output_array
 
@@ -317,7 +323,7 @@ class SequenceWaveform(Waveform):
                       sample_times: np.ndarray,
                       output_array: Union[np.ndarray, None]=None) -> np.ndarray:
         if output_array is None:
-            output_array = np.empty_like(sample_times)
+            output_array = alloc_for_sample(sample_times.size)
         time = 0
         for subwaveform in self._sequenced_waveforms:
             # before you change anything here, make sure to understand the difference between basic and advanced
@@ -480,7 +486,7 @@ class RepetitionWaveform(Waveform):
                       sample_times: np.ndarray,
                       output_array: Union[np.ndarray, None]=None) -> np.ndarray:
         if output_array is None:
-            output_array = np.empty_like(sample_times)
+            output_array = alloc_for_sample(sample_times.size)
         body_duration = self._body.duration
         time = 0
         for _ in range(self._repetition_count):
