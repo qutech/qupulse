@@ -5,18 +5,22 @@ from qupulse._program._loop import Loop
 from qupulse.hardware.awgs.base import AWGDeviceFeature, AWGChannelFeature, AWGChannelTupleFeature
 from qupulse.utils.types import ChannelID
 
+import pyvisa
 
 ########################################################################################################################
 # device features
 ########################################################################################################################
 class SCPI(AWGDeviceFeature, ABC):
-    @abstractmethod
-    def send_cmd(self, cmd_str):
-        pass
+    def __init__(self, visa: pyvisa.resources.MessageBasedResource):
+        super().__init__()
 
-    @abstractmethod
+        self._socket = visa
+
+    def send_cmd(self, cmd_str):
+        self._socket.write(cmd_str)
+
     def send_query(self, query_str):
-        pass
+        self._socket.query(query_str)
 
 
 class ChannelSynchronization(AWGDeviceFeature, ABC):

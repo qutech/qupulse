@@ -18,6 +18,7 @@ from qupulse.hardware.awgs.base import AWGChannelTuple, AWGChannel, AWGDevice, A
 from typing import Sequence
 from qupulse._program.tabor import TaborSegment, TaborException, TaborProgram, PlottableProgram, TaborSequencing, \
     make_combined_wave
+import pyvisa
 
 # Provided by Tabor electronics for python 2.7
 # a python 3 version is in a private repository on https://git.rwth-aachen.de/qutech
@@ -70,9 +71,11 @@ def with_select(function_object: Callable[["TaborChannelTuple", Any], Any]) -> C
 ########################################################################################################################
 # FeaturesBes
 class TaborSCPI(SCPI):
-    def __init__(self, device: "TaborDevice"):
-        super().__init__()
+    def __init__(self, device: "TaborDevice", visa: pyvisa.resources.MessageBasedResource):
+        super().__init__(visa)
+
         self._parent = weakref.ref(device)
+
 
     def send_cmd(self, cmd_str, paranoia_level=None):
         for instr in self._parent().all_devices:
@@ -215,7 +218,7 @@ class TaborDevice(AWGDevice):
         self._coupled = None
         self._clock_marker = [0, 0, 0, 0]
 
-        self.add_feature(TaborSCPI(self))
+        self.add_feature(TaborSCPI(self,self.main_instrument._visa_inst))
         self.add_feature(TaborDeviceControl(self))
         self.add_feature(TaborStatusTable(self))
 
