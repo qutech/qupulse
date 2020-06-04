@@ -22,6 +22,9 @@ class SCPI(AWGDeviceFeature, ABC):
     def send_query(self, query_str):
         self._socket.query(query_str)
 
+    def close(self):
+        self._socket.close()
+
 
 class ChannelSynchronization(AWGDeviceFeature, ABC):
     """This Feature is used to synchronise a certain ammount of channels"""

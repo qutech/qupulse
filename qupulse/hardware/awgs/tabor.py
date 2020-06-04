@@ -76,7 +76,6 @@ class TaborSCPI(SCPI):
 
         self._parent = weakref.ref(device)
 
-
     def send_cmd(self, cmd_str, paranoia_level=None):
         for instr in self._parent().all_devices:
             instr.send_cmd(cmd_str=cmd_str, paranoia_level=paranoia_level)
@@ -218,7 +217,7 @@ class TaborDevice(AWGDevice):
         self._coupled = None
         self._clock_marker = [0, 0, 0, 0]
 
-        self.add_feature(TaborSCPI(self,self.main_instrument._visa_inst))
+        self.add_feature(TaborSCPI(self, self.main_instrument._visa_inst))
         self.add_feature(TaborDeviceControl(self))
         self.add_feature(TaborStatusTable(self))
 
@@ -522,7 +521,7 @@ class TaborChannel(AWGChannel):
 ########################################################################################################################
 # Features
 class TaborProgramManagement(ProgramManagement):
-    def __init__(self, channel_tuple: "TaborChannelTuple", ):
+    def __init__(self, channel_tuple: "TaborChannelTuple"):
         super().__init__()
         self._programs = {}
         self._armed_program = None
@@ -543,7 +542,10 @@ class TaborProgramManagement(ProgramManagement):
 
         The policy is to prefer amending the unknown waveforms to overwriting old ones.
         """
-
+        if len(channels) != len(self._parent().channels):
+            raise ValueError("Wrong number of channels")
+        if len(markers) != len(self._parent().marker):
+            raise ValueError("Wrong number of marker")
         if len(voltage_transformation) != len(self._parent().channels):
             raise ValueError("Wrong number of voltage transformations")
 
@@ -569,9 +571,9 @@ class TaborProgramManagement(ProgramManagement):
 
         voltage_offsets = []
         for channel in self._parent().channels:
-            if channel._amplitude_offset_handling == self._parent().AmplitudeOffsetHandling.IGNORE_OFFSET:
+            if channel._amplitude_offset_handling == AmplitudeOffsetHandling.IGNORE_OFFSET:
                 voltage_offsets.append(0)
-            elif channel._amplitude_offset_handling == self._parent().AmplitudeOffsetHandling.CONSIDER_OFFSET:
+            elif channel._amplitude_offset_handling == AmplitudeOffsetHandling.CONSIDER_OFFSET:
                 voltage_offsets.append(channel[VoltageRange].offset)
             else:
                 raise ValueError(
@@ -649,7 +651,6 @@ class TaborProgramManagement(ProgramManagement):
 
     @with_select
     def arm(self, name: Optional[str]) -> None:
-        # TODO: does dearm work?
         """
         Load the program 'name' and arm the device for running it.
 
@@ -674,10 +675,18 @@ class TaborProgramManagement(ProgramManagement):
         Throws:
             RuntimeError: This exception is thrown if there is no active program for this device
         """
-        if self._parent()._current_program:
-            self._parent().device.send_cmd(':TRIG', paranoia_level=self._parent().internal_paranoia_level)
+        if(self._parent().device()._is_coupled()):
+            for tuple in self._parent().device().channel_tuples:
+                if not tuple._parent()._current_program:
+                    raise RuntimeError("The device is couple and one of the channel tuples has no program active")
+                self._parent().device().channel_tuples[0]._select()
+                self._parent().device.send_cmd(':TRIG', paranoia_level=self._parent().internal_paranoia_level)
+
         else:
-            raise RuntimeError("No program active")
+            if self._parent()._current_program:
+                self._parent().device.send_cmd(':TRIG', paranoia_level=self._parent().internal_paranoia_level)
+            else:
+                raise RuntimeError("No program active")
 
     @with_select
     @with_configuration_guard
@@ -1177,32 +1186,31 @@ class TaborChannelTuple(AWGChannelTuple):
         sequencing is disabled. The manual states this speeds up sequence validation when uploading multiple sequences.
         When entering and leaving the configuration mode the AWG outputs a small (~60 mV in 4 V mode) blip.
         """
-        for num in range(0, int(len(self.channels) / 2)):
-            if self._is_in_config_mode is False:
+        if self._is_in_config_mode is False:
 
-                # 1. Selct channel pair
-                # 2. Select DC as function shape
-                # 3. Select build-in waveform mode
+            # 1. Selct channel pair
+            # 2. Select DC as function shape
+            # 3. Select build-in waveform mode
 
-                if self.device._is_coupled():
-                    out_cmd = ":OUTP:ALL OFF;"
-                else:
-                    out_cmd = ""
-                    for channel in self.channels[num*2:num*2+2]:
-                        out_cmd = out_cmd + ":INST:SEL {ch_id}; :OUTP OFF;".format(ch_id=channel.idn)
+            if self.device._is_coupled():
+                out_cmd = ":OUTP:ALL OFF"
+            else:
+                out_cmd = ""
+                for channel in self.channels:
+                    out_cmd = out_cmd + ":INST:SEL {ch_id}; :OUTP OFF;".format(ch_id=channel.idn)
 
-                marker_0_cmd = ":SOUR:MARK:SEL 1;:SOUR:MARK:SOUR USER;:SOUR:MARK:STAT OFF"
-                marker_1_cmd = ":SOUR:MARK:SEL 2;:SOUR:MARK:SOUR USER;:SOUR:MARK:STAT OFF"
-                # TODO: würde diese ersetzung reichen? - maybe change for synchronisationsfeature
-                # for marker_ch in self.marker_channels:
-                #    marker_ch[TaborMarkerChannelActivatable].disable()
+            marker_0_cmd = ":SOUR:MARK:SEL 1;:SOUR:MARK:SOUR USER;:SOUR:MARK:STAT OFF"
+            marker_1_cmd = ":SOUR:MARK:SEL 2;:SOUR:MARK:SOUR USER;:SOUR:MARK:STAT OFF"
+            # TODO: würde diese ersetzung reichen? - maybe change for synchronisationsfeature
+            # for marker_ch in self.marker_channels:
+            #    marker_ch[TaborMarkerChannelActivatable].disable()
 
-                wf_mode_cmd = ":SOUR:FUNC:MODE FIX"
+            wf_mode_cmd = ":SOUR:FUNC:MODE FIX"
 
-                cmd = ";".join([marker_0_cmd, marker_1_cmd, wf_mode_cmd])
-                cmd = out_cmd + cmd
-                self.device[SCPI].send_cmd(cmd, paranoia_level=self.CONFIG_MODE_PARANOIA_LEVEL)
-                self._is_in_config_mode = True
+            cmd = ";".join([marker_0_cmd, marker_1_cmd, wf_mode_cmd])
+            cmd = out_cmd + cmd
+            self.device.send_cmd(cmd, paranoia_level=self.CONFIG_MODE_PARANOIA_LEVEL)
+            self._is_in_config_mode = True
 
     @with_select
     def _exit_config_mode(self) -> None:
@@ -1210,7 +1218,20 @@ class TaborChannelTuple(AWGChannelTuple):
 
         # TODO: change implementation for channel synchronisation feature
 
-        if not self.device._is_coupled():
+        if self.device._is_coupled():
+            # Coupled -> switch all channels at once
+            other_channel_tuple: TaborChannelTuple
+            if self.channels == self.device.channel_tuples[0].channels:
+                other_channel_tuple = self.device.channel_tuples[1]
+            else:
+                other_channel_tuple = self.device.channel_tuples[0]
+
+            if not other_channel_tuple._is_in_config_mode:
+                self.device.send_cmd(":SOUR:FUNC:MODE ASEQ")
+                self.device.send_cmd(":SEQ:SEL 1")
+                self.device.send_cmd(":OUTP:ALL ON")
+
+        else:
             self.device.send_cmd(":SOUR:FUNC:MODE ASEQ")
             self.device.send_cmd(":SEQ:SEL 1")
 
@@ -1220,7 +1241,8 @@ class TaborChannelTuple(AWGChannelTuple):
             self.device.send_cmd(cmd[:-1])
 
         for marker_ch in self.marker_channels:
-            marker_ch[TaborActivatableMarkerChannels].enable()
+            marker_ch[ActivatableChannels].enable()
+
         self._is_in_config_mode = False
 
 
@@ -1290,8 +1312,8 @@ class TaborMarkerChannel(AWGMarkerChannel):
         """
         This marker channel is selected and is now the active channel marker of the device
         """
-        self.device.channels[int((self.idn-1)/2)]._select()
-        self.device.send_cmd(":SOUR:MARK:SEL {marker}".format(marker=(((self.idn-1)%2)+1)))
+        self.device.channels[int((self.idn - 1) / 2)]._select()
+        self.device.send_cmd(":SOUR:MARK:SEL {marker}".format(marker=(((self.idn - 1) % 2) + 1)))
 
 
 ########################################################################################################################
