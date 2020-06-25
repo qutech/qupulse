@@ -145,6 +145,8 @@ class TaborDeviceControl(DeviceControl):
         """
         This method triggers a device remotely.
         """
+        #TODO: why does this work?
+        #self._parent()[SCPI].send_cmd(":ENAB")
         self._parent()[SCPI].send_cmd(":TRIG")
 
 
@@ -230,7 +232,7 @@ class TaborDevice(AWGDevice):
         # ChannelMarker
         self._channel_marker = [TaborMarkerChannel(i + 1, self) for i in range(4)]
 
-        self._initialize()  # TODO: change for synchronisation-feature
+        self._initialize()
 
         # ChannelTuple
         self._channel_tuples = []
@@ -254,6 +256,15 @@ class TaborDevice(AWGDevice):
         terminated the output starts generating an idle waveform.
         """
         self[SCPI].send_cmd(":ABOR")
+
+    def set_coupled(self, coupled: bool) -> None:
+        """
+        Thats the coupling of the device to 'coupled'
+        """
+        if coupled:
+            self.send_cmd("INST:COUP:STAT ON")
+        else:
+            self.send_cmd("INST:COUP:STAT OFF")
 
     def _is_coupled(self) -> bool:
         # TODO: comment is missing
@@ -679,8 +690,8 @@ class TaborProgramManagement(ProgramManagement):
             for tuple in self._parent().device().channel_tuples:
                 if not tuple._parent()._current_program:
                     raise RuntimeError("The device is couple and one of the channel tuples has no program active")
-                self._parent().device().channel_tuples[0]._select()
-                self._parent().device.send_cmd(':TRIG', paranoia_level=self._parent().internal_paranoia_level)
+            self._parent().device().channel_tuples[0]._select()
+            self._parent().device.send_cmd(':TRIG', paranoia_level=self._parent().internal_paranoia_level)
 
         else:
             if self._parent()._current_program:
