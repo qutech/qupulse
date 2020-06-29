@@ -1,25 +1,22 @@
 """This module defines RepetitionPulseTemplate, a higher-order hierarchical pulse template that
 represents the n-times repetition of another PulseTemplate."""
 
-from typing import Dict, List, Set, Optional, Union, Any, Tuple, cast
+from typing import Dict, List, Set, Optional, Union, Any, Mapping, cast
 from numbers import Real
 from warnings import warn
 
 import numpy as np
 
 from qupulse.serialization import Serializer, PulseRegistryType
-from qupulse._program._loop import Loop
+from qupulse._program._loop import Loop, VolatileRepetitionCount
+from qupulse.parameter_scope import Scope
 
 from qupulse.utils.types import ChannelID
 from qupulse.expressions import ExpressionScalar
 from qupulse.utils import checked_int_cast
 from qupulse.pulses.pulse_template import PulseTemplate
 from qupulse.pulses.loop_pulse_template import LoopPulseTemplate
-from qupulse.pulses.sequencing import Sequencer
-from qupulse._program.instructions import InstructionBlock, InstructionPointer
-from qupulse._program.waveforms import RepetitionWaveform
-from qupulse.pulses.parameters import Parameter, ParameterConstrainer, ParameterNotProvidedException
-from qupulse.pulses.conditions import Condition
+from qupulse.pulses.parameters import Parameter, ParameterConstrainer, ParameterNotProvidedException, MappedParameter
 from qupulse.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
 
 
@@ -78,8 +75,8 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
         """The amount of repetitions. Either a constant integer or a ParameterDeclaration object."""
         return self._repetition_count
 
-    def get_repetition_count_value(self, parameters: Dict[str, Real]) -> int:
-        value = self._repetition_count.evaluate_numeric(**parameters)
+    def get_repetition_count_value(self, parameters: Mapping[str, Real]) -> int:
+        value = self._repetition_count.evaluate_in_scope(parameters)
         try:
             return checked_int_cast(value)
         except ValueError:
@@ -102,69 +99,39 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
     def duration(self) -> ExpressionScalar:
         return self.repetition_count * self.body.duration
 
-    def build_sequence(self,
-                       sequencer: Sequencer,
-                       parameters: Dict[str, Parameter],
-                       conditions: Dict[str, Condition],
-                       measurement_mapping: Dict[str, Optional[str]],
-                       channel_mapping: Dict[ChannelID, Optional[ChannelID]],
-                       instruction_block: InstructionBlock) -> None:
-        self.validate_parameter_constraints(parameters=parameters)
-        try:
-            real_parameters = {v: parameters[v].get_value() for v in self._repetition_count.variables}
-        except KeyError:
-            raise ParameterNotProvidedException(next(v for v in self.repetition_count.variables if v not in parameters))
-
-        self.insert_measurement_instruction(instruction_block,
-                                            parameters=parameters,
-                                            measurement_mapping=measurement_mapping)
-
-        repetition_count = self.get_repetition_count_value(real_parameters)
-        if repetition_count > 0:
-            body_block = InstructionBlock()
-            body_block.return_ip = InstructionPointer(instruction_block, len(instruction_block))
-
-            instruction_block.add_instruction_repj(repetition_count, body_block)
-            sequencer.push(self.body, parameters=parameters, conditions=conditions,
-                           window_mapping=measurement_mapping, channel_mapping=channel_mapping, target_block=body_block)
-
     def _internal_create_program(self, *,
-                                 parameters: Dict[str, Parameter],
+                                 scope: Scope,
                                  measurement_mapping: Dict[str, Optional[str]],
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional['Transformation'],
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
                                  parent_loop: Loop) -> None:
-        self.validate_parameter_constraints(parameters=parameters)
-        relevant_params = set(self._repetition_count.variables).union(self.measurement_parameters)
-        try:
-            real_parameters = {v: parameters[v].get_value() for v in relevant_params}
-        except KeyError as e:
-            raise ParameterNotProvidedException(str(e)) from e
+        self.validate_scope(scope)
 
-        repetition_count = max(0, self.get_repetition_count_value(real_parameters))
+        repetition_count = max(0, self.get_repetition_count_value(scope))
 
         # todo (2018-07-19): could in some circumstances possibly just multiply subprogram repetition count?
         # could be tricky if any repetition count is volatile ? check later and optimize if necessary
         if repetition_count > 0:
-            repj_loop = Loop(repetition_count=repetition_count)
-            self.body._create_program(parameters=parameters,
+            if scope.get_volatile_parameters().keys() & self.repetition_count.variables:
+                repetition_definition = VolatileRepetitionCount(self.repetition_count, scope)
+                assert int(repetition_definition) == repetition_count
+            else:
+                repetition_definition = repetition_count
+
+            repj_loop = Loop(repetition_count=repetition_definition)
+            self.body._create_program(scope=scope,
                                       measurement_mapping=measurement_mapping,
                                       channel_mapping=channel_mapping,
                                       global_transformation=global_transformation,
                                       to_single_waveform=to_single_waveform,
                                       parent_loop=repj_loop)
             if repj_loop.waveform is not None or len(repj_loop.children) > 0:
-                measurements = self.get_measurement_windows(real_parameters, measurement_mapping)
+                measurements = self.get_measurement_windows(scope, measurement_mapping)
                 if measurements:
                     parent_loop.add_measurements(measurements)
 
                 parent_loop.append_child(loop=repj_loop)
-
-    def requires_stop(self,
-                      parameters: Dict[str, Parameter],
-                      conditions: Dict[str, Condition]) -> bool:
-        return any(parameters[v].requires_stop for v in self.repetition_count.variables)
 
     def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
         data = super().get_serialization_data(serializer)

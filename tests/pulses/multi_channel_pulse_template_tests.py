@@ -1,13 +1,15 @@
 import unittest
-import warnings
+from unittest import mock
 
 import numpy
 
-from qupulse.utils.types import time_from_float
-from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform, MappingPulseTemplate, ChannelMappingException, AtomicMultiChannelPulseTemplate
+from qupulse.parameter_scope import DictScope
+from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform, MappingPulseTemplate,\
+    ChannelMappingException, AtomicMultiChannelPulseTemplate, ParallelConstantChannelPulseTemplate,\
+    TransformingWaveform, ParallelConstantChannelTransformation
 from qupulse.pulses.parameters import ParameterConstraint, ParameterConstraintViolation, ConstantParameter
 from qupulse.expressions import ExpressionScalar, Expression
-from qupulse._program.instructions import InstructionBlock
+from qupulse._program.transformation import LinearTransformation, chain_transformations
 
 from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummyWaveform
 from tests.serialization_dummies import DummySerializer
@@ -65,6 +67,49 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
         with self.assertRaises(TypeError):
             AtomicMultiChannelPulseTemplate((non_atomic_pt, {'A': 'C'}), atomic_pt)
 
+    def test_instantiation_duration_check(self):
+        subtemplates = [DummyPulseTemplate(parameter_names={'p1'},
+                                           measurement_names={'m1'},
+                                           defined_channels={'c1'},
+                                           duration='t_1',
+                                           waveform=DummyWaveform(duration=3, defined_channels={'c1'})),
+                        DummyPulseTemplate(parameter_names={'p2'},
+                                           measurement_names={'m2'},
+                                           defined_channels={'c2'},
+                                           duration='t_2',
+                                           waveform=DummyWaveform(duration=3, defined_channels={'c2'})),
+                        DummyPulseTemplate(parameter_names={'p3'},
+                                           measurement_names={'m3'},
+                                           defined_channels={'c3'},
+                                           duration='t_3',
+                                           waveform=DummyWaveform(duration=4, defined_channels={'c3'}))]
+
+        with self.assertRaisesRegex(ValueError, 'duration equality'):
+            AtomicMultiChannelPulseTemplate(*subtemplates)
+
+        amcpt = AtomicMultiChannelPulseTemplate(*subtemplates, duration=True)
+        self.assertIs(amcpt.duration, subtemplates[0].duration)
+
+        with self.assertRaisesRegex(ValueError, 'duration'):
+            amcpt.build_waveform(parameters=dict(t_1=3, t_2=3, t_3=3),
+                                 channel_mapping={ch: ch for ch in 'c1 c2 c3'.split()})
+
+        subtemplates[2].waveform = None
+        amcpt.build_waveform(parameters=dict(t_1=3, t_2=3, t_3=3),
+                             channel_mapping={ch: ch for ch in 'c1 c2 c3'.split()})
+
+        amcpt = AtomicMultiChannelPulseTemplate(*subtemplates, duration='t_0')
+        with self.assertRaisesRegex(ValueError, 'duration'):
+            amcpt.build_waveform(parameters=dict(t_1=3, t_2=3, t_3=3, t_0=4),
+                                 channel_mapping={ch: ch for ch in 'c1 c2 c3'.split()})
+        with self.assertRaisesRegex(ValueError, 'duration'):
+            amcpt.build_waveform(parameters=dict(t_1=3+1e-9, t_2=3, t_3=3, t_0=4),
+                                 channel_mapping={ch: ch for ch in 'c1 c2 c3'.split()})
+        amcpt.build_waveform(parameters=dict(t_1=3, t_2=3, t_3=3, t_0=3),
+                             channel_mapping={ch: ch for ch in 'c1 c2 c3'.split()})
+        amcpt.build_waveform(parameters=dict(t_1=3+1e-11, t_2=3, t_3=3, t_0=3),
+                             channel_mapping={ch: ch for ch in 'c1 c2 c3'.split()})
+
     def test_external_parameters_warning(self):
         with self.assertWarnsRegex(DeprecationWarning, "external_parameters",
                                    msg="AtomicMultiChannelPulseTemplate did not issue a warning for argument external_parameters"):
@@ -82,11 +127,6 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
         template = AtomicMultiChannelPulseTemplate(*sts[:1])
 
         self.assertEqual(template.duration, 't1')
-
-    def test_parameter_names(self) -> None:
-        template = AtomicMultiChannelPulseTemplate(*zip(self.subtemplates, self.param_maps, self.chan_maps),
-                                                   parameter_constraints={'pp1 > hugo'}, measurements={('meas', 'd', 1)})
-        self.assertEqual({'pp1', 'pp2', 'pp3', 'hugo', 'd'}, template.parameter_names)
 
     def test_mapping_template_pure_conversion(self):
         template = AtomicMultiChannelPulseTemplate(*zip(self.subtemplates, self.param_maps, self.chan_maps))
@@ -135,6 +175,12 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
         self.assertEqual(pt.parameter_names,
                          {'a', 'b', 'c', 'd', 'e'})
 
+    def test_parameter_names_2(self):
+        template = AtomicMultiChannelPulseTemplate(*zip(self.subtemplates, self.param_maps, self.chan_maps),
+                                                   parameter_constraints={'pp1 > hugo'},
+                                                   measurements={('meas', 'd', 1)},
+                                                   duration='my_duration')
+        self.assertEqual({'pp1', 'pp2', 'pp3', 'hugo', 'd', 'my_duration'}, template.parameter_names)
 
     def test_integral(self) -> None:
         sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'},
@@ -149,18 +195,6 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
 
 
 class MultiChannelPulseTemplateSequencingTests(unittest.TestCase):
-
-    def test_requires_stop(self):
-        sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'}, parameter_names={'a', 'b'}, requires_stop=False),
-               DummyPulseTemplate(duration='t1', defined_channels={'B'}, parameter_names={'a', 'c'}, requires_stop=False)]
-
-        self.assertFalse(AtomicMultiChannelPulseTemplate(*sts).requires_stop(dict(), dict()))
-        sts = [
-            DummyPulseTemplate(duration='t1', defined_channels={'A'}, parameter_names={'a', 'b'}, requires_stop=False),
-            DummyPulseTemplate(duration='t1', defined_channels={'B'}, parameter_names={'a', 'c'}, requires_stop=True)]
-
-        self.assertTrue(AtomicMultiChannelPulseTemplate(*sts).requires_stop(dict(), dict()))
-
     def test_build_waveform(self):
         wfs = [DummyWaveform(duration=1.1, defined_channels={'A'}), DummyWaveform(duration=1.1, defined_channels={'B'})]
 
@@ -213,33 +247,6 @@ class MultiChannelPulseTemplateSequencingTests(unittest.TestCase):
         sts[0].waveform = None
         wf = pt.build_waveform(parameters, channel_mapping=channel_mapping)
         self.assertIsNone(wf)
-
-    def test_build_sequence(self):
-        wfs = [DummyWaveform(duration=1.1, defined_channels={'A'}), DummyWaveform(duration=1.1, defined_channels={'B'})]
-        sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'}, waveform=wfs[0], measurements=[('m', 0, 1)]),
-               DummyPulseTemplate(duration='t1', defined_channels={'B'}, waveform=wfs[1]),
-               DummyPulseTemplate(duration='t1', defined_channels={'C'}, waveform=None)]
-
-        pt = AtomicMultiChannelPulseTemplate(*sts, parameter_constraints=['a < b'], measurements=[('n', .1, .2)])
-
-        params = dict(a=ConstantParameter(1.0), b=ConstantParameter(1.1))
-        measurement_mapping = dict(m='foo', n='bar')
-        channel_mapping = {'A': 'A', 'B': 'B', 'C': None}
-
-        block = InstructionBlock()
-        pt.build_sequence(None, parameters=params, conditions={}, measurement_mapping=measurement_mapping,
-                          channel_mapping=channel_mapping, instruction_block=block)
-
-        expected_waveform = MultiChannelWaveform(wfs)
-
-        expected_block = InstructionBlock()
-        measurements = [('bar', .1, .2), ('foo', 0, 1)]
-        expected_block.add_instruction_meas(measurements)
-        expected_block.add_instruction_exec(waveform=expected_waveform)
-
-        self.assertEqual(len(block.instructions), len(expected_block.instructions))
-        self.assertEqual(block.instructions[0].compare_key, expected_block.instructions[0].compare_key)
-        self.assertEqual(block.instructions[1].compare_key, expected_block.instructions[1].compare_key)
 
     def test_get_measurement_windows(self):
         wfs = [DummyWaveform(duration=1.1, defined_channels={'A'}), DummyWaveform(duration=1.1, defined_channels={'B'})]
@@ -331,3 +338,131 @@ class AtomicMultiChannelPulseTemplateOldSerializationTests(unittest.TestCase):
             data = template.get_serialization_data(serializer=serializer)
 
             self.assertEqual(expected_data, data)
+
+
+class ParallelConstantChannelPulseTemplateTests(unittest.TestCase):
+    def test_init(self):
+        template = DummyPulseTemplate(duration='t1', defined_channels={'X', 'Y'}, parameter_names={'a', 'b'}, measurement_names={'M'})
+        overwritten_channels = {'Y': 'c', 'Z': 'a'}
+
+        expected_overwritten_channels = {'Y': ExpressionScalar('c'), 'Z': ExpressionScalar('a')}
+
+        pccpt = ParallelConstantChannelPulseTemplate(template, overwritten_channels)
+        self.assertIs(template, pccpt.template)
+        self.assertEqual(expected_overwritten_channels, pccpt.overwritten_channels)
+
+        self.assertEqual({'X', 'Y', 'Z'}, pccpt.defined_channels)
+        self.assertEqual({'a', 'b', 'c'}, pccpt.parameter_names)
+        self.assertEqual({'M'}, pccpt.measurement_names)
+        self.assertEqual({'a', 'c'}, pccpt.transformation_parameters)
+        self.assertIs(template.duration, pccpt.duration)
+
+    def test_missing_implementations(self):
+        pccpt = ParallelConstantChannelPulseTemplate(DummyPulseTemplate(), {})
+        with self.assertRaises(NotImplementedError):
+            pccpt.get_serialization_data(object())
+
+    def test_integral(self):
+        template = DummyPulseTemplate(duration='t1', defined_channels={'X', 'Y'}, parameter_names={'a', 'b'},
+                                      measurement_names={'M'},
+                                      integrals={'X': ExpressionScalar('a'), 'Y': ExpressionScalar(4)})
+        overwritten_channels = {'Y': 'c', 'Z': 'a'}
+        pccpt = ParallelConstantChannelPulseTemplate(template, overwritten_channels)
+
+        expected_integral = {'X': ExpressionScalar('a'),
+                             'Y': ExpressionScalar('c*t1'),
+                             'Z': ExpressionScalar('a*t1')}
+        self.assertEqual(expected_integral, pccpt.integral)
+
+    def test_get_overwritten_channels_values(self):
+        template = DummyPulseTemplate(duration='t1', defined_channels={'X', 'Y'}, parameter_names={'a', 'b'},
+                                      measurement_names={'M'})
+        overwritten_channels = {'Y': 'c', 'Z': 'a'}
+
+        expected_overwritten_channel_values = {'Y': 1.2, 'Z': 3.4}
+
+        pccpt = ParallelConstantChannelPulseTemplate(template, overwritten_channels)
+
+        real_parameters = {'c': 1.2, 'a': 3.4}
+        self.assertEqual(expected_overwritten_channel_values, pccpt._get_overwritten_channels_values(real_parameters))
+
+    def test_internal_create_program(self):
+        template = DummyPulseTemplate(duration='t1', defined_channels={'X', 'Y'}, parameter_names={'a', 'b'},
+                                      measurement_names={'M'}, waveform=DummyWaveform())
+        overwritten_channels = {'Y': 'c', 'Z': 'a'}
+
+        parent_loop = object()
+        measurement_mapping = object()
+        channel_mapping = object()
+        to_single_waveform = object()
+
+        other_kwargs = dict(measurement_mapping=measurement_mapping,
+                            channel_mapping=channel_mapping,
+                            to_single_waveform=to_single_waveform,
+                            parent_loop=parent_loop)
+        pccpt = ParallelConstantChannelPulseTemplate(template, overwritten_channels)
+
+        scope = DictScope.from_kwargs(c=1.2, a=3.4)
+        kwargs = {**other_kwargs, 'scope': scope, 'global_transformation': None}
+
+        expected_overwritten_channels = {'Y': 1.2, 'Z': 3.4}
+        expected_transformation = ParallelConstantChannelTransformation(expected_overwritten_channels)
+        expected_kwargs = {**kwargs, 'global_transformation': expected_transformation}
+
+        with mock.patch.object(template, '_create_program', spec=template._create_program) as cp_mock:
+            pccpt._internal_create_program(**kwargs)
+            cp_mock.assert_called_once_with(**expected_kwargs)
+
+        global_transformation = LinearTransformation(numpy.zeros((0, 0)), [], [])
+        expected_transformation = chain_transformations(global_transformation, expected_transformation)
+        kwargs = {**other_kwargs, 'scope': scope, 'global_transformation': global_transformation}
+        expected_kwargs = {**kwargs, 'global_transformation': expected_transformation}
+
+        with mock.patch.object(template, '_create_program', spec=template._create_program) as cp_mock:
+            pccpt._internal_create_program(**kwargs)
+            cp_mock.assert_called_once_with(**expected_kwargs)
+
+    def test_build_waveform(self):
+        template = DummyPulseTemplate(duration='t1', defined_channels={'X', 'Y'}, parameter_names={'a', 'b'},
+                                      measurement_names={'M'}, waveform=DummyWaveform())
+        overwritten_channels = {'Y': 'c', 'Z': 'a'}
+        channel_mapping = {'X': 'X', 'Y': 'K'}
+        pccpt = ParallelConstantChannelPulseTemplate(template, overwritten_channels)
+
+        parameters = {'c': 1.2, 'a': 3.4}
+        expected_overwritten_channels = {'Y': 1.2, 'Z': 3.4}
+        expected_transformation = ParallelConstantChannelTransformation(expected_overwritten_channels)
+        expected_waveform = TransformingWaveform(template.waveform, expected_transformation)
+
+        resulting_waveform = pccpt.build_waveform(parameters.copy(), channel_mapping.copy())
+        self.assertEqual(expected_waveform, resulting_waveform)
+
+        self.assertEqual([(parameters, channel_mapping)], template.build_waveform_calls)
+
+        template.waveform = None
+        resulting_waveform = pccpt.build_waveform(parameters.copy(), channel_mapping.copy())
+        self.assertEqual(None, resulting_waveform)
+        self.assertEqual([(parameters, channel_mapping), (parameters, channel_mapping)], template.build_waveform_calls)
+
+
+class ParallelConstantChannelPulseTemplateSerializationTests(SerializableTests, unittest.TestCase):
+    @property
+    def class_to_test(self):
+        return ParallelConstantChannelPulseTemplate
+
+    @staticmethod
+    def make_kwargs(*args, **kwargs):
+        return {
+            'template': DummyPulseTemplate(duration='t1', defined_channels={'X', 'Y'}, parameter_names={'a', 'b'}),
+            'overwritten_channels': {'Y': 'c', 'Z': 'a'}
+        }
+
+    def assert_equal_instance_except_id(self, lhs: ParallelConstantChannelPulseTemplate, rhs: ParallelConstantChannelPulseTemplate):
+        self.assertIsInstance(lhs, ParallelConstantChannelPulseTemplate)
+        self.assertIsInstance(rhs, ParallelConstantChannelPulseTemplate)
+        self.assertEqual(lhs.template, rhs.template)
+        self.assertEqual(lhs.overwritten_channels, rhs.overwritten_channels)
+
+    @unittest.skip("Conversion not implemented for new type")
+    def test_conversion(self):
+        pass

@@ -2,7 +2,7 @@
 combines several other PulseTemplate objects for sequential execution."""
 
 import numpy as np
-from typing import Dict, List, Tuple, Set, Optional, Any, Iterable, Union
+from typing import Dict, List, Set, Optional, Any, Iterable, Union, Callable, cast
 from numbers import Real
 import functools
 import warnings
@@ -11,12 +11,10 @@ from cached_property import cached_property
 
 from qupulse.serialization import Serializer, PulseRegistryType
 from qupulse._program._loop import Loop
-
+from qupulse.parameter_scope import Scope
 from qupulse.utils.types import MeasurementWindow, ChannelID, TimeType
-from qupulse.pulses.pulse_template import PulseTemplate
+from qupulse.pulses.pulse_template import PulseTemplate, AtomicPulseTemplate
 from qupulse.pulses.parameters import Parameter, ParameterConstrainer, ParameterNotProvidedException
-from qupulse.pulses.sequencing import InstructionBlock, Sequencer
-from qupulse.pulses.conditions import Condition
 from qupulse.pulses.mapping_pulse_template import MappingPulseTemplate, MappingTuple
 from qupulse._program.waveforms import SequenceWaveform
 from qupulse.pulses.measurement import MeasurementDeclaration, MeasurementDefiner
@@ -115,10 +113,6 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
     def subtemplates(self) -> List[MappingPulseTemplate]:
         return self.__subtemplates
 
-    @property
-    def is_interruptable(self) -> bool:
-        return any(st.is_interruptable for st in self.subtemplates)
-
     @cached_property
     def duration(self) -> Expression:
         return sum(sub.duration for sub in self.__subtemplates)
@@ -132,64 +126,30 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
         return set.union(MeasurementDefiner.measurement_names.fget(self),
                          *(st.measurement_names for st in self.subtemplates))
 
-    def requires_stop(self,
-                      parameters: Dict[str, Parameter],
-                      conditions: Dict[str, 'Condition']) -> bool:
-        """Returns the stop requirement of the first subtemplate. If a later subtemplate requires a stop the
-        SequencePulseTemplate can be partially sequenced."""
-        return self.__subtemplates[0].requires_stop(parameters, conditions) if self.__subtemplates else False
-
     def build_waveform(self,
                        parameters: Dict[str, Real],
                        channel_mapping: Dict[ChannelID, ChannelID]) -> SequenceWaveform:
-        self.validate_parameter_constraints(parameters=parameters)
+        self.validate_parameter_constraints(parameters=parameters, volatile=set())
         return SequenceWaveform([sub_template.build_waveform(parameters,
                                                              channel_mapping=channel_mapping)
                                  for sub_template in self.__subtemplates])
 
-    def build_sequence(self,
-                       sequencer: Sequencer,
-                       parameters: Dict[str, Parameter],
-                       conditions: Dict[str, Condition],
-                       measurement_mapping: Dict[str, str],
-                       channel_mapping: Dict['ChannelID', 'ChannelID'],
-                       instruction_block: InstructionBlock) -> None:
-        self.validate_parameter_constraints(parameters=parameters)
-        self.insert_measurement_instruction(instruction_block=instruction_block,
-                                            parameters=parameters,
-                                            measurement_mapping=measurement_mapping)
-        for subtemplate in reversed(self.subtemplates):
-            sequencer.push(subtemplate,
-                           parameters=parameters,
-                           conditions=conditions,
-                           window_mapping=measurement_mapping,
-                           channel_mapping=channel_mapping,
-                           target_block=instruction_block)
-
     def _internal_create_program(self, *,
-                                 parameters: Dict[str, Parameter],
+                                 scope: Scope,
                                  measurement_mapping: Dict[str, Optional[str]],
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional['Transformation'],
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
                                  parent_loop: Loop) -> None:
-        self.validate_parameter_constraints(parameters=parameters)
+        self.validate_scope(scope)
 
-        try:
-            measurement_parameters = {parameter_name: parameters[parameter_name].get_value()
-                                      for parameter_name in self.measurement_parameters}
-            duration_parameters = {parameter_name: parameters[parameter_name].get_value()
-                                   for parameter_name in self.duration.variables}
-        except KeyError as e:
-            raise ParameterNotProvidedException(e) from e
-
-        if self.duration.evaluate_numeric(**duration_parameters) > 0:
-            measurements = self.get_measurement_windows(measurement_parameters, measurement_mapping)
+        if self.duration.evaluate_in_scope(scope) > 0:
+            measurements = self.get_measurement_windows(scope, measurement_mapping)
             if measurements:
                 parent_loop.add_measurements(measurements)
 
             for subtemplate in self.subtemplates:
-                subtemplate._create_program(parameters=parameters,
+                subtemplate._create_program(scope=scope,
                                             measurement_mapping=measurement_mapping,
                                             channel_mapping=channel_mapping,
                                             global_transformation=global_transformation,
@@ -235,5 +195,3 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
             return {k: x[k] + y[k] for k in x}
 
         return functools.reduce(add_dicts, [sub.integral for sub in self.__subtemplates], expressions)
-
-

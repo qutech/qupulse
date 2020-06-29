@@ -25,7 +25,6 @@ from qupulse.pulses.interpolation import InterpolationStrategy, LinearInterpolat
 from qupulse._program.waveforms import TableWaveform, TableWaveformEntry
 from qupulse.expressions import ExpressionScalar, Expression
 from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
-from qupulse.pulses.conditions import Condition
 
 __all__ = ["TablePulseTemplate", "concatenate"]
 
@@ -94,6 +93,10 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
         """
         AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
+
+        if not entries:
+            raise ValueError("Cannot construct an empty TablePulseTemplate (no entries given). There is currently no "
+                             "specific reason for this. Please submit an issue if you need this 'feature'.")
 
         self._entries = dict((ch, list()) for ch in entries.keys())
         for channel, channel_entries in entries.items():
@@ -202,10 +205,6 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
         return self.table_parameters | self.measurement_parameters | self.constrained_parameters
 
     @property
-    def is_interruptable(self) -> bool:
-        return False
-
-    @property
     def duration(self) -> ExpressionScalar:
         return self._duration
 
@@ -217,17 +216,6 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
     @property
     def defined_channels(self) -> Set[ChannelID]:
         return set(self._entries.keys())
-
-    def requires_stop(self,
-                      parameters: Dict[str, Parameter],
-                      conditions: Dict[str, 'Condition']) -> bool:
-        try:
-            return any(
-                parameters[name].requires_stop
-                for name in self.parameter_names
-            )
-        except KeyError as key_error:
-            raise ParameterNotProvidedException(str(key_error)) from key_error
 
     def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
         data = super().get_serialization_data(serializer)
@@ -251,7 +239,7 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
                        parameters: Dict[str, numbers.Real],
                        channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Union[TableWaveform,
                                                                                                 MultiChannelWaveform]]:
-        self.validate_parameter_constraints(parameters)
+        self.validate_parameter_constraints(parameters, volatile=set())
 
         if all(channel_mapping[channel] is None
                for channel in self.defined_channels):

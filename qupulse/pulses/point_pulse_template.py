@@ -3,11 +3,12 @@ from numbers import Real
 import itertools
 import numbers
 
+import sympy
 import numpy as np
 
+from qupulse.utils.sympy import Broadcast
 from qupulse.utils.types import ChannelID
 from qupulse.expressions import Expression, ExpressionScalar
-from qupulse.pulses.conditions import Condition
 from qupulse._program.waveforms import TableWaveform, TableWaveformEntry
 from qupulse.pulses.parameters import Parameter, ParameterNotProvidedException, ParameterConstraint,\
     ParameterConstrainer
@@ -64,7 +65,7 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
     def build_waveform(self,
                        parameters: Dict[str, Real],
                        channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[TableWaveform]:
-        self.validate_parameter_constraints(parameters)
+        self.validate_parameter_constraints(parameters=parameters, volatile=set())
 
         if all(channel_mapping[channel] is None
                for channel in self.defined_channels):
@@ -133,27 +134,20 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
     def parameter_names(self) -> Set[str]:
         return self.point_parameters | self.measurement_parameters | self.constrained_parameters
 
-    def requires_stop(self,
-                      parameters: Dict[str, Parameter],
-                      conditions: Dict[str, Condition]) -> bool:
-        try:
-            return any(
-                parameters[name].requires_stop
-                for name in self.parameter_names
-            )
-        except KeyError as key_error:
-            raise ParameterNotProvidedException(str(key_error)) from key_error
-
     @property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
         expressions = {channel: 0 for channel in self._channels}
         for first_entry, second_entry in zip(self._entries[:-1], self._entries[1:]):
-            substitutions = {'t0': ExpressionScalar(first_entry.t).sympified_expression,
-                             't1': ExpressionScalar(second_entry.t).sympified_expression}
+            substitutions = {'t0': first_entry.t.sympified_expression,
+                             't1': second_entry.t.sympified_expression}
+
+            v0 = sympy.IndexedBase(Broadcast(first_entry.v.underlying_expression, (len(self.defined_channels),)))
+            v1 = sympy.IndexedBase(Broadcast(second_entry.v.underlying_expression, (len(self.defined_channels),)))
 
             for i, channel in enumerate(self._channels):
-                substitutions['v0'] = ExpressionScalar(first_entry.v[i]).sympified_expression
-                substitutions['v1'] = ExpressionScalar(second_entry.v[i]).sympified_expression
+                substitutions['v0'] = v0[i]
+                substitutions['v1'] = v1[i]
+
                 expressions[channel] += first_entry.interp.integral.sympified_expression.subs(substitutions)
 
         expressions = {c: ExpressionScalar(expressions[c]) for c in expressions}

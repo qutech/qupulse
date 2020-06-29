@@ -1,11 +1,11 @@
-from typing import NamedTuple, Set, Callable, Dict, Tuple, Union, Iterable, Any
+from typing import NamedTuple, Set, Callable, Dict, Tuple, Union, Iterable, Any, Mapping
 from collections import defaultdict
 import warnings
+import numbers
 
 from qupulse.hardware.awgs.base import AWG
 from qupulse.hardware.dacs import DAC
-from qupulse._program._loop import MultiChannelProgram, Loop
-from qupulse._program.instructions import AbstractInstructionBlock
+from qupulse._program._loop import Loop
 
 from qupulse.utils.types import ChannelID
 
@@ -69,7 +69,7 @@ class MarkerChannel(_SingleChannel):
         super().__init__(awg=awg, channel_on_awg=channel_on_awg)
 
 
-RegisteredProgram = NamedTuple('RegisteredProgram', [('program', MultiChannelProgram),
+RegisteredProgram = NamedTuple('RegisteredProgram', [('program', Loop),
                                                      ('measurement_windows', Dict[str, Tuple[float, float]]),
                                                      ('run_callback', Callable),
                                                      ('awgs_to_upload_to', Set[AWG]),
@@ -91,20 +91,19 @@ class HardwareSetup:
         self._registered_programs = dict()  # type: Dict[str, RegisteredProgram]
 
     def register_program(self, name: str,
-                         instruction_block: Union[AbstractInstructionBlock, Loop],
+                         program: Loop,
                          run_callback=lambda: None, update=False) -> None:
         if not callable(run_callback):
             raise TypeError('The provided run_callback is not callable')
 
-        mcp = MultiChannelProgram(instruction_block)
-        if mcp.channels - set(self._channel_map.keys()):
+        channels = next(program.get_depth_first_iterator()).waveform.defined_channels
+        if channels - set(self._channel_map.keys()):
             raise KeyError('The following channels are unknown to the HardwareSetup: {}'.format(
-                mcp.channels - set(self._channel_map.keys())))
+                channels - set(self._channel_map.keys())))
 
         temp_measurement_windows = defaultdict(list)
-        for program in mcp.programs.values():
-            for mw_name, begins_lengths in program.get_measurement_windows().items():
-                temp_measurement_windows[mw_name].append(begins_lengths)
+        for mw_name, begins_lengths in program.get_measurement_windows().items():
+            temp_measurement_windows[mw_name].append(begins_lengths)
 
         if set(temp_measurement_windows.keys()) - set(self._measurement_map.keys()):
             raise KeyError('The following measurements are not registered: {}\nUse set_measurement for that.'.format(
@@ -127,41 +126,40 @@ class HardwareSetup:
                 affected_dacs[dac][mask_name] = begins_lengths
 
         handled_awgs = set()
-        for channels, program in mcp.programs.items():
-            awgs_to_channel_info = dict()
+        awgs_to_channel_info = dict()
 
-            def get_default_info(awg):
-                return ([None] * awg.num_channels,
-                        [None] * awg.num_channels,
-                        [None] * awg.num_markers)
+        def get_default_info(awg):
+            return ([None] * awg.num_channels,
+                    [None] * awg.num_channels,
+                    [None] * awg.num_markers)
 
-            for channel_id in channels:
-                for single_channel in self._channel_map[channel_id]:
-                    playback_ids, voltage_trafos, marker_ids = \
+        for channel_id in channels:
+            for single_channel in self._channel_map[channel_id]:
+                playback_ids, voltage_trafos, marker_ids = \
                         awgs_to_channel_info.setdefault(single_channel.awg, get_default_info(single_channel.awg))
 
-                    if isinstance(single_channel, PlaybackChannel):
-                        playback_ids[single_channel.channel_on_awg] = channel_id
-                        voltage_trafos[single_channel.channel_on_awg] = single_channel.voltage_transformation
-                    elif isinstance(single_channel, MarkerChannel):
-                        marker_ids[single_channel.channel_on_awg] = channel_id
+                if isinstance(single_channel, PlaybackChannel):
+                    playback_ids[single_channel.channel_on_awg] = channel_id
+                    voltage_trafos[single_channel.channel_on_awg] = single_channel.voltage_transformation
+                elif isinstance(single_channel, MarkerChannel):
+                    marker_ids[single_channel.channel_on_awg] = channel_id
 
-            for awg, (playback_ids, voltage_trafos, marker_ids) in awgs_to_channel_info.items():
-                if awg in handled_awgs:
-                    raise ValueError('AWG has two programs')
-                else:
-                    handled_awgs.add(awg)
-                awg.upload(name,
-                           program=program,
-                           channels=tuple(playback_ids),
-                           markers=tuple(marker_ids),
-                           force=update,
-                           voltage_transformation=tuple(voltage_trafos))
+        for awg, (playback_ids, voltage_trafos, marker_ids) in awgs_to_channel_info.items():
+            if awg in handled_awgs:
+                raise ValueError('AWG has two programs')
+            else:
+                handled_awgs.add(awg)
+            awg.upload(name,
+                       program=program,
+                       channels=tuple(playback_ids),
+                       markers=tuple(marker_ids),
+                       force=update,
+                       voltage_transformation=tuple(voltage_trafos))
 
         for dac, dac_windows in affected_dacs.items():
             dac.register_measurement_windows(name, dac_windows)
 
-        self._registered_programs[name] = RegisteredProgram(program=mcp,
+        self._registered_programs[name] = RegisteredProgram(program=program,
                                                             measurement_windows=measurement_windows,
                                                             run_callback=run_callback,
                                                             awgs_to_upload_to=handled_awgs,
@@ -283,6 +281,13 @@ class HardwareSetup:
 
     def registered_channels(self) -> Dict[ChannelID, Set[_SingleChannel]]:
         return self._channel_map
+
+    def update_parameters(self, name: str, parameters: Mapping[str, numbers.Real]):
+        *_, awgs, dacs = self._registered_programs[name]
+
+        for awg in self.known_awgs:
+            if awg in awgs:
+                awg.set_volatile_parameters(name, parameters)
 
     @property
     def registered_programs(self) -> Dict[str, RegisteredProgram]:

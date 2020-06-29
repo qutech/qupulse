@@ -4,11 +4,11 @@ from unittest import mock
 import numpy
 import numpy as np
 
-from qupulse.utils.types import time_from_float
+from qupulse.utils.types import TimeType
 from qupulse.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy,\
     JumpInterpolationStrategy
 from qupulse._program.waveforms import MultiChannelWaveform, RepetitionWaveform, SequenceWaveform,\
-    TableWaveformEntry, TableWaveform, TransformingWaveform, SubsetWaveform
+    TableWaveformEntry, TableWaveform, TransformingWaveform, SubsetWaveform, ArithmeticWaveform
 from qupulse._program.transformation import Transformation
 
 from tests.pulses.sequencing_dummies import DummyWaveform, DummyInterpolationStrategy
@@ -117,7 +117,7 @@ class MultiChannelWaveformTest(unittest.TestCase):
 
         waveform = MultiChannelWaveform([dwf])
         self.assertEqual({'A'}, waveform.defined_channels)
-        self.assertEqual(time_from_float(1.3), waveform.duration)
+        self.assertEqual(TimeType.from_float(1.3), waveform.duration)
 
     def test_init_several_channels(self) -> None:
         dwf_a = DummyWaveform(duration=2.2, defined_channels={'A'})
@@ -126,7 +126,7 @@ class MultiChannelWaveformTest(unittest.TestCase):
 
         waveform = MultiChannelWaveform([dwf_a, dwf_b])
         self.assertEqual({'A', 'B'}, waveform.defined_channels)
-        self.assertEqual(time_from_float(2.2), waveform.duration)
+        self.assertEqual(TimeType.from_float(2.2), waveform.duration)
 
         with self.assertRaises(ValueError):
             MultiChannelWaveform([dwf_a, dwf_c])
@@ -224,7 +224,7 @@ class RepetitionWaveformTest(unittest.TestCase):
 
     def test_duration(self):
         wf = RepetitionWaveform(DummyWaveform(duration=2.2), 3)
-        self.assertEqual(wf.duration, time_from_float(2.2)*3)
+        self.assertEqual(wf.duration, TimeType.from_float(2.2)*3)
 
     def test_defined_channels(self):
         body_wf = DummyWaveform(defined_channels={'a'})
@@ -333,8 +333,8 @@ class SequenceWaveformTest(unittest.TestCase):
         self.assertEqual(sub_wf.compare_key[0].defined_channels, subset)
         self.assertEqual(sub_wf.compare_key[1].defined_channels, subset)
 
-        self.assertEqual(sub_wf.compare_key[0].duration, time_from_float(2.2))
-        self.assertEqual(sub_wf.compare_key[1].duration, time_from_float(3.3))
+        self.assertEqual(sub_wf.compare_key[0].duration, TimeType.from_float(2.2))
+        self.assertEqual(sub_wf.compare_key[1].duration, TimeType.from_float(3.3))
 
 
 
@@ -551,3 +551,61 @@ class SubsetWaveformTest(unittest.TestCase):
             actual_data = subset_wf.unsafe_sample('g', time, output)
             self.assertIs(expected_data, actual_data)
             unsafe_sample.assert_called_once_with('g', time, output)
+
+
+class ArithmeticWaveformTest(unittest.TestCase):
+    def test_simple_properties(self):
+        lhs = DummyWaveform(duration=1.5, defined_channels={'a', 'b', 'c'})
+        rhs = DummyWaveform(duration=1.5, defined_channels={'a', 'b', 'd'})
+
+        arith = ArithmeticWaveform(lhs, '-', rhs)
+
+        self.assertEqual(set('abcd'), arith.defined_channels)
+        self.assertIs(lhs, arith.lhs)
+        self.assertIs(rhs, arith.rhs)
+        self.assertEqual('-', arith.arithmetic_operator)
+        self.assertEqual(lhs.duration, arith.duration)
+
+        self.assertEqual(('-', lhs, rhs), arith.compare_key)
+
+    def test_unsafe_get_subset_for_channels(self):
+        lhs = DummyWaveform(duration=1.5, defined_channels={'a', 'b', 'c'})
+        rhs = DummyWaveform(duration=1.5, defined_channels={'a', 'b', 'd'})
+
+        arith = ArithmeticWaveform(lhs, '-', rhs)
+
+        self.assertEqual(SubsetWaveform(arith, {'a', 'c'}), arith.unsafe_get_subset_for_channels({'a', 'c'}))
+
+    def test_unsafe_sample(self):
+        sample_times = np.linspace(0, 10, num=20)
+        rhs_a = np.sin(sample_times)
+        rhs_b = np.cos(sample_times)
+        rhs_c = np.tan(sample_times)
+        rhs_out = dict(a=rhs_a,
+                       b=rhs_b,
+                       c=rhs_c)
+
+        lhs_a = np.sinh(sample_times)
+        lhs_b = np.cosh(sample_times)
+        lhs_d = np.tanh(sample_times)
+        lhs_out = dict(a=lhs_a,
+                       b=lhs_b,
+                       d=lhs_d)
+
+        for op_str, op_fn in (('+', np.add), ('-', np.subtract)):
+            for output_array in (None, np.zeros_like(sample_times)):
+                lhs = DummyWaveform(sample_output=lhs_out)
+                rhs = DummyWaveform(sample_output=rhs_out)
+                arith = ArithmeticWaveform(lhs, op_str, rhs)
+
+                expected = dict(a=op_fn(lhs_a, rhs_a),
+                                b=op_fn(lhs_b, rhs_b),
+                                c=op_fn(0, rhs_c),
+                                d=op_fn(lhs_d, 0))
+
+                for ch, data in expected.items():
+                    result = arith.unsafe_sample(ch, sample_times=sample_times, output_array=output_array)
+
+                    np.testing.assert_equal(data, result)
+                    if output_array is not None:
+                        self.assertIs(result, output_array)

@@ -32,7 +32,7 @@ import importlib
 import warnings
 from contextlib import contextmanager
 
-from qupulse.utils.types import DocStringABCMeta
+from qupulse.utils.types import DocStringABCMeta, FrozenDict
 
 __all__ = ["StorageBackend", "FilesystemBackend", "ZipFileBackend", "CachingBackend", "Serializable", "Serializer",
            "AnonymousSerializable", "DictBackend", "PulseStorage",
@@ -295,8 +295,10 @@ class CachingBackend(StorageBackend):
 
     Note that it does not automatically clear the cache at any time and thus will consume increasing amounts of memory
     over time. Use the :meth:`clear_cache` method to clear the cache manually.
+
+    DEPRECATED (2018-09-20): PulseStorage now already provides chaching around StorageBackends, rendering CachingBackend
+    obsolete.
     """
-    #todo (2018-09-20): PulseStorage now provides caching. Does this make CachingBackend obsolete? if so -> deprecate and remove
 
     def __init__(self, backend: StorageBackend) -> None:
         """Creates a new CachingBackend.
@@ -305,6 +307,8 @@ class CachingBackend(StorageBackend):
             backend (StorageBackend): A StorageBackend that provides data
                 IO functionality.
         """
+        warnings.warn("CachingBackend is obsolete due to PulseStorage already offering caching functionality.",
+                      DeprecationWarning)
         self._backend = backend
         self._cache = {}
 
@@ -468,8 +472,6 @@ class Serializable(metaclass=SerializableMeta):
         Raises:
             ValueError: If identifier is the empty string
         """
-        super().__init__()
-
         if identifier == '':
             raise ValueError("Identifier must not be empty.")
         self.__identifier = identifier
@@ -908,11 +910,11 @@ class PulseStorage(MutableMapping[str, Serializable]):
 
         Calling this method will overwrite the entity currently stored under the given identifier by the
         provided serializable. It does _not_ overwrite nested Serializable objects contained in serializable. If you
-        want to overwrite those as well, do that explicitely.
+        want to overwrite those as well, do that explicitly.
 
         Args:
               identifier: The identifier to store serializable under.
-            serializable: The Serializable object to be stored.
+              serializable: The Serializable object to be stored.
         """
 
         is_transaction_begin = (self._transaction_storage is None)
@@ -1040,7 +1042,8 @@ class JSONSerializableEncoder(json.JSONEncoder):
                 if o.identifier not in self.storage:
                     self.storage[o.identifier] = o
                 elif o is not self.storage[o.identifier]:
-                    raise RuntimeError('Trying to store a subpulse with an identifier that is already taken.')
+                    raise RuntimeError('Trying to store a subpulse with an identifier that is already taken.',
+                                       o.identifier)
 
 
                 return {Serializable.type_identifier_name: 'reference',
@@ -1053,6 +1056,9 @@ class JSONSerializableEncoder(json.JSONEncoder):
 
         elif type(o) is set:
             return list(o)
+
+        elif type(o) is FrozenDict:
+            return dict(o.items())
 
         else:
             return super().default(o)

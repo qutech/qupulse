@@ -1,15 +1,14 @@
 import unittest
-import itertools
+from unittest import mock
 
 import numpy as np
 
-from qupulse._program.instructions import InstructionBlock, MEASInstruction
 from qupulse.hardware.setup import HardwareSetup, PlaybackChannel, MarkerChannel, MeasurementMask
+from qupulse._program._loop import Loop
 
 from tests.pulses.sequencing_dummies import DummyWaveform
 
 from tests.hardware.dummy_devices import DummyAWG, DummyDAC
-from tests._program.loop_tests import get_two_chan_test_block, WaveformGenerator
 
 
 class SingleChannelTests(unittest.TestCase):
@@ -68,6 +67,35 @@ class HardwareSetupTests(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+    def get_test_loops(self):
+        wf_1 = DummyWaveform(duration=1.1, defined_channels={'A', 'B'})
+        wf_2 = DummyWaveform(duration=1.1, defined_channels={'A', 'C'})
+        wf_3 = DummyWaveform(duration=1.1, defined_channels={'C'})
+        loop1 = Loop(repetition_count=1, children=[Loop(repetition_count=1, waveform=wf_1),
+                                                   Loop(repetition_count=10, children=[
+                                                      Loop(repetition_count=50, waveform=wf_1)]),
+                                                   Loop(repetition_count=17, children=[Loop(repetition_count=2,
+                                                                                            waveform=wf_1),
+                                                                                       Loop(repetition_count=1,
+                                                                                            waveform=wf_1)])],
+                     measurements=[('m1', 0., 1.)])
+        loop2 = Loop(repetition_count=1, children=[Loop(repetition_count=1, waveform=wf_2),
+                                                   Loop(repetition_count=10, children=[
+                                                      Loop(repetition_count=50, waveform=wf_2)]),
+                                                   Loop(repetition_count=17, children=[Loop(repetition_count=2,
+                                                                                            waveform=wf_2),
+                                                                                       Loop(repetition_count=1,
+                                                                                            waveform=wf_2)])],
+                     measurements=[('m2', 0., 1.)])
+        loop3 = Loop(repetition_count=1, children=[Loop(repetition_count=1, waveform=wf_3),
+                                                   Loop(repetition_count=10, children=[
+                                                       Loop(repetition_count=50, waveform=wf_3)]),
+                                                   Loop(repetition_count=17, children=[Loop(repetition_count=2,
+                                                                                            waveform=wf_3),
+                                                                                       Loop(repetition_count=1,
+                                                                                            waveform=wf_3)])])
+        return loop1, loop2, loop3
+
     def test_set_channel(self):
         awg1 = DummyAWG()
         awg2 = DummyAWG(num_channels=4)
@@ -113,17 +141,7 @@ class HardwareSetupTests(unittest.TestCase):
                          dict(A={PlaybackChannel(awg1, 0)}))
 
     def test_arm_program(self):
-        wf_1 = DummyWaveform(duration=1.1, defined_channels={'A', 'B'})
-        wf_2 = DummyWaveform(duration=1.1, defined_channels={'A', 'C'})
-
-        block_1 = InstructionBlock()
-        block_2 = InstructionBlock()
-
-        block_1.add_instruction_meas([('m1', 0., 1.)])
-        block_1.add_instruction_exec(wf_1)
-
-        block_2.add_instruction_meas([('m2', 0., 1.)])
-        block_2.add_instruction_exec(wf_2)
+        loop1, loop2, _ = self.get_test_loops()
 
         awg1 = DummyAWG()
         awg2 = DummyAWG()
@@ -141,7 +159,7 @@ class HardwareSetupTests(unittest.TestCase):
         setup.set_measurement('m1', MeasurementMask(dac1, 'DAC_1'))
         setup.set_measurement('m2', MeasurementMask(dac2, 'DAC_2'))
 
-        setup.register_program('test_1', block_1)
+        setup.register_program('test_1', loop1)
 
         self.assertIsNone(awg1._armed)
         self.assertIsNone(awg2._armed)
@@ -157,7 +175,7 @@ class HardwareSetupTests(unittest.TestCase):
         self.assertEqual(dac1._armed_program, 'test_1')
         self.assertIsNone(dac2._armed_program)
 
-        setup.register_program('test_2', block_2)
+        setup.register_program('test_2', loop2)
 
         self.assertEqual(awg1._armed, 'test_1')
         self.assertEqual(awg2._armed, 'test_1')
@@ -182,9 +200,7 @@ class HardwareSetupTests(unittest.TestCase):
 
         setup = HardwareSetup()
 
-        wfg = WaveformGenerator(num_channels=2, duration_generator=itertools.repeat(1))
-        block = get_two_chan_test_block(wfg)
-        block._InstructionBlock__instruction_list[:0] = (MEASInstruction([('m1', 0.1, 0.2)]),)
+        loop, *rest = self.get_test_loops()
 
         class ProgStart:
             def __init__(self):
@@ -201,7 +217,7 @@ class HardwareSetupTests(unittest.TestCase):
 
         setup.set_measurement('m1', MeasurementMask(dac, 'DAC'))
 
-        setup.register_program('p1', block, program_started)
+        setup.register_program('p1', loop, program_started)
 
         self.assertEqual(tuple(setup.registered_programs.keys()), ('p1',))
         self.assertEqual(setup.registered_programs['p1'].run_callback,  program_started)
@@ -226,24 +242,14 @@ class HardwareSetupTests(unittest.TestCase):
 
         expected_measurement_windows = {'p1':
                                             {'DAC':
-                                                 (np.array([0.1, 0.1]), np.array([0.2, 0.2]))
-                                             }
+                                                 (np.array([0,]), np.array([1,]))
+                                            }
                                         }
         np.testing.assert_equal(dac._measurement_windows,
                                 expected_measurement_windows)
 
     def test_remove_program(self):
-        wf_1 = DummyWaveform(duration=1.1, defined_channels={'A', 'B'})
-        wf_2 = DummyWaveform(duration=1.1, defined_channels={'A', 'C'})
-
-        block_1 = InstructionBlock()
-        block_2 = InstructionBlock()
-
-        block_1.add_instruction_meas([('m1', 0., 1.)])
-        block_1.add_instruction_exec(wf_1)
-
-        block_2.add_instruction_meas([('m2', 0., 1.)])
-        block_2.add_instruction_exec(wf_2)
+        loop1, loop2, _ = self.get_test_loops()
 
         awg1 = DummyAWG()
         awg2 = DummyAWG()
@@ -261,9 +267,9 @@ class HardwareSetupTests(unittest.TestCase):
         setup.set_measurement('m1', MeasurementMask(dac1, 'DAC_1'))
         setup.set_measurement('m2', MeasurementMask(dac2, 'DAC_2'))
 
-        setup.register_program('test_1', block_1)
+        setup.register_program('test_1', loop1)
 
-        setup.register_program('test_2', block_2)
+        setup.register_program('test_2', loop2)
 
         setup.arm_program('test_1')
 
@@ -275,11 +281,8 @@ class HardwareSetupTests(unittest.TestCase):
         self.assertIsNone(awg2._armed)
 
     def test_run_program(self):
-        wf = DummyWaveform(duration=1.1, defined_channels={'A', 'B'})
 
-        block = InstructionBlock()
-        block.add_instruction_meas([('m1', 0., 1.)])
-        block.add_instruction_exec(wf)
+        loop, *rest = self.get_test_loops()
 
         awg1 = DummyAWG()
         awg2 = DummyAWG()
@@ -305,7 +308,7 @@ class HardwareSetupTests(unittest.TestCase):
                 self.was_started = True
         program_started = ProgStart()
 
-        setup.register_program('test', block, run_callback=program_started)
+        setup.register_program('test', loop, run_callback=program_started)
 
         self.assertIsNone(awg1._armed)
         self.assertIsNone(awg2._armed)
@@ -326,22 +329,21 @@ class HardwareSetupTests(unittest.TestCase):
     def test_register_program_exceptions(self):
         setup = HardwareSetup()
 
-        wfg = WaveformGenerator(num_channels=2, duration_generator=itertools.repeat(1))
-        block = get_two_chan_test_block(wfg)
+        loop, *rest = self.get_test_loops()
 
         with self.assertRaises(TypeError):
-            setup.register_program('p1', block, 4)
+            setup.register_program('p1', loop, 4)
 
         with self.assertRaises(KeyError):
-            setup.register_program('p1', block, lambda: None)
+            setup.register_program('p1', loop, lambda: None)
 
         awg = DummyAWG(num_channels=2, num_markers=5)
 
         setup.set_channel('A', PlaybackChannel(awg, 0, lambda x: x))
         setup.set_channel('B', MarkerChannel(awg, 1))
 
-        with self.assertRaises(ValueError):
-            setup.register_program('p1', block, lambda: None)
+        with self.assertRaises(KeyError):
+            setup.register_program('p1', loop, lambda: None)
 
     def test_known_dacs(self) -> None:
         setup = HardwareSetup()
@@ -362,6 +364,33 @@ class HardwareSetupTests(unittest.TestCase):
         expected = {awg1, awg2}
         self.assertEqual(expected, setup.known_awgs)
 
+    def test_update_parameters(self) -> None:
+        setup = HardwareSetup()
+        awg1 = DummyAWG(num_channels=2, num_markers=0)
+        awg2 = DummyAWG(num_channels=1, num_markers=1)
+        dac1 = DummyDAC()
+        dac2 = DummyDAC()
+        setup.set_channel('A', PlaybackChannel(awg1, 0))
+        setup.set_channel('B', PlaybackChannel(awg1, 1))
+        setup.set_channel('C', PlaybackChannel(awg2, 0))
+        setup.set_measurement('m1', MeasurementMask(dac1, 'DAC_1'))
+        setup.set_measurement('m2', MeasurementMask(dac2, 'DAC_2'))
+        loop1, loop2, _ = self.get_test_loops()
+        name1 = 'prog1'
+        name2 = 'prog2'
+        setup.register_program(name1, loop1)
+        setup.register_program(name2, loop2)
+
+        parameters = dict(a=1, b=5)
+
+        with mock.patch.object(DummyAWG, 'set_volatile_parameters') as setpara:
+            setup.update_parameters(name1, parameters)
+            setpara.assert_called_once_with(name1, parameters)
+        with mock.patch.object(DummyAWG, 'set_volatile_parameters') as setpara:
+            setup.update_parameters(name2, parameters)
+            assert setpara.call_count == 2
+            setpara.assert_called_with(name2, parameters)
+
     def test_clear_programs(self) -> None:
         setup = HardwareSetup()
         awg1 = DummyAWG(num_channels=2, num_markers=0)
@@ -373,31 +402,17 @@ class HardwareSetupTests(unittest.TestCase):
         setup.set_channel('C', PlaybackChannel(awg2, 0))
         setup.set_channel('M1', MarkerChannel(awg2, 0))
 
-        wf1 = DummyWaveform(duration=1.1, defined_channels={'C'})
-        wf2 = DummyWaveform(duration=7.2, defined_channels={'A'})
-        wf3 = DummyWaveform(duration=3.7, defined_channels={'B', 'C'})
-
         setup.set_measurement('m1', MeasurementMask(dac1, 'DAC_1'))
         setup.set_measurement('m2', MeasurementMask(dac2, 'DAC_2'))
 
-        block1 = InstructionBlock()
-        block1.add_instruction_exec(wf1)
+        loop1, loop2, loop3 = self.get_test_loops()
 
-        block2 = InstructionBlock()
-        block2.add_instruction_meas([('m1', 0., 1.)])
-        block2.add_instruction_exec(wf2)
-
-        block3 = InstructionBlock()
-        block3.add_instruction_meas([('m2', 2., 3.)])
-        block3.add_instruction_exec(wf3)
-
-        setup.register_program('prog1', block1)
-        setup.register_program('prog2', block2)
-        setup.register_program('prog3', block3)
+        setup.register_program('prog1', loop1)
+        setup.register_program('prog2', loop2)
+        setup.register_program('prog3', loop3)
 
         self.assertTrue(setup.registered_programs)
 
         setup.clear_programs()
 
         self.assertFalse(setup.registered_programs)
-

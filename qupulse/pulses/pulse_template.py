@@ -10,20 +10,18 @@ from abc import abstractmethod
 from typing import Dict, Tuple, Set, Optional, Union, List, Callable, Any, Generic, TypeVar, Mapping
 import itertools
 import collections
-from numbers import Real
+from numbers import Real, Number
 
-from qupulse.utils.types import ChannelID, DocStringABCMeta
+from qupulse.utils.types import ChannelID, DocStringABCMeta, FrozenDict
 from qupulse.serialization import Serializable
-from qupulse.expressions import ExpressionScalar, Expression
+from qupulse.expressions import ExpressionScalar, Expression, ExpressionLike
 from qupulse._program._loop import Loop, to_waveform
 from qupulse._program.transformation import Transformation, IdentityTransformation, ChainedTransformation, chain_transformations
 
-
-from qupulse.pulses.conditions import Condition
 from qupulse.pulses.parameters import Parameter, ConstantParameter, ParameterNotProvidedException
-from qupulse.pulses.sequencing import Sequencer, SequencingElement, InstructionBlock
 from qupulse._program.waveforms import Waveform, TransformingWaveform
 from qupulse.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
+from qupulse.parameter_scope import Scope, DictScope
 
 __all__ = ["PulseTemplate", "AtomicPulseTemplate", "DoubleParameterNameException", "MappingTuple"]
 
@@ -34,7 +32,7 @@ MappingTuple = Union[Tuple['PulseTemplate'],
                      Tuple['PulseTemplate', Dict, Dict, Dict]]
 
 
-class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta):
+class PulseTemplate(Serializable):
     """A PulseTemplate represents the parametrized general structure of a pulse.
 
     A PulseTemplate described a pulse in an abstract way: It defines the structure of a pulse
@@ -44,6 +42,9 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
     Obtaining an actual pulse which can be executed by specifying values for these parameters is
     called instantiation of the PulseTemplate and achieved by invoking the sequencing process.
     """
+
+    """This is not stable"""
+    _DEFAULT_FORMAT_SPEC = 'identifier'
 
     def __init__(self, *,
                  identifier: Optional[str]) -> None:
@@ -58,12 +59,6 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
     @abstractmethod
     def measurement_names(self) -> Set[str]:
         """The set of measurement identifiers in this pulse template."""
-
-    @property
-    @abstractmethod
-    def is_interruptable(self) -> bool:
-        """Return true, if this PulseTemplate contains points at which it can halt if interrupted.
-        """
 
     @property
     @abstractmethod
@@ -98,11 +93,12 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
         """Returns an expression giving the integral over the pulse."""
 
     def create_program(self, *,
-                       parameters: Optional[Dict[str, Union[Parameter, float, Expression, str, Real]]]=None,
-                       measurement_mapping: Optional[Dict[str, Optional[str]]]=None,
-                       channel_mapping: Optional[Dict[ChannelID, Optional[ChannelID]]]=None,
+                       parameters: Optional[Mapping[str, Union[Expression, str, Number, ConstantParameter]]]=None,
+                       measurement_mapping: Optional[Mapping[str, Optional[str]]]=None,
+                       channel_mapping: Optional[Mapping[ChannelID, Optional[ChannelID]]]=None,
                        global_transformation: Optional[Transformation]=None,
-                       to_single_waveform: Set[Union[str, 'PulseTemplate']]=None) -> Optional['Loop']:
+                       to_single_waveform: Set[Union[str, 'PulseTemplate']]=None,
+                       volatile: Set[str] = None) -> Optional['Loop']:
         """Translates this PulseTemplate into a program Loop.
 
         The returned Loop represents the PulseTemplate with all parameter values instantiated provided as dictated by
@@ -116,6 +112,7 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
             global_transformation: This transformation is applied to every waveform
             to_single_waveform: A set of pulse templates (or identifiers) which are directly translated to a
                 waveform. This might change how transformations are applied. TODO: clarify
+            volatile: Everything in the final program that depends on these parameters is marked as volatile
         Returns:
              A Loop object corresponding to this PulseTemplate.
         """
@@ -127,10 +124,12 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
             channel_mapping = dict()
         if to_single_waveform is None:
             to_single_waveform = set()
+        if volatile is None:
+            volatile = set()
 
-        for channel in self.defined_channels:
-            if channel not in channel_mapping:
-                channel_mapping[channel] = channel
+        # make sure all channels are mapped
+        complete_channel_mapping = {channel: channel for channel in self.defined_channels}
+        complete_channel_mapping.update(channel_mapping)
 
         non_unique_targets = {channel
                               for channel, count in collections.Counter(channel_mapping.values()).items()
@@ -138,27 +137,37 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
         if non_unique_targets:
             raise ValueError('The following channels are mapped to twice', non_unique_targets)
 
-        # make sure all values in the parameters dict are of type Parameter
-        for (key, value) in parameters.items():
-            if not isinstance(value, Parameter):
-                parameters[key] = ConstantParameter(value)
+        # make sure all values in the parameters dict are numbers
+        if isinstance(parameters, Scope):
+            assert not volatile
+            scope = parameters
+        else:
+            parameters = dict(parameters)
+            for parameter_name, value in parameters.items():
+                if isinstance(value, Parameter):
+                    parameters[parameter_name] = value.get_value()
+                elif not isinstance(value, Number):
+                    parameters[parameter_name] = Expression(value).evaluate_numeric()
+
+            scope = DictScope(values=FrozenDict(parameters), volatile=volatile)
 
         root_loop = Loop()
+
         # call subclass specific implementation
-        self._create_program(parameters=parameters,
+        self._create_program(scope=scope,
                              measurement_mapping=measurement_mapping,
-                             channel_mapping=channel_mapping,
+                             channel_mapping=complete_channel_mapping,
                              global_transformation=global_transformation,
                              to_single_waveform=to_single_waveform,
                              parent_loop=root_loop)
 
         if root_loop.waveform is None and len(root_loop.children) == 0:
-            return None # return None if no program
+            return None  # return None if no program
         return root_loop
 
     @abstractmethod
     def _internal_create_program(self, *,
-                                 parameters: Dict[str, Parameter],
+                                 scope: Scope,
                                  measurement_mapping: Dict[str, Optional[str]],
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional[Transformation],
@@ -179,7 +188,7 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
         remains unchanged in this case."""
 
     def _create_program(self, *,
-                        parameters: Dict[str, Parameter],
+                        scope: Scope,
                         measurement_mapping: Dict[str, Optional[str]],
                         channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                         global_transformation: Optional[Transformation],
@@ -190,7 +199,11 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
         if self.identifier in to_single_waveform or self in to_single_waveform:
             root = Loop()
 
-            self._internal_create_program(parameters=parameters,
+            if not scope.get_volatile_parameters().keys().isdisjoint(self.parameter_names):
+                raise NotImplementedError('A pulse template that has volatile parameters cannot be transformed into a '
+                                          'single waveform yet.')
+
+            self._internal_create_program(scope=scope,
                                           measurement_mapping=measurement_mapping,
                                           channel_mapping=channel_mapping,
                                           global_transformation=None,
@@ -212,12 +225,63 @@ class PulseTemplate(Serializable, SequencingElement, metaclass=DocStringABCMeta)
             parent_loop.append_child(waveform=waveform)
 
         else:
-            self._internal_create_program(parameters=parameters,
+            self._internal_create_program(scope=scope,
                                           measurement_mapping=measurement_mapping,
                                           channel_mapping=channel_mapping,
                                           to_single_waveform=to_single_waveform,
                                           global_transformation=global_transformation,
                                           parent_loop=parent_loop)
+
+    def __format__(self, format_spec: str):
+        if format_spec == '':
+            format_spec = self._DEFAULT_FORMAT_SPEC
+        formatted = []
+        for attr in format_spec.split(';'):
+            value = getattr(self, attr)
+            if value is None:
+                continue
+            # the repr(str(value)) is to avoid very deep nesting. If needed one should use repr
+            formatted.append('{attr}={value}'.format(attr=attr, value=repr(str(value))))
+        type_name = type(self).__name__
+        return '{type_name}({attrs})'.format(type_name=type_name, attrs=', '.join(formatted))
+
+    def __str__(self):
+        return format(self)
+
+    def __repr__(self):
+        type_name = type(self).__name__
+        kwargs = ','.join('%s=%r' % (key, value)
+                          for key, value in self.get_serialization_data().items()
+                          if key.isidentifier() and value is not None)
+        return '{type_name}({kwargs})'.format(type_name=type_name, kwargs=kwargs)
+
+    def __add__(self, other: ExpressionLike):
+        from qupulse.pulses.arithmetic_pulse_template import try_operation
+        return try_operation(self, '+', other)
+
+    def __radd__(self, other: ExpressionLike):
+        from qupulse.pulses.arithmetic_pulse_template import try_operation
+        return try_operation(other, '+', self)
+
+    def __sub__(self, other):
+        from qupulse.pulses.arithmetic_pulse_template import try_operation
+        return try_operation(self, '-', other)
+
+    def __rsub__(self, other):
+        from qupulse.pulses.arithmetic_pulse_template import try_operation
+        return try_operation(other, '-', self)
+
+    def __mul__(self, other):
+        from qupulse.pulses.arithmetic_pulse_template import try_operation
+        return try_operation(self, '*', other)
+
+    def __rmul__(self, other):
+        from qupulse.pulses.arithmetic_pulse_template import try_operation
+        return try_operation(other, '*', self)
+
+    def __truediv__(self, other):
+        from qupulse.pulses.arithmetic_pulse_template import try_operation
+        return try_operation(self, '/', other)
 
 
 class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
@@ -232,34 +296,14 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
         PulseTemplate.__init__(self, identifier=identifier)
         MeasurementDefiner.__init__(self, measurements=measurements)
 
-    def is_interruptable(self) -> bool:
-        return False
-
     @property
     def atomicity(self) -> bool:
         return True
 
     measurement_names = MeasurementDefiner.measurement_names
 
-    def build_sequence(self,
-                       sequencer: Sequencer,
-                       parameters: Dict[str, Parameter],
-                       conditions: Dict[str, Condition],
-                       measurement_mapping: Dict[str, Optional[str]],
-                       channel_mapping: Dict[ChannelID, Optional[ChannelID]],
-                       instruction_block: InstructionBlock) -> None:
-        parameters = {parameter_name: parameter_value.get_value()
-                      for parameter_name, parameter_value in parameters.items()
-                      if parameter_name in self.parameter_names}
-        waveform = self.build_waveform(parameters=parameters,
-                                       channel_mapping=channel_mapping)
-        if waveform:
-            measurements = self.get_measurement_windows(parameters=parameters, measurement_mapping=measurement_mapping)
-            instruction_block.add_instruction_meas(measurements)
-            instruction_block.add_instruction_exec(waveform)
-
     def _internal_create_program(self, *,
-                                 parameters: Dict[str, Parameter],
+                                 scope: Scope,
                                  measurement_mapping: Dict[str, Optional[str]],
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional[Transformation],
@@ -269,19 +313,12 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
         during sequencing"""
         ### current behavior (same as previously): only adds EXEC Loop and measurements if a waveform exists.
         ### measurements are directly added to parent_loop (to reflect behavior of Sequencer + MultiChannelProgram)
-        # todo (2018-08-08): could move measurements into own Loop object?
+        assert not scope.get_volatile_parameters().keys() & self.parameter_names, "AtomicPT cannot be volatile"
 
-        # todo (2018-07-05): why are parameter constraints not validated here?
-        try:
-            parameters = {parameter_name: parameters[parameter_name].get_value()
-                          for parameter_name in self.parameter_names}
-        except KeyError as e:
-            raise ParameterNotProvidedException(str(e)) from e
-
-        waveform = self.build_waveform(parameters=parameters,
+        waveform = self.build_waveform(parameters=scope,
                                        channel_mapping=channel_mapping)
         if waveform:
-            measurements = self.get_measurement_windows(parameters=parameters,
+            measurements = self.get_measurement_windows(parameters=scope,
                                                         measurement_mapping=measurement_mapping)
 
             if global_transformation:
@@ -292,7 +329,7 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
 
     @abstractmethod
     def build_waveform(self,
-                       parameters: Dict[str, Real],
+                       parameters: Mapping[str, Real],
                        channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Waveform]:
         """Translate this PulseTemplate into a waveform according to the given parameters.
 

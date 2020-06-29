@@ -10,8 +10,7 @@ from qupulse.pulses.parameters import ParameterNotProvidedException, ParameterCo
 from qupulse.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy, JumpInterpolationStrategy
 from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
 
-from tests.pulses.sequencing_dummies import DummyInterpolationStrategy, DummyParameter, DummyCondition,\
-    DummyPulseTemplate
+from tests.pulses.sequencing_dummies import DummyInterpolationStrategy, DummyParameter, DummyPulseTemplate
 from tests.serialization_dummies import DummySerializer, DummyStorageBackend
 from tests.pulses.measurement_tests import ParameterConstrainerTest, MeasurementDefinerTest
 from tests.serialization_tests import SerializableTests
@@ -171,9 +170,6 @@ class TablePulseTemplateTest(unittest.TestCase):
         table.build_waveform(parameters=dict(v=1., w=2, t=0.1, x=1.2, y=1, h=2),
                              channel_mapping={0: 0, 1: 1})
 
-    def test_is_interruptable(self) -> None:
-        self.assertFalse(TablePulseTemplate({0: [(1, 1)]}).is_interruptable)
-
     def test_get_entries_instantiated_one_entry_float_float(self) -> None:
         table = TablePulseTemplate({0: [(0, 2)]})
         instantiated_entries = table.get_entries_instantiated(dict())[0]
@@ -224,7 +220,7 @@ class TablePulseTemplateTest(unittest.TestCase):
     def test_empty_instantiated(self) -> None:
         with self.assertRaises(TypeError):
             TablePulseTemplate()
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, 'empty TablePulseTemplate'):
             TablePulseTemplate(entries=dict())
 
     def test_get_entries_instantiated_two_equal_entries(self) -> None:
@@ -424,9 +420,11 @@ class TablePulseTemplateTest(unittest.TestCase):
         pulse = TablePulseTemplate(entries={0: [(1, 2, 'linear'), (3, 0, 'jump'), (4, 2, 'hold'), (5, 8, 'hold')],
                                             'other_channel': [(0, 7, 'linear'), (2, 0, 'hold'), (10, 0)],
                                             'symbolic': [(3, 'a', 'hold'), ('b', 4, 'linear'), ('c', Expression('d'), 'hold')]})
-        self.assertEqual(pulse.integral, {0: Expression('6'),
-                                          'other_channel': Expression(7),
-                                          'symbolic': Expression('(b-3)*a + 0.5 * (c-b)*(d+4)')})
+        expected = {0: Expression('6'),
+                    'other_channel': Expression(7),
+                    'symbolic': Expression('(b-3.)*a + (c-b)*(d+4.) / 2')}
+
+        self.assertEqual(expected, pulse.integral)
 
 
 class TablePulseTemplateConstraintTest(ParameterConstrainerTest):
@@ -631,26 +629,6 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
     def test_build_waveform_empty(self) -> None:
         table = TablePulseTemplate(dict(a=[('t', 0)]))
         self.assertIsNone(table.build_waveform(dict(t=0), dict(a='a')))
-
-    def test_requires_stop_missing_param(self) -> None:
-        table = TablePulseTemplate({0: [('foo', 'v')]})
-        with self.assertRaises(ParameterNotProvidedException):
-            table.requires_stop({'foo': DummyParameter(0, False)}, {})
-
-    def test_requires_stop(self) -> None:
-        table = TablePulseTemplate({0: [('foo', 'v'),
-                                        ('bar', 0)]})
-        test_sets = [(False, {'foo': DummyParameter(0, False), 'bar': DummyParameter(0, False), 'v': DummyParameter(0, False)}, {'foo': DummyCondition(False)}),
-                     (False, {'foo': DummyParameter(0, False), 'bar': DummyParameter(0, False), 'v': DummyParameter(0, False)}, {'foo': DummyCondition(True)}),
-                     (True, {'foo': DummyParameter(0, True), 'bar': DummyParameter(0, False), 'v': DummyParameter(0, False)}, {'foo': DummyCondition(False)}),
-                     (True, {'foo': DummyParameter(0, True), 'bar': DummyParameter(0, False), 'v': DummyParameter(0, False)}, {'foo': DummyCondition(True)}),
-                     (True, {'foo': DummyParameter(0, False), 'bar': DummyParameter(0, False), 'v': DummyParameter(0, True)}, {'foo': DummyCondition(False)}),
-                     (True, {'foo': DummyParameter(0, False), 'bar': DummyParameter(0, False), 'v': DummyParameter(0, True)}, {'foo': DummyCondition(True)}),
-                     (True, {'foo': DummyParameter(0, True), 'bar': DummyParameter(0, True), 'v': DummyParameter(0, True)}, {'foo': DummyCondition(False)}),
-                     (True, {'foo': DummyParameter(0, True), 'bar': DummyParameter(0, True), 'v': DummyParameter(0, True)}, {'foo': DummyCondition(True)})]
-        for expected_result, parameter_set, condition_set in test_sets:
-            self.assertEqual(expected_result, table.requires_stop(parameter_set, condition_set))
-
 
 
 class TablePulseConcatenationTests(unittest.TestCase):

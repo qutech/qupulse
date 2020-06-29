@@ -1,9 +1,10 @@
-from typing import Iterable, Union, List, Generator, Tuple, TypeVar, Optional
+"""This module contains a tree implementation."""
+
+from typing import Iterable, Union, List, Generator, Tuple, TypeVar, Optional, Sequence
 from collections import deque, namedtuple
-from copy import copy as shallow_copy
 import weakref
 
-from qupulse.comparable import Comparable
+from qupulse.utils.types import SequenceProxy
 
 
 __all__ = ['Node']
@@ -16,8 +17,9 @@ def make_empty_weak_reference() -> weakref.ref:
 _NodeType = TypeVar('_NodeType', bound='Node')
 
 
-class Node(Comparable):
+class Node:
     debug = False
+    __slots__ = ('__parent', '__children', '__parent_index', '__weakref__')
 
     def __init__(self: _NodeType,
                  parent: Union[_NodeType, None]=None,
@@ -51,6 +53,9 @@ class Node(Comparable):
 
     def __iter__(self: _NodeType) -> Iterable[_NodeType]:
         return iter(self.__children)
+
+    def __reversed__(self: _NodeType) -> Iterable[_NodeType]:
+        return reversed(self.__children)
 
     def __setitem__(self: _NodeType, idx: Union[int, slice], value: Union[_NodeType, Iterable[_NodeType]]):
         if isinstance(idx, slice):
@@ -114,11 +119,11 @@ class Node(Comparable):
                         raise AssertionError('Parent is missing child reference')
 
     @property
-    def children(self: _NodeType) -> List[_NodeType]:
+    def children(self: _NodeType) -> Sequence[_NodeType]:
         """
         :return: shallow copy of children
         """
-        return shallow_copy(self.__children)
+        return SequenceProxy(self.__children)
 
     @property
     def parent(self: _NodeType) -> Union[None, _NodeType]:
@@ -146,10 +151,6 @@ class Node(Comparable):
             return self.__children[location[0]].locate(location[1:])
         else:
             return self
-
-    @property
-    def compare_key(self) -> List:
-        return self.__children
 
 
 def is_tree_circular(root: Node) -> Union[None, Tuple[List[Node], int]]:

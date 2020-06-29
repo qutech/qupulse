@@ -4,9 +4,15 @@ import itertools
 
 from string import ascii_uppercase
 
-from qupulse.utils.types import time_from_float
-from qupulse._program._loop import Loop, MultiChannelProgram, _make_compatible, _is_compatible, _CompatibilityLevel, RepetitionWaveform, SequenceWaveform, make_compatible
-from qupulse._program.instructions import InstructionBlock, ImmutableInstructionBlock
+from qupulse.expressions import ExpressionScalar
+from qupulse.parameter_scope import DictScope
+
+from qupulse.utils.types import TimeType, time_from_float
+from qupulse._program.volatile import VolatileRepetitionCount
+from qupulse._program._loop import Loop, _make_compatible, _is_compatible, _CompatibilityLevel,\
+    RepetitionWaveform, SequenceWaveform, make_compatible, MakeCompatibleWarning, DroppedMeasurementWarning, VolatileModificationWarning
+from qupulse._program._loop import Loop, _make_compatible, _is_compatible, _CompatibilityLevel,\
+    RepetitionWaveform, SequenceWaveform, make_compatible, MakeCompatibleWarning
 from tests.pulses.sequencing_dummies import DummyWaveform
 from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
 
@@ -31,66 +37,6 @@ class WaveformGenerator:
 
     def __call__(self):
         return self.generate_multi_channel_waveform()
-
-
-def get_two_chan_test_block(wfg=WaveformGenerator(2)):
-    generate_waveform = wfg.generate_single_channel_waveform
-    generate_multi_channel_waveform = wfg.generate_multi_channel_waveform
-
-    loop_block11 = InstructionBlock()
-    loop_block11.add_instruction_exec(generate_multi_channel_waveform())
-
-    loop_block1 = InstructionBlock()
-    loop_block1.add_instruction_repj(5, ImmutableInstructionBlock(loop_block11))
-
-    loop_block21 = InstructionBlock()
-    loop_block21.add_instruction_exec(generate_multi_channel_waveform())
-    loop_block21.add_instruction_exec(generate_multi_channel_waveform())
-
-    loop_block2 = InstructionBlock()
-    loop_block2.add_instruction_repj(2, ImmutableInstructionBlock(loop_block21))
-    loop_block2.add_instruction_exec(generate_multi_channel_waveform())
-
-    loop_block3 = InstructionBlock()
-    loop_block3.add_instruction_exec(generate_multi_channel_waveform())
-    loop_block3.add_instruction_exec(generate_multi_channel_waveform())
-
-    loop_block411 = InstructionBlock()
-    loop_block411.add_instruction_exec(MultiChannelWaveform([generate_waveform('A')]))
-    loop_block412 = InstructionBlock()
-    loop_block412.add_instruction_exec(MultiChannelWaveform([generate_waveform('A')]))
-
-    loop_block41 = InstructionBlock()
-    loop_block41.add_instruction_repj(7, ImmutableInstructionBlock(loop_block411))
-    loop_block41.add_instruction_repj(8, ImmutableInstructionBlock(loop_block412))
-
-    loop_block421 = InstructionBlock()
-    loop_block421.add_instruction_exec(MultiChannelWaveform([generate_waveform('B')]))
-    loop_block422 = InstructionBlock()
-    loop_block422.add_instruction_exec(MultiChannelWaveform([generate_waveform('B')]))
-
-    loop_block42 = InstructionBlock()
-    loop_block42.add_instruction_repj(10, ImmutableInstructionBlock(loop_block421))
-    loop_block42.add_instruction_repj(11, ImmutableInstructionBlock(loop_block422))
-
-    chan_block4A = InstructionBlock()
-    chan_block4A.add_instruction_repj(6, ImmutableInstructionBlock(loop_block41))
-
-    chan_block4B = InstructionBlock()
-    chan_block4B.add_instruction_repj(9, ImmutableInstructionBlock(loop_block42))
-
-    loop_block4 = InstructionBlock()
-    loop_block4.add_instruction_chan({frozenset('A'): ImmutableInstructionBlock(chan_block4A),
-                                           frozenset('B'): ImmutableInstructionBlock(chan_block4B)})
-
-    root_block = InstructionBlock()
-    root_block.add_instruction_exec(generate_multi_channel_waveform())
-    root_block.add_instruction_repj(10, ImmutableInstructionBlock(loop_block1))
-    root_block.add_instruction_repj(17, ImmutableInstructionBlock(loop_block2))
-    root_block.add_instruction_repj(3, ImmutableInstructionBlock(loop_block3))
-    root_block.add_instruction_repj(4, ImmutableInstructionBlock(loop_block4))
-
-    return root_block
 
 
 @mock.patch.object(Loop, 'MAX_REPR_SIZE', 10000)
@@ -329,32 +275,6 @@ LOOP 1 times:
                                   Loop(waveform=wf3)])
         self.assertEqual(expected, root)
 
-    def test_remove_empty_loops(self):
-        wfs = [DummyWaveform(duration=i) for i in range(2)]
-
-        root = Loop(children=[
-            Loop(waveform=wfs[0]),
-            Loop(waveform=None),
-            Loop(children=[Loop(waveform=None)]),
-            Loop(children=[Loop(waveform=wfs[1])])
-        ])
-
-        expected = Loop(children=[
-            Loop(waveform=wfs[0]),
-            Loop(children=[Loop(waveform=wfs[1])])
-        ])
-
-        root.remove_empty_loops()
-
-        self.assertEqual(expected, root)
-
-        root = Loop(children=[
-            Loop(measurements=[('m', 0, 1)])
-        ])
-
-        with self.assertWarnsRegex(UserWarning, 'Dropping measurement'):
-            root.remove_empty_loops()
-
     def test_cleanup(self):
         wfs = [DummyWaveform(duration=i) for i in range(3)]
 
@@ -376,198 +296,102 @@ LOOP 1 times:
 
         self.assertEqual(expected, root)
 
+    def test_cleanup_single_rep(self):
+        wf = DummyWaveform(duration=1)
+        measurements = [('n', 0, 1)]
+
+        root = Loop(children=[Loop(waveform=wf, repetition_count=1)],
+                    measurements=measurements, repetition_count=10)
+
+        expected = Loop(waveform=wf, repetition_count=10, measurements=measurements)
+        root.cleanup()
+        self.assertEqual(expected, root)
+
     def test_cleanup_warnings(self):
         root = Loop(children=[
             Loop(measurements=[('m', 0, 1)])
         ])
 
-        with self.assertWarnsRegex(UserWarning, 'Dropping measurement'):
+        with self.assertWarnsRegex(DroppedMeasurementWarning, 'Dropping measurement'):
             root.cleanup()
 
         root = Loop(children=[
             Loop(measurements=[('m', 0, 1)], children=[Loop()])
         ])
-        with self.assertWarnsRegex(UserWarning, 'Dropping measurement since there is no waveform in children'):
+        with self.assertWarnsRegex(DroppedMeasurementWarning, 'Dropping measurement since there is no waveform in children'):
             root.cleanup()
 
 
-class MultiChannelTests(unittest.TestCase):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        wf = DummyWaveform()
-        self.descriptionA = \
-"""\
-LOOP 1 times:
-  ->EXEC {} 1 times
-  ->EXEC {} 50 times
-  ->LOOP 17 times:
-      ->LOOP 2 times:
-          ->EXEC {} 1 times
-          ->EXEC {} 1 times
-      ->EXEC {} 1 times
-  ->LOOP 3 times:
-      ->EXEC {} 1 times
-      ->EXEC {} 1 times
-  ->LOOP 24 times:
-      ->EXEC {} 7 times
-      ->EXEC {} 8 times"""
-        self.descriptionB = \
-"""\
-LOOP 1 times:
-  ->EXEC {} 1 times
-  ->EXEC {} 50 times
-  ->LOOP 17 times:
-      ->LOOP 2 times:
-          ->EXEC {} 1 times
-          ->EXEC {} 1 times
-      ->EXEC {} 1 times
-  ->LOOP 3 times:
-      ->EXEC {} 1 times
-      ->EXEC {} 1 times
-  ->LOOP 36 times:
-      ->EXEC {} 10 times
-      ->EXEC {} 11 times"""
-
-        def generate_waveform(channel):
-            return DummyWaveform(sample_output=None, duration=1., defined_channels={channel})
-
-        def generate_multi_channel_waveform():
-            return MultiChannelWaveform([generate_waveform('A'), generate_waveform('B')])
-
-        self.loop_block11 = InstructionBlock()
-        self.loop_block11.add_instruction_exec(generate_multi_channel_waveform())
-
-        self.loop_block1 = InstructionBlock()
-        self.loop_block1.add_instruction_repj(5, ImmutableInstructionBlock(self.loop_block11))
-
-        self.loop_block21 = InstructionBlock()
-        self.loop_block21.add_instruction_exec(generate_multi_channel_waveform())
-        self.loop_block21.add_instruction_exec(generate_multi_channel_waveform())
-
-        self.loop_block2 = InstructionBlock()
-        self.loop_block2.add_instruction_repj(2, ImmutableInstructionBlock(self.loop_block21))
-        self.loop_block2.add_instruction_exec(generate_multi_channel_waveform())
-
-        self.loop_block3 = InstructionBlock()
-        self.loop_block3.add_instruction_exec(generate_multi_channel_waveform())
-        self.loop_block3.add_instruction_exec(generate_multi_channel_waveform())
-
-        self.loop_block411 = InstructionBlock()
-        self.loop_block411.add_instruction_exec(MultiChannelWaveform([generate_waveform('A')]))
-        self.loop_block412 = InstructionBlock()
-        self.loop_block412.add_instruction_exec(MultiChannelWaveform([generate_waveform('A')]))
-
-        self.loop_block41 = InstructionBlock()
-        self.loop_block41.add_instruction_repj(7, ImmutableInstructionBlock(self.loop_block411))
-        self.loop_block41.add_instruction_repj(8, ImmutableInstructionBlock(self.loop_block412))
-
-        self.loop_block421 = InstructionBlock()
-        self.loop_block421.add_instruction_exec(MultiChannelWaveform([generate_waveform('B')]))
-        self.loop_block422 = InstructionBlock()
-        self.loop_block422.add_instruction_exec(MultiChannelWaveform([generate_waveform('B')]))
-
-        self.loop_block42 = InstructionBlock()
-        self.loop_block42.add_instruction_repj(10, ImmutableInstructionBlock(self.loop_block421))
-        self.loop_block42.add_instruction_repj(11, ImmutableInstructionBlock(self.loop_block422))
-
-        self.chan_block4A = InstructionBlock()
-        self.chan_block4A.add_instruction_repj(6, ImmutableInstructionBlock(self.loop_block41))
-
-        self.chan_block4B = InstructionBlock()
-        self.chan_block4B.add_instruction_repj(9, ImmutableInstructionBlock(self.loop_block42))
-
-        self.loop_block4 = InstructionBlock()
-        self.loop_block4.add_instruction_chan({frozenset('A'): ImmutableInstructionBlock(self.chan_block4A),
-                                              frozenset('B'): ImmutableInstructionBlock(self.chan_block4B)})
-
-        self.root_block = InstructionBlock()
-        self.root_block.add_instruction_exec(generate_multi_channel_waveform())
-        self.root_block.add_instruction_repj(10, ImmutableInstructionBlock(self.loop_block1))
-        self.root_block.add_instruction_repj(17, ImmutableInstructionBlock(self.loop_block2))
-        self.root_block.add_instruction_repj(3, ImmutableInstructionBlock(self.loop_block3))
-        self.root_block.add_instruction_repj(4, ImmutableInstructionBlock(self.loop_block4))
-
-        self.maxDiff = None
-
-    def get_mcp(self, channels):
-        program = MultiChannelProgram(self.root_block, ['A', 'B'])
-        return program[channels]
-
-    def test_init(self):
-        with self.assertRaises(ValueError):
-            MultiChannelProgram(InstructionBlock())
-
-        mcp = MultiChannelProgram(self.root_block, ['A', 'B'])
-        self.assertEqual(mcp.channels, {'A', 'B'})
-
-        with self.assertRaises(KeyError):
-            mcp['C']
-
-    def test_empty_repj(self):
-        empty_block = InstructionBlock()
-
-        root_block = InstructionBlock()
-        root_block.add_instruction_repj(1, empty_block)
-
-        with self.assertRaisesRegex(ValueError, 'no defined channels'):
-            MultiChannelProgram(root_block)
-
-        empty_block.add_instruction_exec(DummyWaveform(duration=1, defined_channels={'A', 'B'}))
-        MultiChannelProgram(root_block)
-
-
-    def test_via_repr(self):
-        root_loopA = self.get_mcp('A')
-        root_loopB = self.get_mcp('B')
-        waveformsA = tuple(loop.waveform
-                                           for loop in root_loopA.get_depth_first_iterator() if loop.is_leaf())
-        reprA = self.descriptionA.format(*waveformsA)
-        reprB = self.descriptionB.format(*(loop.waveform
-                                           for loop in root_loopB.get_depth_first_iterator() if loop.is_leaf()))
-        self.assertEqual(root_loopA.__repr__(), reprA)
-        self.assertEqual(root_loopB.__repr__(), reprB)
-
-    def test_init_from_loop(self):
-        program = Loop(waveform=DummyWaveform(defined_channels={'A', 'B'}))
-
-        mcp = MultiChannelProgram(program)
-        self.assertEqual(mcp.programs, {frozenset('AB'): program})
-
-        with self.assertRaises(TypeError):
-            MultiChannelProgram(mcp)
-
-
 class ProgramWaveformCompatibilityTest(unittest.TestCase):
+    def test_is_compatible_warnings(self):
+        wf = DummyWaveform(duration=1)
+        volatile_repetition_count = VolatileRepetitionCount(ExpressionScalar('x'),
+                                                            DictScope.from_kwargs(x=3, volatile={'x'}))
+
+        volatile_leaf = Loop(waveform=wf, repetition_count=volatile_repetition_count)
+        with self.assertWarns(VolatileModificationWarning):
+            self.assertEqual(_CompatibilityLevel.action_required, _is_compatible(volatile_leaf, min_len=3, quantum=1,
+                                                                                 sample_rate=time_from_float(1.)))
+
+        volatile_node = Loop(children=[Loop(waveform=wf)], repetition_count=volatile_repetition_count)
+        with self.assertWarns(VolatileModificationWarning):
+            self.assertEqual(_CompatibilityLevel.action_required, _is_compatible(volatile_node, min_len=3, quantum=1,
+                                                                                 sample_rate=time_from_float(1.)))
+
     def test_is_compatible_incompatible(self):
         wf = DummyWaveform(duration=1.1)
 
         self.assertEqual(_is_compatible(Loop(waveform=wf), min_len=1, quantum=1, sample_rate=time_from_float(1.)),
-                         _CompatibilityLevel.incompatible)
+                         _CompatibilityLevel.incompatible_fraction)
 
         self.assertEqual(_is_compatible(Loop(waveform=wf, repetition_count=10), min_len=20, quantum=1, sample_rate=time_from_float(1.)),
-                         _CompatibilityLevel.incompatible)
+                         _CompatibilityLevel.incompatible_too_short)
 
         self.assertEqual(_is_compatible(Loop(waveform=wf, repetition_count=10), min_len=10, quantum=3, sample_rate=time_from_float(1.)),
-                         _CompatibilityLevel.incompatible)
+                         _CompatibilityLevel.incompatible_quantum)
 
     def test_is_compatible_leaf(self):
         self.assertEqual(_is_compatible(Loop(waveform=DummyWaveform(duration=1.1), repetition_count=10),
-                                        min_len=11, quantum=1, sample_rate=time_from_float(1.)),
+                                        min_len=11, quantum=1, sample_rate=TimeType.from_float(1.)),
                          _CompatibilityLevel.action_required)
 
         self.assertEqual(_is_compatible(Loop(waveform=DummyWaveform(duration=1.1), repetition_count=10),
-                                        min_len=11, quantum=1, sample_rate=time_from_float(10.)),
+                                        min_len=11, quantum=1, sample_rate=TimeType.from_float(10.)),
                          _CompatibilityLevel.compatible)
 
     def test_is_compatible_node(self):
         program = Loop(children=[Loop(waveform=DummyWaveform(duration=1.5), repetition_count=2),
                                  Loop(waveform=DummyWaveform(duration=2.0))])
 
-        self.assertEqual(_is_compatible(program, min_len=1, quantum=1, sample_rate=time_from_float(2.)),
+        self.assertEqual(_is_compatible(program, min_len=1, quantum=1, sample_rate=TimeType.from_float(2.)),
                          _CompatibilityLevel.compatible)
 
-        self.assertEqual(_is_compatible(program, min_len=1, quantum=1, sample_rate=time_from_float(1.)),
+        self.assertEqual(_is_compatible(program, min_len=1, quantum=1, sample_rate=TimeType.from_float(1.)),
                          _CompatibilityLevel.action_required)
+
+    def test_make_compatible_repetition_count(self):
+        wf1 = DummyWaveform(duration=1.5)
+        wf2 = DummyWaveform(duration=2.0)
+
+        program = Loop(children=[Loop(waveform=wf1, repetition_count=2),
+                                 Loop(waveform=wf2)])
+        duration = program.duration
+        _make_compatible(program, min_len=1, quantum=1, sample_rate=time_from_float(1.))
+        self.assertEqual(program.duration, duration)
+
+        wf2 = DummyWaveform(duration=2.5)
+        program = Loop(children=[Loop(waveform=wf1, repetition_count=3),
+                                 Loop(waveform=wf2)])
+        duration = program.duration
+        with self.assertWarns(MakeCompatibleWarning):
+            make_compatible(program, minimal_waveform_length=1, waveform_quantum=1, sample_rate=time_from_float(1.))
+        self.assertEqual(program.duration, duration)
+
+        program = Loop(children=[Loop(waveform=wf1, repetition_count=3),
+                                 Loop(waveform=wf2)], repetition_count=3)
+        duration = program.duration
+        _make_compatible(program, min_len=1, quantum=3, sample_rate=time_from_float(1.))
+        self.assertEqual(program.duration, duration)
 
     def test_make_compatible_partial_unroll(self):
         wf1 = DummyWaveform(duration=1.5)
@@ -576,7 +400,7 @@ class ProgramWaveformCompatibilityTest(unittest.TestCase):
         program = Loop(children=[Loop(waveform=wf1, repetition_count=2),
                                  Loop(waveform=wf2)])
 
-        _make_compatible(program, min_len=1, quantum=1, sample_rate=time_from_float(1.))
+        _make_compatible(program, min_len=1, quantum=1, sample_rate=TimeType.from_float(1.))
 
         self.assertIsNone(program.waveform)
         self.assertEqual(len(program), 2)
@@ -587,10 +411,10 @@ class ProgramWaveformCompatibilityTest(unittest.TestCase):
 
         program = Loop(children=[Loop(waveform=wf1, repetition_count=2),
                                  Loop(waveform=wf2)], repetition_count=2)
-        _make_compatible(program, min_len=5, quantum=1, sample_rate=time_from_float(1.))
+        _make_compatible(program, min_len=5, quantum=1, sample_rate=TimeType.from_float(1.))
 
         self.assertIsInstance(program.waveform, SequenceWaveform)
-        self.assertEqual(program.children, [])
+        self.assertEqual(list(program.children), [])
         self.assertEqual(program.repetition_count, 2)
 
         self.assertEqual(len(program.waveform._sequenced_waveforms), 2)
@@ -606,10 +430,10 @@ class ProgramWaveformCompatibilityTest(unittest.TestCase):
         program = Loop(children=[Loop(waveform=wf1, repetition_count=2),
                                  Loop(waveform=wf2, repetition_count=1)], repetition_count=2)
 
-        _make_compatible(program, min_len=5, quantum=10, sample_rate=time_from_float(1.))
+        _make_compatible(program, min_len=5, quantum=10, sample_rate=TimeType.from_float(1.))
 
         self.assertIsInstance(program.waveform, RepetitionWaveform)
-        self.assertEqual(program.children, [])
+        self.assertEqual(list(program.children), [])
         self.assertEqual(program.repetition_count, 1)
 
         self.assertIsInstance(program.waveform, RepetitionWaveform)
@@ -626,12 +450,24 @@ class ProgramWaveformCompatibilityTest(unittest.TestCase):
         program = Loop()
         pub_kwargs = dict(minimal_waveform_length=5,
                           waveform_quantum=10,
-                          sample_rate=time_from_float(1.))
-        priv_kwargs = dict(min_len=5, quantum=10, sample_rate=time_from_float(1.))
+                          sample_rate=TimeType.from_float(1.))
+        priv_kwargs = dict(min_len=5, quantum=10, sample_rate=TimeType.from_float(1.))
 
         with mock.patch('qupulse._program._loop._is_compatible',
-                        return_value=_CompatibilityLevel.incompatible) as mocked:
-            with self.assertRaisesRegex(ValueError, 'cannot be made compatible'):
+                        return_value=_CompatibilityLevel.incompatible_too_short) as mocked:
+            with self.assertRaisesRegex(ValueError, 'too short'):
+                make_compatible(program, **pub_kwargs)
+            mocked.assert_called_once_with(program, **priv_kwargs)
+
+        with mock.patch('qupulse._program._loop._is_compatible',
+                        return_value=_CompatibilityLevel.incompatible_fraction) as mocked:
+            with self.assertRaisesRegex(ValueError, 'not an integer'):
+                make_compatible(program, **pub_kwargs)
+            mocked.assert_called_once_with(program, **priv_kwargs)
+
+        with mock.patch('qupulse._program._loop._is_compatible',
+                        return_value=_CompatibilityLevel.incompatible_quantum) as mocked:
+            with self.assertRaisesRegex(ValueError, 'not a multiple of quantum'):
                 make_compatible(program, **pub_kwargs)
             mocked.assert_called_once_with(program, **priv_kwargs)
 

@@ -218,7 +218,10 @@ class SerializableTests(metaclass=ABCMeta):
             source_backend = DummyStorageBackend()
             instance = self.make_instance(identifier='foo', registry=dict())
             serializer = Serializer(source_backend)
-            serializer.serialize(instance)
+            try:
+                serializer.serialize(instance)
+            except NotImplementedError as err:
+                raise unittest.SkipTest(err.args[0]) from err
             del serializer
 
             dest_backend = DummyStorageBackend()
@@ -247,8 +250,6 @@ class DummyPulseTemplateSerializationTests(SerializableTests, unittest.TestCase)
 
     def make_kwargs(self):
         return {
-            'requires_stop': True,
-            'is_interruptable': True,
             'parameter_names': {'foo', 'bar'},
             'defined_channels': {'default', 'not_default'},
             'duration': ExpressionScalar('17.3*foo+bar'),
@@ -537,7 +538,9 @@ class ZipFileBackendTests(unittest.TestCase):
 class CachingBackendTests(unittest.TestCase):
     def setUp(self) -> None:
         self.dummy_backend = DummyStorageBackend()
-        self.caching_backend = CachingBackend(self.dummy_backend)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', DeprecationWarning)
+            self.caching_backend = CachingBackend(self.dummy_backend)
         self.identifier = 'foo'
         self.testdata = 'foodata'
         self.alternative_testdata = 'atadoof'

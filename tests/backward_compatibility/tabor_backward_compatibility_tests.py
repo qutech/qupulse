@@ -9,7 +9,6 @@ from tests.hardware.tabor_simulator_based_tests import TaborSimulatorManager
 from tests.hardware.dummy_devices import DummyDAC
 
 from qupulse.serialization import Serializer, FilesystemBackend, PulseStorage
-from qupulse.pulses.sequencing import Sequencer
 from qupulse.pulses.pulse_template import PulseTemplate
 from qupulse.hardware.setup import HardwareSetup, PlaybackChannel, MarkerChannel, MeasurementMask
 from qupulse.hardware.awgs.tabor import PlottableProgram
@@ -100,12 +99,10 @@ class PulseLoadingAndSequencingHelper:
         self.pulse = typing.cast(PulseTemplate, pulse_storage[self.pulse_name])
 
     def sequence_pulse(self):
-        sequencer = Sequencer()
-        sequencer.push(self.pulse,
-                       parameters=self.parameters,
-                       window_mapping=self.window_mapping,
-                       channel_mapping=self.channel_mapping)
-        self.program = sequencer.build()
+        self.program = self.pulse.create_program(
+            parameters=self.parameters,
+            measurement_mapping=self.window_mapping,
+            channel_mapping=self.channel_mapping)
 
     def initialize_hardware_setup(self):
         self.simulator_manager = TaborSimulatorManager()

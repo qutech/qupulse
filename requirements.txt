@@ -1,1 +1,14 @@
-.
+cached-property==1.5.1
+matplotlib==3.0.0
+numpy==1.15.2
+PyVISA==1.9.1
+sympy==1.3
+gmpy2==2.0.8
+
+cycler==0.10.0
+kiwisolver==1.0.1
+mpmath==1.0.0
+pyparsing==2.2.1
+python-dateutil==2.7.3
+six==1.11.0
+wincertstore==0.2

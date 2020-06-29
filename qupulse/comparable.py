@@ -1,6 +1,6 @@
 """This module defines the abstract Comparable class."""
 from abc import abstractmethod
-from typing import Any
+from typing import Hashable, Any
 
 from qupulse.utils.types import DocStringABCMeta
 
@@ -16,10 +16,11 @@ class Comparable(metaclass=DocStringABCMeta):
     Comparable provides implementations of the hashing function as well as the equals and not-equals
     operators based on comparison of this key.
     """
+    __slots__ = ()
 
     @property
     @abstractmethod
-    def compare_key(self) -> Any:
+    def compare_key(self) -> Hashable:
         """Return a unique key used in comparison and hashing operations.
 
         The key must describe the essential properties of the object.

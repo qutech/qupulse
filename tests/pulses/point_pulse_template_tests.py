@@ -6,7 +6,7 @@ from qupulse.pulses.parameters import ParameterNotProvidedException
 
 from qupulse.pulses.point_pulse_template import PointPulseTemplate, PointWaveform, InvalidPointDimension, PointPulseEntry, PointWaveformEntry
 from tests.pulses.measurement_tests import ParameterConstrainerTest, MeasurementDefinerTest
-from tests.pulses.sequencing_dummies import DummyParameter, DummyCondition
+from tests.pulses.sequencing_dummies import DummyParameter
 from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
 from qupulse.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy
 from qupulse.expressions import Expression, ExpressionScalar
@@ -76,42 +76,29 @@ class PointPulseTemplateTests(unittest.TestCase):
 
     def test_integral(self) -> None:
         pulse = PointPulseTemplate(
-            [(1, (2, 'b'), 'linear'), (3, (0, 0), 'jump'), (4, (2, 'c'), 'hold'), (5, (8, 'd'), 'hold')],
+            [(1, (2, 'b'), 'linear'),
+             (3, (0, 0), 'jump'),
+             (4, (2, 'c'), 'hold'),
+             (5, (8, 'd'), 'hold')],
             [0, 'other_channel']
         )
-        self.assertEqual({0: ExpressionScalar(6),
-                          'other_channel': ExpressionScalar('1.0*b + 2.0*c')},
+        self.assertEqual({0: ExpressionScalar('6'),
+                          'other_channel': ExpressionScalar('b + 2*c')},
                          pulse.integral)
 
         pulse = PointPulseTemplate(
-            [(1, ('2', 'b'), 'linear'), ('t0', (0, 0), 'jump'), (4, (2, 'c'), 'hold'), ('g', (8, 'd'), 'hold')],
+            [(1, ('2', 'b'), 'linear'), ('t0', (0, 0), 'jump'), (4, (2.0, 'c'), 'hold'), ('g', (8, 'd'), 'hold')],
             ['symbolic', 1]
         )
-        self.assertEqual({'symbolic': ExpressionScalar('2.0*g - t0 - 1.0'),
-                          1: ExpressionScalar('b*(0.5*t0 - 0.5) + c*(g - 4.0) + c*(-t0 + 4.0)')},
+        self.assertEqual({'symbolic': ExpressionScalar('2.0*g - 1.0*t0 - 1.0'),
+                          1: ExpressionScalar('b*(t0 - 1) / 2 + c*(g - 4) + c*(-t0 + 4)')},
                          pulse.integral)
+
+        ppt = PointPulseTemplate([(0, 0), ('t_init', 0)], ['X', 'Y'])
+        self.assertEqual(ppt.integral, {'X': 0, 'Y': 0})
 
 
 class PointPulseTemplateSequencingTests(unittest.TestCase):
-
-    def test_requires_stop_missing_param(self) -> None:
-        table = PointPulseTemplate([('foo', 'v')], [0])
-        with self.assertRaises(ParameterNotProvidedException):
-            table.requires_stop({'foo': DummyParameter(0, False)}, {})
-
-    def test_requires_stop(self) -> None:
-        point = PointPulseTemplate([('foo', 'v'), ('bar', 0)], [0])
-        test_sets = [(False, {'foo': DummyParameter(0, False), 'bar': DummyParameter(0, False), 'v': DummyParameter(0, False)}, {'foo': DummyCondition(False)}),
-                     (False, {'foo': DummyParameter(0, False), 'bar': DummyParameter(0, False), 'v': DummyParameter(0, False)}, {'foo': DummyCondition(True)}),
-                     (True, {'foo': DummyParameter(0, True), 'bar': DummyParameter(0, False), 'v': DummyParameter(0, False)}, {'foo': DummyCondition(False)}),
-                     (True, {'foo': DummyParameter(0, True), 'bar': DummyParameter(0, False), 'v': DummyParameter(0, False)}, {'foo': DummyCondition(True)}),
-                     (True, {'foo': DummyParameter(0, False), 'bar': DummyParameter(0, False), 'v': DummyParameter(0, True)}, {'foo': DummyCondition(False)}),
-                     (True, {'foo': DummyParameter(0, False), 'bar': DummyParameter(0, False), 'v': DummyParameter(0, True)}, {'foo': DummyCondition(True)}),
-                     (True, {'foo': DummyParameter(0, True), 'bar': DummyParameter(0, True), 'v': DummyParameter(0, True)}, {'foo': DummyCondition(False)}),
-                     (True, {'foo': DummyParameter(0, True), 'bar': DummyParameter(0, True), 'v': DummyParameter(0, True)}, {'foo': DummyCondition(True)})]
-        for expected_result, parameter_set, condition_set in test_sets:
-            self.assertEqual(expected_result, point.requires_stop(parameter_set, condition_set))
-
     def test_build_waveform_empty(self):
         self.assertIsNone(PointPulseTemplate([('t1', 'A')], [0]).build_waveform(parameters={'t1': 0, 'A': 1},
                                                                                 channel_mapping={0: 1}))

@@ -1,4 +1,6 @@
 from typing import Tuple, Set, Dict
+from collections import deque
+
 
 from qupulse.hardware.awgs.base import AWG, ProgramOverwriteException
 from qupulse.hardware.dacs import DAC
@@ -7,7 +9,8 @@ class DummyDAC(DAC):
     def __init__(self):
         self._measurement_windows = dict()
         self._operations = dict()
-
+        self.measured_data = deque([])
+        self._meas_masks = {}
         self._armed_program = None
 
     @property
@@ -34,6 +37,13 @@ class DummyDAC(DAC):
         self._measurement_windows = dict()
         self._operations = dict()
         self._armed_program = None
+
+    def measure_program(self, channels):
+        return self.measured_data.pop()
+
+    def set_measurement_mask(self, program_name, mask_name, begins, lengths) -> Tuple['numpy.ndarray', 'numpy.ndarray']:
+        self._meas_masks.setdefault(program_name, {})[mask_name] = (begins, lengths)
+        return begins, lengths
 
 
 class DummyAWG(AWG):
@@ -67,6 +77,9 @@ class DummyAWG(AWG):
         self._waveform_memory = [None for i in range(memory)]
         self._waveform_indices = {}  # dict that maps from waveform hash to memory index
         self._program_wfs = {}  # contains program names and necessary waveforms indices
+
+    def set_volatile_parameters(self, program_name: str, parameters):
+        raise NotImplementedError()
 
     def upload(self, name, program, channels, markers, voltage_transformation, force=False) -> None:
         if name in self.programs:

@@ -1,36 +1,41 @@
 language: python
 python:
-  - "3.5"
+  - 3.5
+  - 3.6
+  - 3.7
+env:
+  - INSTALL_EXTRAS=[VISA,plotting,zurich-instruments,tektronix]
+  - INSTALL_EXTRAS=[VISA,plotting,zurich-instruments,tektronix,Faster-fractions]
 
 #use container based infrastructure
 sudo: false
 
 #these directories are persistent
-cache:
-  directories:
-    - $HOME/.cache/pip
-    - $HOME/.cache/miniconda3_pkgs
-    - $HOME/Downloads
+cache: pip
 
-# Setup anaconda
+# install dependencies for gmpy2
+addons:
+  apt:
+    update: true
+
+    sources:
+      # newer compiler for zhinst
+      - ubuntu-toolchain-r-test
+
+    packages:
+      - libgmp-dev
+      - libmpfr-dev
+      - libmpc-dev
+
 before_install:
-# install miniconda with symlink of pkg dir to cache
-  - chmod +x ./install_miniconda3.sh
-  - ./install_miniconda3.sh
-#
-  - export PATH=$HOME/miniconda3/bin:$PATH
-  - hash -r
-  - conda config --set always_yes yes --set changeps1 no
-  - conda update -q conda
-  - conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION pip atlas numpy matplotlib gmpy2
-  - source activate test-environment
-  - pip install pyflakes coverage coveralls sympy
+  - eval "CC=gcc-8 && GXX=g++-8"
+  - pip install coverage coveralls
 install:
-  - python setup.py install
+  - pip install .$INSTALL_EXTRAS
 script:
   - "coverage run --source=qupulse --rcfile=coverage.ini setup.py test"
 after_success:
-    - coveralls
+  - coveralls
 
 notifications:
   email: false

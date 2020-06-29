@@ -25,6 +25,26 @@ class ConstantParameterTest(unittest.TestCase):
         constant_parameter = ConstantParameter(0.2)
         self.assertEqual("<ConstantParameter 0.2>", repr(constant_parameter))
 
+    def test_expression_value(self) -> None:
+        expression_str = "exp(4)*sin(pi/2)"
+        expression_obj = Expression(expression_str)
+        expression_val = expression_obj.evaluate_numeric()
+        param = ConstantParameter(expression_str)
+        self.assertEqual(expression_val, param.get_value())
+        param = ConstantParameter(expression_obj)
+        self.assertEqual(expression_val, param.get_value())
+
+    def test_invalid_expression_value(self) -> None:
+        expression_obj = Expression("sin(pi/2*t)")
+        with self.assertRaises(RuntimeError):
+            ConstantParameter(expression_obj)
+
+    def test_numpy_value(self) -> None:
+        import numpy as np
+        arr = np.array([6, 7, 8])
+        param = ConstantParameter(arr)
+        np.array_equal(arr, param.get_value())
+
 
 class MappedParameterTest(unittest.TestCase):
 
@@ -40,23 +60,31 @@ class MappedParameterTest(unittest.TestCase):
         hugo = DummyParameter(5.2, requires_stop=True)
         ilse = DummyParameter(2356.4, requires_stop=True)
 
-        p.dependencies = {'foo': foo, 'bar': bar, 'ilse': ilse}
+        p._namespace = {'foo': foo, 'bar': bar, 'ilse': ilse}
         with self.assertRaises(ParameterNotProvidedException):
             p.requires_stop
         with self.assertRaises(ParameterNotProvidedException):
             p.get_value()
 
-        p.dependencies = {'foo': foo, 'bar': bar, 'hugo': hugo}
+        p._namespace = {'foo': foo, 'bar': bar, 'hugo': hugo}
         self.assertTrue(p.requires_stop)
 
         hugo = DummyParameter(5.2, requires_stop=False)
-        p.dependencies = {'foo': foo, 'bar': bar, 'hugo': hugo, 'ilse': ilse}
+        p._namespace = {'foo': foo, 'bar': bar, 'hugo': hugo, 'ilse': ilse}
         self.assertFalse(p.requires_stop)
         self.assertEqual(1.5, p.get_value())
 
     def test_repr(self) -> None:
         p = MappedParameter(Expression("foo + bar * hugo"))
         self.assertIsInstance(repr(p), str)
+
+    def test_equality(self):
+        p1 = MappedParameter(Expression("foo + 1"), {'foo': ConstantParameter(3)})
+        p2 = MappedParameter(Expression("foo + 1"), {'foo': ConstantParameter(4)})
+        p3 = MappedParameter(Expression("foo + 1"), {'foo': ConstantParameter(3)})
+
+        self.assertEqual(p1, p3)
+        self.assertNotEqual(p1, p2)
 
 
 class ParameterConstraintTest(unittest.TestCase):
@@ -87,10 +115,16 @@ class ParameterConstraintTest(unittest.TestCase):
             ParameterConstraint('a*b')
         ParameterConstraint('1 < 2')
 
-    def test_str(self):
+    def test_str_and_serialization(self):
         self.assertEqual(str(ParameterConstraint('a < b')), 'a < b')
+        self.assertEqual(ParameterConstraint('a < b').get_serialization_data(), 'a < b')
 
         self.assertEqual(str(ParameterConstraint('a==b')), 'a==b')
+        self.assertEqual(ParameterConstraint('a==b').get_serialization_data(), 'a==b')
+
+    def test_repr(self):
+        pc = ParameterConstraint('a < b')
+        self.assertEqual("ParameterConstraint('a < b')", repr(pc))
 
 
 class ParameterNotProvidedExceptionTests(unittest.TestCase):

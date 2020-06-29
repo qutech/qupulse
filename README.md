@@ -1,7 +1,8 @@
 # qupulse: A Quantum compUting PULse parametrization and SEquencing framework
-[![Coverage Status](https://coveralls.io/repos/qutech/qc-toolkit/badge.svg?branch=master&service=github)](https://coveralls.io/github/qutech/qc-toolkit?branch=master)
+[![Coverage Status](https://coveralls.io/repos/github/qutech/qupulse/badge.svg?branch=master)](https://coveralls.io/github/qutech/qupulse?branch=master)
 [![Build Status](https://travis-ci.org/qutech/qupulse.svg?branch=master)](https://travis-ci.org/qutech/qupulse)
-[![Documentation Status](https://readthedocs.org/projects/qc-toolkit/badge/?version=latest)](http://qc-toolkit.readthedocs.org/en/latest/?badge=latest)
+[![Documentation Status](https://readthedocs.org/projects/qupulse/badge/?version=latest)](http://qupulse.readthedocs.org/en/latest/?badge=latest)
+[![DOI](https://zenodo.org/badge/29915259.svg)](https://zenodo.org/badge/latestdoi/29915259)
 
 The qupulse project aims to produce a software toolkit facilitating experiments involving pulse driven state manipulation of physical qubits.
 
@@ -23,25 +24,35 @@ The current feature list is as follows:
 - Serialization of pulses (to allow storing into permanent storage)
 - Hardware model representation (prototype, work in progress)
 - High-level pulse to hardware configuration and waveform translation routines 
-- Hardware drivers for Tabor Electronics AWGs and AlazarTech Digitizers
+- Hardware drivers for Tabor Electronics, Tektronix and Zurich Instruments AWGs and AlazarTech Digitizers
 - MATLAB interface to access qupulse functionality
 
 ## Installation
-qupulse is developed using Python 3.5 but should also run on previous 3.3+ versions.
+qupulse is available on [PyPi](https://pypi.org/project/qupulse/) and the latest release can be installed by executing:
+```
+pip3 install qupulse
+```
+qupulse version numbers follow the [Semantic Versioning](https://semver.org/) conventions.
 
-The package is installed by executing in the cloned repository root folder:
+Alternatively, the current development version of qupulse can be installed by executing in the cloned repository root folder: 
 ```
 pip3 install .
 ```
 
-The backend for TaborAWGs requires packages that can be found [here](https://git.rwth-aachen.de/qutech/python-TaborDriver).
+qupulse is developed using Python 3.6 and tested on 3.5 - 3.7 It relies on some external Python packages as dependencies; 
+`requirements.txt` lists the versions of these qupulse is developed against. 
+We intentionally did not restrict versions of dependencies in the install scripts to not unnecessarily prevent usage of
+newer releases of dependencies that might be compatible. However, if qupulse does encounter problems with a particular dependency version,
+try installing the version listed in `requirements.txt`.   
+
+The backend for TaborAWGs requires packages that can be found [here](https://git.rwth-aachen.de/qutech/python-TaborDriver). As a shortcut you can install it from the python interpreter via `qupulse.hardware.awgs.install_requirements('tabor')`.
 
 The data acquisition backend for AlazarTech cards needs a package that unfortunately is not open source (yet). If you need it or have questions contact <simon.humpohl@rwth-aachen.de>.
 
 The optional script *tests/utils/syntax_check.py* invokes pyflakes to perform a static code analysis, so pyflakes should be installed if its usage is intended.
 
 ## Documentation
-You can find documentation on how to use this library on [readthedocs](http://qc-toolkit.readthedocs.io/en/latest/) and [IPython notebooks with examples in this repo](doc/source/examples)
+You can find documentation on how to use this library on [readthedocs](https://qupulse.readthedocs.io/en/latest/) and [IPython notebooks with examples in this repo](doc/source/examples). You can build it locally with `python setup.py build_sphinx`.
 
 ## Folder Structure
 The repository primarily consists of the folders `qupulse` (toolkit core code) and `tests` (toolkit core tests). Additional parts of the project reside in `MATLAB` (MATLAB interface) and `doc` (configuration and source files to build documentation)  
@@ -51,7 +62,7 @@ The repository primarily consists of the folders `qupulse` (toolkit core code) a
 - `pulses` which contains all modules related to pulse representation.
 - `hardware` containing classes for hardware representation as well as hardware drivers
 - `utils` containing miscellaneous utility modules or wrapping code for external libraries
-
+- `_program` contains general and hardware specific representations of instantiated (parameter free) pulses. It is private because there is no stability guarantee.
 
 Contents of `tests` mirror the structure of `qupulse`. For every `<module>` somewhere in `qupulse` there should exist a `<module>Tests.py` in the corresponding subdirectory of `tests`.
 

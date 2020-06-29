@@ -33,6 +33,16 @@ class dummy_pyvisa(dummy_package):
                     answers = [self.answers[q] if q in self.answers else self.default_answer
                                for q in ques]
                     return ';'.join(answers)
+
+                def query(self, *args, **kwargs):
+                    self.logged_asks.append((args, kwargs))
+                    ques = args[0].split(';')
+                    ques = [q.strip(' ?') for q in ques if q.strip().endswith('?')]
+                    answers = [self.answers[q] if q in self.answers else self.default_answer
+                               for q in ques]
+                    return ';'.join(answers)
+
+
 dummy_pyvisa.resources.MessageBasedResource = dummy_pyvisa.resources.messagebased.MessageBasedResource
 
 
@@ -154,6 +164,9 @@ class dummy_teawg(dummy_package):
             self._download_sequencer_table_calls = []
 
         @property
+        def is_simulator(self):
+            return False
+        @property
         def visa_inst(self):
             return self._visa_inst
         def send_cmd(self, *args, **kwargs):
@@ -184,8 +197,11 @@ class dummy_atsaverage(dummy_package):
             minimum_record_size = 256
             def __init__(self):
                 self._startAcquisition_calls = []
+                self._applyConfiguration_calls = []
             def startAcquisition(self, x: int):
                 self._startAcquisition_calls.append(x)
+            def applyConfiguration(self, config):
+                self._applyConfiguration_calls.append(config)
     class config(dummy_package):
         class CaptureClockConfig:
             def numeric_sample_rate(self, card):
