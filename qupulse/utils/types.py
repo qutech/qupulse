@@ -200,8 +200,14 @@ class TimeType:
             if type(value) in (cls, cls._InternalType, fractions.Fraction):
                 return cls(value)
             else:
-                # .upper() is a bit faster than replace('e', 'E') which gmpy2.mpq needs
-                return cls(cls._to_internal(str(value).upper()))
+                try:
+                    # .upper() is a bit faster than replace('e', 'E') which gmpy2.mpq needs
+                    return cls(cls._to_internal(str(value).upper()))
+                except ValueError:
+                    if isinstance(value, numbers.Number) and not numpy.isfinite(value):
+                        raise ValueError('Cannot represent "{}" as TimeType'.format(value), value)
+                    else:
+                        raise
 
         elif absolute_error == 0:
             return cls(cls._to_internal(value))

@@ -58,6 +58,14 @@ class TestTimeType(unittest.TestCase):
                 self._fallback_qutypes = qutypes
         return self._fallback_qutypes
 
+    def test_non_finite_float(self):
+        with self.assertRaisesRegex(ValueError, 'Cannot represent'):
+            qutypes.TimeType.from_float(float('inf'))
+        with self.assertRaisesRegex(ValueError, 'Cannot represent'):
+            qutypes.TimeType.from_float(float('-inf'))
+        with self.assertRaisesRegex(ValueError, 'Cannot represent'):
+            qutypes.TimeType.from_float(float('nan'))
+
     def test_fraction_fallback(self):
         self.assertIs(fractions.Fraction, self.fallback_qutypes.TimeType._InternalType)
 
