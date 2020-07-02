@@ -58,6 +58,14 @@ class TestTimeType(unittest.TestCase):
                 self._fallback_qutypes = qutypes
         return self._fallback_qutypes
 
+    def test_non_finite_float(self):
+        with self.assertRaisesRegex(ValueError, 'Cannot represent'):
+            qutypes.TimeType.from_float(float('inf'))
+        with self.assertRaisesRegex(ValueError, 'Cannot represent'):
+            qutypes.TimeType.from_float(float('-inf'))
+        with self.assertRaisesRegex(ValueError, 'Cannot represent'):
+            qutypes.TimeType.from_float(float('nan'))
+
     def test_fraction_fallback(self):
         self.assertIs(fractions.Fraction, self.fallback_qutypes.TimeType._InternalType)
 
@@ -133,6 +141,42 @@ class TestTimeType(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, '<= 1'):
             qutypes.time_from_float(.8, 2)
+
+    def assert_comparisons_work(self, time_type):
+        tt = time_type.from_float(1.1)
+
+        self.assertLess(tt, 4)
+        self.assertLess(tt, 4.)
+        self.assertLess(tt, time_type.from_float(4.))
+        self.assertLess(tt, float('inf'))
+
+        self.assertLessEqual(tt, 4)
+        self.assertLessEqual(tt, 4.)
+        self.assertLessEqual(tt, time_type.from_float(4.))
+        self.assertLessEqual(tt, float('inf'))
+
+        self.assertGreater(tt, 1)
+        self.assertGreater(tt, 1.)
+        self.assertGreater(tt, time_type.from_float(1.))
+        self.assertGreater(tt, float('-inf'))
+
+        self.assertGreaterEqual(tt, 1)
+        self.assertGreaterEqual(tt, 1.)
+        self.assertGreaterEqual(tt, time_type.from_float(1.))
+        self.assertGreaterEqual(tt, float('-inf'))
+
+        self.assertFalse(tt == float('nan'))
+        self.assertFalse(tt <= float('nan'))
+        self.assertFalse(tt >= float('nan'))
+        self.assertFalse(tt < float('nan'))
+        self.assertFalse(tt > float('nan'))
+
+    def test_comparisons_work(self):
+        self.assert_comparisons_work(qutypes.TimeType)
+
+    @unittest.skipIf(gmpy2 is None, "fallback already tested")
+    def test_comparisons_work_fallback(self):
+        self.assert_comparisons_work(self.fallback_qutypes.TimeType)
 
 
 def get_some_floats(seed=42, n=1000):
