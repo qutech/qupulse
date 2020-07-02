@@ -1,3 +1,7 @@
+## pending/current ##
+ - General:
+    - Fix TimeType comparisons with non-finite floats (inf, -inf, NaN)
+
 ## 0.5.1 ##
 
  - General:
