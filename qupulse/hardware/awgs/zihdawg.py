@@ -154,6 +154,7 @@ class HDAWGRepresentation:
     def range(self, channel: int, voltage: float = None) -> float:
         """Query channel voltage range and optionally set it. The instruments selects the next higher available range.
         This is the one-sided range Vp. Total range: -Vp...Vp"""
+        assert channel > 0
         node_path = '/{}/sigouts/{:d}/range'.format(self.serial, channel-1)
         if voltage is not None:
             self.api_session.setDouble(node_path, voltage)
@@ -510,17 +511,29 @@ class HDAWGChannelPair(AWG):
             self.device.api_session.setInt(node_path, value)
             self.device.api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
         return self.device.api_session.getInt(node_path)
+    
+    def _amplitude_scale(self, channel: int) -> float:
+        assert channel in (1, 2)
+        return self.device.api_session.getDouble(f'/{self.device.serial}/awgs/{self.awg_group_index:d}/outputs/{channel-1:d}/amplitude')
 
-    def amplitude(self, channel: int, value: float = None) -> float:
-        """Query AWG channel amplitude value and optionally set it. Amplitude in units of full scale of the given
-         AWG Output. The full scale corresponds to the Range voltage setting of the Signal Outputs."""
+    def amplitude(self, channel: int) -> float:
+        """Query AWG channel amplitude value.
+        
+        From manual:
+        The final signal amplitude is given by the product of the full scale
+        output range of 1 V[in this example], the dimensionless amplitude
+        scaling factor 1.0, and the actual dimensionless signal amplitude
+        stored in the waveform memory."""
+        
+        
         if channel not in (1, 2):
             raise HDAWGValueError('{} not a valid (1-2) channel.'.format(channel))
-        node_path = '/{}/awgs/{:d}/outputs/{:d}/amplitude'.format(self.device.serial, self.awg_group_index, channel-1)
-        if value is not None:
-            self.device.api_session.setDouble(node_path, value)
-            self.device.api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
-        return self.device.api_session.getDouble(node_path)
+        
+        # scale
+        zi_amplitude = self._amplitude_scale(channel)
+        zi_range = self.device.range(self.awg_group_index * 2 + channel)
+        
+        return zi_amplitude * zi_range
 
 
 class ELFManager:
