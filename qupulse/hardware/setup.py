@@ -199,7 +199,7 @@ class HardwareSetup:
 
     @property
     def known_dacs(self) -> Set[DAC]:
-        masks = set.union(*self._measurement_map.values())
+        masks = set.union(*self._measurement_map.values()) if self._measurement_map else set()
         dacs = {mask.dac for mask in masks}
         return dacs
 
