@@ -25,6 +25,7 @@ from collections import OrderedDict
 import string
 import warnings
 import numbers
+import string
 
 import numpy as np
 from pathlib import Path
@@ -43,6 +44,14 @@ except ImportError:
 
 
 __all__ = ["HDAWGProgramManager"]
+
+
+def make_valid_identifier(name: str) -> str:
+    # replace all invalid characters and conactenate with hash of original name
+    name_hash = hashlib.sha256(name.encode('utf-8')).hexdigest()
+    valid_chars = string.ascii_letters + string.digits + '_'
+    namestub = ''.join(c for c in name if c in valid_chars)
+    return f'renamed_{namestub}_{name_hash}'
 
 
 class BinaryWaveform:
@@ -307,22 +316,32 @@ class WaveformMemory:
 
 class ProgramWaveformManager:
     """Manages waveforms of a program"""
-    def __init__(self, name, memory: WaveformMemory):
+    def __init__(self, name: str, memory: WaveformMemory):
+        if not name.isidentifier():
+            waveform_name = make_valid_identifier(name)
+        else:
+            waveform_name = name
+        
+        self._waveform_name = waveform_name
         self._program_name = name
         self._memory = memory
 
         assert self._program_name not in self._memory.concatenated_waveforms
         assert all(self._program_name not in programs for programs in self._memory.shared_waveforms.values())
-        self._memory.concatenated_waveforms[self._program_name] = ConcatenatedWaveform()
+        self._memory.concatenated_waveforms[waveform_name] = ConcatenatedWaveform()
 
     @property
     def program_name(self) -> str:
         return self._program_name
+    
+    @property
+    def main_waveform_name(self) -> str:
+        self._waveform_name
 
     def clear_requested(self):
         for programs in self._memory.shared_waveforms.values():
             programs.discard(self._program_name)
-        self._memory.concatenated_waveforms[self._program_name].clear()
+        self._memory.concatenated_waveforms[self._waveform_name].clear()
 
     def request_shared(self, binary_waveform: BinaryWaveform) -> str:
         """Register waveform if not already registered and return a unique identifier placeholder.
@@ -336,17 +355,17 @@ class ProgramWaveformManager:
 
     def request_concatenated(self, binary_waveform: BinaryWaveform) -> str:
         """Append the waveform to the concatenated waveform"""
-        bin_wf_list = self._memory.concatenated_waveforms[self._program_name]
+        bin_wf_list = self._memory.concatenated_waveforms[self._waveform_name]
         bin_wf_list.append(binary_waveform)
         return self._memory.WF_PLACEHOLDER_TEMPLATE.format(id=id(bin_wf_list))
 
     def finalize(self):
-        self._memory.concatenated_waveforms[self._program_name].finalize()
+        self._memory.concatenated_waveforms[self._waveform_name].finalize()
 
     def prepare_delete(self):
         """Delete all references in waveform memory to this program. Cannot be used afterwards."""
         self.clear_requested()
-        del self._memory.concatenated_waveforms[self._program_name]
+        del self._memory.concatenated_waveforms[self._waveform_name]
 
 
 class UserRegister:
@@ -571,7 +590,7 @@ class HDAWGProgramManager:
                          NO_RESET_MASK=bin(1 << 15),
                          PROG_SEL_MASK=bin((1 << 15) - 1),
                          IDLE_WAIT_CYCLES=300)
-    PROGRAM_FUNCTION_NAME_TEMPLATE = '{program_name}_function'
+    _PROGRAM_FUNCTION_NAME_TEMPLATE = '{program_name}_function'
     INIT_PROGRAM_SWITCH = '// INIT program switch.\nvar prog_sel = 0;'
     WAIT_FOR_SOFTWARE_TRIGGER = "waitForSoftwareTrigger();"
     SOFTWARE_WAIT_FOR_TRIGGER_FUNCTION_DEFINITION = (
@@ -583,6 +602,12 @@ class HDAWGProgramManager:
         '  }\n'
         '}\n'
     )
+    
+    @classmethod
+    def get_program_function_name(cls, program_name: str):
+        if not program_name.isidentifier():
+            program_name = make_valid_identifier(program_name)
+        return cls._PROGRAM_FUNCTION_NAME_TEMPLATE.format(program_name=program_name)
 
     def __init__(self):
         self._waveform_memory = WaveformMemory()
@@ -692,7 +717,7 @@ class HDAWGProgramManager:
 
         lines.append('\n// program definitions')
         for program_name, program in self.programs.items():
-            program_function_name = self.PROGRAM_FUNCTION_NAME_TEMPLATE.format(program_name=program_name)
+            program_function_name = self.get_program_function_name(program_name)
             lines.append('void {program_function_name}() {{'.format(program_function_name=program_function_name))
             lines.append(replace_multiple(program.seqc_source, replacements))
             lines.append('}\n')
@@ -709,7 +734,7 @@ class HDAWGProgramManager:
         lines.append('  switch (prog_sel) {')
 
         for program_name, program_entry in self.programs.items():
-            program_function_name = self.PROGRAM_FUNCTION_NAME_TEMPLATE.format(program_name=program_name)
+            program_function_name = self.get_program_function_name(program_name)
             lines.append('    case {selection_index}:'.format(selection_index=program_entry.selection_index))
             lines.append('      {program_function_name}();'.format(program_function_name=program_function_name))
             lines.append('      waitWave();')
