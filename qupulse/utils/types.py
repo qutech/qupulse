@@ -55,7 +55,7 @@ class TimeType:
     _to_internal = fractions.Fraction if gmpy2 is None else gmpy2.mpq
 
     def __init__(self, value: numbers.Rational = 0.):
-        if type(value) == type(self):
+        if type(getattr(value, '_value', None)) is self._InternalType:
             self._value = value._value
         else:
             self._value = self._to_internal(value)
