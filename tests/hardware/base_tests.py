@@ -16,7 +16,7 @@ class ProgramEntryTests(unittest.TestCase):
         self.channels = ('A', None, 'C')
         self.marker = (None, 'M')
         self.amplitudes = (1., 1., .5)
-        self.offset = (0., .5, .0)
+        self.offset = (0., .5, .1)
         self.voltage_transformations = (
             mock.Mock(wraps=lambda x: x),
             mock.Mock(wraps=lambda x: x),
@@ -82,9 +82,11 @@ class ProgramEntryTests(unittest.TestCase):
     def test_sample_waveforms(self):
         empty_ch = np.array([1, 2, 3])
         empty_m = np.array([0, 1, 0])
+        # channels ==  (A, None, C)
+
         expected_sampled = [
-            ((self.sampled[0]['A'], empty_ch, self.sampled[0]['C']), (empty_m, self.sampled[0]['M'] != 0)),
-            ((self.sampled[1]['A'], empty_ch, self.sampled[1]['C']), (empty_m, self.sampled[1]['M'] != 0))
+            ((self.sampled[0]['A'], empty_ch, 2.*(self.sampled[0]['C'] - 0.1)), (empty_m, self.sampled[0]['M'] != 0)),
+            ((self.sampled[1]['A'], empty_ch, 2.*(self.sampled[1]['C'] - 0.1)), (empty_m, self.sampled[1]['M'] != 0))
         ]
 
         entry = ProgramEntry(loop=self.loop,
