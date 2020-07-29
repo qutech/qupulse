@@ -7,7 +7,7 @@ import numpy as np
 from qupulse.utils.types import TimeType
 from qupulse._program._loop import Loop
 from tests.pulses.sequencing_dummies import DummyWaveform
-from qupulse.hardware.awgs.zihdawg import HDAWGChannelPair, HDAWGRepresentation, HDAWGValueError, UserRegister,\
+from qupulse.hardware.awgs.zihdawg import HDAWGChannelGroup, HDAWGRepresentation, HDAWGValueError, UserRegister,\
     ConstantParameter, ELFManager
 
 
@@ -91,7 +91,7 @@ class HDAWGChannelPairTests(unittest.TestCase):
         with mock.patch('weakref.proxy') as proxy_mock:
             mock_device = mock.Mock()
 
-            channel_pair = HDAWGChannelPair(mock_device, (3, 4), 'foo', 3.4)
+            channel_pair = HDAWGChannelGroup(mock_device, (3, 4), 'foo', 3.4)
 
             self.assertEqual(channel_pair.timeout, 3.4)
             self.assertEqual(channel_pair._channels, (3, 4))
@@ -112,7 +112,7 @@ class HDAWGChannelPairTests(unittest.TestCase):
 
         expected_user_reg_calls = [mock.call(*args) for args in requested_changes.items()]
 
-        channel_pair = HDAWGChannelPair(mock_device, (3, 4), 'foo', 3.4)
+        channel_pair = HDAWGChannelGroup(mock_device, (3, 4), 'foo', 3.4)
 
         channel_pair._current_program = 'active_program'
         with mock.patch.object(channel_pair._program_manager, 'get_register_values_to_update_volatile_parameters',
@@ -140,7 +140,7 @@ class HDAWGChannelPairTests(unittest.TestCase):
 
         with mock.patch('weakref.proxy'),\
              mock.patch('qupulse.hardware.awgs.zihdawg.make_compatible') as mock_make_compatible:
-            channel_pair = HDAWGChannelPair(mock.Mock(), (3, 4), 'foo', 3.4)
+            channel_pair = HDAWGChannelGroup(mock.Mock(), (3, 4), 'foo', 3.4)
 
             with self.assertRaisesRegex(HDAWGValueError, 'Channel ID'):
                 channel_pair.upload('bar', mock_loop, ('A'), (None, 'A', None, None), voltage_trafos)

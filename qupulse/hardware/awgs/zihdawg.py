@@ -1,6 +1,6 @@
 from pathlib import Path
 import functools
-from typing import Tuple, Set, Callable, Optional, Mapping, Generator, Union
+from typing import Tuple, Set, Callable, Optional, Mapping, Generator, Union, List, Dict
 from enum import Enum
 import weakref
 import logging
@@ -53,7 +53,8 @@ class HDAWGRepresentation:
                  data_server_port: int = 8004,
                  api_level_number: int = 6,
                  reset: bool = False,
-                 timeout: float = 20) -> None:
+                 timeout: float = 20,
+                 grouping: 'HDAWGChannelGrouping' = None) -> None:
         """
         :param device_serial:     Device serial that uniquely identifies this device to the LabOne data server
         :param device_interface:  Either '1GbE' for ethernet or 'USB'
@@ -66,6 +67,7 @@ class HDAWGRepresentation:
         self._api_session = zhinst.ziPython.ziDAQServer(data_server_addr, data_server_port, api_level_number)
         assert zhinst.utils.api_server_version_check(self.api_session)  # Check equal data server and api version.
         self.api_session.connectDevice(device_serial, device_interface)
+        self.default_timeout = timeout
         self._dev_ser = device_serial
 
         if reset:
@@ -76,34 +78,56 @@ class HDAWGRepresentation:
 
         waveform_path = pathlib.Path(self.api_session.awgModule().getString('directory'), 'awg', 'waves')
         self._waveform_file_system = WaveformFileSystem(waveform_path)
-        self._channel_pair_AB = HDAWGChannelPair(self, (1, 2), str(self.serial) + '_AB', timeout)
-        self._channel_pair_CD = HDAWGChannelPair(self, (3, 4), str(self.serial) + '_CD', timeout)
-        self._channel_pair_EF = HDAWGChannelPair(self, (5, 6), str(self.serial) + '_EF', timeout)
-        self._channel_pair_GH = HDAWGChannelPair(self, (7, 8), str(self.serial) + '_GH', timeout)
+        self._channel_groups: Dict[HDAWGChannelGrouping, Tuple[HDAWGChannelGroup, ...]] = {}
+
+        # TODO: lookup method to find channel count
+        n_channels = 8
+
+        for grouping in HDAWGChannelGrouping:
+            group_size = grouping.group_size()
+            groups = []
+            for group_idx in range(n_channels // group_size):
+                groups.append(HDAWGChannelGroup(group_idx, group_size,
+                                                identifier=self.group_name(group_idx, group_size),
+                                                timeout=self.default_timeout))
+            self._channel_groups[grouping] = tuple(groups)
+
+        if grouping is None:
+            grouping = self.channel_grouping
+        # activates channel groups
+        self.channel_grouping = grouping
 
     @property
     def waveform_file_system(self) -> WaveformFileSystem:
         return self._waveform_file_system
 
     @property
-    def channel_tuples(self) -> Tuple['HDAWGChannelPair', ...]:
-        return self._channel_pair_AB, self._channel_pair_CD, self._channel_pair_EF, self._channel_pair_GH
+    def channel_tuples(self) -> Tuple['HDAWGChannelGroup', ...]:
+        return self._channel_groups[self.channel_grouping]
 
     @property
-    def channel_pair_AB(self) -> 'HDAWGChannelPair':
-        return self._channel_pair_AB
+    def channel_pair_AB(self) -> 'HDAWGChannelGroup':
+        if len(self.channel_tuples) != 4:
+            raise HDAWGValueError('Legacy channel pair interface is only usable in 4x2 grouping')
+        return self.channel_tuples[0]
 
     @property
-    def channel_pair_CD(self) -> 'HDAWGChannelPair':
-        return self._channel_pair_CD
+    def channel_pair_CD(self) -> 'HDAWGChannelGroup':
+        if len(self.channel_tuples) != 4:
+            raise HDAWGValueError('Legacy channel pair interface is only usable in 4x2 grouping')
+        return self.channel_tuples[1]
 
     @property
-    def channel_pair_EF(self) -> 'HDAWGChannelPair':
-        return self._channel_pair_EF
+    def channel_pair_EF(self) -> 'HDAWGChannelGroup':
+        if len(self.channel_tuples) != 4:
+            raise HDAWGValueError('Legacy channel pair interface is only usable in 4x2 grouping')
+        return self.channel_tuples[2]
 
     @property
-    def channel_pair_GH(self) -> 'HDAWGChannelPair':
-        return self._channel_pair_GH
+    def channel_pair_GH(self) -> 'HDAWGChannelGroup':
+        if len(self.channel_tuples) != 4:
+            raise HDAWGValueError('Legacy channel pair interface is only usable in 4x2 grouping')
+        return self.channel_tuples[3]
 
     @property
     def api_session(self) -> zhinst.ziPython.ziDAQServer:
@@ -115,8 +139,6 @@ class HDAWGRepresentation:
 
     def _initialize(self) -> None:
         settings = []
-        settings.append(['/{}/system/awg/channelgrouping'.format(self.serial),
-                         HDAWGChannelGrouping.CHAN_GROUP_4x2.value])
         settings.append(['/{}/awgs/*/time'.format(self.serial), 0])  # Maximum sampling rate.
         settings.append(['/{}/sigouts/*/range'.format(self.serial), HDAWGVoltageRange.RNG_1V.value])
         settings.append(['/{}/awgs/*/outputs/*/amplitude'.format(self.serial), 1.0])  # Default amplitude factor 1.0
@@ -136,10 +158,36 @@ class HDAWGRepresentation:
     def reset(self) -> None:
         zhinst.utils.disable_everything(self.api_session, self.serial)
         self._initialize()
-        self.channel_pair_AB.clear()
-        self.channel_pair_CD.clear()
-        self.channel_pair_EF.clear()
-        self.channel_pair_GH.clear()
+        for tuple in self.channel_tuples:
+            tuple.clear()
+
+    def group_name(self, group_idx, group_size) -> str:
+        return str(self.serial) + '_' + 'ABCDEFGH'[group_idx*group_size:][:group_size]
+
+    def _get_groups(self, grouping: 'HDAWGChannelGrouping') -> Tuple['HDAWGChannelGroup', ...]:
+        return self._channel_groups[grouping]
+        
+    @property
+    def channel_grouping(self) -> 'HDAWGChannelGrouping':
+        grouping = self.api_session.getInt(f'/{self.serial}/SYSTEM/AWG/CHANNELGROUPING')
+        return HDAWGChannelGrouping(grouping)
+
+    @channel_grouping.setter
+    def channel_grouping(self, channel_grouping: 'HDAWGChannelGrouping'):
+        # ipython reload ...
+        if not type(channel_grouping).__name__ == 'HDAWGChannelGrouping':
+            raise HDAWGTypeError('Channel grouping must be an enum of type "HDAWGChannelGrouping" to avoid confusions '
+                                 'between enum value and group size.')
+        old_channel_grouping = self.channel_grouping
+        if old_channel_grouping != channel_grouping:
+            self.api_session.setInt(f'/{self.serial}/SYSTEM/AWG/CHANNELGROUPING', channel_grouping.value)
+            # disable old groups
+            for group in self._get_groups(old_channel_grouping):
+                group.disconnect_group()
+
+        for group in self._get_groups(channel_grouping):
+            if not group.is_connected():
+                group.connect_group(self)
 
     @valid_channel
     def offset(self, channel: int, voltage: float = None) -> float:
@@ -206,6 +254,13 @@ class HDAWGChannelGrouping(Enum):
     CHAN_GROUP_2x4 = 1  # 2x4 with HDAWG8; 1x4 with HDAWG4.  /dev.../awgs/0 & 2/
     CHAN_GROUP_1x8 = 2  # 1x8 with HDAWG8.                   /dev.../awgs/0/
 
+    def group_size(self) -> int:
+        return {
+            HDAWGChannelGrouping.CHAN_GROUP_4x2: 2,
+            HDAWGChannelGrouping.CHAN_GROUP_2x4: 4,
+            HDAWGChannelGrouping.CHAN_GROUP_1x8: 8
+        }[self]
+
 
 class HDAWGVoltageRange(Enum):
     """All available voltage ranges for the HDAWG wave outputs. Define maximum output voltage."""
@@ -230,7 +285,7 @@ class HDAWGModulationMode(Enum):
     ADVANCED = 5  # AWG output modulates corresponding sines from modulation carriers.
 
 
-class HDAWGChannelPair(AWG):
+class HDAWGChannelGroup(AWG):
     """Represents a channel pair of the Zurich Instruments HDAWG as an independent AWG entity.
     It represents a set of channels that have to have(hardware enforced) the same control flow and sample rate.
 
@@ -240,41 +295,73 @@ class HDAWGChannelPair(AWG):
     MIN_WAVEFORM_LEN = 192
     WAVEFORM_LEN_QUANTUM = 16
 
-    def __init__(self, hdawg_device: HDAWGRepresentation,
-                 channels: Tuple[int, int],
+    def __init__(self,
+                 group_idx: int,
+                 group_size: int,
                  identifier: str,
                  timeout: float) -> None:
         super().__init__(identifier)
-        self._device = weakref.proxy(hdawg_device)
+        self._device = None
 
-        if channels not in ((1, 2), (3, 4), (5, 6), (7, 8)):
-            raise HDAWGValueError('Invalid channel pair: {}'.format(channels))
-        self._channels = channels
+        assert group_idx in range(4)
+        assert group_size in (2, 4, 8)
+
+        self._group_idx = group_idx
+        self._group_size = group_size
         self.timeout = timeout
 
-        self._awg_module = self.device.api_session.awgModule()
-        self.awg_module.set('awgModule/device', self.device.serial)
-        self.awg_module.set('awgModule/index', self.awg_group_index)
-        self.awg_module.execute()
-        # Seems creating AWG module sets SINGLE (single execution mode of sequence) to 0 per default.
-        self.device.api_session.setInt('/{}/awgs/{:d}/single'.format(self.device.serial, self.awg_group_index), 1)
-
+        self._awg_module = None
         self._program_manager = HDAWGProgramManager()
-        self._elf_manager = ELFManager(self.awg_module)
+        self._elf_manager = None
         self._required_seqc_source = self._program_manager.to_seqc_program()
         self._uploaded_seqc_source = None
         self._current_program = None  # Currently armed program.
         self._upload_generator = ()
 
+    def _initialize(self):
+        """Only run once"""
+        assert self._awg_module is None
+        self._awg_module = self.device.api_session.awgModule()
+        self.awg_module.set('awgModule/device', self.device.serial)
+        self.awg_module.set('awgModule/index', self.awg_group_index)
+        self.awg_module.execute()
+        self._elf_manager = ELFManager(self.awg_module)
+
+    def disconnect_group(self):
+        """Disconnect this group from device so groups of another size can be used"""
+        if self._awg_module:
+            self.awg_module.clear()
+        self._device = None
+
+    def connect_group(self, hdawg_device: HDAWGRepresentation):
+        """"""
+        self.disconnect_group()
+        self._device = weakref.proxy(hdawg_device)
+        assert self.device.channel_grouping.group_size() == self._group_size
+        if self._awg_module is None:
+            self._initialize()
+        else:
+            self.awg_module.execute()
+        # Seems creating AWG module sets SINGLE (single execution mode of sequence) to 0 per default.
+        self.device.api_session.setInt('/{}/awgs/{:d}/single'.format(self.device.serial, self.awg_group_index), 1)
+
+    def is_connected(self) -> bool:
+        return self._device is not None
+
     @property
     def num_channels(self) -> int:
         """Number of channels"""
-        return 2
+        return self._group_size
+
+    def _channels(self) -> Tuple[int, ...]:
+        """1 indexed channel"""
+        offset = 1 + self._group_size * self._group_idx
+        return tuple(ch + offset for ch in range(self._group_size))
 
     @property
     def num_markers(self) -> int:
         """Number of marker channels"""
-        return 4
+        return 2 * self.num_channels
 
     def upload(self, name: str,
                program: Loop,
@@ -327,14 +414,14 @@ class HDAWGChannelPair(AWG):
                         sample_rate=q_sample_rate)
 
         if self._amplitude_offset_handling == AWGAmplitudeOffsetHandling.IGNORE_OFFSET:
-            voltage_offsets = (0., 0.)
+            voltage_offsets = (0.,) * self.num_channels
         elif self._amplitude_offset_handling == AWGAmplitudeOffsetHandling.CONSIDER_OFFSET:
-            voltage_offsets = (self._device.offset(self._channels[0]),
-                               self._device.offset(self._channels[1]))
+            voltage_offsets = tuple(map(self.offset, self._channels()))
         else:
             raise ValueError('{} is invalid as AWGAmplitudeOffsetHandling'.format(self._amplitude_offset_handling))
 
-        amplitudes = self._device.range(self._channels[0]), self._device.range(self._channels[1])
+        amplitudes = tuple(map(self.amplitude, self._channels()))
+        self._device.range(self._channels[0]), self._device.range(self._channels[1])
 
         if name in self._program_manager.programs:
             self._program_manager.remove(name)
@@ -461,16 +548,20 @@ class HDAWGChannelPair(AWG):
     @property
     def awg_group_index(self) -> int:
         """AWG node group index assuming 4x2 channel grouping. Then 0...3 will give appropriate index of group."""
-        return self._channels[0] // 2
+        return self._group_idx
 
     @property
     def device(self) -> HDAWGRepresentation:
         """Reference to HDAWG representation."""
+        if self._device is None:
+            raise HDAWGValueError('Channel group is currently not connected')
         return self._device
 
     @property
     def awg_module(self) -> zhinst.ziPython.AwgModule:
         """Each AWG channel group has its own awg module to manage program compilation and upload."""
+        if self._awg_module is None:
+            raise HDAWGValueError('Channel group is not connected and was never initialized')
         return self._awg_module
 
     @property
@@ -510,6 +601,15 @@ class HDAWGChannelPair(AWG):
             self.device.api_session.setInt(node_path, value)
             self.device.api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
         return self.device.api_session.getInt(node_path)
+
+    def amplitudes(self) -> Tuple[float, ...]:
+        amplitudes = []
+
+        for ch in self._channels():
+            zi_range = self.device.range(ch)
+            zi_amplitude = self.device.
+
+        return tuple(self.device.)
 
     def amplitude(self, channel: int, value: float = None) -> float:
         """Query AWG channel amplitude value and optionally set it. Amplitude in units of full scale of the given
