@@ -160,13 +160,6 @@ class BinaryWaveform:
         return table
 
 
-def _fingerprint(binary_waveform: Tuple[BinaryWaveform, ...]) -> str:
-    h = hashlib.sha256()
-    for wf in binary_waveform:
-        h.update(wf.data)
-    return h.hexdigest()
-
-
 class ConcatenatedWaveform:
     def __init__(self):
         """Handle the concatenation of multiple binary waveforms to create a big indexable waveform."""
