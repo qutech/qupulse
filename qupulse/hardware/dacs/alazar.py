@@ -1,5 +1,9 @@
-from typing import Dict, Any, Optional, Tuple, List, Iterable, Callable
+from typing import Dict, Any, Optional, Tuple, List, Iterable, Callable, Sequence
 from collections import defaultdict
+import logging
+import math
+import functools
+import abc
 
 import numpy as np
 
@@ -74,6 +78,107 @@ class AlazarProgram:
         yield self.total_length
 
 
+def gcd_set(data):
+    return functools.reduce(math.gcd, data)
+
+
+class BufferStrategy(metaclass=abc.ABCMeta):
+    """This class defines the strategy how the buffer size is chosen. Buffers might impact the signal due to hardware
+    imperfections. The aim of this class is to allow the user to work around that."""
+    @abc.abstractmethod
+    def calculate_acquisition_properties(self,
+                                         masks: Sequence[CrossBufferMask],
+                                         buffer_length_divisor: int) -> Tuple[int, int]:
+        """
+
+        Args:
+            windows: Measurement windows in samples
+            buffer_length_divisor: Necessary divisor of the buffer length
+
+        Returns:
+            A tuple (buffer_length, total_acquisition_length)
+        """
+
+    @staticmethod
+    def minimum_total_length(masks: Sequence[CrossBufferMask]) -> int:
+        mtl = 0
+        for mask in masks:
+            mtl = max(mtl, mask.begin[-1] + mask.length[-1])
+        return mtl
+
+
+class ForceBufferSize(BufferStrategy):
+    def __init__(self, target_size: int):
+        """
+        Args:
+            aimed_size: Try to use that length
+        """
+        super().__init__()
+        self.target_buffer_size = target_size
+
+    def calculate_acquisition_properties(self,
+                                         masks: Sequence[CrossBufferMask],
+                                         buffer_length_divisor: int) -> Tuple[int, int]:
+        buffer_size = int(self.target_buffer_size or buffer_length_divisor)
+        if buffer_size % buffer_length_divisor:
+            raise ValueError('Target size not possible for required buffer length divisor',
+                             buffer_size, buffer_length_divisor)
+
+        mtl = self.minimum_total_length(masks)
+        total_length = int(math.ceil(mtl / buffer_size) * buffer_size)
+        return buffer_size, total_length
+
+    def __repr__(self):
+        return 'ForceBufferSize(target_size=%r)' % self.target_buffer_size
+
+
+class AvoidSingleBufferAcquisition(BufferStrategy):
+    def __init__(self, wrapped_strategy: BufferStrategy):
+        self.wrapped_strategy = wrapped_strategy
+
+    def calculate_acquisition_properties(self,
+                                         masks: Sequence[CrossBufferMask],
+                                         buffer_length_divisor: int) -> Tuple[int, int]:
+        buffer_size, total_length = self.wrapped_strategy.calculate_acquisition_properties(masks,
+                                                                                           buffer_length_divisor)
+        if buffer_size == total_length and buffer_size != buffer_length_divisor:
+            # resize the buffer and recalculate total length
+
+            # n is at least 2
+            n = total_length // buffer_length_divisor
+            buffer_size = (n // 2) * buffer_length_divisor
+            mtl = self.minimum_total_length(masks)
+            total_length = int(math.ceil(mtl / buffer_size) * buffer_size)
+        return buffer_size, total_length
+
+    def __repr__(self):
+        return 'AvoidSingleBufferAcquisition(wrapped_strategy=%r)' % self.wrapped_strategy
+
+
+class OneBufferPerWindow(BufferStrategy):
+    """Choose the greatest common divisor of all window periods (diff(begin)) as buffer size. Aim is to only have an
+    integer number of buffers in a measurement window."""
+
+    def calculate_acquisition_properties(self,
+                                         masks: Sequence[CrossBufferMask],
+                                         buffer_length_divisor: int) -> Tuple[int, int]:
+        gcd = None
+        for mask in masks:
+            c_gcd = gcd_set(np.unique(np.diff(mask.begin.as_ndarray())))
+            if gcd is None:
+                gcd = c_gcd
+            else:
+                gcd = math.gcd(gcd, c_gcd)
+
+        buffer_size = max((gcd // buffer_length_divisor) *  buffer_length_divisor, buffer_length_divisor)
+        mtl = self.minimum_total_length(masks)
+        total_length = int(math.ceil(mtl / buffer_size) * buffer_size)
+        return buffer_size, total_length
+
+    def __repr__(self):
+        return 'OneBufferPerWindow()'
+
+
 class AlazarCard(DAC):
     def __init__(self, card, config: Optional[ScanlineConfiguration]=None):
         self.__card = card
@@ -84,6 +189,9 @@ class AlazarCard(DAC):
         self.__definitions = dict()
         self.config = config
 
+        # defaults to self.__card.minimum_record_size
+        self._buffer_strategy = None
+
         self._mask_prototypes = dict()  # type: Dict
 
         self._registered_programs = defaultdict(AlazarProgram)  # type: Dict[str, AlazarProgram]
@@ -91,6 +199,19 @@ class AlazarCard(DAC):
     @property
     def card(self) -> Any:
         return self.__card
+
+    @property
+    def buffer_strategy(self) -> BufferStrategy:
+        if self._buffer_strategy is None:
+            return AvoidSingleBufferAcquisition(ForceBufferSize(self.config.aimedBufferSize))
+        else:
+            return self._buffer_strategy
+
+    @buffer_strategy.setter
+    def buffer_strategy(self, strategy):
+        if strategy is not None and not isinstance(strategy, BufferStrategy):
+            raise TypeError('Buffer strategy must be of type BufferStrategy or None')
+        self._buffer_strategy = strategy
 
     def _make_mask(self, mask_id: str, begins, lengths) -> Mask:
         if mask_id not in self._mask_prototypes:
@@ -157,16 +278,11 @@ class AlazarCard(DAC):
             elif config.totalRecordSize < total_record_size:
                 raise ValueError('specified total record size is smaller than needed {} < {}'.format(config.totalRecordSize,
                                                                                                      total_record_size))
-            
             old_aimed_buffer_size = config.aimedBufferSize
-            
-            # work around for measurments not working with one buffer
-            if config.totalRecordSize < 5*config.aimedBufferSize:
-                config.aimedBufferSize = config.totalRecordSize // 5
 
             self.__card.applyConfiguration(config, True)
 
-            # "Hide" work around from the user
+            # Keep user value
             config.aimedBufferSize = old_aimed_buffer_size
 
             self.update_settings = False

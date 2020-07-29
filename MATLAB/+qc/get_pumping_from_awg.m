@@ -21,27 +21,29 @@ pumpSubTab = seqTable{1}{end};
 %---------------- some checks ---------------------------------------------
 
 %check if there are six entries for the three pumping types for each qubit
-if length(pumpSubTab) ~= 6
-  seqTableCheck = false;
-  report = ' -- There are not six waveforms at the end of the sequence table! They might be put together or not uploaded or not at the end of the sequence table. -- '
+if length(pumpSubTab) < 6
+	seqTableCheck = false;
+	report = ' -- There are not six waveforms at the end of the sequence table! They might be put together or not uploaded or not at the end of the sequence table. -- ';
 end
 
-%test if every waveform is different/has a different 
+%test if every waveform is different/has a different
 if seqTableCheck
-  for i = 1:6
-    for j = 1:6
-      if (i~=j) && (pumpSubTab{i}{2} == pumpSubTab{j}{2})
-        report = ' -- Not all waveforms for pumping (that are assumed to be different) are different to each other! -- ';
-        seqTableCheck = false;
-      end
-    end
-  end
+	for i = 0:5
+		for j = 0:5
+			if (i~=j) && (pumpSubTab{end-i}{2} == pumpSubTab{end-j}{2})
+				report = ' -- Not all waveforms for pumping (that are assumed to be different) are different to each other! -- ';
+				seqTableCheck = false;
+			end
+		end
+	end
 end
 
 %test if both channel pairs have the same pumping sequence table part
-if seqTableCheck && ~isequal(seqTable{1}{end}, seqTable{2}{end})
-  report = ' -- Not the same pumping configuration on both channel pairs of the AWG! -- ';
-  seqTableCheck = false;
+for i = 1:6
+	if seqTableCheck && ~isequal(seqTable{1}{end}{end-i+1}, seqTable{2}{end}{end-i+1})
+		report = ' -- Not the same pumping configuration on both channel pairs of the AWG! -- ';
+		seqTableCheck = false;
+	end
 end
 
 
