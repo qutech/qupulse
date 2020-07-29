@@ -55,7 +55,7 @@ class TimeType:
     _to_internal = fractions.Fraction if gmpy2 is None else gmpy2.mpq
 
     def __init__(self, value: numbers.Rational = 0.):
-        if type(value) == type(self):
+        if type(getattr(value, '_value', None)) is self._InternalType:
             self._value = value._value
         else:
             self._value = self._to_internal(value)
@@ -219,7 +219,7 @@ class TimeType:
         elif absolute_error > 1:
             raise ValueError('absolute_error needs to be <= 1')
         else:
-            return cls(qupulse_numeric.approximate_double(value, absolute_error, fraction_type=cls._InternalType))
+            return cls(qupulse_numeric.approximate_double(value, absolute_error, fraction_type=cls._to_internal))
 
     @classmethod
     def from_fraction(cls, numerator: int, denominator: int) -> 'TimeType':
