@@ -219,7 +219,7 @@ class TimeType:
         elif absolute_error > 1:
             raise ValueError('absolute_error needs to be <= 1')
         else:
-            return cls(qupulse_numeric.approximate_double(value, absolute_error, fraction_type=cls._InternalType))
+            return cls(qupulse_numeric.approximate_double(value, absolute_error, fraction_type=cls._to_internal))
 
     @classmethod
     def from_fraction(cls, numerator: int, denominator: int) -> 'TimeType':
