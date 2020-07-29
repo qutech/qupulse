@@ -29,7 +29,7 @@ except ImportError:
 def make_binary_waveform(waveform):
     if waveform.duration == 0:
         data = np.asarray(3 * [1, 2, 3, 4, 5], dtype=np.uint16)
-        return BinaryWaveform(data)
+        return (BinaryWaveform(data),)
     else:
         chs = sorted(waveform.defined_channels)
         t = np.arange(0., waveform.duration, 1.)
@@ -37,7 +37,7 @@ def make_binary_waveform(waveform):
         sampled = [None if ch is None else waveform.get_sampled(ch, t)
                    for _, ch in zip_longest(range(6), take(6, chs), fillvalue=None)]
         ch1, ch2, *markers = sampled
-        return BinaryWaveform.from_sampled(ch1, ch2, markers)
+        return (BinaryWaveform.from_sampled(ch1, ch2, markers),)
 
 
 def get_unique_wfs(n=10000, duration=32, defined_channels=frozenset(['A'])):
@@ -760,7 +760,7 @@ const PROG_SEL_NONE = 0;
 const NO_RESET_MASK = 0b1000000000000000;
 const PROG_SEL_MASK = 0b111111111111111;
 const IDLE_WAIT_CYCLES = 300;
-wave test_concatenated_waveform = "3e0090e8ffd002d1134ce38827c6a35fede89cf23d126a44057ef43f466ae4cd";
+wave test_concatenated_waveform_0 = "3e0090e8ffd002d1134ce38827c6a35fede89cf23d126a44057ef43f466ae4cd";
 wave test_shared_waveform_121f5c6e8822793b3836fb3098fa4591b91d4c205cc2d8afd01ee1bf6956e518 = "121f5c6e8822793b3836fb3098fa4591b91d4c205cc2d8afd01ee1bf6956e518";
 
 //function used by manually triggered programs
@@ -784,7 +784,7 @@ void test_function() {
     repeat(1000) { // stepping repeat
       repeat(10) {
         repeat(42) {
-          playWaveIndexed(test_concatenated_waveform, pos, 32); // advance disabled do to parent repetition
+          playWaveIndexed(test_concatenated_waveform_0, pos, 32); // advance disabled do to parent repetition
         }
         repeat(98) {
           playWave(test_shared_waveform_121f5c6e8822793b3836fb3098fa4591b91d4c205cc2d8afd01ee1bf6956e518);
@@ -793,16 +793,16 @@ void test_function() {
       pos = pos + 32;
     }
     repeat(21) {
-      playWaveIndexed(test_concatenated_waveform, pos, 32); // advance disabled do to parent repetition
+      playWaveIndexed(test_concatenated_waveform_0, pos, 32); // advance disabled do to parent repetition
     }
     pos = pos + 32;
     repeat(23) {
-      playWaveIndexed(test_concatenated_waveform, pos, 48); // advance disabled do to parent repetition
+      playWaveIndexed(test_concatenated_waveform_0, pos, 48); // advance disabled do to parent repetition
     }
     pos = pos + 48;
     var idx_2;
     for(idx_2 = 0; idx_2 < user_reg_2; idx_2 = idx_2 + 1) {
-      playWaveIndexed(test_concatenated_waveform, pos, 48); // advance disabled do to parent repetition
+      playWaveIndexed(test_concatenated_waveform_0, pos, 48); // advance disabled do to parent repetition
     }
     pos = pos + 48;
   }
