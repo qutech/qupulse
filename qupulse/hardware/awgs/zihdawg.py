@@ -601,11 +601,11 @@ class HDAWGChannelGroup(AWG):
             self.device.api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
         return self.device.api_session.getInt(node_path)
 
-    def _amplitude_scale(self, channel: int) -> float:
-        assert channel in range(1, 1+self._group_size)
-        return self.device.api_session.getDouble(f'/{self.device.serial}/awgs/{self.awg_group_index:d}/outputs/{channel-1:d}/amplitude')
+    def _amplitude_scales(self) -> Tuple[float, ...]:
+        return tuple(self.device.api_session.getDouble(f'/{self.device.serial}/awgs/{self.awg_group_index:d}/outputs/{channel-1:d}/amplitude')
+                     for channel in range(self._group_size))
 
-    def amplitudes(self, channel: int) -> float:
+    def amplitudes(self) -> Tuple[float, ...]:
         """Query AWG channel amplitude value (not peak to peak).
 
         From manual:
@@ -614,19 +614,14 @@ class HDAWGChannelGroup(AWG):
         scaling factor 1.0, and the actual dimensionless signal amplitude
         stored in the waveform memory."""
         amplitudes = []
-        raise NotImplementedError()
 
-        for ch in self._channels():
+        for ch, zi_amplitude in zip(self._channels(), self._amplitude_scales()):
             zi_range = self.device.range(ch)
-            zi_amplitude = self._amplitude_scale()
+            amplitudes.append(zi_amplitude * zi_range / 2)
+        return tuple(amplitudes)
 
-        return tuple(self.device.)
-
-        # scale
-        zi_amplitude = self._amplitude_scale(channel)
-        zi_range = self.device.range(self.awg_group_index * 2 + channel)
-
-        return zi_amplitude * zi_range / 2
+    def offsets(self) -> Tuple[float, ...]:
+        return tuple(map(self.device.offset, self._channels()))
 
 
 class ELFManager:
