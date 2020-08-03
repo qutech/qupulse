@@ -258,7 +258,7 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
         if len(waveforms) == 1:
             return waveforms.pop()
         else:
-            return MultiChannelWaveform(waveforms)
+            return MultiChannelWaveform.from_iterable(waveforms)
 
     @staticmethod
     def from_array(times: np.ndarray, voltages: np.ndarray, channels: List[ChannelID]) -> 'TablePulseTemplate':
@@ -357,6 +357,9 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
             expressions[channel] = ExpressionScalar(expr)
 
         return expressions
+
+    def _as_expression(self) -> Dict[ChannelID, ExpressionScalar]:
+        raise NotImplementedError('test implementation if PointPT first')
 
 
 def concatenate(*table_pulse_templates: TablePulseTemplate, **kwargs) -> TablePulseTemplate:

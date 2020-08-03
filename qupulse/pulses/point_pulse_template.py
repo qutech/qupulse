@@ -1,4 +1,4 @@
-from typing import Optional, List, Union, Set, Dict, Sequence, Any
+from typing import Optional, List, Union, Set, Dict, Sequence, Any, Tuple
 from numbers import Real
 import itertools
 import numbers
@@ -6,6 +6,7 @@ import numbers
 import sympy
 import numpy as np
 
+from qupulse.utils import pairwise
 from qupulse.utils.sympy import Broadcast
 from qupulse.utils.types import ChannelID
 from qupulse.expressions import Expression, ExpressionScalar
@@ -98,7 +99,7 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
         if len(waveforms) == 1:
             return waveforms.pop()
         else:
-            return MultiChannelWaveform(waveforms)
+            return MultiChannelWaveform.from_iterable(waveforms)
 
     @property
     def point_pulse_entries(self) -> Sequence[PointPulseEntry]:
@@ -152,6 +153,35 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
 
         expressions = {c: ExpressionScalar(expressions[c]) for c in expressions}
         return expressions
+
+    def _as_expression(self) -> Tuple[Dict[ChannelID, ExpressionScalar], list]:
+        t = self._AS_EXPRESSION_TIME
+        t0, t1, v0, v1 = sympy.sympify('t0, t1, v0, v1')
+        piecewise_args = {channel: [] for channel in self._channels}
+
+        ts = [entry.t.underlying_expression for entry in self._entries]
+        assumptions = [sympy.Q.is_true(a <= b)
+                       for i, a in enumerate(ts)
+                       for b in ts[i + 1:]]
+        assumptions.extend(sympy.Q.positive(t) for t in ts)
+
+        for first_entry, second_entry in pairwise(self._entries, zip_function=zip):
+            subs = {t0: first_entry.t.sympified_expression,
+                    t1: second_entry.t.sympified_expression}
+            v0_base = sympy.IndexedBase(Broadcast(first_entry.v.underlying_expression, (len(self.defined_channels),)))
+            v1_base = sympy.IndexedBase(Broadcast(second_entry.v.underlying_expression, (len(self.defined_channels),)))
+
+            time_gate = sympy.And(subs[t0] <= t, t < subs[t1])
+
+            interpolation = first_entry.interp.expression.underlying_expression
+
+            for i, channel in enumerate(self._channels):
+                subs[v0] = v0_base[i]
+                subs[v1] = v1_base[i]
+                substituted = interpolation.subs(subs)
+                piecewise_args[channel].append((substituted, time_gate))
+
+        return {ch: ExpressionScalar(sympy.Piecewise(*args, (0, True))) for ch, args in piecewise_args.items()}, assumptions
 
 
 class InvalidPointDimension(Exception):

@@ -11,12 +11,14 @@ from typing import Dict, List, Optional, Any, Iterable, Union, Set, Sequence, Ma
 import numbers
 import warnings
 
+import sympy
+
 from qupulse.serialization import Serializer, PulseRegistryType
 from qupulse.parameter_scope import Scope
 
 from qupulse.utils import isclose
 from qupulse.utils.sympy import almost_equal, Sympifyable
-from qupulse.utils.types import ChannelID, TimeType
+from qupulse.utils.types import ChannelID, FrozenDict, TimeType
 from qupulse.utils.numeric import are_durations_compatible
 from qupulse._program.waveforms import MultiChannelWaveform, Waveform, TransformingWaveform
 from qupulse._program.transformation import ParallelConstantChannelTransformation, Transformation, chain_transformations
@@ -24,22 +26,31 @@ from qupulse.pulses.pulse_template import PulseTemplate, AtomicPulseTemplate
 from qupulse.pulses.mapping_pulse_template import MappingPulseTemplate, MappingTuple
 from qupulse.pulses.parameters import Parameter, ParameterConstrainer
 from qupulse.pulses.measurement import MeasurementDeclaration, MeasurementWindow
-from qupulse.expressions import Expression, ExpressionScalar
+from qupulse.expressions import Expression, ExpressionScalar, ExpressionLike
 
 __all__ = ["AtomicMultiChannelPulseTemplate", "ParallelConstantChannelPulseTemplate"]
 
 
 class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
-    """Combines multiple PulseTemplates that are defined on different channels into an AtomicPulseTemplate."""
     def __init__(self,
                  *subtemplates: Union[AtomicPulseTemplate, MappingTuple, MappingPulseTemplate],
-                 external_parameters: Optional[Set[str]]=None,
                  identifier: Optional[str]=None,
                  parameter_constraints: Optional[List]=None,
                  measurements: Optional[List[MeasurementDeclaration]]=None,
                  registry: PulseRegistryType=None,
-                 duration: Union[str, Expression, bool]=False) -> None:
-        """Parallels multiple AtomicPulseTemplates of the same duration. The duration equality check is performed on
+                 duration: Optional[ExpressionLike] = None,
+                 pad_values: Mapping[ChannelID, ExpressionLike] = None) -> None:
+        """Parallels multiple AtomicPulseTemplates that are defined on different channels. The `duration` and
+        `pad_values` arguments can be used to determine how differences in the sub-templates' durations are handled.
+
+        `duration` is True:
+            There are no compatibility checks performed during the initialization of this object.
+        `duration` is None (default):
+            The durations may not be incompatible if it can be determined
+
+
+
+        equality check is performed on
         construction by default. If the duration keyword argument is given the check is performed on instantiation
         (when build_waveform is called). duration can be a Expression to enforce a certain duration or True for an
         unspecified duration.
@@ -56,23 +67,52 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
         AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 
+        if duration in (False, True):
+            warnings.warn('Boolean duration is deprecated since qupulse 0.6', DeprecationWarning)
+            duration = None
+
         self._subtemplates = [st if isinstance(st, PulseTemplate) else MappingPulseTemplate.from_tuple(st) for st in
                               subtemplates]
 
-        for subtemplate in self._subtemplates:
-            if isinstance(subtemplate, AtomicPulseTemplate):
-                continue
-            elif isinstance(subtemplate, MappingPulseTemplate):
-                if isinstance(subtemplate.template, AtomicPulseTemplate):
-                    continue
-                else:
-                    raise TypeError('Non atomic subtemplate of MappingPulseTemplate: {}'.format(subtemplate.template))
-            else:
-                raise TypeError('Non atomic subtemplate: {}'.format(subtemplate))
+        if duration is None:
+            self._duration = None
+        else:
+            self._duration = ExpressionScalar(duration)
+
+        if pad_values is None:
+            self._pad_values = FrozenDict()
+        else:
+            self._pad_values = FrozenDict((ch, None if value is None else ExpressionScalar(value))
+                                          for ch, value in pad_values.items())
 
         if not self._subtemplates:
             raise ValueError('Cannot create empty MultiChannelPulseTemplate')
 
+        if self._pad_values.keys() - self.defined_channels:
+            raise ValueError('Padding value for channels not defined in subtemplates',
+                             self._pad_values.keys() - self.defined_channels)
+
+        # factored out for easier readability
+        # important that asserts happen before register
+        self._assert_atomic_sub_templates()
+        self._assert_disjoint_channels()
+        self._assert_compatible_durations()
+
+        self._register(registry=registry)
+
+    def _assert_atomic_sub_templates(self):
+        for sub_template in self._subtemplates:
+            template = sub_template
+            while isinstance(template, MappingPulseTemplate):
+                template = template.template
+
+            if not isinstance(template, AtomicPulseTemplate):
+                if template is sub_template:
+                    raise TypeError('Non atomic subtemplate: {}'.format(template))
+                else:
+                    raise TypeError('Non atomic subtemplate of MappingPulseTemplate: {}'.format(template))
+
+    def _assert_disjoint_channels(self):
         defined_channels = [st.defined_channels for st in self._subtemplates]
 
         # check there are no intersections between channels
@@ -83,51 +123,39 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
                                                   'subtemplate {}'.format(i + 2 + j),
                                                   (channels_i & channels_j).pop())
 
-        if external_parameters is not None:
-            warnings.warn("external_parameters is an obsolete argument and will be removed in the future.",
-                          category=DeprecationWarning)
-
-        if not duration:
-            durations = list(subtemplate.duration for subtemplate in subtemplates)
-            are_compatible = are_durations_compatible(*durations)
-
-            if are_compatible is False:
-                # durations definitely not compatible
-                raise ValueError('Could not assert duration equality of {} and {}'.format(repr(duration),
-                                                                                          repr(subtemplate.duration)))
-            elif are_compatible is None:
-                # cannot assert compatibility
-                raise ValueError('Could not assert duration equality of {} and {}'.format(repr(duration),
-                                                                                          repr(subtemplate.duration)))
-
-            else:
-                assert are_compatible is True
-
-            self._duration = None
-        elif duration is True:
-            self._duration = None
-        else:
-            self._duration = ExpressionScalar(duration)
-
-        self._register(registry=registry)
+    def _assert_compatible_durations(self):
+        """Check if we can prove that durations of unpadded waveforms are incompatible."""
+        unpadded_durations = [sub_template.duration
+                              for sub_template in self._subtemplates
+                              if sub_template.defined_channels - self._pad_values.keys()]
+        are_compatible = are_durations_compatible(self.duration, *unpadded_durations)
+        if are_compatible is False:
+            # durations definitely not compatible
+            raise ValueError('Durations are definitely not compatible: {}'.format(unpadded_durations),
+                             unpadded_durations)
 
     @property
     def duration(self) -> ExpressionScalar:
         if self._duration:
             return self._duration
         else:
-            return self._subtemplates[0].duration
+            return ExpressionScalar(sympy.Max(*(subtemplate.duration for subtemplate in self._subtemplates)))
 
     @property
     def parameter_names(self) -> Set[str]:
         return set.union(self.measurement_parameters,
                          self.constrained_parameters,
                          *(st.parameter_names for st in self._subtemplates),
-                         self._duration.variables if self._duration else ())
+                         self._duration.variables if self._duration else (),
+                         *(value.variables for value in self._pad_values.values() if value is not None))
 
     @property
     def subtemplates(self) -> Sequence[Union[AtomicPulseTemplate, MappingPulseTemplate]]:
         return self._subtemplates
+
+    @property
+    def pad_values(self) -> Mapping[ChannelID, Optional[Expression]]:
+        return self._pad_values
 
     @property
     def defined_channels(self) -> Set[ChannelID]:
@@ -148,21 +176,29 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
             if sub_waveform is not None:
                 sub_waveforms.append(sub_waveform)
 
+        pad_values = {}
+        for ch, pad_expression in self._pad_values.items():
+            ch = channel_mapping[ch]
+            if ch is None:
+                continue
+            elif pad_expression is None:
+                pad_values[ch] = None
+            else:
+                pad_values[ch] = pad_expression.evaluate_in_scope(parameters)
+
         if len(sub_waveforms) == 0:
             return None
 
-        if len(sub_waveforms) == 1:
+        if self._duration is None:
+            duration = None
+        else:
+            duration = TimeType.from_float(self._duration.evaluate_numeric(**parameters))
+
+        if len(sub_waveforms) == 1 and (duration in (None, sub_waveforms[0].duration)):
+            # No padding
             waveform = sub_waveforms[0]
         else:
-            waveform = MultiChannelWaveform(sub_waveforms)
-
-        if self._duration:
-            expected_duration = self._duration.evaluate_numeric(**parameters)
-
-            if not isclose(expected_duration, waveform.duration):
-                raise ValueError('The duration does not '
-                                 'equal the expected duration',
-                                 expected_duration, waveform.duration)
+            waveform = MultiChannelWaveform.from_iterable(sub_waveforms, pad_values, duration=duration)
 
         return waveform
 
@@ -188,6 +224,10 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
             data['parameter_constraints'] = [str(constraint) for constraint in self.parameter_constraints]
         if self.measurement_declarations:
             data['measurements'] = self.measurement_declarations
+        if self._pad_values:
+            data['pad_values'] = self._pad_values
+        if self._duration is not None:
+            data['duration'] = self._duration
 
         return data
 
@@ -203,10 +243,30 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
 
     @property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
-        expressions = dict()
-        for subtemplate in self._subtemplates:
-            expressions.update(subtemplate.integral)
-        return expressions
+        t = self._AS_EXPRESSION_TIME
+        self_duration = self.duration.underlying_expression
+        result = self._as_expression()
+        for ch, expr in result.items():
+            ch_integral = sympy.integrate(expr.underlying_expression, (t, 0, self_duration))
+            result[ch] = ExpressionScalar(ch_integral)
+        return result
+
+    def _as_expression(self) -> Dict[ChannelID, ExpressionScalar]:
+        t = self._AS_EXPRESSION_TIME
+        as_expression = {}
+        for sub_template in self.subtemplates:
+            sub_duration = sub_template.duration.sympified_expression
+            sub_as_expression = sub_template._as_expression()
+
+            padding = t > sub_duration
+
+            for ch, ch_expr in sub_as_expression.items():
+                pad_value = self._pad_values.get(ch, None)
+                if pad_value is None:
+                    pad_value = ch_expr.underlying_expression.subs({t: sub_duration})
+                as_expression[ch] = ExpressionScalar(sympy.Piecewise((pad_value, padding),
+                                                                     (ch_expr.underlying_expression, True)))
+        return as_expression
 
 
 class ParallelConstantChannelPulseTemplate(PulseTemplate):

@@ -148,4 +148,8 @@ class FunctionPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
             sympy.integrate(self.__expression.sympified_expression, ('t', 0, self.duration.sympified_expression))
         )}
 
+    def _as_expression(self) -> Dict[ChannelID, ExpressionScalar]:
+        expr = ExpressionScalar.make(self.__expression.underlying_expression.subs({'t': self._AS_EXPRESSION_TIME}))
+        return {self.__channel: expr}
+
 

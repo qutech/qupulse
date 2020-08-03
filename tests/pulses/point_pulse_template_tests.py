@@ -290,3 +290,31 @@ class PointPulseTemplateOldSerializationTests(unittest.TestCase):
             self.assertEqual(template.point_pulse_entries, self.template.point_pulse_entries)
             self.assertEqual(template.measurement_declarations, self.template.measurement_declarations)
             self.assertEqual(template.parameter_constraints, self.template.parameter_constraints)
+
+
+class PointPulseExpressionIntegralTests(unittest.TestCase):
+    def test_integral_as_expression_compatible(self):
+        import sympy
+        from sympy import Q
+        from sympy.assumptions.assume import global_assumptions
+        from sympy.assumptions import assuming
+        template = PointPulseTemplate(**PointPulseTemplateSerializationTests().make_kwargs())
+
+        t = template._AS_EXPRESSION_TIME
+        as_expression, assumptions = template._as_expression()
+        integral = template.integral
+        duration = template.duration.underlying_expression
+
+        self.assertEqual(template.defined_channels, integral.keys())
+        self.assertEqual(template.defined_channels, as_expression.keys())
+
+        assumptions.append(Q.is_true(t <= duration))
+
+        with assuming(*assumptions):
+            for channel in template.defined_channels:
+                ch_expr = as_expression[channel].underlying_expression
+                ch_int = integral[channel].underlying_expression
+
+                symbolic = sympy.integrate(ch_expr, (t, 0, duration))
+                symbolic = sympy.simplify(symbolic)
+                self.assertEqual(ch_int, symbolic)

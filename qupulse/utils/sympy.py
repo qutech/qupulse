@@ -234,6 +234,7 @@ _numpy_environment = {**_base_environment, **numpy.__dict__}
 _sympy_environment = {**_base_environment, **sympy.__dict__}
 
 _lambdify_modules = [{'ceiling': numpy_compatible_ceiling, 'Broadcast': numpy.broadcast_to}, 'numpy', _special_functions]
+_numbafy_mpdules = ['mpmath']
 
 
 def evaluate_compiled(expression: sympy.Expr,
@@ -273,3 +274,28 @@ def almost_equal(lhs: sympy.Expr, rhs: sympy.Expr, epsilon: float=1e-15) -> Opti
         return False
     else:
         return None
+
+
+import numba
+
+@numba.njit
+def _numpy_ceil_to_int(input_value):
+    return numpy.ceil(input_value).astype(numpy.int64)
+
+
+def evaluate_numbafied(expression: Union[sympy.Expr, numpy.ndarray],
+                        variables: Sequence[str],
+                        parameters: Dict[str, Union[numpy.ndarray, Number]],
+                        cached):
+    if cached is None:
+        lambdified = sympy.lambdify(variables, expression, _lambdify_modules)
+        njit_func = numba.njit(lambdified)
+    else:
+        lambdified, njit_func = cached
+
+    if njit_func is not None:
+        try:
+            return njit_func(**parameters), (lambdified, njit_func)
+        except numba.UnsupportedError:
+            njit_func = None
+    return lambdified(**parameters), (lambdified, njit_func)

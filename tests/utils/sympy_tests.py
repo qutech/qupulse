@@ -17,7 +17,7 @@ b_ = IndexedBase(b)
 
 from qupulse.utils.sympy import sympify as qc_sympify, substitute_with_eval, recursive_substitution, Len,\
     evaluate_lambdified, evaluate_compiled, get_most_simple_representation, get_variables, get_free_symbols,\
-    almost_equal, Broadcast, IndexedBasedFinder
+    almost_equal, Broadcast, IndexedBasedFinder, evaluate_numbafied
 
 
 ################################################### SUBSTITUTION #######################################################
@@ -299,6 +299,20 @@ class CompiledEvaluationTest(EvaluationTestsBase, unittest.TestCase):
             return np.array(result)
         else:
             return result
+
+    def test_eval_many_arguments(self):
+        super().test_eval_many_arguments()
+
+
+class NumbaEvaluationTest(EvaluationTestsBase, unittest.TestCase):
+
+    def evaluate(self, expression: Union[sympy.Expr, np.ndarray], parameters):
+        if isinstance(expression, np.ndarray):
+            variables = set.union(*map(set, map(get_variables, expression.flat)))
+        else:
+            variables = get_variables(expression)
+
+        return evaluate_numbafied(expression, variables=list(variables), parameters=parameters, cached=None)[0]
 
     def test_eval_many_arguments(self):
         super().test_eval_many_arguments()

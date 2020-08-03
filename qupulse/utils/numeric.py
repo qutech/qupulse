@@ -121,7 +121,7 @@ def are_durations_compatible(first_duration: Real, *other_durations: Real,
     for duration in other_durations:
         min_duration = min(min_duration, duration)
         max_duration = max(max_duration, duration)
-    assert 0 < max_duration, "At least one duration must be positive"
+    assert (0 <= max_duration) is not False, "At least one duration must be positive"
     # spread = max_duration - min_duration
     # allowed_spread = max(max_rel_spread * max_duration, max_abs_spread)
     are_compatible = max_duration - min_duration < max(max_rel_spread * max_duration, max_abs_spread)
@@ -129,7 +129,7 @@ def are_durations_compatible(first_duration: Real, *other_durations: Real,
         return are_compatible
 
     # durations are sympy expressions with clear ordering
-    elif are_compatible.is_Boolean:
+    elif getattr(are_compatible, 'is_Boolean', False):
         return bool(are_compatible)
 
     else:
