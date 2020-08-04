@@ -75,11 +75,10 @@ class TableEntry(NamedTuple('TableEntry', [('t', ExpressionScalar),
     @classmethod
     def _sequence_as_expression(cls, entry_sequence: Sequence['TableEntry'],
                                 expression_extractor: Callable[[Expression], sympy.Expr],
-                                t: sympy.Dummy) -> Tuple[ExpressionScalar, List[sympy.AppliedPredicate]]:
+                                t: sympy.Dummy) -> ExpressionScalar:
 
         # args are tested in order
         piecewise_args = []
-        assumptions = []
         for first_entry, second_entry in more_itertools.pairwise(entry_sequence):
             t0, t1 = first_entry.t.sympified_expression, second_entry.t.sympified_expression
             substitutions = {'t0': t0,
@@ -92,10 +91,9 @@ class TableEntry(NamedTuple('TableEntry', [('t', ExpressionScalar),
             interpolation_expr = first_entry.interp.expression.underlying_expression.subs(substitutions)
 
             piecewise_args.append((interpolation_expr, time_gate))
-            assumptions.append(sympy.Q.is_true(t0 <= t1))
 
         piecewise_args.append((0, True))
-        return ExpressionScalar(sympy.Piecewise(*piecewise_args)), assumptions
+        return ExpressionScalar(sympy.Piecewise(*piecewise_args))
 
 
 class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
@@ -297,7 +295,7 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
         if len(waveforms) == 1:
             return waveforms.pop()
         else:
-            return MultiChannelWaveform(waveforms)
+            return MultiChannelWaveform.from_iterable(waveforms)
 
     @staticmethod
     def from_array(times: np.ndarray, voltages: np.ndarray, channels: List[ChannelID]) -> 'TablePulseTemplate':

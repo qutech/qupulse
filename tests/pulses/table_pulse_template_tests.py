@@ -422,7 +422,7 @@ class TablePulseTemplateTest(unittest.TestCase):
                                             'symbolic': [(3, 'a', 'hold'), ('b', 4, 'linear'), ('c', Expression('d'), 'hold')]})
         expected = {0: Expression('6'),
                     'other_channel': Expression(7),
-                    'symbolic': Expression('(b-3.)*a + (c-b)*(d+4.) / 2')}
+                    'symbolic': Expression('(b-3)*a + (c-b)*(d+4) / 2')}
 
         self.assertEqual(expected, pulse.integral)
 

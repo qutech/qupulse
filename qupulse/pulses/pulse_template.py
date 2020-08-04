@@ -350,8 +350,9 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
         """
 
     @abstractmethod
-    def _as_expression(self) -> Tuple[Dict[ChannelID, ExpressionScalar], list]:
-        """Helper function to allow integral calculation in case of truncation. 't' is by convention the time."""
+    def _as_expression(self) -> Dict[ChannelID, ExpressionScalar]:
+        """Helper function to allow integral calculation in case of truncation. AtomicPulseTemplate._AS_EXPRESSION_TIME
+        is by convention the time variable."""
 
 
 class DoubleParameterNameException(Exception):

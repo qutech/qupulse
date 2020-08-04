@@ -97,6 +97,13 @@ class PointPulseTemplateTests(unittest.TestCase):
         ppt = PointPulseTemplate([(0, 0), ('t_init', 0)], ['X', 'Y'])
         self.assertEqual(ppt.integral, {'X': 0, 'Y': 0})
 
+        ppt = PointPulseTemplate([(0., 'a', 'linear'), ('t_1', 'b'), ('t_2', (0, 0))], ('X', 'Y'))
+        parameters = {'a': (3.4, 4.1), 'b': 4, 't_1': 2, 't_2': 5}
+        integral = {ch: v.evaluate_in_scope(parameters) for ch, v in ppt.integral.items()}
+        self.assertEqual({'X': 2 * (3.4 + 4) / 2 + (5 - 2) * 4,
+                          'Y': 2 * (4.1 + 4) / 2 + (5 - 2) * 4},
+                         integral)
+
 
 class PointPulseTemplateSequencingTests(unittest.TestCase):
     def test_build_waveform_empty(self):
@@ -290,3 +297,45 @@ class PointPulseTemplateOldSerializationTests(unittest.TestCase):
             self.assertEqual(template.point_pulse_entries, self.template.point_pulse_entries)
             self.assertEqual(template.measurement_declarations, self.template.measurement_declarations)
             self.assertEqual(template.parameter_constraints, self.template.parameter_constraints)
+
+
+class PointPulseExpressionIntegralTests(unittest.TestCase):
+    def test_integral_as_expression_compatible(self):
+        import sympy
+        from sympy import Q
+        from sympy.assumptions import assuming
+        template = PointPulseTemplate(**PointPulseTemplateSerializationTests().make_kwargs())
+
+        t = template._AS_EXPRESSION_TIME
+        as_expression, assumptions = template._as_expression()
+        integral = template.integral
+        duration = template.duration.underlying_expression
+
+        self.assertEqual(template.defined_channels, integral.keys())
+        self.assertEqual(template.defined_channels, as_expression.keys())
+
+        assumptions.append(Q.is_true(t <= duration))
+        assumptions.append(Q.is_true(0 <= duration))
+
+        parameter_sets = [
+            {'foo': 1., 'hugo': 2., 'sudo': 3., 'A': 4., 'B': 5., 'a': 6.},
+            {'foo': 1.1, 'hugo': 2.6, 'sudo': 2.7, 'A': np.array([3., 4.]), 'B': 5., 'a': 6.},
+        ]
+
+        with assuming(*assumptions):
+            for channel in template.defined_channels:
+                ch_expr = as_expression[channel].underlying_expression
+                ch_int = integral[channel].underlying_expression
+
+                symbolic = sympy.integrate(ch_expr, (t, 0, duration))
+                for assumption in assumptions:
+                    symbolic = sympy.refine(symbolic, assumption)
+                symbolic = sympy.simplify(symbolic)
+
+                for parameters in parameter_sets:
+                    num_from_expr = ExpressionScalar(symbolic).evaluate_in_scope(parameters)
+                    num_from_in = ExpressionScalar(ch_int).evaluate_in_scope(parameters)
+                    np.testing.assert_almost_equal(num_from_in, num_from_expr)
+
+                # TODO: the following fails
+                # self.assertEqual(ch_int, symbolic)

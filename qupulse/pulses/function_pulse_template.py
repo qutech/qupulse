@@ -6,10 +6,9 @@ Classes:
 """
 
 
-from typing import Any, Dict, List, Set, Optional, Union, Tuple
+from typing import Any, Dict, List, Set, Optional, Union
 import numbers
 
-import numpy as np
 import sympy
 
 from qupulse.expressions import ExpressionScalar
@@ -148,8 +147,8 @@ class FunctionPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
             sympy.integrate(self.__expression.sympified_expression, ('t', 0, self.duration.sympified_expression))
         )}
 
-    def _as_expression(self) -> Tuple[Dict[ChannelID, ExpressionScalar], list]:
+    def _as_expression(self) -> Dict[ChannelID, ExpressionScalar]:
         expr = ExpressionScalar.make(self.__expression.underlying_expression.subs({'t': self._AS_EXPRESSION_TIME}))
-        return {self.__channel: expr}, []
+        return {self.__channel: expr}
 
 

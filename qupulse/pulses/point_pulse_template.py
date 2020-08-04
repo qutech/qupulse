@@ -98,7 +98,7 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
         if len(waveforms) == 1:
             return waveforms.pop()
         else:
-            return MultiChannelWaveform(waveforms)
+            return MultiChannelWaveform.from_iterable(waveforms)
 
     @property
     def point_pulse_entries(self) -> Sequence[PointPulseEntry]:
@@ -164,6 +164,7 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
             pw, assumptions = TableEntry._sequence_as_expression(self._entries, expression_extractor=value_trafo, t=t)
             expressions[channel] = pw
         return expressions, assumptions
+
 
 class InvalidPointDimension(Exception):
     def __init__(self, expected, received):
