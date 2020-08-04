@@ -614,10 +614,10 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
                                         channel_mapping=channel_mapping)
 
         self.assertIsInstance(waveform, MultiChannelWaveform)
-        self.assertEqual(len(waveform._sub_waveforms), 2)
+        self.assertEqual(len(waveform._wf_pad), 2)
 
         channels = {'oh', 'ch'}
-        for wf in waveform._sub_waveforms:
+        for wf, _ in waveform._wf_pad.values():
             self.assertIsInstance(wf, TableWaveform)
             self.assertIn(wf._channel_id, channels)
             channels.remove(wf._channel_id)

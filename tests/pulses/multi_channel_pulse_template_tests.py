@@ -85,10 +85,12 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
                                            duration='t_3',
                                            waveform=DummyWaveform(duration=4, defined_channels={'c3'}))]
 
-        amcpt = AtomicMultiChannelPulseTemplate(*subtemplates, duration=True)
-        self.assertIs(amcpt.duration, sympy.Max(subtemplates[0].duration,
-                                                subtemplates[1].duration,
-                                                subtemplates[2].duration))
+        with self.assertWarnsRegex(DeprecationWarning, "Boolean duration is deprecated since qupulse 0.6"):
+            amcpt = AtomicMultiChannelPulseTemplate(*subtemplates, duration=True)
+        self.assertEqual(amcpt.duration.sympified_expression,
+                         sympy.Max(subtemplates[0].duration,
+                                   subtemplates[1].duration,
+                                   subtemplates[2].duration))
 
         with self.assertRaisesRegex(ValueError, 'duration'):
             amcpt.build_waveform(parameters=dict(t_1=3, t_2=3, t_3=3),

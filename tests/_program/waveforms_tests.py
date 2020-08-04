@@ -176,7 +176,7 @@ class MultiChannelWaveformTest(unittest.TestCase):
         duration = TimeType.from_float(4)
         sub_duration = TimeType.from_float(3.2)
         pad_sample_times = numpy.linspace(0, float(duration), num=11, dtype=float)
-        n_sub, n_pad = sum(pad_sample_times <= sub_duration), sum(pad_sample_times > sub_duration)
+        n_sub, n_pad = sum(pad_sample_times <= float(sub_duration)), sum(pad_sample_times > float(sub_duration))
         no_pad_sample_times = pad_sample_times[:n_sub]
         samples_a = numpy.linspace(4, 5, n_sub)
         samples_b = numpy.linspace(2, 3, n_sub)

@@ -64,7 +64,8 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
 
     def build_waveform(self,
                        parameters: Dict[str, Real],
-                       channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[TableWaveform]:
+                       channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Union[TableWaveform,
+                                                                                                MultiChannelWaveform]]:
         self.validate_parameter_constraints(parameters=parameters, volatile=set())
 
         if all(channel_mapping[channel] is None
@@ -148,11 +149,10 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
             expressions[channel] = TableEntry._sequence_integral(self._entries, expression_extractor=value_trafo)
         return expressions
 
-    def _as_expression(self) -> Tuple[Dict[ChannelID, ExpressionScalar], list]:
+    def _as_expression(self) -> Dict[ChannelID, ExpressionScalar]:
         t = self._AS_EXPRESSION_TIME
         shape = (len(self.defined_channels),)
         expressions = {}
-        assumptions = []
 
         for i, channel in enumerate(self._channels):
             def value_trafo(v):
@@ -161,9 +161,9 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
                 except TypeError:
                     return sympy.IndexedBase(Broadcast(v.underlying_expression, shape))[i]
 
-            pw, assumptions = TableEntry._sequence_as_expression(self._entries, expression_extractor=value_trafo, t=t)
+            pw = TableEntry._sequence_as_expression(self._entries, expression_extractor=value_trafo, t=t)
             expressions[channel] = pw
-        return expressions, assumptions
+        return expressions
 
 
 class InvalidPointDimension(Exception):
