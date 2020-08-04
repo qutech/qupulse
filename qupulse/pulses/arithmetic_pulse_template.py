@@ -18,6 +18,18 @@ from qupulse._program.transformation import Transformation, ScalingTransformatio
     IdentityTransformation
 
 
+def _apply_operation_to_channel_dict(operator: str,
+                                     lhs: Mapping[ChannelID, Any],
+                                     rhs: Mapping[ChannelID, Any]) -> Dict[ChannelID, Any]:
+    result = dict(lhs)
+    for channel, rhs_value in rhs.items():
+        if channel in result:
+            result[channel] = ArithmeticWaveform.operator_map[operator](result[channel], rhs_value)
+        else:
+            result[channel] = ArithmeticWaveform.rhs_only_map[operator](rhs_value)
+    return result
+
+
 class ArithmeticAtomicPulseTemplate(AtomicPulseTemplate):
     def __init__(self,
                  lhs: AtomicPulseTemplate,
@@ -96,17 +108,12 @@ class ArithmeticAtomicPulseTemplate(AtomicPulseTemplate):
 
     @property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
-        lhs = self.lhs.integral
-        rhs = self.rhs.integral
+        return _apply_operation_to_channel_dict(self._arithmetic_operator, self.lhs.integral, self.rhs.integral)
 
-        result = lhs.copy()
-
-        for channel, rhs_value in rhs.items():
-            if channel in result:
-                result[channel] = ArithmeticWaveform.operator_map[self._arithmetic_operator](result[channel], rhs_value)
-            else:
-                result[channel] = ArithmeticWaveform.rhs_only_map[self._arithmetic_operator](rhs_value)
-        return result
+    def _as_expression(self) -> Dict[ChannelID, ExpressionScalar]:
+        return _apply_operation_to_channel_dict(self._arithmetic_operator,
+                                                self.lhs._as_expression(),
+                                                self.rhs._as_expression())
 
     def build_waveform(self,
                        parameters: Dict[str, Real],

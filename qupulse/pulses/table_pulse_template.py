@@ -7,13 +7,14 @@ Classes:
         declared parameters.
 """
 
-from typing import Union, Dict, List, Set, Optional, Any, Tuple, Sequence, NamedTuple
+from typing import Union, Dict, List, Set, Optional, Any, Tuple, Sequence, NamedTuple, Callable
 import numbers
 import itertools
 import warnings
 
 import numpy as np
 import sympy
+import more_itertools
 
 from qupulse.utils.types import ChannelID
 from qupulse.serialization import Serializer, PulseRegistryType
@@ -57,6 +58,44 @@ class TableEntry(NamedTuple('TableEntry', [('t', ExpressionScalar),
 
     def get_serialization_data(self) -> tuple:
         return self.t.get_serialization_data(), self.v.get_serialization_data(), str(self.interp)
+
+    @classmethod
+    def _sequence_integral(cls, entry_sequence: Sequence['TableEntry'],
+                           expression_extractor: Callable[[Expression], sympy.Expr]) -> ExpressionScalar:
+        expr = 0
+        for first_entry, second_entry in more_itertools.pairwise(entry_sequence):
+            substitutions = {'t0': first_entry.t.sympified_expression,
+                             'v0': expression_extractor(first_entry.v),
+                             't1': second_entry.t.sympified_expression,
+                             'v1': expression_extractor(second_entry.v)}
+
+            expr += first_entry.interp.integral.sympified_expression.subs(substitutions)
+        return ExpressionScalar(expr)
+
+    @classmethod
+    def _sequence_as_expression(cls, entry_sequence: Sequence['TableEntry'],
+                                expression_extractor: Callable[[Expression], sympy.Expr],
+                                t: sympy.Dummy) -> Tuple[ExpressionScalar, List[sympy.AppliedPredicate]]:
+
+        # args are tested in order
+        piecewise_args = []
+        assumptions = []
+        for first_entry, second_entry in more_itertools.pairwise(entry_sequence):
+            t0, t1 = first_entry.t.sympified_expression, second_entry.t.sympified_expression
+            substitutions = {'t0': t0,
+                             'v0': expression_extractor(first_entry.v),
+                             't1': t1,
+                             'v1': expression_extractor(second_entry.v),
+                             't': t}
+            time_gate = sympy.And(t0 <= t, t < t1)
+
+            interpolation_expr = first_entry.interp.expression.underlying_expression.subs(substitutions)
+
+            piecewise_args.append((interpolation_expr, time_gate))
+            assumptions.append(sympy.Q.is_true(t0 <= t1))
+
+        piecewise_args.append((0, True))
+        return ExpressionScalar(sympy.Piecewise(*piecewise_args)), assumptions
 
 
 class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
@@ -347,15 +386,16 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
         expressions = dict()
         for channel, channel_entries in self._entries.items():
+            expressions[channel] = TableEntry._sequence_integral(channel_entries, lambda v: v.sympified_expression)
 
-            expr = 0
-            for first_entry, second_entry in zip(channel_entries[:-1], channel_entries[1:]):
-                substitutions = {'t0': ExpressionScalar(first_entry.t).sympified_expression, 'v0': ExpressionScalar(first_entry.v).sympified_expression,
-                                 't1': ExpressionScalar(second_entry.t).sympified_expression, 'v1': ExpressionScalar(second_entry.v).sympified_expression}
+        return expressions
 
-                expr += first_entry.interp.integral.sympified_expression.subs(substitutions)
-            expressions[channel] = ExpressionScalar(expr)
-
+    def _as_expression(self) -> Dict[ChannelID, ExpressionScalar]:
+        expressions = dict()
+        for channel, channel_entries in self._entries.items():
+            expressions[channel] = TableEntry._sequence_as_expression(channel_entries,
+                                                                      lambda v: v.sympified_expression,
+                                                                      t=self._AS_EXPRESSION_TIME)
         return expressions
 
 

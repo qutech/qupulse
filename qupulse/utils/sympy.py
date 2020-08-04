@@ -87,15 +87,24 @@ class Broadcast(sympy.Function):
         >>> assert bc.subs({'a': 2}) == sympy.Array([2, 2, 2])
         >>> assert bc.subs({'a': (1, 2, 3)}) == sympy.Array([1, 2, 3])
     """
+    nargs = (2,)
 
     @classmethod
     def eval(cls, x, shape) -> Optional[sympy.Array]:
-        if hasattr(shape, 'free_symbols') and shape.free_symbols:
+        if getattr(shape, 'free_symbols', None):
             # cannot do anything
             return None
 
         if hasattr(x, '__len__') or not x.free_symbols:
             return sympy.Array(numpy.broadcast_to(x, shape))
+
+    def _eval_Integral(self, *symbols, **assumptions):
+        x, shape = self.args
+        return Broadcast(sympy.Integral(x, *symbols, **assumptions), shape)
+
+    def _eval_derivative(self, sym):
+        x, shape = self.args
+        return Broadcast(sympy.diff(x, sym), shape)
 
 
 class Len(sympy.Function):
