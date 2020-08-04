@@ -55,7 +55,7 @@ class TimeType:
     _to_internal = fractions.Fraction if gmpy2 is None else gmpy2.mpq
 
     def __init__(self, value: numbers.Rational = 0.):
-        if type(value) == type(self):
+        if type(getattr(value, '_value', None)) is self._InternalType:
             self._value = value._value
         else:
             self._value = self._to_internal(value)
@@ -151,27 +151,30 @@ class TimeType:
     def __rfloordiv__(self, other: 'TimeType'):
         return self._value.__rfloordiv__(other._value)
 
-    @_with_other_as_time_type
-    def __le__(self, other: 'TimeType'):
-        return self._value.__le__(other._value)
+    def __le__(self, other):
+        return self._value <= self.as_comparable(other)
 
-    @_with_other_as_time_type
-    def __ge__(self, other: 'TimeType'):
-        return self._value.__ge__(other._value)
+    def __ge__(self, other):
+        return self._value >= self.as_comparable(other)
 
-    @_with_other_as_time_type
-    def __lt__(self, other: 'TimeType'):
-        return self._value.__lt__(other._value)
+    def __lt__(self, other):
+        return self._value < self.as_comparable(other)
 
-    @_with_other_as_time_type
-    def __gt__(self, other: 'TimeType'):
-        return self._value.__gt__(other._value)
+    def __gt__(self, other):
+        return self._value > self.as_comparable(other)
 
     def __eq__(self, other):
         if type(other) == type(self):
             return self._value.__eq__(other._value)
         else:
             return self._value == other
+
+    @classmethod
+    def as_comparable(cls, other: typing.Union['TimeType', typing.Any]):
+        if type(other) == cls:
+            return other._value
+        else:
+            return other
 
     @classmethod
     def from_float(cls, value: float, absolute_error: typing.Optional[float] = None) -> 'TimeType':
@@ -200,8 +203,14 @@ class TimeType:
             if type(value) in (cls, cls._InternalType, fractions.Fraction):
                 return cls(value)
             else:
-                # .upper() is a bit faster than replace('e', 'E') which gmpy2.mpq needs
-                return cls(cls._to_internal(str(value).upper()))
+                try:
+                    # .upper() is a bit faster than replace('e', 'E') which gmpy2.mpq needs
+                    return cls(cls._to_internal(str(value).upper()))
+                except ValueError:
+                    if isinstance(value, numbers.Number) and not numpy.isfinite(value):
+                        raise ValueError('Cannot represent "{}" as TimeType'.format(value), value)
+                    else:
+                        raise
 
         elif absolute_error == 0:
             return cls(cls._to_internal(value))
@@ -210,7 +219,7 @@ class TimeType:
         elif absolute_error > 1:
             raise ValueError('absolute_error needs to be <= 1')
         else:
-            return cls(qupulse_numeric.approximate_double(value, absolute_error, fraction_type=cls._InternalType))
+            return cls(qupulse_numeric.approximate_double(value, absolute_error, fraction_type=cls._to_internal))
 
     @classmethod
     def from_fraction(cls, numerator: int, denominator: int) -> 'TimeType':

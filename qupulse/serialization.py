@@ -1056,8 +1056,11 @@ class JSONSerializableEncoder(json.JSONEncoder):
 
         elif type(o) is set:
             return list(o)
+        
+        elif type(o) in (dict, tuple, list):
+            return super().default(o)
 
-        elif type(o) is FrozenDict:
+        elif isinstance(o, Mapping):
             return dict(o.items())
 
         else:

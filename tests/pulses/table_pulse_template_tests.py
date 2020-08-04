@@ -561,6 +561,37 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
         self.assertEqual(waveform._channel_id,
                          'ch')
 
+    def test_build_waveform_time_type(self):
+        from qupulse.utils.types import TimeType
+
+        table = TablePulseTemplate({0: [(0, 0),
+                                        ('foo', 'v', 'linear'),
+                                        ('bar', 0, 'jump')]},
+                                   parameter_constraints=['foo>1'],
+                                   measurements=[('M', 'b', 'l'),
+                                                 ('N', 1, 2)])
+
+        parameters = {'v': 2.3,
+                      'foo': TimeType.from_float(1.), 'bar': TimeType.from_float(4),
+                      'b': TimeType.from_float(2), 'l': TimeType.from_float(1)}
+        channel_mapping = {0: 'ch'}
+
+        with self.assertRaises(ParameterConstraintViolation):
+            table.build_waveform(parameters=parameters,
+                                 channel_mapping=channel_mapping)
+
+        parameters['foo'] = TimeType.from_float(1.1)
+        waveform = table.build_waveform(parameters=parameters,
+                                        channel_mapping=channel_mapping)
+
+        self.assertIsInstance(waveform, TableWaveform)
+        self.assertEqual(waveform._table,
+                         ((0, 0, HoldInterpolationStrategy()),
+                          (TimeType.from_float(1.1), 2.3, LinearInterpolationStrategy()),
+                          (4, 0, JumpInterpolationStrategy())))
+        self.assertEqual(waveform._channel_id,
+                         'ch')
+
     def test_build_waveform_multi_channel(self):
         table = TablePulseTemplate({0: [(0, 0),
                                         ('foo', 'v', 'linear'),

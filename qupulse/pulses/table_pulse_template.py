@@ -14,6 +14,7 @@ import warnings
 
 import numpy as np
 import sympy
+from sympy.logic.boolalg import BooleanAtom
 import more_itertools
 
 from qupulse.utils.types import ChannelID
@@ -166,7 +167,7 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
                             for previous_entry, entry in zip(channel_entries, channel_entries[1:])]
 
             # test if any condition is already dissatisfied
-            if any(isinstance(eq, sympy.boolalg.BooleanAtom) and bool(eq) is False
+            if any(isinstance(eq, BooleanAtom) and bool(eq) is False
                    for eq in inequalities):
                 raise ValueError('Table pulse template has impossible parametrization')
 
