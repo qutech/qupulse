@@ -11,6 +11,7 @@ from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform, Ma
 from qupulse.pulses.parameters import ParameterConstraint, ParameterConstraintViolation, ConstantParameter
 from qupulse.expressions import ExpressionScalar, Expression
 from qupulse._program.transformation import LinearTransformation, chain_transformations
+from qupulse.utils.types import TimeType
 
 from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummyWaveform
 from tests.serialization_dummies import DummySerializer
@@ -261,6 +262,26 @@ class MultiChannelPulseTemplateSequencingTests(unittest.TestCase):
         expected = [('bar', .1, .2), ('foo', 0, 1), ('bar', .3, .4), ('foo', .1, .2)]
         meas_windows = pt.get_measurement_windows({}, measurement_mapping)
         self.assertEqual(expected, meas_windows)
+
+    def test_build_waveform_padding_and_truncation(self):
+        wfs = [DummyWaveform(duration=1.1, defined_channels={'A'}),
+               DummyWaveform(duration=1.2, defined_channels={'B'}),
+               DummyWaveform(duration=0.9, defined_channels={'C'})]
+
+        sts = [DummyPulseTemplate(duration='ta', defined_channels={'A'}, waveform=wfs[0]),
+               DummyPulseTemplate(duration='tb', defined_channels={'B'}, waveform=wfs[1]),
+               DummyPulseTemplate(duration='tc', defined_channels={'C'}, waveform=wfs[2])]
+
+        pt = AtomicMultiChannelPulseTemplate(*sts, duration='t_dur', pad_values={'C': 'c'})
+
+        wf = pt.build_waveform(parameters={'a': 1., 'b': 2., 'c': 3.,
+                                           't_dur': 1.1, 'ta': 1.1,
+                                           'tb': 1.2, 'tc': 0.9}, channel_mapping={'A': 'A', 'B': 'B', 'C': 'C'})
+
+        expected_wf = MultiChannelWaveform(dict(zip('ABC', wfs)), pad_values={'C': 3.},
+                                           duration=TimeType.from_float(1.1))
+        self.assertEqual(expected_wf, wf)
+
 
 
 class AtomicMultiChannelPulseTemplateSerializationTests(SerializableTests, unittest.TestCase):

@@ -386,7 +386,7 @@ class MultiChannelWaveform(Waveform):
             assert ch in waveform.defined_channels
 
             if ch not in pad_values:
-                assert are_durations_compatible(duration, waveform.duration)
+                assert waveform.duration > duration or are_durations_compatible(duration, waveform.duration)
 
             # add default pad that is only required in corner cases of numeric accuracy
             pad_value = pad_values.get(ch, None)
@@ -409,7 +409,7 @@ class MultiChannelWaveform(Waveform):
             sub_waveforms (Iterable( Waveform )): The list of sub waveforms of this
                 MultiChannelWaveform
             pad_values: Value for padding if desired. None implies :py:meth:`Waveform.last_value`. Channels not
-                mentioned must have a compatible duration.
+                mentioned must have a longer or compatible duration.
             duration: Duration of this waveform. None implies the maximum subwaveform duration.
         Raises:
             ValueError, if `sub_waveforms` is empty
@@ -434,9 +434,12 @@ class MultiChannelWaveform(Waveform):
         for waveform in sub_waveforms:
             # if pad is not defined the sub waveform duration needs to be compatible with the overall duration
             undefined_pad = waveform.defined_channels - pad_values.keys()
-            if undefined_pad and not are_durations_compatible(duration, waveform.duration):
+            if waveform.duration > duration:
+                # truncation is allowed
+                pass
+            elif undefined_pad and not are_durations_compatible(duration, waveform.duration):
                 # prepare error message
-                incompatible_durations.setdefault(waveform.duration, set()).intersection_update(undefined_pad)
+                incompatible_durations.setdefault(waveform.duration, set()).update(undefined_pad)
 
             defined_channels.update(waveform.defined_channels)
 
@@ -531,6 +534,12 @@ class MultiChannelWaveform(Waveform):
             {ch: self._wf_pad[ch][1] for ch in channels},
             self._duration
         )
+
+    def __repr__(self):
+        sub_waveforms = {ch: wf for ch, (wf, _) in self._wf_pad.items()}
+        pad_values = {ch: pad for ch, (_, pad) in self._wf_pad.items()}
+        duration = self.duration
+        return f"{type(self).__name__}(sub_waveforms={sub_waveforms}, pad_values={pad_values}, duration={duration})"
 
 
 class RepetitionWaveform(Waveform):
