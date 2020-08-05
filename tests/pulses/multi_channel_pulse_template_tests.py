@@ -2,6 +2,7 @@ import unittest
 from unittest import mock
 
 import numpy
+import sympy
 
 from qupulse.parameter_scope import DictScope
 from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform, MappingPulseTemplate,\
@@ -10,6 +11,7 @@ from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform, Ma
 from qupulse.pulses.parameters import ParameterConstraint, ParameterConstraintViolation, ConstantParameter
 from qupulse.expressions import ExpressionScalar, Expression
 from qupulse._program.transformation import LinearTransformation, chain_transformations
+from qupulse.utils.types import TimeType
 
 from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummyWaveform
 from tests.serialization_dummies import DummySerializer
@@ -84,11 +86,12 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
                                            duration='t_3',
                                            waveform=DummyWaveform(duration=4, defined_channels={'c3'}))]
 
-        with self.assertRaisesRegex(ValueError, 'duration equality'):
-            AtomicMultiChannelPulseTemplate(*subtemplates)
-
-        amcpt = AtomicMultiChannelPulseTemplate(*subtemplates, duration=True)
-        self.assertIs(amcpt.duration, subtemplates[0].duration)
+        with self.assertWarnsRegex(DeprecationWarning, "Boolean duration is deprecated since qupulse 0.6"):
+            amcpt = AtomicMultiChannelPulseTemplate(*subtemplates, duration=True)
+        self.assertEqual(amcpt.duration.sympified_expression,
+                         sympy.Max(subtemplates[0].duration,
+                                   subtemplates[1].duration,
+                                   subtemplates[2].duration))
 
         with self.assertRaisesRegex(ValueError, 'duration'):
             amcpt.build_waveform(parameters=dict(t_1=3, t_2=3, t_3=3),
@@ -110,15 +113,10 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
         amcpt.build_waveform(parameters=dict(t_1=3+1e-11, t_2=3, t_3=3, t_0=3),
                              channel_mapping={ch: ch for ch in 'c1 c2 c3'.split()})
 
-    def test_external_parameters_warning(self):
-        with self.assertWarnsRegex(DeprecationWarning, "external_parameters",
-                                   msg="AtomicMultiChannelPulseTemplate did not issue a warning for argument external_parameters"):
-            AtomicMultiChannelPulseTemplate(DummyPulseTemplate(), external_parameters={'a'})
-
     def test_duration(self):
-        sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'}),
-               DummyPulseTemplate(duration='t1', defined_channels={'B'}),
-               DummyPulseTemplate(duration='t2', defined_channels={'C'})]
+        sts = [DummyPulseTemplate(duration=1, defined_channels={'A'}),
+               DummyPulseTemplate(duration=1, defined_channels={'B'}),
+               DummyPulseTemplate(duration=2, defined_channels={'C'})]
         with self.assertRaises(ValueError):
             AtomicMultiChannelPulseTemplate(*sts)
 
@@ -126,7 +124,7 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
             AtomicMultiChannelPulseTemplate(sts[0], sts[2])
         template = AtomicMultiChannelPulseTemplate(*sts[:1])
 
-        self.assertEqual(template.duration, 't1')
+        self.assertEqual(template.duration, 1)
 
     def test_mapping_template_pure_conversion(self):
         template = AtomicMultiChannelPulseTemplate(*zip(self.subtemplates, self.param_maps, self.chan_maps))
@@ -183,15 +181,19 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
         self.assertEqual({'pp1', 'pp2', 'pp3', 'hugo', 'd', 'my_duration'}, template.parameter_names)
 
     def test_integral(self) -> None:
-        sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'},
+        sts = [DummyPulseTemplate(duration=ExpressionScalar('t1'), defined_channels={'A'},
                                   integrals={'A': ExpressionScalar('2+k')}),
-               DummyPulseTemplate(duration='t1', defined_channels={'B', 'C'},
+               DummyPulseTemplate(duration=ExpressionScalar('t1'), defined_channels={'B', 'C'},
                                   integrals={'B': ExpressionScalar('t1-t0*3.1'), 'C': ExpressionScalar('l')})]
         pulse = AtomicMultiChannelPulseTemplate(*sts)
+
         self.assertEqual({'A': ExpressionScalar('2+k'),
                           'B': ExpressionScalar('t1-t0*3.1'),
                           'C': ExpressionScalar('l')},
                          pulse.integral)
+
+    def test_as_expression(self):
+        raise NotImplementedError()
 
 
 class MultiChannelPulseTemplateSequencingTests(unittest.TestCase):
@@ -260,6 +262,26 @@ class MultiChannelPulseTemplateSequencingTests(unittest.TestCase):
         expected = [('bar', .1, .2), ('foo', 0, 1), ('bar', .3, .4), ('foo', .1, .2)]
         meas_windows = pt.get_measurement_windows({}, measurement_mapping)
         self.assertEqual(expected, meas_windows)
+
+    def test_build_waveform_padding_and_truncation(self):
+        wfs = [DummyWaveform(duration=1.1, defined_channels={'A'}),
+               DummyWaveform(duration=1.2, defined_channels={'B'}),
+               DummyWaveform(duration=0.9, defined_channels={'C'})]
+
+        sts = [DummyPulseTemplate(duration='ta', defined_channels={'A'}, waveform=wfs[0]),
+               DummyPulseTemplate(duration='tb', defined_channels={'B'}, waveform=wfs[1]),
+               DummyPulseTemplate(duration='tc', defined_channels={'C'}, waveform=wfs[2])]
+
+        pt = AtomicMultiChannelPulseTemplate(*sts, duration='t_dur', pad_values={'C': 'c'})
+
+        wf = pt.build_waveform(parameters={'a': 1., 'b': 2., 'c': 3.,
+                                           't_dur': 1.1, 'ta': 1.1,
+                                           'tb': 1.2, 'tc': 0.9}, channel_mapping={'A': 'A', 'B': 'B', 'C': 'C'})
+
+        expected_wf = MultiChannelWaveform(dict(zip('ABC', wfs)), pad_values={'C': 3.},
+                                           duration=TimeType.from_float(1.1))
+        self.assertEqual(expected_wf, wf)
+
 
 
 class AtomicMultiChannelPulseTemplateSerializationTests(SerializableTests, unittest.TestCase):

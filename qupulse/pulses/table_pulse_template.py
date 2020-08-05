@@ -7,7 +7,7 @@ Classes:
         declared parameters.
 """
 
-from typing import Union, Dict, List, Set, Optional, Any, Tuple, Sequence, NamedTuple
+from typing import Union, Dict, List, Set, Optional, Any, Tuple, Sequence, NamedTuple, Callable
 import numbers
 import itertools
 import warnings
@@ -15,6 +15,7 @@ import warnings
 import numpy as np
 import sympy
 from sympy.logic.boolalg import BooleanAtom
+import more_itertools
 
 from qupulse.utils.types import ChannelID
 from qupulse.serialization import Serializer, PulseRegistryType
@@ -38,13 +39,13 @@ EntryInInit = Union['TableEntry',
 
 class TableEntry(NamedTuple('TableEntry', [('t', ExpressionScalar),
                                            ('v', Expression),
-                                           ('interp', InterpolationStrategy)])):
+                                           ('interp', Optional[InterpolationStrategy])])):
     __slots__ = ()
 
-    def __new__(cls, t: ValueInInit, v: ValueInInit, interp: Union[str, InterpolationStrategy]='default'):
+    def __new__(cls, t: ValueInInit, v: ValueInInit, interp: Optional[Union[str, InterpolationStrategy]]='default'):
         if interp in TablePulseTemplate.interpolation_strategies:
             interp = TablePulseTemplate.interpolation_strategies[interp]
-        if not isinstance(interp, InterpolationStrategy):
+        if interp is not None and not isinstance(interp, InterpolationStrategy):
             raise KeyError(interp, 'is not a valid interpolation strategy')
 
         return super().__new__(cls, ExpressionScalar.make(t),
@@ -57,7 +58,73 @@ class TableEntry(NamedTuple('TableEntry', [('t', ExpressionScalar),
                                   self.interp)
 
     def get_serialization_data(self) -> tuple:
-        return self.t.get_serialization_data(), self.v.get_serialization_data(), str(self.interp)
+        interp = None if self.interp is None else str(self.interp)
+        return self.t.get_serialization_data(), self.v.get_serialization_data(), interp
+
+    @classmethod
+    def _sequence_integral(cls, entry_sequence: Sequence['TableEntry'],
+                           expression_extractor: Callable[[Expression], sympy.Expr]) -> ExpressionScalar:
+        """Returns an expression for the time integral over the complete sequence of table entries.
+
+        Args:
+            entry_sequence: Sequence of table entries. Assumed to be ordered by time.
+            expression_extractor: Convert each entry's voltage into a sympy expression. Can be used to select single
+            channels from a vectorized expression.
+
+        Returns:
+            Scalar expression for the integral.
+        """
+        expr = 0
+        for first_entry, second_entry in more_itertools.pairwise(entry_sequence):
+            substitutions = {'t0': first_entry.t.sympified_expression,
+                             'v0': expression_extractor(first_entry.v),
+                             't1': second_entry.t.sympified_expression,
+                             'v1': expression_extractor(second_entry.v)}
+            expr += second_entry.interp.integral.sympified_expression.subs(substitutions, simultaneous=True)
+        return ExpressionScalar(expr)
+
+    @classmethod
+    def _sequence_as_expression(cls, entry_sequence: Sequence['TableEntry'],
+                                expression_extractor: Callable[[Expression], sympy.Expr],
+                                t: sympy.Dummy,
+                                pre_value: Optional[sympy.Expr],
+                                post_value: Optional[sympy.Expr]) -> ExpressionScalar:
+        """Create an expression out of a sequence of table entries.
+
+        Args:
+            entry_sequence: Table entries to be represented as an expression. They are assumed to be ordered by time.
+            expression_extractor: Convert each entry's voltage into a sympy expression. Can be used to select single
+            channels from a vectorized expression.
+            t: Time variable
+            pre_value: If not None all t values smaller than the first entry's time give this value
+            post_value: If not None all t values larger than the last entry's time give this value
+
+        Returns:
+            Scalar expression that covers the complete sequence and is zero outside.
+        """
+
+        # args are tested in order
+        piecewise_args = []
+        for first_entry, second_entry in more_itertools.pairwise(entry_sequence):
+            t0, t1 = first_entry.t.sympified_expression, second_entry.t.sympified_expression
+            substitutions = {'t0': t0,
+                             'v0': expression_extractor(first_entry.v),
+                             't1': t1,
+                             'v1': expression_extractor(second_entry.v),
+                             't': t}
+            time_gate = sympy.And(t0 <= t, t < t1)
+
+            interpolation_expr = second_entry.interp.expression.underlying_expression.subs(substitutions,
+                                                                                          simultaneous=True)
+
+            piecewise_args.append((interpolation_expr, time_gate))
+
+        if pre_value is not None:
+            piecewise_args.append((pre_value, t < entry_sequence[0].t.sympified_expression))
+        if post_value is not None:
+            piecewise_args.append((post_value, t >= entry_sequence[-1].t.sympified_expression))
+
+        return ExpressionScalar(sympy.Piecewise(*piecewise_args))
 
 
 class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
@@ -142,16 +209,17 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
         self._register(registry=registry)
 
     def _add_entry(self, channel, new_entry: TableEntry) -> None:
+        ch_entries = self._entries[channel]
 
         # comparisons with Expression can yield None -> use 'is True' and 'is False'
         if (new_entry.t < 0) is True:
             raise ValueError('Time parameter number {} of channel {} is negative.'.format(
-                len(self._entries[channel]), channel))
+                len(ch_entries), channel))
 
-        for previous_entry in self._entries[channel]:
+        for previous_entry in ch_entries:
             if (new_entry.t < previous_entry.t) is True:
                 raise ValueError('Time parameter number {} of channel {} is smaller than a previous one'.format(
-                    len(self._entries[channel]), channel))
+                    len(ch_entries), channel))
 
         self._entries[channel].append(new_entry)
 
@@ -259,7 +327,7 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
         if len(waveforms) == 1:
             return waveforms.pop()
         else:
-            return MultiChannelWaveform(waveforms)
+            return MultiChannelWaveform.from_iterable(waveforms)
 
     @staticmethod
     def from_array(times: np.ndarray, voltages: np.ndarray, channels: List[ChannelID]) -> 'TablePulseTemplate':
@@ -348,15 +416,24 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
         expressions = dict()
         for channel, channel_entries in self._entries.items():
+            pre_entry = TableEntry(0, channel_entries[0].v, None)
+            post_entry = TableEntry(self.duration, channel_entries[-1].v, 'hold')
+            channel_entries = [pre_entry] + channel_entries + [post_entry]
+            expressions[channel] = TableEntry._sequence_integral(channel_entries, lambda v: v.sympified_expression)
 
-            expr = 0
-            for first_entry, second_entry in zip(channel_entries[:-1], channel_entries[1:]):
-                substitutions = {'t0': ExpressionScalar(first_entry.t).sympified_expression, 'v0': ExpressionScalar(first_entry.v).sympified_expression,
-                                 't1': ExpressionScalar(second_entry.t).sympified_expression, 'v1': ExpressionScalar(second_entry.v).sympified_expression}
+        return expressions
 
-                expr += first_entry.interp.integral.sympified_expression.subs(substitutions)
-            expressions[channel] = ExpressionScalar(expr)
+    def _as_expression(self) -> Dict[ChannelID, ExpressionScalar]:
+        expressions = dict()
+        for channel, channel_entries in self._entries.items():
+            pre_value = channel_entries[0].v.sympified_expression
+            post_value = channel_entries[-1].v.sympified_expression
 
+            expressions[channel] = TableEntry._sequence_as_expression(channel_entries,
+                                                                      lambda v: v.sympified_expression,
+                                                                      t=self._AS_EXPRESSION_TIME,
+                                                                      pre_value=pre_value,
+                                                                      post_value=post_value)
         return expressions
 
 

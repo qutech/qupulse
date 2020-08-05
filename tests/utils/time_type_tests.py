@@ -5,6 +5,7 @@ import contextlib
 import importlib
 import fractions
 import random
+import math
 from unittest import mock
 
 try:
@@ -65,6 +66,14 @@ class TestTimeType(unittest.TestCase):
             qutypes.TimeType.from_float(float('-inf'))
         with self.assertRaisesRegex(ValueError, 'Cannot represent'):
             qutypes.TimeType.from_float(float('nan'))
+
+    def assert_self_init_works(self, time_type):
+        t = time_type.from_fraction(1, 3)
+        self.assertIs(t._value, time_type(t)._value)
+
+    def test_self_init(self):
+        self.assert_self_init_works(self.fallback_qutypes.TimeType)
+        self.assert_self_init_works(qutypes.TimeType)
 
     def test_fraction_fallback(self):
         self.assertIs(fractions.Fraction, self.fallback_qutypes.TimeType._InternalType)
@@ -179,6 +188,29 @@ class TestTimeType(unittest.TestCase):
     @unittest.skipIf(gmpy2 is None, "fallback already tested")
     def test_comparisons_work_fallback(self):
         self.assert_comparisons_work(self.fallback_qutypes.TimeType)
+
+    def assert_simple_arithmetic_work(self, time_type):
+        t1 = time_type.from_fraction(19, 3)
+        as_frac = fractions.Fraction(19, 3)
+
+        self.assertEqual(math.ceil(as_frac), math.ceil(t1))
+        self.assertEqual(math.floor(as_frac), math.floor(t1))
+        self.assertEqual(math.trunc(as_frac), math.trunc(t1))
+        self.assertEqual(3 % as_frac, 3 % t1)
+        self.assertEqual(-as_frac, -t1)
+        self.assertIs(t1, +t1)
+        self.assertEqual(as_frac**3, t1**3)
+        self.assertEqual(3 ** as_frac, 3 ** t1)
+        self.assertEqual(3 / as_frac, 3 / t1)
+        self.assertEqual(as_frac // 3, t1 // 3)
+        self.assertEqual(3 // as_frac, 3 // t1)
+
+    def test_simple_arithmetic(self):
+        self.assert_simple_arithmetic_work(qutypes.TimeType)
+        self.assert_simple_arithmetic_work(self.fallback_qutypes.TimeType)
+
+    def test_time_from_fraction(self):
+        self.assertEqual(qutypes.time_from_fraction(1, 3), qutypes.TimeType.from_fraction(1, 3))
 
 
 def get_some_floats(seed=42, n=1000):

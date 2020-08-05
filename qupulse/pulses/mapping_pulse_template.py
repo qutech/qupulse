@@ -354,17 +354,27 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         # todo: make Expressions compatible with sympy.subs()
         parameter_mapping = {parameter_name: expression.underlying_expression
                              for parameter_name, expression in self.__parameter_mapping.items()}
-
         for channel, ch_integral in internal_integral.items():
             channel_out = self.__channel_mapping.get(channel, channel)
             if channel_out is None:
                 continue
 
             expressions[channel_out] = ExpressionScalar(
-                ch_integral.sympified_expression.subs(parameter_mapping)
+                ch_integral.sympified_expression.subs(parameter_mapping, simultaneous=True)
             )
 
         return expressions
+
+    def _as_expression(self) -> Dict[ChannelID, ExpressionScalar]:
+        parameter_mapping = {parameter_name: expression.underlying_expression
+                             for parameter_name, expression in self.__parameter_mapping.items()}
+        inner = self.__template._as_expression()
+        return {
+            self.__channel_mapping.get(ch, ch): ExpressionScalar(ch_expr.sympified_expression.subs(parameter_mapping,
+                                                                                                   simultaneous=True))
+            for ch, ch_expr in inner.items()
+            if self.__channel_mapping.get(ch, ch) is not None
+        }
 
 
 class MissingMappingException(Exception):

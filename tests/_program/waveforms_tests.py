@@ -94,16 +94,16 @@ class WaveformTest(unittest.TestCase):
 class MultiChannelWaveformTest(unittest.TestCase):
     def test_init_no_args(self) -> None:
         with self.assertRaises(ValueError):
-            MultiChannelWaveform(dict())
+            MultiChannelWaveform.from_iterable(dict())
         with self.assertRaises(ValueError):
-            MultiChannelWaveform(None)
+            MultiChannelWaveform.from_iterable(None)
 
     def test_get_item(self):
         dwf_a = DummyWaveform(duration=2.2, defined_channels={'A'})
         dwf_b = DummyWaveform(duration=2.2, defined_channels={'B'})
         dwf_c = DummyWaveform(duration=2.2, defined_channels={'C'})
 
-        wf = MultiChannelWaveform([dwf_a, dwf_b, dwf_c])
+        wf = MultiChannelWaveform.from_iterable([dwf_a, dwf_b, dwf_c])
 
         self.assertIs(wf['A'], dwf_a)
         self.assertIs(wf['B'], dwf_b)
@@ -115,7 +115,7 @@ class MultiChannelWaveformTest(unittest.TestCase):
     def test_init_single_channel(self) -> None:
         dwf = DummyWaveform(duration=1.3, defined_channels={'A'})
 
-        waveform = MultiChannelWaveform([dwf])
+        waveform = MultiChannelWaveform.from_iterable([dwf])
         self.assertEqual({'A'}, waveform.defined_channels)
         self.assertEqual(TimeType.from_float(1.3), waveform.duration)
 
@@ -124,28 +124,28 @@ class MultiChannelWaveformTest(unittest.TestCase):
         dwf_b = DummyWaveform(duration=2.2, defined_channels={'B'})
         dwf_c = DummyWaveform(duration=2.3, defined_channels={'C'})
 
-        waveform = MultiChannelWaveform([dwf_a, dwf_b])
+        waveform = MultiChannelWaveform.from_iterable([dwf_a, dwf_b])
         self.assertEqual({'A', 'B'}, waveform.defined_channels)
         self.assertEqual(TimeType.from_float(2.2), waveform.duration)
 
-        with self.assertRaises(ValueError):
-            MultiChannelWaveform([dwf_a, dwf_c])
-        with self.assertRaises(ValueError):
-            MultiChannelWaveform([waveform, dwf_c])
-        with self.assertRaises(ValueError):
-            MultiChannelWaveform((dwf_a, dwf_a))
+        with self.assertRaisesRegex(ValueError, 'incompatible duration'):
+            MultiChannelWaveform.from_iterable([dwf_a, dwf_c])
+        with self.assertRaisesRegex(ValueError, 'incompatible duration'):
+            MultiChannelWaveform.from_iterable([waveform, dwf_c])
+        with self.assertRaisesRegex(ValueError, 'multiple waveforms'):
+            MultiChannelWaveform.from_iterable((dwf_a, dwf_a))
 
         dwf_c_valid = DummyWaveform(duration=2.2, defined_channels={'C'})
-        waveform_flat = MultiChannelWaveform((waveform, dwf_c_valid))
-        self.assertEqual(len(waveform_flat.compare_key), 3)
+        waveform_flat = MultiChannelWaveform.from_iterable((waveform, dwf_c_valid))
+        self.assertEqual(len(waveform_flat.compare_key), 2)
 
     def test_unsafe_sample(self) -> None:
-        sample_times = numpy.linspace(98.5, 103.5, num=11)
+        sample_times = numpy.linspace(.1, .534, num=11)
         samples_a = numpy.linspace(4, 5, 11)
         samples_b = numpy.linspace(2, 3, 11)
         dwf_a = DummyWaveform(duration=3.2, sample_output=samples_a, defined_channels={'A'})
         dwf_b = DummyWaveform(duration=3.2, sample_output=samples_b, defined_channels={'B', 'C'})
-        waveform = MultiChannelWaveform((dwf_a, dwf_b))
+        waveform = MultiChannelWaveform.from_iterable((dwf_a, dwf_b))
 
         result_a = waveform.unsafe_sample('A', sample_times)
         numpy.testing.assert_equal(result_a, samples_a)
@@ -172,23 +172,58 @@ class MultiChannelWaveformTest(unittest.TestCase):
         self.assertIs(result_a, dwf_a.sample_calls[1][2])
         numpy.testing.assert_equal(result_b, samples_b)
 
+    def test_padding(self):
+        duration = TimeType.from_float(4)
+        sub_duration = TimeType.from_float(3.2)
+        pad_sample_times = numpy.linspace(0, float(duration), num=11, dtype=float)
+        n_sub, n_pad = sum(pad_sample_times <= float(sub_duration)), sum(pad_sample_times > float(sub_duration))
+        no_pad_sample_times = pad_sample_times[:n_sub]
+        samples_a = numpy.linspace(4, 5, n_sub)
+        samples_b = numpy.linspace(2, 3, n_sub)
+        dwf_a = DummyWaveform(duration=sub_duration, sample_output=samples_a, defined_channels={'A'})
+        dwf_b = DummyWaveform(duration=sub_duration, sample_output=samples_b, defined_channels={'B'})
+        waveform = MultiChannelWaveform.from_iterable((dwf_a, dwf_b),
+                                                      pad_values={'A': -1, 'B': None},
+                                                      duration=duration)
+        result_a = waveform.unsafe_sample('A', pad_sample_times)
+        result_b = waveform.unsafe_sample('B', pad_sample_times)
+        expected_a = np.array(samples_a.tolist() + [-1] * n_pad)
+        expected_b = np.array(samples_b.tolist() + [samples_b[-1]] * n_pad)
+        np.testing.assert_equal(expected_a, result_a)
+        np.testing.assert_equal(expected_b, result_b)
+
+        with mock.patch.object(dwf_a, 'unsafe_sample') as sam_a, mock.patch.object(dwf_b, 'unsafe_sample') as sam_b:
+            self.assertIs(sam_a.return_value, waveform.unsafe_sample('A', no_pad_sample_times))
+            self.assertIs(sam_b.return_value, waveform.unsafe_sample('B', no_pad_sample_times))
+
     def test_equality(self) -> None:
         dwf_a = DummyWaveform(duration=246.2, defined_channels={'A'})
         dwf_b = DummyWaveform(duration=246.2, defined_channels={'B'})
         dwf_c = DummyWaveform(duration=246.2, defined_channels={'C'})
-        waveform_a1 = MultiChannelWaveform([dwf_a, dwf_b])
-        waveform_a2 = MultiChannelWaveform([dwf_a, dwf_b])
-        waveform_a3 = MultiChannelWaveform([dwf_a, dwf_c])
+        waveform_a1 = MultiChannelWaveform.from_iterable([dwf_a, dwf_b])
+        waveform_a2 = MultiChannelWaveform.from_iterable([dwf_a, dwf_b])
+        waveform_a3 = MultiChannelWaveform.from_iterable([dwf_a, dwf_b], duration=TimeType.from_float(246.2))
+        waveform_a4 = MultiChannelWaveform.from_iterable([dwf_a, dwf_b], pad_values={'A': 1})
+        waveform_a5 = MultiChannelWaveform.from_iterable([dwf_a, dwf_c])
+
+        waveform_b1 = MultiChannelWaveform.from_iterable([dwf_a, dwf_b], pad_values={'A': 1, 'B': 1})
+        waveform_b2 = MultiChannelWaveform.from_iterable([dwf_a, dwf_b], pad_values={'A': 1, 'B': 1},
+                                                         duration=TimeType.from_float(246.2))
+        waveform_b3 = MultiChannelWaveform.from_iterable([dwf_a, dwf_b], pad_values={'A': 1, 'B': 1}, duration=TimeType.from_float(246.))
         self.assertEqual(waveform_a1, waveform_a1)
         self.assertEqual(waveform_a1, waveform_a2)
-        self.assertNotEqual(waveform_a1, waveform_a3)
+        self.assertEqual(waveform_a1, waveform_a3)
+        self.assertNotEqual(waveform_a1, waveform_a4)
+        self.assertNotEqual(waveform_a1, waveform_a5)
+        self.assertEqual(waveform_b1, waveform_b2)
+        self.assertNotEqual(waveform_b2, waveform_b3)
 
     def test_unsafe_get_subset_for_channels(self):
         dwf_a = DummyWaveform(duration=246.2, defined_channels={'A'})
         dwf_b = DummyWaveform(duration=246.2, defined_channels={'B'})
         dwf_c = DummyWaveform(duration=246.2, defined_channels={'C'})
 
-        mcwf = MultiChannelWaveform((dwf_a, dwf_b, dwf_c))
+        mcwf = MultiChannelWaveform.from_iterable((dwf_a, dwf_b, dwf_c))
         with self.assertRaises(KeyError):
             mcwf.unsafe_get_subset_for_channels({'D'})
         with self.assertRaises(KeyError):

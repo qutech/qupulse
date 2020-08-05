@@ -7,6 +7,13 @@
 
  - General:
     - Unify `TimeType.from_float` between fractions and gmpy2 backend behaviour (fixes issue 529).
+    - Add central allocation function for sampled data `_program.waveforms.alloc_for_sample` that initializes with nan
+      per default
+
+ - Pulse Templates:
+    - AtomicMultiChannelPulseTemplate:
+        - Remove deprecated `external_parameters` keyword argument.
+        - Add padding and truncation functionality with `pad_values`
 
 ## 0.5 ##
 

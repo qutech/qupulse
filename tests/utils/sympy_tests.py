@@ -14,6 +14,7 @@ from sympy import sin, Sum, IndexedBase
 
 a_ = IndexedBase(a)
 b_ = IndexedBase(b)
+dummy_a = sympy.Dummy('a')
 
 from qupulse.utils.sympy import sympify as qc_sympify, substitute_with_eval, recursive_substitution, Len,\
     evaluate_lambdified, evaluate_compiled, get_most_simple_representation, get_variables, get_free_symbols,\
@@ -48,6 +49,11 @@ vector_valued_cases = [
 
 full_featured_cases = [
     (Sum(a_[i], (i, 0, Len(a) - 1)), {'a': sympy.Array([1, 2, 3])}, 6),
+]
+
+dummy_substitution_cases = [
+    (a * dummy_a + sympy.exp(dummy_a), {'a': b}, b * dummy_a + sympy.exp(dummy_a)),
+    (a * dummy_a + sympy.exp(dummy_a), {dummy_a: b}, a * b + sympy.exp(b)),
 ]
 
 
@@ -196,6 +202,11 @@ class SubstitutionTests(TestCase):
             raise unittest.SkipTest('sympy.Expr.subs does not handle simultaneous substitutions of indexed entities.')
 
         for expr, subs, expected in full_featured_cases:
+            result = self.substitute(expr, subs)
+            self.assertEqual(result, expected)
+
+    def test_dummy_subs(self):
+        for expr, subs, expected in dummy_substitution_cases:
             result = self.substitute(expr, subs)
             self.assertEqual(result, expected)
 

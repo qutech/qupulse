@@ -347,6 +347,15 @@ class ExpressionScalar(Expression):
     def is_nan(self) -> bool:
         return sympy.sympify('nan') == self._sympified_expression
 
+    def _parse_evaluate_numeric_result(self,
+                                       result: Union[Number, numpy.ndarray],
+                                       call_arguments: Any) -> Number:
+        parsed = super()._parse_evaluate_numeric_result(result, call_arguments)
+        if isinstance(parsed, numpy.ndarray):
+            return parsed[()]
+        else:
+            return parsed
+
 
 class ExpressionVariableMissingException(Exception):
     """An exception indicating that a variable value was not provided during expression evaluation.

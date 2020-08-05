@@ -32,8 +32,8 @@ class WaveformGenerator:
                              defined_channels={channel})
 
     def generate_multi_channel_waveform(self):
-        return MultiChannelWaveform([self.generate_single_channel_waveform(self.channel_names[ch_i])
-                                     for ch_i in range(self.num_channels)])
+        return MultiChannelWaveform.from_iterable([self.generate_single_channel_waveform(self.channel_names[ch_i])
+                                                   for ch_i in range(self.num_channels)])
 
     def __call__(self):
         return self.generate_multi_channel_waveform()
