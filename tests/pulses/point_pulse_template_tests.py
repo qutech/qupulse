@@ -76,28 +76,28 @@ class PointPulseTemplateTests(unittest.TestCase):
 
     def test_integral(self) -> None:
         pulse = PointPulseTemplate(
-            [(1, (2, 'b'), 'linear'),
-             (3, (0, 0), 'jump'),
-             (4, (2, 'c'), 'hold'),
+            [(1, (2, 'b'), 'hold'),
+             (3, (0, 0), 'linear'),
+             (4, (2, 'c'), 'jump'),
              (5, (8, 'd'), 'hold')],
             [0, 'other_channel']
         )
-        self.assertEqual({0: ExpressionScalar('6'),
-                          'other_channel': ExpressionScalar('b + 2*c')},
+        self.assertEqual({0: ExpressionScalar('2 + 6'),
+                          'other_channel': ExpressionScalar('b + b + 2*c')},
                          pulse.integral)
 
         pulse = PointPulseTemplate(
-            [(1, ('2', 'b'), 'linear'), ('t0', (0, 0), 'jump'), (4, (2.0, 'c'), 'hold'), ('g', (8, 'd'), 'hold')],
+            [(1, ('2', 'b'), 'hold'), ('t0', (0, 0), 'linear'), (4, (2.0, 'c'), 'jump'), ('g', (8, 'd'), 'hold')],
             ['symbolic', 1]
         )
-        self.assertEqual({'symbolic': ExpressionScalar('2.0*g - 1.0*t0 - 1.0'),
-                          1: ExpressionScalar('b*(t0 - 1) / 2 + c*(g - 4) + c*(-t0 + 4)')},
+        self.assertEqual({'symbolic': ExpressionScalar('2 + 2.0*g - 1.0*t0 - 1.0'),
+                          1: ExpressionScalar('b + b*(t0 - 1) / 2 + c*(g - 4) + c*(-t0 + 4)')},
                          pulse.integral)
 
         ppt = PointPulseTemplate([(0, 0), ('t_init', 0)], ['X', 'Y'])
         self.assertEqual(ppt.integral, {'X': 0, 'Y': 0})
 
-        ppt = PointPulseTemplate([(0., 'a', 'linear'), ('t_1', 'b'), ('t_2', (0, 0))], ('X', 'Y'))
+        ppt = PointPulseTemplate([(0., 'a'), ('t_1', 'b', 'linear'), ('t_2', (0, 0))], ('X', 'Y'))
         parameters = {'a': (3.4, 4.1), 'b': 4, 't_1': 2, 't_2': 5}
         integral = {ch: v.evaluate_in_scope(parameters) for ch, v in ppt.integral.items()}
         self.assertEqual({'X': 2 * (3.4 + 4) / 2 + (5 - 2) * 4,
@@ -300,35 +300,58 @@ class PointPulseTemplateOldSerializationTests(unittest.TestCase):
 
 
 class PointPulseExpressionIntegralTests(unittest.TestCase):
-    def test_integral_as_expression_compatible(self):
-        import sympy
-        from sympy import Q
-        template = PointPulseTemplate(**PointPulseTemplateSerializationTests().make_kwargs())
-
-        t = template._AS_EXPRESSION_TIME
-        as_expression = template._as_expression()
-        integral = template.integral
-        duration = template.duration.underlying_expression
-
-        self.assertEqual(template.defined_channels, integral.keys())
-        self.assertEqual(template.defined_channels, as_expression.keys())
-
-        parameter_sets = [
-            {'foo': 1., 'hugo': 2., 'sudo': 3., 'A': 4., 'B': 5., 'a': 6.},
-            {'foo': 1.1, 'hugo': 2.6, 'sudo': 2.7, 'A': np.array([3., 4.]), 'B': 5., 'a': 6.},
+    def setUp(self):
+        self.template = PointPulseTemplate(**PointPulseTemplateSerializationTests().make_kwargs())
+        self.parameter_sets = [
+            {'foo': 1., 'hugo': 2., 'sudo': 3., 'A': 4., 'B': 5., 'a': 6., 'ilse': 7., 'k': 8.},
+            {'foo': 1.1, 'hugo': 2.6, 'sudo': 2.7, 'A': np.array([3., 4.]), 'B': 5., 'a': 6., 'ilse': 7., 'k': 8.},
         ]
 
-        for channel in template.defined_channels:
+    def test_integral_as_expression_compatible(self):
+        import sympy
+
+        t = self.template._AS_EXPRESSION_TIME
+        as_expression = self.template._as_expression()
+        integral = self.template.integral
+        duration = self.template.duration.underlying_expression
+
+        self.assertEqual(self.template.defined_channels, integral.keys())
+        self.assertEqual(self.template.defined_channels, as_expression.keys())
+
+        for channel in self.template.defined_channels:
             ch_expr = as_expression[channel].underlying_expression
             ch_int = integral[channel].underlying_expression
 
             symbolic = sympy.integrate(ch_expr, (t, 0, duration))
             symbolic = sympy.simplify(symbolic)
 
-            for parameters in parameter_sets:
+            for parameters in self.parameter_sets:
                 num_from_expr = ExpressionScalar(symbolic).evaluate_in_scope(parameters)
                 num_from_in = ExpressionScalar(ch_int).evaluate_in_scope(parameters)
                 np.testing.assert_almost_equal(num_from_in, num_from_expr)
 
             # TODO: the following fails even with a lot of assumptions in sympy 1.6
             # self.assertEqual(ch_int, symbolic)
+
+    def test_as_expression_wf_and_sample_compatible(self):
+        as_expression = self.template._as_expression()
+
+        for parameters in self.parameter_sets:
+            wf = self.template.build_waveform(parameters, {c: c for c in self.template.defined_channels})
+
+            ts = np.linspace(0, float(wf.duration), num=33)
+            sampled = {ch: wf.get_sampled(ch, ts) for ch in self.template.defined_channels}
+
+            from_expr = {}
+            for ch, expected_vs in sampled.items():
+                ch_expr = as_expression[ch]
+
+                ch_from_expr = []
+                for t, expected in zip(ts, expected_vs):
+                    result_expr = ch_expr.evaluate_symbolic({**parameters, self.template._AS_EXPRESSION_TIME: t})
+                    ch_from_expr.append(result_expr.sympified_expression)
+                from_expr[ch] = ch_from_expr
+
+                np.testing.assert_almost_equal(expected_vs, ch_from_expr)
+
+

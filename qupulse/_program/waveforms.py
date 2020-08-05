@@ -89,7 +89,7 @@ class Waveform(Comparable, metaclass=ABCMeta):
 
         if np.any(sample_times[:-1] >= sample_times[1:]):
             raise ValueError('The sample times are not monotonously increasing')
-        if sample_times[0] < 0 or sample_times[-1] > self.duration:
+        if sample_times[0] < 0 or sample_times[-1] > float(self.duration):
             raise ValueError('The sample times are not in the range [0, duration]')
         if channel not in self.defined_channels:
             raise KeyError('Channel not defined in this waveform: {}'.format(channel))
@@ -153,8 +153,8 @@ class Waveform(Comparable, metaclass=ABCMeta):
 class TableWaveformEntry(NamedTuple('TableWaveformEntry', [('t', float),
                                                            ('v', float),
                                                            ('interp', InterpolationStrategy)])):
-    def __init__(self, t: float, v: float, interp: InterpolationStrategy):
-        if not callable(interp):
+    def __init__(self, t: float, v: float, interp: Optional[InterpolationStrategy]):
+        if not callable(interp) or interp is None:
             raise TypeError('{} is neither callable nor of type InterpolationStrategy'.format(interp))
 
 

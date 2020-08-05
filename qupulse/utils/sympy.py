@@ -134,6 +134,22 @@ def numpy_compatible_mul(*args) -> Union[sympy.Mul, sympy.Array]:
         return sympy.Mul(*args)
 
 
+def numpy_compatible_add(*args) -> Union[sympy.Add, sympy.Array]:
+    if any(isinstance(a, sympy.NDimArray) for a in args):
+        result = 0
+        for a in args:
+            result = result + (numpy.array(a.tolist()) if isinstance(a, sympy.NDimArray) else a)
+        return sympy.Array(result)
+    else:
+        return sympy.Add(*args)
+
+
+_NUMPY_COMPATIBLE = {
+    sympy.Add: numpy_compatible_add,
+    sympy.Mul: numpy_compatible_mul
+}
+
+
 def numpy_compatible_ceiling(input_value: Any) -> Any:
     if isinstance(input_value, numpy.ndarray):
         return numpy.ceil(input_value).astype(numpy.int64)
@@ -163,6 +179,8 @@ def sympify(expr: Union[str, Number, sympy.Expr, numpy.str_], **kwargs) -> sympy
         # putting numpy.str_ in sympy.sympify behaves unexpected in version 1.1.1
         # It seems to ignore the locals argument
         expr = str(expr)
+    if isinstance(expr, (tuple, list)):
+        expr = numpy.array(expr)
     try:
         return sympy.sympify(expr, **kwargs, locals=sympify_namespace)
     except TypeError as err:
@@ -218,20 +236,18 @@ def _recursive_substitution(expression: sympy.Expr,
                            substitutions: Dict[sympy.Symbol, sympy.Expr]) -> sympy.Expr:
     if not expression.free_symbols:
         return expression
-    elif expression.func is sympy.Symbol:
+    elif expression.func in (sympy.Symbol, sympy.Dummy):
         return substitutions.get(expression, expression)
 
-    elif expression.func is sympy.Mul:
-        func = numpy_compatible_mul
-    else:
-        func = expression.func
+    func = _NUMPY_COMPATIBLE.get(expression.func, expression.func)
     substitutions = {s: substitutions.get(s, s) for s in get_free_symbols(expression)}
     return func(*(_recursive_substitution(arg, substitutions) for arg in expression.args))
 
 
 def recursive_substitution(expression: sympy.Expr,
                            substitutions: Dict[str, Union[sympy.Expr, numpy.ndarray, str]]) -> sympy.Expr:
-    substitutions = {sympy.Symbol(k): sympify(v) for k, v in substitutions.items()}
+    substitutions = {k if isinstance(k, (sympy.Symbol, sympy.Dummy)) else sympy.Symbol(k): sympify(v)
+                     for k, v in substitutions.items()}
     for s in get_free_symbols(expression):
         substitutions.setdefault(s, s)
     return _recursive_substitution(expression, substitutions)

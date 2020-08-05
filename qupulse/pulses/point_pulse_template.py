@@ -146,7 +146,9 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
                     return v.underlying_expression[i]
                 except TypeError:
                     return sympy.IndexedBase(Broadcast(v.underlying_expression, shape))[i]
-            expressions[channel] = TableEntry._sequence_integral(self._entries, expression_extractor=value_trafo)
+            pre_entry = TableEntry(0, self._entries[0].v, None)
+            entries = [pre_entry] + self._entries
+            expressions[channel] = TableEntry._sequence_integral(entries, expression_extractor=value_trafo)
         return expressions
 
     def _as_expression(self) -> Dict[ChannelID, ExpressionScalar]:
@@ -160,8 +162,13 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
                     return v.underlying_expression[i]
                 except TypeError:
                     return sympy.IndexedBase(Broadcast(v.underlying_expression, shape))[i]
-
-            pw = TableEntry._sequence_as_expression(self._entries, expression_extractor=value_trafo, t=t)
+            pre_value = value_trafo(self._entries[0].v)
+            post_value = value_trafo(self._entries[-1].v)
+            pw = TableEntry._sequence_as_expression(self._entries,
+                                                    expression_extractor=value_trafo,
+                                                    t=t,
+                                                    post_value=post_value,
+                                                    pre_value=pre_value)
             expressions[channel] = pw
         return expressions
 
