@@ -360,7 +360,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                 continue
 
             expressions[channel_out] = ExpressionScalar(
-                ch_integral.sympified_expression.subs(parameter_mapping)
+                ch_integral.sympified_expression.subs(parameter_mapping, simultaneous=True)
             )
 
         return expressions
@@ -370,7 +370,8 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                              for parameter_name, expression in self.__parameter_mapping.items()}
         inner = self.__template._as_expression()
         return {
-            self.__channel_mapping.get(ch, ch): ExpressionScalar(ch_expr.sympified_expression.subs(parameter_mapping))
+            self.__channel_mapping.get(ch, ch): ExpressionScalar(ch_expr.sympified_expression.subs(parameter_mapping,
+                                                                                                   simultaneous=True))
             for ch, ch_expr in inner.items()
             if self.__channel_mapping.get(ch, ch) is not None
         }

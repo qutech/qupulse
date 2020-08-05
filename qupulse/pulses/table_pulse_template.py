@@ -63,20 +63,40 @@ class TableEntry(NamedTuple('TableEntry', [('t', ExpressionScalar),
     @classmethod
     def _sequence_integral(cls, entry_sequence: Sequence['TableEntry'],
                            expression_extractor: Callable[[Expression], sympy.Expr]) -> ExpressionScalar:
+        """Returns an expression for the time integral over the complete sequence of table entries.
+
+        Args:
+            entry_sequence: Sequence of table entries. Assumed to be ordered by time.
+            expression_extractor: Convert each entry's voltage into a sympy expression. Can be used to select single
+            channels from a vectorized expression.
+
+        Returns:
+            Scalar expression for the integral.
+        """
         expr = 0
         for first_entry, second_entry in more_itertools.pairwise(entry_sequence):
             substitutions = {'t0': first_entry.t.sympified_expression,
                              'v0': expression_extractor(first_entry.v),
                              't1': second_entry.t.sympified_expression,
                              'v1': expression_extractor(second_entry.v)}
-
-            expr += first_entry.interp.integral.sympified_expression.subs(substitutions)
+            expr += first_entry.interp.integral.sympified_expression.subs(substitutions, simultaneous=True)
         return ExpressionScalar(expr)
 
     @classmethod
     def _sequence_as_expression(cls, entry_sequence: Sequence['TableEntry'],
                                 expression_extractor: Callable[[Expression], sympy.Expr],
                                 t: sympy.Dummy) -> ExpressionScalar:
+        """Create an expression out of a sequence of table entries.
+
+        Args:
+            entry_sequence: Table entries to be represented as an expression. They are assumed to be ordered by time.
+            expression_extractor: Convert each entry's voltage into a sympy expression. Can be used to select single
+            channels from a vectorized expression.
+            t: Time variable
+
+        Returns:
+            Scalar expression that covers the complete sequence and is zero outside.
+        """
 
         # args are tested in order
         piecewise_args = []
@@ -89,7 +109,8 @@ class TableEntry(NamedTuple('TableEntry', [('t', ExpressionScalar),
                              't': t}
             time_gate = sympy.And(t0 <= t, t < t1)
 
-            interpolation_expr = first_entry.interp.expression.underlying_expression.subs(substitutions)
+            interpolation_expr = first_entry.interp.expression.underlying_expression.subs(substitutions,
+                                                                                          simultaneous=True)
 
             piecewise_args.append((interpolation_expr, time_gate))
 

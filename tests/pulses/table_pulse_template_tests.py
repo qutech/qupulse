@@ -2,8 +2,9 @@ import unittest
 import warnings
 
 import numpy
+import sympy
 
-from qupulse.expressions import Expression
+from qupulse.expressions import Expression, ExpressionScalar
 from qupulse.serialization import Serializer
 from qupulse.pulses.table_pulse_template import TablePulseTemplate, TableWaveform, TableEntry, TableWaveformEntry, ZeroDurationTablePulseTemplate, AmbiguousTablePulseEntry, concatenate
 from qupulse.pulses.parameters import ParameterNotProvidedException, ParameterConstraintViolation, ParameterConstraint
@@ -37,6 +38,54 @@ class TableEntryTest(unittest.TestCase):
     def test_unknown_interpolation_strategy(self):
         with self.assertRaises(KeyError):
             TableEntry(0, 0, 'foo')
+
+    def test_sequence_integral(self):
+        def get_sympy(v):
+            return v.sympified_expression
+
+        entries = [TableEntry(0, 0, 'hold'), TableEntry(1, 0, 'hold')]
+        self.assertEqual(ExpressionScalar(0), TableEntry._sequence_integral(entries, get_sympy))
+
+        entries = [TableEntry(0, 1, 'hold'), TableEntry(1, 1, 'hold')]
+        self.assertEqual(ExpressionScalar(1), TableEntry._sequence_integral(entries, get_sympy))
+
+        entries = [TableEntry(0, 0, 'linear'), TableEntry(1, 1, 'hold')]
+        self.assertEqual(ExpressionScalar(.5), TableEntry._sequence_integral(entries, get_sympy))
+
+        entries = [TableEntry('t0', 'a', 'linear'), TableEntry('t1', 'b', 'hold'), TableEntry('t2', 'c', 'hold')]
+        self.assertEqual(ExpressionScalar('(t1-t0)*(a+b)/2 + (t2-t1)*b'),
+                         TableEntry._sequence_integral(entries, get_sympy))
+
+    def test_sequence_as_expression(self):
+        def get_sympy(v):
+            return v.sympified_expression
+
+        t = sympy.Dummy('t')
+
+        times = {
+            t: 0.5,
+            't0': 0.3,
+            't1': 0.7,
+            't2': 1.3,
+        }
+
+        entries = [TableEntry(0, 0, 'hold'), TableEntry(1, 0, 'hold')]
+        self.assertEqual(ExpressionScalar(0),
+                         TableEntry._sequence_as_expression(entries, get_sympy, t).sympified_expression.subs(times))
+
+        entries = [TableEntry(0, 1, 'hold'), TableEntry(1, 1, 'hold')]
+        self.assertEqual(ExpressionScalar(1),
+                         TableEntry._sequence_as_expression(entries, get_sympy, t).sympified_expression.subs(times))
+
+        entries = [TableEntry(0, 0, 'linear'), TableEntry(1, 1, 'hold')]
+        self.assertEqual(ExpressionScalar(.5),
+                         TableEntry._sequence_as_expression(entries, get_sympy, t).sympified_expression.subs(times))
+
+        entries = [TableEntry('t0', 'a', 'linear'),
+                   TableEntry('t1', 'b', 'hold'),
+                   TableEntry('t2', 'c', 'hold')]
+        self.assertEqual(ExpressionScalar('(a+b)*.5'),
+                         TableEntry._sequence_as_expression(entries, get_sympy, t).sympified_expression.subs(times))
 
 
 class TablePulseTemplateTest(unittest.TestCase):
