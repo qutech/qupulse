@@ -191,6 +191,9 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
                           'C': ExpressionScalar('l')},
                          pulse.integral)
 
+    def test_as_expression(self):
+        raise NotImplementedError()
+
 
 class MultiChannelPulseTemplateSequencingTests(unittest.TestCase):
     def test_build_waveform(self):

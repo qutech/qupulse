@@ -475,6 +475,9 @@ class TablePulseTemplateTest(unittest.TestCase):
 
         self.assertEqual(expected, pulse.integral)
 
+    def test_as_expression(self):
+        raise NotImplementedError()
+
 
 class TablePulseTemplateConstraintTest(ParameterConstrainerTest):
     def __init__(self, *args, **kwargs):

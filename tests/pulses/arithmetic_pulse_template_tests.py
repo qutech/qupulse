@@ -118,6 +118,9 @@ class ArithmeticAtomicPulseTemplateTest(unittest.TestCase):
         self.assertEqual(expected_plus, (lhs + rhs).integral)
         self.assertEqual(expected_minus, (lhs - rhs).integral)
 
+    def test_as_expression(self):
+        raise NotImplementedError()
+
     def test_duration(self):
         lhs = DummyPulseTemplate(duration=ExpressionScalar('x'), defined_channels={'a', 'b'}, parameter_names={'x', 'y'})
         rhs = DummyPulseTemplate(duration=ExpressionScalar('y'), defined_channels={'a', 'c'}, parameter_names={'x', 'z'})
