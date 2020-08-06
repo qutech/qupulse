@@ -365,9 +365,9 @@ class HDAWGChannelGroup(AWG):
 
     def upload(self, name: str,
                program: Loop,
-               channels: Tuple[Optional[ChannelID], Optional[ChannelID]],
-               markers: Tuple[Optional[ChannelID], Optional[ChannelID], Optional[ChannelID], Optional[ChannelID]],
-               voltage_transformation: Tuple[Callable, Callable],
+               channels: Tuple[Optional[ChannelID], ...],
+               markers: Tuple[Optional[ChannelID], ...],
+               voltage_transformation: Tuple[Callable, ...],
                force: bool = False) -> None:
         """Upload a program to the AWG.
 
@@ -449,6 +449,11 @@ class HDAWGChannelGroup(AWG):
             time.sleep(.1)
         self._uploaded_seqc_source = self._required_seqc_source
         logger.debug("AWG %d: wait_for_compile_and_upload has finished", self.awg_group_index)
+
+    def was_current_program_finished(self) -> bool:
+        """Return true if the current program has finished at least once"""
+        playback_finished_mask = int(HDAWGProgramManager.Constants.PLAYBACK_FINISHED_MASK, 2)
+        return bool(self.user_register(HDAWGProgramManager.Constants.PROG_SEL_REGISTER) & playback_finished_mask)
 
     def set_volatile_parameters(self, program_name: str, parameters: Mapping[str, ConstantParameter]):
         """Set the values of parameters which were marked as volatile on program creation."""
@@ -931,7 +936,25 @@ class HDAWGUploadException(HDAWGException):
         return "Upload to the instrument failed."
 
 
-def example_upload(hdawg_kwargs: dict, channels: Set[int], markers: Set[Tuple[int, int]]):
+def get_group_for_channels(hdawg: HDAWGRepresentation, channels: Set[int]) -> HDAWGChannelGroup:
+    channels = set(channels)
+    assert not channels - set(range(8)), "Channels must be in 0..=7"
+
+    channel_range = range(min(channels) // 2 * 2, (max(channels) + 2) // 2 * 2)
+    if len(channel_range) > 4 or len(channel_range) == 4 and channel_range.start == 2:
+        c = (HDAWGChannelGrouping.CHAN_GROUP_1x8, 0)
+    elif len(channel_range) == 4:
+        assert channel_range.start in (0, 4)
+        c = (HDAWGChannelGrouping.CHAN_GROUP_2x4, channel_range.start // 4)
+    else:
+        assert len(channel_range) == 2
+        c = (HDAWGChannelGrouping.CHAN_GROUP_4x2, channel_range.start // 2)
+
+    hdawg.channel_grouping = c[0]
+    return hdawg.channel_tuples[c[1]]
+
+
+def example_upload(hdawg_kwargs: dict, channels: Set[int], markers: Set[Tuple[int, int]]):  # pragma: no cover
     from qupulse.pulses import TablePT, SequencePT, RepetitionPT
     if isinstance(hdawg_kwargs, dict):
         hdawg = HDAWGRepresentation(**hdawg_kwargs)
@@ -941,13 +964,15 @@ def example_upload(hdawg_kwargs: dict, channels: Set[int], markers: Set[Tuple[in
     assert not set(channels) - set(range(8)), "Channels must be in 0..=7"
     channels = sorted(channels)
 
-    channel_tuples = [ct for i, ct in enumerate(hdawg.channel_tuples) if i*2 in channels or i*2+1 in channels]
-    assert channel_tuples
+    required_channels = {*channels, *(ch for ch, _ in markers)}
+    channel_group = get_group_for_channels(hdawg, required_channels)
+    channel_group_channels = range(channel_group.awg_group_index * channel_group.num_channels,
+                                   (channel_group.awg_group_index + 1) * channel_group.num_channels)
 
     # choose length based on minimal sample rate
-    min_sr = min(ct.sample_rate for ct in channel_tuples) / 10**9
-    min_t = channel_tuples[0].MIN_WAVEFORM_LEN / min_sr
-    quant_t = channel_tuples[0].WAVEFORM_LEN_QUANTUM / min_sr
+    sample_rate = channel_group.sample_rate / 10**9
+    min_t = channel_group.MIN_WAVEFORM_LEN / sample_rate
+    quant_t = channel_group.WAVEFORM_LEN_QUANTUM / sample_rate
 
     assert min_t > 4 * quant_t, "Example not updated"
 
@@ -969,54 +994,45 @@ def example_upload(hdawg_kwargs: dict, channels: Set[int], markers: Set[Tuple[in
     spt2 = SequencePT(rpt2, tpt3)
     p = spt2.create_program()
 
-    # use HardwareSetup for this
-    for ct in channel_tuples:
-        i = hdawg.channel_tuples.index(ct)
-        ch = tuple(ch if ch in channels else None for ch in (2*i, 2*i+1))
-        mk = (None, None, None, None)
-        vt = (lambda x: x, lambda x: x)
-        ct.upload('pulse_test1', p, ch, mk, vt)
+    upload_ch = tuple(ch if ch in channels else None
+                      for ch in channel_group_channels)
+    upload_mk = (None,) * channel_group.num_markers
+    upload_vt = (lambda x: x,) * channel_group.num_channels
 
-    for ct in channel_tuples:
-        ct.arm('pulse_test1')
-
-    # channel_tuples[0].run_current_program()
+    channel_group.upload('pulse_test1', p, upload_ch, upload_mk, upload_vt)
 
     if markers:
         markers = sorted(markers)
         assert len(markers) == len(set(markers))
-
-        channel_tuples = []
-        for ch, m in markers:
-            assert ch in range(8)
-            assert m in (0, 1)
-            ct = hdawg.channel_tuples[ch//2]
-            if ct not in channel_tuples:
-                channel_tuples.append(ct)
+        channel_group_markers = tuple((ch, mk)
+                                      for ch in channel_group_channels
+                                      for mk in (0, 1))
 
         full_on = [(0, 1), (min_t, 1)]
         two_3rd = [(0, 1), (min_t*2/3, 0), (min_t, 0)]
         one_3rd = [(0, 0), (min_t*2/3, 1), (min_t, 1)]
 
-        marker_start = TablePT({'m1': full_on, 'm2': full_on})
-        marker_body = TablePT({'m1': two_3rd, 'm2': one_3rd})
+        marker_start = TablePT({'m0': full_on, 'm1': full_on})
+        marker_body = TablePT({'m0': two_3rd, 'm1': one_3rd})
 
         marker_test_pulse = marker_start @ RepetitionPT(marker_body, 10000)
 
         marker_program = marker_test_pulse.create_program()
 
-        for ct in channel_tuples:
-            i = hdawg.channel_tuples.index(ct)
-            ch = (None, None)
-            mk = ('m1' if (i*2, 0) in markers else None,
-                  'm2' if (i*2, 1) in markers else None,
-                  'm1' if (i*2 + 1, 0) in markers else None,
-                  'm2' if (i*2 + 1, 1) in markers else None)
-            vt = (lambda x: x, lambda x: x)
-            ct.upload('marker_test', marker_program, ch, mk, vt)
-            ct.arm('marker_test')
+        upload_ch = (None, ) * channel_group.num_channels
+        upload_mk = tuple(f"m{mk}" if (ch, mk) in markers else None
+                          for (ch, mk) in channel_group_markers)
 
-        channel_tuples[0].run_current_program()
+        channel_group.upload('marker_test', marker_program, upload_ch, upload_mk, upload_vt)
+
+    while True:
+        for program in channel_group.programs:
+            print(f'playing {program}')
+            channel_group.arm(program)
+            channel_group.run_current_program()
+            while not channel_group.was_current_program_finished():
+                print(f'waiting for {program} to finish')
+                time.sleep(1e-2)
 
 
 if __name__ == "__main__":

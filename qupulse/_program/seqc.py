@@ -601,15 +601,31 @@ class HDAWGProgramManager:
     """This class contains everything that is needed to create the final seqc program and provides an interface to write
     the required waveforms to the file system. It does not talk to the device."""
 
-    GLOBAL_CONSTS = dict(PROG_SEL_REGISTER=UserRegister(zero_based_value=0),
-                         TRIGGER_REGISTER=UserRegister(zero_based_value=1),
-                         TRIGGER_RESET_MASK=bin(1 << 15),
-                         PROG_SEL_NONE=0,
-                         NO_RESET_MASK=bin(1 << 15),
-                         PROG_SEL_MASK=bin((1 << 15) - 1),
-                         IDLE_WAIT_CYCLES=300)
+    class Constants:
+        PROG_SEL_REGISTER = UserRegister(zero_based_value=0)
+        TRIGGER_REGISTER = UserRegister(zero_based_value=1)
+        TRIGGER_RESET_MASK = bin(1 << 15)
+        PROG_SEL_NONE = 0
+        # if not set the register is set to PROG_SEL_NONE
+        NO_RESET_MASK = bin(1 << 15)
+        # set to one if playback finished
+        PLAYBACK_FINISHED_MASK = bin(1 << 14)
+        PROG_SEL_MASK = bin((1 << 14) - 1)
+        IDLE_WAIT_CYCLES = 300
+
+        @classmethod
+        def as_dict(cls) -> Dict[str, Any]:
+            return {name: value
+                    for name, value in vars(cls).items()
+                    if name[0] in string.ascii_uppercase}
+
     _PROGRAM_FUNCTION_NAME_TEMPLATE = '{program_name}_function'
-    INIT_PROGRAM_SWITCH = '// INIT program switch.\nvar prog_sel = 0;'
+    INIT_PROGRAM_SWITCH = (
+        '// INIT program switch.\n'
+        'var prog_sel = 0;\n'
+        'var playback_finished = 0;\n'
+        'var new_prog_sel = 0\n'
+    )
     WAIT_FOR_SOFTWARE_TRIGGER = "waitForSoftwareTrigger();"
     SOFTWARE_WAIT_FOR_TRIGGER_FUNCTION_DEFINITION = (
         'void waitForSoftwareTrigger() {\n'
@@ -638,7 +654,7 @@ class HDAWGProgramManager:
     def _get_low_unused_index(self):
         existing = {entry.selection_index for entry in self._programs.values()}
         for idx in itertools.count():
-            if idx not in existing and idx != self.GLOBAL_CONSTS['PROG_SEL_NONE']:
+            if idx not in existing and idx != self.Constants.PROG_SEL_NONE:
                 return idx
 
     def add_program(self, name: str, loop: Loop,
@@ -667,7 +683,7 @@ class HDAWGProgramManager:
         selection_index = self._get_low_unused_index()
 
         # TODO: verify total number of registers
-        available_registers = [UserRegister.from_seqc(idx) for idx in range(2, 16)]
+        available_registers = [UserRegister.from_seqc(idx) for idx in range(3, 16)]
 
         program_entry = HDAWGProgramEntry(loop, selection_index, self._waveform_memory, name,
                                           channels, markers, amplitudes, offsets, voltage_transformations, sample_rate)
@@ -719,7 +735,7 @@ class HDAWGProgramManager:
 
     def to_seqc_program(self) -> str:
         lines = []
-        for const_name, const_val in self.GLOBAL_CONSTS.items():
+        for const_name, const_val in self.Constants.as_dict().items():
             if isinstance(const_val, (int, str)):
                 const_repr = str(const_val)
             else:
@@ -746,7 +762,9 @@ class HDAWGProgramManager:
         lines.append('while (true) {')
         lines.append('  // read program selection value')
         lines.append('  prog_sel = getUserReg(PROG_SEL_REGISTER);')
-        lines.append('  if (!(prog_sel & NO_RESET_MASK))  setUserReg(PROG_SEL_REGISTER, 0);')
+        lines.append('  new_prog_sel = prog_sel | playback_finished;')
+        lines.append('  if (!(prog_sel & NO_RESET_MASK)) new_prog_sel = new_prog_sel & ~PROG_SEL_MASK;')
+        lines.append('  setUserReg(PROG_SEL_REGISTER, new_prog_sel);')
         lines.append('  prog_sel = prog_sel & PROG_SEL_MASK;')
         lines.append('  ')
         lines.append('  switch (prog_sel) {')
@@ -756,6 +774,7 @@ class HDAWGProgramManager:
             lines.append('    case {selection_index}:'.format(selection_index=program_entry.selection_index))
             lines.append('      {program_function_name}();'.format(program_function_name=program_function_name))
             lines.append('      waitWave();')
+            lines.append('      playback_finished = PLAYBACK_FINISHED_MASK;')
 
         lines.append('    default:')
         lines.append('      wait(IDLE_WAIT_CYCLES);')
