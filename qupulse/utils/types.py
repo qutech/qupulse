@@ -79,6 +79,8 @@ class TimeType:
             return cls.from_fraction(int(any), 1)
         if isinstance(any, numbers.Real):
             return cls.from_float(float(any))
+        if isinstance(any, numpy.ndarray):
+            return numpy.vectorize(cls._try_from_any)(any)
         return cls(any)
 
     @property
