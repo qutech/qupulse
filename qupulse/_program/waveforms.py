@@ -222,7 +222,9 @@ class TableWaveform(Waveform):
             indices = slice(np.searchsorted(sample_times, entry1.t, 'left'),
                             np.searchsorted(sample_times, entry2.t, 'right'))
             output_array[indices] = \
-                entry2.interp((entry1.t, entry1.v), (entry2.t, entry2.v), sample_times[indices])
+                entry2.interp((float(entry1.t), entry1.v),
+                              (float(entry2.t), entry2.v),
+                              sample_times[indices])
         return output_array
 
     @property
