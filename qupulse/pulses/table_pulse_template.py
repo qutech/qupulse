@@ -52,7 +52,7 @@ class TableEntry(NamedTuple('TableEntry', [('t', ExpressionScalar),
                                     interp)
 
     def instantiate(self, parameters: Dict[str, numbers.Real]) -> TableWaveformEntry:
-        return TableWaveformEntry(self.t.high_precision_eval_in_scope(parameters),
+        return TableWaveformEntry(self.t.evaluate_with_exact_rationals(parameters),
                                   self.v.evaluate_in_scope(parameters),
                                   self.interp)
 
