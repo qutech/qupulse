@@ -604,13 +604,14 @@ class HDAWGProgramManager:
     class Constants:
         PROG_SEL_REGISTER = UserRegister(zero_based_value=0)
         TRIGGER_REGISTER = UserRegister(zero_based_value=1)
-        TRIGGER_RESET_MASK = bin(1 << 15)
+        TRIGGER_RESET_MASK = bin(1 << 31)
         PROG_SEL_NONE = 0
         # if not set the register is set to PROG_SEL_NONE
-        NO_RESET_MASK = bin(1 << 15)
+        NO_RESET_MASK = bin(1 << 31)
         # set to one if playback finished
-        PLAYBACK_FINISHED_MASK = bin(1 << 14)
-        PROG_SEL_MASK = bin((1 << 14) - 1)
+        PLAYBACK_FINISHED_MASK = bin(1 << 30)
+        PROG_SEL_MASK = bin((1 << 30) - 1)
+        INVERTED_PROG_SEL_MASK = bin(((1 << 32) - 1) ^ int(PROG_SEL_MASK, 2))
         IDLE_WAIT_CYCLES = 300
 
         @classmethod
@@ -624,7 +625,7 @@ class HDAWGProgramManager:
         '// INIT program switch.\n'
         'var prog_sel = 0;\n'
         'var playback_finished = 0;\n'
-        'var new_prog_sel = 0\n'
+        'var new_prog_sel = 0;\n'
     )
     WAIT_FOR_SOFTWARE_TRIGGER = "waitForSoftwareTrigger();"
     SOFTWARE_WAIT_FOR_TRIGGER_FUNCTION_DEFINITION = (
@@ -763,9 +764,9 @@ class HDAWGProgramManager:
         lines.append('  // read program selection value')
         lines.append('  prog_sel = getUserReg(PROG_SEL_REGISTER);')
         lines.append('  new_prog_sel = prog_sel | playback_finished;')
-        lines.append('  if (!(prog_sel & NO_RESET_MASK)) new_prog_sel = new_prog_sel & ~PROG_SEL_MASK;')
+        lines.append('  if (!(prog_sel & NO_RESET_MASK)) new_prog_sel &= INVERTED_PROG_SEL_MASK;')
         lines.append('  setUserReg(PROG_SEL_REGISTER, new_prog_sel);')
-        lines.append('  prog_sel = prog_sel & PROG_SEL_MASK;')
+        lines.append('  prog_sel &= PROG_SEL_MASK;')
         lines.append('  ')
         lines.append('  switch (prog_sel) {')
 

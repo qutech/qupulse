@@ -149,7 +149,7 @@ class HDAWGRepresentation:
             if ch % 2 == 0:
                 output = HDAWGTriggerOutSource.OUT_1_MARK_1.value
             else:
-                output = HDAWGTriggerOutSource.OUT_2_MARK_1.value
+                output = HDAWGTriggerOutSource.OUT_1_MARK_2.value
             settings.append(['/{}/triggers/out/{}/source'.format(self.serial, ch), output])
 
         self.api_session.set(settings)
@@ -318,9 +318,10 @@ class HDAWGChannelGroup(AWG):
         self._current_program = None  # Currently armed program.
         self._upload_generator = ()
 
-    def _initialize(self):
+    def _initialize_awg_module(self):
         """Only run once"""
-        assert self._awg_module is None
+        if self._awg_module:
+            self._awg_module.clear()
         self._awg_module = self.device.api_session.awgModule()
         self.awg_module.set('awgModule/device', self.device.serial)
         self.awg_module.set('awgModule/index', self.awg_group_index)
@@ -338,10 +339,7 @@ class HDAWGChannelGroup(AWG):
         self.disconnect_group()
         self._device = weakref.proxy(hdawg_device)
         assert self.device.channel_grouping.group_size() == self._group_size
-        if self._awg_module is None:
-            self._initialize()
-        else:
-            self.awg_module.execute()
+        self._initialize_awg_module()
         # Seems creating AWG module sets SINGLE (single execution mode of sequence) to 0 per default.
         self.device.api_session.setInt('/{}/awgs/{:d}/single'.format(self.device.serial, self.awg_group_index), 1)
 
@@ -353,9 +351,9 @@ class HDAWGChannelGroup(AWG):
         """Number of channels"""
         return self._group_size
 
-    def _channels(self) -> Tuple[int, ...]:
+    def _channels(self, index_start=1) -> Tuple[int, ...]:
         """1 indexed channel"""
-        offset = 1 + self._group_size * self._group_idx
+        offset = index_start + self._group_size * self._group_idx
         return tuple(ch + offset for ch in range(self._group_size))
 
     @property
@@ -495,11 +493,11 @@ class HDAWGChannelGroup(AWG):
         if self._required_seqc_source != self._uploaded_seqc_source:
             self._wait_for_compile_and_upload()
 
-        self.user_register(self._program_manager.GLOBAL_CONSTS['TRIGGER_REGISTER'], 0)
+        self.user_register(self._program_manager.Constants.TRIGGER_REGISTER, 0)
 
         if name is None:
-            self.user_register(self._program_manager.GLOBAL_CONSTS['PROG_SEL_REGISTER'],
-                               self._program_manager.GLOBAL_CONSTS['PROG_SEL_NONE'])
+            self.user_register(self._program_manager.Constants.PROG_SEL_REGISTER,
+                               self._program_manager.Constants.PROG_SEL_NONE)
             self._current_program = None
         else:
             if name not in self.programs:
@@ -508,12 +506,12 @@ class HDAWGChannelGroup(AWG):
 
             # set the registers of initial repetition counts
             for register, value in self._program_manager.get_register_values(name).items():
-                assert register not in (self._program_manager.GLOBAL_CONSTS['PROG_SEL_REGISTER'],
-                                        self._program_manager.GLOBAL_CONSTS['TRIGGER_REGISTER'])
+                assert register not in (self._program_manager.Constants.PROG_SEL_REGISTER,
+                                        self._program_manager.Constants.TRIGGER_REGISTER)
                 self.user_register(register, value)
 
-            self.user_register(self._program_manager.GLOBAL_CONSTS['PROG_SEL_REGISTER'],
-                               self._program_manager.name_to_index(name) | int(self._program_manager.GLOBAL_CONSTS['NO_RESET_MASK'], 2))
+            self.user_register(self._program_manager.Constants.PROG_SEL_REGISTER,
+                               self._program_manager.name_to_index(name) | int(self._program_manager.Constants.NO_RESET_MASK, 2))
 
         # this is a workaround for problems in the past and should be re-thought in case of a re-write
         for ch_pair in self.device.channel_tuples:
@@ -527,7 +525,8 @@ class HDAWGChannelGroup(AWG):
                 raise HDAWGValueError('{} is unknown on {}'.format(self._current_program, self.identifier))
             if not self.enable():
                 self.enable(True)
-            self.user_register(self._program_manager.GLOBAL_CONSTS['TRIGGER_REGISTER'], int(self._program_manager.GLOBAL_CONSTS['TRIGGER_RESET_MASK'], 2))
+            self.user_register(self._program_manager.Constants.TRIGGER_REGISTER,
+                               int(self._program_manager.Constants.TRIGGER_RESET_MASK, 2))
         else:
             raise HDAWGRuntimeError('No program active')
 
@@ -607,8 +606,9 @@ class HDAWGChannelGroup(AWG):
         return self.device.api_session.getInt(node_path)
 
     def _amplitude_scales(self) -> Tuple[float, ...]:
-        return tuple(self.device.api_session.getDouble(f'/{self.device.serial}/awgs/{self.awg_group_index:d}/outputs/{channel-1:d}/amplitude')
-                     for channel in range(self._group_size))
+        """not affected by grouping"""
+        return tuple(self.device.api_session.getDouble(f'/{self.device.serial}/awgs/{ch // 2:d}/outputs/{ch % 2:d}/amplitude')
+                     for ch in self._channels(index_start=0))
 
     def amplitudes(self) -> Tuple[float, ...]:
         """Query AWG channel amplitude value (not peak to peak).
