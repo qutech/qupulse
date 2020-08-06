@@ -9,6 +9,7 @@ import collections
 import operator
 
 import numpy
+import sympy
 
 import qupulse.utils.numeric as qupulse_numeric
 
@@ -33,7 +34,7 @@ def _with_other_as_time_type(fn):
     """This is decorator to convert the other argument and the result into a :class:`TimeType`"""
     @functools.wraps(fn)
     def wrapper(self, other) -> 'TimeType':
-        converted = _converter.get(type(other), TimeType)(other)
+        converted = _converter.get(type(other), TimeType._try_from_any)(other)
         result = fn(self, converted)
         if result is NotImplemented:
             return result
@@ -58,7 +59,27 @@ class TimeType:
         if type(getattr(value, '_value', None)) is self._InternalType:
             self._value = value._value
         else:
-            self._value = self._to_internal(value)
+            try:
+                self._value = self._to_internal(value)
+            except TypeError as err:
+                raise TypeError(f'Could not create TimeType from {value} of type {type(value)}') from err
+
+    @classmethod
+    def _try_from_any(cls, any: typing.Any):
+        try:
+            cls(any)
+        except TypeError:
+            pass
+
+        if isinstance(any, numbers.Rational):
+            numerator = any.numerator() if callable(any.numerator) else any.numerator
+            denominator = any.denominator() if callable(any.denominator) else any.denominator
+            return cls.from_fraction(int(numerator), int(denominator))
+        if isinstance(any, numbers.Integral):
+            return cls.from_fraction(int(any), 1)
+        if isinstance(any, numbers.Real):
+            return cls.from_float(float(any))
+        return cls(any)
 
     @property
     def numerator(self):
@@ -67,6 +88,10 @@ class TimeType:
     @property
     def denominator(self):
         return self._value.denominator
+
+    def _sympy_(self):
+        import sympy
+        return sympy.Rational(self.numerator, self.denominator)
 
     def __round__(self, *args, **kwargs):
         return self._value.__round__(*args, **kwargs)
@@ -247,6 +272,9 @@ numbers.Rational.register(TimeType)
 
 _converter = {
     float: TimeType.from_float,
+    TimeType._InternalType: TimeType,
+    fractions.Fraction: TimeType,
+    sympy.Rational: lambda q: TimeType.from_fraction(q.p, q.q),
     TimeType: lambda x: x
 }
 
