@@ -68,6 +68,10 @@ class TimeType:
     def denominator(self):
         return self._value.denominator
 
+    def _sympy_(self):
+        import sympy
+        return sympy.Rational(self.numerator, self.denominator)
+
     def __round__(self, *args, **kwargs):
         return self._value.__round__(*args, **kwargs)
 

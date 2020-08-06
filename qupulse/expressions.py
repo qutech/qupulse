@@ -14,7 +14,7 @@ import numpy
 
 from qupulse.serialization import AnonymousSerializable
 from qupulse.utils.sympy import sympify, to_numpy, recursive_substitution, evaluate_lambdified,\
-    get_most_simple_representation, get_variables
+    get_most_simple_representation, get_variables, evaluate_lamdified_exact
 from qupulse.utils.types import TimeType
 
 __all__ = ["Expression", "ExpressionVariableMissingException", "ExpressionScalar", "ExpressionVector", "ExpressionLike"]
@@ -346,6 +346,11 @@ class ExpressionScalar(Expression):
 
     def is_nan(self) -> bool:
         return sympy.sympify('nan') == self._sympified_expression
+
+    def high_precision_eval_in_scope(self, scope: Mapping):
+        parsed_kwargs = self._parse_evaluate_numeric_arguments(scope)
+        result, _ = evaluate_lamdified_exact(self.sympified_expression, self.variables, parsed_kwargs, None)
+        return result
 
 
 class ExpressionVariableMissingException(Exception):

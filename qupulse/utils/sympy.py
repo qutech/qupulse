@@ -262,6 +262,46 @@ def evaluate_lambdified(expression: Union[sympy.Expr, numpy.ndarray],
     return lambdified(**parameters), lambdified
 
 
+from sympy.printing.pycode import NumPyPrinter
+class HighPrecPrinter(NumPyPrinter):
+    def _print_Rational(self, expr):
+        return f'TimeType.from_fraction({expr.p}, {expr.q})'
+
+    @classmethod
+    def make(cls, expr, modules, use_imps=True):
+        namespaces = []
+        if use_imps:
+            from sympy.utilities.lambdify import _imp_namespace
+            namespaces.append(_imp_namespace(expr))
+        # Check for dict before iterating
+        namespaces += list(modules)
+
+        user_functions = {}
+        for m in _lambdify_modules[::-1]:
+            if isinstance(m, dict):
+                for k in m:
+                    user_functions[k] = k
+        return cls({'fully_qualified_modules': False, 'inline': True,
+                    'allow_unknown_functions': True,
+                    'user_functions': user_functions})
+
+
+def evaluate_lamdified_exact(expression: Union[sympy.Expr, numpy.ndarray],
+                        variables: Sequence[str],
+                        parameters: Dict[str, Union[numpy.ndarray, Number]],
+                        lambdified) -> Tuple[Any, Any]:
+    from qupulse.utils.types import TimeType
+
+    printer = HighPrecPrinter.make(expression, _lambdify_modules)
+
+    _lambdify_modules[0]['TimeType'] = TimeType
+
+    lambdified = lambdified or sympy.lambdify(variables, expression, _lambdify_modules, printer=printer)
+
+    return lambdified(**parameters), lambdified
+
+
+
 def almost_equal(lhs: sympy.Expr, rhs: sympy.Expr, epsilon: float=1e-15) -> Optional[bool]:
     """Returns True (or False) if the two expressions are almost equal (or not). Returns None if this cannot be
     determined."""
