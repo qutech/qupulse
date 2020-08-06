@@ -1,4 +1,4 @@
-from typing import Union, Dict, Tuple, Any, Sequence, Optional
+from typing import Union, Dict, Tuple, Any, Sequence, Optional, Callable
 from numbers import Number
 from types import CodeType
 import warnings
@@ -8,6 +8,8 @@ import math
 
 import sympy
 import numpy
+from sympy.printing.pycode import NumPyPrinter
+
 
 try:
     import scipy.special as _special_functions
@@ -256,23 +258,22 @@ def evaluate_compiled(expression: sympy.Expr,
 def evaluate_lambdified(expression: Union[sympy.Expr, numpy.ndarray],
                         variables: Sequence[str],
                         parameters: Dict[str, Union[numpy.ndarray, Number]],
-                        lambdified) -> Tuple[Any, Any]:
+                        lambdified: Optional[Callable]) -> Tuple[Any, Any]:
     lambdified = lambdified or sympy.lambdify(variables, expression, _lambdify_modules)
-
     return lambdified(**parameters), lambdified
 
 
-from sympy.printing.pycode import NumPyPrinter
 class HighPrecPrinter(NumPyPrinter):
+    """Custom printer that translates sympy.Rational into TimeType"""
     def _print_Rational(self, expr):
         return f'TimeType.from_fraction({expr.p}, {expr.q})'
 
     @classmethod
     def make(cls, expr, modules, use_imps=True):
+        """This is basically the printer creation code from sympy 1.6 lambdify"""
         namespaces = []
         if use_imps:
-            from sympy.utilities.lambdify import _imp_namespace
-            namespaces.append(_imp_namespace(expr))
+            raise NotImplementedError('this is copied from lambdify printer creation but _imp_namespace is not puplic')
         # Check for dict before iterating
         namespaces += list(modules)
 
@@ -286,20 +287,16 @@ class HighPrecPrinter(NumPyPrinter):
                     'user_functions': user_functions})
 
 
-def evaluate_lamdified_exact(expression: Union[sympy.Expr, numpy.ndarray],
-                        variables: Sequence[str],
-                        parameters: Dict[str, Union[numpy.ndarray, Number]],
-                        lambdified) -> Tuple[Any, Any]:
+def evaluate_lamdified_exact_rational(expression: sympy.Expr,
+                                      variables: Sequence[str],
+                                      parameters: Dict[str, Union[numpy.ndarray, Number]],
+                                      lambdified: Optional[Callable]) -> Tuple[Any, Any]:
+    """Evaluates Rational as TimeType. Only supports scalar expressions"""
     from qupulse.utils.types import TimeType
-
-    printer = HighPrecPrinter.make(expression, _lambdify_modules)
-
     _lambdify_modules[0]['TimeType'] = TimeType
-
+    printer = HighPrecPrinter.make(expression, _lambdify_modules, use_imps=False)
     lambdified = lambdified or sympy.lambdify(variables, expression, _lambdify_modules, printer=printer)
-
     return lambdified(**parameters), lambdified
-
 
 
 def almost_equal(lhs: sympy.Expr, rhs: sympy.Expr, epsilon: float=1e-15) -> Optional[bool]:

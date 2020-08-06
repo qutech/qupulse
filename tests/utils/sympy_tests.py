@@ -10,14 +10,15 @@ import sympy
 import numpy as np
 
 from sympy.abc import a, b, c, d, e, f, k, l, m, n, i, j
-from sympy import sin, Sum, IndexedBase
+from sympy import sin, Sum, IndexedBase, Rational
 
 a_ = IndexedBase(a)
 b_ = IndexedBase(b)
 
 from qupulse.utils.sympy import sympify as qc_sympify, substitute_with_eval, recursive_substitution, Len,\
     evaluate_lambdified, evaluate_compiled, get_most_simple_representation, get_variables, get_free_symbols,\
-    almost_equal, Broadcast, IndexedBasedFinder
+    almost_equal, Broadcast, IndexedBasedFinder, evaluate_lamdified_exact_rational
+from qupulse.utils.types import TimeType
 
 
 ################################################### SUBSTITUTION #######################################################
@@ -99,6 +100,13 @@ eval_sum = [
 
 eval_array_expression = [
     (np.array([a*c, b*c]), {'a': 2, 'b': 3, 'c': 4}, np.array([8, 12]))
+]
+
+eval_exact_rational = [
+    (a * Rational('1/3'), {'a': 2}, TimeType.from_fraction(2, 3)),
+    (a * Rational('1/3'), {'a': Rational(1, 5)}, TimeType.from_fraction(1, 15)),
+    # TODO: this fails
+    # (np.array([a, Rational(1, 3)]), {'a': 2}, np.array([2, TimeType.from_fraction(1, 3)]))
 ]
 
 
@@ -272,15 +280,42 @@ class EvaluationTestsBase:
             result = self.evaluate(expr, parameters)
             np.testing.assert_equal(result, expected)
 
+    def test_eval_exact_rational(self):
+        for expr, parameters, expected in eval_exact_rational:
+            result = self.evaluate(expr, parameters)
+            try:
+                self.assertEqual(result, expected)
+            except ValueError:
+                np.testing.assert_equal(result, expected)
+
 
 class LamdifiedEvaluationTest(EvaluationTestsBase, unittest.TestCase):
-
     def evaluate(self, expression: Union[sympy.Expr, np.ndarray], parameters):
         if isinstance(expression, np.ndarray):
             variables = set.union(*map(set, map(get_variables, expression.flat)))
         else:
             variables = get_variables(expression)
         return evaluate_lambdified(expression, variables=list(variables), parameters=parameters, lambdified=None)[0]
+
+    @unittest.skipIf(sys.version_info[0] == 3 and sys.version_info[1] < 7, "causes syntax error for python < 3.7")
+    def test_eval_many_arguments(self):
+        super().test_eval_many_arguments()
+
+    @unittest.expectedFailure
+    def test_eval_exact_rational(self):
+        super().test_eval_exact_rational()
+
+
+class LamdifiedExactRationalEvaluationTest(EvaluationTestsBase, unittest.TestCase):
+    def evaluate(self, expression: Union[sympy.Expr, np.ndarray], parameters):
+        if isinstance(expression, np.ndarray):
+            variables = set.union(*map(set, map(get_variables, expression.flat)))
+        else:
+            variables = get_variables(expression)
+        return evaluate_lamdified_exact_rational(expression,
+                                                 variables=list(variables),
+                                                 parameters=parameters,
+                                                 lambdified=None)[0]
 
     @unittest.skipIf(sys.version_info[0] == 3 and sys.version_info[1] < 7, "causes syntax error for python < 3.7")
     def test_eval_many_arguments(self):
@@ -302,6 +337,10 @@ class CompiledEvaluationTest(EvaluationTestsBase, unittest.TestCase):
 
     def test_eval_many_arguments(self):
         super().test_eval_many_arguments()
+
+    @unittest.expectedFailure
+    def test_eval_exact_rational(self):
+        super().test_eval_exact_rational()
 
 
 class RepresentationTest(unittest.TestCase):
