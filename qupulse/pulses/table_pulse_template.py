@@ -52,8 +52,8 @@ class TableEntry(NamedTuple('TableEntry', [('t', ExpressionScalar),
                                     interp)
 
     def instantiate(self, parameters: Dict[str, numbers.Real]) -> TableWaveformEntry:
-        return TableWaveformEntry(self.t.evaluate_numeric(**parameters),
-                                  self.v.evaluate_numeric(**parameters),
+        return TableWaveformEntry(self.t.evaluate_with_exact_rationals(parameters),
+                                  self.v.evaluate_in_scope(parameters),
                                   self.interp)
 
     def get_serialization_data(self) -> tuple:

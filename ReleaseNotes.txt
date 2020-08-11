@@ -3,6 +3,10 @@
     - Fix TimeType comparisons with non-finite floats (inf, -inf, NaN)
     - Drop python 3.5 support
 
+ - Expressions:
+    - Add `evaluate_with_exact_rationals` method to ExpressionScalar
+
+
 ## 0.5.1 ##
 
  - General:
