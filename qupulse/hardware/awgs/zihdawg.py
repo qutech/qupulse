@@ -107,27 +107,19 @@ class HDAWGRepresentation:
 
     @property
     def channel_pair_AB(self) -> 'HDAWGChannelGroup':
-        if len(self.channel_tuples) != 4:
-            raise HDAWGValueError('Legacy channel pair interface is only usable in 4x2 grouping')
-        return self.channel_tuples[0]
+        return self._channel_groups[HDAWGChannelGrouping.CHAN_GROUP_4x2][0]
 
     @property
     def channel_pair_CD(self) -> 'HDAWGChannelGroup':
-        if len(self.channel_tuples) != 4:
-            raise HDAWGValueError('Legacy channel pair interface is only usable in 4x2 grouping')
-        return self.channel_tuples[1]
+        return self._channel_groups[HDAWGChannelGrouping.CHAN_GROUP_4x2][1]
 
     @property
     def channel_pair_EF(self) -> 'HDAWGChannelGroup':
-        if len(self.channel_tuples) != 4:
-            raise HDAWGValueError('Legacy channel pair interface is only usable in 4x2 grouping')
-        return self.channel_tuples[2]
+        return self._channel_groups[HDAWGChannelGrouping.CHAN_GROUP_4x2][2]
 
     @property
     def channel_pair_GH(self) -> 'HDAWGChannelGroup':
-        if len(self.channel_tuples) != 4:
-            raise HDAWGValueError('Legacy channel pair interface is only usable in 4x2 grouping')
-        return self.channel_tuples[3]
+        return self._channel_groups[HDAWGChannelGrouping.CHAN_GROUP_4x2][3]
 
     @property
     def api_session(self) -> zhinst.ziPython.ziDAQServer:
@@ -338,7 +330,7 @@ class HDAWGChannelGroup(AWG):
         """"""
         self.disconnect_group()
         self._device = weakref.proxy(hdawg_device)
-        assert self.device.channel_grouping.group_size() == self._group_size
+        assert self.device.channel_grouping.group_size() == self._group_size, f"{self.device.channel_grouping} != {self._group_size}"
         self._initialize_awg_module()
         # Seems creating AWG module sets SINGLE (single execution mode of sequence) to 0 per default.
         self.device.api_session.setInt('/{}/awgs/{:d}/single'.format(self.device.serial, self.awg_group_index), 1)
