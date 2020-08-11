@@ -13,6 +13,7 @@ except ImportError:
     gmpy2 = None
 
 import numpy as np
+import sympy
 
 import qupulse.utils.types as qutypes
 
@@ -143,6 +144,39 @@ class TestTimeType(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, '<= 1'):
             qutypes.time_from_float(.8, 2)
+
+    def assert_try_from_any_works(self, time_type):
+        try_from_any = time_type._try_from_any
+
+        signed_int_types = [int, sympy.Integer, np.int8, np.int16, np.int32, np.int64]
+        if gmpy2:
+            signed_int_types.append(gmpy2.mpz)
+
+        for s_t in signed_int_types:
+            self.assertEqual(1, try_from_any(s_t(1)))
+            self.assertEqual(17, try_from_any(s_t(17)))
+            self.assertEqual(-17, try_from_any(s_t(-17)))
+
+        unsigned_int_types = [np.uint8, np.uint16, np.uint32, np.uint]
+        for u_t in unsigned_int_types:
+            self.assertEqual(1, try_from_any(u_t(1)))
+            self.assertEqual(17, try_from_any(u_t(17)))
+
+        rational_types = [fractions.Fraction, sympy.Rational, time_type.from_fraction]
+        if gmpy2:
+            rational_types.append(gmpy2.mpq)
+        for r_t in rational_types:
+            self.assertEqual(fractions.Fraction(1, 3), try_from_any(r_t(1, 3)))
+
+        float_types = [float, sympy.Float]
+        if gmpy2:
+            float_types.append(gmpy2.mpfr)
+        for f_t in float_types:
+            self.assertEqual(time_type.from_float(3.4), try_from_any(f_t(3.4)))
+
+    def test_try_from_any(self):
+        self.assert_try_from_any_works(qutypes.TimeType)
+        self.assert_try_from_any_works(self.fallback_qutypes.TimeType)
 
     def assert_comparisons_work(self, time_type):
         tt = time_type.from_float(1.1)
