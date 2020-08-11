@@ -751,6 +751,8 @@ class HDAWGProgramManagerTest(unittest.TestCase):
 
         manager.add_program('test', root, channels, markers, amplitudes, offsets, volatage_transformations, sample_rate)
 
+        # 0: Program selection
+        # 1: Trigger
         self.assertEqual({UserRegister(zero_based_value=2): 7}, manager.get_register_values('test'))
         seqc_program = manager.to_seqc_program()
         expected_program = """const PROG_SEL_REGISTER = 0;

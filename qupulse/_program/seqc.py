@@ -684,7 +684,7 @@ class HDAWGProgramManager:
         selection_index = self._get_low_unused_index()
 
         # TODO: verify total number of registers
-        available_registers = [UserRegister.from_seqc(idx) for idx in range(3, 16)]
+        available_registers = [UserRegister.from_seqc(idx) for idx in range(2, 16)]
 
         program_entry = HDAWGProgramEntry(loop, selection_index, self._waveform_memory, name,
                                           channels, markers, amplitudes, offsets, voltage_transformations, sample_rate)
