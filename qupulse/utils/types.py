@@ -71,16 +71,44 @@ class TimeType:
         except TypeError:
             pass
 
-        if isinstance(any, numbers.Rational):
+        # duck type rational
+        if hasattr(any, 'numerator') and hasattr(any, 'denominator'):
+            # sympy.Rational has callables...
             numerator = any.numerator() if callable(any.numerator) else any.numerator
             denominator = any.denominator() if callable(any.denominator) else any.denominator
             return cls.from_fraction(int(numerator), int(denominator))
+
+        # test if objects subclass number
         if isinstance(any, numbers.Integral):
             return cls.from_fraction(int(any), 1)
         if isinstance(any, numbers.Real):
             return cls.from_float(float(any))
+
+        # test for array
         if isinstance(any, numpy.ndarray):
             return numpy.vectorize(cls._try_from_any)(any)
+
+        # try conversion to int and float. gmpy2's answer to isinstance is version dependent
+        try:
+            as_int = int(any)
+        except (TypeError, ValueError, RuntimeError):
+            as_int = None
+        try:
+            as_float = float(any)
+        except (TypeError, ValueError, RuntimeError):
+            as_float = None
+
+        if as_int is None and as_float is not None:
+            return cls.from_float(as_float)
+        elif as_int is not None and as_float is None:
+            return cls.from_fraction(as_int, 1)
+        elif as_int is not None and as_float is not None:
+            if as_float.is_integer():
+                return cls.from_fraction(as_int, 1)
+            elif int(as_float) == as_int:
+                return cls.from_float(as_float)
+
+        # for error message
         return cls(any)
 
     @property
