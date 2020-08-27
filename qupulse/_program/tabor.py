@@ -389,7 +389,8 @@ class TaborProgram(ProgramEntry):
                  offsets: Tuple[float, float],
                  voltage_transformations: Tuple[Optional[callable], Optional[callable]],
                  sample_rate: TimeType,
-                 mode: TaborSequencing = None
+                 mode: TaborSequencing = None,
+                 repetition_mode: str = "infinite",
                  ):
         if len(channels) != device_properties['chan_per_part']:
             raise TaborException('TaborProgram only supports {} channels'.format(device_properties['chan_per_part']))
@@ -420,6 +421,7 @@ class TaborProgram(ProgramEntry):
         self._parsed_program = None  # type: Optional[ParsedProgram]
         self._mode = None
         self._device_properties = device_properties
+        self._repetition_mode = repeat
 
         assert mode in (TaborSequencing.ADVANCED, TaborSequencing.SINGLE), "Invalid mode"
         if mode == TaborSequencing.SINGLE:

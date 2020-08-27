@@ -92,6 +92,7 @@ class ProgramManagement(AWGChannelTupleFeature, ABC):
                channels: Tuple[Optional[ChannelID], ...],
                markers: Tuple[Optional[ChannelID], ...],
                voltage_transformation: Tuple[Optional[Callable], ...],
+               repetition_mode = None,
                force: bool = False) -> None:
         """
         Upload a program to the AWG.
@@ -108,6 +109,7 @@ class ProgramManagement(AWGChannelTupleFeature, ABC):
             markers: List of channels in the program to use. Position in the List in the list corresponds to the AWG channel
             voltage_transformation: transformations applied to the waveforms extracted rom the program. Position
             in the list corresponds to the AWG channel
+            repetition_mode: how often the signal should be sent
             force: If a different sequence is already present with the same name, it is
                 overwritten if force is set to True. (default = False)
         """
@@ -152,6 +154,10 @@ class ProgramManagement(AWGChannelTupleFeature, ABC):
     def run_current_program(self) -> None:
         """This method starts running the active program"""
         raise NotImplementedError()
+
+
+
+
 
 ########################################################################################################################
 # channel features

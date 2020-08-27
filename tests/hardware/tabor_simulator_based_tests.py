@@ -257,7 +257,9 @@ class TaborMemoryReadTests(TaborSimulatorBasedTest):
         self.channel_pair._amend_segments(self.segments)
         self.arm_program(self.sequence_tables, self.advanced_sequence_table, None, np.asarray([1, 2]))
 
-        actual_advanced_table = [(1, 1, 1)] + [(rep, idx + 1, jmp) for rep, idx, jmp in self.advanced_sequence_table]
+        #TODO: test here
+        #actual_advanced_table = [(1, 1, 1)] + [(rep, idx + 1, jmp) for rep, idx, jmp in self.advanced_sequence_table]
+        actual_advanced_table = [(1, 1, 0)] + [(rep, idx + 1, jmp) for rep, idx, jmp in self.advanced_sequence_table]
 
         expected = list(np.asarray(d)
                         for d in zip(*actual_advanced_table))
@@ -276,7 +278,7 @@ class TaborMemoryReadTests(TaborSimulatorBasedTest):
                                                                              for table in self.sequence_tables_raw]
 
 
-        actual_advanced_table = [(1, 1, 1)] + [(rep, idx + 1, jmp) for rep, idx, jmp in self.advanced_sequence_table]
+        actual_advanced_table = [(1, 1, 0)] + [(rep, idx + 1, jmp) for rep, idx, jmp in self.advanced_sequence_table]
 
         self.channel_pair[VolatileParameters].set_volatile_parameters('dummy_program', parameters=para)
 

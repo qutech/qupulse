@@ -69,7 +69,7 @@ def with_select(function_object: Callable[["TaborChannelTuple", Any], Any]) -> C
 ########################################################################################################################
 # Device
 ########################################################################################################################
-# FeaturesBes
+# Features
 class TaborSCPI(SCPI):
     def __init__(self, device: "TaborDevice", visa: pyvisa.resources.MessageBasedResource):
         super().__init__(visa)
@@ -145,8 +145,8 @@ class TaborDeviceControl(DeviceControl):
         """
         This method triggers a device remotely.
         """
-        #TODO: why does this work?
-        #self._parent()[SCPI].send_cmd(":ENAB")
+        # TODO: why does this work?
+        # self._parent()[SCPI].send_cmd(":ENAB")
         self._parent()[SCPI].send_cmd(":TRIG")
 
 
@@ -371,6 +371,8 @@ class TaborDevice(AWGDevice):
             assert len(answers) == 0
 
     def _initialize(self) -> None:
+        # TODO: work on this comment
+
         # 1. Select channel
         # 2. Turn off gated mode
         # 3. continous mode
@@ -378,9 +380,12 @@ class TaborDevice(AWGDevice):
         # 5. Expect enable signal from (USB / LAN / GPIB)
         # 6. Use arbitrary waveforms as marker source
         # 7. Expect jump command for sequencing from (USB / LAN / GPIB)
+
+        # TODO: Test here
+        # ":INIT:CONT:ENAB SELF; :INIT:CONT:ENAB:SOUR BUS;" // :INIT:CONT:ENAB ARM; :INIT:CONT:ENAB:SOUR TRIG;
         setup_command = (
             ":INIT:GATE OFF; :INIT:CONT ON; "
-            ":INIT:CONT:ENAB SELF; :INIT:CONT:ENAB:SOUR BUS; "
+            ":INIT:CONT:ENAB ARM; :INIT:CONT:ENAB:SOUR BUS;"
             ":SOUR:MARK:SOUR USER; :SOUR:SEQ:JUMP:EVEN BUS ")
         self[SCPI].send_cmd(":INST:SEL 1")
         self[SCPI].send_cmd(setup_command)
@@ -486,11 +491,6 @@ class TaborActivatableChannels(ActivatableChannels):
         self._parent()._select()
 
 
-class TaborRepetionMode(RepetionMode):
-    # TODO: fill with functionalty
-    pass
-
-
 # Implementation
 class TaborChannel(AWGChannel):
     def __init__(self, idn: int, device: TaborDevice):
@@ -520,7 +520,6 @@ class TaborChannel(AWGChannel):
         Args:
             channel_tuple (TaborChannelTuple): the channel tuple that this channel belongs to
         """
-        # TODO (toCheck): problem with the _?
         self._channel_tuple = weakref.ref(channel_tuple)
 
     def _select(self) -> None:
@@ -540,6 +539,29 @@ class TaborProgramManagement(ProgramManagement):
 
         self._idle_sequence_table = [(1, 1, 0), (1, 1, 0), (1, 1, 0)]
 
+    def get_runmode(self, program_name: str) -> str:
+        """
+        Returns the default runmode of a certain program
+        Args:
+            program_name (str): name of the program whose runmode should be returned
+        """
+        return self._parent()._known_programs[program_name].program._repetition_mode
+
+    def set_runmode(self, program_name: str, runmode: str) -> None:
+        """
+        Changes the default runmode of a certain program
+
+        Args:
+            program_name (str): name of the program whose runmode should be changed
+
+        Throws:
+            ValueError: this Exception is thrown when an invalid runmode is given
+        """
+        if runmode is "infinite" or runmode is "once":
+            self._parent()._known_programs[program_name].program._repetition_mode = runmode
+        else:
+            raise ValueError("{} is no vaild repetition mode".format(runmode))
+
     @with_configuration_guard
     @with_select
     def upload(self, name: str,
@@ -547,12 +569,16 @@ class TaborProgramManagement(ProgramManagement):
                channels: Tuple[Optional[ChannelID], Optional[ChannelID]],
                markers: Tuple[Optional[ChannelID], Optional[ChannelID]],
                voltage_transformation: Tuple[Callable, Callable],
+               repetition_mode: str = None,
                force: bool = False) -> None:
         """
         Upload a program to the AWG.
 
         The policy is to prefer amending the unknown waveforms to overwriting old ones.
         """
+        if repetition_mode is None:
+            repetition_mode = "infinite"
+
         if len(channels) != len(self._parent().channels):
             raise ValueError("Wrong number of channels")
         if len(markers) != len(self._parent().marker):
@@ -574,7 +600,6 @@ class TaborProgramManagement(ProgramManagement):
                 raise ValueError('{} is already known on {}'.format(name, self._parent().idn))
 
         # They call the peak to peak range amplitude
-        # TODO: Are the replacments for a variable size of channel tuples okay?
 
         ranges = tuple(ch[VoltageRange].amplitude for ch in self._parent().channels)
 
@@ -619,6 +644,9 @@ class TaborProgramManagement(ProgramManagement):
 
         self._parent()._known_programs[name] = TaborProgramMemory(waveform_to_segment=waveform_to_segment,
                                                                   program=tabor_program)
+
+        # set the default repetionmode for a programm
+        self.set_runmode(program_name=name, runmode=repetition_mode)
 
     def remove(self, name: str) -> None:
         """
@@ -686,16 +714,23 @@ class TaborProgramManagement(ProgramManagement):
         Throws:
             RuntimeError: This exception is thrown if there is no active program for this device
         """
-        if(self._parent().device()._is_coupled()):
-            for tuple in self._parent().device().channel_tuples:
-                if not tuple._parent()._current_program:
-                    raise RuntimeError("The device is couple and one of the channel tuples has no program active")
-            self._parent().device().channel_tuples[0]._select()
-            self._parent().device.send_cmd(':TRIG', paranoia_level=self._parent().internal_paranoia_level)
+        if (self._parent().device()._is_coupled()):
+            raise NotImplementedError
 
         else:
             if self._parent()._current_program:
-                self._parent().device.send_cmd(':TRIG', paranoia_level=self._parent().internal_paranoia_level)
+                repetition_mode = self._parent()._known_programs[
+                    self._parent()._current_program].program._repetition_mode
+                if repetition_mode is "infinite":
+                    self._cont_runmode()
+                    self._parent().device.send_cmd(':TRIG', paranoia_level=self._parent().internal_paranoia_level)
+                elif repetition_mode is "once":
+                    self._trig_runmode()
+                    self._parent().device.send_cmd(':INIT:CONT OFF;',
+                                                   paranoia_level=self._parent().internal_paranoia_level)
+                    self._parent().device.send_cmd(':TRIG', paranoia_level=self._parent().internal_paranoia_level)
+                else:
+                    raise ValueError("{} is no vaild repetition mode".format(repetition_mode))
             else:
                 raise RuntimeError("No program active")
 
@@ -731,7 +766,8 @@ class TaborProgramManagement(ProgramManagement):
                     sequencer_tables[1].append((1, 1, 0))
 
         # insert idle sequence in advanced sequence table
-        advanced_sequencer_table = [(1, 1, 1)] + advanced_sequencer_table
+        # TODO: Does it work without this line?
+        advanced_sequencer_table = [(1, 1, 0)] + advanced_sequencer_table
 
         while len(advanced_sequencer_table) < self._parent().device.dev_properties["min_aseq_len"]:
             advanced_sequencer_table.append((1, 1, 0))
@@ -770,6 +806,16 @@ class TaborProgramManagement(ProgramManagement):
 
     def _exit_config_mode(self):
         self._parent()._exit_config_mode()
+
+    @with_select
+    def _cont_runmode(self):
+        """Changes the run mode of this channel tuple to continous mode"""
+        self._parent().device.send_cmd(":INIT:CONT ON; :INIT:CONT:ENAB ARM; :INIT:CONT:ENAB:SOUR BUS")
+
+    @with_select
+    def _trig_runmode(self):
+        """Changes the run mode of this channel tuple to triggered mode"""
+        self._parent().device.send_cmd(":INIT:CONT 0")
 
 
 class TaborVolatileParameters(VolatileParameters):
