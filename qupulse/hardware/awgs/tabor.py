@@ -246,7 +246,7 @@ class TaborDevice(AWGDevice):
     def enable(self) -> None:
         """
         This method immediately generates the selected output waveform, if the device is in continuous and armed
-        run mode.
+        repetition mode.
         """
         self[SCPI].send_cmd(":ENAB")
 
@@ -538,29 +538,30 @@ class TaborProgramManagement(ProgramManagement):
         self._parent = weakref.ref(channel_tuple)
 
         self._idle_sequence_table = [(1, 1, 0), (1, 1, 0), (1, 1, 0)]
+        self._trigger_source = 'BUS'
 
-    def get_runmode(self, program_name: str) -> str:
+    def get_repetition_mode(self, program_name: str) -> str:
         """
-        Returns the default runmode of a certain program
+        Returns the default repetition mode of a certain program
         Args:
-            program_name (str): name of the program whose runmode should be returned
+            program_name (str): name of the program whose repetition mode should be returned
         """
         return self._parent()._known_programs[program_name].program._repetition_mode
 
-    def set_runmode(self, program_name: str, runmode: str) -> None:
+    def set_repetition_mode(self, program_name: str, repetition_mode: str) -> None:
         """
-        Changes the default runmode of a certain program
+        Changes the default repetition mode of a certain program
 
         Args:
-            program_name (str): name of the program whose runmode should be changed
+            program_name (str): name of the program whose repetition mode should be changed
 
         Throws:
-            ValueError: this Exception is thrown when an invalid runmode is given
+            ValueError: this Exception is thrown when an invalid repetition mode is given
         """
-        if runmode is "infinite" or runmode is "once":
-            self._parent()._known_programs[program_name].program._repetition_mode = runmode
+        if repetition_mode is "infinite" or repetition_mode is "once":
+            self._parent()._known_programs[program_name].program._repetition_mode = repetition_mode
         else:
-            raise ValueError("{} is no vaild repetition mode".format(runmode))
+            raise ValueError("{} is no vaild repetition mode".format(repetition_mode))
 
     @with_configuration_guard
     @with_select
@@ -576,12 +577,10 @@ class TaborProgramManagement(ProgramManagement):
 
         The policy is to prefer amending the unknown waveforms to overwriting old ones.
         """
-        if repetition_mode is None:
-            repetition_mode = "infinite"
 
         if len(channels) != len(self._parent().channels):
             raise ValueError("Wrong number of channels")
-        if len(markers) != len(self._parent().marker):
+        if len(markers) != len(self._parent().marker_channels):
             raise ValueError("Wrong number of marker")
         if len(voltage_transformation) != len(self._parent().channels):
             raise ValueError("Wrong number of voltage transformations")
@@ -646,7 +645,7 @@ class TaborProgramManagement(ProgramManagement):
                                                                   program=tabor_program)
 
         # set the default repetionmode for a programm
-        self.set_runmode(program_name=name, runmode=repetition_mode)
+        self.set_repetition_mode(program_name=name, repetition_mode=repetition_mode)
 
     def remove(self, name: str) -> None:
         """
@@ -714,20 +713,19 @@ class TaborProgramManagement(ProgramManagement):
         Throws:
             RuntimeError: This exception is thrown if there is no active program for this device
         """
-        if (self._parent().device()._is_coupled()):
+        if (self._parent().device._is_coupled()):
             raise NotImplementedError
 
+        #TODO: continue
         else:
             if self._parent()._current_program:
                 repetition_mode = self._parent()._known_programs[
                     self._parent()._current_program].program._repetition_mode
                 if repetition_mode is "infinite":
-                    self._cont_runmode()
+                    self._cont_repetition_mode()
                     self._parent().device.send_cmd(':TRIG', paranoia_level=self._parent().internal_paranoia_level)
                 elif repetition_mode is "once":
-                    self._trig_runmode()
-                    self._parent().device.send_cmd(':INIT:CONT OFF;',
-                                                   paranoia_level=self._parent().internal_paranoia_level)
+                    self._trig_repetition_mode()
                     self._parent().device.send_cmd(':TRIG', paranoia_level=self._parent().internal_paranoia_level)
                 else:
                     raise ValueError("{} is no vaild repetition mode".format(repetition_mode))
@@ -808,14 +806,14 @@ class TaborProgramManagement(ProgramManagement):
         self._parent()._exit_config_mode()
 
     @with_select
-    def _cont_runmode(self):
+    def _cont_repetition_mode(self):
         """Changes the run mode of this channel tuple to continous mode"""
-        self._parent().device.send_cmd(":INIT:CONT ON; :INIT:CONT:ENAB ARM; :INIT:CONT:ENAB:SOUR BUS")
+        self._parent().device.send_cmd(f":INIT:CONT ON; :INIT:CONT:ENAB ARM; :INIT:CONT:ENAB:SOUR {self._trigger_source}")
 
     @with_select
-    def _trig_runmode(self):
+    def _trig_repetition_mode(self):
         """Changes the run mode of this channel tuple to triggered mode"""
-        self._parent().device.send_cmd(":INIT:CONT 0")
+        self._parent().device.send_cmd(f":INIT:CONT 0; :TRIG:SOUR:ADV {self._trigger_source}")
 
 
 class TaborVolatileParameters(VolatileParameters):
