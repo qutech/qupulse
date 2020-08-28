@@ -7,6 +7,7 @@ from qupulse.utils.types import ChannelID
 
 import pyvisa
 
+
 ########################################################################################################################
 # device features
 ########################################################################################################################
@@ -80,10 +81,12 @@ class ReadProgram(AWGChannelTupleFeature, ABC):
     def read_complete_program(self):
         pass
 
+
 class VolatileParameters(AWGChannelTupleFeature, ABC):
     @abstractmethod
     def set_volatile_parameters(self, program_name, parameters) -> None:
         raise NotImplementedError()
+
 
 class ProgramManagement(AWGChannelTupleFeature, ABC):
     @abstractmethod
@@ -92,7 +95,7 @@ class ProgramManagement(AWGChannelTupleFeature, ABC):
                channels: Tuple[Optional[ChannelID], ...],
                marker_channels: Tuple[Optional[ChannelID], ...],
                voltage_transformation: Tuple[Optional[Callable], ...],
-               repetition_mode = None,
+               repetition_mode=None,
                force: bool = False) -> None:
         """
         Upload a program to the AWG.
@@ -154,9 +157,6 @@ class ProgramManagement(AWGChannelTupleFeature, ABC):
     def run_current_program(self) -> None:
         """This method starts running the active program"""
         raise NotImplementedError()
-
-
-
 
 
 ########################################################################################################################

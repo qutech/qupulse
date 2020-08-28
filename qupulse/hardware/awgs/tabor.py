@@ -716,9 +716,26 @@ class TaborProgramManagement(ProgramManagement):
             RuntimeError: This exception is thrown if there is no active program for this device
         """
         if (self._parent().device._is_coupled()):
-            raise NotImplementedError
+            # channel tuple is the first channel tuple
+            if (self._parent.device._channel_tuples[0] == self):
+                if self._parent()._current_program:
+                    repetition_mode = self._parent()._known_programs[
+                        self._parent()._current_program].program._repetition_mode
+                    if repetition_mode is "infinite":
+                        self._cont_repetition_mode()
+                        self._parent().device.send_cmd(':TRIG', paranoia_level=self._parent().internal_paranoia_level)
+                    elif repetition_mode is "once":
+                        self._trig_repetition_mode()
+                        self._parent().device.send_cmd(':TRIG', paranoia_level=self._parent().internal_paranoia_level)
+                    else:
+                        raise ValueError("{} is no vaild repetition mode".format(repetition_mode))
+                else:
+                    raise RuntimeError("No program active")
+            else:
+                warnings.warn(
+                    "TaborWarning - run_current_program() - the device is coupled - runthe program via the first channel tuple")
 
-        #TODO: continue
+        # TODO: continue
         else:
             if self._parent()._current_program:
                 repetition_mode = self._parent()._known_programs[
@@ -733,6 +750,8 @@ class TaborProgramManagement(ProgramManagement):
                     raise ValueError("{} is no vaild repetition mode".format(repetition_mode))
             else:
                 raise RuntimeError("No program active")
+
+
 
     @with_select
     @with_configuration_guard
@@ -810,7 +829,8 @@ class TaborProgramManagement(ProgramManagement):
     @with_select
     def _cont_repetition_mode(self):
         """Changes the run mode of this channel tuple to continous mode"""
-        self._parent().device.send_cmd(f":INIT:CONT ON; :INIT:CONT:ENAB ARM; :INIT:CONT:ENAB:SOUR {self._trigger_source}")
+        self._parent().device.send_cmd(
+            f":INIT:CONT ON; :INIT:CONT:ENAB ARM; :INIT:CONT:ENAB:SOUR {self._trigger_source}")
 
     @with_select
     def _trig_repetition_mode(self):
