@@ -228,8 +228,8 @@ class TaborDevice(AWGDevice):
         # Channel
         self._channels = [TaborChannel(i + 1, self) for i in range(4)]
 
-        # ChannelMarker
-        self._channel_marker = [TaborMarkerChannel(i + 1, self) for i in range(4)]
+        # MarkerChannels
+        self._marker_channels = [TaborMarkerChannel(i + 1, self) for i in range(4)]
 
         self._initialize()
 
@@ -285,7 +285,7 @@ class TaborDevice(AWGDevice):
     @property
     def marker_channels(self) -> Collection["TaborMarkerChannel"]:
         """Returns a list of all marker channels of a device. The collection may be empty"""
-        return self._channel_marker
+        return self._marker_channels
 
     @property
     def channel_tuples(self) -> Collection["TaborChannelTuple"]:
@@ -565,7 +565,7 @@ class TaborProgramManagement(ProgramManagement):
     def upload(self, name: str,
                program: Loop,
                channels: Tuple[Optional[ChannelID], Optional[ChannelID]],
-               markers: Tuple[Optional[ChannelID], Optional[ChannelID]],
+               marker_channels: Tuple[Optional[ChannelID], Optional[ChannelID]],
                voltage_transformation: Tuple[Callable, Callable],
                repetition_mode: str = None,
                force: bool = False) -> None:
@@ -582,7 +582,7 @@ class TaborProgramManagement(ProgramManagement):
 
         if len(channels) != len(self._parent().channels):
             raise ValueError("Wrong number of channels")
-        if len(markers) != len(self._parent().marker_channels):
+        if len(marker_channels) != len(self._parent().marker_channels):
             raise ValueError("Wrong number of marker")
         if len(voltage_transformation) != len(self._parent().channels):
             raise ValueError("Wrong number of voltage transformations")
@@ -620,7 +620,7 @@ class TaborProgramManagement(ProgramManagement):
         # parse to tabor program
         tabor_program = TaborProgram(program,
                                      channels=tuple(channels),
-                                     markers=markers,
+                                     markers=marker_channels,
                                      device_properties=self._parent().device.dev_properties,
                                      sample_rate=sample_rate / 10 ** 9,
                                      amplitudes=voltage_amplitudes,

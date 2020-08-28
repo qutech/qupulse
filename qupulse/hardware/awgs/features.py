@@ -90,7 +90,7 @@ class ProgramManagement(AWGChannelTupleFeature, ABC):
     def upload(self, name: str,
                program: Loop,
                channels: Tuple[Optional[ChannelID], ...],
-               markers: Tuple[Optional[ChannelID], ...],
+               marker_channels: Tuple[Optional[ChannelID], ...],
                voltage_transformation: Tuple[Optional[Callable], ...],
                repetition_mode = None,
                force: bool = False) -> None:
@@ -106,7 +106,7 @@ class ProgramManagement(AWGChannelTupleFeature, ABC):
             name: A name for the program on the AWG.
             program: The program (a sequence of instructions) to upload.
             channels: Tuple of length num_channels that ChannelIDs of  in the program to use. Position in the list corresponds to the AWG channel
-            markers: List of channels in the program to use. Position in the List in the list corresponds to the AWG channel
+            marker_channels: List of channels in the program to use. Position in the List in the list corresponds to the AWG channel
             voltage_transformation: transformations applied to the waveforms extracted rom the program. Position
             in the list corresponds to the AWG channel
             repetition_mode: how often the signal should be sent

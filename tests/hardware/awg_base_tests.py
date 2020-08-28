@@ -70,7 +70,7 @@ class TestProgramManagementFeature(ProgramManagement):
         self._armed_program = None
 
     def upload(self, name: str, program: Loop, channels: Tuple[Optional[ChannelID], ...],
-               markers: Tuple[Optional[ChannelID], ...], voltage_transformation: Tuple[Optional[Callable], ...],
+               marker_channels: Tuple[Optional[ChannelID], ...], voltage_transformation: Tuple[Optional[Callable], ...],
                force: bool = False) -> None:
         if name in self._programs:
             raise KeyError("Program with name \"{}\" is already on the instrument.".format(name))
