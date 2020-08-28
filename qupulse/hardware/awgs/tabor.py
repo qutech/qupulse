@@ -19,6 +19,7 @@ from typing import Sequence
 from qupulse._program.tabor import TaborSegment, TaborException, TaborProgram, PlottableProgram, TaborSequencing, \
     make_combined_wave
 import pyvisa
+import warnings
 
 # Provided by Tabor electronics for python 2.7
 # a python 3 version is in a private repository on https://git.rwth-aachen.de/qutech
@@ -145,8 +146,6 @@ class TaborDeviceControl(DeviceControl):
         """
         This method triggers a device remotely.
         """
-        # TODO: why does this work?
-        # self._parent()[SCPI].send_cmd(":ENAB")
         self._parent()[SCPI].send_cmd(":TRIG")
 
 
@@ -381,8 +380,6 @@ class TaborDevice(AWGDevice):
         # 6. Use arbitrary waveforms as marker source
         # 7. Expect jump command for sequencing from (USB / LAN / GPIB)
 
-        # TODO: Test here
-        # ":INIT:CONT:ENAB SELF; :INIT:CONT:ENAB:SOUR BUS;" // :INIT:CONT:ENAB ARM; :INIT:CONT:ENAB:SOUR TRIG;
         setup_command = (
             ":INIT:GATE OFF; :INIT:CONT ON; "
             ":INIT:CONT:ENAB ARM; :INIT:CONT:ENAB:SOUR BUS;"
@@ -577,6 +574,11 @@ class TaborProgramManagement(ProgramManagement):
 
         The policy is to prefer amending the unknown waveforms to overwriting old ones.
         """
+
+        # TODO: Default mode should be "once" for backward compability - change when once is working
+        if repetition_mode is None:
+            warnings.warn("TaborWarning - upload() - no repetition mode given!")
+            repetition_mode = "infinite"
 
         if len(channels) != len(self._parent().channels):
             raise ValueError("Wrong number of channels")
