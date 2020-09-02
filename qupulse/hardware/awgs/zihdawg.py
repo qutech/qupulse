@@ -172,6 +172,7 @@ class HDAWGRepresentation:
                                  'between enum value and group size.')
         old_channel_grouping = self.channel_grouping
         if old_channel_grouping != channel_grouping:
+            self.api_session.setInt(f'/{self.serial}/AWGS/*/ENABLE', 0)
             self.api_session.setInt(f'/{self.serial}/SYSTEM/AWG/CHANNELGROUPING', channel_grouping.value)
             # disable old groups
             for group in self._get_groups(old_channel_grouping):
@@ -1017,14 +1018,17 @@ def example_upload(hdawg_kwargs: dict, channels: Set[int], markers: Set[Tuple[in
 
         channel_group.upload('marker_test', marker_program, upload_ch, upload_mk, upload_vt)
 
-    while True:
-        for program in channel_group.programs:
-            print(f'playing {program}')
-            channel_group.arm(program)
-            channel_group.run_current_program()
-            while not channel_group.was_current_program_finished():
-                print(f'waiting for {program} to finish')
-                time.sleep(1e-2)
+    try:
+        while True:
+            for program in channel_group.programs:
+                print(f'playing {program}')
+                channel_group.arm(program)
+                channel_group.run_current_program()
+                while not channel_group.was_current_program_finished():
+                    print(f'waiting for {program} to finish')
+                    time.sleep(1e-2)
+    finally:
+        channel_group.enable(False)
 
 
 if __name__ == "__main__":
