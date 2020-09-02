@@ -620,13 +620,32 @@ class HDAWGProgramManager:
                     for name, value in vars(cls).items()
                     if name[0] in string.ascii_uppercase}
 
+    class GlobalVariables:
+        """Global variables of the program together with their (multiline) doc string.
+        The python names are uppercase."""
+
+        PROG_SEL = (['Selected program index (0 -> None)'], 0)
+        NEW_PROG_SEL = (('Value that gets written back to program selection register.',
+                         'Used to signal that at least one program was played completely.'), 0)
+        PLAYBACK_FINISHED = (('Is OR\'ed to new_prog_sel.',
+                              'Set to PLAYBACK_FINISHED_MASK if a program was played completely.',), 0)
+
+        @classmethod
+        def as_dict(cls) -> Dict[str, Tuple[Sequence[str], int]]:
+            return {name: value
+                    for name, value in vars(cls).items()
+                    if name[0] in string.ascii_uppercase}
+
+        @classmethod
+        def get_init_block(cls) -> str:
+            lines = ['// Declare and initialize global variables']
+            for var_name, (comment, initial_value) in cls.as_dict().items():
+                lines.extend(f'// {comment_line}' for comment_line in comment)
+                lines.append(f'var {var_name.lower()} = {initial_value};')
+                lines.append('')
+            return '\n'.join(lines)
+
     _PROGRAM_FUNCTION_NAME_TEMPLATE = '{program_name}_function'
-    INIT_PROGRAM_SWITCH = (
-        '// INIT program switch.\n'
-        'var prog_sel = 0;\n'
-        'var playback_finished = 0;\n'
-        'var new_prog_sel = 0;\n'
-    )
     WAIT_FOR_SOFTWARE_TRIGGER = "waitForSoftwareTrigger();"
     SOFTWARE_WAIT_FOR_TRIGGER_FUNCTION_DEFINITION = (
         'void waitForSoftwareTrigger() {\n'
@@ -745,7 +764,7 @@ class HDAWGProgramManager:
 
         lines.append(self._waveform_memory.waveform_declaration())
 
-        lines.append('\n//function used by manually triggered programs')
+        lines.append('\n// function used by manually triggered programs')
         lines.append(self.SOFTWARE_WAIT_FOR_TRIGGER_FUNCTION_DEFINITION)
 
         replacements = self._waveform_memory.waveform_name_replacements()
@@ -757,15 +776,22 @@ class HDAWGProgramManager:
             lines.append(replace_multiple(program.seqc_source, replacements))
             lines.append('}\n')
 
-        lines.append(self.INIT_PROGRAM_SWITCH)
+        lines.append(self.GlobalVariables.get_init_block())
 
-        lines.append('\n//runtime block')
+        lines.append('\n// runtime block')
         lines.append('while (true) {')
         lines.append('  // read program selection value')
         lines.append('  prog_sel = getUserReg(PROG_SEL_REGISTER);')
+        lines.append('  ')
+        lines.append('  // calculate value to write back to PROG_SEL_REGISTER')
         lines.append('  new_prog_sel = prog_sel | playback_finished;')
         lines.append('  if (!(prog_sel & NO_RESET_MASK)) new_prog_sel &= INVERTED_PROG_SEL_MASK;')
         lines.append('  setUserReg(PROG_SEL_REGISTER, new_prog_sel);')
+        lines.append('  ')
+        lines.append('  // reset playback flag')
+        lines.append('  playback_finished = 0;')
+        lines.append('  ')
+        lines.append('  // only use part of prog sel that does not mean other things to select the program.')
         lines.append('  prog_sel &= PROG_SEL_MASK;')
         lines.append('  ')
         lines.append('  switch (prog_sel) {')

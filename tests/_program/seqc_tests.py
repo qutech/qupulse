@@ -757,15 +757,17 @@ class HDAWGProgramManagerTest(unittest.TestCase):
         seqc_program = manager.to_seqc_program()
         expected_program = """const PROG_SEL_REGISTER = 0;
 const TRIGGER_REGISTER = 1;
-const TRIGGER_RESET_MASK = 0b1000000000000000;
+const TRIGGER_RESET_MASK = 0b10000000000000000000000000000000;
 const PROG_SEL_NONE = 0;
-const NO_RESET_MASK = 0b1000000000000000;
-const PROG_SEL_MASK = 0b111111111111111;
+const NO_RESET_MASK = 0b10000000000000000000000000000000;
+const PLAYBACK_FINISHED_MASK = 0b1000000000000000000000000000000;
+const PROG_SEL_MASK = 0b111111111111111111111111111111;
+const INVERTED_PROG_SEL_MASK = 0b11000000000000000000000000000000;
 const IDLE_WAIT_CYCLES = 300;
 wave test_concatenated_waveform_0 = "3e0090e8ffd002d1134ce38827c6a35fede89cf23d126a44057ef43f466ae4cd";
 wave test_shared_waveform_121f5c6e8822793b3836fb3098fa4591b91d4c205cc2d8afd01ee1bf6956e518 = "121f5c6e8822793b3836fb3098fa4591b91d4c205cc2d8afd01ee1bf6956e518";
 
-//function used by manually triggered programs
+// function used by manually triggered programs
 void waitForSoftwareTrigger() {
   while (true) {
     var trigger_register = getUserReg(TRIGGER_REGISTER);
@@ -810,20 +812,40 @@ void test_function() {
   }
 }
 
-// INIT program switch.
+// Declare and initialize global variables
+// Selected program index (0 -> None)
 var prog_sel = 0;
 
-//runtime block
+// Value that gets written back to program selection register.
+// Used to signal that at least one program was played completely.
+var new_prog_sel = 0;
+
+// Is OR'ed to new_prog_sel.
+// Set to PLAYBACK_FINISHED_MASK if a program was played completely.
+var playback_finished = 0;
+
+
+// runtime block
 while (true) {
   // read program selection value
   prog_sel = getUserReg(PROG_SEL_REGISTER);
-  if (!(prog_sel & NO_RESET_MASK))  setUserReg(PROG_SEL_REGISTER, 0);
-  prog_sel = prog_sel & PROG_SEL_MASK;
+  
+  // calculate value to write back to PROG_SEL_REGISTER
+  new_prog_sel = prog_sel | playback_finished;
+  if (!(prog_sel & NO_RESET_MASK)) new_prog_sel &= INVERTED_PROG_SEL_MASK;
+  setUserReg(PROG_SEL_REGISTER, new_prog_sel);
+  
+  // reset playback flag
+  playback_finished = 0;
+  
+  // only use part of prog sel that does not mean other things to select the program.
+  prog_sel &= PROG_SEL_MASK;
   
   switch (prog_sel) {
     case 1:
       test_function();
       waitWave();
+      playback_finished = PLAYBACK_FINISHED_MASK;
     default:
       wait(IDLE_WAIT_CYCLES);
   }
