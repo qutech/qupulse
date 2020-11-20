@@ -1,4 +1,4 @@
-from typing import Optional, List, Union, Set, Dict, Sequence, Any
+from typing import Optional, List, Union, Set, Dict, Sequence, Any, Tuple
 from numbers import Real
 import itertools
 import numbers
@@ -64,7 +64,8 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
 
     def build_waveform(self,
                        parameters: Dict[str, Real],
-                       channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[TableWaveform]:
+                       channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Union[TableWaveform,
+                                                                                                MultiChannelWaveform]]:
         self.validate_parameter_constraints(parameters=parameters, volatile=set())
 
         if all(channel_mapping[channel] is None
@@ -136,21 +137,39 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
 
     @property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
-        expressions = {channel: 0 for channel in self._channels}
-        for first_entry, second_entry in zip(self._entries[:-1], self._entries[1:]):
-            substitutions = {'t0': first_entry.t.sympified_expression,
-                             't1': second_entry.t.sympified_expression}
+        expressions = {}
+        shape = (len(self.defined_channels),)
 
-            v0 = sympy.IndexedBase(Broadcast(first_entry.v.underlying_expression, (len(self.defined_channels),)))
-            v1 = sympy.IndexedBase(Broadcast(second_entry.v.underlying_expression, (len(self.defined_channels),)))
+        for i, channel in enumerate(self._channels):
+            def value_trafo(v):
+                try:
+                    return v.underlying_expression[i]
+                except TypeError:
+                    return sympy.IndexedBase(Broadcast(v.underlying_expression, shape))[i]
+            pre_entry = TableEntry(0, self._entries[0].v, None)
+            entries = [pre_entry] + self._entries
+            expressions[channel] = TableEntry._sequence_integral(entries, expression_extractor=value_trafo)
+        return expressions
 
-            for i, channel in enumerate(self._channels):
-                substitutions['v0'] = v0[i]
-                substitutions['v1'] = v1[i]
+    def _as_expression(self) -> Dict[ChannelID, ExpressionScalar]:
+        t = self._AS_EXPRESSION_TIME
+        shape = (len(self.defined_channels),)
+        expressions = {}
 
-                expressions[channel] += first_entry.interp.integral.sympified_expression.subs(substitutions)
-
-        expressions = {c: ExpressionScalar(expressions[c]) for c in expressions}
+        for i, channel in enumerate(self._channels):
+            def value_trafo(v):
+                try:
+                    return v.underlying_expression[i]
+                except TypeError:
+                    return sympy.IndexedBase(Broadcast(v.underlying_expression, shape))[i]
+            pre_value = value_trafo(self._entries[0].v)
+            post_value = value_trafo(self._entries[-1].v)
+            pw = TableEntry._sequence_as_expression(self._entries,
+                                                    expression_extractor=value_trafo,
+                                                    t=t,
+                                                    post_value=post_value,
+                                                    pre_value=pre_value)
+            expressions[channel] = pw
         return expressions
 
 

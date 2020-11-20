@@ -2,8 +2,9 @@ import unittest
 import warnings
 
 import numpy
+import sympy
 
-from qupulse.expressions import Expression
+from qupulse.expressions import Expression, ExpressionScalar
 from qupulse.serialization import Serializer
 from qupulse.pulses.table_pulse_template import TablePulseTemplate, TableWaveform, TableEntry, TableWaveformEntry, ZeroDurationTablePulseTemplate, AmbiguousTablePulseEntry, concatenate
 from qupulse.pulses.parameters import ParameterNotProvidedException, ParameterConstraintViolation, ParameterConstraint
@@ -37,6 +38,54 @@ class TableEntryTest(unittest.TestCase):
     def test_unknown_interpolation_strategy(self):
         with self.assertRaises(KeyError):
             TableEntry(0, 0, 'foo')
+
+    def test_sequence_integral(self):
+        def get_sympy(v):
+            return v.sympified_expression
+
+        entries = [TableEntry(0, 0, 'hold'), TableEntry(1, 0, 'hold')]
+        self.assertEqual(ExpressionScalar(0), TableEntry._sequence_integral(entries, get_sympy))
+
+        entries = [TableEntry(0, 1, 'hold'), TableEntry(1, 1, 'hold')]
+        self.assertEqual(ExpressionScalar(1), TableEntry._sequence_integral(entries, get_sympy))
+
+        entries = [TableEntry(0, 0, 'linear'), TableEntry(1, 1, 'hold')]
+        self.assertEqual(ExpressionScalar(.5), TableEntry._sequence_integral(entries, get_sympy))
+
+        entries = [TableEntry('t0', 'a', 'linear'), TableEntry('t1', 'b', 'hold'), TableEntry('t2', 'c', 'hold')]
+        self.assertEqual(ExpressionScalar('(t1-t0)*(a+b)/2 + (t2-t1)*b'),
+                         TableEntry._sequence_integral(entries, get_sympy))
+
+    def test_sequence_as_expression(self):
+        def get_sympy(v):
+            return v.sympified_expression
+
+        t = sympy.Dummy('t')
+
+        times = {
+            t: 0.5,
+            't0': 0.3,
+            't1': 0.7,
+            't2': 1.3,
+        }
+
+        entries = [TableEntry(0, 0, None), TableEntry(1, 0, 'hold')]
+        self.assertEqual(ExpressionScalar(0),
+                         TableEntry._sequence_as_expression(entries, get_sympy, t).sympified_expression.subs(times))
+
+        entries = [TableEntry(0, 1, None), TableEntry(1, 1, 'hold')]
+        self.assertEqual(ExpressionScalar(1),
+                         TableEntry._sequence_as_expression(entries, get_sympy, t).sympified_expression.subs(times))
+
+        entries = [TableEntry(0, 0, None), TableEntry(1, 1, 'linear')]
+        self.assertEqual(ExpressionScalar(.5),
+                         TableEntry._sequence_as_expression(entries, get_sympy, t).sympified_expression.subs(times))
+
+        entries = [TableEntry('t0', 'a', 'linear'),
+                   TableEntry('t1', 'b', 'hold'),
+                   TableEntry('t2', 'c', 'hold')]
+        self.assertEqual(ExpressionScalar('(a+b)*.5'),
+                         TableEntry._sequence_as_expression(entries, get_sympy, t).sympified_expression.subs(times))
 
 
 class TablePulseTemplateTest(unittest.TestCase):
@@ -417,14 +466,41 @@ class TablePulseTemplateTest(unittest.TestCase):
         self.assertEqual(pulse.identifier, identifier)
 
     def test_integral(self) -> None:
-        pulse = TablePulseTemplate(entries={0: [(1, 2, 'linear'), (3, 0, 'jump'), (4, 2, 'hold'), (5, 8, 'hold')],
-                                            'other_channel': [(0, 7, 'linear'), (2, 0, 'hold'), (10, 0)],
-                                            'symbolic': [(3, 'a', 'hold'), ('b', 4, 'linear'), ('c', Expression('d'), 'hold')]})
-        expected = {0: Expression('6'),
+        pulse = TablePulseTemplate(entries={0: [(1, 2), (3, 0, 'linear'), (4, 2, 'jump'), (5, 8, 'hold')],
+                                            'other_channel': [(0, 7), (2, 0, 'linear'), (10, 0)],
+                                            'symbolic': [(3, 'a'), ('b', 4, 'hold'), ('c', Expression('d'), 'linear')]})
+        expected = {0: Expression('2 + 2 + 2 + 2 + (Max(c, 10) - 5) * 8'),
                     'other_channel': Expression(7),
-                    'symbolic': Expression('(b-3.)*a + (c-b)*(d+4.) / 2')}
+                    'symbolic': Expression('3 * a + (b-3)*a + (c-b)*(d+4) / 2 + (Max(10, c) - c) * d')}
 
         self.assertEqual(expected, pulse.integral)
+
+    def test_as_expression(self):
+        pulse = TablePulseTemplate(entries={0: [(0, 0), (1, 2), (3, 0, 'linear'), (4, 2, 'jump'), (5, 8, 'hold')],
+                                            'other_channel': [(0, 7), (2, 0, 'linear'), (10, 0)],
+                                            'symbolic': [(3, 'a'), ('b', 4, 'hold'),
+                                                         ('c', Expression('d'), 'linear')]})
+        parameters = dict(a=2., b=4, c=9, d=8)
+        wf = pulse.build_waveform(parameters, channel_mapping={0: 0,
+                                                               'other_channel': 'other_channel',
+                                                               'symbolic': 'symbolic'})
+        expr = pulse._as_expression()
+        ts = numpy.linspace(0, float(wf.duration), num=33)
+        sampled = {ch: wf.get_sampled(ch, ts) for ch in pulse.defined_channels}
+
+        from_expr = {}
+        for ch, expected_vs in sampled.items():
+            ch_expr = expr[ch]
+
+            ch_from_expr = []
+            for t, expected in zip(ts, expected_vs):
+                params = {**parameters, TablePulseTemplate._AS_EXPRESSION_TIME: t}
+                result = ch_expr.sympified_expression.subs(params, simultaneous=True)
+                ch_from_expr.append(result)
+            from_expr[ch] = ch_from_expr
+
+            numpy.testing.assert_almost_equal(expected_vs, ch_from_expr)
+
 
 
 class TablePulseTemplateConstraintTest(ParameterConstrainerTest):
@@ -614,10 +690,10 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
                                         channel_mapping=channel_mapping)
 
         self.assertIsInstance(waveform, MultiChannelWaveform)
-        self.assertEqual(len(waveform._sub_waveforms), 2)
+        self.assertEqual(len(waveform._wf_pad), 2)
 
         channels = {'oh', 'ch'}
-        for wf in waveform._sub_waveforms:
+        for wf, _ in waveform._wf_pad.values():
             self.assertIsInstance(wf, TableWaveform)
             self.assertIn(wf._channel_id, channels)
             channels.remove(wf._channel_id)
