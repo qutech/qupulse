@@ -421,7 +421,7 @@ class TaborProgram(ProgramEntry):
         self._parsed_program = None  # type: Optional[ParsedProgram]
         self._mode = None
         self._device_properties = device_properties
-        self._repetition_mode = repeat
+        self._repetition_mode = repetition_mode
 
         assert mode in (TaborSequencing.ADVANCED, TaborSequencing.SINGLE), "Invalid mode"
         if mode == TaborSequencing.SINGLE:
