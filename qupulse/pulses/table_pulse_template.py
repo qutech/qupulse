@@ -105,6 +105,14 @@ class TableEntry(NamedTuple('TableEntry', [('t', ExpressionScalar),
 
         # args are tested in order
         piecewise_args = []
+
+        # first define out of sequence values. Otherwise integration might produce strange results
+        if pre_value is not None:
+            piecewise_args.append((pre_value, t < entry_sequence[0].t.sympified_expression))
+
+        if post_value is not None:
+            piecewise_args.append((post_value, t >= entry_sequence[-1].t.sympified_expression))
+
         for first_entry, second_entry in more_itertools.pairwise(entry_sequence):
             t0, t1 = first_entry.t.sympified_expression, second_entry.t.sympified_expression
             substitutions = {'t0': t0,
@@ -119,10 +127,8 @@ class TableEntry(NamedTuple('TableEntry', [('t', ExpressionScalar),
 
             piecewise_args.append((interpolation_expr, time_gate))
 
-        if pre_value is not None:
-            piecewise_args.append((pre_value, t < entry_sequence[0].t.sympified_expression))
-        if post_value is not None:
-            piecewise_args.append((post_value, t >= entry_sequence[-1].t.sympified_expression))
+        if post_value is None and pre_value is None:
+            piecewise_args.append((0, True))
 
         return ExpressionScalar(sympy.Piecewise(*piecewise_args))
 
