@@ -154,10 +154,8 @@ class PointPulseTemplateSequencingTests(unittest.TestCase):
                                      (1., 0., HoldInterpolationStrategy()),
                                      (1.1, 21., LinearInterpolationStrategy())])
         self.assertEqual(wf.defined_channels, {1, 'A'})
-        self.assertEqual(wf._wf_pad[1][0].defined_channels, {1})
-        self.assertEqual(wf._wf_pad[1][0], expected_1)
-        self.assertEqual(wf._wf_pad['A'][0].defined_channels, {'A'})
-        self.assertEqual(wf._wf_pad['A'][0], expected_A)
+        self.assertEqual(wf._sub_waveforms[0], expected_1)
+        self.assertEqual(wf._sub_waveforms[1], expected_A)
 
     def test_build_waveform_multi_channel_vectorized(self):
         ppt = PointPulseTemplate([('t1', 'A'),
@@ -175,10 +173,8 @@ class PointPulseTemplateSequencingTests(unittest.TestCase):
                                      (1., 0., HoldInterpolationStrategy()),
                                      (1.1, 20., LinearInterpolationStrategy())])
         self.assertEqual(wf.defined_channels, {1, 'A'})
-        self.assertEqual(wf._wf_pad[1][0].defined_channels, {1})
-        self.assertEqual(wf._wf_pad[1][0], expected_1)
-        self.assertEqual(wf._wf_pad['A'][0].defined_channels, {'A'})
-        self.assertEqual(wf._wf_pad['A'][0], expected_A)
+        self.assertEqual(wf._sub_waveforms[0], expected_1)
+        self.assertEqual(wf._sub_waveforms[1], expected_A)
 
     def test_build_waveform_none_channel(self):
         ppt = PointPulseTemplate([('t1', 'A'),
@@ -325,9 +321,12 @@ class PointPulseExpressionIntegralTests(unittest.TestCase):
             symbolic = sympy.integrate(ch_expr, (t, 0, duration))
             symbolic = sympy.simplify(symbolic)
 
+            scalar_from_as_expr = ExpressionScalar(symbolic)
+            scalar_from_integral = ExpressionScalar(ch_int)
+
             for parameters in self.parameter_sets:
-                num_from_expr = ExpressionScalar(symbolic).evaluate_in_scope(parameters)
-                num_from_in = ExpressionScalar(ch_int).evaluate_in_scope(parameters)
+                num_from_expr = scalar_from_as_expr.evaluate_in_scope(parameters)
+                num_from_in = scalar_from_integral.evaluate_in_scope(parameters)
                 np.testing.assert_almost_equal(num_from_in, num_from_expr)
 
             # TODO: the following fails even with a lot of assumptions in sympy 1.6

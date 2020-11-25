@@ -43,16 +43,16 @@ class TableEntryTest(unittest.TestCase):
         def get_sympy(v):
             return v.sympified_expression
 
-        entries = [TableEntry(0, 0, 'hold'), TableEntry(1, 0, 'hold')]
+        entries = [TableEntry(0, 0), TableEntry(1, 0, 'hold')]
         self.assertEqual(ExpressionScalar(0), TableEntry._sequence_integral(entries, get_sympy))
 
-        entries = [TableEntry(0, 1, 'hold'), TableEntry(1, 1, 'hold')]
+        entries = [TableEntry(0, 1), TableEntry(1, 1, 'hold')]
         self.assertEqual(ExpressionScalar(1), TableEntry._sequence_integral(entries, get_sympy))
 
-        entries = [TableEntry(0, 0, 'linear'), TableEntry(1, 1, 'hold')]
+        entries = [TableEntry(0, 0), TableEntry(1, 1, 'linear')]
         self.assertEqual(ExpressionScalar(.5), TableEntry._sequence_integral(entries, get_sympy))
 
-        entries = [TableEntry('t0', 'a', 'linear'), TableEntry('t1', 'b', 'hold'), TableEntry('t2', 'c', 'hold')]
+        entries = [TableEntry('t0', 'a', 'linear'), TableEntry('t1', 'b', 'linear'), TableEntry('t2', 'c', 'hold')]
         self.assertEqual(ExpressionScalar('(t1-t0)*(a+b)/2 + (t2-t1)*b'),
                          TableEntry._sequence_integral(entries, get_sympy))
 
@@ -71,21 +71,21 @@ class TableEntryTest(unittest.TestCase):
 
         entries = [TableEntry(0, 0, None), TableEntry(1, 0, 'hold')]
         self.assertEqual(ExpressionScalar(0),
-                         TableEntry._sequence_as_expression(entries, get_sympy, t).sympified_expression.subs(times))
+                         TableEntry._sequence_as_expression(entries, get_sympy, t, pre_value=None, post_value=None).sympified_expression.subs(times))
 
         entries = [TableEntry(0, 1, None), TableEntry(1, 1, 'hold')]
         self.assertEqual(ExpressionScalar(1),
-                         TableEntry._sequence_as_expression(entries, get_sympy, t).sympified_expression.subs(times))
+                         TableEntry._sequence_as_expression(entries, get_sympy, t, pre_value=None, post_value=None).sympified_expression.subs(times))
 
         entries = [TableEntry(0, 0, None), TableEntry(1, 1, 'linear')]
         self.assertEqual(ExpressionScalar(.5),
-                         TableEntry._sequence_as_expression(entries, get_sympy, t).sympified_expression.subs(times))
+                         TableEntry._sequence_as_expression(entries, get_sympy, t, pre_value=None, post_value=None).sympified_expression.subs(times))
 
         entries = [TableEntry('t0', 'a', 'linear'),
-                   TableEntry('t1', 'b', 'hold'),
+                   TableEntry('t1', 'b', 'linear'),
                    TableEntry('t2', 'c', 'hold')]
         self.assertEqual(ExpressionScalar('(a+b)*.5'),
-                         TableEntry._sequence_as_expression(entries, get_sympy, t).sympified_expression.subs(times))
+                         TableEntry._sequence_as_expression(entries, get_sympy, t, pre_value=None, post_value=None).sympified_expression.subs(times))
 
 
 class TablePulseTemplateTest(unittest.TestCase):
@@ -690,23 +690,17 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
                                         channel_mapping=channel_mapping)
 
         self.assertIsInstance(waveform, MultiChannelWaveform)
-        self.assertEqual(len(waveform._wf_pad), 2)
 
-        channels = {'oh', 'ch'}
-        for wf, _ in waveform._wf_pad.values():
-            self.assertIsInstance(wf, TableWaveform)
-            self.assertIn(wf._channel_id, channels)
-            channels.remove(wf._channel_id)
-            if wf.defined_channels == {'ch'}:
-                self.assertEqual(wf._table,
-                                 ((0, 0, HoldInterpolationStrategy()),
+        expected_waveforms = [
+            TableWaveform('ch', ((0, 0, HoldInterpolationStrategy()),
                                   (1.1, 2.3, LinearInterpolationStrategy()),
                                   (4, 0, JumpInterpolationStrategy()),
-                                  (5.1, 0, HoldInterpolationStrategy())))
-            elif wf.defined_channels == {'oh'}:
-                self.assertEqual(wf._table,
-                                 ((0, 1, HoldInterpolationStrategy()),
-                                  (5.1, 0, LinearInterpolationStrategy())))
+                                  (5.1, 0, HoldInterpolationStrategy()))),
+            TableWaveform('oh', ((0, 1, HoldInterpolationStrategy()),
+                                  (5.1, 0, LinearInterpolationStrategy()))),
+        ]
+
+        self.assertEqual(waveform._sub_waveforms, tuple(expected_waveforms))
 
     def test_build_waveform_none(self) -> None:
         table = TablePulseTemplate({0: [(0, 0),

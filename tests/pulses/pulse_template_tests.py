@@ -356,7 +356,7 @@ class AtomicPulseTemplateTests(unittest.TestCase):
     def test_internal_create_program(self) -> None:
         measurement_windows = [('M', 0, 5)]
         single_wf = DummyWaveform(duration=6, defined_channels={'A'})
-        wf = MultiChannelWaveform.from_iterable([single_wf])
+        wf = MultiChannelWaveform([single_wf])
 
         template = AtomicPulseTemplateStub(measurements=measurement_windows, parameter_names={'foo'})
         scope = DictScope.from_kwargs(foo=7.2, volatile={'gutes_zeuch'})
