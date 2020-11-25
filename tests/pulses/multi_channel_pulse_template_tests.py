@@ -10,6 +10,7 @@ from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform, Ma
 from qupulse.pulses.parameters import ParameterConstraint, ParameterConstraintViolation, ConstantParameter
 from qupulse.expressions import ExpressionScalar, Expression
 from qupulse._program.transformation import LinearTransformation, chain_transformations
+from qupulse.utils.sympy import sympify
 
 from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummyWaveform
 from tests.serialization_dummies import DummySerializer
@@ -192,6 +193,17 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
                           'B': ExpressionScalar('t1-t0*3.1'),
                           'C': ExpressionScalar('l')},
                          pulse.integral)
+
+    def test_as_expression(self):
+        sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'},
+                                  integrals={'A': ExpressionScalar('2+k')}),
+               DummyPulseTemplate(duration='t1', defined_channels={'B', 'C'},
+                                  integrals={'B': ExpressionScalar('t1-t0*3.1'), 'C': ExpressionScalar('l')})]
+        pulse = AtomicMultiChannelPulseTemplate(*sts)
+        self.assertEqual({'A': ExpressionScalar(sympify('(2+k) / t1') * pulse._AS_EXPRESSION_TIME),
+                          'B': ExpressionScalar(sympify('(t1-t0*3.1)/t1') * pulse._AS_EXPRESSION_TIME),
+                          'C': ExpressionScalar(sympify('l/t1') * pulse._AS_EXPRESSION_TIME)},
+                         pulse._as_expression())
 
 
 class MultiChannelPulseTemplateSequencingTests(unittest.TestCase):

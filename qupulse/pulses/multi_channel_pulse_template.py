@@ -199,6 +199,12 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
             expressions.update(subtemplate.integral)
         return expressions
 
+    def _as_expression(self) -> Dict[ChannelID, ExpressionScalar]:
+        expressions = dict()
+        for subtemplate in self._subtemplates:
+            expressions.update(subtemplate._as_expression())
+        return expressions
+
 
 class ParallelConstantChannelPulseTemplate(PulseTemplate):
     def __init__(self,

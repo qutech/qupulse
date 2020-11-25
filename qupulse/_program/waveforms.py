@@ -82,8 +82,9 @@ class Waveform(Comparable, metaclass=ABCMeta):
 
         if np.any(sample_times[:-1] >= sample_times[1:]):
             raise ValueError('The sample times are not monotonously increasing')
-        if sample_times[0] < 0 or sample_times[-1] > self.duration:
-            raise ValueError('The sample times are not in the range [0, duration]')
+        if sample_times[0] < 0 or sample_times[-1] > float(self.duration):
+            raise ValueError(f'The sample times [{sample_times[0]}, ..., {sample_times[-1]}] are not in the range'
+                             f' [0, duration={float(self.duration)}]')
         if channel not in self.defined_channels:
             raise KeyError('Channel not defined in this waveform: {}'.format(channel))
 
@@ -144,6 +145,9 @@ class TableWaveformEntry(NamedTuple('TableWaveformEntry', [('t', Real),
     def __init__(self, t: float, v: float, interp: InterpolationStrategy):
         if not callable(interp):
             raise TypeError('{} is neither callable nor of type InterpolationStrategy'.format(interp))
+
+    def __repr__(self):
+        return f'{type(self).__name__}(t={self.t}, v={self.v}, interp="{self.interp}")'
 
 
 class TableWaveform(Waveform):
@@ -233,6 +237,9 @@ class TableWaveform(Waveform):
 
     def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> 'Waveform':
         return self
+
+    def __repr__(self):
+        return f'{type(self).__name__}(channel={self._channel_id}, waveform_table={self._table})'
 
 
 class FunctionWaveform(Waveform):

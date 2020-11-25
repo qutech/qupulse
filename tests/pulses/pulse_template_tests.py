@@ -3,6 +3,7 @@ import math
 from unittest import mock
 
 from typing import Optional, Dict, Set, Any, Union
+import sympy
 
 from qupulse.parameter_scope import Scope, DictScope
 from qupulse.utils.types import ChannelID
@@ -132,6 +133,9 @@ class AtomicPulseTemplateStub(AtomicPulseTemplate):
 
     @property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
+        raise NotImplementedError()
+
+    def _as_expression(self) -> Dict[ChannelID, ExpressionScalar]:
         raise NotImplementedError()
 
 
@@ -437,3 +441,4 @@ class AtomicPulseTemplateTests(unittest.TestCase):
                                               to_single_waveform=set(),
                                               global_transformation=None)
         self.assertEqual(Loop(), program)
+
