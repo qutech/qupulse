@@ -18,7 +18,7 @@ dummy_a = sympy.Dummy('a')
 
 from qupulse.utils.sympy import sympify as qc_sympify, substitute_with_eval, recursive_substitution, Len,\
     evaluate_lambdified, evaluate_compiled, get_most_simple_representation, get_variables, get_free_symbols,\
-    almost_equal, Broadcast, IndexedBasedFinder
+    almost_equal, Broadcast, IndexedBasedFinder, IndexedBroadcast
 
 
 ################################################### SUBSTITUTION #######################################################
@@ -76,7 +76,9 @@ len_sympify = [
 ]
 
 index_sympify = [
-    ('a[i]', a_[i])
+    ('a[i]', a_[i]),
+    ('Broadcast(a, (3,))[0]', Broadcast(a, (3,))[0]),
+    ('IndexedBroadcast(a, (3,), 1)', IndexedBroadcast(a, (3,), 1))
 ]
 
 
@@ -448,13 +450,25 @@ class BroadcastTests(unittest.TestCase):
     test_numeric_equal = unittest.expectedFailure(test_expression_equality) if distutils.version.StrictVersion(sympy.__version__) >= distutils.version.StrictVersion('1.5') else test_expression_equality
 
     def test_integral(self):
-        symbolic = Broadcast(a, (3,))
+        symbolic = Broadcast(a*c, (3,))
+        indexed = symbolic[1]
 
         integ = sympy.Integral(symbolic, (a, 0, b))
-        self.assertEqual(integ, Broadcast(sympy.Integral(a, (a, 0, b)), (3,)))
+        idx_integ = sympy.Integral(indexed, (a, 0, b))
+        self.assertEqual(integ, Broadcast(sympy.Integral(a*c, (a, 0, b)), (3,)))
+        self.assertEqual(idx_integ, Broadcast(sympy.Integral(a*c, (a, 0, b)), (3,))[1])
 
-        diffed = sympy.diff(integ, b).subs({b: a})
-        self.assertEqual(symbolic, diffed)
+        diffed = sympy.diff(symbolic, a)
+        idx_diffed = sympy.diff(indexed, a)
+        self.assertEqual(symbolic.subs(a, 1), diffed)
+        self.assertEqual(indexed.subs(a, 1), idx_diffed)
+
+    def test_indexing(self):
+        symbolic = Broadcast(a, (3,))
+        indexed = symbolic[1]
+
+        self.assertEqual(7, indexed.subs(a, 7))
+        self.assertEqual(7, indexed.subs(a, (6, 7, 8)))
 
 
 class IndexedBasedFinderTests(unittest.TestCase):

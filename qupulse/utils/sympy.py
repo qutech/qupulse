@@ -2,6 +2,7 @@ from typing import Union, Dict, Tuple, Any, Sequence, Optional
 from numbers import Number
 from types import CodeType
 import warnings
+import functools
 
 import builtins
 import math
@@ -80,7 +81,7 @@ class IndexedBasedFinder(dict):
 
 
 class Broadcast(sympy.Function):
-    """Broadcast x to the specified shape using numpy.broadcast_to
+    """Broadcast x to the specified shape using numpy.broadcast_to. The shape must not be symbolic.
 
     Examples:
         >>> bc = Broadcast('a', (3,))
@@ -90,13 +91,19 @@ class Broadcast(sympy.Function):
     nargs = (2,)
 
     @classmethod
-    def eval(cls, x, shape) -> Optional[sympy.Array]:
-        if getattr(shape, 'free_symbols', None):
-            # cannot do anything
+    def eval(cls, x, shape: Tuple[int]) -> Optional[sympy.Array]:
+        shape = _parse_broadcast_shape(shape, user=cls)
+        if shape is None:
             return None
 
         if hasattr(x, '__len__') or not x.free_symbols:
             return sympy.Array(numpy.broadcast_to(x, shape))
+
+    def __getitem__(self, item: Union):
+        return IndexedBroadcast(*self.args, item)
+
+    # Not iterable. If not set to None __getitem__ would be used for iterating
+    __iter__ = None
 
     def _eval_Integral(self, *symbols, **assumptions):
         x, shape = self.args
@@ -105,6 +112,45 @@ class Broadcast(sympy.Function):
     def _eval_derivative(self, sym):
         x, shape = self.args
         return Broadcast(sympy.diff(x, sym), shape)
+
+    def _numpycode(self, printer, **kwargs):
+        x, shape = map(functools.partial(printer._print, **kwargs), self.args)
+        return f'broadcast_to({x}, {shape})'
+
+
+class IndexedBroadcast(sympy.Function):
+    """Broadcast x to the specified shape using numpy.broadcast_to and index in the result."""
+    nargs = (3,)
+
+    @classmethod
+    def eval(cls, x, shape: Tuple[int], idx: int) -> Optional[sympy.Expr]:
+        shape = _parse_broadcast_shape(shape, user=cls)
+        idx = _parse_broadcast_index(idx, user=cls)
+        if shape is None or idx is None:
+            return None
+
+        if hasattr(x, '__len__') or not x.free_symbols:
+            return sympy.Array(numpy.broadcast_to(x, shape))[idx]
+
+    def _eval_Integral(self, *symbols, **assumptions):
+        x, shape, idx = self.args
+        return IndexedBroadcast(sympy.Integral(x, *symbols, **assumptions), shape, idx)
+
+    def _eval_derivative(self, sym):
+        x, shape, idx = self.args
+        return IndexedBroadcast(sympy.diff(x, sym), shape, idx)
+
+    def _eval_is_commutative(self):
+        x, shape, idx = self.args
+        result = self.eval(*self.args)
+        if result is None:
+            return x.is_commutative
+        else:
+            return result.is_commutative
+
+    def _numpycode(self, printer, **kwargs):
+        x, shape, idx = map(functools.partial(printer._print, **kwargs), self.args)
+        return f'broadcast_to({x}, {shape})[{idx}]'
 
 
 class Len(sympy.Function):
@@ -121,7 +167,8 @@ Len.__name__ = 'len'
 
 sympify_namespace = {'len': Len,
                      'Len': Len,
-                     'Broadcast': Broadcast}
+                     'Broadcast': Broadcast,
+                     'IndexedBroadcast': IndexedBroadcast}
 
 
 def numpy_compatible_mul(*args) -> Union[sympy.Mul, sympy.Array]:
@@ -187,7 +234,7 @@ def sympify(expr: Union[str, Number, sympy.Expr, numpy.str_], **kwargs) -> sympy
         if True:#err.args[0] == "'Symbol' object is not subscriptable":
 
             indexed_base = get_subscripted_symbols(expr)
-            return sympy.sympify(expr, **kwargs, locals={**{k: sympy.IndexedBase(k)
+            return sympy.sympify(expr, **kwargs, locals={**{k: k if isinstance(k, Broadcast) else sympy.IndexedBase(k)
                                                             for k in indexed_base},
                                                          **sympify_namespace})
 
@@ -302,3 +349,27 @@ def almost_equal(lhs: sympy.Expr, rhs: sympy.Expr, epsilon: float=1e-15) -> Opti
         return False
     else:
         return None
+
+
+class UnsupportedBroadcastArgumentWarning(RuntimeWarning):
+    pass
+
+
+def _parse_broadcast_shape(shape: Tuple[int], user: type) -> Optional[Tuple[int]]:
+    try:
+        return tuple(map(int, shape))
+    except TypeError as err:
+        warnings.warn(f"The shape passed to {user.__module__}.{user.__name__} is not convertible to a tuple of integers: {err}\n"
+                      "Be aware that using a symbolic shape can lead to unexpected behaviour.",
+                      category=UnsupportedBroadcastArgumentWarning)
+    return None
+
+
+def _parse_broadcast_index(idx: int, user: type) -> Optional[int]:
+    try:
+        return int(idx)
+    except TypeError as err:
+        warnings.warn(f"The index passed to {user.__module__}.{user.__name__} is not convertible to an integer: {err}\n"
+                      "Be aware that using a symbolic index can lead to unexpected behaviour.",
+                      category=UnsupportedBroadcastArgumentWarning)
+    return None

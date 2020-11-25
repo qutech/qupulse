@@ -6,12 +6,11 @@ import numbers
 import sympy
 import numpy as np
 
-from qupulse.utils.sympy import Broadcast
+from qupulse.utils.sympy import IndexedBroadcast
 from qupulse.utils.types import ChannelID
 from qupulse.expressions import Expression, ExpressionScalar
 from qupulse._program.waveforms import TableWaveform, TableWaveformEntry
-from qupulse.pulses.parameters import Parameter, ParameterNotProvidedException, ParameterConstraint,\
-    ParameterConstrainer
+from qupulse.pulses.parameters import ParameterConstraint, ParameterConstrainer
 from qupulse.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration
 from qupulse.pulses.table_pulse_template import TableEntry, EntryInInit
 from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
@@ -145,7 +144,7 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
                 try:
                     return v.underlying_expression[i]
                 except TypeError:
-                    return sympy.IndexedBase(Broadcast(v.underlying_expression, shape))[i]
+                    return IndexedBroadcast(v.underlying_expression, shape, i)
             pre_entry = TableEntry(0, self._entries[0].v, None)
             entries = [pre_entry] + self._entries
             expressions[channel] = TableEntry._sequence_integral(entries, expression_extractor=value_trafo)
@@ -161,7 +160,7 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
                 try:
                     return v.underlying_expression[i]
                 except TypeError:
-                    return sympy.IndexedBase(Broadcast(v.underlying_expression, shape))[i]
+                    return IndexedBroadcast(v.underlying_expression, shape, i)
             pre_value = value_trafo(self._entries[0].v)
             post_value = value_trafo(self._entries[-1].v)
             pw = TableEntry._sequence_as_expression(self._entries,
