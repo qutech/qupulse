@@ -9,6 +9,7 @@ import collections
 import operator
 
 import numpy
+import sympy
 
 import qupulse.utils.numeric as qupulse_numeric
 
@@ -33,7 +34,7 @@ def _with_other_as_time_type(fn):
     """This is decorator to convert the other argument and the result into a :class:`TimeType`"""
     @functools.wraps(fn)
     def wrapper(self, other) -> 'TimeType':
-        converted = _converter.get(type(other), TimeType)(other)
+        converted = _converter.get(type(other), TimeType._try_from_any)(other)
         result = fn(self, converted)
         if result is NotImplemented:
             return result
@@ -58,7 +59,57 @@ class TimeType:
         if type(getattr(value, '_value', None)) is self._InternalType:
             self._value = value._value
         else:
-            self._value = self._to_internal(value)
+            try:
+                self._value = self._to_internal(value)
+            except TypeError as err:
+                raise TypeError(f'Could not create TimeType from {value} of type {type(value)}') from err
+
+    @classmethod
+    def _try_from_any(cls, any: typing.Any):
+        try:
+            cls(any)
+        except TypeError:
+            pass
+
+        # duck type rational
+        if hasattr(any, 'numerator') and hasattr(any, 'denominator'):
+            # sympy.Rational has callables...
+            numerator = any.numerator() if callable(any.numerator) else any.numerator
+            denominator = any.denominator() if callable(any.denominator) else any.denominator
+            return cls.from_fraction(int(numerator), int(denominator))
+
+        # test if objects subclass number
+        if isinstance(any, numbers.Integral):
+            return cls.from_fraction(int(any), 1)
+        if isinstance(any, numbers.Real):
+            return cls.from_float(float(any))
+
+        # test for array
+        if isinstance(any, numpy.ndarray):
+            return numpy.vectorize(cls._try_from_any)(any)
+
+        # try conversion to int and float. gmpy2's answer to isinstance is version dependent
+        try:
+            as_int = int(any)
+        except (TypeError, ValueError, RuntimeError):
+            as_int = None
+        try:
+            as_float = float(any)
+        except (TypeError, ValueError, RuntimeError):
+            as_float = None
+
+        if as_int is None and as_float is not None:
+            return cls.from_float(as_float)
+        elif as_int is not None and as_float is None:
+            return cls.from_fraction(as_int, 1)
+        elif as_int is not None and as_float is not None:
+            if as_float.is_integer():
+                return cls.from_fraction(as_int, 1)
+            elif int(as_float) == as_int:
+                return cls.from_float(as_float)
+
+        # for error message
+        return cls(any)
 
     @property
     def numerator(self):
@@ -67,6 +118,10 @@ class TimeType:
     @property
     def denominator(self):
         return self._value.denominator
+
+    def _sympy_(self):
+        import sympy
+        return sympy.Rational(self.numerator, self.denominator)
 
     def __round__(self, *args, **kwargs):
         return self._value.__round__(*args, **kwargs)
@@ -247,6 +302,9 @@ numbers.Rational.register(TimeType)
 
 _converter = {
     float: TimeType.from_float,
+    TimeType._InternalType: TimeType,
+    fractions.Fraction: TimeType,
+    sympy.Rational: lambda q: TimeType.from_fraction(q.p, q.q),
     TimeType: lambda x: x
 }
 

@@ -5,6 +5,7 @@ Classes:
 """
 
 import itertools
+from numbers import Real
 from abc import ABCMeta, abstractmethod
 from weakref import WeakValueDictionary, ref
 from typing import Union, Set, Sequence, NamedTuple, Tuple, Any, Iterable, FrozenSet, Optional, Mapping, AbstractSet
@@ -138,7 +139,7 @@ class Waveform(Comparable, metaclass=ABCMeta):
         return self
 
 
-class TableWaveformEntry(NamedTuple('TableWaveformEntry', [('t', float),
+class TableWaveformEntry(NamedTuple('TableWaveformEntry', [('t', Real),
                                                            ('v', float),
                                                            ('interp', InterpolationStrategy)])):
     def __init__(self, t: float, v: float, interp: InterpolationStrategy):
@@ -225,7 +226,9 @@ class TableWaveform(Waveform):
             indices = slice(np.searchsorted(sample_times, entry1.t, 'left'),
                             np.searchsorted(sample_times, entry2.t, 'right'))
             output_array[indices] = \
-                entry2.interp((entry1.t, entry1.v), (entry2.t, entry2.v), sample_times[indices])
+                entry2.interp((float(entry1.t), entry1.v),
+                              (float(entry2.t), entry2.v),
+                              sample_times[indices])
         return output_array
 
     @property

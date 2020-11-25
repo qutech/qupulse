@@ -14,7 +14,7 @@ import numpy
 
 from qupulse.serialization import AnonymousSerializable
 from qupulse.utils.sympy import sympify, to_numpy, recursive_substitution, evaluate_lambdified,\
-    get_most_simple_representation, get_variables
+    get_most_simple_representation, get_variables, evaluate_lamdified_exact_rational
 from qupulse.utils.types import TimeType
 
 __all__ = ["Expression", "ExpressionVariableMissingException", "ExpressionScalar", "ExpressionVector", "ExpressionLike"]
@@ -250,6 +250,7 @@ class ExpressionScalar(Expression):
             self._sympified_expression = sympify(ex)
 
         self._variables = get_variables(self._sympified_expression)
+        self._exact_rational_lambdified = None
 
     @property
     def underlying_expression(self) -> sympy.Expr:
@@ -356,6 +357,14 @@ class ExpressionScalar(Expression):
             return parsed[()]
         else:
             return parsed
+
+    def evaluate_with_exact_rationals(self, scope: Mapping) -> Number:
+        parsed_kwargs = self._parse_evaluate_numeric_arguments(scope)
+        result, self._exact_rational_lambdified = evaluate_lamdified_exact_rational(self.sympified_expression,
+                                                                                    self.variables,
+                                                                                    parsed_kwargs,
+                                                                                    self._exact_rational_lambdified)
+        return self._parse_evaluate_numeric_result(result, scope)
 
 
 class ExpressionVariableMissingException(Exception):

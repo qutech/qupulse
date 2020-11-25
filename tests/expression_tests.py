@@ -5,7 +5,7 @@ import numpy as np
 from sympy import sympify, Eq
 
 from qupulse.expressions import Expression, ExpressionVariableMissingException, NonNumericEvaluation, ExpressionScalar, ExpressionVector
-
+from qupulse.utils.types import TimeType
 
 class ExpressionTests(unittest.TestCase):
     def test_make(self):
@@ -388,6 +388,17 @@ class ExpressionScalarTests(unittest.TestCase):
         result = expr.evaluate_numeric(t=data)
 
         np.testing.assert_allclose(expected, result)
+
+    def test_evaluate_with_exact_rationals(self):
+        expr = ExpressionScalar('1 / 3')
+        self.assertEqual(TimeType.from_fraction(1, 3), expr.evaluate_with_exact_rationals({}))
+
+        expr = ExpressionScalar('a * (1 / 3)')
+        self.assertEqual(TimeType.from_fraction(2, 3), expr.evaluate_with_exact_rationals({'a': 2}))
+
+        expr = ExpressionScalar('dot(a, b) * (1 / 3)')
+        self.assertEqual(TimeType.from_fraction(10, 3),
+                         expr.evaluate_with_exact_rationals({'a': [2, 2], 'b': [1, 4]}))
 
 
 class ExpressionExceptionTests(unittest.TestCase):
