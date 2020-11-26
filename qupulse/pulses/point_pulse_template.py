@@ -171,6 +171,22 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
             expressions[channel] = pw
         return expressions
 
+    @property
+    def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        shape = (len(self._channels),)
+        return {
+            ch: IndexedBroadcast(self._entries[0].v, shape, ch_idx)
+            for ch_idx, ch in enumerate(self._channels)
+        }
+
+    @property
+    def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        shape = (len(self._channels),)
+        return {
+            ch: IndexedBroadcast(self._entries[-1].v, shape, ch_idx)
+            for ch_idx, ch in enumerate(self._channels)
+        }
+
 
 class InvalidPointDimension(Exception):
     def __init__(self, expected, received):

@@ -271,5 +271,13 @@ class DummyPulseTemplate(AtomicPulseTemplate):
         assert self.duration != 0
         t = self._AS_EXPRESSION_TIME
         duration = self.duration.underlying_expression
-        return {ch: ExpressionScalar(integral.underlying_expression*t/duration)
+        return {ch: ExpressionScalar(integral.underlying_expression*t/duration**2 * 2)
                 for ch, integral in self.integral.items()}
+
+    @property
+    def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        return self.integral
+
+    @property
+    def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        return self.integral

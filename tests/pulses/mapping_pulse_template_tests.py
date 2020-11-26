@@ -253,6 +253,12 @@ class MappingTemplateTests(unittest.TestCase):
 
         self.assertEqual({'a': Expression('2*f'), 'B': Expression('-3.2*f+2.3')}, pulse.integral)
 
+    def test_initial_values(self):
+        raise NotImplementedError()
+
+    def test_final_values(self):
+        raise NotImplementedError()
+
     def test_as_expression(self):
         from sympy.abc import f, k, b
         duration = 5

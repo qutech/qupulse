@@ -116,6 +116,12 @@ class SequencePulseTemplateTest(unittest.TestCase):
 
         self.assertEqual({'A': ExpressionScalar('k+2*b+7*(b-f)'), 'B': ExpressionScalar('0.24*f')}, pulse.integral)
 
+    def test_initial_values(self):
+        raise NotImplementedError()
+
+    def test_final_values(self):
+        raise NotImplementedError()
+
     def test_concatenate(self):
         a = DummyPulseTemplate(parameter_names={'foo'}, defined_channels={'A'})
         b = DummyPulseTemplate(parameter_names={'bar'}, defined_channels={'A'})

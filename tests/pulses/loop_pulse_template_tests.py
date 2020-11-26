@@ -177,6 +177,12 @@ class ForLoopPulseTemplateTest(unittest.TestCase):
                     'B': ExpressionScalar('Sum((1+2*i), (i, 0, 3))') }
         self.assertEqual(expected, pulse.integral)
 
+    def test_initial_values(self):
+        raise NotImplementedError()
+
+    def test_final_values(self):
+        raise NotImplementedError()
+
 
 class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
     def test_create_program_constraint_on_loop_var_exception(self):

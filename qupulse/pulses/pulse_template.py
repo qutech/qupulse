@@ -94,6 +94,16 @@ class PulseTemplate(Serializable):
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
         """Returns an expression giving the integral over the pulse."""
 
+    @property
+    @abstractmethod
+    def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        """Values of defined channels at t == 0"""
+
+    @property
+    @abstractmethod
+    def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        """Values of defined channels at t == self.duration"""
+
     def create_program(self, *,
                        parameters: Optional[Mapping[str, Union[Expression, str, Number, ConstantParameter]]]=None,
                        measurement_mapping: Optional[Mapping[str, Optional[str]]]=None,
@@ -353,6 +363,27 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
     def _as_expression(self) -> Dict[ChannelID, ExpressionScalar]:
         """Helper function to allow integral calculation in case of truncation. AtomicPulseTemplate._AS_EXPRESSION_TIME
         is by convention the time variable."""
+
+    @property
+    def integral(self) -> Dict[ChannelID, ExpressionScalar]:
+        # this default implementation uses _as_expression
+        return {ch: ExpressionScalar(sympy.integrate(expr.sympified_expression,
+                                                     (self._AS_EXPRESSION_TIME, 0, self.duration.sympified_expression)))
+                for ch, expr in self._as_expression().items()}
+
+    @property
+    def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        values = self._as_expression()
+        for ch, value in values.items():
+            values[ch] = value.evaluate_symbolic({self._AS_EXPRESSION_TIME: 0})
+        return values
+
+    @property
+    def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        values = self._as_expression()
+        for ch, value in values.items():
+            values[ch] = value.evaluate_symbolic({self._AS_EXPRESSION_TIME: self.duration})
+        return values
 
 
 class DoubleParameterNameException(Exception):

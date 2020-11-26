@@ -475,6 +475,12 @@ class TablePulseTemplateTest(unittest.TestCase):
 
         self.assertEqual(expected, pulse.integral)
 
+    def test_initial_values(self):
+        raise NotImplementedError()
+
+    def test_final_values(self):
+        raise NotImplementedError()
+
     def test_as_expression(self):
         pulse = TablePulseTemplate(entries={0: [(0, 0), (1, 2), (3, 0, 'linear'), (4, 2, 'jump'), (5, 8, 'hold')],
                                             'other_channel': [(0, 7), (2, 0, 'linear'), (10, 0)],

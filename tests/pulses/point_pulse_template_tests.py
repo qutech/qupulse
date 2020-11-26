@@ -104,6 +104,12 @@ class PointPulseTemplateTests(unittest.TestCase):
                           'Y': 2 * (4.1 + 4) / 2 + (5 - 2) * 4},
                          integral)
 
+    def test_initial_values(self):
+        raise NotImplementedError()
+
+    def test_final_values(self):
+        raise NotImplementedError()
+
 
 class PointPulseTemplateSequencingTests(unittest.TestCase):
     def test_build_waveform_empty(self):

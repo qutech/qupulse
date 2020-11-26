@@ -442,6 +442,16 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
                                                                       post_value=post_value)
         return expressions
 
+    @property
+    def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        return {ch: entries[0].v
+                for ch, entries in self._entries.items()}
+
+    @property
+    def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        return {ch: entries[-1].v
+                for ch, entries in self._entries.items()}
+
 
 def concatenate(*table_pulse_templates: TablePulseTemplate, **kwargs) -> TablePulseTemplate:
     """Concatenate two or more table pulse templates"""

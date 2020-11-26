@@ -146,6 +146,10 @@ class AbstractPulseTemplate(PulseTemplate):
                         doc=_PROPERTY_DOC.format(name='integral'))
     parameter_names = property(partial(_get_property, property_name='parameter_names'),
                                doc=_PROPERTY_DOC.format(name='parameter_names'))
+    initial_values = property(partial(_get_property, property_name='initial_values'),
+                              doc=_PROPERTY_DOC.format(name='initial_values'))
+    final_values = property(partial(_get_property, property_name='final_values'),
+                            doc=_PROPERTY_DOC.format(name='final_values'))
 
 
 class NotSpecifiedError(RuntimeError):

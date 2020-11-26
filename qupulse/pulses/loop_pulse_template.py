@@ -283,6 +283,24 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
 
         return body_integrals
 
+    @property
+    def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        values = self.body.initial_values
+        initial_idx = self._loop_range.start
+        for ch, value in values.items():
+            values[ch] = ExpressionScalar(value.underlying_expression.subs(self._loop_index, initial_idx))
+        return values
+
+    @property
+    def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        values = self.body.initial_values
+        start, step, stop = self._loop_range.start.sympified_expression, self._loop_range.step.sympified_expression, self._loop_range.stop.sympified_expression
+        n = (stop - start) // step
+        final_idx = start + sympy.Max(n - 1, 0) * step
+        for ch, value in values.items():
+            values[ch] = ExpressionScalar(value.underlying_expression.subs(self._loop_index, final_idx))
+        return values
+
 
 class LoopIndexNotUsedException(Exception):
     def __init__(self, loop_index: str, body_parameter_names: Set[str]):

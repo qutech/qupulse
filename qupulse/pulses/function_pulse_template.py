@@ -151,4 +151,14 @@ class FunctionPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
         expr = ExpressionScalar.make(self.__expression.underlying_expression.subs({'t': self._AS_EXPRESSION_TIME}))
         return {self.__channel: expr}
 
+    @property
+    def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        expr = ExpressionScalar.make(self.__expression.underlying_expression.subs('t', 0))
+        return {self.__channel: expr}
+
+    @property
+    def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        expr = ExpressionScalar.make(self.__expression.underlying_expression.subs('t', self.__duration_expression.underlying_expression))
+        return {self.__channel: expr}
+
 
