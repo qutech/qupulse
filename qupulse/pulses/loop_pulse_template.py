@@ -18,7 +18,7 @@ from qupulse._program._loop import Loop
 from qupulse.expressions import ExpressionScalar, ExpressionVariableMissingException
 from qupulse.utils import checked_int_cast
 from qupulse.pulses.parameters import InvalidParameterNameException, ParameterConstrainer, ParameterNotProvidedException
-from qupulse.pulses.pulse_template import PulseTemplate, ChannelID, AtomicPulseTemplate
+from qupulse.pulses.pulse_template import PulseTemplate, ChannelID, BuildRequirement, BuildContext
 from qupulse._program.waveforms import SequenceWaveform as ForLoopWaveform
 from qupulse.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
 
@@ -300,6 +300,19 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
         for ch, value in values.items():
             values[ch] = ExpressionScalar(value.underlying_expression.subs(self._loop_index, final_idx))
         return values
+
+    def required_context(self) -> BuildRequirement:
+        required = self.body.required_context()
+        if required.previous or required.next:
+            raise NotImplementedError("ForLoopPulseTemplates do not support reference to previous or next pulse"
+                                      "templates yet")
+        return required
+
+    def build(self, context: BuildContext) -> PulseTemplate:
+        with context.with_parent(self) as inner_context:
+            serialized = self.get_serialization_data()
+            serialized['body'] = self.body.build(inner_context)
+        return ForLoopPulseTemplate(**serialized, registry=context.pulse_registry)
 
 
 class LoopIndexNotUsedException(Exception):

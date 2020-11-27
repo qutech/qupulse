@@ -14,7 +14,7 @@ from qupulse.parameter_scope import Scope
 from qupulse.utils.types import ChannelID
 from qupulse.expressions import ExpressionScalar
 from qupulse.utils import checked_int_cast
-from qupulse.pulses.pulse_template import PulseTemplate
+from qupulse.pulses.pulse_template import PulseTemplate, BuildRequirement, BuildContext
 from qupulse.pulses.loop_pulse_template import LoopPulseTemplate
 from qupulse.pulses.parameters import Parameter, ParameterConstrainer, ParameterNotProvidedException, MappedParameter
 from qupulse.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
@@ -169,6 +169,19 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
     @property
     def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
         return self.body.final_values
+
+    def required_context(self) -> BuildRequirement:
+        required = self.body.required_context()
+        if required.previous or required.next:
+            raise NotImplementedError("RepetitionPulseTemplates do not support reference to previous or next pulse"
+                                      "templates yet")
+        return required
+
+    def build(self, context: BuildContext) -> PulseTemplate:
+        with context.with_parent(self) as inner_context:
+            serialized = self.get_serialization_data()
+            serialized['body'] = self.body.build(inner_context)
+        return RepetitionPulseTemplate(**serialized, registry=context.pulse_registry)
 
 
 class ParameterNotIntegerException(Exception):

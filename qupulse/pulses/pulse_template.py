@@ -11,11 +11,13 @@ from typing import Dict, Tuple, Set, Optional, Union, List, Callable, Any, Gener
 import itertools
 import collections
 from numbers import Real, Number
+from dataclasses import dataclass, field
+import contextlib
 
 import sympy
 
 from qupulse.utils.types import ChannelID, DocStringABCMeta, FrozenDict
-from qupulse.serialization import Serializable
+from qupulse.serialization import Serializable, PulseRegistryType
 from qupulse.expressions import ExpressionScalar, Expression, ExpressionLike
 from qupulse._program._loop import Loop, to_waveform
 from qupulse._program.transformation import Transformation, IdentityTransformation, ChainedTransformation, chain_transformations
@@ -34,7 +36,25 @@ MappingTuple = Union[Tuple['PulseTemplate'],
                      Tuple['PulseTemplate', Dict, Dict, Dict]]
 
 
-class PulseTemplate(Serializable):
+class Buildable:
+    """This is the base class for build helper objects. Build helper objects do not know their duration and values by
+    them selves. Their properties depend on the surrounding pulse templates."""
+
+    @abstractmethod
+    def build(self, context: 'BuildContext') -> 'PulseTemplate':
+        """"""
+
+    @abstractmethod
+    def required_context(self) -> 'BuildRequirement':
+        """Returns false-like if no build is required"""
+
+    @abstractmethod
+    @property
+    def duration(self) -> ExpressionScalar:
+        """"""
+
+
+class PulseTemplate(Serializable, Buildable):
     """A PulseTemplate represents the parametrized general structure of a pulse.
 
     A PulseTemplate described a pulse in an abstract way: It defines the structure of a pulse
@@ -385,9 +405,14 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
             values[ch] = value.evaluate_symbolic({self._AS_EXPRESSION_TIME: self.duration})
         return values
 
+    def required_context(self) -> 'BuildRequirement':
+        return BuildRequirement()
+
+    def build(self, context: 'BuildContext') -> 'PulseTemplate':
+        return self
+
 
 class DoubleParameterNameException(Exception):
-
     def __init__(self, templateA: PulseTemplate, templateB: PulseTemplate, names: Set[str]) -> None:
         super().__init__()
         self.templateA = templateA
@@ -399,4 +424,40 @@ class DoubleParameterNameException(Exception):
                "Both define the following parameter names: {}".format(
             self.templateA, self.templateB, ', '.join(self.names)
         )
+
+
+@dataclass(frozen=False)
+class BuildContext:
+    """Describes what is the context a build is called with i.e. the surrounding and encapsulationg  pulse templates"""
+    parents: List[PulseTemplate] = field(default_factory=list)
+    previous: Optional[PulseTemplate] = None
+    next: Optional[PulseTemplate] = None
+    pulse_registry: PulseRegistryType = None
+
+    @contextlib.contextmanager
+    def with_parent(self, additional_parent: PulseTemplate):
+        self.parents.append(additional_parent)
+        try:
+            yield self
+        finally:
+            self.parents.pop()
+
+
+@dataclass
+class BuildRequirement:
+    parent: bool = False
+    previous: bool = False
+    next: bool = False
+
+    def __bool__(self):
+        return self.parent or self.previous or self.next
+
+    def __or__(self, other: 'BuildRequirement'):
+        return BuildRequirement(
+            parent=self.parent or other.parent,
+            previous=self.previous or other.previous,
+            next=self.next or other.next
+        )
+
+
 

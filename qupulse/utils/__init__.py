@@ -4,7 +4,7 @@ from typing import Union, Iterable, Any, Tuple, Mapping
 import itertools
 import re
 import numbers
-from collections import OrderedDict
+from collections import OrderedDict, deque
 
 import numpy
 
@@ -58,6 +58,16 @@ def pairwise(iterable: Iterable[Any],
     a, b = itertools.tee(iterable)
     next(b, None)
     return zip_function(a, b, **kwargs)
+
+
+def window(iterable, n):
+    assert n > 0
+    it = iter(iterable)
+    state = deque(itertools.islice(it, 0, n - 1), maxlen=n)
+    for new_element in it:
+        state.append(new_element)
+        yield tuple(state)
+        state.popleft()
 
 
 def replace_multiple(s: str, replacements: Mapping[str, str]) -> str:

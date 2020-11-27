@@ -5,7 +5,9 @@ import numpy as np
 from typing import Dict, List, Set, Optional, Any, Iterable, Union, Callable, cast
 from numbers import Real
 import functools
+import itertools
 import warnings
+import dataclasses
 
 from cached_property import cached_property
 
@@ -13,12 +15,13 @@ from qupulse.serialization import Serializer, PulseRegistryType
 from qupulse._program._loop import Loop
 from qupulse.parameter_scope import Scope
 from qupulse.utils.types import MeasurementWindow, ChannelID, TimeType
-from qupulse.pulses.pulse_template import PulseTemplate, AtomicPulseTemplate
+from qupulse.pulses.pulse_template import PulseTemplate, BuildContext, BuildRequirement
 from qupulse.pulses.parameters import Parameter, ParameterConstrainer, ParameterNotProvidedException
 from qupulse.pulses.mapping_pulse_template import MappingPulseTemplate, MappingTuple
 from qupulse._program.waveforms import SequenceWaveform
 from qupulse.pulses.measurement import MeasurementDeclaration, MeasurementDefiner
 from qupulse.expressions import Expression, ExpressionScalar
+from qupulse.utils import window
 
 __all__ = ["SequencePulseTemplate"]
 
@@ -204,3 +207,26 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
     def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
         return self.__subtemplates[-1].final_values
 
+    def required_context(self) -> BuildRequirement:
+        first_required = self.__subtemplates[0].required_context()
+        last_required = self.__subtemplates[-1].required_context()
+
+        return BuildRequirement(
+            previous=first_required.previous,
+            next=last_required.next,
+            parent=first_required.parent or last_required.parent or any(pt for pt in itertools.islice(self.__subtemplates, 1, len(self.__subtemplates) - 1))
+        )
+
+    def build(self, context: BuildContext) -> PulseTemplate:
+        serialized = self.get_serialization_data()
+        subtemplates = serialized.pop('subtemplates')
+
+        with_neighbours = itertools.chain([context.previous], self.__subtemplates, [context.next])
+
+        with context.with_parent(self) as inner_context:
+            for idx, (previous_pt, current_pt, next_pt) in enumerate(window(with_neighbours, 3)):
+                inner_context = dataclasses.replace(inner_context,
+                                                    previous=previous_pt,
+                                                    next=next_pt)
+                subtemplates[idx] = current_pt.build(inner_context)
+        return SequencePulseTemplate(*subtemplates, **serialized, registry=context.pulse_registry)

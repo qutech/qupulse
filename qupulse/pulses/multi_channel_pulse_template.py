@@ -19,7 +19,7 @@ from qupulse.utils.sympy import almost_equal, Sympifyable
 from qupulse.utils.types import ChannelID, TimeType
 from qupulse._program.waveforms import MultiChannelWaveform, Waveform, TransformingWaveform
 from qupulse._program.transformation import ParallelConstantChannelTransformation, Transformation, chain_transformations
-from qupulse.pulses.pulse_template import PulseTemplate, AtomicPulseTemplate
+from qupulse.pulses.pulse_template import PulseTemplate, AtomicPulseTemplate, BuildContext, BuildRequirement
 from qupulse.pulses.mapping_pulse_template import MappingPulseTemplate, MappingTuple
 from qupulse.pulses.parameters import Parameter, ParameterConstrainer
 from qupulse.pulses.measurement import MeasurementDeclaration, MeasurementWindow
@@ -320,6 +320,15 @@ class ParallelConstantChannelPulseTemplate(PulseTemplate):
         data['template'] = self._template
         data['overwritten_channels'] = self._overwritten_channels
         return data
+
+    def required_context(self) -> BuildRequirement:
+        return self._template.required_context()
+
+    def build(self, context: BuildContext) -> PulseTemplate:
+        serialized = self.get_serialization_data()
+        with context.with_parent(self) as inner_context:
+            serialized['template'] = self.__template.build(inner_context)
+        return ParallelConstantChannelPulseTemplate(**serialized, registry=context.pulse_registry)
 
 
 class ChannelMappingException(Exception):

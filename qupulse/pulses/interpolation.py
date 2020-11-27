@@ -10,7 +10,9 @@ Classes:
 
 from abc import ABCMeta, abstractmethod
 from typing import Any, Tuple
+
 import numpy as np
+import sympy
 
 from qupulse.expressions import ExpressionScalar
 
@@ -152,3 +154,38 @@ class JumpInterpolationStrategy(InterpolationStrategy):
 
     def __repr__(self) -> str:
         return "<Jump Interpolation>"
+
+
+class SinusoidalInterpolationStrategy(InterpolationStrategy):
+    def __call__(self,
+                 start: Tuple[float, float],
+                 end: Tuple[float, float],
+                 times: np.ndarray) -> np.ndarray:
+        if np.any(times < start[0]) or np.any(times > end[0]):
+            raise ValueError(
+                "Time Value for interpolation out of bounds. Must be between {0} and {1}.".format(
+                    start[0], end[0]
+                )
+            )
+        result = times - start[0]
+        result /= (end[0] - start[0]) / np.pi
+        result = np.cos(result, out=result)
+        result += 1
+        result *= -0.5 * (end[1] - start[1])
+        result += start[1]
+        return result
+
+    @property
+    def integral(self) -> ExpressionScalar:
+        return ExpressionScalar(sympy.integrate(self.expression.sympified_expression, ('t', 't0', 't1')))
+
+    @property
+    def expression(self) -> ExpressionScalar:
+        raise NotImplementedError()
+        return ExpressionScalar('v0 + (v1 - v0)*(Cos(t * Pi / (t1 - t0)) + 1)')
+
+    def __str__(self) -> str:
+        return 'sin'
+
+    def __repr__(self) -> str:
+        return "<Sin Interpolation>"

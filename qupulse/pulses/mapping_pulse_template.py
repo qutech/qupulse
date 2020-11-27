@@ -6,7 +6,7 @@ import collections
 from qupulse.utils.types import ChannelID, FrozenDict, FrozenMapping
 from qupulse.expressions import Expression, ExpressionScalar
 from qupulse.parameter_scope import Scope, MappedScope
-from qupulse.pulses.pulse_template import PulseTemplate, MappingTuple
+from qupulse.pulses.pulse_template import PulseTemplate, MappingTuple, BuildContext, BuildRequirement
 from qupulse.pulses.parameters import Parameter, MappedParameter, ParameterNotProvidedException, ParameterConstrainer
 from qupulse._program.waveforms import Waveform
 from qupulse._program._loop import Loop
@@ -368,6 +368,15 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
     @property
     def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
         return self._apply_mapping_to_inner_channel_dict(self.__template.final_values)
+
+    def required_context(self) -> BuildRequirement:
+        return self.__template.required_context()
+
+    def build(self, context: BuildContext) -> PulseTemplate:
+        serialized = self.get_serialization_data()
+        with context.with_parent(self) as inner_context:
+            serialized['template'] = self.__template.build(inner_context)
+        return MappingPulseTemplate(**serialized, registry=context.pulse_registry)
 
 
 class MissingMappingException(Exception):
