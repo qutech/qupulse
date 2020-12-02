@@ -130,13 +130,8 @@ class HDAWGRepresentation:
         return self._dev_ser
 
     def _initialize(self) -> None:
-        settings = []
-        settings.append(['/{}/awgs/*/time'.format(self.serial), 0])  # Maximum sampling rate.
-        settings.append(['/{}/sigouts/*/range'.format(self.serial), HDAWGVoltageRange.RNG_1V.value])
-        settings.append(['/{}/awgs/*/outputs/*/amplitude'.format(self.serial), 1.0])  # Default amplitude factor 1.0
-        settings.append(['/{}/awgs/*/outputs/*/modulation/mode'.format(self.serial), HDAWGModulationMode.OFF.value])
-        settings.append(['/{}/awgs/*/userregs/*'.format(self.serial), 0])  # Reset all user registers to 0.
-        settings.append(['/{}/awgs/*/single'.format(self.serial), 1])  # Single execution mode of sequence.
+        settings = [(f'/{self.serial}/awgs/*/userregs/*', 0),  # Reset all user registers to 0.
+                    (f'/{self.serial}/*/single', 1)]  # Single execution mode of sequence.
         for ch in range(0, 8):  # Route marker 1 signal for each channel to marker output.
             if ch % 2 == 0:
                 output = HDAWGTriggerOutSource.OUT_1_MARK_1.value
@@ -152,6 +147,23 @@ class HDAWGRepresentation:
         self._initialize()
         for tuple in self.channel_tuples:
             tuple.clear()
+        self.api_session.set([
+            (f'/{self.serial}/awgs/*/time', 0),
+            (f'/{self.serial}/sigouts/*/range', HDAWGVoltageRange.RNG_1V.value),
+            (f'/{self.serial}/awgs/*/outputs/*/amplitude', 1.0),
+            (f'/{self.serial}/outputs/*/modulation/mode', HDAWGModulationMode.OFF.value),
+        ])
+
+        # marker outputs
+        marker_settings = []
+        for ch in range(0, 8):  # Route marker 1 signal for each channel to marker output.
+            if ch % 2 == 0:
+                output = HDAWGTriggerOutSource.OUT_1_MARK_1.value
+            else:
+                output = HDAWGTriggerOutSource.OUT_1_MARK_2.value
+            marker_settings.append([f'/{self.serial}/triggers/out/{ch}/source', output])
+        self.api_session.set(marker_settings)
+        self.api_session.sync()
 
     def group_name(self, group_idx, group_size) -> str:
         return str(self.serial) + '_' + 'ABCDEFGH'[group_idx*group_size:][:group_size]
