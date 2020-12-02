@@ -26,7 +26,6 @@ import warnings
 # Beware of the string encoding change!
 import teawg
 
-# What does this mean?
 assert (sys.byteorder == "little")
 
 __all__ = ["TaborDevice", "TaborChannelTuple", "TaborChannel"]
@@ -83,9 +82,39 @@ class TaborSCPI(SCPI):
 
     def send_query(self, query_str, query_mirrors=False) -> Any:
         if query_mirrors:
-            return tuple(instr.send_query(query_str) for instr in self.all_devices)
+            return tuple(instr.send_query(query_str) for instr in self._parent().all_devices)
         else:
             return self._parent().main_instrument.send_query(query_str)
+
+    def _send_cmd(self, cmd_str, paranoia_level=None) -> Any:
+        """Overwrite send_cmd for paranoia_level > 3"""
+        if paranoia_level is None:
+            paranoia_level = self._parent().paranoia_level
+
+        if paranoia_level < 3:
+            self._parent().super().send_cmd(cmd_str=cmd_str, paranoia_level=paranoia_level)  # pragma: no cover
+        else:
+            cmd_str = cmd_str.rstrip()
+
+            if len(cmd_str) > 0:
+                ask_str = cmd_str + "; *OPC?; :SYST:ERR?"
+            else:
+                ask_str = "*OPC?; :SYST:ERR?"
+
+            *answers, opc, error_code_msg = self._parent()._visa_inst.ask(ask_str).split(";")
+
+            error_code, error_msg = error_code_msg.split(",")
+            error_code = int(error_code)
+            if error_code != 0:
+                _ = self._parent()._visa_inst.ask("*CLS; *OPC?")
+
+                if error_code == -450:
+                    # query queue overflow
+                    self.send_cmd(cmd_str)
+                else:
+                    raise RuntimeError("Cannot execute command: {}\n{}: {}".format(cmd_str, error_code, error_msg))
+
+            assert len(answers) == 0
 
 
 class TaborChannelSynchronization(ChannelSynchronization):
@@ -261,9 +290,9 @@ class TaborDevice(AWGDevice):
         Thats the coupling of the device to 'coupled'
         """
         if coupled:
-            self.send_cmd("INST:COUP:STAT ON")
+            self[SCPI].send_cmd("INST:COUP:STAT ON")
         else:
-            self.send_cmd("INST:COUP:STAT OFF")
+            self[SCPI].send_cmd("INST:COUP:STAT OFF")
 
     def _is_coupled(self) -> bool:
         # TODO: comment is missing
@@ -317,10 +346,6 @@ class TaborDevice(AWGDevice):
     def dev_properties(self) -> dict:
         return self._instr.dev_properties
 
-    def send_cmd(self, cmd_str, paranoia_level=None):
-        for instr in self.all_devices:
-            instr.send_cmd(cmd_str=cmd_str, paranoia_level=paranoia_level)
-
     def _send_binary_data(self, pref, bin_dat, paranoia_level=None):
         for instr in self.all_devices:
             instr.send_binary_data(pref, bin_dat=bin_dat, paranoia_level=paranoia_level)
@@ -338,36 +363,6 @@ class TaborDevice(AWGDevice):
             instr.download_adv_seq_table(seq_table, pref=pref, paranoia_level=paranoia_level)
 
     make_combined_wave = staticmethod(teawg.TEWXAwg.make_combined_wave)
-
-    def _send_cmd(self, cmd_str, paranoia_level=None) -> Any:
-        """Overwrite send_cmd for paranoia_level > 3"""
-        if paranoia_level is None:
-            paranoia_level = self.paranoia_level
-
-        if paranoia_level < 3:
-            super().send_cmd(cmd_str=cmd_str, paranoia_level=paranoia_level)  # pragma: no cover
-        else:
-            cmd_str = cmd_str.rstrip()
-
-            if len(cmd_str) > 0:
-                ask_str = cmd_str + "; *OPC?; :SYST:ERR?"
-            else:
-                ask_str = "*OPC?; :SYST:ERR?"
-
-            *answers, opc, error_code_msg = self._visa_inst.ask(ask_str).split(";")
-
-            error_code, error_msg = error_code_msg.split(",")
-            error_code = int(error_code)
-            if error_code != 0:
-                _ = self._visa_inst.ask("*CLS; *OPC?")
-
-                if error_code == -450:
-                    # query queue overflow
-                    self.send_cmd(cmd_str)
-                else:
-                    raise RuntimeError("Cannot execute command: {}\n{}: {}".format(cmd_str, error_code, error_msg))
-
-            assert len(answers) == 0
 
     def _initialize(self) -> None:
         # TODO: work on this comment
@@ -520,7 +515,7 @@ class TaborChannel(AWGChannel):
         self._channel_tuple = weakref.ref(channel_tuple)
 
     def _select(self) -> None:
-        self.device.send_cmd(":INST:SEL {channel}".format(channel=self.idn))
+        self.device[SCPI].send_cmd(":INST:SEL {channel}".format(channel=self.idn))
 
 
 ########################################################################################################################
@@ -669,13 +664,13 @@ class TaborProgramManagement(ProgramManagement):
         """
 
         self._parent().device.channels[0]._select()
-        self._parent().device.send_cmd(":TRAC:DEL:ALL")
-        self._parent().device.send_cmd(":SOUR:SEQ:DEL:ALL")
-        self._parent().device.send_cmd(":ASEQ:DEL")
+        self._parent().device[SCPI].send_cmd(":TRAC:DEL:ALL")
+        self._parent().device[SCPI].send_cmd(":SOUR:SEQ:DEL:ALL")
+        self._parent().device[SCPI].send_cmd(":ASEQ:DEL")
 
-        self._parent().device.send_cmd(":TRAC:DEF 1, 192")
-        self._parent().device.send_cmd(":TRAC:SEL 1")
-        self._parent().device.send_cmd(":TRAC:MODE COMB")
+        self._parent().device[SCPI].send_cmd(":TRAC:DEF 1, 192")
+        self._parent().device[SCPI].send_cmd(":TRAC:SEL 1")
+        self._parent().device[SCPI].send_cmd(":TRAC:MODE COMB")
         self._parent().device._send_binary_data(pref=":TRAC:DATA", bin_dat=self._parent()._idle_segment.get_as_binary())
 
         self._parent()._segment_lengths = 192 * np.ones(1, dtype=np.uint32)
@@ -698,7 +693,7 @@ class TaborProgramManagement(ProgramManagement):
             name (str): the program the device should change to
         """
         if self._parent()._current_program == name:
-            self._parent().device.send_cmd("SEQ:SEL 1")
+            self._parent().device[SCPI].send_cmd("SEQ:SEL 1")
         else:
             self._change_armed_program(name)
 
@@ -723,10 +718,12 @@ class TaborProgramManagement(ProgramManagement):
                         self._parent()._current_program].program._repetition_mode
                     if repetition_mode is "infinite":
                         self._cont_repetition_mode()
-                        self._parent().device.send_cmd(':TRIG', paranoia_level=self._parent().internal_paranoia_level)
+                        self._parent().device[SCPI].send_cmd(':TRIG',
+                                                             paranoia_level=self._parent().internal_paranoia_level)
                     elif repetition_mode is "once":
                         self._trig_repetition_mode()
-                        self._parent().device.send_cmd(':TRIG', paranoia_level=self._parent().internal_paranoia_level)
+                        self._parent().device[SCPI].send_cmd(':TRIG',
+                                                             paranoia_level=self._parent().internal_paranoia_level)
                     else:
                         raise ValueError("{} is no vaild repetition mode".format(repetition_mode))
                 else:
@@ -742,16 +739,14 @@ class TaborProgramManagement(ProgramManagement):
                     self._parent()._current_program].program._repetition_mode
                 if repetition_mode is "infinite":
                     self._cont_repetition_mode()
-                    self._parent().device.send_cmd(':TRIG', paranoia_level=self._parent().internal_paranoia_level)
+                    self._parent().device[SCPI].send_cmd(':TRIG', paranoia_level=self._parent().internal_paranoia_level)
                 elif repetition_mode is "once":
                     self._trig_repetition_mode()
-                    self._parent().device.send_cmd(':TRIG', paranoia_level=self._parent().internal_paranoia_level)
+                    self._parent().device[SCPI].send_cmd(':TRIG', paranoia_level=self._parent().internal_paranoia_level)
                 else:
                     raise ValueError("{} is no vaild repetition mode".format(repetition_mode))
             else:
                 raise RuntimeError("No program active")
-
-
 
     @with_select
     @with_configuration_guard
@@ -785,24 +780,23 @@ class TaborProgramManagement(ProgramManagement):
                     sequencer_tables[1].append((1, 1, 0))
 
         # insert idle sequence in advanced sequence table
-        # TODO: Does it work without this line?
         advanced_sequencer_table = [(1, 1, 0)] + advanced_sequencer_table
 
         while len(advanced_sequencer_table) < self._parent().device.dev_properties["min_aseq_len"]:
             advanced_sequencer_table.append((1, 1, 0))
 
-        self._parent().device.send_cmd("SEQ:DEL:ALL", paranoia_level=self._parent().internal_paranoia_level)
+        self._parent().device[SCPI].send_cmd("SEQ:DEL:ALL", paranoia_level=self._parent().internal_paranoia_level)
         self._parent()._sequencer_tables = []
-        self._parent().device.send_cmd("ASEQ:DEL", paranoia_level=self._parent().internal_paranoia_level)
+        self._parent().device[SCPI].send_cmd("ASEQ:DEL", paranoia_level=self._parent().internal_paranoia_level)
         self._parent()._advanced_sequence_table = []
 
         # download all sequence tables
         for i, sequencer_table in enumerate(sequencer_tables):
-            self._parent().device.send_cmd("SEQ:SEL {}".format(i + 1),
-                                           paranoia_level=self._parent().internal_paranoia_level)
+            self._parent().device[SCPI].send_cmd("SEQ:SEL {}".format(i + 1),
+                                                 paranoia_level=self._parent().internal_paranoia_level)
             self._parent().device._download_sequencer_table(sequencer_table)
         self._parent()._sequencer_tables = sequencer_tables
-        self._parent().device.send_cmd("SEQ:SEL 1", paranoia_level=self._parent().internal_paranoia_level)
+        self._parent().device[SCPI].send_cmd("SEQ:SEL 1", paranoia_level=self._parent().internal_paranoia_level)
 
         self._parent().device._download_adv_seq_table(advanced_sequencer_table)
         self._parent()._advanced_sequence_table = advanced_sequencer_table
@@ -829,13 +823,16 @@ class TaborProgramManagement(ProgramManagement):
     @with_select
     def _cont_repetition_mode(self):
         """Changes the run mode of this channel tuple to continous mode"""
-        self._parent().device.send_cmd(
-            f":INIT:CONT ON; :INIT:CONT:ENAB ARM; :INIT:CONT:ENAB:SOUR {self._trigger_source}")
+        self._parent().device[SCPI].send_cmd(f":TRIG:SOUR:ADV EXT")
+        self._parent().device[SCPI].send_cmd(
+            f":INIT:GATE OFF; :INIT:CONT ON; :INIT:CONT:ENAB ARM; :INIT:CONT:ENAB:SOUR {self._trigger_source}")
 
     @with_select
     def _trig_repetition_mode(self):
         """Changes the run mode of this channel tuple to triggered mode"""
-        self._parent().device.send_cmd(f":INIT:CONT 0; :TRIG:SOUR:ADV {self._trigger_source}")
+        self._parent().device[SCPI].send_cmd(":INIT: CONT:ENAB:SOUR EVEN")
+        self._parent().device[SCPI].send_cmd(
+            f":INIT:CONT 0; :INIT:CONT:ENAB ARM; :TRIG:SOUR:ADV {self._trigger_source}")
 
 
 class TaborVolatileParameters(VolatileParameters):
@@ -1029,28 +1026,28 @@ class TaborChannelTuple(AWGChannelTuple):
     def read_waveforms(self) -> List[np.ndarray]:
         device = self.device._get_readable_device(simulator=True)
 
-        old_segment = device.send_query(":TRAC:SEL?")
+        old_segment = device[SCPI].send_query(":TRAC:SEL?")
         waveforms = []
         uploaded_waveform_indices = np.flatnonzero(
             self._segment_references) + 1
 
         for segment in uploaded_waveform_indices:
-            device.send_cmd(":TRAC:SEL {}".format(segment), paranoia_level=self.internal_paranoia_level)
+            device[SCPI].send_cmd(":TRAC:SEL {}".format(segment), paranoia_level=self.internal_paranoia_level)
             waveforms.append(device.read_act_seg_dat())
-        device.send_cmd(":TRAC:SEL {}".format(old_segment), paranoia_level=self.internal_paranoia_level)
+        device[SCPI].send_cmd(":TRAC:SEL {}".format(old_segment), paranoia_level=self.internal_paranoia_level)
         return waveforms
 
     @with_select
     def read_sequence_tables(self) -> List[Tuple[np.ndarray, np.ndarray, np.ndarray]]:
         device = self.device._get_readable_device(simulator=True)
 
-        old_sequence = device.send_query(":SEQ:SEL?")
+        old_sequence = device[SCPI].send_query(":SEQ:SEL?")
         sequences = []
         uploaded_sequence_indices = np.arange(len(self._sequencer_tables)) + 1
         for sequence in uploaded_sequence_indices:
-            device.send_cmd(":SEQ:SEL {}".format(sequence), paranoia_level=self.internal_paranoia_level)
+            device[SCPI].send_cmd(":SEQ:SEL {}".format(sequence), paranoia_level=self.internal_paranoia_level)
             sequences.append(device.read_sequencer_table())
-        device.send_cmd(":SEQ:SEL {}".format(old_sequence), paranoia_level=self.internal_paranoia_level)
+        device[SCPI].send_cmd(":SEQ:SEL {}".format(old_sequence), paranoia_level=self.internal_paranoia_level)
         return sequences
 
     @with_select
@@ -1163,13 +1160,13 @@ class TaborChannelTuple(AWGChannelTuple):
 
         segment_no = segment_index + 1
 
-        self.device.send_cmd(":TRAC:DEF {}, {}".format(segment_no, segment.num_points),
-                             paranoia_level=self.internal_paranoia_level)
+        self.device[SCPI].send_cmd(":TRAC:DEF {}, {}".format(segment_no, segment.num_points),
+                                   paranoia_level=self.internal_paranoia_level)
         self._segment_lengths[segment_index] = segment.num_points
 
-        self.device.send_cmd(":TRAC:SEL {}".format(segment_no), paranoia_level=self.internal_paranoia_level)
+        self.device[SCPI].send_cmd(":TRAC:SEL {}".format(segment_no), paranoia_level=self.internal_paranoia_level)
 
-        self.device.send_cmd(":TRAC:MODE COMB", paranoia_level=self.internal_paranoia_level)
+        self.device[SCPI].send_cmd(":TRAC:MODE COMB", paranoia_level=self.internal_paranoia_level)
         wf_data = segment.get_as_binary()
 
         self.device._send_binary_data(pref=":TRAC:DATA", bin_dat=wf_data)
@@ -1187,12 +1184,12 @@ class TaborChannelTuple(AWGChannelTuple):
         segment_index = len(self._segment_capacity)
         first_segment_number = segment_index + 1
 
-        self.device.send_cmd(":TRAC:DEF {},{}".format(first_segment_number, trac_len),
-                             paranoia_level=self.internal_paranoia_level)
-        self.device.send_cmd(":TRAC:SEL {}".format(first_segment_number),
-                             paranoia_level=self.internal_paranoia_level)
-        self.device.send_cmd(":TRAC:MODE COMB",
-                             paranoia_level=self.internal_paranoia_level)
+        self.device[SCPI].send_cmd(":TRAC:DEF {},{}".format(first_segment_number, trac_len),
+                                   paranoia_level=self.internal_paranoia_level)
+        self.device[SCPI].send_cmd(":TRAC:SEL {}".format(first_segment_number),
+                                   paranoia_level=self.internal_paranoia_level)
+        self.device[SCPI].send_cmd(":TRAC:MODE COMB",
+                                   paranoia_level=self.internal_paranoia_level)
         self.device._send_binary_data(pref=":TRAC:DATA", bin_dat=wf_data)
 
         old_to_update = np.count_nonzero(self._segment_capacity != self._segment_lengths)
@@ -1203,15 +1200,15 @@ class TaborChannelTuple(AWGChannelTuple):
         if len(segments) < old_to_update:
             for i, segment in enumerate(segments):
                 current_segment_number = first_segment_number + i
-                self.device.send_cmd(":TRAC:DEF {},{}".format(current_segment_number, segment.num_points),
-                                     paranoia_level=self.internal_paranoia_level)
+                self.device[SCPI].send_cmd(":TRAC:DEF {},{}".format(current_segment_number, segment.num_points),
+                                           paranoia_level=self.internal_paranoia_level)
         else:
             # flush the capacity
             self.device._download_segment_lengths(segment_capacity)
 
             # update non fitting lengths
             for i in np.flatnonzero(segment_capacity != segment_lengths):
-                self.device.send_cmd(":TRAC:DEF {},{}".format(i + 1, segment_lengths[i]))
+                self.device[SCPI].send_cmd(":TRAC:DEF {},{}".format(i + 1, segment_lengths[i]))
 
         self._segment_capacity = segment_capacity
         self._segment_lengths = segment_lengths
@@ -1236,7 +1233,7 @@ class TaborChannelTuple(AWGChannelTuple):
             #  send max 10 commands at once
             chunk_size = 10
             for chunk_start in range(new_end, old_end, chunk_size):
-                self.device.send_cmd("; ".join("TRAC:DEL {}".format(i + 1)
+                self.device[SCPI].send_cmd("; ".join("TRAC:DEL {}".format(i + 1)
                                                for i in range(chunk_start, min(chunk_start + chunk_size, old_end))))
         except Exception as e:
             raise TaborUndefinedState("Error during cleanup. Device is in undefined state.", device=self) from e
@@ -1249,7 +1246,7 @@ class TaborChannelTuple(AWGChannelTuple):
             commands: Commands that should be executed.
         """
         cmd_str = ";".join(commands)
-        self.device.send_cmd(cmd_str, paranoia_level=self.internal_paranoia_level)
+        self.device[SCPI].send_cmd(cmd_str, paranoia_level=self.internal_paranoia_level)
 
     def set_program_advanced_sequence_table(self, name, new_advanced_sequence_table):
         self._known_programs[name][1]._advanced_sequencer_table = new_advanced_sequence_table
@@ -1286,7 +1283,7 @@ class TaborChannelTuple(AWGChannelTuple):
 
             cmd = ";".join([marker_0_cmd, marker_1_cmd, wf_mode_cmd])
             cmd = out_cmd + cmd
-            self.device.send_cmd(cmd, paranoia_level=self.CONFIG_MODE_PARANOIA_LEVEL)
+            self.device[SCPI].send_cmd(cmd, paranoia_level=self.CONFIG_MODE_PARANOIA_LEVEL)
             self._is_in_config_mode = True
 
     @with_select
@@ -1304,18 +1301,16 @@ class TaborChannelTuple(AWGChannelTuple):
                 other_channel_tuple = self.device.channel_tuples[0]
 
             if not other_channel_tuple._is_in_config_mode:
-                self.device.send_cmd(":SOUR:FUNC:MODE ASEQ")
-                self.device.send_cmd(":SEQ:SEL 1")
-                self.device.send_cmd(":OUTP:ALL ON")
+                self.device[SCPI].send_cmd(":SOUR:FUNC:MODE ASEQ")
+                self.device[SCPI].send_cmd(":SEQ:SEL 1")
+                self.device[SCPI].send_cmd(":OUTP:ALL ON")
 
         else:
-            self.device.send_cmd(":SOUR:FUNC:MODE ASEQ")
-            self.device.send_cmd(":SEQ:SEL 1")
+            self.device[SCPI].send_cmd(":SOUR:FUNC:MODE ASEQ")
+            self.device[SCPI].send_cmd(":SEQ:SEL 1")
 
-            cmd = ""
             for channel in self.channels:
                 channel[ActivatableChannels].enable()
-            self.device.send_cmd(cmd[:-1])
 
         for marker_ch in self.marker_channels:
             marker_ch[ActivatableChannels].enable()
@@ -1343,7 +1338,7 @@ class TaborActivatableMarkerChannels(ActivatableChannels):
         command_string = command_string.format(
             channel=self._parent().channel_tuple.channels[0].idn,
             marker=self._parent().channel_tuple.marker_channels.index(self._parent()) + 1)
-        self._parent().device.send_cmd(command_string)
+        self._parent().device[SCPI].send_cmd(command_string)
 
     @with_select
     def disable(self):
@@ -1351,7 +1346,7 @@ class TaborActivatableMarkerChannels(ActivatableChannels):
         command_string = command_string.format(
             channel=self._parent().channel_tuple.channels[0].idn,
             marker=self._parent().channel_tuple.marker_channels.index(self._parent()) + 1)
-        self._parent().device.send_cmd(command_string)
+        self._parent().device[SCPI].send_cmd(command_string)
 
     def _select(self) -> None:
         self._parent()._select()
@@ -1390,7 +1385,7 @@ class TaborMarkerChannel(AWGMarkerChannel):
         This marker channel is selected and is now the active channel marker of the device
         """
         self.device.channels[int((self.idn - 1) / 2)]._select()
-        self.device.send_cmd(":SOUR:MARK:SEL {marker}".format(marker=(((self.idn - 1) % 2) + 1)))
+        self.device[SCPI].send_cmd(":SOUR:MARK:SEL {marker}".format(marker=(((self.idn - 1) % 2) + 1)))
 
 
 ########################################################################################################################
