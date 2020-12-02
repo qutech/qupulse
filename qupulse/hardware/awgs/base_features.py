@@ -2,7 +2,6 @@ from types import MappingProxyType
 from typing import Callable, Generic, Mapping, Optional, Type, TypeVar
 from abc import ABC
 
-
 __all__ = ["Feature", "FeatureAble"]
 
 
@@ -16,6 +15,7 @@ class Feature(ABC):
     @property
     def target_type(self) -> Type["FeatureAble"]:
         return self._target_type
+
 
 FeatureType = TypeVar("FeatureType", bound=Feature)
 GetItemFeatureType = TypeVar("GetItemFeatureType", bound=Feature)
@@ -32,6 +32,8 @@ class FeatureAble(Generic[FeatureType], ABC):
         self._features = {}
 
     def __getitem__(self, feature_type: Type[GetItemFeatureType]) -> GetItemFeatureType:
+        if isinstance(feature_type, str):
+            return self._features[feature_type]
         if not isinstance(feature_type, type):
             raise TypeError("Expected type-object as key, got \"{ftt}\" instead".format(
                 ftt=type(feature_type).__name__))
@@ -58,6 +60,8 @@ class FeatureAble(Generic[FeatureType], ABC):
         if feature_type in self._features:
             raise KeyError(self, "Feature with type \"{ft}\" already exists".format(ft=feature_type.__name__))
         self._features[feature_type] = feature
+        # Also adding the feature with the string as the key. With this you can you the name as a string for __getitem__
+        self._features[feature_type.__name__] = feature
 
     @property
     def features(self) -> Mapping[FeatureType, Callable]:
