@@ -22,7 +22,7 @@ import logging
 import os.path
 import hashlib
 from collections import OrderedDict
-import string
+import re
 import warnings
 import numbers
 import string
@@ -130,6 +130,10 @@ class BinaryWaveform:
             if marker is not None:
                 marker_data += np.uint16((marker > 0) * 2**idx)
         return cls(zhinst.utils.convert_awg_waveform(ch1, ch2, marker_data))
+
+    @classmethod
+    def zeroed(cls, size):
+        return cls(zhinst.utils.convert_awg_waveform(np.zeros(size), np.zeros(size), np.zeros(size, dtype=np.uint16)))
 
     def __len__(self):
         return self.data.size // 3
@@ -496,11 +500,17 @@ class HDAWGProgramEntry(ProgramEntry):
                          voltage_transformations=voltage_transformations,
                          sample_rate=sample_rate)
         for waveform, (all_sampled_channels, all_sampled_markers) in self._waveforms.items():
+            size = int(waveform.duration * sample_rate)
+
             # group in channel pairs for binary waveform
             binary_waveforms = []
             for (sampled_channels, sampled_markers) in zip(more_itertools.grouper(all_sampled_channels, 2),
                                                            more_itertools.grouper(all_sampled_markers, 4)):
-                binary_waveforms.append(BinaryWaveform.from_sampled(*sampled_channels, sampled_markers))
+                if all(x is None for x in (*sampled_channels, *sampled_markers)):
+                    # empty channel pairs
+                    binary_waveforms.append(BinaryWaveform.zeroed(size))
+                else:
+                    binary_waveforms.append(BinaryWaveform.from_sampled(*sampled_channels, sampled_markers))
             self._waveforms[waveform] = tuple(binary_waveforms)
 
         self._waveform_manager = ProgramWaveformManager(program_name, waveform_memory)
