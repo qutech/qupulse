@@ -656,6 +656,12 @@ class HDAWGProgramManager:
         '  }\n'
         '}\n'
     )
+    DEFAULT_COMPILER_SETTINGS = {
+        'trigger_wait_code': WAIT_FOR_SOFTWARE_TRIGGER,
+        'min_repetitions_for_for_loop': 20,
+        'min_repetitions_for_shared_wf': 1000,
+        'indentation': '  '
+    }
     
     @classmethod
     def get_program_function_name(cls, program_name: str):
@@ -666,6 +672,29 @@ class HDAWGProgramManager:
     def __init__(self):
         self._waveform_memory = WaveformMemory()
         self._programs = OrderedDict()  # type: MutableMapping[str, HDAWGProgramEntry]
+        self._compiler_settings = [
+            # default settings: None -> take cls value
+            (re.compile('.*'), {'trigger_wait_code': None,
+                                'min_repetitions_for_for_loop': None,
+                                'min_repetitions_for_shared_wf': None,
+                                'indentation': None})]
+
+    def _get_compiler_settings(self, program_name: str) -> dict:
+        arg_spec = inspect.getfullargspec(HDAWGProgramEntry.compile)
+        required_compiler_args = (set(arg_spec.args) | set(arg_spec.kwonlyargs)) - {'self', 'available_registers'}
+
+        settings = {}
+        for regex, settings_dict in self._compiler_settings:
+            if regex.match(program_name):
+                settings.update(settings_dict)
+        if required_compiler_args - set(settings):
+            raise ValueError('Not all compiler arguments for program have been defined.'
+                             ' (the default catch all has been removed)'
+                             f'Missing: {required_compiler_args - set(settings)}')
+        for k, v in settings.items():
+            if v is None:
+                settings[k] = self.DEFAULT_COMPILER_SETTINGS[k]
+        return settings
 
     @property
     def waveform_memory(self):
@@ -708,8 +737,10 @@ class HDAWGProgramManager:
         program_entry = HDAWGProgramEntry(loop, selection_index, self._waveform_memory, name,
                                           channels, markers, amplitudes, offsets, voltage_transformations, sample_rate)
 
-        # TODO: de-hardcode these parameters and put compilation in seperate function
-        program_entry.compile(20, 1000, '  ', self.WAIT_FOR_SOFTWARE_TRIGGER,
+        compiler_settings = self._get_compiler_settings(program_name=name)
+
+        # TODO: put compilation in seperate function
+        program_entry.compile(**compiler_settings,
                               available_registers=available_registers)
 
         self._programs[name] = program_entry
