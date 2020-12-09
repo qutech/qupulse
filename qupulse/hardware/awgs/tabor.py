@@ -77,6 +77,7 @@ class TaborSCPI(SCPI):
         self._parent = weakref.ref(device)
 
     def send_cmd(self, cmd_str, paranoia_level=None):
+        print(cmd_str)
         for instr in self._parent().all_devices:
             instr.send_cmd(cmd_str=cmd_str, paranoia_level=paranoia_level)
 
@@ -570,10 +571,11 @@ class TaborProgramManagement(ProgramManagement):
         The policy is to prefer amending the unknown waveforms to overwriting old ones.
         """
 
-        # TODO: Default mode should be "once" for backward compability - change when once is working
         if repetition_mode is None:
             warnings.warn("TaborWarning - upload() - no repetition mode given!")
             repetition_mode = "infinite"
+        elif repetition_mode not in ("infinite"):
+            raise TaborException("Invalid Repetionmode: " + repetition_mode)
 
         if len(channels) != len(self._parent().channels):
             raise ValueError("Wrong number of channels")
@@ -720,10 +722,6 @@ class TaborProgramManagement(ProgramManagement):
                         self._cont_repetition_mode()
                         self._parent().device[SCPI].send_cmd(':TRIG',
                                                              paranoia_level=self._parent().internal_paranoia_level)
-                    elif repetition_mode is "once":
-                        self._trig_repetition_mode()
-                        self._parent().device[SCPI].send_cmd(':TRIG',
-                                                             paranoia_level=self._parent().internal_paranoia_level)
                     else:
                         raise ValueError("{} is no vaild repetition mode".format(repetition_mode))
                 else:
@@ -732,16 +730,12 @@ class TaborProgramManagement(ProgramManagement):
                 warnings.warn(
                     "TaborWarning - run_current_program() - the device is coupled - runthe program via the first channel tuple")
 
-        # TODO: continue
         else:
             if self._parent()._current_program:
                 repetition_mode = self._parent()._known_programs[
                     self._parent()._current_program].program._repetition_mode
                 if repetition_mode is "infinite":
                     self._cont_repetition_mode()
-                    self._parent().device[SCPI].send_cmd(':TRIG', paranoia_level=self._parent().internal_paranoia_level)
-                elif repetition_mode is "once":
-                    self._trig_repetition_mode()
                     self._parent().device[SCPI].send_cmd(':TRIG', paranoia_level=self._parent().internal_paranoia_level)
                 else:
                     raise ValueError("{} is no vaild repetition mode".format(repetition_mode))
@@ -826,13 +820,6 @@ class TaborProgramManagement(ProgramManagement):
         self._parent().device[SCPI].send_cmd(f":TRIG:SOUR:ADV EXT")
         self._parent().device[SCPI].send_cmd(
             f":INIT:GATE OFF; :INIT:CONT ON; :INIT:CONT:ENAB ARM; :INIT:CONT:ENAB:SOUR {self._trigger_source}")
-
-    @with_select
-    def _trig_repetition_mode(self):
-        """Changes the run mode of this channel tuple to triggered mode"""
-        self._parent().device[SCPI].send_cmd(":INIT: CONT:ENAB:SOUR EVEN")
-        self._parent().device[SCPI].send_cmd(
-            f":INIT:CONT 0; :INIT:CONT:ENAB ARM; :TRIG:SOUR:ADV {self._trigger_source}")
 
 
 class TaborVolatileParameters(VolatileParameters):
