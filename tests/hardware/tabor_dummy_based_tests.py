@@ -1,7 +1,7 @@
 import sys
 import unittest
 from unittest import mock
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from typing import List, Tuple, Optional, Any
 from copy import copy, deepcopy
@@ -9,8 +9,8 @@ from copy import copy, deepcopy
 import numpy as np
 
 from qupulse._program.tabor import TableDescription, TableEntry
-from qupulse.hardware.awgs.old_base import AWGAmplitudeOffsetHandling
-from qupulse.hardware.awgs.tabor import TaborProgram, TaborDevice, TaborProgramMemory
+from qupulse.hardware.awgs.base import AWGAmplitudeOffsetHandling
+from qupulse.hardware.awgs_new_driver.tabor import TaborProgram, TaborProgramMemory
 from qupulse.utils.types import TimeType
 from tests.hardware.dummy_modules import import_package
 
@@ -97,7 +97,7 @@ class TaborDummyBasedTest(unittest.TestCase):
         cls.restore_packages()
 
     def setUp(self):
-        from qupulse.hardware.awgs.old_tabor import TaborAWGRepresentation
+        from qupulse.hardware.awgs.tabor import TaborAWGRepresentation
         self.instrument = TaborAWGRepresentation('main_instrument',
                                                  reset=True,
                                                  paranoia_level=2,
@@ -176,7 +176,7 @@ class TaborChannelPairTests(TaborDummyBasedTest):
     def setUpClass(cls):
         super().setUpClass()
 
-        from qupulse.hardware.awgs.old_tabor import TaborChannelPair, TaborProgramMemory, TaborSegment, TaborSequencing
+        from qupulse.hardware.awgs.tabor import TaborChannelPair, TaborProgramMemory, TaborSegment, TaborSequencing
         from qupulse.pulses.table_pulse_template import TableWaveform
         from qupulse.pulses.interpolation import HoldInterpolationStrategy
         from qupulse._program._loop import Loop

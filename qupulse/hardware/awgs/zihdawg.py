@@ -19,7 +19,7 @@ import time
 from qupulse.utils.types import ChannelID, TimeType, time_from_float
 from qupulse._program._loop import Loop, make_compatible
 from qupulse._program.seqc import HDAWGProgramManager, UserRegister
-from qupulse.hardware.awgs.old_base import AWG, ChannelNotFoundException, AWGAmplitudeOffsetHandling
+from qupulse.hardware.awgs.base import AWG, ChannelNotFoundException, AWGAmplitudeOffsetHandling
 from qupulse.pulses.parameters import ConstantParameter
 
 

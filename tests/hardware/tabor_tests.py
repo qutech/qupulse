@@ -1,19 +1,6 @@
 import unittest
-import itertools
-import numpy as np
 
-from teawg import model_properties_dict
-
-from qupulse.hardware.awgs.tabor import TaborException, TaborProgram, \
-    TaborSegment, TaborSequencing, with_configuration_guard, PlottableProgram
-from qupulse._program._loop import Loop
-from qupulse.hardware.util import voltage_to_uint16
-
-from tests.pulses.sequencing_dummies import DummyWaveform
-from tests._program.loop_tests import LoopTests, WaveformGenerator
-
-
-
+from qupulse.hardware.awgs_new_driver.tabor import with_configuration_guard
 
 
 class ConfigurationGuardTest(unittest.TestCase):

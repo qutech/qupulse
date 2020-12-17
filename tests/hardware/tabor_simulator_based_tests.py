@@ -9,9 +9,8 @@ import pytabor
 import numpy as np
 
 from qupulse._program.tabor import TableDescription, TableEntry
-from qupulse.hardware.awgs.features import DeviceControl, VoltageRange, ProgramManagement, SCPI, VolatileParameters
-from qupulse.hardware.awgs.tabor import TaborDevice, TaborException, TaborSegment, TaborChannelTuple, \
-    TaborVoltageRange, TaborDeviceControl, TaborProgramManagement
+from qupulse.hardware.awgs_new_driver.features import DeviceControl, VoltageRange, ProgramManagement, SCPI, VolatileParameters
+from qupulse.hardware.awgs_new_driver.tabor import TaborDevice, TaborSegment
 
 
 class TaborSimulatorManager:

@@ -1,8 +1,8 @@
 from typing import Tuple, Optional, Callable, Set
 
 from qupulse._program._loop import Loop
-from qupulse.hardware.awgs.base import AWGChannelTuple
-from qupulse.hardware.awgs.old_base import AWG
+from qupulse.hardware.awgs_new_driver.base import AWGChannelTuple
+from qupulse.hardware.awgs.base import AWG
 
 
 class ChannelTupleAdapter(AWG):
@@ -32,24 +32,24 @@ class ChannelTupleAdapter(AWG):
                markers: Tuple[Optional["ChannelID"], ...],
                voltage_transformation: Tuple[Optional[Callable], ...],
                force: bool = False) -> None:
-        from qupulse.hardware.awgs.tabor import ProgramManagement
+        from qupulse.hardware.awgs_new_driver.tabor import ProgramManagement
         return self._channel_tuple[ProgramManagement].upload(name, program, channels, markers,
                                                                   voltage_transformation, force)
 
     def remove(self, name: str) -> None:
-        from qupulse.hardware.awgs.tabor import ProgramManagement
+        from qupulse.hardware.awgs_new_driver.tabor import ProgramManagement
         return self._channel_tuple[ProgramManagement].remove(name)
 
     def clear(self) -> None:
-        from qupulse.hardware.awgs.tabor import ProgramManagement
+        from qupulse.hardware.awgs_new_driver.tabor import ProgramManagement
         return self._channel_tuple[ProgramManagement].clear()
 
     def arm(self, name: Optional[str]) -> None:
-        from qupulse.hardware.awgs.tabor import ProgramManagement
+        from qupulse.hardware.awgs_new_driver.tabor import ProgramManagement
         return self._channel_tuple[ProgramManagement].arm(name)
 
     def programs(self) -> Set[str]:
-        from qupulse.hardware.awgs.tabor import ProgramManagement
+        from qupulse.hardware.awgs_new_driver.tabor import ProgramManagement
         return self._channel_tuple[ProgramManagement].programs
 
     def sample_rate(self) -> float:

@@ -9,9 +9,8 @@ import numbers
 import numpy as np
 
 from qupulse.utils.types import ChannelID, TimeType
-from qupulse.hardware.awgs.base import ProgramEntry
+from qupulse.hardware.awgs_new_driver.base import ProgramEntry
 from qupulse.hardware.util import get_sample_times, voltage_to_uint16
-from qupulse.pulses.parameters import Parameter
 from qupulse._program.waveforms import Waveform
 from qupulse._program._loop import Loop
 from qupulse._program.volatile import VolatileRepetitionCount, VolatileProperty

@@ -1,190 +1,154 @@
-from abc import ABC, abstractmethod
-from typing import Optional, Tuple, Sequence, Callable, List
+"""This module defines the common interface for arbitrary waveform generators.
+
+Classes:
+    - AWG: Common AWG interface.
+    - DummyAWG: A software stub implementation of the AWG interface.
+    - ProgramOverwriteException
+    - OutOfWaveformMemoryException
+"""
+
+from abc import abstractmethod
+from numbers import Real
+from typing import Set, Tuple, Callable, Optional, Mapping, Sequence, List
 from collections import OrderedDict
+
+from qupulse.hardware.util import get_sample_times
+from qupulse.utils.types import ChannelID
+from qupulse._program._loop import Loop
+from qupulse._program.waveforms import Waveform
+from qupulse.comparable import Comparable
+from qupulse.utils.types import TimeType
 
 import numpy
 
-from qupulse._program._loop import Loop
-from qupulse._program.waveforms import Waveform
-from qupulse.hardware.awgs import channel_tuple_wrapper
-from qupulse.hardware.awgs.base_features import Feature, FeatureAble
-from qupulse.hardware.util import get_sample_times
-from qupulse.utils.types import Collection, TimeType, ChannelID
+__all__ = ["AWG", "Program", "ProgramOverwriteException",
+           "OutOfWaveformMemoryException", "AWGAmplitudeOffsetHandling"]
 
-__all__ = ["AWGDevice", "AWGChannelTuple", "AWGChannel", "AWGMarkerChannel", "AWGDeviceFeature", "AWGChannelFeature",
-           "AWGChannelTupleFeature"]
+Program = Loop
 
 
-class AWGDeviceFeature(Feature, ABC):
-    """Base class for features that are used for `AWGDevice`s"""
-    def __init__(self):
-        super().__init__(AWGDevice)
+class AWGAmplitudeOffsetHandling:
+    IGNORE_OFFSET = 'ignore_offset'   # Offset is ignored.
+    CONSIDER_OFFSET = 'consider_offset' # Offset is discounted from the waveforms.
+    # TODO OPTIMIZED = 'optimized' # Offset and amplitude are set depending on the waveforms to maximize the waveforms resolution
+
+    _valid = [IGNORE_OFFSET, CONSIDER_OFFSET]
 
 
-class AWGChannelFeature(Feature, ABC):
-    """Base class for features that are used for `AWGChannel`s"""
-    def __init__(self):
-        super().__init__(_BaseAWGChannel)
+class AWG(Comparable):
+    """An arbitrary waveform generator abstraction class.
 
+    It represents a set of channels that have to have(hardware enforced) the same:
+        -control flow
+        -sample rate
 
-class AWGChannelTupleFeature(Feature, ABC):
-    """Base class for features that are used for `AWGChannelTuple`s"""
-    def __init__(self):
-        super().__init__(AWGChannelTuple)
+    It keeps track of the AWG state and manages waveforms and programs on the hardware.
+    """
 
+    def __init__(self, identifier: str):
+        self._identifier = identifier
+        self._amplitude_offset_handling = AWGAmplitudeOffsetHandling.IGNORE_OFFSET
 
-class AWGDevice(FeatureAble[AWGDeviceFeature], ABC):
-    """Base class for all drivers of all arbitrary waveform generators"""
+    @property
+    def identifier(self) -> str:
+        return self._identifier
 
-    def __init__(self, name: str):
+    @property
+    def amplitude_offset_handling(self) -> str:
+        return self._amplitude_offset_handling
+
+    @amplitude_offset_handling.setter
+    def amplitude_offset_handling(self, value):
         """
+        value (str): See possible values at `AWGAmplitudeOffsetHandling`
+        """
+        if value not in AWGAmplitudeOffsetHandling._valid:
+            raise ValueError('"{}" is invalid as AWGAmplitudeOffsetHandling'.format(value))
+
+        self._amplitude_offset_handling = value
+
+    @property
+    @abstractmethod
+    def num_channels(self):
+        """Number of channels"""
+
+    @property
+    @abstractmethod
+    def num_markers(self):
+        """Number of marker channels"""
+
+    @abstractmethod
+    def upload(self, name: str,
+               program: Loop,
+               channels: Tuple[Optional[ChannelID], ...],
+               markers: Tuple[Optional[ChannelID], ...],
+               voltage_transformation: Tuple[Optional[Callable], ...],
+               force: bool=False) -> None:
+        """Upload a program to the AWG.
+
+        Physically uploads all waveforms required by the program - excluding those already present -
+        to the device and sets up playback sequences accordingly.
+        This method should be cheap for program already on the device and can therefore be used
+        for syncing. Programs that are uploaded should be fast(~1 sec) to arm.
+
         Args:
-            name: The name of the device as a String
+            name: A name for the program on the AWG.
+            program: The program (a sequence of instructions) to upload.
+            channels: Tuple of length num_channels that ChannelIDs of  in the program to use. Position in the list corresponds to the AWG channel
+            markers: List of channels in the program to use. Position in the List in the list corresponds to the AWG channel
+            voltage_transformation: transformations applied to the waveforms extracted rom the program. Position
+            in the list corresponds to the AWG channel
+            force: If a different sequence is already present with the same name, it is
+                overwritten if force is set to True. (default = False)
         """
-        super().__init__()
-        self._name = name
-
-    #def __del__(self):
-    #    self.cleanup()
-
-    @property
-    def name(self) -> str:
-        """Returns the name of a Device as a String"""
-        return self._name
 
     @abstractmethod
-    def cleanup(self) -> None:
-        """Function for cleaning up the dependencies of the device"""
-        raise NotImplementedError()
+    def remove(self, name: str) -> None:
+        """Remove a program from the AWG.
 
-    @property
-    @abstractmethod
-    def channels(self) -> Collection["AWGChannel"]:
-        """Returns a list of all channels of a Device"""
-        raise NotImplementedError()
+        Also discards all waveforms referenced only by the program identified by name.
 
-    @property
-    @abstractmethod
-    def marker_channels(self) -> Collection["AWGMarkerChannel"]:
-        """Returns a list of all marker channels of a device. The collection may be empty"""
-        raise NotImplementedError()
-
-    @property
-    @abstractmethod
-    def channel_tuples(self) -> Collection["AWGChannelTuple"]:
-        """Returns a list of all channel tuples of a list"""
-        raise NotImplementedError()
-
-
-class AWGChannelTuple(FeatureAble[AWGChannelTupleFeature], ABC):
-    """Base class for all groups of synchronized channels of an AWG"""
-
-    def __init__(self, idn: int):
-        """
         Args:
-             idn: The identification number of a channel tuple
+            name: The name of the program to remove.
         """
-        super().__init__()
 
-        self._idn = idn
+    @abstractmethod
+    def clear(self) -> None:
+        """Removes all programs and waveforms from the AWG.
+
+        Caution: This affects all programs and waveforms on the AWG, not only those uploaded using qupulse!
+        """
+
+    @abstractmethod
+    def arm(self, name: Optional[str]) -> None:
+        """Load the program 'name' and arm the device for running it. If name is None the awg will "dearm" its current
+        program."""
 
     @property
     @abstractmethod
-    def channel_tuple_adapter(self) -> channel_tuple_wrapper:
-        pass
-
-    @property
-    def idn(self) -> int:
-        """Returns the identification number of a channel tuple"""
-        return self._idn
-
-    @property
-    def name(self) -> str:
-        """Returns the name of a channel tuple"""
-        return "{dev}_CT{idn}".format(dev=self.device.name, idn=self.idn)
+    def programs(self) -> Set[str]:
+        """The set of program names that can currently be executed on the hardware AWG."""
 
     @property
     @abstractmethod
     def sample_rate(self) -> float:
-        """Returns the sample rate of a channel tuple as a float"""
-        raise NotImplementedError()
-
-    # Optional sample_rate-setter
-    # @sample_rate.setter
-    # def sample_rate(self, sample_rate: float) -> None:
+        """The sample rate of the AWG."""
 
     @property
-    @abstractmethod
-    def device(self) -> AWGDevice:
-        """Returns the device which the channel tuple belong to"""
-        raise NotImplementedError()
-
-    @property
-    @abstractmethod
-    def channels(self) -> Collection["AWGChannel"]:
-        """Returns a list of all channels of the channel tuple"""
-        raise NotImplementedError()
-
-    @property
-    @abstractmethod
-    def marker_channels(self) -> Collection["AWGMarkerChannel"]:
-        """Returns a list of all marker channels of the channel tuple. The collection may be empty"""
-        raise NotImplementedError()
-
-
-class _BaseAWGChannel(FeatureAble[AWGChannelFeature], ABC):
-    """Base class for a single channel of an AWG"""
-
-    def __init__(self, idn: int):
-        """
-        Args:
-            idn: The identification number of a channel
-        """
-        super().__init__()
-        self._idn = idn
-
-    @property
-    def idn(self) -> int:
-        """Returns the identification number of a channel"""
-        return self._idn
-
-    @property
-    @abstractmethod
-    def device(self) -> AWGDevice:
-        """Returns the device which the channel belongs to"""
-        raise NotImplementedError()
-
-    @property
-    @abstractmethod
-    def channel_tuple(self) -> Optional[AWGChannelTuple]:
-        """Returns the channel tuple which a channel belongs to"""
-        raise NotImplementedError()
+    def compare_key(self) -> int:
+        """Comparison and hashing is based on the id of the AWG so different devices with the same properties
+        are ot equal"""
+        return id(self)
 
     @abstractmethod
-    def _set_channel_tuple(self, channel_tuple) -> None:
-        """
-        Sets the channel tuple which a channel belongs to
+    def set_volatile_parameters(self, program_name: str, parameters: Mapping[str, Real]):
+        """Set the values of parameters which were marked as volatile on program creation."""
 
-        Args:
-            channel_tuple: reference to the channel tuple
-        """
+    def __copy__(self) -> None:
         raise NotImplementedError()
 
-
-class AWGChannel(_BaseAWGChannel, ABC):
-    """Base class for a single channel of an AWG"""
-    @property
-    def name(self) -> str:
-        """Returns the name of a channel"""
-        return "{dev}_C{idn}".format(dev=self.device.name, idn=self.idn)
-    
-    
-class AWGMarkerChannel(_BaseAWGChannel, ABC):
-    """Base class for a single marker channel of an AWG"""
-    @property
-    def name(self) -> str:
-        """Returns the name of a marker channel"""
-        return "{dev}_M{idn}".format(dev=self.device.name, idn=self.idn)
+    def __deepcopy__(self, memodict={}) -> None:
+        raise NotImplementedError()
 
 
 class ProgramOverwriteException(Exception):

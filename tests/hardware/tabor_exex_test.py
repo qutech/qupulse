@@ -72,7 +72,7 @@ def get_window(card):
 class TaborTests(unittest.TestCase):
     @unittest.skip
     def test_all(self):
-        from qupulse.hardware.awgs.old_tabor import TaborChannelTuple, TaborDevice
+        from qupulse.hardware.awgs.tabor import TaborChannelTuple, TaborDevice
         #import warnings
         tawg = TaborDevice(r'USB0::0x168C::0x2184::0000216488::INSTR')
         tchannelpair = TaborChannelTuple(tawg, (1, 2), 'TABOR_AB')

@@ -10,7 +10,7 @@ with_alazar = True
 
 
 def get_pulse():
-    from qupulse.pulses import TablePulseTemplate as TPT, SequencePulseTemplate as SPT, \
+    from qupulse.pulses import SequencePulseTemplate as SPT, \
         RepetitionPulseTemplate as RPT, FunctionPulseTemplate as FPT, MultiChannelPulseTemplate as MPT
 
     sine = FPT('U*sin(2*pi*t/tau)', 'tau', channel='out')
@@ -67,7 +67,7 @@ def get_alazar_config():
 
 
 def get_operations():
-    from atsaverage.operations import Downsample, RepAverage
+    from atsaverage.operations import RepAverage
 
     return [RepAverage(identifier='REP_A', maskID='A')]
 
@@ -90,7 +90,7 @@ def exec_test():
         t.append(time.time())
         names.append(name)
 
-    from qupulse.hardware.awgs.tabor import TaborChannelPair, TaborAWGRepresentation
+    from qupulse.hardware.awgs_new_driver.tabor import TaborChannelPair, TaborAWGRepresentation
     tawg = TaborAWGRepresentation(r'USB0::0x168C::0x2184::0000216488::INSTR', reset=True)
 
     tchannelpair = TaborChannelPair(tawg, (1, 2), 'TABOR_AB')
