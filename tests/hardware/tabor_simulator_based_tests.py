@@ -3,15 +3,13 @@ import subprocess
 import time
 import platform
 import os
-from typing import List, Tuple, Optional, Any
 
 import pytabor
 import numpy as np
 
-from qupulse._program.tabor import TableDescription, TableEntry
-from qupulse.hardware.awgs_new_driver.features import DeviceControl, VoltageRange, ProgramManagement, SCPI, VolatileParameters
-from qupulse.hardware.awgs_new_driver.tabor import TaborDevice, TaborSegment
-
+from qupulse.hardware.awgs.tabor import TaborAWGRepresentation, TaborChannelPair
+from qupulse._program.tabor import TaborSegment, PlottableProgram, TaborException, TableDescription, TableEntry
+from typing import List, Tuple, Optional, Any
 
 class TaborSimulatorManager:
     def __init__(self,
@@ -23,7 +21,7 @@ class TaborSimulatorManager:
         self.started_simulator = False
 
         self.simulator_process = None
-        self.instrument: TaborDevice = None
+        self.instrument = None
 
     def kill_running_simulators(self):
         command = 'Taskkill', '/IM {simulator_executable}'.format(simulator_executable=self.simulator_executable)
@@ -57,11 +55,10 @@ class TaborSimulatorManager:
                 raise RuntimeError('Could not connect to simulator')
             time.sleep(0.1)
 
-    def connect(self) -> TaborDevice:
-        self.instrument = TaborDevice("testDevice",
-                                      "127.0.0.1",
-                                      reset=True,
-                                      paranoia_level=2)
+    def connect(self):
+        self.instrument = TaborAWGRepresentation('127.0.0.1',
+                                                 reset=True,
+                                                 paranoia_level=2)
 
         if self.instrument.main_instrument.visa_inst is None:
             raise RuntimeError('Could not connect to simulator')
@@ -82,7 +79,7 @@ class TaborSimulatorBasedTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.instrument: TaborDevice
+        self.instrument = None
 
     @classmethod
     def setUpClass(cls):
@@ -100,7 +97,7 @@ class TaborSimulatorBasedTest(unittest.TestCase):
         self.instrument = self.simulator_manager.connect()
 
     def tearDown(self):
-        self.instrument[DeviceControl].reset()
+        self.instrument.reset()
         self.simulator_manager.disconnect()
 
     @staticmethod
@@ -119,59 +116,60 @@ class TaborAWGRepresentationTests(TaborSimulatorBasedTest):
         super().__init__(*args, **kwargs)
 
     def test_sample_rate(self):
-        # for ch in (1, 2, 3, 4):
-        #   self.assertIsInstance(self.instrument.sample_rate(ch), int)
-        # for ch_tuple in self.instrument.channel_tuples:
-        #    self.assertIsInstance(ch_tuple.sample_rate,int)
+        for ch in (1, 2, 3, 4):
+            self.assertIsInstance(self.instrument.sample_rate(ch), int)
 
-        # with self.assertRaises(TaborException):
-        #    self.instrument.sample_rate(0)
+        with self.assertRaises(TaborException):
+            self.instrument.sample_rate(0)
 
         self.instrument.send_cmd(':INST:SEL 1')
         self.instrument.send_cmd(':FREQ:RAST 2.3e9')
 
-        # TODO: int or float self.assertEqual(2300000000, self.instrument.channel_tuples[0].sample_rate)
+        self.assertEqual(2300000000, self.instrument.sample_rate(1))
 
     def test_amplitude(self):
-        for channel in self.instrument.channels:
-            self.assertIsInstance(channel[VoltageRange].amplitude, float)
+        for ch in (1, 2, 3, 4):
+            self.assertIsInstance(self.instrument.amplitude(ch), float)
+
+        with self.assertRaises(TaborException):
+            self.instrument.amplitude(0)
 
         self.instrument.send_cmd(':INST:SEL 1; :OUTP:COUP DC')
         self.instrument.send_cmd(':VOLT 0.7')
 
-        self.assertAlmostEqual(.7, self.instrument.channels[0][VoltageRange].amplitude)
+        self.assertAlmostEqual(.7, self.instrument.amplitude(1))
 
     def test_select_marker(self):
-        with self.assertRaises(IndexError):
-            self.instrument.marker_channels[6]._select()
+        with self.assertRaises(TaborException):
+            self.instrument.select_marker(6)
 
-        self.instrument.marker_channels[1]._select()
-        selected = self.instrument[SCPI].send_query(':SOUR:MARK:SEL?')
+        self.instrument.select_marker(2)
+        selected = self.instrument.send_query(':SOUR:MARK:SEL?')
         self.assertEqual(selected, '2')
 
-        self.instrument.marker_channels[0]._select()
-        selected = self.instrument[SCPI].send_query(':SOUR:MARK:SEL?')
+        self.instrument.select_marker(1)
+        selected = self.instrument.send_query(':SOUR:MARK:SEL?')
         self.assertEqual(selected, '1')
 
     def test_select_channel(self):
-        with self.assertRaises(IndexError):
-            self.instrument.channels[6]._select()
+        with self.assertRaises(TaborException):
+            self.instrument.select_channel(6)
 
-        self.instrument.channels[0]._select()
-        self.assertEqual(self.instrument[SCPI].send_query(':INST:SEL?'), '1')
+        self.instrument.select_channel(1)
+        self.assertEqual(self.instrument.send_query(':INST:SEL?'), '1')
 
-        self.instrument.channels[3]._select()
-        self.assertEqual(self.instrument[SCPI].send_query(':INST:SEL?'), '4')
+        self.instrument.select_channel(4)
+        self.assertEqual(self.instrument.send_query(':INST:SEL?'), '4')
 
 
 class TaborMemoryReadTests(TaborSimulatorBasedTest):
     def setUp(self):
         super().setUp()
 
-        ramp_up = np.linspace(0, 2 ** 14 - 1, num=192, dtype=np.uint16)
+        ramp_up = np.linspace(0, 2**14-1, num=192, dtype=np.uint16)
         ramp_down = ramp_up[::-1]
-        zero = np.ones(192, dtype=np.uint16) * 2 ** 13
-        sine = ((np.sin(np.linspace(0, 2 * np.pi, 192 + 64)) + 1) / 2 * (2 ** 14 - 1)).astype(np.uint16)
+        zero = np.ones(192, dtype=np.uint16) * 2**13
+        sine = ((np.sin(np.linspace(0, 2*np.pi, 192+64)) + 1) / 2 * (2**14 - 1)).astype(np.uint16)
 
         self.segments = [TaborSegment.from_sampled(ramp_up, ramp_up, None, None),
                          TaborSegment.from_sampled(ramp_down, zero, None, None),
@@ -187,11 +185,7 @@ class TaborMemoryReadTests(TaborSimulatorBasedTest):
         self.sequence_tables = self.to_new_sequencer_tables(self.sequence_tables_raw)
         self.advanced_sequence_table = self.to_new_advanced_sequencer_table(self.advanced_sequence_table)
 
-        # TODO: darf man das so ersetzen
-        # self.channel_pair = TaborChannelTuple(self.instrument, (1, 2), 'tabor_unit_test')
-
-        self.channel_pair = self.instrument.channel_tuples[0]
-
+        self.channel_pair = TaborChannelPair(self.instrument, (1, 2), 'tabor_unit_test')
 
     def arm_program(self, sequencer_tables, advanced_sequencer_table, mode, waveform_to_segment_index):
         class DummyProgram:
@@ -215,12 +209,11 @@ class TaborMemoryReadTests(TaborSimulatorBasedTest):
             waveform_mode = mode
 
         self.channel_pair._known_programs['dummy_program'] = (waveform_to_segment_index, DummyProgram)
-        self.channel_pair[ProgramManagement]._change_armed_program('dummy_program') #TODO: change - change_armed_program in the feature doesnt work yet
+        self.channel_pair.change_armed_program('dummy_program')
 
     def test_read_waveforms(self):
         self.channel_pair._amend_segments(self.segments)
 
-        #waveforms sind schon nicht gleich zum alten Treiber
         waveforms = self.channel_pair.read_waveforms()
 
         segments = [TaborSegment.from_binary_segment(waveform)
@@ -242,7 +235,7 @@ class TaborMemoryReadTests(TaborSimulatorBasedTest):
 
         sequence_tables = self.channel_pair.read_sequence_tables()
 
-        actual_sequence_tables = [self.channel_pair[ProgramManagement]._idle_sequence_table] + [[(rep, index+2, jump)
+        actual_sequence_tables = [self.channel_pair._idle_sequence_table] + [[(rep, index+2, jump)
                                                                              for rep, index, jump in table]
                                                                              for table in self.sequence_tables_raw]
 
@@ -256,15 +249,12 @@ class TaborMemoryReadTests(TaborSimulatorBasedTest):
         self.channel_pair._amend_segments(self.segments)
         self.arm_program(self.sequence_tables, self.advanced_sequence_table, None, np.asarray([1, 2]))
 
-        #TODO: test here
-        #actual_advanced_table = [(1, 1, 1)] + [(rep, idx + 1, jmp) for rep, idx, jmp in self.advanced_sequence_table]
-        actual_advanced_table = [(1, 1, 0)] + [(rep, idx + 1, jmp) for rep, idx, jmp in self.advanced_sequence_table]
+        actual_advanced_table = [(1, 1, 1)] + [(rep, idx+1, jmp) for rep, idx, jmp in self.advanced_sequence_table]
 
         expected = list(np.asarray(d)
                         for d in zip(*actual_advanced_table))
 
         advanced_table = self.channel_pair.read_advanced_sequencer_table()
-
         np.testing.assert_equal(advanced_table, expected)
 
     def test_set_volatile_parameter(self):
@@ -272,14 +262,13 @@ class TaborMemoryReadTests(TaborSimulatorBasedTest):
         self.arm_program(self.sequence_tables, self.advanced_sequence_table, None, np.asarray([1, 2]))
 
         para = {'a': 5}
-        actual_sequence_tables = [self.channel_pair[ProgramManagement]._idle_sequence_table] + [[(rep, index + 2, jump)
+        actual_sequence_tables = [self.channel_pair._idle_sequence_table] + [[(rep, index + 2, jump)
                                                                               for rep, index, jump in table]
                                                                              for table in self.sequence_tables_raw]
 
+        actual_advanced_table = [(1, 1, 1)] + [(rep, idx + 1, jmp) for rep, idx, jmp in self.advanced_sequence_table]
 
-        actual_advanced_table = [(1, 1, 0)] + [(rep, idx + 1, jmp) for rep, idx, jmp in self.advanced_sequence_table]
-
-        self.channel_pair[VolatileParameters].set_volatile_parameters('dummy_program', parameters=para)
+        self.channel_pair.set_volatile_parameters('dummy_program', parameters=para)
 
         actual_sequence_tables[1][1] = (50, 3, 0)
         actual_advanced_table[2] = (5, 3, 0)

@@ -77,7 +77,6 @@ class TaborSCPI(SCPI):
         self._parent = weakref.ref(device)
 
     def send_cmd(self, cmd_str, paranoia_level=None):
-        print(cmd_str)
         for instr in self._parent().all_devices:
             instr.send_cmd(cmd_str=cmd_str, paranoia_level=paranoia_level)
 
