@@ -127,8 +127,8 @@ class TaborAWGRepresentationTests(TaborSimulatorBasedTest):
         # with self.assertRaises(TaborException):
         #    self.instrument.sample_rate(0)
 
-        self.instrument.send_cmd(':INST:SEL 1')
-        self.instrument.send_cmd(':FREQ:RAST 2.3e9')
+        self.instrument[SCPI].send_cmd(':INST:SEL 1')
+        self.instrument[SCPI].send_cmd(':FREQ:RAST 2.3e9')
 
         # TODO: int or float self.assertEqual(2300000000, self.instrument.channel_tuples[0].sample_rate)
 
@@ -136,8 +136,8 @@ class TaborAWGRepresentationTests(TaborSimulatorBasedTest):
         for channel in self.instrument.channels:
             self.assertIsInstance(channel[VoltageRange].amplitude, float)
 
-        self.instrument.send_cmd(':INST:SEL 1; :OUTP:COUP DC')
-        self.instrument.send_cmd(':VOLT 0.7')
+        self.instrument[SCPI].send_cmd(':INST:SEL 1; :OUTP:COUP DC')
+        self.instrument[SCPI].send_cmd(':VOLT 0.7')
 
         self.assertAlmostEqual(.7, self.instrument.channels[0][VoltageRange].amplitude)
 

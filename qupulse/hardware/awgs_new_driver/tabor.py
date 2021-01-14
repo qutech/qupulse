@@ -1012,28 +1012,28 @@ class TaborChannelTuple(AWGChannelTuple):
     def read_waveforms(self) -> List[np.ndarray]:
         device = self.device._get_readable_device(simulator=True)
 
-        old_segment = device[SCPI].send_query(":TRAC:SEL?")
+        old_segment = device.send_query(":TRAC:SEL?")
         waveforms = []
         uploaded_waveform_indices = np.flatnonzero(
             self._segment_references) + 1
 
         for segment in uploaded_waveform_indices:
-            device[SCPI].send_cmd(":TRAC:SEL {}".format(segment), paranoia_level=self.internal_paranoia_level)
+            device.send_cmd(":TRAC:SEL {}".format(segment), paranoia_level=self.internal_paranoia_level)
             waveforms.append(device.read_act_seg_dat())
-        device[SCPI].send_cmd(":TRAC:SEL {}".format(old_segment), paranoia_level=self.internal_paranoia_level)
+        device.send_cmd(":TRAC:SEL {}".format(old_segment), paranoia_level=self.internal_paranoia_level)
         return waveforms
 
     @with_select
     def read_sequence_tables(self) -> List[Tuple[np.ndarray, np.ndarray, np.ndarray]]:
         device = self.device._get_readable_device(simulator=True)
 
-        old_sequence = device[SCPI].send_query(":SEQ:SEL?")
+        old_sequence = device.send_query(":SEQ:SEL?")
         sequences = []
         uploaded_sequence_indices = np.arange(len(self._sequencer_tables)) + 1
         for sequence in uploaded_sequence_indices:
-            device[SCPI].send_cmd(":SEQ:SEL {}".format(sequence), paranoia_level=self.internal_paranoia_level)
+            device.send_cmd(":SEQ:SEL {}".format(sequence), paranoia_level=self.internal_paranoia_level)
             sequences.append(device.read_sequencer_table())
-        device[SCPI].send_cmd(":SEQ:SEL {}".format(old_sequence), paranoia_level=self.internal_paranoia_level)
+        device.send_cmd(":SEQ:SEL {}".format(old_sequence), paranoia_level=self.internal_paranoia_level)
         return sequences
 
     @with_select
