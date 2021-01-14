@@ -9,6 +9,9 @@ import collections
 import operator
 
 import numpy
+import sympy
+
+import qupulse.utils.numeric as qupulse_numeric
 
 __all__ = ["MeasurementWindow", "ChannelID", "HashableNumpyArray", "TimeType", "time_from_float", "DocStringABCMeta",
            "SingletonABCMeta", "SequenceProxy"]
@@ -18,6 +21,8 @@ ChannelID = typing.Union[str, int]
 
 try:
     import gmpy2
+    qupulse_numeric.FractionType = gmpy2.mpq
+
 except ImportError:
     gmpy2 = None
 
@@ -29,7 +34,7 @@ def _with_other_as_time_type(fn):
     """This is decorator to convert the other argument and the result into a :class:`TimeType`"""
     @functools.wraps(fn)
     def wrapper(self, other) -> 'TimeType':
-        converted = _converter.get(type(other), TimeType)(other)
+        converted = _converter.get(type(other), TimeType._try_from_any)(other)
         result = fn(self, converted)
         if result is NotImplemented:
             return result
@@ -51,10 +56,60 @@ class TimeType:
     _to_internal = fractions.Fraction if gmpy2 is None else gmpy2.mpq
 
     def __init__(self, value: numbers.Rational = 0.):
-        if type(value) == type(self):
+        if type(getattr(value, '_value', None)) is self._InternalType:
             self._value = value._value
         else:
-            self._value = self._to_internal(value)
+            try:
+                self._value = self._to_internal(value)
+            except TypeError as err:
+                raise TypeError(f'Could not create TimeType from {value} of type {type(value)}') from err
+
+    @classmethod
+    def _try_from_any(cls, any: typing.Any):
+        try:
+            cls(any)
+        except TypeError:
+            pass
+
+        # duck type rational
+        if hasattr(any, 'numerator') and hasattr(any, 'denominator'):
+            # sympy.Rational has callables...
+            numerator = any.numerator() if callable(any.numerator) else any.numerator
+            denominator = any.denominator() if callable(any.denominator) else any.denominator
+            return cls.from_fraction(int(numerator), int(denominator))
+
+        # test if objects subclass number
+        if isinstance(any, numbers.Integral):
+            return cls.from_fraction(int(any), 1)
+        if isinstance(any, numbers.Real):
+            return cls.from_float(float(any))
+
+        # test for array
+        if isinstance(any, numpy.ndarray):
+            return numpy.vectorize(cls._try_from_any)(any)
+
+        # try conversion to int and float. gmpy2's answer to isinstance is version dependent
+        try:
+            as_int = int(any)
+        except (TypeError, ValueError, RuntimeError):
+            as_int = None
+        try:
+            as_float = float(any)
+        except (TypeError, ValueError, RuntimeError):
+            as_float = None
+
+        if as_int is None and as_float is not None:
+            return cls.from_float(as_float)
+        elif as_int is not None and as_float is None:
+            return cls.from_fraction(as_int, 1)
+        elif as_int is not None and as_float is not None:
+            if as_float.is_integer():
+                return cls.from_fraction(as_int, 1)
+            elif int(as_float) == as_int:
+                return cls.from_float(as_float)
+
+        # for error message
+        return cls(any)
 
     @property
     def numerator(self):
@@ -63,6 +118,10 @@ class TimeType:
     @property
     def denominator(self):
         return self._value.denominator
+
+    def _sympy_(self):
+        import sympy
+        return sympy.Rational(self.numerator, self.denominator)
 
     def __round__(self, *args, **kwargs):
         return self._value.__round__(*args, **kwargs)
@@ -147,27 +206,30 @@ class TimeType:
     def __rfloordiv__(self, other: 'TimeType'):
         return self._value.__rfloordiv__(other._value)
 
-    @_with_other_as_time_type
-    def __le__(self, other: 'TimeType'):
-        return self._value.__le__(other._value)
+    def __le__(self, other):
+        return self._value <= self.as_comparable(other)
 
-    @_with_other_as_time_type
-    def __ge__(self, other: 'TimeType'):
-        return self._value.__ge__(other._value)
+    def __ge__(self, other):
+        return self._value >= self.as_comparable(other)
 
-    @_with_other_as_time_type
-    def __lt__(self, other: 'TimeType'):
-        return self._value.__lt__(other._value)
+    def __lt__(self, other):
+        return self._value < self.as_comparable(other)
 
-    @_with_other_as_time_type
-    def __gt__(self, other: 'TimeType'):
-        return self._value.__gt__(other._value)
+    def __gt__(self, other):
+        return self._value > self.as_comparable(other)
 
     def __eq__(self, other):
         if type(other) == type(self):
             return self._value.__eq__(other._value)
         else:
             return self._value == other
+
+    @classmethod
+    def as_comparable(cls, other: typing.Union['TimeType', typing.Any]):
+        if type(other) == cls:
+            return other._value
+        else:
+            return other
 
     @classmethod
     def from_float(cls, value: float, absolute_error: typing.Optional[float] = None) -> 'TimeType':
@@ -182,31 +244,37 @@ class TimeType:
             absolute_error:
                 - :obj:`None`: Use `str(value)` as a proxy to get consistent precision
                 - 0: Return the exact value of the float i.e. float(0.8) == 3602879701896397 / 4503599627370496
-                - 0 < `absolute_error` <= 1: Use `absolute_error` to limit the denominator
+                - 0 < `absolute_error` <= 1: Return the best approximation to `value` within `(value - absolute_error,
+                value + absolute_error)`. The best approximation is defined as the fraction with the smallest
+                denominator.
 
         Raises:
             ValueError: If `absolute_error` is not None and not 0 <= `absolute_error` <=  1
         """
         # gmpy2 is at least an order of magnitude faster than fractions.Fraction
         if absolute_error is None:
-            # this method utilizes the 'print as many digits as necessary to destinguish between all floats'
+            # this method utilizes the 'print as many digits as necessary to distinguish between all floats'
             # functionality of str
             if type(value) in (cls, cls._InternalType, fractions.Fraction):
                 return cls(value)
             else:
-                return cls(cls._to_internal(str(value).replace('e', 'E')))
+                try:
+                    # .upper() is a bit faster than replace('e', 'E') which gmpy2.mpq needs
+                    return cls(cls._to_internal(str(value).upper()))
+                except ValueError:
+                    if isinstance(value, numbers.Number) and not numpy.isfinite(value):
+                        raise ValueError('Cannot represent "{}" as TimeType'.format(value), value)
+                    else:
+                        raise
 
         elif absolute_error == 0:
             return cls(cls._to_internal(value))
         elif absolute_error < 0:
-            raise ValueError('absolute_error needs to be at least 0')
+            raise ValueError('absolute_error needs to be > 0')
         elif absolute_error > 1:
-            raise ValueError('absolute_error needs to be smaller 1')
+            raise ValueError('absolute_error needs to be <= 1')
         else:
-            if cls._InternalType is fractions.Fraction:
-                return fractions.Fraction(value).limit_denominator(int(1 / absolute_error))
-            else:
-                return cls(gmpy2.f2q(value, absolute_error))
+            return cls(qupulse_numeric.approximate_double(value, absolute_error, fraction_type=cls._to_internal))
 
     @classmethod
     def from_fraction(cls, numerator: int, denominator: int) -> 'TimeType':
@@ -234,6 +302,9 @@ numbers.Rational.register(TimeType)
 
 _converter = {
     float: TimeType.from_float,
+    TimeType._InternalType: TimeType,
+    fractions.Fraction: TimeType,
+    sympy.Rational: lambda q: TimeType.from_fraction(q.p, q.q),
     TimeType: lambda x: x
 }
 

@@ -32,11 +32,17 @@ function [output, bool, msg] = daq_operations(ctrl, varargin)
 		% armed program. We know plsdata.awg.currentProgam contains the last
 		% armed program since qc.daq_operations should be called before 
 		% qc.awg_program('arm'). 
-		if plsdata.daq.reuseOperations && strcmp(plsdata.awg.currentProgam, a.program_name)
+		if plsdata.daq.reuseOperations && ~plsdata.daq.operationsExternallyModified && strcmp(plsdata.awg.currentProgam, a.program_name)
 			msg = sprintf('Operations from last armed program ''%s'' reused.\n  If an error occurs, try executing another program\n  first to update the operations.', plsdata.awg.currentProgam);
 		else
 			daq.register_operations(a.program_name, qc.operations_to_python(a.operations));
 			msg = sprintf('Operations for program ''%s'' added', a.program_name);			
+						
+			if plsdata.daq.operationsExternallyModified
+				plsdata.daq.inst.update_settings = py.True;
+			end
+			
+			plsdata.daq.operationsExternallyModified = false;
 			% qc.workaround_alazar_single_buffer_acquisition();
 		end
 		bool = true;

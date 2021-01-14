@@ -10,7 +10,7 @@ except ImportError:
     pass
 
 try:
-    from qctoolkit.hardware.awgs.tektronix import TektronixAWG
+    from qupulse.hardware.awgs.tektronix import TektronixAWG
     __all__.extend(["TektronixAWG"])
 except ImportError:
     pass

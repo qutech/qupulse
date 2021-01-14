@@ -11,11 +11,23 @@ from qupulse.serialization import Serializer, PulseRegistryType
 from qupulse.parameter_scope import Scope
 
 from qupulse.utils.types import ChannelID
-from qupulse.pulses.parameters import Parameter
+from qupulse.pulses.measurement import MeasurementWindow
 from qupulse.pulses.pulse_template import AtomicPulseTemplate, PulseTemplate
 from qupulse._program.waveforms import Waveform, ArithmeticWaveform, TransformingWaveform
 from qupulse._program.transformation import Transformation, ScalingTransformation, OffsetTransformation,\
     IdentityTransformation
+
+
+def _apply_operation_to_channel_dict(operator: str,
+                                     lhs: Mapping[ChannelID, Any],
+                                     rhs: Mapping[ChannelID, Any]) -> Dict[ChannelID, Any]:
+    result = dict(lhs)
+    for channel, rhs_value in rhs.items():
+        if channel in result:
+            result[channel] = ArithmeticWaveform.operator_map[operator](result[channel], rhs_value)
+        else:
+            result[channel] = ArithmeticWaveform.rhs_only_map[operator](rhs_value)
+    return result
 
 
 class ArithmeticAtomicPulseTemplate(AtomicPulseTemplate):
@@ -96,17 +108,12 @@ class ArithmeticAtomicPulseTemplate(AtomicPulseTemplate):
 
     @property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
-        lhs = self.lhs.integral
-        rhs = self.rhs.integral
+        return _apply_operation_to_channel_dict(self._arithmetic_operator, self.lhs.integral, self.rhs.integral)
 
-        result = lhs.copy()
-
-        for channel, rhs_value in rhs.items():
-            if channel in result:
-                result[channel] = ArithmeticWaveform.operator_map[self._arithmetic_operator](result[channel], rhs_value)
-            else:
-                result[channel] = ArithmeticWaveform.rhs_only_map[self._arithmetic_operator](rhs_value)
-        return result
+    def _as_expression(self) -> Dict[ChannelID, ExpressionScalar]:
+        return _apply_operation_to_channel_dict(self._arithmetic_operator,
+                                                self.lhs._as_expression(),
+                                                self.rhs._as_expression())
 
     def build_waveform(self,
                        parameters: Dict[str, Real],
@@ -123,7 +130,7 @@ class ArithmeticAtomicPulseTemplate(AtomicPulseTemplate):
 
     def get_measurement_windows(self,
                                 parameters: Dict[str, Real],
-                                measurement_mapping: Dict[str, Optional[str]]) -> List['MeasurementWindow']:
+                                measurement_mapping: Dict[str, Optional[str]]) -> List[MeasurementWindow]:
         measurements = super().get_measurement_windows(parameters=parameters,
                                                        measurement_mapping=measurement_mapping)
         measurements.extend(self.lhs.get_measurement_windows(parameters=parameters,

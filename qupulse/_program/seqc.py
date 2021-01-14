@@ -18,13 +18,14 @@ from types import MappingProxyType
 import abc
 import itertools
 import inspect
-import glob
+import logging
 import os.path
 import hashlib
 from collections import OrderedDict
 import string
 import warnings
 import numbers
+import string
 
 import numpy as np
 from pathlib import Path
@@ -44,6 +45,14 @@ except ImportError:
 
 
 __all__ = ["HDAWGProgramManager"]
+
+
+def make_valid_identifier(name: str) -> str:
+    # replace all invalid characters and conactenate with hash of original name
+    name_hash = hashlib.sha256(name.encode('utf-8')).hexdigest()
+    valid_chars = string.ascii_letters + string.digits + '_'
+    namestub = ''.join(c for c in name if c in valid_chars)
+    return f'renamed_{namestub}_{name_hash}'
 
 
 class BinaryWaveform:
@@ -131,6 +140,7 @@ class BinaryWaveform:
         return hash(bytes(self.data))
 
     def fingerprint(self) -> str:
+        """This fingerprint is runtime independent"""
         return hashlib.sha256(self.data).hexdigest()
 
     def to_csv_compatible_table(self):
@@ -150,8 +160,8 @@ class BinaryWaveform:
 
 
 class ConcatenatedWaveform:
-    """Handle the concatenation of multiple binary waveforms to create a big indexable waveform."""
     def __init__(self):
+        """Handle the concatenation of multiple binary waveforms to create a big indexable waveform."""
         self._concatenated = []
         self._as_binary = None
 
@@ -183,6 +193,48 @@ class ConcatenatedWaveform:
         else:
             self._concatenated.clear()
         self._as_binary = None
+
+
+class WaveformFileSystem:
+    logger = logging.getLogger('qupulse.hdawg.waveforms')
+
+    def __init__(self, path: Path):
+        """This class coordinates multiple AWGs (channel pairs) using the same file system to store the waveforms.
+
+        Args:
+            path: Waveforms are stored here
+        """
+        self._required = {}
+        self._path = path
+
+    def sync(self, client: 'WaveformMemory', waveforms: Mapping[str, BinaryWaveform], **kwargs):
+        """Write the required waveforms to the filesystem."""
+        self._required[id(client)] = waveforms
+        self._sync(**kwargs)
+
+    def _sync(self, delete=True, write_all=False):
+        to_save = {self._path.joinpath(file_name): binary
+                   for d in self._required.values()
+                   for file_name, binary in d.items()}
+
+        for existing_file in self._path.iterdir():
+            if not existing_file.is_file():
+                pass
+            elif existing_file in to_save:
+                if not write_all:
+                    self.logger.debug('Skipping %r', existing_file.name)
+                    to_save.pop(existing_file)
+            elif delete:
+                try:
+                    self.logger.debug('Deleting %r', existing_file.name)
+                    existing_file.unlink()
+                except OSError:
+                    self.logger.exception("Error deleting: %r", existing_file.name)
+
+        for file_name, binary_waveform in to_save.items():
+            table = binary_waveform.to_csv_compatible_table()
+            np.savetxt(file_name, table, '%u')
+            self.logger.debug('Wrote %r', file_name)
 
 
 class WaveformMemory:
@@ -255,45 +307,42 @@ class WaveformMemory:
             )
         return '\n'.join(declarations)
 
-    def sync_to_file_system(self, path: Path, delete=True, write_all=False):
-        to_save = {path.joinpath(wave_info.file_name): wave_info.binary_waveform
+    def sync_to_file_system(self, file_system: WaveformFileSystem):
+
+        to_save = {wave_info.file_name: wave_info.binary_waveform
                    for wave_info in itertools.chain(self._concatenated_waveforms_iter(),
                                                     self._shared_waveforms_iter())}
-
-        for file_name in glob.glob(os.path.join(path, '*.csv')):
-            if file_name in to_save:
-                if not write_all:
-                    to_save.pop(file_name)
-            elif delete:
-                try:
-                    os.remove(file_name)
-                except OSError:
-                    # TODO: log
-                    pass
-
-        for file_name, binary_waveform in to_save.items():
-            table = binary_waveform.to_csv_compatible_table()
-            np.savetxt(file_name, table, '%u')
+        file_system.sync(self, to_save)
 
 
 class ProgramWaveformManager:
     """Manages waveforms of a program"""
-    def __init__(self, name, memory: WaveformMemory):
+    def __init__(self, name: str, memory: WaveformMemory):
+        if not name.isidentifier():
+            waveform_name = make_valid_identifier(name)
+        else:
+            waveform_name = name
+        
+        self._waveform_name = waveform_name
         self._program_name = name
         self._memory = memory
 
         assert self._program_name not in self._memory.concatenated_waveforms
         assert all(self._program_name not in programs for programs in self._memory.shared_waveforms.values())
-        self._memory.concatenated_waveforms[self._program_name] = ConcatenatedWaveform()
+        self._memory.concatenated_waveforms[waveform_name] = ConcatenatedWaveform()
 
     @property
     def program_name(self) -> str:
         return self._program_name
+    
+    @property
+    def main_waveform_name(self) -> str:
+        self._waveform_name
 
     def clear_requested(self):
         for programs in self._memory.shared_waveforms.values():
             programs.discard(self._program_name)
-        self._memory.concatenated_waveforms[self._program_name].clear()
+        self._memory.concatenated_waveforms[self._waveform_name].clear()
 
     def request_shared(self, binary_waveform: BinaryWaveform) -> str:
         """Register waveform if not already registered and return a unique identifier placeholder.
@@ -307,17 +356,17 @@ class ProgramWaveformManager:
 
     def request_concatenated(self, binary_waveform: BinaryWaveform) -> str:
         """Append the waveform to the concatenated waveform"""
-        bin_wf_list = self._memory.concatenated_waveforms[self._program_name]
+        bin_wf_list = self._memory.concatenated_waveforms[self._waveform_name]
         bin_wf_list.append(binary_waveform)
         return self._memory.WF_PLACEHOLDER_TEMPLATE.format(id=id(bin_wf_list))
 
     def finalize(self):
-        self._memory.concatenated_waveforms[self._program_name].finalize()
+        self._memory.concatenated_waveforms[self._waveform_name].finalize()
 
     def prepare_delete(self):
         """Delete all references in waveform memory to this program. Cannot be used afterwards."""
         self.clear_requested()
-        del self._memory.concatenated_waveforms[self._program_name]
+        del self._memory.concatenated_waveforms[self._waveform_name]
 
 
 class UserRegister:
@@ -542,7 +591,7 @@ class HDAWGProgramManager:
                          NO_RESET_MASK=bin(1 << 15),
                          PROG_SEL_MASK=bin((1 << 15) - 1),
                          IDLE_WAIT_CYCLES=300)
-    PROGRAM_FUNCTION_NAME_TEMPLATE = '{program_name}_function'
+    _PROGRAM_FUNCTION_NAME_TEMPLATE = '{program_name}_function'
     INIT_PROGRAM_SWITCH = '// INIT program switch.\nvar prog_sel = 0;'
     WAIT_FOR_SOFTWARE_TRIGGER = "waitForSoftwareTrigger();"
     SOFTWARE_WAIT_FOR_TRIGGER_FUNCTION_DEFINITION = (
@@ -554,6 +603,12 @@ class HDAWGProgramManager:
         '  }\n'
         '}\n'
     )
+    
+    @classmethod
+    def get_program_function_name(cls, program_name: str):
+        if not program_name.isidentifier():
+            program_name = make_valid_identifier(program_name)
+        return cls._PROGRAM_FUNCTION_NAME_TEMPLATE.format(program_name=program_name)
 
     def __init__(self):
         self._waveform_memory = WaveformMemory()
@@ -663,7 +718,7 @@ class HDAWGProgramManager:
 
         lines.append('\n// program definitions')
         for program_name, program in self.programs.items():
-            program_function_name = self.PROGRAM_FUNCTION_NAME_TEMPLATE.format(program_name=program_name)
+            program_function_name = self.get_program_function_name(program_name)
             lines.append('void {program_function_name}() {{'.format(program_function_name=program_function_name))
             lines.append(replace_multiple(program.seqc_source, replacements))
             lines.append('}\n')
@@ -680,7 +735,7 @@ class HDAWGProgramManager:
         lines.append('  switch (prog_sel) {')
 
         for program_name, program_entry in self.programs.items():
-            program_function_name = self.PROGRAM_FUNCTION_NAME_TEMPLATE.format(program_name=program_name)
+            program_function_name = self.get_program_function_name(program_name)
             lines.append('    case {selection_index}:'.format(selection_index=program_entry.selection_index))
             lines.append('      {program_function_name}();'.format(program_function_name=program_function_name))
             lines.append('      waitWave();')

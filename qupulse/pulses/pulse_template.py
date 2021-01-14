@@ -12,6 +12,8 @@ import itertools
 import collections
 from numbers import Real, Number
 
+import sympy
+
 from qupulse.utils.types import ChannelID, DocStringABCMeta, FrozenDict
 from qupulse.serialization import Serializable
 from qupulse.expressions import ExpressionScalar, Expression, ExpressionLike
@@ -32,7 +34,7 @@ MappingTuple = Union[Tuple['PulseTemplate'],
                      Tuple['PulseTemplate', Dict, Dict, Dict]]
 
 
-class PulseTemplate(Serializable, metaclass=DocStringABCMeta):
+class PulseTemplate(Serializable):
     """A PulseTemplate represents the parametrized general structure of a pulse.
 
     A PulseTemplate described a pulse in an abstract way: It defines the structure of a pulse
@@ -290,6 +292,8 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
 
     Implies that no AtomicPulseTemplate object is interruptable.
     """
+    _AS_EXPRESSION_TIME = sympy.Dummy('_t', positive=True)
+
     def __init__(self, *,
                  identifier: Optional[str],
                  measurements: Optional[List[MeasurementDeclaration]]):
@@ -344,6 +348,11 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
             Waveform object represented by this PulseTemplate object or None, if this object
                 does not represent a valid waveform of finite length.
         """
+
+    @abstractmethod
+    def _as_expression(self) -> Dict[ChannelID, ExpressionScalar]:
+        """Helper function to allow integral calculation in case of truncation. AtomicPulseTemplate._AS_EXPRESSION_TIME
+        is by convention the time variable."""
 
 
 class DoubleParameterNameException(Exception):
