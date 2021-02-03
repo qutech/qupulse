@@ -295,14 +295,15 @@ class TaborDevice(AWGDevice):
             self[SCPI].send_cmd("INST:COUP:STAT OFF")
 
     def _is_coupled(self) -> bool:
-        # TODO: comment is missing
+        """
+        Returns true if the coupling of the device is 'coupled' otherwise false
+        """
         if self._coupled is None:
             return self[SCPI].send_query(":INST:COUP:STAT?") == "ON"
         else:
             return self._coupled
 
     def cleanup(self) -> None:
-        # TODO: split cleanup in to two different methods
         for channel_tuple in self.channel_tuples:
             channel_tuple.cleanup()
 
@@ -365,11 +366,9 @@ class TaborDevice(AWGDevice):
     make_combined_wave = staticmethod(teawg.TEWXAwg.make_combined_wave)
 
     def _initialize(self) -> None:
-        # TODO: work on this comment
-
         # 1. Select channel
         # 2. Turn off gated mode
-        # 3. continous mode
+        # 3. Turn on continous mode
         # 4. Armed mode (only generate waveforms after enab command)
         # 5. Expect enable signal from (USB / LAN / GPIB)
         # 6. Use arbitrary waveforms as marker source
@@ -481,7 +480,6 @@ class TaborActivatableChannels(ActivatableChannels):
 
     def _select(self) -> None:
         self._parent()._select()
-
 
 # Implementation
 class TaborChannel(AWGChannel):
