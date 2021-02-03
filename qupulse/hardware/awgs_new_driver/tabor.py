@@ -1259,9 +1259,6 @@ class TaborChannelTuple(AWGChannelTuple):
 
             marker_0_cmd = ":SOUR:MARK:SEL 1;:SOUR:MARK:SOUR USER;:SOUR:MARK:STAT OFF"
             marker_1_cmd = ":SOUR:MARK:SEL 2;:SOUR:MARK:SOUR USER;:SOUR:MARK:STAT OFF"
-            # TODO: würde diese ersetzung reichen? - maybe change for synchronisationsfeature
-            # for marker_ch in self.marker_channels:
-            #    marker_ch[TaborMarkerChannelActivatable].disable()
 
             wf_mode_cmd = ":SOUR:FUNC:MODE FIX"
 
@@ -1273,8 +1270,6 @@ class TaborChannelTuple(AWGChannelTuple):
     @with_select
     def _exit_config_mode(self) -> None:
         """Leave the configuration mode. Enter advanced sequence mode and turn on all outputs"""
-
-        # TODO: change implementation for channel synchronisation feature
 
         if self.device._is_coupled():
             # Coupled -> switch all channels at once
