@@ -463,8 +463,9 @@ class TaborActivatableChannels(ActivatableChannels):
     def enabled(self) -> bool:
         """
         Returns the the state a channel has at the moment. A channel is either activated or deactivated
+        True stands for activated and false for deactivated
         """
-        pass  # TODO: to implement
+        return self._parent().device[SCPI].send_query(":OUTP ?") == "ON"
 
     @with_select
     def enable(self):
@@ -1309,10 +1310,15 @@ class TaborActivatableMarkerChannels(ActivatableChannels):
 
     @property
     def enabled(self) -> bool:
-        pass  # TODO: to implement
+        """
+        Returns the the state a marker channel has at the moment. A channel is either activated or deactivated
+        True stands for activated and false for deactivated
+        """
+        return self._parent().device[SCPI].send_query(":MARK:STAT ?") == "ON"
 
     @with_select
     def enable(self):
+        """Enables the output of a certain marker channel"""
         command_string = "SOUR:MARK:SOUR USER; :SOUR:MARK:STAT ON"
         command_string = command_string.format(
             channel=self._parent().channel_tuple.channels[0].idn,
@@ -1321,6 +1327,7 @@ class TaborActivatableMarkerChannels(ActivatableChannels):
 
     @with_select
     def disable(self):
+        """Disable the output of a certain marker channel"""
         command_string = ":SOUR:MARK:SOUR USER; :SOUR:MARK:STAT OFF"
         command_string = command_string.format(
             channel=self._parent().channel_tuple.channels[0].idn,
