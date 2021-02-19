@@ -13,7 +13,7 @@ Furthermore:
 classes that convert `Loop` objects"""
 
 from typing import Optional, Union, Sequence, Dict, Iterator, Tuple, Callable, NamedTuple, MutableMapping, Mapping,\
-    Iterable, Any, List
+    Iterable, Any, List, Deque
 from types import MappingProxyType
 import abc
 import itertools
@@ -23,9 +23,10 @@ import os.path
 import hashlib
 from collections import OrderedDict
 import re
-import warnings
+import collections
 import numbers
 import string
+import functools
 
 import more_itertools
 
@@ -881,26 +882,152 @@ def mark_sharable_waveforms(node_cluster: Sequence['SEQCNode'], sharable_wavefor
                 wf_playback.shared = True
 
 
+def _find_repetition(nodes: Deque['SEQCNode'],
+                     hashes: Deque[int],
+                     cluster_dump: List[List['SEQCNode']]) -> Tuple[
+    Tuple['SEQCNode', ...],
+    Tuple[int, ...],
+    List['SEQCNode']
+]:
+    """Finds repetitions of stepping patterns in nodes. Assumes hashes contains the stepping_hash of each node. If a
+    pattern is """
+    assert len(nodes) == len(hashes)
+
+    max_cluster_size = len(nodes) // 2
+    for cluster_size in range(max_cluster_size, 0, -1):
+        n_repetitions = len(nodes) // cluster_size
+        for c_idx in range(cluster_size):
+            idx_a = -1 - c_idx
+
+            for n in range(1, n_repetitions):
+                idx_b = idx_a - n * cluster_size
+                if hashes[idx_a] != hashes[idx_b] or not nodes[idx_a].same_stepping(nodes[idx_b]):
+                    n_repetitions = n
+                    break
+
+            if n_repetitions < 2:
+                break
+
+        else:
+            assert n_repetitions > 1
+            # found a stepping pattern repetition of length cluster_size!
+            to_dump = len(nodes) - (n_repetitions * cluster_size)
+            for _ in range(to_dump):
+                cluster_dump.append([nodes.popleft()])
+                hashes.popleft()
+
+            assert len(nodes) == n_repetitions * cluster_size
+
+            if cluster_size == 1:
+                current_cluster = list(nodes)
+
+                cluster_template_hashes = (hashes.popleft(),)
+                cluster_template: Tuple[SEQCNode] = (nodes.popleft(),)
+
+                nodes.clear()
+                hashes.clear()
+
+            else:
+                cluster_template_hashes = tuple(hashes.popleft() for _ in range(cluster_size))
+                cluster_template = tuple(
+                    nodes.popleft() for _ in range(cluster_size)
+                )
+
+                current_cluster: List[SEQCNode] = [Scope(list(cluster_template))]
+
+                for n in range(1, n_repetitions):
+                    current_cluster.append(Scope([
+                        nodes.popleft() for _ in range(cluster_size)
+                    ]))
+                assert not nodes
+                hashes.clear()
+
+            return cluster_template, cluster_template_hashes, current_cluster
+    return (), (), []
+
+
 def to_node_clusters(loop: Union[Sequence[Loop], Loop], loop_to_seqc_kwargs: dict) -> Sequence[Sequence['SEQCNode']]:
     """transform to seqc recursively noes and cluster them if they have compatible stepping"""
     assert len(loop) > 1
 
-    node_clusters = []
+    # complexity: O( len(loop) * MAX_SUB_CLUSTER * loop.depth() )
+    # I hope...
+    MAX_SUB_CLUSTER = 4
+
+    node_clusters: List[List[SEQCNode]] = []
+
+
+    last_period = []
+    # this is the period that we currently are collecting
+    current_period: List[SEQCNode] = []
+
+    # list of already collected periods. Each period is transformed into a SEQCNode
+    current_cluster: List[SEQCNode] = []
+
+    # this is a template for what we are currently collecting
+    current_template: Tuple[SEQCNode, ...] = ()
+    current_template_hashes: Tuple[int, ...] = ()
+
+    # only populated if we are looking for a node template
     last_node = loop_to_seqc(loop[0], **loop_to_seqc_kwargs)
-    current_nodes = [last_node]
+    last_hashes = collections.deque([last_node.stepping_hash()], maxlen=MAX_SUB_CLUSTER*2)
+    last_nodes = collections.deque([last_node], maxlen=MAX_SUB_CLUSTER*2)
 
     # compress all nodes in clusters of the same stepping
     for child in itertools.islice(loop, 1, None):
         current_node = loop_to_seqc(child, **loop_to_seqc_kwargs)
+        current_hash = current_node.stepping_hash()
 
-        if last_node.same_stepping(current_node):
-            current_nodes.append(current_node)
+        if current_template:
+            # we are currently collecting something
+            idx = len(current_period)
+            if current_template_hashes[idx] == current_hash and current_node.same_stepping(current_template[idx]):
+                current_period.append(current_node)
+
+                if len(current_period) == len(current_template):
+                    if idx == 0:
+                        node = current_period.pop()
+                    else:
+                        node = Scope(current_period)
+                        current_period = []
+                    current_cluster.append(node)
+
+            else:
+                # current template became invalid
+                assert len(current_cluster) > 1
+                node_clusters.append(current_cluster)
+
+                assert not last_nodes
+                assert not last_hashes
+                last_nodes.extend(current_period)
+                last_hashes.extend(current_template_hashes[:len(current_period)])
+
+                last_nodes.append(current_node)
+                last_hashes.append(current_hash)
+
+                (current_template,
+                 current_template_hashes,
+                 current_cluster) = _find_repetition(last_nodes, last_hashes,
+                                                     node_clusters)
         else:
-            node_clusters.append(current_nodes)
-            current_nodes = [current_node]
+            if len(last_nodes) == last_nodes.maxlen:
+                # lookup deque is full
+                node_clusters.append([last_nodes.popleft()])
+                last_hashes.popleft()
 
-        last_node = current_node
-    node_clusters.append(current_nodes)
+            last_nodes.append(current_node)
+            last_hashes.append(current_hash)
+
+            (current_template,
+             current_template_hashes,
+             current_cluster) = _find_repetition(last_nodes, last_hashes,
+                                                 node_clusters)
+
+    assert not (current_cluster and last_nodes)
+    node_clusters.append(current_cluster)
+    node_clusters.extend([node] for node in current_period)
+    node_clusters.extend([node] for node in last_nodes)
+
     return node_clusters
 
 
@@ -962,6 +1089,10 @@ class SEQCNode(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def samples(self) -> int:
         pass
+
+    @abc.abstractmethod
+    def stepping_hash(self) -> int:
+        """hash of the stepping properties of this node"""
 
     @abc.abstractmethod
     def same_stepping(self, other: 'SEQCNode'):
@@ -1030,6 +1161,9 @@ class Scope(SEQCNode):
         for node in self.nodes:
             yield from node.iter_waveform_playbacks()
 
+    def stepping_hash(self) -> int:
+        return functools.reduce(int.__xor__, (node.stepping_hash() for node in self.nodes), hash(type(self)))
+
     def same_stepping(self, other: 'Scope'):
         return (type(other) is Scope and
                 len(self.nodes) == len(other.nodes) and
@@ -1048,6 +1182,12 @@ class Scope(SEQCNode):
                                            pos_var_name=pos_var_name,
                                            node_name_generator=node_name_generator,
                                            advance_pos_var=advance_pos_var)
+
+    def __eq__(self, other):
+        if type(other) is type(self):
+            return self.nodes == other.nodes
+        else:
+            return NotImplemented
 
 
 class Repeat(SEQCNode):
@@ -1083,6 +1223,9 @@ class Repeat(SEQCNode):
         return (type(self) == type(other) and
                 self.repetition_count == other.repetition_count and
                 self.scope.same_stepping(other.scope))
+
+    def stepping_hash(self) -> int:
+        return hash((type(self), self.repetition_count, self.scope.stepping_hash()))
 
     def iter_waveform_playbacks(self) -> Iterator['WaveformPlayback']:
         return self.scope.iter_waveform_playbacks()
@@ -1183,6 +1326,9 @@ class SteppingRepeat(SEQCNode):
         for node in self.node_cluster:
             yield from node.iter_waveform_playbacks()
 
+    def stepping_hash(self) -> int:
+        return hash((type(self), self.node_cluster[0].stepping_hash()))
+
     def same_stepping(self, other: 'SteppingRepeat'):
         return (type(other) is SteppingRepeat and
                 len(self.node_cluster) == len(other.node_cluster) and
@@ -1229,6 +1375,12 @@ class WaveformPlayback(SEQCNode):
             assert len(wf_lens) == 1
             wf_len, = wf_lens
             return wf_len
+
+    def stepping_hash(self) -> int:
+        if self.shared:
+            return hash((type(self), self.waveform))
+        else:
+            return hash((type(self), self.samples()))
 
     def same_stepping(self, other: 'WaveformPlayback') -> bool:
         same_type = type(self) is type(other) and self.shared == other.shared
