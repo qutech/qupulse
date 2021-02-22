@@ -9,9 +9,6 @@ from qupulse.hardware.feature_awg.features import ChannelSynchronization, Progra
     AmplitudeOffsetHandling
 from qupulse.utils.types import Collection
 
-warnings.simplefilter("ignore", UserWarning)
-
-
 
 ########################################################################################################################
 # Example Features
