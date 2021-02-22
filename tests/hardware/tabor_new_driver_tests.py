@@ -1,6 +1,6 @@
 import unittest
 
-from qupulse.hardware.awgs_new_driver.tabor import with_configuration_guard
+from qupulse.hardware.feature_awg.tabor import with_configuration_guard
 
 
 class ConfigurationGuardTest(unittest.TestCase):

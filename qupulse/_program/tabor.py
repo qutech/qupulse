@@ -9,7 +9,7 @@ import numbers
 import numpy as np
 
 from qupulse.utils.types import ChannelID, TimeType
-from qupulse.hardware.awgs_new_driver.base import ProgramEntry
+from qupulse.hardware.feature_awg.base import ProgramEntry
 from qupulse.hardware.util import get_sample_times, voltage_to_uint16
 from qupulse._program.waveforms import Waveform
 from qupulse._program._loop import Loop

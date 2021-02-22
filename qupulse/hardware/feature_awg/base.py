@@ -6,8 +6,8 @@ import numpy
 
 from qupulse._program._loop import Loop
 from qupulse._program.waveforms import Waveform
-from qupulse.hardware.awgs_new_driver import channel_tuple_wrapper
-from qupulse.hardware.awgs_new_driver.base_features import Feature, FeatureAble
+from qupulse.hardware.feature_awg import channel_tuple_wrapper
+from qupulse.hardware.feature_awg.base_features import Feature, FeatureAble
 from qupulse.hardware.util import get_sample_times
 from qupulse.utils.types import Collection, TimeType, ChannelID
 

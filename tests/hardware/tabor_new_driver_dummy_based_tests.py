@@ -9,7 +9,7 @@ from copy import copy, deepcopy
 import numpy as np
 
 from qupulse.hardware.awgs.base import AWGAmplitudeOffsetHandling
-from qupulse.hardware.awgs_new_driver.tabor import TaborProgram, TaborProgramMemory
+from qupulse.hardware.feature_awg.tabor import TaborProgram, TaborProgramMemory
 from qupulse.utils.types import TimeType
 from qupulse._program.tabor import TableDescription, TimeType, TableEntry
 from tests.hardware.dummy_modules import import_package

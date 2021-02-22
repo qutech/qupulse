@@ -4,7 +4,7 @@ import subprocess
 __all__ = ["install_requirements"]
 
 try:
-    from qupulse.hardware.awgs_new_driver.tabor import TaborDevice, TaborChannelTuple
+    from qupulse.hardware.feature_awg.tabor import TaborDevice, TaborChannelTuple
     __all__.extend(["TaborAWGRepresentation", "TaborChannelPair"])
 except ImportError:
     pass

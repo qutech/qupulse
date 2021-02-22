@@ -1,5 +1,5 @@
 from qupulse.hardware.setup import HardwareSetup, PlaybackChannel, MarkerChannel
-from qupulse.hardware.awgs_new_driver.tabor import TaborAWGRepresentation
+from qupulse.hardware.awgs.tabor import TaborAWGRepresentation
 import pyvisa
 
 

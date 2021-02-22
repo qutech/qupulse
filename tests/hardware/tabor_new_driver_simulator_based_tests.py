@@ -9,9 +9,10 @@ import pytabor
 import numpy as np
 
 from qupulse._program.tabor import TableDescription, TableEntry
-from qupulse.hardware.awgs_new_driver.features import DeviceControl, VoltageRange, ProgramManagement, SCPI, VolatileParameters
-from qupulse.hardware.awgs_new_driver.tabor import TaborDevice, TaborSegment
+from qupulse.hardware.feature_awg.features import DeviceControl, VoltageRange, ProgramManagement, SCPI, VolatileParameters
+from qupulse.hardware.feature_awg.tabor import TaborDevice, TaborSegment
 from qupulse.utils.types import TimeType
+
 
 class TaborSimulatorManager:
     def __init__(self,
@@ -120,7 +121,7 @@ class TaborAWGRepresentationTests(TaborSimulatorBasedTest):
 
     def test_sample_rate(self):
         for ch_tuple in self.instrument.channel_tuples:
-            self.assertIsInstance(ch_tuple.sample_rate,TimeType)
+            self.assertIsInstance(ch_tuple.sample_rate, TimeType)
 
         self.instrument[SCPI].send_cmd(':INST:SEL 1')
         self.instrument[SCPI].send_cmd(':FREQ:RAST 2.3e9')
@@ -262,7 +263,6 @@ class TaborMemoryReadTests(TaborSimulatorBasedTest):
         actual_sequence_tables = [self.channel_pair[ProgramManagement]._idle_sequence_table] + [[(rep, index + 2, jump)
                                                                               for rep, index, jump in table]
                                                                              for table in self.sequence_tables_raw]
-
 
         actual_advanced_table = [(1, 1, 0)] + [(rep, idx + 1, jmp) for rep, idx, jmp in self.advanced_sequence_table]
 

@@ -29,7 +29,7 @@ if awg_name == 'ZI':
     awg_channel = awg.channel_pair_AB
 
 elif awg_name == 'TABOR':
-    from qupulse.hardware.awgs_new_driver.tabor import TaborAWGRepresentation
+    from qupulse.hardware.awgs.tabor import TaborAWGRepresentation
     awg = TaborAWGRepresentation(awg_address, reset=True)
 
     channel_pairs = []

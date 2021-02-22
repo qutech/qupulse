@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Callable, Optional, Set, Tuple, Dict, Union
 
 from qupulse._program._loop import Loop
-from qupulse.hardware.awgs_new_driver.base import AWGDeviceFeature, AWGChannelFeature, AWGChannelTupleFeature
+from qupulse.hardware.feature_awg.base import AWGDeviceFeature, AWGChannelFeature, AWGChannelTupleFeature
 from qupulse.utils.types import ChannelID
 
 import pyvisa

@@ -4,8 +4,8 @@ import warnings
 
 from qupulse import ChannelID
 from qupulse._program._loop import Loop
-from qupulse.hardware.awgs_new_driver.base import AWGDevice, AWGChannel, AWGChannelTuple, AWGMarkerChannel
-from qupulse.hardware.awgs_new_driver.features import ChannelSynchronization, ProgramManagement, VoltageRange, \
+from qupulse.hardware.feature_awg.base import AWGDevice, AWGChannel, AWGChannelTuple, AWGMarkerChannel
+from qupulse.hardware.feature_awg.features import ChannelSynchronization, ProgramManagement, VoltageRange, \
     AmplitudeOffsetHandling
 from qupulse.utils.types import Collection
 

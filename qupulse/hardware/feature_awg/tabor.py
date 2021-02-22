@@ -8,13 +8,13 @@ from collections import OrderedDict
 import numpy as np
 from qupulse import ChannelID
 from qupulse._program._loop import Loop, make_compatible
-from qupulse.hardware.awgs_new_driver.channel_tuple_wrapper import ChannelTupleAdapter
-from qupulse.hardware.awgs_new_driver.features import ChannelSynchronization, AmplitudeOffsetHandling, VoltageRange, \
+from qupulse.hardware.feature_awg.channel_tuple_wrapper import ChannelTupleAdapter
+from qupulse.hardware.feature_awg.features import ChannelSynchronization, AmplitudeOffsetHandling, VoltageRange, \
     ProgramManagement, ActivatableChannels, DeviceControl, StatusTable, SCPI, VolatileParameters, \
     ReadProgram
 from qupulse.hardware.util import voltage_to_uint16, find_positions
 from qupulse.utils.types import Collection, TimeType
-from qupulse.hardware.awgs_new_driver.base import AWGChannelTuple, AWGChannel, AWGDevice, AWGMarkerChannel
+from qupulse.hardware.feature_awg.base import AWGChannelTuple, AWGChannel, AWGDevice, AWGMarkerChannel
 from typing import Sequence
 from qupulse._program.tabor import TaborSegment, TaborException, TaborProgram, PlottableProgram, TaborSequencing, \
     make_combined_wave
