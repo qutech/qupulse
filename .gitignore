@@ -13,5 +13,4 @@ MATLAB/+qc/personalPaths.mat
 /doc/source/_autosummary/*
 .idea/
 .mypy_cache/*
-.gitignore
 tests/hardware/WX2184C.exe
