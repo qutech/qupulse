@@ -323,36 +323,42 @@ class Loop(Node):
         Args:
             depth: Target depth of the program
         """
-        i = 0
-        while i < len(self):
-            # only used by type checker
-            sub_program = cast(Loop, self[i])
-
-            if sub_program.depth() < depth - 1:
-                # increase nesting because the subprogram is not deep enough
-                sub_program.encapsulate()
-
-            elif not sub_program.is_balanced():
-                # balance the sub program. We revisit it in the next iteration (no change of i )
-                # because it might modify self. While writing this comment I am not sure this is true. 14.01.2020 Simon
-                sub_program.flatten_and_balance(depth - 1)
-
-            elif sub_program.depth() == depth - 1:
-                # subprogram is balanced with the correct depth
-                i += 1
-
-            elif sub_program._has_single_child_that_can_be_merged():
-                # subprogram is balanced but to deep and has no measurements -> we can "lift" the sub-sub-program
-                # TODO: There was a len(sub_sub_program) == 1 check here that I cannot explain
-                sub_program._merge_single_child()
-
-            elif not sub_program.is_leaf():
-                # subprogram is balanced but too deep
-                sub_program.unroll()
-
-            else:
-                # we land in this case if the function gets called with depth == 0 and the current subprogram is a leaf
-                i += 1
+        if self._waveform is None:
+            i = 0
+            while i < len(self):
+                # only used by type checker
+                sub_program = cast(Loop, self[i])
+    
+                if sub_program.depth() < depth - 1:
+                    # increase nesting because the subprogram is not deep enough
+                    sub_program.encapsulate()
+    
+                elif not sub_program.is_balanced():
+                    # balance the sub program. We revisit it in the next iteration (no change of i )
+                    # because it might modify self. While writing this comment I am not sure this is true. 14.01.2020 Simon
+                    sub_program.flatten_and_balance(depth - 1)
+    
+                elif sub_program.depth() == depth - 1:
+                    # subprogram is balanced with the correct depth
+                    i += 1
+    
+                elif sub_program._has_single_child_that_can_be_merged():
+                    # subprogram is balanced but to deep and has no measurements -> we can "lift" the sub-sub-program
+                    # TODO: There was a len(sub_sub_program) == 1 check here that I cannot explain
+                    sub_program._merge_single_child()
+    
+                elif not sub_program.is_leaf():
+                    # subprogram is balanced but too deep
+                    sub_program.unroll()
+    
+                else:
+                    # we land in this case if the function gets called with depth == 0 and the current subprogram is a leaf
+                    i += 1
+        
+        else:
+            assert len(self) == 0
+            for _ in range(depth):
+                self.encapsulate()
 
     def _has_single_child_that_can_be_merged(self) -> bool:
         if len(self) == 1:
