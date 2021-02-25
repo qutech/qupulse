@@ -294,7 +294,7 @@ class AlazarCard(DAC):
         # todo [2018-06-14]: what if program to delete is currently armed?
 
     def clear(self) -> None:
-        self._registered_programs = dict()
+        self._registered_programs.clear()
         self.__armed_program = None
 
     @property

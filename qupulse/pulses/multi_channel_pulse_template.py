@@ -229,22 +229,26 @@ class ParallelConstantChannelPulseTemplate(PulseTemplate):
         return self._overwritten_channels
 
     def _get_overwritten_channels_values(self,
-                                         parameters: Mapping[str, Union[numbers.Real]]
+                                         parameters: Mapping[str, Union[numbers.Real]],
+                                         channel_mapping: Dict[ChannelID, Optional[ChannelID]]
                                          ) -> Dict[str, numbers.Real]:
-        return {name: value.evaluate_in_scope(parameters)
-                for name, value in self.overwritten_channels.items()}
+        return {channel_mapping[name]: value.evaluate_in_scope(parameters)
+                for name, value in self.overwritten_channels.items()
+                if channel_mapping[name] is not None}
 
     def _internal_create_program(self, *,
                                  scope: Scope,
                                  global_transformation: Optional[Transformation],
+                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  **kwargs):
-        overwritten_channels = self._get_overwritten_channels_values(parameters=scope)
+        overwritten_channels = self._get_overwritten_channels_values(parameters=scope, channel_mapping=channel_mapping)
         transformation = ParallelConstantChannelTransformation(overwritten_channels)
 
         if global_transformation is not None:
             transformation = chain_transformations(global_transformation, transformation)
 
         self._template._create_program(scope=scope,
+                                       channel_mapping=channel_mapping,
                                        global_transformation=transformation,
                                        **kwargs)
 
@@ -253,7 +257,8 @@ class ParallelConstantChannelPulseTemplate(PulseTemplate):
         inner_waveform = self._template.build_waveform(parameters, channel_mapping)
 
         if inner_waveform:
-            overwritten_channels = self._get_overwritten_channels_values(parameters=parameters)
+            overwritten_channels = self._get_overwritten_channels_values(parameters=parameters,
+                                                                         channel_mapping=channel_mapping)
             transformation = ParallelConstantChannelTransformation(overwritten_channels)
             return TransformingWaveform(inner_waveform, transformation)
 
