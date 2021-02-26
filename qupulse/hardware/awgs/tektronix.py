@@ -817,7 +817,7 @@ class TektronixAWG(AWG):
         if channel not in (1, 2, 3, 4):
             raise TektronixException('Invalid channel: {}'.format(channel))
        
-        return float(self._device.query(f'SOUR{channel}:VOLT?'))
+        return self._device.get_amplitude(channel)
        
             
       
