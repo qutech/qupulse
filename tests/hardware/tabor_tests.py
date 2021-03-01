@@ -52,3 +52,5 @@ class ConfigurationGuardTest(unittest.TestCase):
             channel_pair.guarded_method(1, True)
 
         self.assertFalse(channel_pair.is_in_config_mode)
+
+
