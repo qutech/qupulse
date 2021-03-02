@@ -152,7 +152,7 @@ class HardwareSetup:
             awg.upload(name,
                        program=program,
                        channels=tuple(playback_ids),
-                       marker_channels=tuple(marker_ids),
+                       markers=tuple(marker_ids),
                        force=update,
                        voltage_transformation=tuple(voltage_trafos))
 
