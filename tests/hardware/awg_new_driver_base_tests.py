@@ -4,6 +4,7 @@ import warnings
 
 from qupulse import ChannelID
 from qupulse._program._loop import Loop
+from qupulse.hardware.feature_awg import channel_tuple_wrapper
 from qupulse.hardware.feature_awg.base import AWGDevice, AWGChannel, AWGChannelTuple, AWGMarkerChannel
 from qupulse.hardware.feature_awg.features import ChannelSynchronization, ProgramManagement, VoltageRange, \
     AmplitudeOffsetHandling
@@ -92,6 +93,13 @@ class TestProgramManagementFeature(ProgramManagement):
     def programs(self) -> Set[str]:
         return set(self._programs.keys())
 
+    def run_current_program(self) -> None:
+        if self._armed_program:
+            print("Run Program:", self._armed_program)
+            print(self.programs[self._armed_program])
+        else:
+            print("No program armed")
+
 
 ########################################################################################################################
 # Device & Channels
@@ -160,6 +168,10 @@ class TestAWGChannelTuple(AWGChannelTuple):
         self._device = device
         self._channels = tuple(channels)
         self._sample_rate = 12.456  # default value
+
+    @property
+    def channel_tuple_adapter(self) -> channel_tuple_wrapper:
+        pass
 
     @property
     def sample_rate(self) -> float:
