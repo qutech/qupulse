@@ -720,8 +720,8 @@ class ELFManager:
 
     def clear(self):
         """Deletes all files with a SHA512 hash name"""
-        src_regex = re.compile('[a-z0-9]{128}\.seqc')
-        elf_regex = re.compile('[a-z0-9]{128}\.elf')
+        src_regex = re.compile(r'[a-z0-9]{128}\.seqc')
+        elf_regex = re.compile(r'[a-z0-9]{128}\.elf')
 
         for p in self.awg_module.src_dir.iterdir():
             if src_regex.match(p.name):
