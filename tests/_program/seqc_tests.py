@@ -1,8 +1,7 @@
 import unittest
 from unittest import TestCase, mock
 import time
-from more_itertools import take
-from itertools import zip_longest
+from itertools import zip_longest, islice
 import sys
 import tempfile
 import pathlib
@@ -24,6 +23,11 @@ try:
     import zhinst
 except ImportError:
     zhinst = None
+
+
+def take(n, iterable):
+    "Return first n items of the iterable as a list"
+    return list(islice(iterable, n))
 
 
 def make_binary_waveform(waveform):

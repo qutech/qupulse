@@ -36,7 +36,7 @@ setup(name='qupulse',
       package_dir={'qupulse': 'qupulse', 'qctoolkit': 'qctoolkit'},
       packages=packages,
       python_requires='>=3.6',
-      install_requires=['sympy>=1.1.1', 'numpy', 'cached_property', 'more_itertools'],
+      install_requires=['sympy>=1.1.1', 'numpy', 'cached_property'],
       extras_require={
           'plotting': ['matplotlib'],
           'VISA': ['pyvisa'],
