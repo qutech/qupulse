@@ -377,23 +377,24 @@ class ParallelConstantChannelPulseTemplateTests(unittest.TestCase):
     def test_get_overwritten_channels_values(self):
         template = DummyPulseTemplate(duration='t1', defined_channels={'X', 'Y'}, parameter_names={'a', 'b'},
                                       measurement_names={'M'})
-        overwritten_channels = {'Y': 'c', 'Z': 'a'}
-
-        expected_overwritten_channel_values = {'Y': 1.2, 'Z': 3.4}
+        overwritten_channels = {'Y': 'c', 'Z': 'a', 'ToNone': 'foo'}
+        channel_mapping = {'X': 'X', 'Y': 'K', 'Z': 'Z', 'ToNone': None}
+        expected_overwritten_channel_values = {'K': 1.2, 'Z': 3.4}
 
         pccpt = ParallelConstantChannelPulseTemplate(template, overwritten_channels)
 
         real_parameters = {'c': 1.2, 'a': 3.4}
-        self.assertEqual(expected_overwritten_channel_values, pccpt._get_overwritten_channels_values(real_parameters))
+        self.assertEqual(expected_overwritten_channel_values, pccpt._get_overwritten_channels_values(real_parameters,
+                                                                                                     channel_mapping=channel_mapping))
 
     def test_internal_create_program(self):
         template = DummyPulseTemplate(duration='t1', defined_channels={'X', 'Y'}, parameter_names={'a', 'b'},
                                       measurement_names={'M'}, waveform=DummyWaveform())
-        overwritten_channels = {'Y': 'c', 'Z': 'a'}
+        overwritten_channels = {'Y': 'c', 'Z': 'a', 'ToNone': 'foo'}
 
         parent_loop = object()
         measurement_mapping = object()
-        channel_mapping = {'Y': 'O'}
+        channel_mapping = {'Y': 'O', 'Z': 'Z', 'X': 'X', 'ToNone': None}
         to_single_waveform = object()
 
         other_kwargs = dict(measurement_mapping=measurement_mapping,
@@ -405,7 +406,7 @@ class ParallelConstantChannelPulseTemplateTests(unittest.TestCase):
         scope = DictScope.from_kwargs(c=1.2, a=3.4)
         kwargs = {**other_kwargs, 'scope': scope, 'global_transformation': None}
 
-        expected_overwritten_channels = {'Y': 1.2, 'Z': 3.4}
+        expected_overwritten_channels = {'O': 1.2, 'Z': 3.4}
         expected_transformation = ParallelConstantChannelTransformation(expected_overwritten_channels)
         expected_kwargs = {**kwargs, 'global_transformation': expected_transformation}
 
@@ -426,11 +427,11 @@ class ParallelConstantChannelPulseTemplateTests(unittest.TestCase):
         template = DummyPulseTemplate(duration='t1', defined_channels={'X', 'Y'}, parameter_names={'a', 'b'},
                                       measurement_names={'M'}, waveform=DummyWaveform())
         overwritten_channels = {'Y': 'c', 'Z': 'a'}
-        channel_mapping = {'X': 'X', 'Y': 'K'}
+        channel_mapping = {'X': 'X', 'Y': 'K', 'Z': 'Z'}
         pccpt = ParallelConstantChannelPulseTemplate(template, overwritten_channels)
 
         parameters = {'c': 1.2, 'a': 3.4}
-        expected_overwritten_channels = {'Y': 1.2, 'Z': 3.4}
+        expected_overwritten_channels = {'K': 1.2, 'Z': 3.4}
         expected_transformation = ParallelConstantChannelTransformation(expected_overwritten_channels)
         expected_waveform = TransformingWaveform(template.waveform, expected_transformation)
 
