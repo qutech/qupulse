@@ -107,7 +107,7 @@ class HDAWGChannelPairTests(unittest.TestCase):
     def test_set_volatile_parameters(self):
         mock_device = mock.Mock()
 
-        parameters = {'a': ConstantParameter(9)}
+        parameters = {'a': 9}
         requested_changes = OrderedDict([(UserRegister.from_seqc(4), 2), (UserRegister.from_seqc(3), 6)])
 
         expected_user_reg_calls = [mock.call(*args) for args in requested_changes.items()]

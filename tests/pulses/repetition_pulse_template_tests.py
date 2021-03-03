@@ -302,7 +302,6 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
                                    global_transformation=None,
                                        parent_loop=program)
 
-        parameters = {'foo': ConstantParameter(7)}
         with self.assertRaises(ParameterNotProvidedException):
             t._internal_create_program(scope=scope,
                                        measurement_mapping=measurement_mapping,
