@@ -187,7 +187,7 @@ class ParameterConstraint(AnonymousSerializable):
             self._expression = sympy.Eq(*sympy.sympify(relation.split('==')))
         else:
             self._expression = sympy.sympify(relation)
-        if not isinstance(self._expression, sympy.boolalg.Boolean):
+        if not isinstance(self._expression, sympy.logic.boolalg.Boolean):
             raise ValueError('Constraint is not boolean')
         self._expression = Expression(self._expression)
 
