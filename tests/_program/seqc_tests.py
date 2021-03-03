@@ -371,9 +371,9 @@ class LoopToSEQCTranslationTests(TestCase):
         def dummy_loop_to_seqc(loop, **kwargs):
             return loop
 
-        loops = [wf1, wf2, wf1, wf1, wf3, wf1, wf1, wf1]
+        loops = [wf1, wf2, wf1, wf1, wf3, wf1, wf1, wf1, wf3, wf1, wf3, wf1, wf3]
         expected_calls = [mock.call(loop, **loop_to_seqc_kwargs) for loop in loops]
-        expected_result = [[wf1, wf2, wf1, wf1], [wf3], [wf1, wf1, wf1]]
+        expected_result = [[wf1, wf2, wf1, wf1], [wf3], [wf1, wf1, wf1], [Scope([wf3, wf1]), Scope([wf3, wf1])], [wf3]]
 
         with mock.patch('qupulse._program.seqc.loop_to_seqc', wraps=dummy_loop_to_seqc) as mock_loop_to_seqc:
             result = to_node_clusters(loops, loop_to_seqc_kwargs)

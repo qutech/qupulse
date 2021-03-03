@@ -393,7 +393,7 @@ class ParallelConstantChannelPulseTemplateTests(unittest.TestCase):
 
         parent_loop = object()
         measurement_mapping = object()
-        channel_mapping = object()
+        channel_mapping = {'Y': 'O'}
         to_single_waveform = object()
 
         other_kwargs = dict(measurement_mapping=measurement_mapping,
