@@ -60,6 +60,14 @@ def pairwise(iterable: Iterable[Any],
     return zip_function(a, b, **kwargs)
 
 
+def grouper(iterable: Iterable[Any], n: int, fillvalue=None) -> Iterable[Tuple[Any, ...]]:
+    """Collect data into fixed-length chunks or blocks"""
+    # grouper('ABCDEFG', 3, 'x') --> ABC DEF Gxx"
+    # this is here instead of using more_itertools because there were problems with the old version's argument order
+    args = [iter(iterable)] * n
+    return itertools.zip_longest(fillvalue=fillvalue, *args)
+
+
 def replace_multiple(s: str, replacements: Mapping[str, str]) -> str:
     """Replace multiple strings at once. If multiple replacements overlap the precedence is given by the order in
     replacements.
