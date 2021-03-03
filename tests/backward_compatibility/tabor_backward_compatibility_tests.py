@@ -4,6 +4,7 @@ import json
 import typing
 import importlib.util
 import sys
+import warnings
 
 from tests.hardware.tabor_simulator_based_tests import TaborSimulatorManager
 from tests.hardware.dummy_devices import DummyDAC
@@ -158,7 +159,8 @@ class CompleteIntegrationTestHelper(unittest.TestCase):
         cls.test_state = PulseLoadingAndSequencingHelper(cls.data_folder, cls.pulse_name)
 
     def test_1_1_deserialization(self):
-        self.test_state.deserialize_pulse()
+        with self.assertWarns(DeprecationWarning):
+            self.test_state.deserialize_pulse()
 
     def test_1_2_deserialization_2018(self) -> None:
         self.test_state.deserialize_pulse_2018()
