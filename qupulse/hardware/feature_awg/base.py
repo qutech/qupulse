@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Optional
 import weakref
 
-from qupulse.hardware.feature_awg import channel_tuple_wrapper
+from qupulse.hardware.awgs.base import AWG
 from qupulse.hardware.feature_awg.base_features import Feature, FeatureAble
 from qupulse.utils.types import Collection
 
@@ -83,8 +83,8 @@ class AWGChannelTuple(FeatureAble[AWGChannelTupleFeature], ABC):
 
     @property
     @abstractmethod
-    def channel_tuple_adapter(self) -> channel_tuple_wrapper:
-        pass
+    def channel_tuple_adapter(self) -> AWG:
+        """Return old interface adapter object. See channel_tuple_wrapper for details."""
 
     @property
     def idn(self) -> int:

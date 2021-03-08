@@ -7,7 +7,7 @@ from qupulse._program._loop import Loop
 from qupulse.hardware.feature_awg import channel_tuple_wrapper
 from qupulse.hardware.feature_awg.base import AWGDevice, AWGChannel, AWGChannelTuple, AWGMarkerChannel
 from qupulse.hardware.feature_awg.features import ChannelSynchronization, ProgramManagement, VoltageRange, \
-    AmplitudeOffsetHandling, RepetitionMode
+    AmplitudeOffsetHandling, RepetitionMode, VolatileParameters
 from qupulse.utils.types import Collection
 
 
@@ -23,6 +23,11 @@ class TestSynchronizeChannelsFeature(ChannelSynchronization):
     def synchronize_channels(self, group_size: int) -> None:
         """Forwarding call to TestAWGDevice"""
         self._parent.synchronize_channels(group_size)
+
+
+class TestVolatileParameters(VolatileParameters):
+    def set_volatile_parameters(self, program_name: str, parameters) -> None:
+        raise NotImplementedError()
 
 
 class TestVoltageRangeFeature(VoltageRange):
@@ -175,7 +180,7 @@ class TestAWGChannelTuple(AWGChannelTuple):
 
     @property
     def channel_tuple_adapter(self) -> channel_tuple_wrapper:
-        pass
+        return channel_tuple_wrapper.ChannelTupleAdapter(self)
 
     @property
     def sample_rate(self) -> float:
