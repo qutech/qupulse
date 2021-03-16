@@ -319,7 +319,7 @@ class LoopToSEQCTranslationTests(TestCase):
         # we use None because it is not used in this test
         user_registers = None
 
-        wf = DummyWaveform(duration=32)
+        wf = DummyWaveform(duration=32, sample_output=lambda x: np.sin(x))
         loop = Loop(waveform=wf)
 
         # with wrapping repetition

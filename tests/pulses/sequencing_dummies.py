@@ -75,7 +75,7 @@ class DummyNoValueParameter(Parameter):
 
 class DummyWaveform(Waveform):
 
-    def __init__(self, duration: Union[float, TimeType]=0, sample_output: Union[numpy.ndarray, dict]=None, defined_channels=None) -> None:
+    def __init__(self, duration: Union[float, TimeType]=0, sample_output: Union[numpy.ndarray, dict, callable]=None, defined_channels=None) -> None:
         super().__init__()
         self.duration_ = duration if isinstance(duration, TimeType) else TimeType.from_float(duration)
         self.sample_output = sample_output
@@ -118,6 +118,8 @@ class DummyWaveform(Waveform):
         if self.sample_output is not None:
             if isinstance(self.sample_output, dict):
                 output_array[:] = self.sample_output[channel]
+            elif callable(self.sample_output):
+                output_array[:] = self.sample_output(sample_times)
             else:
                 output_array[:] = self.sample_output
         else:
