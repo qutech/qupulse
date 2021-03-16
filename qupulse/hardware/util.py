@@ -1,5 +1,6 @@
 from typing import List, Sequence, Tuple, Union, Optional
 import itertools
+from unittest import mock
 
 import numpy as np
 
@@ -8,10 +9,10 @@ from qupulse.utils.types import TimeType, Collection
 from qupulse.utils import pairwise
 
 try:
-    import numba
-    njit = numba.njit
+    import numba as nb
+    njit = nb.njit
 except ImportError:
-    numba = None
+    nb = mock.MagicMock()
     njit = lambda x: x
 
 try:
@@ -78,7 +79,7 @@ def voltage_to_uint16(voltage: np.ndarray, output_amplitude: float, output_offse
         raise ValueError('The resolution must be an integer > 0')
 
     try:
-        if numba:
+        if nb:
             impl = _voltage_to_uint16_numba
         else:
             impl = _voltage_to_uint16_numpy
@@ -186,7 +187,8 @@ def _zhinst_voltage_to_uint16_numba(size: int, ch1: Optional[np.ndarray], ch2: O
             data[i, 2] |= (m2_back[i] != 0) << 3
 
     if invalid_value is not None:
-        raise ValueError('Encountered an invalid value in channel data (not in [-1, 1])', invalid_value)
+        # we can only use compile time constants here
+        raise ValueError('Encountered an invalid value in channel data (not in [-1, 1])')
 
     return data.ravel()
 
@@ -239,7 +241,10 @@ def zhinst_voltage_to_uint16(ch1: Optional[np.ndarray], ch2: Optional[np.ndarray
     size, = size
     size = int(size)
 
-    if numba:
-        return _zhinst_voltage_to_uint16_numba(size, *all_input)
-    else:
-        return _zhinst_voltage_to_uint16_numpy(size, *all_input)
+    if nb is not None:
+        try:
+            return _zhinst_voltage_to_uint16_numba(size, *all_input)
+        except ValueError:
+            # use the exception from numpy version
+            pass
+    return _zhinst_voltage_to_uint16_numpy(size, *all_input)
