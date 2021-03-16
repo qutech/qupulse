@@ -248,3 +248,19 @@ def zhinst_voltage_to_uint16(ch1: Optional[np.ndarray], ch2: Optional[np.ndarray
             # use the exception from numpy version
             pass
     return _zhinst_voltage_to_uint16_numpy(size, *all_input)
+
+
+def not_none_indices(seq: Sequence) -> Tuple[Sequence[Optional[int]], int]:
+    """Calculate lookup table from sparse to non sparse indices and the total number of not None elements
+
+    assert ([None, 0, 1, None, None, 2], 3) == not_none_indices([None, 'a', 'b', None, None, 'c'])
+    """
+    indices = []
+    idx = 0
+    for elem in seq:
+        if elem is None:
+            indices.append(elem)
+        else:
+            indices.append(idx)
+            idx += 1
+    return indices, idx

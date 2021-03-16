@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 
 from qupulse.utils.types import TimeType
-from qupulse.hardware.util import voltage_to_uint16, find_positions, get_sample_times
+from qupulse.hardware.util import voltage_to_uint16, find_positions, get_sample_times, not_none_indices
 from tests.pulses.sequencing_dummies import DummyWaveform
 
 
@@ -29,8 +29,6 @@ class VoltageToBinaryTests(unittest.TestCase):
     def test_zero_level_14bit(self):
         zero_level = voltage_to_uint16(np.zeros(1), 0.5, 0., 14)
         self.assertEqual(zero_level, 8192)
-
-
 
 
 class FindPositionTest(unittest.TestCase):
@@ -73,3 +71,8 @@ class SampleTimeCalculationTest(unittest.TestCase):
 
         np.testing.assert_equal(times, expected_times)
         np.testing.assert_equal(n_samples, np.asarray(4))
+
+class NotNoneIndexTest(unittest.TestCase):
+    def test_not_none_indices(self):
+        self.assertEqual(([None, 0, 1, None, None, 2], 3),
+                         not_none_indices([None, 'a', 'b', None, None, 'c']))
