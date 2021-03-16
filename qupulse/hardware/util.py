@@ -1,10 +1,10 @@
-from typing import List, Sequence, Tuple, Union
+from typing import List, Sequence, Tuple, Union, Collection
 import itertools
 
 import numpy as np
 
 from qupulse._program.waveforms import Waveform
-from qupulse.utils.types import TimeType, Collection
+from qupulse.utils.types import TimeType
 from qupulse.utils import pairwise
 
 __all__ = ['voltage_to_uint16', 'get_sample_times']

@@ -1,4 +1,4 @@
-from typing import Callable, Iterable, Optional, Set, Tuple
+from typing import Callable, Iterable, Optional, Set, Tuple, Collection
 import unittest
 import warnings
 
@@ -8,7 +8,6 @@ from qupulse.hardware.feature_awg import channel_tuple_wrapper
 from qupulse.hardware.feature_awg.base import AWGDevice, AWGChannel, AWGChannelTuple, AWGMarkerChannel
 from qupulse.hardware.feature_awg.features import ChannelSynchronization, ProgramManagement, VoltageRange, \
     AmplitudeOffsetHandling, RepetitionMode, VolatileParameters
-from qupulse.utils.types import Collection
 
 
 ########################################################################################################################
