@@ -1,13 +1,16 @@
-from typing import Union, Dict, Tuple, Any, Sequence, Optional
+from typing import Union, Dict, Tuple, Any, Sequence, Optional, Callable
 from numbers import Number
 from types import CodeType
 import warnings
+import functools
 
 import builtins
 import math
 
 import sympy
 import numpy
+from sympy.printing.pycode import NumPyPrinter
+
 
 try:
     import scipy.special as _special_functions
@@ -80,22 +83,76 @@ class IndexedBasedFinder(dict):
 
 
 class Broadcast(sympy.Function):
-    """Broadcast x to the specified shape using numpy.broadcast_to
+    """Broadcast x to the specified shape using numpy.broadcast_to. The shape must not be symbolic.
 
     Examples:
         >>> bc = Broadcast('a', (3,))
         >>> assert bc.subs({'a': 2}) == sympy.Array([2, 2, 2])
         >>> assert bc.subs({'a': (1, 2, 3)}) == sympy.Array([1, 2, 3])
     """
+    nargs = (2,)
 
     @classmethod
-    def eval(cls, x, shape) -> Optional[sympy.Array]:
-        if hasattr(shape, 'free_symbols') and shape.free_symbols:
-            # cannot do anything
+    def eval(cls, x, shape: Tuple[int]) -> Optional[sympy.Array]:
+        shape = _parse_broadcast_shape(shape, user=cls)
+        if shape is None:
             return None
 
         if hasattr(x, '__len__') or not x.free_symbols:
             return sympy.Array(numpy.broadcast_to(x, shape))
+
+    def __getitem__(self, item: Union):
+        return IndexedBroadcast(*self.args, item)
+
+    # Not iterable. If not set to None __getitem__ would be used for iterating
+    __iter__ = None
+
+    def _eval_Integral(self, *symbols, **assumptions):
+        x, shape = self.args
+        return Broadcast(sympy.Integral(x, *symbols, **assumptions), shape)
+
+    def _eval_derivative(self, sym):
+        x, shape = self.args
+        return Broadcast(sympy.diff(x, sym), shape)
+
+    def _numpycode(self, printer, **kwargs):
+        x, shape = map(functools.partial(printer._print, **kwargs), self.args)
+        return f'broadcast_to({x}, {shape})'
+
+
+class IndexedBroadcast(sympy.Function):
+    """Broadcast x to the specified shape using numpy.broadcast_to and index in the result."""
+    nargs = (3,)
+
+    @classmethod
+    def eval(cls, x, shape: Tuple[int], idx: int) -> Optional[sympy.Expr]:
+        shape = _parse_broadcast_shape(shape, user=cls)
+        idx = _parse_broadcast_index(idx, user=cls)
+        if shape is None or idx is None:
+            return None
+
+        if hasattr(x, '__len__') or not x.free_symbols:
+            return sympy.Array(numpy.broadcast_to(x, shape))[idx]
+
+    def _eval_Integral(self, *symbols, **assumptions):
+        x, shape, idx = self.args
+        return IndexedBroadcast(sympy.Integral(x, *symbols, **assumptions), shape, idx)
+
+    def _eval_derivative(self, sym):
+        x, shape, idx = self.args
+        return IndexedBroadcast(sympy.diff(x, sym), shape, idx)
+
+    def _eval_is_commutative(self):
+        x, shape, idx = self.args
+        result = self.eval(*self.args)
+        if result is None:
+            return x.is_commutative
+        else:
+            return result.is_commutative
+
+    def _numpycode(self, printer, **kwargs):
+        x, shape, idx = map(functools.partial(printer._print, **kwargs), self.args)
+        return f'broadcast_to({x}, {shape})[{idx}]'
 
 
 class Len(sympy.Function):
@@ -112,7 +169,8 @@ Len.__name__ = 'len'
 
 sympify_namespace = {'len': Len,
                      'Len': Len,
-                     'Broadcast': Broadcast}
+                     'Broadcast': Broadcast,
+                     'IndexedBroadcast': IndexedBroadcast}
 
 
 def numpy_compatible_mul(*args) -> Union[sympy.Mul, sympy.Array]:
@@ -123,6 +181,22 @@ def numpy_compatible_mul(*args) -> Union[sympy.Mul, sympy.Array]:
         return sympy.Array(result)
     else:
         return sympy.Mul(*args)
+
+
+def numpy_compatible_add(*args) -> Union[sympy.Add, sympy.Array]:
+    if any(isinstance(a, sympy.NDimArray) for a in args):
+        result = 0
+        for a in args:
+            result = result + (numpy.array(a.tolist()) if isinstance(a, sympy.NDimArray) else a)
+        return sympy.Array(result)
+    else:
+        return sympy.Add(*args)
+
+
+_NUMPY_COMPATIBLE = {
+    sympy.Add: numpy_compatible_add,
+    sympy.Mul: numpy_compatible_mul
+}
 
 
 def numpy_compatible_ceiling(input_value: Any) -> Any:
@@ -154,13 +228,15 @@ def sympify(expr: Union[str, Number, sympy.Expr, numpy.str_], **kwargs) -> sympy
         # putting numpy.str_ in sympy.sympify behaves unexpected in version 1.1.1
         # It seems to ignore the locals argument
         expr = str(expr)
+    if isinstance(expr, (tuple, list)):
+        expr = numpy.array(expr)
     try:
         return sympy.sympify(expr, **kwargs, locals=sympify_namespace)
     except TypeError as err:
         if True:#err.args[0] == "'Symbol' object is not subscriptable":
 
             indexed_base = get_subscripted_symbols(expr)
-            return sympy.sympify(expr, **kwargs, locals={**{k: sympy.IndexedBase(k)
+            return sympy.sympify(expr, **kwargs, locals={**{k: k if isinstance(k, Broadcast) else sympy.IndexedBase(k)
                                                             for k in indexed_base},
                                                          **sympify_namespace})
 
@@ -192,6 +268,9 @@ def get_variables(expression: sympy.Expr) -> Sequence[str]:
 def substitute_with_eval(expression: sympy.Expr,
                          substitutions: Dict[str, Union[sympy.Expr, numpy.ndarray, str]]) -> sympy.Expr:
     """Substitutes only sympy.Symbols. Workaround for numpy like array behaviour. ~Factor 3 slower compared to subs"""
+    warnings.warn("substitute_with_eval does not handle dummy symbols correctly and is planned to be removed",
+                  FutureWarning)
+
     substitutions = {k: v if isinstance(v, sympy.Expr) else sympify(v)
                      for k, v in substitutions.items()}
 
@@ -202,27 +281,26 @@ def substitute_with_eval(expression: sympy.Expr,
 
     string_representation = sympy.srepr(expression)
     return eval(string_representation, sympy.__dict__, {'Symbol': substitutions.__getitem__,
-                                                        'Mul': numpy_compatible_mul})
+                                                        'Mul': numpy_compatible_mul,
+                                                        'Add': numpy_compatible_add})
 
 
 def _recursive_substitution(expression: sympy.Expr,
                            substitutions: Dict[sympy.Symbol, sympy.Expr]) -> sympy.Expr:
     if not expression.free_symbols:
         return expression
-    elif expression.func is sympy.Symbol:
+    elif expression.func in (sympy.Symbol, sympy.Dummy):
         return substitutions.get(expression, expression)
 
-    elif expression.func is sympy.Mul:
-        func = numpy_compatible_mul
-    else:
-        func = expression.func
+    func = _NUMPY_COMPATIBLE.get(expression.func, expression.func)
     substitutions = {s: substitutions.get(s, s) for s in get_free_symbols(expression)}
     return func(*(_recursive_substitution(arg, substitutions) for arg in expression.args))
 
 
 def recursive_substitution(expression: sympy.Expr,
                            substitutions: Dict[str, Union[sympy.Expr, numpy.ndarray, str]]) -> sympy.Expr:
-    substitutions = {sympy.Symbol(k): sympify(v) for k, v in substitutions.items()}
+    substitutions = {k if isinstance(k, (sympy.Symbol, sympy.Dummy)) else sympy.Symbol(k): sympify(v)
+                     for k, v in substitutions.items()}
     for s in get_free_symbols(expression):
         substitutions.setdefault(s, s)
     return _recursive_substitution(expression, substitutions)
@@ -256,9 +334,44 @@ def evaluate_compiled(expression: sympy.Expr,
 def evaluate_lambdified(expression: Union[sympy.Expr, numpy.ndarray],
                         variables: Sequence[str],
                         parameters: Dict[str, Union[numpy.ndarray, Number]],
-                        lambdified) -> Tuple[Any, Any]:
+                        lambdified: Optional[Callable]) -> Tuple[Any, Any]:
     lambdified = lambdified or sympy.lambdify(variables, expression, _lambdify_modules)
+    return lambdified(**parameters), lambdified
 
+
+class HighPrecPrinter(NumPyPrinter):
+    """Custom printer that translates sympy.Rational into TimeType"""
+    def _print_Rational(self, expr):
+        return f'TimeType.from_fraction({expr.p}, {expr.q})'
+
+    @classmethod
+    def make(cls, expr, modules, use_imps=True):
+        """This is basically the printer creation code from sympy 1.6 lambdify"""
+        namespaces = []
+        if use_imps:
+            raise NotImplementedError('this is copied from lambdify printer creation but _imp_namespace is not puplic')
+        # Check for dict before iterating
+        namespaces += list(modules)
+
+        user_functions = {}
+        for m in _lambdify_modules[::-1]:
+            if isinstance(m, dict):
+                for k in m:
+                    user_functions[k] = k
+        return cls({'fully_qualified_modules': False, 'inline': True,
+                    'allow_unknown_functions': True,
+                    'user_functions': user_functions})
+
+
+def evaluate_lamdified_exact_rational(expression: sympy.Expr,
+                                      variables: Sequence[str],
+                                      parameters: Dict[str, Union[numpy.ndarray, Number]],
+                                      lambdified: Optional[Callable]) -> Tuple[Any, Any]:
+    """Evaluates Rational as TimeType. Only supports scalar expressions"""
+    from qupulse.utils.types import TimeType
+    _lambdify_modules[0]['TimeType'] = TimeType
+    printer = HighPrecPrinter.make(expression, _lambdify_modules, use_imps=False)
+    lambdified = lambdified or sympy.lambdify(variables, expression, _lambdify_modules, printer=printer)
     return lambdified(**parameters), lambdified
 
 
@@ -273,3 +386,27 @@ def almost_equal(lhs: sympy.Expr, rhs: sympy.Expr, epsilon: float=1e-15) -> Opti
         return False
     else:
         return None
+
+
+class UnsupportedBroadcastArgumentWarning(RuntimeWarning):
+    pass
+
+
+def _parse_broadcast_shape(shape: Tuple[int], user: type) -> Optional[Tuple[int]]:
+    try:
+        return tuple(map(int, shape))
+    except TypeError as err:
+        warnings.warn(f"The shape passed to {user.__module__}.{user.__name__} is not convertible to a tuple of integers: {err}\n"
+                      "Be aware that using a symbolic shape can lead to unexpected behaviour.",
+                      category=UnsupportedBroadcastArgumentWarning)
+    return None
+
+
+def _parse_broadcast_index(idx: int, user: type) -> Optional[int]:
+    try:
+        return int(idx)
+    except TypeError as err:
+        warnings.warn(f"The index passed to {user.__module__}.{user.__name__} is not convertible to an integer: {err}\n"
+                      "Be aware that using a symbolic index can lead to unexpected behaviour.",
+                      category=UnsupportedBroadcastArgumentWarning)
+    return None

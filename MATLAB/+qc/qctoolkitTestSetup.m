@@ -1,16 +1,17 @@
 %% --- Test setup without AWG and Alazar (only qctoolkit) -----------------
+quPulsePath = fileparts(which('qc.qctoolkitTestSetup'));
+load([quPulsePath '\personalPaths.mat']);
 global plsdata
 plsdata = struct( ...
-	'path', 'C:\Users\Marcel Meyer\Documents\__Wissenschaft__\Master_Projekt\code\qctk_pulses', ...
+	'path', personalPathsStruct.pulses_repo, ...
 	'awg', struct('inst', [], 'hardwareSetup', [], 'sampleRate', 2e9, 'currentProgam', '', 'registeredPrograms', struct(), 'defaultChannelMapping', struct(), 'defaultWindowMapping', struct(), 'defaultParametersAndDicts', {{}}, 'defaultAddMarker', {{}}), ...
-  'dict', struct('cache', [], 'path', 'C:\Users\Marcel Meyer\Documents\__Wissenschaft__\Master_Projekt\code\qctk_dicts'), ...
+  'dict', struct('cache', [], 'path', personalPathsStruct.dicts_repo), ...
 	'qc', struct('figId', 801), ...
-	'daq', struct('inst', [], 'defaultOperations', {{}}, 'reuseOperations', false) ...
+	'daq', struct('inst', [], 'defaultOperations', {{}}, 'reuseOperations', false, 'operationsExternallyModified', false) ...
 	);
 plsdata.daq.instSmName = 'ATS9440Python';
 plsdata.qc.backend = py.qctoolkit.serialization.FilesystemBackend(plsdata.path);
 plsdata.qc.serializer = py.qctoolkit.serialization.Serializer(plsdata.qc.backend);
-disp('[second script (plsdata) done]');
 % -------------------------------------------------------------------------
 
 %% --- Test setup replicating the Triton 200 measurement setup ------------
@@ -18,10 +19,10 @@ disp('[second script (plsdata) done]');
 % Need the triton_200 repo on the path (for awgctrl)
 
 % Path for Triton 200 backups
-loadPath = 'C:\Users\Marcel Meyer\Documents\__Wissenschaft__\Master_Projekt\copy_from_trition200_backup\DATA\workspace';
+loadPath = personalPathsStruct.loadPath;
 pulsePath = plsdata.path;
 dictPath = plsdata.dict.path;
-tunePath = 'C:\Users\Marcel Meyer\Documents\__Wissenschaft__\Master_Projekt\DATA\workspace';
+tunePath = personalPathsStruct.tunePath;
 
 % Loading
 try
@@ -53,7 +54,7 @@ fprintf('Loaded plsdata from %s\n', datestr(info.datenum));
 
 global tunedata
 global plsdata
-tunedata.run{tunedata.runIndex}.opts.loadFile = 'X:\Common\GaAs\Triton 200\Backup\DATA\tune';
+tunedata.run{tunedata.runIndex}.opts.loadFile = personalPathsStruct.loadPath;
 import tune.tune
 
 plsdata.path = pulsePath;
@@ -67,7 +68,7 @@ plsdata.daq.inst = py.qctoolkit.hardware.dacs.alazar.AlazarCard([]);
 % Initializes hardware setup
 % Can also be used for deleting all programs/resetting but then also need to setup Alazar again, i.e. the cell above and the three cells below )
 plsdata.awg.hardwareSetup = [];
-qc.setup_tabor_awg('realAWG', false, 'simulateAWG', true, 'taborDriverPath', 'C:\Users\"Marcel Meyer"\Documents\__Wissenschaft__\Master_Projekt\code\python-TaborDriver');
+qc.setup_tabor_awg('realAWG', false, 'simulateAWG', true, 'taborDriverPath', personalPathsStruct.taborDriverPath);
 
 % AWG default settings
 awgctrl('default');
@@ -89,5 +90,5 @@ tunedata.run{tunedata.runIndex}.opts.path = tunePath;
 
 
 import tune.tune
-disp('[third script (awg, tunedata etc) done]');
+disp('done');
 % -------------------------------------------------------------------------

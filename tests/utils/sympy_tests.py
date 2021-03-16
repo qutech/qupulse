@@ -10,14 +10,16 @@ import sympy
 import numpy as np
 
 from sympy.abc import a, b, c, d, e, f, k, l, m, n, i, j
-from sympy import sin, Sum, IndexedBase
+from sympy import sin, Sum, IndexedBase, Rational
 
 a_ = IndexedBase(a)
 b_ = IndexedBase(b)
+dummy_a = sympy.Dummy('a')
 
 from qupulse.utils.sympy import sympify as qc_sympify, substitute_with_eval, recursive_substitution, Len,\
     evaluate_lambdified, evaluate_compiled, get_most_simple_representation, get_variables, get_free_symbols,\
-    almost_equal, Broadcast, IndexedBasedFinder
+    almost_equal, Broadcast, IndexedBasedFinder, IndexedBroadcast, evaluate_lamdified_exact_rational
+from qupulse.utils.types import TimeType
 
 
 ################################################### SUBSTITUTION #######################################################
@@ -44,10 +46,17 @@ indexed_substitution_cases = [
 vector_valued_cases = [
     (a*b, {'a': sympy.Array([1, 2, 3])}, sympy.Array([1, 2, 3])*b),
     (a*b, {'a': sympy.Array([1, 2, 3]), 'b': sympy.Array([4, 5, 6])}, sympy.Array([4, 10, 18])),
+    (a + b, {'a': sympy.Array([1, 2, 3])}, sympy.Array([1 + b, 2 + b, 3 + b])),
+    (a + b, {'a': sympy.Array([1, 2, 3]), 'b': sympy.Array([4, 5, 6])}, sympy.Array([5, 7, 9])),
 ]
 
 full_featured_cases = [
     (Sum(a_[i], (i, 0, Len(a) - 1)), {'a': sympy.Array([1, 2, 3])}, 6),
+]
+
+dummy_substitution_cases = [
+    (a * dummy_a + sympy.exp(dummy_a), {'a': b}, b * dummy_a + sympy.exp(dummy_a)),
+    (a * dummy_a + sympy.exp(dummy_a), {dummy_a: b}, a * b + sympy.exp(b)),
 ]
 
 
@@ -68,7 +77,9 @@ len_sympify = [
 ]
 
 index_sympify = [
-    ('a[i]', a_[i])
+    ('a[i]', a_[i]),
+    ('Broadcast(a, (3,))[0]', Broadcast(a, (3,))[0]),
+    ('IndexedBroadcast(a, (3,), 1)', IndexedBroadcast(a, (3,), 1))
 ]
 
 
@@ -99,6 +110,13 @@ eval_sum = [
 
 eval_array_expression = [
     (np.array([a*c, b*c]), {'a': 2, 'b': 3, 'c': 4}, np.array([8, 12]))
+]
+
+eval_exact_rational = [
+    (a * Rational('1/3'), {'a': 2}, TimeType.from_fraction(2, 3)),
+    (a * Rational('1/3'), {'a': Rational(1, 5)}, TimeType.from_fraction(1, 15)),
+    # TODO: this fails
+    # (np.array([a, Rational(1, 3)]), {'a': 2}, np.array([2, TimeType.from_fraction(1, 3)]))
 ]
 
 
@@ -199,10 +217,16 @@ class SubstitutionTests(TestCase):
             result = self.substitute(expr, subs)
             self.assertEqual(result, expected)
 
+    def test_dummy_subs(self):
+        for expr, subs, expected in dummy_substitution_cases:
+            result = self.substitute(expr, subs)
+            self.assertEqual(result, expected)
+
 
 class SubstituteWithEvalTests(SubstitutionTests):
     def substitute(self, expression: sympy.Expr, substitutions: dict):
-        return substitute_with_eval(expression, substitutions)
+        with self.assertWarns(FutureWarning):
+            return substitute_with_eval(expression, substitutions)
 
     @unittest.expectedFailure
     def test_sum_substitution_cases(self):
@@ -211,6 +235,10 @@ class SubstituteWithEvalTests(SubstitutionTests):
     @unittest.expectedFailure
     def test_full_featured_cases(self):
         super().test_full_featured_cases()
+
+    @unittest.expectedFailure
+    def test_dummy_subs(self):
+        super().test_dummy_subs()
 
 
 class RecursiveSubstitutionTests(SubstitutionTests):
@@ -272,15 +300,42 @@ class EvaluationTestsBase:
             result = self.evaluate(expr, parameters)
             np.testing.assert_equal(result, expected)
 
+    def test_eval_exact_rational(self):
+        for expr, parameters, expected in eval_exact_rational:
+            result = self.evaluate(expr, parameters)
+            try:
+                self.assertEqual(result, expected)
+            except ValueError:
+                np.testing.assert_equal(result, expected)
+
 
 class LamdifiedEvaluationTest(EvaluationTestsBase, unittest.TestCase):
-
     def evaluate(self, expression: Union[sympy.Expr, np.ndarray], parameters):
         if isinstance(expression, np.ndarray):
             variables = set.union(*map(set, map(get_variables, expression.flat)))
         else:
             variables = get_variables(expression)
         return evaluate_lambdified(expression, variables=list(variables), parameters=parameters, lambdified=None)[0]
+
+    @unittest.skipIf(sys.version_info[0] == 3 and sys.version_info[1] < 7, "causes syntax error for python < 3.7")
+    def test_eval_many_arguments(self):
+        super().test_eval_many_arguments()
+
+    @unittest.expectedFailure
+    def test_eval_exact_rational(self):
+        super().test_eval_exact_rational()
+
+
+class LamdifiedExactRationalEvaluationTest(EvaluationTestsBase, unittest.TestCase):
+    def evaluate(self, expression: Union[sympy.Expr, np.ndarray], parameters):
+        if isinstance(expression, np.ndarray):
+            variables = set.union(*map(set, map(get_variables, expression.flat)))
+        else:
+            variables = get_variables(expression)
+        return evaluate_lamdified_exact_rational(expression,
+                                                 variables=list(variables),
+                                                 parameters=parameters,
+                                                 lambdified=None)[0]
 
     @unittest.skipIf(sys.version_info[0] == 3 and sys.version_info[1] < 7, "causes syntax error for python < 3.7")
     def test_eval_many_arguments(self):
@@ -302,6 +357,10 @@ class CompiledEvaluationTest(EvaluationTestsBase, unittest.TestCase):
 
     def test_eval_many_arguments(self):
         super().test_eval_many_arguments()
+
+    @unittest.expectedFailure
+    def test_eval_exact_rational(self):
+        super().test_eval_exact_rational()
 
 
 class RepresentationTest(unittest.TestCase):
@@ -428,6 +487,27 @@ class BroadcastTests(unittest.TestCase):
         self.assertEqual(expr_with_float, expr_with_int_other_order)
 
     test_numeric_equal = unittest.expectedFailure(test_expression_equality) if distutils.version.StrictVersion(sympy.__version__) >= distutils.version.StrictVersion('1.5') else test_expression_equality
+
+    def test_integral(self):
+        symbolic = Broadcast(a*c, (3,))
+        indexed = symbolic[1]
+
+        integ = sympy.Integral(symbolic, (a, 0, b))
+        idx_integ = sympy.Integral(indexed, (a, 0, b))
+        self.assertEqual(integ, Broadcast(sympy.Integral(a*c, (a, 0, b)), (3,)))
+        self.assertEqual(idx_integ, Broadcast(sympy.Integral(a*c, (a, 0, b)), (3,))[1])
+
+        diffed = sympy.diff(symbolic, a)
+        idx_diffed = sympy.diff(indexed, a)
+        self.assertEqual(symbolic.subs(a, 1), diffed)
+        self.assertEqual(indexed.subs(a, 1), idx_diffed)
+
+    def test_indexing(self):
+        symbolic = Broadcast(a, (3,))
+        indexed = symbolic[1]
+
+        self.assertEqual(7, indexed.subs(a, 7))
+        self.assertEqual(7, indexed.subs(a, (6, 7, 8)))
 
 
 class IndexedBasedFinderTests(unittest.TestCase):

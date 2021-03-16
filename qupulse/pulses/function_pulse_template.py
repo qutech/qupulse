@@ -9,7 +9,6 @@ Classes:
 from typing import Any, Dict, List, Set, Optional, Union
 import numbers
 
-import numpy as np
 import sympy
 
 from qupulse.expressions import ExpressionScalar
@@ -104,7 +103,7 @@ class FunctionPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
             parameters = {k: v for k, v in parameters.items() if k != 't'}
 
         expression = self.__expression.evaluate_symbolic(substitutions=parameters)
-        duration = self.__duration_expression.evaluate_numeric(**parameters)
+        duration = self.__duration_expression.evaluate_with_exact_rationals(parameters)
 
         return FunctionWaveform(expression=expression,
                                 duration=duration,
@@ -147,5 +146,9 @@ class FunctionPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
         return {self.__channel: ExpressionScalar(
             sympy.integrate(self.__expression.sympified_expression, ('t', 0, self.duration.sympified_expression))
         )}
+
+    def _as_expression(self) -> Dict[ChannelID, ExpressionScalar]:
+        expr = ExpressionScalar.make(self.__expression.underlying_expression.subs({'t': self._AS_EXPRESSION_TIME}))
+        return {self.__channel: expr}
 
 

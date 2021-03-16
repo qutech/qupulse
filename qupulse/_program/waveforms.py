@@ -5,6 +5,7 @@ Classes:
 """
 
 import itertools
+from numbers import Real
 from abc import ABCMeta, abstractmethod
 from weakref import WeakValueDictionary, ref
 from typing import Union, Set, Sequence, NamedTuple, Tuple, Any, Iterable, FrozenSet, Optional, Mapping, AbstractSet
@@ -82,8 +83,9 @@ class Waveform(Comparable, metaclass=ABCMeta):
 
         if not is_monotonic(sample_times):
             raise ValueError('The sample times are not monotonously increasing')
-        if sample_times[0] < 0 or sample_times[-1] > self.duration:
-            raise ValueError('The sample times are not in the range [0, duration]')
+        if sample_times[0] < 0 or sample_times[-1] > float(self.duration):
+            raise ValueError(f'The sample times [{sample_times[0]}, ..., {sample_times[-1]}] are not in the range'
+                             f' [0, duration={float(self.duration)}]')
         if channel not in self.defined_channels:
             raise KeyError('Channel not defined in this waveform: {}'.format(channel))
 
@@ -138,12 +140,15 @@ class Waveform(Comparable, metaclass=ABCMeta):
         return self
 
 
-class TableWaveformEntry(NamedTuple('TableWaveformEntry', [('t', float),
+class TableWaveformEntry(NamedTuple('TableWaveformEntry', [('t', Real),
                                                            ('v', float),
                                                            ('interp', InterpolationStrategy)])):
     def __init__(self, t: float, v: float, interp: InterpolationStrategy):
         if not callable(interp):
             raise TypeError('{} is neither callable nor of type InterpolationStrategy'.format(interp))
+
+    def __repr__(self):
+        return f'{type(self).__name__}(t={self.t}, v={self.v}, interp="{self.interp}")'
 
 
 class TableWaveform(Waveform):
@@ -222,7 +227,9 @@ class TableWaveform(Waveform):
             indices = slice(np.searchsorted(sample_times, entry1.t, 'left'),
                             np.searchsorted(sample_times, entry2.t, 'right'))
             output_array[indices] = \
-                entry2.interp((entry1.t, entry1.v), (entry2.t, entry2.v), sample_times[indices])
+                entry2.interp((float(entry1.t), entry1.v),
+                              (float(entry2.t), entry2.v),
+                              sample_times[indices])
         return output_array
 
     @property
@@ -231,6 +238,9 @@ class TableWaveform(Waveform):
 
     def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> 'Waveform':
         return self
+
+    def __repr__(self):
+        return f'{type(self).__name__}(channel={self._channel_id}, waveform_table={self._table})'
 
 
 class FunctionWaveform(Waveform):

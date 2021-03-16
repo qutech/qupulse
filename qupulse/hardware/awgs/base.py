@@ -233,7 +233,7 @@ class ProgramEntry:
                         sampled = trafo(sampled)
                     sampled = sampled - offset
                     sampled /= amplitude
-                    sampled_channels.append(waveform.get_sampled(channel, wf_time))
+                    sampled_channels.append(sampled)
 
             sampled_markers = []
             for marker in self._markers:

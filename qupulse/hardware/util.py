@@ -151,7 +151,7 @@ def get_sample_times(waveforms: Union[Collection[Waveform], Waveform],
         segment_lengths.append(rounded_segment_length)
 
     segment_lengths = np.asarray(segment_lengths, dtype=np.uint64)
-    time_array = np.arange(np.max(segment_lengths)) / float(sample_rate_in_GHz)
+    time_array = np.arange(np.max(segment_lengths), dtype=float) / float(sample_rate_in_GHz)
 
     return time_array, segment_lengths
 

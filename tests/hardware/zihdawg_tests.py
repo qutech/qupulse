@@ -7,8 +7,8 @@ import numpy as np
 from qupulse.utils.types import TimeType
 from qupulse._program._loop import Loop
 from tests.pulses.sequencing_dummies import DummyWaveform
-from qupulse.hardware.awgs.zihdawg import HDAWGChannelPair, HDAWGRepresentation, HDAWGValueError, UserRegister,\
-    ConstantParameter, ELFManager
+from qupulse.hardware.awgs.zihdawg import HDAWGChannelGroup, HDAWGRepresentation, HDAWGValueError, UserRegister,\
+    ConstantParameter, ELFManager, HDAWGChannelGrouping
 
 
 class HDAWGRepresentationTests(unittest.TestCase):
@@ -19,18 +19,21 @@ class HDAWGRepresentationTests(unittest.TestCase):
         data_server_addr = 'asd'
         data_server_port = 42
         api_level_number = 23
+        channel_grouping = HDAWGChannelGrouping.CHAN_GROUP_1x8
 
         with \
                 mock.patch('zhinst.utils.api_server_version_check') as mock_version_check,\
                 mock.patch('zhinst.ziPython.ziDAQServer') as mock_daq_server, \
                 mock.patch('qupulse.hardware.awgs.zihdawg.HDAWGRepresentation._initialize') as mock_init, \
-                mock.patch('qupulse.hardware.awgs.zihdawg.HDAWGChannelPair') as mock_channel_pair,\
+                mock.patch('qupulse.hardware.awgs.zihdawg.HDAWGRepresentation.channel_grouping', new_callable=mock.PropertyMock) as mock_grouping, \
+                mock.patch('qupulse.hardware.awgs.zihdawg.HDAWGChannelGroup') as mock_channel_pair,\
                 mock.patch('zhinst.utils.disable_everything') as mock_reset,\
                 mock.patch('pathlib.Path') as mock_path:
 
             representation = HDAWGRepresentation(device_serial,
                                                  device_interface,
-                                                 data_server_addr, data_server_port, api_level_number, False, 1.3)
+                                                 data_server_addr, data_server_port, api_level_number,
+                                                 False, 1.3, grouping=channel_grouping)
 
             mock_daq_server.return_value.awgModule.return_value.getString.assert_called_once_with('directory')
             module_dir = mock_daq_server.return_value.awgModule.return_value.getString.return_value
@@ -43,12 +46,19 @@ class HDAWGRepresentationTests(unittest.TestCase):
             representation.api_session.connectDevice.assert_called_once_with(device_serial, device_interface)
             self.assertEqual(device_serial, representation.serial)
 
+            mock_grouping.assert_called_once_with(channel_grouping)
+
             mock_reset.assert_not_called()
             mock_init.assert_called_once_with()
 
-            pair_calls = [mock.call(representation, (2*i+1, 2*i+2), str(device_serial) + post_fix, 1.3)
-                          for i, post_fix in enumerate(['_AB', '_CD', '_EF', '_GH'])]
-            for c1, c2 in zip(pair_calls, mock_channel_pair.call_args_list):
+            group_calls = [mock.call(0, 2, identifier=str(device_serial) + '_AB', timeout=1.3),
+                           mock.call(1, 2, identifier=str(device_serial) + '_CD', timeout=1.3),
+                           mock.call(2, 2, identifier=str(device_serial) + '_EF', timeout=1.3),
+                           mock.call(3, 2, identifier=str(device_serial) + '_GH', timeout=1.3),
+                           mock.call(0, 4, identifier=str(device_serial) + '_ABCD', timeout=1.3),
+                           mock.call(1, 4, identifier=str(device_serial) + '_EFGH', timeout=1.3),
+                           mock.call(0, 8, identifier=str(device_serial) + '_ABCDEFGH', timeout=1.3)]
+            for c1, c2 in zip(group_calls, mock_channel_pair.call_args_list):
                 self.assertEqual(c1, c2)
 
             self.assertIs(representation.channel_pair_AB, mock_channel_pair.return_value)
@@ -76,9 +86,14 @@ class HDAWGRepresentationTests(unittest.TestCase):
             mock_reset.assert_called_once_with(representation.api_session, representation.serial)
             mock_init.assert_called_once_with()
 
-            pair_calls = [mock.call(representation, (2*i+1, 2*i+2), str(device_serial) + post_fix, 20)
-                          for i, post_fix in enumerate(['_AB', '_CD', '_EF', '_GH'])]
-            self.assertEqual(pair_calls, mock_channel_pair.call_args_list)
+            group_calls = [mock.call(0, 2, identifier=str(device_serial) + '_AB', timeout=20),
+                           mock.call(1, 2, identifier=str(device_serial) + '_CD', timeout=20),
+                           mock.call(2, 2, identifier=str(device_serial) + '_EF', timeout=20),
+                           mock.call(3, 2, identifier=str(device_serial) + '_GH', timeout=20),
+                           mock.call(0, 4, identifier=str(device_serial) + '_ABCD', timeout=20),
+                           mock.call(1, 4, identifier=str(device_serial) + '_EFGH', timeout=20),
+                           mock.call(0, 8, identifier=str(device_serial) + '_ABCDEFGH', timeout=20)]
+            self.assertEqual(group_calls, mock_channel_pair.call_args_list)
 
             self.assertIs(representation.channel_pair_AB, mock_channel_pair.return_value)
             self.assertIs(representation.channel_pair_CD, mock_channel_pair.return_value)
@@ -86,33 +101,41 @@ class HDAWGRepresentationTests(unittest.TestCase):
             self.assertIs(representation.channel_pair_GH, mock_channel_pair.return_value)
 
 
-class HDAWGChannelPairTests(unittest.TestCase):
+class HDAWGChannelGroupTests(unittest.TestCase):
     def test_init(self):
         with mock.patch('weakref.proxy') as proxy_mock:
             mock_device = mock.Mock()
 
-            channel_pair = HDAWGChannelPair(mock_device, (3, 4), 'foo', 3.4)
+            channels = (3, 4)
+            awg_group_idx = 1
+
+            channel_pair = HDAWGChannelGroup(awg_group_idx, 2, 'foo', 3.4)
 
             self.assertEqual(channel_pair.timeout, 3.4)
-            self.assertEqual(channel_pair._channels, (3, 4))
-            self.assertEqual(channel_pair.awg_group_index, 1)
-
-            proxy_mock.assert_called_once_with(mock_device)
-            self.assertIs(channel_pair.device, proxy_mock.return_value)
-
-            self.assertIs(channel_pair.awg_module, channel_pair.device.api_session.awgModule.return_value)
+            self.assertEqual(channel_pair._channels(), channels)
+            self.assertEqual(channel_pair.awg_group_index, awg_group_idx)
             self.assertEqual(channel_pair.num_channels, 2)
             self.assertEqual(channel_pair.num_markers, 4)
+
+            self.assertFalse(channel_pair.is_connected())
+
+            proxy_mock.return_value.channel_grouping = HDAWGChannelGrouping.CHAN_GROUP_4x2
+
+            channel_pair.connect_group(mock_device)
+            self.assertTrue(channel_pair.is_connected())
+            proxy_mock.assert_called_once_with(mock_device)
+            self.assertIs(channel_pair.device, proxy_mock.return_value)
+            self.assertIs(channel_pair.awg_module, channel_pair.device.api_session.awgModule.return_value)
 
     def test_set_volatile_parameters(self):
         mock_device = mock.Mock()
 
-        parameters = {'a': ConstantParameter(9)}
+        parameters = {'a': 9}
         requested_changes = OrderedDict([(UserRegister.from_seqc(4), 2), (UserRegister.from_seqc(3), 6)])
 
         expected_user_reg_calls = [mock.call(*args) for args in requested_changes.items()]
 
-        channel_pair = HDAWGChannelPair(mock_device, (3, 4), 'foo', 3.4)
+        channel_pair = HDAWGChannelGroup(1, 2, 'foo', 3.4)
 
         channel_pair._current_program = 'active_program'
         with mock.patch.object(channel_pair._program_manager, 'get_register_values_to_update_volatile_parameters',
@@ -140,7 +163,7 @@ class HDAWGChannelPairTests(unittest.TestCase):
 
         with mock.patch('weakref.proxy'),\
              mock.patch('qupulse.hardware.awgs.zihdawg.make_compatible') as mock_make_compatible:
-            channel_pair = HDAWGChannelPair(mock.Mock(), (3, 4), 'foo', 3.4)
+            channel_pair = HDAWGChannelGroup(1, 2, 'foo', 3.4)
 
             with self.assertRaisesRegex(HDAWGValueError, 'Channel ID'):
                 channel_pair.upload('bar', mock_loop, ('A'), (None, 'A', None, None), voltage_trafos)

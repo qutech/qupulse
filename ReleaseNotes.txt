@@ -1,3 +1,17 @@
+## pending/current ##
+ - General:
+    - Fix TimeType comparisons with non-finite floats (inf, -inf, NaN)
+    - Drop python 3.5 support
+
+ - Expressions:
+    - Add `evaluate_with_exact_rationals` method to ExpressionScalar
+
+
+## 0.5.1 ##
+
+ - General:
+    - Unify `TimeType.from_float` between fractions and gmpy2 backend behaviour (fixes issue 529).
+
 ## 0.5 ##
 
  - General:
