@@ -1,10 +1,9 @@
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, Collection
 import weakref
 
 from qupulse.hardware.awgs.base import AWG
 from qupulse.hardware.feature_awg.base_features import Feature, FeatureAble
-from qupulse.utils.types import Collection
 
 __all__ = ["AWGDevice", "AWGChannelTuple", "AWGChannel", "AWGMarkerChannel", "AWGDeviceFeature", "AWGChannelFeature",
            "AWGChannelTupleFeature"]
