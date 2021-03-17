@@ -3,7 +3,8 @@ import logging
 import numbers
 import sys
 import weakref
-from typing import List, Tuple, Set, Callable, Optional, Any, cast, Union, Dict, Mapping, NamedTuple, Iterable
+from typing import List, Tuple, Set, Callable, Optional, Any, cast, Union, Dict, Mapping, NamedTuple, Iterable,\
+    Collection
 from collections import OrderedDict
 import numpy as np
 from qupulse import ChannelID
@@ -15,7 +16,7 @@ from qupulse.hardware.feature_awg.features import ChannelSynchronization, Amplit
     ReadProgram, RepetitionMode
 from qupulse.hardware.util import voltage_to_uint16, find_positions
 
-from qupulse.utils.types import Collection, TimeType
+from qupulse.utils.types import TimeType
 from qupulse.hardware.feature_awg.base import AWGChannelTuple, AWGChannel, AWGDevice, AWGMarkerChannel
 from typing import Sequence
 from qupulse._program.tabor import TaborSegment, TaborException, TaborProgram, PlottableProgram, TaborSequencing, \

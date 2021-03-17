@@ -5,6 +5,7 @@ from itertools import zip_longest, islice
 import sys
 import tempfile
 import pathlib
+import hashlib
 
 import numpy as np
 
@@ -51,7 +52,8 @@ def get_unique_wfs(n=10000, duration=32, defined_channels=frozenset(['A'])):
     key = (n, duration)
 
     if key not in get_unique_wfs.cache:
-        h = hash(key)
+        # positive deterministic int64
+        h = int(hashlib.sha256(str(key).encode('ascii')).hexdigest()[:2*8], base=16) // 2
         base = np.bitwise_xor(np.linspace(-h, h, num=duration + n, dtype=np.int64), h)
         base = base / np.max(np.abs(base))
 
@@ -768,7 +770,7 @@ const PLAYBACK_FINISHED_MASK = 0b1000000000000000000000000000000;
 const PROG_SEL_MASK = 0b111111111111111111111111111111;
 const INVERTED_PROG_SEL_MASK = 0b11000000000000000000000000000000;
 const IDLE_WAIT_CYCLES = 300;
-wave test_concatenated_waveform_0 = "3e0090e8ffd002d1134ce38827c6a35fede89cf23d126a44057ef43f466ae4cd";
+wave test_concatenated_waveform_0 = "c583e709957ec1536986ae1c7a6ad6311c89e052405d2a5c786760fc2fcdf6e3";
 wave test_shared_waveform_121f5c6e8822793b3836fb3098fa4591b91d4c205cc2d8afd01ee1bf6956e518 = "121f5c6e8822793b3836fb3098fa4591b91d4c205cc2d8afd01ee1bf6956e518";
 
 // function used by manually triggered programs

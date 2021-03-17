@@ -377,38 +377,6 @@ def has_type_interface(obj: typing.Any, type_obj: typing.Type) -> bool:
     return set(dir(obj)) >= {attr for attr in dir(type_obj) if not attr.startswith('_')}
 
 
-if hasattr(typing, 'Collection'):
-    Collection = typing.Collection
-else:
-    def _check_methods(C, *methods):
-        """copied from https://github.com/python/cpython/blob/3.8/Lib/_collections_abc.py"""
-        mro = C.__mro__
-        for method in methods:
-            for B in mro:
-                if method in B.__dict__:
-                    if B.__dict__[method] is None:
-                        return NotImplemented
-                    break
-            else:
-                return NotImplemented
-        return True
-
-    class _ABCCollection(collections.abc.Sized, collections.abc.Iterable, collections.abc.Container):
-        """copied from https://github.com/python/cpython/blob/3.8/Lib/_collections_abc.py"""
-        __slots__ = ()
-
-        @classmethod
-        def __subclasshook__(cls, C):
-            # removed "if cls is _ABCCollection" guard because reloading this module damages the test
-            return _check_methods(C, "__len__", "__iter__", "__contains__")
-
-    class Collection(typing.Sized, typing.Iterable[typing.T_co], typing.Container[typing.T_co],
-                     extra=_ABCCollection):
-        """Fallback for typing.Collection if python 3.5
-        copied from https://github.com/python/cpython/blob/3.5/Lib/typing.py"""
-        __slots__ = ()
-
-
 _KT_hash = typing.TypeVar('_KT_hash', bound=typing.Hashable)  # Key type.
 _T_co_hash = typing.TypeVar('_T_co_hash', bound=typing.Hashable, covariant=True)  # Any type covariant containers.
 

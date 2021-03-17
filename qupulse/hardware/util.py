@@ -1,11 +1,11 @@
-from typing import List, Sequence, Tuple, Union, Optional
+from typing import Collection, Sequence, Tuple, Union, Optional
 import itertools
 from unittest import mock
 
 import numpy as np
 
 from qupulse._program.waveforms import Waveform
-from qupulse.utils.types import TimeType, Collection
+from qupulse.utils.types import TimeType
 from qupulse.utils import pairwise
 
 try:
