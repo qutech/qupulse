@@ -376,9 +376,11 @@ def evaluate_lamdified_exact_rational(expression: sympy.Expr,
     return lambdified(**parameters), lambdified
 
 
-def almost_equal(lhs: sympy.Expr, rhs: sympy.Expr, epsilon: float=SYMPY_DURATION_ERROR_MARGIN) -> Optional[bool]:
+def almost_equal(lhs: sympy.Expr, rhs: sympy.Expr, epsilon: Optional[float]=None) -> Optional[bool]:
     """Returns True (or False) if the two expressions are almost equal (or not). Returns None if this cannot be
     determined."""
+    if epsilon is None:
+        epsilon = SYMPY_DURATION_ERROR_MARGIN
     relation = sympy.simplify(sympy.Abs(lhs - rhs) <= epsilon)
 
     if relation is sympy.true:
