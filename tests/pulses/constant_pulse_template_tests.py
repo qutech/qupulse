@@ -2,12 +2,11 @@ import unittest
 
 import qupulse.pulses.plotting
 from qupulse.pulses import TablePT, FunctionPT, AtomicMultiChannelPT, MappingPT
-from qupulse.pulses.plotting import render, plot
+from qupulse.pulses.plotting import plot
 from qupulse.pulses.sequence_pulse_template import SequencePulseTemplate
 from qupulse._program._loop import make_compatible
 
 from qupulse.pulses.constant_pulse_template import ConstantPulseTemplate
-#, AtomicSequencePulseTemplate, create_multichannel_pulse, MethodPulseTemplate
 
 class TestConstantPulseTemplate(unittest.TestCase):
 
@@ -22,7 +21,7 @@ class TestConstantPulseTemplate(unittest.TestCase):
 
         _ = qupulse.pulses.plotting.render(p1.create_program())
 
-        pulse = AtomicSequencePulseTemplate([p1, p2, p3])
+        pulse = SequencePulseTemplate(p1, p2, p3)
         prog = pulse.create_program()
         _ = qupulse.pulses.plotting.render(prog)
 

@@ -8,15 +8,18 @@ Classes:
 
 from typing import Union, Dict, List, Set, Optional, Any, Tuple, Sequence, NamedTuple, Callable
 import numbers
-
+import logging
 import numpy as np
 
+from qupulse.pulses.pulse_template import ChannelID, Parameter, Transformation, AtomicPulseTemplate, Loop, PulseTemplate
 from qupulse.utils.types import ChannelID
 from qupulse.pulses.parameters import ParameterNotProvidedException, ParameterConstraint, ParameterConstrainer
-from qupulse.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration
+from qupulse.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration, PulseTemplate
 from qupulse._program.waveforms import ConstantWaveform
 from qupulse.expressions import ExpressionScalar
 from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
+from qupulse.parameter_scope import Scope
+
 
 __all__ = ["ConstantPulseTemplate", "concatenate"]
 
@@ -107,7 +110,7 @@ class ConstantPulseTemplate(AtomicPulseTemplate):  # type: ignore
 
     def build_waveform(self,
                        parameters: Dict[str, numbers.Real],
-                       channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Union[ConstantPulseWaveform,
+                       channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Union[ConstantWaveform,
                                                                                                 MultiChannelWaveform]]:
         logging.debug(f'build_waveform of ConstantPulse: channel_mapping {channel_mapping}, defined_channels {self.defined_channels} ')
         if all(channel_mapping.get(channel, None) is None

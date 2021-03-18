@@ -8,7 +8,7 @@ import itertools
 from numbers import Real
 from abc import ABCMeta, abstractmethod
 from weakref import WeakValueDictionary, ref
-from typing import Union, Set, Sequence, NamedTuple, Tuple, Any, Iterable, FrozenSet, Optional, Mapping, AbstractSet
+from typing import cast, Union, Set, Sequence, NamedTuple, Tuple, Any, Iterable, FrozenSet, Mapping, AbstractSet
 import operator
 
 import numpy as np
@@ -241,6 +241,43 @@ class TableWaveform(Waveform):
 
     def __repr__(self):
         return f'{type(self).__name__}(channel={self._channel_id}, waveform_table={self._table})'
+
+
+class ConstantWaveform(Waveform):  
+    def __init__(self, duration: float, amplitude: Any, channel: ChannelID):
+        """ Create a qupulse waveform from a qupulse template that has a QI waveform inside """
+        self._duration = duration
+        self._amplitude = amplitude
+        self._channel = channel
+
+        self._is_constant_waveform = True
+
+    @property
+    def duration(self) -> TimeType:
+        return time_from_float(float(self._duration), absolute_error=PULSE_TO_WAVEFORM_ERROR)
+
+    @property
+    def defined_channels(self) -> Set[ChannelID]:
+        """The channels this waveform should played on. Use
+            :func:`~qupulse.pulses.instructions.get_measurement_windows` to get a waveform for a subset of these."""
+
+        return {self._channel}
+
+    def compare_key(self) -> str:
+        return 'ConstantWaveform:' + cast(str, hash([self._duration, self._amplitude, self._channel]))
+
+    def unsafe_sample(self,
+                      channel: ChannelID,
+                      sample_times: np.ndarray,
+                      output_array: Union[np.ndarray, None] = None) -> np.ndarray:
+        if output_array is None:
+            output_array = np.empty_like(sample_times)
+        output_array[:] = self._amplitude
+        return output_array
+
+    def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> Waveform:
+        """Unsafe version of :func:`~qupulse.pulses.instructions.get_measurement_windows`."""
+        return self
 
 
 class FunctionWaveform(Waveform):
