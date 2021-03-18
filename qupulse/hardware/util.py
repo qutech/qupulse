@@ -111,7 +111,7 @@ def get_sample_times(waveforms: Union[Collection[Waveform], Waveform],
 
     segment_lengths = []
     for waveform in waveforms:
-        rounded_segment_length = get_waveform_length(waveform)
+        rounded_segment_length = get_waveform_length(waveform, sample_rate_in_GHz=sample_rate_in_GHz, tolerance=tolerance)
         segment_lengths.append(rounded_segment_length)
 
     segment_lengths = np.asarray(segment_lengths, dtype=np.uint64)
