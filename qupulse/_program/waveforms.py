@@ -25,6 +25,7 @@ from qupulse._program.transformation import Transformation
 __all__ = ["Waveform", "TableWaveform", "TableWaveformEntry", "FunctionWaveform", "SequenceWaveform",
            "MultiChannelWaveform", "RepetitionWaveform", "TransformingWaveform", "ArithmeticWaveform"]
 
+PULSE_TO_WAVEFORM_ERROR = None # error margin in pulse template to waveform conversion
 
 class Waveform(Comparable, metaclass=ABCMeta):
     """Represents an instantiated PulseTemplate which can be sampled to retrieve arrays of voltage
@@ -213,7 +214,7 @@ class TableWaveform(Waveform):
 
     @property
     def duration(self) -> TimeType:
-        return TimeType.from_float(self._table[-1].t)
+        return TimeType.from_float(self._table[-1].t, absolute_error = PULSE_TO_WAVEFORM_ERROR)
 
     def unsafe_sample(self,
                       channel: ChannelID,
@@ -262,7 +263,7 @@ class FunctionWaveform(Waveform):
             raise ValueError('FunctionWaveforms may not depend on anything but "t"')
 
         self._expression = expression
-        self._duration = TimeType.from_float(duration)
+        self._duration = TimeType.from_float(duration, absolute_error = PULSE_TO_WAVEFORM_ERROR)
         self._channel_id = channel
 
     @property
