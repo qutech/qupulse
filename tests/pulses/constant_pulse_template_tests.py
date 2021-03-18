@@ -2,6 +2,7 @@ import unittest
 
 import qupulse.pulses.plotting
 import qupulse._program.waveforms
+import qupulse.utils.sympy
 from qupulse.pulses import TablePT, FunctionPT, AtomicMultiChannelPT, MappingPT
 from qupulse.pulses.plotting import plot
 from qupulse.pulses.sequence_pulse_template import SequencePulseTemplate
@@ -57,17 +58,17 @@ class TestConstantPulseTemplate(unittest.TestCase):
             qupulse._program.waveforms.PULSE_TO_WAVEFORM_ERROR = old_value
 
     def test_regression_template_combination(self):
-        old_value = qupulse._program.waveforms.PULSE_TO_WAVEFORM_ERROR 
+        old_value = qupulse.utils.sympy.SYMPY_DURATION_ERROR_MARGIN
 
         try:
-            qupulse._program.waveforms.PULSE_TO_WAVEFORM_ERROR = 1e-6
+            qupulse.utils.sympy.SYMPY_DURATION_ERROR_MARGIN = 1e-9
             duration_in_seconds = 2e-6
             full_template = ConstantPulseTemplate(duration=duration_in_seconds * 1e9, amplitude_dict={'C1': 1.1})
             duration_in_seconds_derived = 1e-9 * full_template.duration
             marker_pulse = TablePT({'marker': [(0, 0), (duration_in_seconds_derived * 1e9, 0)]})
             full_template = AtomicMultiChannelPT(full_template, marker_pulse)
         finally:
-            qupulse._program.waveforms.PULSE_TO_WAVEFORM_ERROR = old_value
+            qupulse.utils.sympy.SYMPY_DURATION_ERROR_MARGIN = old_value
 
     def test_regression_sequencept_with_mappingpt(self):
         t1 = TablePT({'C1': [(0, 0), (100, 0)], 'C2': [(0, 1), (100, 1)]})
