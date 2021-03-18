@@ -1,6 +1,7 @@
 import unittest
 
 import qupulse.pulses.plotting
+import qupulse._program.waveforms
 from qupulse.pulses import TablePT, FunctionPT, AtomicMultiChannelPT, MappingPT
 from qupulse.pulses.plotting import plot
 from qupulse.pulses.sequence_pulse_template import SequencePulseTemplate
@@ -28,27 +29,45 @@ class TestConstantPulseTemplate(unittest.TestCase):
         self.assertEqual(pulse.duration, 12)
 
     def test_regression_duration_conversion(self):
-        for duration_in_samples in [64, 936320, 24615392]:
-            p = ConstantPulseTemplate(duration_in_samples / 2.4, {'a': 0})
-            number_of_samples = p.create_program().duration * 2.4
-            make_compatible(p.create_program(), 8, 8, 2.4)
-            self.assertEqual(number_of_samples.denominator, 1)
+        old_value = qupulse._program.waveforms.PULSE_TO_WAVEFORM_ERROR 
 
-            p2 = ConstantPulseTemplate((duration_in_samples +1) / 2.4, {'a': 0})
-            self.assertNotEqual(p.create_program().duration, p2.create_program().duration)
+        try:
+            qupulse._program.waveforms.PULSE_TO_WAVEFORM_ERROR = 1e-6
+            for duration_in_samples in [64, 936320, 24615392]:
+                p = ConstantPulseTemplate(duration_in_samples / 2.4, {'a': 0})
+                number_of_samples = p.create_program().duration * 2.4
+                make_compatible(p.create_program(), 8, 8, 2.4)
+                self.assertEqual(number_of_samples.denominator, 1)
+    
+                p2 = ConstantPulseTemplate((duration_in_samples +1) / 2.4, {'a': 0})
+                self.assertNotEqual(p.create_program().duration, p2.create_program().duration)
+        finally:
+            qupulse._program.waveforms.PULSE_TO_WAVEFORM_ERROR = old_value
 
     def test_regression_duration_conversion_functionpt(self):
-        for duration_in_samples in [64, 2000, 936320]:
-            p = FunctionPT('1', duration_expression=duration_in_samples / 2.4, channel='a')
-            number_of_samples = p.create_program().duration * 2.4
-            self.assertEqual(number_of_samples.denominator, 1)
+        old_value = qupulse._program.waveforms.PULSE_TO_WAVEFORM_ERROR 
+
+        try:
+            qupulse._program.waveforms.PULSE_TO_WAVEFORM_ERROR = 1e-6
+            for duration_in_samples in [64, 2000, 936320]:
+                p = FunctionPT('1', duration_expression=duration_in_samples / 2.4, channel='a')
+                number_of_samples = p.create_program().duration * 2.4
+                self.assertEqual(number_of_samples.denominator, 1)
+        finally:
+            qupulse._program.waveforms.PULSE_TO_WAVEFORM_ERROR = old_value
 
     def test_regression_template_combination(self):
-        duration_in_seconds = 2e-6
-        full_template = ConstantPulseTemplate(duration=duration_in_seconds * 1e9, amplitude_dict={'C1': 1.1})
-        duration_in_seconds_derived = 1e-9 * full_template.duration
-        marker_pulse = TablePT({'marker': [(0, 0), (duration_in_seconds_derived * 1e9, 0)]})
-        full_template = AtomicMultiChannelPT(full_template, marker_pulse)
+        old_value = qupulse._program.waveforms.PULSE_TO_WAVEFORM_ERROR 
+
+        try:
+            qupulse._program.waveforms.PULSE_TO_WAVEFORM_ERROR = 1e-6
+            duration_in_seconds = 2e-6
+            full_template = ConstantPulseTemplate(duration=duration_in_seconds * 1e9, amplitude_dict={'C1': 1.1})
+            duration_in_seconds_derived = 1e-9 * full_template.duration
+            marker_pulse = TablePT({'marker': [(0, 0), (duration_in_seconds_derived * 1e9, 0)]})
+            full_template = AtomicMultiChannelPT(full_template, marker_pulse)
+        finally:
+            qupulse._program.waveforms.PULSE_TO_WAVEFORM_ERROR = old_value
 
     def test_regression_sequencept_with_mappingpt(self):
         t1 = TablePT({'C1': [(0, 0), (100, 0)], 'C2': [(0, 1), (100, 1)]})
