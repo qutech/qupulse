@@ -11,7 +11,7 @@ import numbers
 import logging
 import numpy as np
 
-from qupulse.pulses.pulse_template import ChannelID, Parameter, Transformation, AtomicPulseTemplate, Loop, PulseTemplate
+from qupulse.pulses.pulse_template import ChannelID, Transformation, AtomicPulseTemplate, Loop, PulseTemplate
 from qupulse.utils.types import ChannelID
 from qupulse.pulses.parameters import ParameterNotProvidedException, ParameterConstraint, ParameterConstrainer
 from qupulse.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration, PulseTemplate
@@ -21,14 +21,21 @@ from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
 from qupulse.parameter_scope import Scope
 
 
-__all__ = ["ConstantPulseTemplate", "concatenate"]
+__all__ = ["ConstantPulseTemplate"]
 
 
 class ConstantPulseTemplate(AtomicPulseTemplate):  # type: ignore
 
     def __init__(self, duration: float, amplitude_dict: Dict[str, Any], identifier: Optional[str] = None,
                  name: Optional[str] = None, measurements: Optional[List[MeasurementDeclaration]] = [], **kwargs: Any) -> None:
-        """ A qupulse waveform representing a single channel with constant value """
+        """ A qupulse waveform representing a multi-channel pulse with constant values
+        
+        Args:
+            duration: Duration of the template
+            amplitude_dict: Dictionary with values for the channels
+            name: Name for the template
+        
+        """
         super().__init__(identifier=identifier, measurements=measurements, **kwargs)
 
         self._duration = ExpressionScalar(duration)
