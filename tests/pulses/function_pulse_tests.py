@@ -84,6 +84,11 @@ class FunctionPulsePropertyTest(FunctionPulseTest):
         pulse = FunctionPulseTemplate('sin(0.5*t+b)', '2*Tmax')
         self.assertEqual({'default': Expression('2.0*cos(b) - 2.0*cos(1.0*Tmax+b)')}, pulse.integral)
 
+    def test_as_expression(self):
+        pulse = FunctionPulseTemplate('sin(0.5*t+b)', '2*Tmax')
+        expr = sympy.sin(0.5 * pulse._AS_EXPRESSION_TIME + sympy.sympify('b'))
+        self.assertEqual({'default': Expression.make(expr)}, pulse._as_expression())
+
 
 class FunctionPulseSerializationTest(SerializableTests, unittest.TestCase):
 

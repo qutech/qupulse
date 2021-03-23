@@ -150,6 +150,14 @@ class ExpressionScalarTests(unittest.TestCase):
         }
         np.testing.assert_equal((2 * 1.5 - 7) * np.ones(4), e.evaluate_numeric(**params))
 
+        e = ExpressionScalar('a * b + c')
+        params = {
+            'a': np.array(2),
+            'b': np.array(1.5),
+            'c': np.array(-7)
+        }
+        np.testing.assert_equal((2 * 1.5 - 7), e.evaluate_numeric(**params))
+
     def test_indexing(self):
         e = ExpressionScalar('a[i] * c')
 
@@ -338,7 +346,7 @@ class ExpressionScalarTests(unittest.TestCase):
         self.assertIs(3 >= valued, True)
 
     def assertExpressionEqual(self, lhs: Expression, rhs: Expression):
-        self.assertTrue(bool(Eq(lhs.sympified_expression, rhs.sympified_expression)), '{} and {} are not equal'.format(lhs, rhs))
+        self.assertTrue(bool(Eq(lhs, rhs)), '{} and {} are not equal'.format(lhs, rhs))
 
     def test_number_math(self):
         a = ExpressionScalar('a')

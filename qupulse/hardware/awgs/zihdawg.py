@@ -151,23 +151,10 @@ class HDAWGRepresentation:
             f'/{self.serial}/awgs/*/single': 1  # Single execution mode of sequence.
         }
 
-    def _mark_source_setting(self, marker_idx: int, source: 'HDAWGTriggerOutSource') -> (str, Any):
-        assert marker_idx in range(8)
-        if isinstance(source, str):
-            source = getattr(HDAWGTriggerOutSource, source.upper())
-        elif isinstance(source, int):
-            source = HDAWGTriggerOutSource(source)
-        return f'/{self.serial}/triggers/out/{marker_idx}/source', source.value
-
-    def set_mark_source(self, marker_idx: int, source: 'HDAWGTriggerOutSource'):
-        self.api_session.setInt(*self._mark_source_setting(marker_idx, source))
-
     def _initialize(self, force_defaults=False) -> None:
         settings = self._required_settings()
         if force_defaults:
             settings.update(self._default_settings())
-
-        self.api_session.set()
 
         settings = []
         settings.append(['/{}/awgs/*/userregs/*'.format(self.serial), 0])  # Reset all user registers to 0.
@@ -187,6 +174,34 @@ class HDAWGRepresentation:
         self._initialize()
         for channel_tuple in self.channel_tuples:
             channel_tuple.clear()
+        self.api_session.set([
+            (f'/{self.serial}/awgs/*/time', 0),
+            (f'/{self.serial}/sigouts/*/range', HDAWGVoltageRange.RNG_1V.value),
+            (f'/{self.serial}/awgs/*/outputs/*/amplitude', 1.0),
+            (f'/{self.serial}/outputs/*/modulation/mode', HDAWGModulationMode.OFF.value),
+        ])
+
+        # marker outputs
+        marker_settings = []
+        for ch in range(0, 8):  # Route marker 1 signal for each channel to marker output.
+            if ch % 2 == 0:
+                output = HDAWGTriggerOutSource.OUT_1_MARK_1.value
+            else:
+                output = HDAWGTriggerOutSource.OUT_1_MARK_2.value
+            marker_settings.append([f'/{self.serial}/triggers/out/{ch}/source', output])
+        self.api_session.set(marker_settings)
+        self.api_session.sync()
+
+    def _mark_source_setting(self, marker_idx: int, source: 'HDAWGTriggerOutSource') -> (str, Any):
+        assert marker_idx in range(8)
+        if isinstance(source, str):
+            source = getattr(HDAWGTriggerOutSource, source.upper())
+        elif isinstance(source, int):
+            source = HDAWGTriggerOutSource(source)
+        return f'/{self.serial}/triggers/out/{marker_idx}/source', source.value
+
+    def set_mark_source(self, marker_idx: int, source: 'HDAWGTriggerOutSource'):
+        self.api_session.setInt(*self._mark_source_setting(marker_idx, source))
 
     def group_name(self, group_idx, group_size) -> str:
         return str(self.serial) + '_' + 'ABCDEFGH'[group_idx*group_size:][:group_size]
@@ -743,8 +758,8 @@ class ELFManager:
 
     def clear(self):
         """Deletes all files with a SHA512 hash name"""
-        src_regex = re.compile('[a-z0-9]{128}\.seqc')
-        elf_regex = re.compile('[a-z0-9]{128}\.elf')
+        src_regex = re.compile(r'[a-z0-9]{128}\.seqc')
+        elf_regex = re.compile(r'[a-z0-9]{128}\.elf')
 
         for p in self.awg_module.src_dir.iterdir():
             if src_regex.match(p.name):

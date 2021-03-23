@@ -207,6 +207,9 @@ class ExpressionVector(Expression):
     def __repr__(self):
         return 'ExpressionVector({})'.format(repr(self.get_serialization_data()))
 
+    def _sympy_(self):
+        return sympy.NDimArray(self._expression_vector)
+
     def __eq__(self, other):
         if not isinstance(other, Expression):
             other = Expression.make(other)
@@ -330,6 +333,9 @@ class ExpressionScalar(Expression):
     def __pos__(self):
         return self.make(self._sympified_expression.__pos__())
 
+    def _sympy_(self):
+        return self._sympified_expression
+
     @property
     def original_expression(self) -> Union[str, Number]:
         return self._original_expression
@@ -347,6 +353,16 @@ class ExpressionScalar(Expression):
 
     def is_nan(self) -> bool:
         return sympy.sympify('nan') == self._sympified_expression
+
+    def _parse_evaluate_numeric_result(self,
+                                       result: Union[Number, numpy.ndarray],
+                                       call_arguments: Any) -> Number:
+        """Overwrite super class method because we do not want to return a scalar numpy.ndarray"""
+        parsed = super()._parse_evaluate_numeric_result(result, call_arguments)
+        if isinstance(parsed, numpy.ndarray):
+            return parsed[()]
+        else:
+            return parsed
 
     def evaluate_with_exact_rationals(self, scope: Mapping) -> Number:
         parsed_kwargs = self._parse_evaluate_numeric_arguments(scope)

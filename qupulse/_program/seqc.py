@@ -13,27 +13,25 @@ Furthermore:
 classes that convert `Loop` objects"""
 
 from typing import Optional, Union, Sequence, Dict, Iterator, Tuple, Callable, NamedTuple, MutableMapping, Mapping,\
-    Iterable, Any, List
+    Iterable, Any, List, Deque
 from types import MappingProxyType
 import abc
 import itertools
 import inspect
 import logging
-import os.path
 import hashlib
 from collections import OrderedDict
-import string
-import warnings
+import re
+import collections
 import numbers
 import string
-
-import more_itertools
+import functools
 
 import numpy as np
 from pathlib import Path
 
 from qupulse.utils.types import ChannelID, TimeType
-from qupulse.utils import replace_multiple
+from qupulse.utils import replace_multiple, grouper
 from qupulse._program.waveforms import Waveform
 from qupulse._program._loop import Loop
 from qupulse._program.volatile import VolatileRepetitionCount, VolatileProperty
@@ -130,6 +128,10 @@ class BinaryWaveform:
             if marker is not None:
                 marker_data += np.uint16((marker > 0) * 2**idx)
         return cls(zhinst.utils.convert_awg_waveform(ch1, ch2, marker_data))
+
+    @classmethod
+    def zeroed(cls, size):
+        return cls(zhinst.utils.convert_awg_waveform(np.zeros(size), np.zeros(size), np.zeros(size, dtype=np.uint16)))
 
     def __len__(self):
         return self.data.size // 3
@@ -496,11 +498,17 @@ class HDAWGProgramEntry(ProgramEntry):
                          voltage_transformations=voltage_transformations,
                          sample_rate=sample_rate)
         for waveform, (all_sampled_channels, all_sampled_markers) in self._waveforms.items():
+            size = int(waveform.duration * sample_rate)
+
             # group in channel pairs for binary waveform
             binary_waveforms = []
-            for (sampled_channels, sampled_markers) in zip(more_itertools.grouper(all_sampled_channels, 2),
-                                                           more_itertools.grouper(all_sampled_markers, 4)):
-                binary_waveforms.append(BinaryWaveform.from_sampled(*sampled_channels, sampled_markers))
+            for (sampled_channels, sampled_markers) in zip(grouper(all_sampled_channels, 2),
+                                                           grouper(all_sampled_markers, 4)):
+                if all(x is None for x in (*sampled_channels, *sampled_markers)):
+                    # empty channel pairs
+                    binary_waveforms.append(BinaryWaveform.zeroed(size))
+                else:
+                    binary_waveforms.append(BinaryWaveform.from_sampled(*sampled_channels, sampled_markers))
             self._waveforms[waveform] = tuple(binary_waveforms)
 
         self._waveform_manager = ProgramWaveformManager(program_name, waveform_memory)
@@ -656,6 +664,12 @@ class HDAWGProgramManager:
         '  }\n'
         '}\n'
     )
+    DEFAULT_COMPILER_SETTINGS = {
+        'trigger_wait_code': WAIT_FOR_SOFTWARE_TRIGGER,
+        'min_repetitions_for_for_loop': 20,
+        'min_repetitions_for_shared_wf': 1000,
+        'indentation': '  '
+    }
     
     @classmethod
     def get_program_function_name(cls, program_name: str):
@@ -666,6 +680,29 @@ class HDAWGProgramManager:
     def __init__(self):
         self._waveform_memory = WaveformMemory()
         self._programs = OrderedDict()  # type: MutableMapping[str, HDAWGProgramEntry]
+        self._compiler_settings = [
+            # default settings: None -> take cls value
+            (re.compile('.*'), {'trigger_wait_code': None,
+                                'min_repetitions_for_for_loop': None,
+                                'min_repetitions_for_shared_wf': None,
+                                'indentation': None})]
+
+    def _get_compiler_settings(self, program_name: str) -> dict:
+        arg_spec = inspect.getfullargspec(HDAWGProgramEntry.compile)
+        required_compiler_args = (set(arg_spec.args) | set(arg_spec.kwonlyargs)) - {'self', 'available_registers'}
+
+        settings = {}
+        for regex, settings_dict in self._compiler_settings:
+            if regex.match(program_name):
+                settings.update(settings_dict)
+        if required_compiler_args - set(settings):
+            raise ValueError('Not all compiler arguments for program have been defined.'
+                             ' (the default catch all has been removed)'
+                             f'Missing: {required_compiler_args - set(settings)}')
+        for k, v in settings.items():
+            if v is None:
+                settings[k] = self.DEFAULT_COMPILER_SETTINGS[k]
+        return settings
 
     @property
     def waveform_memory(self):
@@ -708,8 +745,10 @@ class HDAWGProgramManager:
         program_entry = HDAWGProgramEntry(loop, selection_index, self._waveform_memory, name,
                                           channels, markers, amplitudes, offsets, voltage_transformations, sample_rate)
 
-        # TODO: de-hardcode these parameters and put compilation in seperate function
-        program_entry.compile(20, 1000, '  ', self.WAIT_FOR_SOFTWARE_TRIGGER,
+        compiler_settings = self._get_compiler_settings(program_name=name)
+
+        # TODO: put compilation in seperate function
+        program_entry.compile(**compiler_settings,
                               available_registers=available_registers)
 
         self._programs[name] = program_entry
@@ -840,26 +879,152 @@ def mark_sharable_waveforms(node_cluster: Sequence['SEQCNode'], sharable_wavefor
                 wf_playback.shared = True
 
 
+def _find_repetition(nodes: Deque['SEQCNode'],
+                     hashes: Deque[int],
+                     cluster_dump: List[List['SEQCNode']]) -> Tuple[
+    Tuple['SEQCNode', ...],
+    Tuple[int, ...],
+    List['SEQCNode']
+]:
+    """Finds repetitions of stepping patterns in nodes. Assumes hashes contains the stepping_hash of each node. If a
+    pattern is """
+    assert len(nodes) == len(hashes)
+
+    max_cluster_size = len(nodes) // 2
+    for cluster_size in range(max_cluster_size, 0, -1):
+        n_repetitions = len(nodes) // cluster_size
+        for c_idx in range(cluster_size):
+            idx_a = -1 - c_idx
+
+            for n in range(1, n_repetitions):
+                idx_b = idx_a - n * cluster_size
+                if hashes[idx_a] != hashes[idx_b] or not nodes[idx_a].same_stepping(nodes[idx_b]):
+                    n_repetitions = n
+                    break
+
+            if n_repetitions < 2:
+                break
+
+        else:
+            assert n_repetitions > 1
+            # found a stepping pattern repetition of length cluster_size!
+            to_dump = len(nodes) - (n_repetitions * cluster_size)
+            for _ in range(to_dump):
+                cluster_dump.append([nodes.popleft()])
+                hashes.popleft()
+
+            assert len(nodes) == n_repetitions * cluster_size
+
+            if cluster_size == 1:
+                current_cluster = list(nodes)
+
+                cluster_template_hashes = (hashes.popleft(),)
+                cluster_template: Tuple[SEQCNode] = (nodes.popleft(),)
+
+                nodes.clear()
+                hashes.clear()
+
+            else:
+                cluster_template_hashes = tuple(hashes.popleft() for _ in range(cluster_size))
+                cluster_template = tuple(
+                    nodes.popleft() for _ in range(cluster_size)
+                )
+
+                current_cluster: List[SEQCNode] = [Scope(list(cluster_template))]
+
+                for n in range(1, n_repetitions):
+                    current_cluster.append(Scope([
+                        nodes.popleft() for _ in range(cluster_size)
+                    ]))
+                assert not nodes
+                hashes.clear()
+
+            return cluster_template, cluster_template_hashes, current_cluster
+    return (), (), []
+
+
 def to_node_clusters(loop: Union[Sequence[Loop], Loop], loop_to_seqc_kwargs: dict) -> Sequence[Sequence['SEQCNode']]:
     """transform to seqc recursively noes and cluster them if they have compatible stepping"""
     assert len(loop) > 1
 
-    node_clusters = []
+    # complexity: O( len(loop) * MAX_SUB_CLUSTER * loop.depth() )
+    # I hope...
+    MAX_SUB_CLUSTER = 4
+
+    node_clusters: List[List[SEQCNode]] = []
+
+
+    last_period = []
+    # this is the period that we currently are collecting
+    current_period: List[SEQCNode] = []
+
+    # list of already collected periods. Each period is transformed into a SEQCNode
+    current_cluster: List[SEQCNode] = []
+
+    # this is a template for what we are currently collecting
+    current_template: Tuple[SEQCNode, ...] = ()
+    current_template_hashes: Tuple[int, ...] = ()
+
+    # only populated if we are looking for a node template
     last_node = loop_to_seqc(loop[0], **loop_to_seqc_kwargs)
-    current_nodes = [last_node]
+    last_hashes = collections.deque([last_node.stepping_hash()], maxlen=MAX_SUB_CLUSTER*2)
+    last_nodes = collections.deque([last_node], maxlen=MAX_SUB_CLUSTER*2)
 
     # compress all nodes in clusters of the same stepping
     for child in itertools.islice(loop, 1, None):
         current_node = loop_to_seqc(child, **loop_to_seqc_kwargs)
+        current_hash = current_node.stepping_hash()
 
-        if last_node.same_stepping(current_node):
-            current_nodes.append(current_node)
+        if current_template:
+            # we are currently collecting something
+            idx = len(current_period)
+            if current_template_hashes[idx] == current_hash and current_node.same_stepping(current_template[idx]):
+                current_period.append(current_node)
+
+                if len(current_period) == len(current_template):
+                    if idx == 0:
+                        node = current_period.pop()
+                    else:
+                        node = Scope(current_period)
+                        current_period = []
+                    current_cluster.append(node)
+
+            else:
+                # current template became invalid
+                assert len(current_cluster) > 1
+                node_clusters.append(current_cluster)
+
+                assert not last_nodes
+                assert not last_hashes
+                last_nodes.extend(current_period)
+                last_hashes.extend(current_template_hashes[:len(current_period)])
+
+                last_nodes.append(current_node)
+                last_hashes.append(current_hash)
+
+                (current_template,
+                 current_template_hashes,
+                 current_cluster) = _find_repetition(last_nodes, last_hashes,
+                                                     node_clusters)
         else:
-            node_clusters.append(current_nodes)
-            current_nodes = [current_node]
+            if len(last_nodes) == last_nodes.maxlen:
+                # lookup deque is full
+                node_clusters.append([last_nodes.popleft()])
+                last_hashes.popleft()
 
-        last_node = current_node
-    node_clusters.append(current_nodes)
+            last_nodes.append(current_node)
+            last_hashes.append(current_hash)
+
+            (current_template,
+             current_template_hashes,
+             current_cluster) = _find_repetition(last_nodes, last_hashes,
+                                                 node_clusters)
+
+    assert not (current_cluster and last_nodes)
+    node_clusters.append(current_cluster)
+    node_clusters.extend([node] for node in current_period)
+    node_clusters.extend([node] for node in last_nodes)
+
     return node_clusters
 
 
@@ -921,6 +1086,10 @@ class SEQCNode(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def samples(self) -> int:
         pass
+
+    @abc.abstractmethod
+    def stepping_hash(self) -> int:
+        """hash of the stepping properties of this node"""
 
     @abc.abstractmethod
     def same_stepping(self, other: 'SEQCNode'):
@@ -989,6 +1158,9 @@ class Scope(SEQCNode):
         for node in self.nodes:
             yield from node.iter_waveform_playbacks()
 
+    def stepping_hash(self) -> int:
+        return functools.reduce(int.__xor__, (node.stepping_hash() for node in self.nodes), hash(type(self)))
+
     def same_stepping(self, other: 'Scope'):
         return (type(other) is Scope and
                 len(self.nodes) == len(other.nodes) and
@@ -1007,6 +1179,12 @@ class Scope(SEQCNode):
                                            pos_var_name=pos_var_name,
                                            node_name_generator=node_name_generator,
                                            advance_pos_var=advance_pos_var)
+
+    def __eq__(self, other):
+        if type(other) is type(self):
+            return self.nodes == other.nodes
+        else:
+            return NotImplemented
 
 
 class Repeat(SEQCNode):
@@ -1042,6 +1220,9 @@ class Repeat(SEQCNode):
         return (type(self) == type(other) and
                 self.repetition_count == other.repetition_count and
                 self.scope.same_stepping(other.scope))
+
+    def stepping_hash(self) -> int:
+        return hash((type(self), self.repetition_count, self.scope.stepping_hash()))
 
     def iter_waveform_playbacks(self) -> Iterator['WaveformPlayback']:
         return self.scope.iter_waveform_playbacks()
@@ -1142,6 +1323,9 @@ class SteppingRepeat(SEQCNode):
         for node in self.node_cluster:
             yield from node.iter_waveform_playbacks()
 
+    def stepping_hash(self) -> int:
+        return hash((type(self), self.node_cluster[0].stepping_hash()))
+
     def same_stepping(self, other: 'SteppingRepeat'):
         return (type(other) is SteppingRepeat and
                 len(self.node_cluster) == len(other.node_cluster) and
@@ -1188,6 +1372,12 @@ class WaveformPlayback(SEQCNode):
             assert len(wf_lens) == 1
             wf_len, = wf_lens
             return wf_len
+
+    def stepping_hash(self) -> int:
+        if self.shared:
+            return hash((type(self), self.waveform))
+        else:
+            return hash((type(self), self.samples()))
 
     def same_stepping(self, other: 'WaveformPlayback') -> bool:
         same_type = type(self) is type(other) and self.shared == other.shared

@@ -3,6 +3,7 @@ import math
 from unittest import mock
 
 from typing import Optional, Dict, Set, Any, Union
+import sympy
 
 from qupulse.parameter_scope import Scope, DictScope
 from qupulse.utils.types import ChannelID
@@ -134,12 +135,15 @@ class AtomicPulseTemplateStub(AtomicPulseTemplate):
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
         raise NotImplementedError()
 
+    def _as_expression(self) -> Dict[ChannelID, ExpressionScalar]:
+        raise NotImplementedError()
+
 
 class PulseTemplateTest(unittest.TestCase):
 
     def test_create_program(self) -> None:
         template = PulseTemplateStub(defined_channels={'A'}, parameter_names={'foo'})
-        parameters = {'foo': ConstantParameter(2.126), 'bar': -26.2, 'hugo': 'exp(sin(pi/2))', 'append_a_child': '1'}
+        parameters = {'foo': 2.126, 'bar': -26.2, 'hugo': 'exp(sin(pi/2))', 'append_a_child': '1'}
         previous_parameters = parameters.copy()
         measurement_mapping = {'M': 'N'}
         previos_measurement_mapping = measurement_mapping.copy()
@@ -300,7 +304,10 @@ class PulseTemplateTest(unittest.TestCase):
 
     def test_create_program_none(self) -> None:
         template = PulseTemplateStub(defined_channels={'A'}, parameter_names={'foo'})
-        parameters = {'foo': ConstantParameter(2.126), 'bar': -26.2, 'hugo': 'exp(sin(pi/2))'}
+        with self.assertWarns(DeprecationWarning):
+            # just a test that old stuff wont break. remove in the future
+            constant_parameter = ConstantParameter(2.126)
+        parameters = {'foo': constant_parameter, 'bar': -26.2, 'hugo': 'exp(sin(pi/2))'}
         measurement_mapping = {'M': 'N'}
         channel_mapping = {'A': 'B'}
         volatile = {'hugo'}
@@ -437,3 +444,4 @@ class AtomicPulseTemplateTests(unittest.TestCase):
                                               to_single_waveform=set(),
                                               global_transformation=None)
         self.assertEqual(Loop(), program)
+

@@ -162,10 +162,10 @@ class MappingTemplateTests(unittest.TestCase):
         template = DummyPulseTemplate(parameter_names={'foo', 'bar'})
         st = MappingPulseTemplate(template, parameter_mapping={'foo': 't*k', 'bar': 't*l'})
 
-        parameters = {'t': ConstantParameter(3), 'k': ConstantParameter(2), 'l': ConstantParameter(7)}
+        parameters = {'t': 3, 'k': 2, 'l': 7}
         values = {'foo': 6, 'bar': 21}
         for k, v in st.map_parameters(parameters).items():
-            self.assertEqual(v.get_value(), values[k])
+            self.assertEqual(v, values[k])
         parameters.popitem()
         with self.assertRaises(ParameterNotProvidedException):
             st.map_parameters(parameters)
@@ -178,7 +178,9 @@ class MappingTemplateTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "type of return value"):
             st.map_parameters({})
 
-        parameters = dict(t=3, k=2, l=ConstantParameter(7))
+        with self.assertWarns(DeprecationWarning):
+            # remove if ConstantParameter is removed
+            parameters = dict(t=3, k=2, l=ConstantParameter(7))
         with self.assertRaisesRegex(TypeError, "neither all Parameter nor Real"):
             st.map_parameters(parameters)
 
@@ -252,6 +254,26 @@ class MappingTemplateTests(unittest.TestCase):
                                      allow_partial_parameter_mapping=True)
 
         self.assertEqual({'a': Expression('2*f'), 'B': Expression('-3.2*f+2.3')}, pulse.integral)
+
+    def test_as_expression(self):
+        from sympy.abc import f, k, b
+        duration = 5
+        dummy = DummyPulseTemplate(defined_channels={'A', 'B', 'C'},
+                                   parameter_names={'k', 'f', 'b'},
+                                   integrals={'A': Expression(2 * k),
+                                              'B': Expression(-3.2*f+b),
+                                              'C': Expression(1)}, duration=duration)
+        t = DummyPulseTemplate._AS_EXPRESSION_TIME
+        dummy_expr = {ch: i * t / duration for ch, i in dummy._integrals.items()}
+        pulse = MappingPulseTemplate(dummy, parameter_mapping={'k': 'f', 'b': 2.3}, channel_mapping={'A': 'a',
+                                                                                                     'C': None},
+                                     allow_partial_parameter_mapping=True)
+
+        expected = {
+            'a': Expression(2*f*t/duration),
+            'B': Expression((-3.2*f + 2.3)*t/duration),
+        }
+        self.assertEqual(expected, pulse._as_expression())
 
     def test_duration(self):
         seconds2ns = 1e9
@@ -506,6 +528,7 @@ class MappingPulseTemplateOldSerializationTests(unittest.TestCase):
             self.assertEqual(data['measurement_mapping'], deserialized.measurement_mapping)
             self.assertEqual(data['parameter_constraints'], [str(pc) for pc in deserialized.parameter_constraints])
             self.assertIs(deserialized.template, dummy_pt)
+
 
 class MappingPulseTemplateRegressionTests(unittest.TestCase):
     def test_issue_451(self):
