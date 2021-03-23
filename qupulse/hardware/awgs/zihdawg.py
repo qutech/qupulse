@@ -1,6 +1,6 @@
 from pathlib import Path
 import functools
-from typing import Tuple, Set, Callable, Optional, Mapping, Generator, Union, List, Dict
+from typing import Tuple, Set, Callable, Optional, Mapping, Generator, Union, Dict, Any, NamedTuple
 from enum import Enum
 import weakref
 import logging
@@ -47,6 +47,9 @@ class HDAWGRepresentation:
     """HDAWGRepresentation represents an HDAWG8 instruments and manages a LabOne data server api session. A data server
     must be running and the device be discoverable. Channels are per default grouped into pairs."""
 
+    _MarkerState = NamedTuple("_MarkerState", [('idle', 'HDAWGTriggerOutSource'),
+                                               ('playback', 'HDAWGTriggerOutSource')])
+
     def __init__(self, device_serial: str = None,
                  device_interface: str = '1GbE',
                  data_server_addr: str = 'localhost',
@@ -64,6 +67,9 @@ class HDAWGRepresentation:
         :param reset:             Reset device before initialization
         :param timeout:           Timeout in seconds for uploading
         """
+        # TODO: lookup method to find channel count
+        n_channels = 8
+
         self._api_session = zhinst.ziPython.ziDAQServer(data_server_addr, data_server_port, api_level_number)
         assert zhinst.utils.api_server_version_check(self.api_session)  # Check equal data server and api version.
         self.api_session.connectDevice(device_serial, device_interface)
@@ -79,9 +85,8 @@ class HDAWGRepresentation:
         waveform_path = pathlib.Path(self.api_session.awgModule().getString('directory'), 'awg', 'waves')
         self._waveform_file_system = WaveformFileSystem(waveform_path)
         self._channel_groups: Dict[HDAWGChannelGrouping, Tuple[HDAWGChannelGroup, ...]] = {}
-
-        # TODO: lookup method to find channel count
-        n_channels = 8
+        self._marker_state = [self._MarkerState(HDAWGTriggerOutSource.OUT_1_MARK_1,
+                                                HDAWGTriggerOutSource.OUT_1_MARK_2)] * n_channels
 
         for grouping in HDAWGChannelGrouping:
             group_size = grouping.group_size()
@@ -129,12 +134,42 @@ class HDAWGRepresentation:
     def serial(self) -> str:
         return self._dev_ser
 
-    def _initialize(self) -> None:
+    def _default_settings(self) -> Dict[str, Any]:
+        """Set parameters that might be changed by the user to some sensible default"""
+        return {
+            f'/{self.serial}/awgs/*/time': 0,  # Maximum sampling rate.
+            f'/{self.serial}/sigouts/*/range': HDAWGVoltageRange.RNG_1V.value,
+            f'/{self.serial}/awgs/*/outputs/*/amplitude': 0,
+            f'/{self.serial}/awgs/*/outputs/*/modulation/mode': HDAWGModulationMode.OFF.value,
+            f'/{self.serial}/awgs/*/userregs/*': 0,
+        }
+
+    def _required_settings(self) -> Dict[str, Any]:
+        """Settings that are required for this driver to work properly"""
+        return {
+            f'/{self.serial}/awgs/*/userregs/*': 0,  # Reset all user registers to 0.
+            f'/{self.serial}/awgs/*/single': 1  # Single execution mode of sequence.
+        }
+
+    def _mark_source_setting(self, marker_idx: int, source: 'HDAWGTriggerOutSource') -> (str, Any):
+        assert marker_idx in range(8)
+        if isinstance(source, str):
+            source = getattr(HDAWGTriggerOutSource, source.upper())
+        elif isinstance(source, int):
+            source = HDAWGTriggerOutSource(source)
+        return f'/{self.serial}/triggers/out/{marker_idx}/source', source.value
+
+    def set_mark_source(self, marker_idx: int, source: 'HDAWGTriggerOutSource'):
+        self.api_session.setInt(*self._mark_source_setting(marker_idx, source))
+
+    def _initialize(self, force_defaults=False) -> None:
+        settings = self._required_settings()
+        if force_defaults:
+            settings.update(self._default_settings())
+
+        self.api_session.set()
+
         settings = []
-        settings.append(['/{}/awgs/*/time'.format(self.serial), 0])  # Maximum sampling rate.
-        settings.append(['/{}/sigouts/*/range'.format(self.serial), HDAWGVoltageRange.RNG_1V.value])
-        settings.append(['/{}/awgs/*/outputs/*/amplitude'.format(self.serial), 1.0])  # Default amplitude factor 1.0
-        settings.append(['/{}/awgs/*/outputs/*/modulation/mode'.format(self.serial), HDAWGModulationMode.OFF.value])
         settings.append(['/{}/awgs/*/userregs/*'.format(self.serial), 0])  # Reset all user registers to 0.
         settings.append(['/{}/awgs/*/single'.format(self.serial), 1])  # Single execution mode of sequence.
         for ch in range(0, 8):  # Route marker 1 signal for each channel to marker output.
@@ -150,8 +185,8 @@ class HDAWGRepresentation:
     def reset(self) -> None:
         zhinst.utils.disable_everything(self.api_session, self.serial)
         self._initialize()
-        for tuple in self.channel_tuples:
-            tuple.clear()
+        for channel_tuple in self.channel_tuples:
+            channel_tuple.clear()
 
     def group_name(self, group_idx, group_size) -> str:
         return str(self.serial) + '_' + 'ABCDEFGH'[group_idx*group_size:][:group_size]
@@ -237,8 +272,8 @@ class HDAWGTriggerOutSource(Enum):
     TRIG_IN_6 = 13  # Trigger output assigned to trigger inout 6.
     TRIG_IN_7 = 14  # Trigger output assigned to trigger inout 7.
     TRIG_IN_8 = 15  # Trigger output assigned to trigger inout 8.
-    HIGH = 17 # Trigger output is set to high.
-    LOW = 18 # Trigger output is set to low.
+    HIGH = 17  # Trigger output is set to high.
+    LOW = 18  # Trigger output is set to low.
 
 
 class HDAWGChannelGrouping(Enum):
