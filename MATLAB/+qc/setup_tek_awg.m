@@ -4,7 +4,7 @@ global smdata
 global plsdata
 
 defaultArgs = struct( ...
-  'sampleVoltPerAwgVolt', [util.db('dB2F',-48)*2 util.db('dB2F',-48)*2 util.db('dB2F',-44)*2 util.db('dB2F',-48)*2], ... % 10^(-dB/20)*ImpedanceMismatch
+  'sampleVoltPerAwgVolt', [util.db('dB2F',-45)*2 util.db('dB2F',-45)*2 util.db('dB2F',-45)*2 util.db('dB2F',-45)*2], ... % 10^(-dB/20)*ImpedanceMismatch
   'smChannels', {{'RFA', 'RFB', 'RFC', 'RFD'}}, ...
   'tekName', 'AWG5000', ...
   'globalTransformation', [], ...
@@ -36,13 +36,16 @@ qctoolkit_tek = py.importlib.reload(py.importlib.import_module('qctoolkit.hardwa
 py.importlib.import_module('tek_awg');
 
 awg = py.tek_awg.TekAwg.connect_to_ip('169.254.40.80');
+awg.instrument.timeout = py.int(1200000);
+% awg = py.tek_awg.TekAwg.connect_raw_visa_socket('169.254.40.80', '4001','@ni');
+% % 
+tawg=qctoolkit_tek.TektronixAWG(awg, pyargs('synchronize','clear'));
 % Only real instrument
-smdata.inst(sminstlookup(args.tekName)).data.tawg = qctoolkit_tek.TektronixAWG(awg, pyargs('synchronize','clear'));
-
+smdata.inst(sminstlookup(args.tekName)).data.tawg = tawg;
 
 plsdata.awg.inst = smdata.inst(sminstlookup(args.tekName)).data.tawg;
 if exist('awgctrl_tek.m', 'file')
-  awgcntrl('off')
+  awgctrl('off')
 end
 
 % Create hardware setup for qctoolkit integration
