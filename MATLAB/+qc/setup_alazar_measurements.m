@@ -39,26 +39,28 @@ function [mask_prototypes, measurement_map, txt] = setup_alazar_measurements(var
 	
 	defaultArgs = struct( ...
 		'disp', true, ...
-		'nMeasPerQubit', 2, ...
-		'nQubits', 2 ...
+		'nMeasPerQubit', 1, ...
+		'nQubits', 1 ...
 		);
 	args = util.parse_varargin(varargin, defaultArgs);
 	nAlazarChannels = 4;
 	nQubits = args.nQubits;
 	nMeasPerQubit = args.nMeasPerQubit;
 		
-	py.setattr(hws, '_measurement_map', py.dict);
-	py.setattr(daq, '_mask_prototypes', py.dict);
+% 	py.setattr(hws, '_measurement_map', py.dict());
+  py.getattr(hws, '_measurement_map').clear();
+% 	py.setattr(daq, '_mask_prototypes', py.dict() );
+  py.getattr(daq, '_mask_prototypes').clear();
 	warning('Removing measurement_map and measurement_map might break stuff if previously set. Needs testing.');
 	
 	for q = 1:nQubits
 		for m = 1:nMeasPerQubit
 			%                 qubitIndex, measIndex, hwChannel,   auxFlag1
-			add_meas_and_mask(q,          m,        q+nQubits-1,  false);
+			add_meas_and_mask(q,          m,        q+nQubits-2,  false);
 		end
 	end
 	
-	for a = 1:(nAlazarChannels-nQubits)
+	for a = (nAlazarChannels-nQubits-1):nAlazarChannels
 		for m = 1:nMeasPerQubit
 			%                 qubitIndex, measIndex, hwChannel,   auxFlag1
 			add_meas_and_mask(a,          m,         a-1,         true);
@@ -71,7 +73,8 @@ function [mask_prototypes, measurement_map, txt] = setup_alazar_measurements(var
 	
 	if args.nQubits > 2
 		warning('Simultaneous measurements for more than 2 qubits not implemented at the moment.');
-	end
+  end
+  
 	if q == 2
 		for m = 1:nMeasPerQubit
 			% Q1 Q2           qubitIndex, measIndex, hwChannel, auxFlag1, secondQubitIndex, secondHwChannel, auxFlag2
