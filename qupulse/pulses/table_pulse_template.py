@@ -15,8 +15,8 @@ import warnings
 import numpy as np
 import sympy
 from sympy.logic.boolalg import BooleanAtom
-import more_itertools
 
+from qupulse.utils import pairwise
 from qupulse.utils.types import ChannelID
 from qupulse.serialization import Serializer, PulseRegistryType
 from qupulse.pulses.parameters import Parameter, \
@@ -75,7 +75,7 @@ class TableEntry(NamedTuple('TableEntry', [('t', ExpressionScalar),
             Scalar expression for the integral.
         """
         expr = 0
-        for first_entry, second_entry in more_itertools.pairwise(entry_sequence):
+        for first_entry, second_entry in pairwise(entry_sequence):
             substitutions = {'t0': first_entry.t.sympified_expression,
                              'v0': expression_extractor(first_entry.v),
                              't1': second_entry.t.sympified_expression,
@@ -113,7 +113,7 @@ class TableEntry(NamedTuple('TableEntry', [('t', ExpressionScalar),
         if post_value is not None:
             piecewise_args.append((post_value, t >= entry_sequence[-1].t.sympified_expression))
 
-        for first_entry, second_entry in more_itertools.pairwise(entry_sequence):
+        for first_entry, second_entry in pairwise(entry_sequence):
             t0, t1 = first_entry.t.sympified_expression, second_entry.t.sympified_expression
             substitutions = {'t0': t0,
                              'v0': expression_extractor(first_entry.v),

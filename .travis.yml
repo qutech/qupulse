@@ -2,6 +2,7 @@ language: python
 python:
   - 3.6
   - 3.7
+  - 3.8
 env:
   - INSTALL_EXTRAS=[VISA,plotting,zurich-instruments,tektronix]
   - INSTALL_EXTRAS=[VISA,plotting,zurich-instruments,tektronix,Faster-fractions]

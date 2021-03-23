@@ -45,9 +45,9 @@ function scan = conf_seq(varargin)
 		... Saving variables
 		'save_custom_var_fn',    @tune.get_global_opts,...          % Can specify a function which returns data to be saved in the scan
 		'save_custom_var_args',  {{'dnp', 'tune_gui'}}, ...
-        'save_metadata_fns',     {{{@sm_scans.triton_200.metafn_get_configchanvals} ... % Can specify functions to log metadata during each loop
-                                  {@sm_scans.triton_200.metafn_get_rf_channels}}}, ...  
-        'save_metadata_fields',  {{'configchanvals', 'rfChannels'}}, ...							 % Fieldnames of the metadata struct saved by smrun
+    'save_metadata_fns',     {{@sm_scans.triton_200.metafn_get_configchanvals} ... % Can specify functions to log metadata during each loop
+															{@sm_scans.triton_200.metafn_get_rf_channels}}, ...  
+    'save_metadata_fields',  {{'configchanvals'} {'rfChannels'}}, ...							 % Fieldnames of the metadata struct saved by smrun
 		...                      
 		... Measurements         
 		'operations',            {plsdata.daq.defaultOperations}, ...
@@ -68,7 +68,7 @@ function scan = conf_seq(varargin)
 		'arm_global',            false, ...							            % If true, set the program to be armed via tunedata.global_opts.conf_seq.arm_program_name.
 		...											 												            % If you use this, all programs need to be uploaded manually before the scan and need to 
 		...											 												            % have the same Alazar configuration.
-		'rf_sources',            [false false], ...				            % turn RF sources on and off automatically
+		'rf_sources',            [true true], ...				            % turn RF sources on and off automatically
 		'buffer_strategy',        {plsdata.daq.defaultBufferStrategy},... % call qc.set_alazar_buffer_strategy with these arguments before pulse
 		'verbosity',             10 ...									            % 0: display nothing, 10: display all except when arming program, 11: display all
 		);

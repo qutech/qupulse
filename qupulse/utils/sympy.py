@@ -28,6 +28,7 @@ __all__ = ["sympify", "substitute_with_eval", "to_numpy", "get_variables", "get_
 
 Sympifyable = Union[str, Number, sympy.Expr, numpy.str_]
 
+SYMPY_DURATION_ERROR_MARGIN = 1e-15 # error margin when checking sympy expression durations
 
 class IndexedBasedFinder(dict):
     """Acts as a symbol lookup and determines which symbols in an expression a subscripted."""
@@ -375,9 +376,11 @@ def evaluate_lamdified_exact_rational(expression: sympy.Expr,
     return lambdified(**parameters), lambdified
 
 
-def almost_equal(lhs: sympy.Expr, rhs: sympy.Expr, epsilon: float=1e-15) -> Optional[bool]:
+def almost_equal(lhs: sympy.Expr, rhs: sympy.Expr, epsilon: Optional[float]=None) -> Optional[bool]:
     """Returns True (or False) if the two expressions are almost equal (or not). Returns None if this cannot be
     determined."""
+    if epsilon is None:
+        epsilon = SYMPY_DURATION_ERROR_MARGIN
     relation = sympy.simplify(sympy.Abs(lhs - rhs) <= epsilon)
 
     if relation is sympy.true:

@@ -346,7 +346,7 @@ class ExpressionScalarTests(unittest.TestCase):
         self.assertIs(3 >= valued, True)
 
     def assertExpressionEqual(self, lhs: Expression, rhs: Expression):
-        self.assertTrue(bool(Eq(lhs.sympified_expression, rhs.sympified_expression)), '{} and {} are not equal'.format(lhs, rhs))
+        self.assertTrue(bool(Eq(lhs, rhs)), '{} and {} are not equal'.format(lhs, rhs))
 
     def test_number_math(self):
         a = ExpressionScalar('a')

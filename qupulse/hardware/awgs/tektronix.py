@@ -611,7 +611,7 @@ class TektronixAWG(AWG):
         if previous_errors:
             self.logger.warning("Error queue not empty before sequence upload: %r", previous_errors)
 
-        positions_with_next = pairwise(positions, fillvalue=last_jump_to)
+        positions_with_next = pairwise(positions, zip_function=itertools.zip_longest, fillvalue=last_jump_to)
 
         self._synchronized = False
         for idx, ((element_index, next_element), sequencing_element) in enumerate(zip(positions_with_next, sequencing_elements)):

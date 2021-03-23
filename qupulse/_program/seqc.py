@@ -19,7 +19,6 @@ import abc
 import itertools
 import inspect
 import logging
-import os.path
 import hashlib
 from collections import OrderedDict
 import re
@@ -28,13 +27,11 @@ import numbers
 import string
 import functools
 
-import more_itertools
-
 import numpy as np
 from pathlib import Path
 
 from qupulse.utils.types import ChannelID, TimeType
-from qupulse.utils import replace_multiple
+from qupulse.utils import replace_multiple, grouper
 from qupulse._program.waveforms import Waveform
 from qupulse._program._loop import Loop
 from qupulse._program.volatile import VolatileRepetitionCount, VolatileProperty
@@ -505,8 +502,8 @@ class HDAWGProgramEntry(ProgramEntry):
 
             # group in channel pairs for binary waveform
             binary_waveforms = []
-            for (sampled_channels, sampled_markers) in zip(more_itertools.grouper(all_sampled_channels, 2),
-                                                           more_itertools.grouper(all_sampled_markers, 4)):
+            for (sampled_channels, sampled_markers) in zip(grouper(all_sampled_channels, 2),
+                                                           grouper(all_sampled_markers, 4)):
                 if all(x is None for x in (*sampled_channels, *sampled_markers)):
                     # empty channel pairs
                     binary_waveforms.append(BinaryWaveform.zeroed(size))
