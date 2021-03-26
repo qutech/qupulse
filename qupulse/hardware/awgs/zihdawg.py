@@ -176,6 +176,11 @@ class HDAWGRepresentation:
         grouping = self.api_session.getInt(f'/{self.serial}/SYSTEM/AWG/CHANNELGROUPING')
         return HDAWGChannelGrouping(grouping)
 
+    @property
+    def sample_clock(self) -> float:
+        node_path = f'/{self.serial}/system/clocks/sampleclock/freq'
+        return self.api_session.getDouble(node_path)
+
     @channel_grouping.setter
     def channel_grouping(self, channel_grouping: 'HDAWGChannelGrouping'):
         # ipython reload ...
@@ -322,6 +327,7 @@ class HDAWGChannelGroup(AWG):
         self._uploaded_seqc_source = None
         self._current_program = None  # Currently armed program.
         self._upload_generator = ()
+        self._rate_exponents = {}
 
     def _initialize_awg_module(self):
         """Only run once"""
@@ -407,8 +413,16 @@ class HDAWGChannelGroup(AWG):
         if name in self.programs and not force:
             raise HDAWGValueError('{} is already known on {}'.format(name, self.identifier))
 
+        program_rate = self._rate_exponents.get(name, default=None)
+        if program_rate is None:
+            sample_rate = self.sample_rate
+            reset_rate = None
+        else:
+            sample_rate = TimeType.from_float(self.device.sample_clock) / 2**program_rate
+            reset_rate = self.default_awg_rate_exponent
+
         # Go to qupulse nanoseconds time base.
-        q_sample_rate = self.sample_rate / 10**9
+        q_sample_rate = sample_rate / 10**9
 
         # Adjust program to fit criteria.
         make_compatible(program,
@@ -435,7 +449,9 @@ class HDAWGChannelGroup(AWG):
                                           voltage_transformations=voltage_transformation,
                                           sample_rate=q_sample_rate,
                                           amplitudes=amplitudes,
-                                          offsets=voltage_offsets)
+                                          offsets=voltage_offsets,
+                                          program_rate_exponent=program_rate,
+                                          reset_rate_exponent=reset_rate)
 
         self._required_seqc_source = self._program_manager.to_seqc_program()
         self._program_manager.waveform_memory.sync_to_file_system(self.device.waveform_file_system)
@@ -541,17 +557,17 @@ class HDAWGChannelGroup(AWG):
         return set(self._program_manager.programs.keys())
 
     @property
-    def sample_rate(self) -> TimeType:
-        """The default sample rate of the AWG channel group."""
-        node_path = '/{}/awgs/{}/time'.format(self.device.serial, self.awg_group_index)
-        sample_rate_num = self.device.api_session.getInt(node_path)
-        node_path = '/{}/system/clocks/sampleclock/freq'.format(self.device.serial)
-        sample_clock = self.device.api_session.getDouble(node_path)
+    def default_awg_rate_exponent(self) -> int:
+        """Final sample rate is sample_clock/2**default_awg_rate_exponent"""
+        path = f'/{self.device.serial}/awgs/{self.awg_group_index}/time'
+        return self.device.api_session.getInt(path)
 
+    @property
+    def sample_rate(self) -> TimeType:
         """Calculate exact rational number based on (sample_clock Sa/s) / 2^sample_rate_num. Otherwise numerical
         imprecision will give rise to errors for very long pulses. fractions.Fraction does not accept floating point
         numerator, which sample_clock could potentially be."""
-        return time_from_float(sample_clock) / 2 ** sample_rate_num
+        return time_from_float(self.device.sample_clock) / 2 ** self.default_awg_rate_exponent
 
     @property
     def awg_group_index(self) -> int:

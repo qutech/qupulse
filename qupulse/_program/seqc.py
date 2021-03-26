@@ -491,12 +491,19 @@ class HDAWGProgramEntry(ProgramEntry):
                  amplitudes: Tuple[float, ...],
                  offsets: Tuple[float, ...],
                  voltage_transformations: Tuple[Optional[Callable], ...],
-                 sample_rate: TimeType):
+                 sample_rate: TimeType,
+                 program_rate: int = None,
+                 reset_rate: int = None):
+        if program_rate is not None:
+            effective_sample_rate = sample_rate / 2 ** program_rate
+        else:
+            effective_sample_rate = sample_rate
+
         super().__init__(loop, channels=channels, markers=markers,
                          amplitudes=amplitudes,
                          offsets=offsets,
                          voltage_transformations=voltage_transformations,
-                         sample_rate=sample_rate)
+                         sample_rate=effective_sample_rate)
         for waveform, (all_sampled_channels, all_sampled_markers) in self._waveforms.items():
             size = int(waveform.duration * sample_rate)
 
@@ -519,6 +526,10 @@ class HDAWGProgramEntry(ProgramEntry):
         self._var_declarations = None
         self._user_registers = None
         self._user_register_source = None
+        self._rate_preparation = None
+        self._rate_reset = None
+        self._sample_rate_exponent = program_rate
+        self._reset_rate_exponent = reset_rate
 
     def compile(self,
                 min_repetitions_for_for_loop: int,
@@ -565,6 +576,19 @@ class HDAWGProgramEntry(ProgramEntry):
                                                                      map(str, itertools.count(1)),
                                                                      line_prefix=indentation,
                                                                      pos_var_name=pos_var_name))
+
+        if self._sample_rate_exponent is not None:
+            self._rate_preparation = [f'{indentation}// set sample rate exponent for program'
+                                      f'{indentation}setRate({self._sample_rate_exponent});']
+        else:
+            self._rate_preparation = []
+
+        if self._reset_rate_exponent is not None:
+            self._rate_reset = [f'{indentation}// cleanup rate to (probably previous) value'
+                                f'{indentation}setRate({self._reset_rate_exponent});']
+        else:
+            self._rate_reset = []
+
         self._waveform_manager.finalize()
 
     @property
@@ -575,10 +599,12 @@ class HDAWGProgramEntry(ProgramEntry):
     @property
     def seqc_source(self) -> str:
         assert self._seqc_source is not None, "compile not called"
-        return '\n'.join([self._var_declarations,
+        return '\n'.join([*self._rate_preparation,
+                          self._var_declarations,
                           self._user_register_source,
                           self._trigger_wait_code,
-                          self._seqc_source])
+                          self._seqc_source,
+                          *self._rate_reset])
 
     def volatile_repetition_counts(self) -> Iterable[Tuple[UserRegister, VolatileRepetitionCount]]:
         """
@@ -720,7 +746,9 @@ class HDAWGProgramManager:
                     amplitudes: Tuple[float, ...],
                     offsets: Tuple[float, ...],
                     voltage_transformations: Tuple[Optional[Callable], ...],
-                    sample_rate: TimeType):
+                    sample_rate: TimeType,
+                    program_rate_exponent: Optional[int] = None,
+                    reset_rate_exponent: Optional[int] = None):
         """Register the given program and translate it to seqc.
 
         TODO: Add an interface to change the trigger mode
@@ -734,6 +762,8 @@ class HDAWGProgramManager:
             offsets: Used to sample the waveforms
             voltage_transformations: see AWG.upload
             sample_rate: Used to sample the waveforms
+            program_rate_exponent: sample rate exponent is set to this value before the program
+            reset_rate_exponent: sample rate exponent is set to this value after the program
         """
         assert name not in self._programs
 
@@ -743,7 +773,8 @@ class HDAWGProgramManager:
         available_registers = [UserRegister.from_seqc(idx) for idx in range(2, 16)]
 
         program_entry = HDAWGProgramEntry(loop, selection_index, self._waveform_memory, name,
-                                          channels, markers, amplitudes, offsets, voltage_transformations, sample_rate)
+                                          channels, markers, amplitudes, offsets, voltage_transformations, sample_rate,
+                                          program_rate=program_rate_exponent, reset_rate=reset_rate_exponent)
 
         compiler_settings = self._get_compiler_settings(program_name=name)
 

@@ -11,6 +11,7 @@ import numpy as np
 
 from qupulse.expressions import ExpressionScalar
 from qupulse.parameter_scope import DictScope
+from qupulse.utils.types import TimeType
 
 from qupulse._program._loop import Loop
 from qupulse._program.seqc import BinaryWaveform, loop_to_seqc, WaveformPlayback, Repeat, SteppingRepeat, Scope,\
@@ -748,14 +749,15 @@ class HDAWGProgramManagerTest(unittest.TestCase):
         amplitudes = (1., 1.)
         offsets = (0., 0.)
         volatage_transformations = (lambda x: x, lambda x: x)
-        sample_rate = 1
+        sample_rate = TimeType.from_fraction(1, 1)
 
         root = complex_program_as_loop(unique_wfs, wf_same=same_wf)
         seqc_nodes = complex_program_as_seqc(unique_wfs, wf_same=same_wf)
 
         manager = HDAWGProgramManager()
 
-        manager.add_program('test', root, channels, markers, amplitudes, offsets, volatage_transformations, sample_rate)
+        manager.add_program('test', root, channels, markers, amplitudes, offsets, volatage_transformations,
+                            sample_rate, None)
 
         # 0: Program selection
         # 1: Trigger
