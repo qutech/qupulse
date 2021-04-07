@@ -1,6 +1,7 @@
 from typing import Dict, Any, Optional, Tuple, List, Iterable, Callable, Sequence
 from collections import defaultdict
-import logging
+import copy
+import warnings
 import math
 import functools
 import abc
@@ -187,7 +188,8 @@ class AlazarCard(DAC):
         self.update_settings = True
 
         self.__definitions = dict()
-        self.config = config
+        self.default_config = config
+        self._current_config = None
 
         # defaults to self.__card.minimum_record_size
         self._buffer_strategy = None
@@ -201,9 +203,22 @@ class AlazarCard(DAC):
         return self.__card
 
     @property
+    def config(self):
+        warnings.warn("AlazarCard.config is deprecated. Use AlazarCard.default_config or AlazarCard.current_config",
+                      DeprecationWarning)
+        if self._current_config is None:
+            return self.default_config
+        else:
+            return self._current_config
+
+    @property
+    def current_config(self):
+        return self._current_config
+
+    @property
     def buffer_strategy(self) -> BufferStrategy:
         if self._buffer_strategy is None:
-            return AvoidSingleBufferAcquisition(ForceBufferSize(self.config.aimedBufferSize))
+            return AvoidSingleBufferAcquisition(ForceBufferSize(self.default_config.aimedBufferSize))
         else:
             return self._buffer_strategy
 
@@ -230,15 +245,15 @@ class AlazarCard(DAC):
         return mask
 
     def set_measurement_mask(self, program_name, mask_name, begins, lengths) -> Tuple[np.ndarray, np.ndarray]:
-        sample_factor = TimeType(int(self.config.captureClockConfiguration.numeric_sample_rate(self.card.model)), 10**9)
+        sample_factor = TimeType(int(self.default_config.captureClockConfiguration.numeric_sample_rate(self.card.model)), 10**9)
         return self._registered_programs[program_name].set_measurement_mask(mask_name, sample_factor, begins, lengths)
 
     def register_measurement_windows(self,
                                      program_name: str,
                                      windows: Dict[str, Tuple[np.ndarray, np.ndarray]]) -> None:
         program = self._registered_programs[program_name]
-        sample_factor = TimeType.from_fraction(int(self.config.captureClockConfiguration.numeric_sample_rate(self.card.model)),
-                                 10 ** 9)
+        sample_factor = TimeType.from_fraction(int(self.default_config.captureClockConfiguration.numeric_sample_rate(self.card.model)),
+                                               10 ** 9)
         program.clear_masks()
 
         for mask_name, (begins, lengths) in windows.items():
@@ -250,11 +265,11 @@ class AlazarCard(DAC):
     def arm_program(self, program_name: str) -> None:
         to_arm = self._registered_programs[program_name]
         if self.update_settings or self.__armed_program is not to_arm:
-            config = self.config
+            config = copy.deepcopy(self.default_config)
             config.masks, config.operations, total_record_size = self._registered_programs[program_name].iter(
                 self._make_mask)
 
-            sample_factor = TimeType.from_fraction(self.config.captureClockConfiguration.numeric_sample_rate(self.card.model),
+            sample_factor = TimeType.from_fraction(config.captureClockConfiguration.numeric_sample_rate(self.card.model),
                                                    10 ** 9)
 
             if not config.operations:
@@ -278,12 +293,8 @@ class AlazarCard(DAC):
             elif config.totalRecordSize < total_record_size:
                 raise ValueError('specified total record size is smaller than needed {} < {}'.format(config.totalRecordSize,
                                                                                                      total_record_size))
-            old_aimed_buffer_size = config.aimedBufferSize
-
             self.__card.applyConfiguration(config, True)
-
-            # Keep user value
-            config.aimedBufferSize = old_aimed_buffer_size
+            self._current_config = config
 
             self.update_settings = False
             self.__armed_program = to_arm

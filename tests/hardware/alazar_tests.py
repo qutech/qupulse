@@ -183,18 +183,18 @@ class AlazarTest(unittest.TestCase):
         lengths = np.ones(100) * 10 * np.pi
         card.register_measurement_windows('otto', dict(A=(begins, lengths)))
 
-        card.config.totalRecordSize = 17
+        card.default_config.totalRecordSize = 17
 
         with self.assertRaisesRegex(ValueError, "total record size is smaller than needed"):
             card.arm_program('otto')
 
-        card.config.totalRecordSize = 0
+        card.default_config.totalRecordSize = 0
 
         with mock.patch.object(card.card, 'applyConfiguration') as mock_applyConfiguration:
             with mock.patch.object(card.card, 'startAcquisition') as mock_startAcquisition:
                 card.arm_program('otto')
 
-                mock_applyConfiguration.assert_called_once_with(card.config, True)
+                mock_applyConfiguration.assert_called_once_with(card.current_config, True)
                 mock_startAcquisition.assert_called_once_with(1)
 
                 mock_applyConfiguration.reset_mock()
