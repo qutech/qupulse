@@ -98,7 +98,7 @@ class BinaryWaveform:
 
     @property
     def markers_ch2(self):
-        return np.bitwise_and(self.marker_data, 0b1100)
+        return np.right_shift(np.bitwise_and(self.marker_data, 0b1100), 2)
 
     @classmethod
     def from_sampled(cls, ch1: Optional[np.ndarray], ch2: Optional[np.ndarray],
