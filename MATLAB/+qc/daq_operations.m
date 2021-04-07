@@ -57,10 +57,10 @@ function [output, bool, msg] = daq_operations(ctrl, varargin)
 	elseif strcmp(ctrl, 'get length') % output is length
 		% Operations need to have been added beforehand
         mask_maker = py.getattr(daq, '_make_mask');
-		masks = util.py.py2mat(py.getattr(daq, '_registered_programs'));
-		masks = util.py.py2mat(masks.(a.program_name));
-		operations = masks.operations;		
-		masks = util.py.py2mat(masks.masks(mask_maker));
+		programs = util.py.py2mat(py.getattr(daq, '_registered_programs'));
+		program = util.py.py2mat(programs.(a.program_name));
+		operations = program.operations;
+		masks = util.py.py2mat(program.masks(mask_maker));
         
 		
 		maskIdsFromOperations = cellfun(@(x)(char(x.maskID)), util.py.py2mat(operations), 'UniformOutput', false);
