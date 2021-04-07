@@ -47,8 +47,8 @@ function [mask_prototypes, measurement_map, txt] = setup_alazar_measurements(var
 	nQubits = args.nQubits;
 	nMeasPerQubit = args.nMeasPerQubit;
 		
-	py.setattr(hws, '_measurement_map', py.dict);
-	py.setattr(daq, '_mask_prototypes', py.dict);
+	py.getattr(hws, '_measurement_map').clear();
+	py.getattr(daq, '_mask_prototypes').clear();
 	warning('Removing measurement_map and measurement_map might break stuff if previously set. Needs testing.');
 	
 	for q = 1:nQubits
