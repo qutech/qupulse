@@ -81,12 +81,12 @@ function [mask_prototypes, measurement_map, txt] = setup_alazar_measurements(var
 			
 			% Q1 A1           qubitIndex, measIndex, hwChannel, auxFlag1, secondQubitIndex, secondHwChannel, auxFlag2
 			add_meas_and_mask(1,          m,         2,         false,    1,                0              , true);
-      % Q1 A2           qubitIndex, measIndex, hwChannel, auxFlag1, secondQubitIndex, secondHwChannel, auxFlag2
+            % Q1 A2           qubitIndex, measIndex, hwChannel, auxFlag1, secondQubitIndex, secondHwChannel, auxFlag2
 			add_meas_and_mask(1,          m,         2,         false,    2,                1              , true);
 			
 			% Q2 A1           qubitIndex, measIndex, hwChannel, auxFlag1, secondQubitIndex, secondHwChannel, auxFlag2
 			add_meas_and_mask(2,          m,         3,         false,    1,                0              , true);
-      % Q2 A2           qubitIndex, measIndex, hwChannel, auxFlag1, secondQubitIndex, secondHwChannel, auxFlag2
+            % Q2 A2           qubitIndex, measIndex, hwChannel, auxFlag1, secondQubitIndex, secondHwChannel, auxFlag2
 			add_meas_and_mask(2,          m,         3,         false,    2,                1              , true);
 		end
 	end
