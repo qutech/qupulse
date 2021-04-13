@@ -3,17 +3,20 @@ import logging
 import numbers
 import sys
 import weakref
-from typing import List, Tuple, Set, Callable, Optional, Any, cast, Union, Dict, Mapping, NamedTuple, Iterable
+from typing import List, Tuple, Set, Callable, Optional, Any, cast, Union, Dict, Mapping, NamedTuple, Iterable,\
+    Collection
 from collections import OrderedDict
 import numpy as np
 from qupulse import ChannelID
 from qupulse._program._loop import Loop, make_compatible
+
 from qupulse.hardware.feature_awg.channel_tuple_wrapper import ChannelTupleAdapter
 from qupulse.hardware.feature_awg.features import ChannelSynchronization, AmplitudeOffsetHandling, VoltageRange, \
     ProgramManagement, ActivatableChannels, DeviceControl, StatusTable, SCPI, VolatileParameters, \
-    ReadProgram
+    ReadProgram, RepetitionMode
 from qupulse.hardware.util import voltage_to_uint16, find_positions
-from qupulse.utils.types import Collection, TimeType
+
+from qupulse.utils.types import TimeType
 from qupulse.hardware.feature_awg.base import AWGChannelTuple, AWGChannel, AWGDevice, AWGMarkerChannel
 from typing import Sequence
 from qupulse._program.tabor import TaborSegment, TaborException, TaborProgram, PlottableProgram, TaborSequencing, \
@@ -433,7 +436,7 @@ class TaborVoltageRange(VoltageRange):
             raise TaborException("Unknown coupling: {}".format(coupling))
 
     @property
-    def amplitude_offset_handling(self) -> str:
+    def amplitude_offset_handling(self) -> AmplitudeOffsetHandling:
         """
         Gets the amplitude and offset handling of this channel. The amplitude-offset controls if the amplitude and
         offset settings are constant or if these should be optimized by the driver
@@ -441,14 +444,12 @@ class TaborVoltageRange(VoltageRange):
         return self._parent()._amplitude_offset_handling
 
     @amplitude_offset_handling.setter
-    def amplitude_offset_handling(self, amp_offs_handling: str) -> None:
+    def amplitude_offset_handling(self, amp_offs_handling: Union[AmplitudeOffsetHandling, str]) -> None:
         """
         amp_offs_handling: See possible values at `AWGAmplitudeOffsetHandling`
         """
-        if amp_offs_handling == AmplitudeOffsetHandling.CONSIDER_OFFSET or amp_offs_handling == AmplitudeOffsetHandling.IGNORE_OFFSET:
-            self._parent()._amplitude_offset_handling = amp_offs_handling
-        else:
-            raise ValueError('{} is invalid as AWGAmplitudeOffsetHandling'.format(amp_offs_handling))
+        amp_offs_handling = AmplitudeOffsetHandling(AmplitudeOffsetHandling)
+        self._parent()._amplitude_offset_handling = amp_offs_handling
 
     def _select(self) -> None:
         self._parent()._select()
@@ -523,10 +524,9 @@ class TaborChannel(AWGChannel):
 # Features
 class TaborProgramManagement(ProgramManagement):
     def __init__(self, channel_tuple: "TaborChannelTuple"):
-        super().__init__()
+        super().__init__(channel_tuple)
         self._programs = {}
         self._armed_program = None
-        self._parent = weakref.ref(channel_tuple)
 
         self._idle_sequence_table = [(1, 1, 0), (1, 1, 0), (1, 1, 0)]
         self._trigger_source = 'BUS'
@@ -537,7 +537,7 @@ class TaborProgramManagement(ProgramManagement):
         Args:
             program_name (str): name of the program whose repetition mode should be returned
         """
-        return self._parent()._known_programs[program_name].program._repetition_mode
+        return self._channel_tuple._known_programs[program_name].program._repetition_mode
 
     def set_repetition_mode(self, program_name: str, repetition_mode: str) -> None:
         """
@@ -550,9 +550,13 @@ class TaborProgramManagement(ProgramManagement):
             ValueError: this Exception is thrown when an invalid repetition mode is given
         """
         if repetition_mode is "infinite" or repetition_mode is "once":
-            self._parent()._known_programs[program_name].program._repetition_mode = repetition_mode
+            self._channel_tuple._known_programs[program_name].program._repetition_mode = repetition_mode
         else:
             raise ValueError("{} is no vaild repetition mode".format(repetition_mode))
+
+    @property
+    def supported_repetition_modes(self) -> Set[RepetitionMode]:
+        return {RepetitionMode.INFINITE}
 
     @with_configuration_guard
     @with_select
@@ -570,45 +574,46 @@ class TaborProgramManagement(ProgramManagement):
         """
 
         if repetition_mode is None:
-            warnings.warn("TaborWarning - upload() - no repetition mode given!")
-            repetition_mode = "infinite"
-        elif repetition_mode not in ("infinite"):
-            raise TaborException("Invalid Repetionmode: " + repetition_mode)
+            repetition_mode = self._default_repetition_mode
+        else:
+            repetition_mode = RepetitionMode(repetition_mode)
 
-        if len(channels) != len(self._parent().channels):
+        if repetition_mode not in self.supported_repetition_modes:
+            raise ValueError(f"{repetition_mode} is not supported on {self._channel_tuple}")
+        if len(channels) != len(self._channel_tuple.channels):
             raise ValueError("Wrong number of channels")
-        if len(marker_channels) != len(self._parent().marker_channels):
+        if len(marker_channels) != len(self._channel_tuple.marker_channels):
             raise ValueError("Wrong number of marker")
-        if len(voltage_transformation) != len(self._parent().channels):
+        if len(voltage_transformation) != len(self._channel_tuple.channels):
             raise ValueError("Wrong number of voltage transformations")
 
         # adjust program to fit criteria
-        sample_rate = self._parent().device.channel_tuples[0].sample_rate
+        sample_rate = self._channel_tuple.device.channel_tuples[0].sample_rate
         make_compatible(program,
                         minimal_waveform_length=192,
                         waveform_quantum=16,
                         sample_rate=sample_rate / 10 ** 9)
 
-        if name in self._parent()._known_programs:
+        if name in self._channel_tuple._known_programs:
             if force:
-                self._parent().free_program(name)
+                self._channel_tuple.free_program(name)
             else:
-                raise ValueError('{} is already known on {}'.format(name, self._parent().idn))
+                raise ValueError('{} is already known on {}'.format(name, self._channel_tuple.idn))
 
         # They call the peak to peak range amplitude
 
-        ranges = tuple(ch[VoltageRange].amplitude for ch in self._parent().channels)
+        ranges = tuple(ch[VoltageRange].amplitude for ch in self._channel_tuple.channels)
 
         voltage_amplitudes = tuple(range / 2 for range in ranges)
 
         voltage_offsets = []
-        for channel in self._parent().channels:
+        for channel in self._channel_tuple.channels:
             if channel._amplitude_offset_handling == AmplitudeOffsetHandling.IGNORE_OFFSET:
                 voltage_offsets.append(0)
             elif channel._amplitude_offset_handling == AmplitudeOffsetHandling.CONSIDER_OFFSET:
                 voltage_offsets.append(channel[VoltageRange].offset)
             else:
-                raise ValueError(
+                raise NotImplementedError(
                     '{} is invalid as AWGAmplitudeOffsetHandling'.format(channel._amplitude_offset_handling))
         voltage_offsets = tuple(voltage_offsets)
 
@@ -616,7 +621,7 @@ class TaborProgramManagement(ProgramManagement):
         tabor_program = TaborProgram(program,
                                      channels=tuple(channels),
                                      markers=marker_channels,
-                                     device_properties=self._parent().device.dev_properties,
+                                     device_properties=self._channel_tuple.device.dev_properties,
                                      sample_rate=sample_rate / 10 ** 9,
                                      amplitudes=voltage_amplitudes,
                                      offsets=voltage_offsets,
@@ -624,22 +629,22 @@ class TaborProgramManagement(ProgramManagement):
 
         segments, segment_lengths = tabor_program.get_sampled_segments()
 
-        waveform_to_segment, to_amend, to_insert = self._parent()._find_place_for_segments_in_memory(segments,
-                                                                                                     segment_lengths)
+        waveform_to_segment, to_amend, to_insert = self._channel_tuple._find_place_for_segments_in_memory(segments,
+                                                                                                          segment_lengths)
 
-        self._parent()._segment_references[waveform_to_segment[waveform_to_segment >= 0]] += 1
+        self._channel_tuple._segment_references[waveform_to_segment[waveform_to_segment >= 0]] += 1
 
         for wf_index in np.flatnonzero(to_insert > 0):
             segment_index = to_insert[wf_index]
-            self._parent()._upload_segment(to_insert[wf_index], segments[wf_index])
+            self._channel_tuple._upload_segment(to_insert[wf_index], segments[wf_index])
             waveform_to_segment[wf_index] = segment_index
 
         if np.any(to_amend):
             segments_to_amend = [segments[idx] for idx in np.flatnonzero(to_amend)]
-            waveform_to_segment[to_amend] = self._parent()._amend_segments(segments_to_amend)
+            waveform_to_segment[to_amend] = self._channel_tuple._amend_segments(segments_to_amend)
 
-        self._parent()._known_programs[name] = TaborProgramMemory(waveform_to_segment=waveform_to_segment,
-                                                                  program=tabor_program)
+        self._channel_tuple._known_programs[name] = TaborProgramMemory(waveform_to_segment=waveform_to_segment,
+                                                                         program=tabor_program)
 
         # set the default repetionmode for a programm
         self.set_repetition_mode(program_name=name, repetition_mode=repetition_mode)
@@ -653,8 +658,8 @@ class TaborProgramManagement(ProgramManagement):
         Args:
             name (str): The name of the program to remove.
         """
-        self._parent().free_program(name)
-        self._parent().cleanup()
+        self._channel_tuple.free_program(name)
+        self._channel_tuple.cleanup()
 
     def clear(self) -> None:
         """
@@ -663,25 +668,25 @@ class TaborProgramManagement(ProgramManagement):
         Caution: This affects all programs and waveforms on the AWG, not only those uploaded using qupulse!
         """
 
-        self._parent().device.channels[0]._select()
-        self._parent().device[SCPI].send_cmd(":TRAC:DEL:ALL")
-        self._parent().device[SCPI].send_cmd(":SOUR:SEQ:DEL:ALL")
-        self._parent().device[SCPI].send_cmd(":ASEQ:DEL")
+        self._channel_tuple.device.channels[0]._select()
+        self._channel_tuple.device[SCPI].send_cmd(":TRAC:DEL:ALL")
+        self._channel_tuple.device[SCPI].send_cmd(":SOUR:SEQ:DEL:ALL")
+        self._channel_tuple.device[SCPI].send_cmd(":ASEQ:DEL")
 
-        self._parent().device[SCPI].send_cmd(":TRAC:DEF 1, 192")
-        self._parent().device[SCPI].send_cmd(":TRAC:SEL 1")
-        self._parent().device[SCPI].send_cmd(":TRAC:MODE COMB")
-        self._parent().device._send_binary_data(pref=":TRAC:DATA", bin_dat=self._parent()._idle_segment.get_as_binary())
+        self._channel_tuple.device[SCPI].send_cmd(":TRAC:DEF 1, 192")
+        self._channel_tuple.device[SCPI].send_cmd(":TRAC:SEL 1")
+        self._channel_tuple.device[SCPI].send_cmd(":TRAC:MODE COMB")
+        self._channel_tuple.device._send_binary_data(pref=":TRAC:DATA", bin_dat=self._channel_tuple._idle_segment.get_as_binary())
 
-        self._parent()._segment_lengths = 192 * np.ones(1, dtype=np.uint32)
-        self._parent()._segment_capacity = 192 * np.ones(1, dtype=np.uint32)
-        self._parent()._segment_hashes = np.ones(1, dtype=np.int64) * hash(self._parent()._idle_segment)
-        self._parent()._segment_references = np.ones(1, dtype=np.uint32)
+        self._channel_tuple._segment_lengths = 192 * np.ones(1, dtype=np.uint32)
+        self._channel_tuple._segment_capacity = 192 * np.ones(1, dtype=np.uint32)
+        self._channel_tuple._segment_hashes = np.ones(1, dtype=np.int64) * hash(self._channel_tuple._idle_segment)
+        self._channel_tuple._segment_references = np.ones(1, dtype=np.uint32)
 
-        self._parent()._advanced_sequence_table = []
-        self._parent()._sequencer_tables = []
+        self._channel_tuple._advanced_sequence_table = []
+        self._channel_tuple._sequencer_tables = []
 
-        self._parent()._known_programs = dict()
+        self._channel_tuple._known_programs = dict()
         self._change_armed_program(None)
 
     @with_select
@@ -692,15 +697,15 @@ class TaborProgramManagement(ProgramManagement):
         Args:
             name (str): the program the device should change to
         """
-        if self._parent()._current_program == name:
-            self._parent().device[SCPI].send_cmd("SEQ:SEL 1")
+        if self._channel_tuple._current_program == name:
+            self._channel_tuple.device[SCPI].send_cmd("SEQ:SEL 1")
         else:
             self._change_armed_program(name)
 
     @property
     def programs(self) -> Set[str]:
         """The set of program names that can currently be executed on the hardware AWG."""
-        return set(program.name for program in self._parent()._known_programs.keys())
+        return set(program.name for program in self._channel_tuple._known_programs.keys())
 
     @with_select
     def run_current_program(self) -> None:
@@ -710,16 +715,16 @@ class TaborProgramManagement(ProgramManagement):
         Throws:
             RuntimeError: This exception is thrown if there is no active program for this device
         """
-        if (self._parent().device._is_coupled()):
+        if (self._channel_tuple.device._is_coupled()):
             # channel tuple is the first channel tuple
-            if (self._parent.device._channel_tuples[0] == self):
-                if self._parent()._current_program:
-                    repetition_mode = self._parent()._known_programs[
-                        self._parent()._current_program].program._repetition_mode
+            if (self._channel_tuple.device._channel_tuples[0] == self):
+                if self._channel_tuple._current_program:
+                    repetition_mode = self._channel_tuple._known_programs[
+                        self._channel_tuple._current_program].program._repetition_mode
                     if repetition_mode is "infinite":
                         self._cont_repetition_mode()
-                        self._parent().device[SCPI].send_cmd(':TRIG',
-                                                             paranoia_level=self._parent().internal_paranoia_level)
+                        self._channel_tuple.device[SCPI].send_cmd(':TRIG',
+                                                                    paranoia_level=self._channel_tuple.internal_paranoia_level)
                     else:
                         raise ValueError("{} is no vaild repetition mode".format(repetition_mode))
                 else:
@@ -729,12 +734,12 @@ class TaborProgramManagement(ProgramManagement):
                     "TaborWarning - run_current_program() - the device is coupled - runthe program via the first channel tuple")
 
         else:
-            if self._parent()._current_program:
-                repetition_mode = self._parent()._known_programs[
-                    self._parent()._current_program].program._repetition_mode
+            if self._channel_tuple._current_program:
+                repetition_mode = self._channel_tuple._known_programs[
+                    self._channel_tuple._current_program].program._repetition_mode
                 if repetition_mode is "infinite":
                     self._cont_repetition_mode()
-                    self._parent().device[SCPI].send_cmd(':TRIG', paranoia_level=self._parent().internal_paranoia_level)
+                    self._channel_tuple.device[SCPI].send_cmd(':TRIG', paranoia_level=self._channel_tuple.internal_paranoia_level)
                 else:
                     raise ValueError("{} is no vaild repetition mode".format(repetition_mode))
             else:
@@ -748,7 +753,7 @@ class TaborProgramManagement(ProgramManagement):
             sequencer_tables = [self._idle_sequence_table]
             advanced_sequencer_table = [(1, 1, 0)]
         else:
-            waveform_to_segment_index, program = self._parent()._known_programs[name]
+            waveform_to_segment_index, program = self._channel_tuple._known_programs[name]
             waveform_to_segment_number = waveform_to_segment_index + 1
 
             # translate waveform number to actual segment
@@ -767,63 +772,62 @@ class TaborProgramManagement(ProgramManagement):
                 assert len(advanced_sequencer_table) == 1
                 assert len(sequencer_tables) == 2
 
-                while len(sequencer_tables[1]) < self._parent().device.dev_properties["min_seq_len"]:
+                while len(sequencer_tables[1]) < self._channel_tuple.device.dev_properties["min_seq_len"]:
                     assert advanced_sequencer_table[0][0] == 1
                     sequencer_tables[1].append((1, 1, 0))
 
         # insert idle sequence in advanced sequence table
         advanced_sequencer_table = [(1, 1, 0)] + advanced_sequencer_table
 
-        while len(advanced_sequencer_table) < self._parent().device.dev_properties["min_aseq_len"]:
+        while len(advanced_sequencer_table) < self._channel_tuple.device.dev_properties["min_aseq_len"]:
             advanced_sequencer_table.append((1, 1, 0))
 
-        self._parent().device[SCPI].send_cmd("SEQ:DEL:ALL", paranoia_level=self._parent().internal_paranoia_level)
-        self._parent()._sequencer_tables = []
-        self._parent().device[SCPI].send_cmd("ASEQ:DEL", paranoia_level=self._parent().internal_paranoia_level)
-        self._parent()._advanced_sequence_table = []
+        self._channel_tuple.device[SCPI].send_cmd("SEQ:DEL:ALL", paranoia_level=self._channel_tuple.internal_paranoia_level)
+        self._channel_tuple._sequencer_tables = []
+        self._channel_tuple.device[SCPI].send_cmd("ASEQ:DEL", paranoia_level=self._channel_tuple.internal_paranoia_level)
+        self._channel_tuple._advanced_sequence_table = []
 
         # download all sequence tables
         for i, sequencer_table in enumerate(sequencer_tables):
-            self._parent().device[SCPI].send_cmd("SEQ:SEL {}".format(i + 1),
-                                                 paranoia_level=self._parent().internal_paranoia_level)
-            self._parent().device._download_sequencer_table(sequencer_table)
-        self._parent()._sequencer_tables = sequencer_tables
-        self._parent().device[SCPI].send_cmd("SEQ:SEL 1", paranoia_level=self._parent().internal_paranoia_level)
+            self._channel_tuple.device[SCPI].send_cmd("SEQ:SEL {}".format(i + 1),
+                                                        paranoia_level=self._channel_tuple.internal_paranoia_level)
+            self._channel_tuple.device._download_sequencer_table(sequencer_table)
+        self._channel_tuple._sequencer_tables = sequencer_tables
+        self._channel_tuple.device[SCPI].send_cmd("SEQ:SEL 1", paranoia_level=self._channel_tuple.internal_paranoia_level)
 
-        self._parent().device._download_adv_seq_table(advanced_sequencer_table)
-        self._parent()._advanced_sequence_table = advanced_sequencer_table
+        self._channel_tuple.device._download_adv_seq_table(advanced_sequencer_table)
+        self._channel_tuple._advanced_sequence_table = advanced_sequencer_table
 
-        self._parent()._current_program = name
+        self._channel_tuple._current_program = name
 
     def _select(self):
-        self._parent().channels[0]._select()
+        self._channel_tuple.channels[0]._select()
 
     @property
     def _configuration_guard_count(self):
-        return self._parent()._configuration_guard_count
+        return self._channel_tuple._configuration_guard_count
 
     @_configuration_guard_count.setter
     def _configuration_guard_count(self, configuration_guard_count):
-        self._parent()._configuration_guard_count = configuration_guard_count
+        self._channel_tuple._configuration_guard_count = configuration_guard_count
 
     def _enter_config_mode(self):
-        self._parent()._enter_config_mode()
+        self._channel_tuple._enter_config_mode()
 
     def _exit_config_mode(self):
-        self._parent()._exit_config_mode()
+        self._channel_tuple._exit_config_mode()
 
     @with_select
     def _cont_repetition_mode(self):
         """Changes the run mode of this channel tuple to continous mode"""
-        self._parent().device[SCPI].send_cmd(f":TRIG:SOUR:ADV EXT")
-        self._parent().device[SCPI].send_cmd(
+        self._channel_tuple.device[SCPI].send_cmd(f":TRIG:SOUR:ADV EXT")
+        self._channel_tuple.device[SCPI].send_cmd(
             f":INIT:GATE OFF; :INIT:CONT ON; :INIT:CONT:ENAB ARM; :INIT:CONT:ENAB:SOUR {self._trigger_source}")
 
 
 class TaborVolatileParameters(VolatileParameters):
     def __init__(self, channel_tuple: "TaborChannelTuple", ):
-        super().__init__()
-        self._parent = weakref.ref(channel_tuple)
+        super().__init__(channel_tuple=channel_tuple)
 
     def set_volatile_parameters(self, program_name: str, parameters: Mapping[str, numbers.Number]) -> None:
         """ Set the values of parameters which were marked as volatile on program creation. Sets volatile parameters
@@ -837,19 +841,19 @@ class TaborVolatileParameters(VolatileParameters):
             program_name: Name of program which should be changed.
             parameters: Names of volatile parameters and respective values to which they should be set.
         """
-        waveform_to_segment_index, program = self._parent()._known_programs[program_name]
+        waveform_to_segment_index, program = self._channel_tuple._known_programs[program_name]
         modifications = program.update_volatile_parameters(parameters)
 
-        self._parent().logger.debug("parameter modifications: %r" % modifications)
+        self._channel_tuple.logger.debug("parameter modifications: %r" % modifications)
 
         if not modifications:
-            self._parent().logger.info(
+            self._channel_tuple.logger.info(
                 "There are no volatile parameters to update. Either there are no volatile parameters with "
                 "these names,\nthe respective repetition counts already have the given values or the "
                 "volatile parameters were dropped during upload.")
             return
 
-        if program_name == self._parent()._current_program:
+        if program_name == self._channel_tuple._current_program:
             commands = []
 
             for position, entry in modifications.items():
@@ -865,21 +869,20 @@ class TaborVolatileParameters(VolatileParameters):
                     commands.append(":SEQ:DEF {},{},{},{}".format(step_num,
                                                                   waveform_to_segment_index[entry.element_id] + 1,
                                                                   entry.repetition_count, entry.jump_flag))
-            self._parent()._execute_multiple_commands_with_config_guard(commands)
+            self._channel_tuple._execute_multiple_commands_with_config_guard(commands)
 
         # Wait until AWG is finished
-        _ = self._parent().device.main_instrument._visa_inst.query("*OPC?")
+        _ = self._channel_tuple.device.main_instrument._visa_inst.query("*OPC?")
 
 
 class TaborReadProgram(ReadProgram):
     def __init__(self, channel_tuple: "TaborChannelTuple", ):
-        super().__init__()
-        self._parent = weakref.ref(channel_tuple)
+        super().__init__(channel_tuple=channel_tuple)
 
     def read_complete_program(self):
-        return PlottableProgram.from_read_data(self._parent().read_waveforms(),
-                                               self._parent().read_sequence_tables(),
-                                               self._parent().read_advanced_sequencer_table())
+        return PlottableProgram.from_read_data(self._channel_tuple.read_waveforms(),
+                                               self._channel_tuple.read_sequence_tables(),
+                                               self._channel_tuple.read_advanced_sequencer_table())
 
 
 # Implementation
@@ -985,12 +988,6 @@ class TaborChannelTuple(AWGChannelTuple):
             self[TaborProgramManagement]._change_armed_program(None)
         return program
 
-    def _restore_program(self, name: str, program: TaborProgram) -> None:
-        if name in self._known_programs:
-            raise ValueError("Program cannot be restored as it is already known.")
-        self._segment_references[program.waveform_to_segment] += 1
-        self._known_programs[name] = program
-
     @property
     def _segment_reserved(self) -> np.ndarray:
         return self._segment_references > 0
@@ -1044,7 +1041,7 @@ class TaborChannelTuple(AWGChannelTuple):
                                                self.read_sequence_tables(),
                                                self.read_advanced_sequencer_table())
 
-    def _find_place_for_segments_in_memory(self, segments: Sequence, segment_lengths: Sequence) -> \
+    def _find_place_for_segments_in_memory(self, segments: Sequence, segment_lengths: np.ndarray) -> \
             Tuple[np.ndarray, np.ndarray, np.ndarray]:
         # TODO: comment was not finished
         """
@@ -1145,13 +1142,15 @@ class TaborChannelTuple(AWGChannelTuple):
 
         segment_no = segment_index + 1
 
-        self.device[SCPI].send_cmd(":TRAC:DEF {}, {}".format(segment_no, segment.num_points),
-                                   paranoia_level=self.internal_paranoia_level)
+        self.device[TaborSCPI].send_cmd(":TRAC:DEF {}, {}".format(segment_no, segment.num_points),
+                                        paranoia_level=self.internal_paranoia_level)
         self._segment_lengths[segment_index] = segment.num_points
 
-        self.device[SCPI].send_cmd(":TRAC:SEL {}".format(segment_no), paranoia_level=self.internal_paranoia_level)
+        self.device[TaborSCPI].send_cmd(":TRAC:SEL {}".format(segment_no),
+                                        paranoia_level=self.internal_paranoia_level)
 
-        self.device[SCPI].send_cmd(":TRAC:MODE COMB", paranoia_level=self.internal_paranoia_level)
+        self.device[TaborSCPI].send_cmd(":TRAC:MODE COMB",
+                                        paranoia_level=self.internal_paranoia_level)
         wf_data = segment.get_as_binary()
 
         self.device._send_binary_data(pref=":TRAC:DATA", bin_dat=wf_data)
@@ -1169,12 +1168,12 @@ class TaborChannelTuple(AWGChannelTuple):
         segment_index = len(self._segment_capacity)
         first_segment_number = segment_index + 1
 
-        self.device[SCPI].send_cmd(":TRAC:DEF {},{}".format(first_segment_number, trac_len),
-                                   paranoia_level=self.internal_paranoia_level)
-        self.device[SCPI].send_cmd(":TRAC:SEL {}".format(first_segment_number),
-                                   paranoia_level=self.internal_paranoia_level)
-        self.device[SCPI].send_cmd(":TRAC:MODE COMB",
-                                   paranoia_level=self.internal_paranoia_level)
+        self.device[TaborSCPI].send_cmd(":TRAC:DEF {},{}".format(first_segment_number, trac_len),
+                                        paranoia_level=self.internal_paranoia_level)
+        self.device[TaborSCPI].send_cmd(":TRAC:SEL {}".format(first_segment_number),
+                                        paranoia_level=self.internal_paranoia_level)
+        self.device[TaborSCPI].send_cmd(":TRAC:MODE COMB",
+                                        paranoia_level=self.internal_paranoia_level)
         self.device._send_binary_data(pref=":TRAC:DATA", bin_dat=wf_data)
 
         old_to_update = np.count_nonzero(self._segment_capacity != self._segment_lengths)
@@ -1185,8 +1184,8 @@ class TaborChannelTuple(AWGChannelTuple):
         if len(segments) < old_to_update:
             for i, segment in enumerate(segments):
                 current_segment_number = first_segment_number + i
-                self.device[SCPI].send_cmd(":TRAC:DEF {},{}".format(current_segment_number, segment.num_points),
-                                           paranoia_level=self.internal_paranoia_level)
+                self.device[TaborSCPI].send_cmd(":TRAC:DEF {},{}".format(current_segment_number, segment.num_points),
+                                                paranoia_level=self.internal_paranoia_level)
         else:
             # flush the capacity
             self.device._download_segment_lengths(segment_capacity)
@@ -1231,13 +1230,7 @@ class TaborChannelTuple(AWGChannelTuple):
             commands: Commands that should be executed.
         """
         cmd_str = ";".join(commands)
-        self.device[SCPI].send_cmd(cmd_str, paranoia_level=self.internal_paranoia_level)
-
-    def set_program_advanced_sequence_table(self, name, new_advanced_sequence_table):
-        self._known_programs[name][1]._advanced_sequencer_table = new_advanced_sequence_table
-
-    def set_program_sequence_table(self, name, new_sequence_table):
-        self._known_programs[name][1]._sequencer_tables = new_sequence_table
+        self.device[TaborSCPI].send_cmd(cmd_str, paranoia_level=self.internal_paranoia_level)
 
     def _enter_config_mode(self) -> None:
         """
@@ -1265,7 +1258,7 @@ class TaborChannelTuple(AWGChannelTuple):
 
             cmd = ";".join([marker_0_cmd, marker_1_cmd, wf_mode_cmd])
             cmd = out_cmd + cmd
-            self.device[SCPI].send_cmd(cmd, paranoia_level=self.CONFIG_MODE_PARANOIA_LEVEL)
+            self.device[TaborSCPI].send_cmd(cmd, paranoia_level=self.CONFIG_MODE_PARANOIA_LEVEL)
             self._is_in_config_mode = True
 
     @with_select
@@ -1374,15 +1367,10 @@ class TaborMarkerChannel(AWGMarkerChannel):
         self.device[SCPI].send_cmd(":SOUR:MARK:SEL {marker}".format(marker=(((self.idn - 1) % 2) + 1)))
 
 
-########################################################################################################################
-class TaborException(Exception):
-    pass
-
-
 class TaborUndefinedState(TaborException):
     """
     If this exception is raised the attached tabor device is in an undefined state.
-    It is highly recommended to call reset it.
+    It is highly recommended to call reset it.f
     """
 
     def __init__(self, *args, device: Union[TaborDevice, TaborChannelTuple]):
@@ -1391,7 +1379,7 @@ class TaborUndefinedState(TaborException):
 
     def reset_device(self):
         if isinstance(self.device, TaborDevice):
-            self.device.reset()
+            self.device[TaborDeviceControl].reset()
         elif isinstance(self.device, TaborChannelTuple):
             self.device.cleanup()
-            self.device.clear()
+            self.device[TaborProgramManagement].clear()

@@ -349,10 +349,10 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
                 does not represent a valid waveform of finite length.
         """
 
-    @abstractmethod
     def _as_expression(self) -> Dict[ChannelID, ExpressionScalar]:
         """Helper function to allow integral calculation in case of truncation. AtomicPulseTemplate._AS_EXPRESSION_TIME
         is by convention the time variable."""
+        raise NotImplementedError(f"_as_expression is not implemented for {type(self)} which means it cannot be truncated and integrated over.")
 
 
 class DoubleParameterNameException(Exception):

@@ -207,6 +207,9 @@ class ExpressionVector(Expression):
     def __repr__(self):
         return 'ExpressionVector({})'.format(repr(self.get_serialization_data()))
 
+    def _sympy_(self):
+        return sympy.NDimArray(self._expression_vector)
+
     def __eq__(self, other):
         if not isinstance(other, Expression):
             other = Expression.make(other)
@@ -329,6 +332,9 @@ class ExpressionScalar(Expression):
 
     def __pos__(self):
         return self.make(self._sympified_expression.__pos__())
+
+    def _sympy_(self):
+        return self._sympified_expression
 
     @property
     def original_expression(self) -> Union[str, Number]:

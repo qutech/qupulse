@@ -1,8 +1,11 @@
 from abc import ABC, abstractmethod
-from typing import Callable, Optional, Set, Tuple, Dict, Union
+from typing import Callable, Optional, Set, Tuple, Dict, Union, Any, Mapping
+from numbers import Real
+from enum import Enum
 
 from qupulse._program._loop import Loop
-from qupulse.hardware.feature_awg.base import AWGDeviceFeature, AWGChannelFeature, AWGChannelTupleFeature
+from qupulse.hardware.feature_awg.base import AWGDeviceFeature, AWGChannelFeature, AWGChannelTupleFeature,\
+    AWGChannelTuple
 from qupulse.utils.types import ChannelID
 
 import pyvisa
@@ -12,9 +15,13 @@ import pyvisa
 # device features
 ########################################################################################################################
 class SCPI(AWGDeviceFeature, ABC):
+    """Represents the ability to communicate via SCPI.
+
+    https://en.wikipedia.org/wiki/Standard_Commands_for_Programmable_Instruments
+    """
+
     def __init__(self, visa: pyvisa.resources.MessageBasedResource):
         super().__init__()
-
         self._socket = visa
 
     def send_cmd(self, cmd_str):
@@ -62,6 +69,7 @@ class DeviceControl(AWGDeviceFeature, ABC):
 
 
 class StatusTable(AWGDeviceFeature, ABC):
+    @abstractmethod
     def get_status_table(self) -> Dict[str, Union[str, float, int]]:
         """
         Send a lot of queries to the AWG about its settings. A good way to visualize is using pandas.DataFrame
@@ -77,25 +85,43 @@ class StatusTable(AWGDeviceFeature, ABC):
 ########################################################################################################################
 
 class ReadProgram(AWGChannelTupleFeature, ABC):
-    @abstractmethod
-    def read_complete_program(self):
-        pass
+    """Read the currently armed and uploaded program from the device. The returned object is highly device specific."""
 
-
-class VolatileParameters(AWGChannelTupleFeature, ABC):
     @abstractmethod
-    def set_volatile_parameters(self, program_name, parameters) -> None:
+    def read_complete_program(self) -> Any:
         raise NotImplementedError()
 
 
+class VolatileParameters(AWGChannelTupleFeature, ABC):
+    """Ability to set the values of parameters which were marked as volatile on program creation."""
+    @abstractmethod
+    def set_volatile_parameters(self, program_name: str, parameters: Mapping[str, Real]) -> None:
+        """Set the values of parameters which were marked as volatile on program creation."""
+        raise NotImplementedError()
+
+
+class RepetitionMode(Enum):
+    """Some devices support playing a program indefinitely or only once."""
+    # Arm once, trigger once -> infinite repetitions
+    INFINITE = "infinite"
+    # Arm once, trigger N times -> N playbacks
+    AUTO_REARM = "auto_rearm"
+    # Arm once, trigger N times -> 1 playback
+    ONCE = "once"
+
+
 class ProgramManagement(AWGChannelTupleFeature, ABC):
+    def __init__(self, channel_tuple: 'AWGChannelTuple'):
+        super().__init__(channel_tuple=channel_tuple)
+        self._default_repetition_mode = RepetitionMode.ONCE
+
     @abstractmethod
     def upload(self, name: str,
                program: Loop,
                channels: Tuple[Optional[ChannelID], ...],
                marker_channels: Tuple[Optional[ChannelID], ...],
                voltage_transformation: Tuple[Optional[Callable], ...],
-               repetition_mode=None,
+               repetition_mode: Union[RepetitionMode, str] = None,
                force: bool = False) -> None:
         """
         Upload a program to the AWG.
@@ -105,6 +131,9 @@ class ProgramManagement(AWGChannelTupleFeature, ABC):
         This method should be cheap for program already on the device and can therefore be used
         for syncing. Programs that are uploaded should be fast(~1 sec) to arm.
 
+        Raises:
+            ValueError: if one of channels, marker_channels, voltage_transformation or repetition_mode is invalid
+
         Args:
             name: A name for the program on the AWG.
             program: The program (a sequence of instructions) to upload.
@@ -112,7 +141,7 @@ class ProgramManagement(AWGChannelTupleFeature, ABC):
             marker_channels: List of channels in the program to use. Position in the List in the list corresponds to the AWG channel
             voltage_transformation: transformations applied to the waveforms extracted rom the program. Position
             in the list corresponds to the AWG channel
-            repetition_mode: how often the signal should be sent
+            repetition_mode: how often the program should be played
             force: If a different sequence is already present with the same name, it is
                 overwritten if force is set to True. (default = False)
         """
@@ -158,16 +187,31 @@ class ProgramManagement(AWGChannelTupleFeature, ABC):
         """This method starts running the active program"""
         raise NotImplementedError()
 
+    @property
+    @abstractmethod
+    def supported_repetition_modes(self) -> Set[RepetitionMode]:
+        """Return set of supported repetition modes in the current configuration."""
+        raise NotImplementedError()
+
+    @property
+    def default_repetition_mode(self) -> RepetitionMode:
+        return self._default_repetition_mode
+
+    @default_repetition_mode.setter
+    def default_repetition_mode(self, repetition_mode: RepetitionMode):
+        repetition_mode = RepetitionMode(repetition_mode)
+        if repetition_mode not in self.supported_repetition_modes:
+            raise ValueError(f"The repetition mode {repetition_mode} is not supported by {self._channel_tuple}")
+        self._default_repetition_mode = repetition_mode
+
 
 ########################################################################################################################
 # channel features
 ########################################################################################################################
 
-class AmplitudeOffsetHandling:
+class AmplitudeOffsetHandling(Enum):
     IGNORE_OFFSET = 'ignore_offset'  # Offset is ignored.
     CONSIDER_OFFSET = 'consider_offset'  # Offset is discounted from the waveforms.
-
-    _valid = (IGNORE_OFFSET, CONSIDER_OFFSET)
 
 
 class VoltageRange(AWGChannelFeature):
@@ -185,7 +229,7 @@ class VoltageRange(AWGChannelFeature):
 
     @property
     @abstractmethod
-    def amplitude_offset_handling(self) -> str:
+    def amplitude_offset_handling(self) -> AmplitudeOffsetHandling:
         """
         Gets the amplitude and offset handling of this channel. The amplitude-offset controls if the amplitude and
         offset settings are constant or if these should be optimized by the driver
@@ -194,7 +238,7 @@ class VoltageRange(AWGChannelFeature):
 
     @amplitude_offset_handling.setter
     @abstractmethod
-    def amplitude_offset_handling(self, amp_offs_handling: str) -> None:
+    def amplitude_offset_handling(self, amp_offs_handling: Union[str, AmplitudeOffsetHandling]) -> None:
         """
         amp_offs_handling: See possible values at `AWGAmplitudeOffsetHandling`
         """
@@ -219,7 +263,3 @@ class ActivatableChannels(AWGChannelFeature):
     def disable(self):
         """Disables the output of a certain channel"""
         raise NotImplementedError()
-
-
-class RepetionMode(AWGChannelFeature):
-    pass

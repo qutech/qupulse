@@ -1,0 +1,5 @@
+{
+  "/{device_serial}/system/clocks/sampleclock/freq": 2e9,
+  "/{device_serial}/awgs/*/time": 0,
+  "/{device_serial}/sigouts/*/on": 0
+}

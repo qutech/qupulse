@@ -25,6 +25,7 @@ from qupulse._program.transformation import Transformation
 __all__ = ["Waveform", "TableWaveform", "TableWaveformEntry", "FunctionWaveform", "SequenceWaveform",
            "MultiChannelWaveform", "RepetitionWaveform", "TransformingWaveform", "ArithmeticWaveform"]
 
+PULSE_TO_WAVEFORM_ERROR = None # error margin in pulse template to waveform conversion
 
 class Waveform(Comparable, metaclass=ABCMeta):
     """Represents an instantiated PulseTemplate which can be sampled to retrieve arrays of voltage
@@ -80,7 +81,7 @@ class Waveform(Comparable, metaclass=ABCMeta):
             else:
                 raise ValueError('Output array length and sample time length are different')
 
-        if np.any(sample_times[:-1] >= sample_times[1:]):
+        if np.any(np.diff(sample_times)<0):
             raise ValueError('The sample times are not monotonously increasing')
         if sample_times[0] < 0 or sample_times[-1] > float(self.duration):
             raise ValueError(f'The sample times [{sample_times[0]}, ..., {sample_times[-1]}] are not in the range'
@@ -213,7 +214,7 @@ class TableWaveform(Waveform):
 
     @property
     def duration(self) -> TimeType:
-        return TimeType.from_float(self._table[-1].t)
+        return TimeType.from_float(self._table[-1].t, absolute_error = PULSE_TO_WAVEFORM_ERROR)
 
     def unsafe_sample(self,
                       channel: ChannelID,
@@ -262,7 +263,7 @@ class FunctionWaveform(Waveform):
             raise ValueError('FunctionWaveforms may not depend on anything but "t"')
 
         self._expression = expression
-        self._duration = TimeType.from_float(duration)
+        self._duration = TimeType.from_float(duration, absolute_error = PULSE_TO_WAVEFORM_ERROR)
         self._channel_id = channel
 
     @property

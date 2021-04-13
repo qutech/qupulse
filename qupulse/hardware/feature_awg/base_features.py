@@ -5,7 +5,7 @@ from abc import ABC
 __all__ = ["Feature", "FeatureAble"]
 
 
-class Feature(ABC):
+class Feature:
     """
     Base class for features of `FeatureAble`s.
     """
@@ -21,7 +21,7 @@ FeatureType = TypeVar("FeatureType", bound=Feature)
 GetItemFeatureType = TypeVar("GetItemFeatureType", bound=Feature)
 
 
-class FeatureAble(Generic[FeatureType], ABC):
+class FeatureAble(Generic[FeatureType]):
     """
     Base class for all types that are able to handle features. The features are saved in a dictionary and the methods
     can be called with the __getitem__-operator.

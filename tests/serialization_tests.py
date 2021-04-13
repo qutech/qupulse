@@ -418,7 +418,8 @@ class FileSystemBackendTest(unittest.TestCase):
         for name in expected:
             self.backend.put(name, self.test_data)
 
-        self.assertEqual(expected, self.backend.list_contents(), msg="list_contents() faulty")
+        with self.assertWarns(DeprecationWarning):
+            self.assertEqual(expected, self.backend.list_contents(), msg="list_contents() faulty")
         self.assertEqual(expected, set(iter(self.backend)), msg="__iter__() faulty")
         self.assertEqual(3, len(self.backend), msg="__len__() faulty")
 
@@ -527,7 +528,8 @@ class ZipFileBackendTests(unittest.TestCase):
         for name in expected:
             self.backend.put(name, "asdfasdfas")
 
-        self.assertEqual(expected, self.backend.list_contents(), msg="list_contents() faulty")
+        with self.assertWarns(DeprecationWarning):
+            self.assertEqual(expected, self.backend.list_contents(), msg="list_contents() faulty")
         self.assertEqual(expected, set(iter(self.backend)), msg="__iter__() faulty")
         self.assertEqual(3, len(self.backend), msg="__len__() faulty")
 
@@ -629,7 +631,8 @@ class CachingBackendTests(unittest.TestCase):
         for name in expected:
             self.dummy_backend.put(name, "asdfasdfas")
 
-        self.assertEqual(expected, self.caching_backend.list_contents(), msg="list_contents() faulty")
+        with self.assertWarns(DeprecationWarning):
+            self.assertEqual(expected, self.caching_backend.list_contents(), msg="list_contents() faulty")
         self.assertEqual(expected, set(iter(self.caching_backend)), msg="__iter__() faulty")
         self.assertEqual(3, len(self.caching_backend), msg="__len__() faulty")
 
@@ -678,7 +681,8 @@ class DictBackendTests(unittest.TestCase):
         for name in expected:
             self.backend.put(name, "asdfasdfas")
 
-        self.assertEqual(expected, self.backend.list_contents(), msg="list_contents() faulty")
+        with self.assertWarns(DeprecationWarning):
+            self.assertEqual(expected, self.backend.list_contents(), msg="list_contents() faulty")
         self.assertEqual(expected, set(iter(self.backend)), msg="__iter__() faulty")
         self.assertEqual(3, len(self.backend), msg="__len__() faulty")
 
