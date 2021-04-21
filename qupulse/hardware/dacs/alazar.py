@@ -188,24 +188,31 @@ class AlazarCard(DAC):
         self.update_settings = True
 
         self.__definitions = dict()
+
+        # this ScanlineConfig is used by default for each program
+        # masks and operations are overwritten
         self.default_config = config
+
+        # the currently active ScanlineConfig
         self._current_config = None
 
-        # defaults to self.__card.minimum_record_size
         self._buffer_strategy = None
 
         self._mask_prototypes = dict()  # type: Dict
 
         self._registered_programs = defaultdict(AlazarProgram)  # type: Dict[str, AlazarProgram]
 
-        self._record_size_factor = None
+        # defaults to self.__card.minimum_record_size if None
+        # we use a page size here because this is allocated anyways for a buffer
+        # This might lead to problems with small sample rates
+        self._record_size_factor = 1024 * 4
 
     @property
     def card(self) -> Any:
         return self.__card
 
-     @property
-     def record_size_factor(self) -> int:
+    @property
+    def record_size_factor(self) -> int:
         """The total record size of each measurement gets extended to be a multiple of this. None means that the
         minimal value supported by the card is taken."""
         if self._record_size_factor is None:
@@ -249,6 +256,9 @@ class AlazarCard(DAC):
 
         hardware_channel, mask_type = self._mask_prototypes[mask_id]
 
+        if mask_type not in ('auto', 'cross_buffer', None):
+            warnings.warn("Currently only CrossBufferMask is implemented.")
+
         if np.any(begins[:-1]+lengths[:-1] > begins[1:]):
             raise ValueError('Found overlapping windows in begins')
 
@@ -284,8 +294,10 @@ class AlazarCard(DAC):
             config.masks, config.operations, total_record_size = self._registered_programs[program_name].iter(
                 self._make_mask)
 
-            sample_factor = TimeType.from_fraction(config.captureClockConfiguration.numeric_sample_rate(self.card.model),
-                                                   10 ** 9)
+            sample_rate = config.captureClockConfiguration.numeric_sample_rate(self.card.model)
+
+            # sample rate in GHz
+            sample_factor = TimeType.from_fraction(sample_rate, 10 ** 9)
 
             if not config.operations:
                 raise RuntimeError("No operations: Arming program without operations is an error as there will "
@@ -300,6 +312,7 @@ class AlazarCard(DAC):
 
             assert total_record_size > 0
 
+            # extend the total record size to be a multiple of record_size_factor
             record_size_factor = self.record_size_factor
             total_record_size = (((total_record_size - 1) // record_size_factor) + 1) * record_size_factor
 
