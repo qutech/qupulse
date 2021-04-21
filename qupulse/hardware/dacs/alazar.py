@@ -198,9 +198,24 @@ class AlazarCard(DAC):
 
         self._registered_programs = defaultdict(AlazarProgram)  # type: Dict[str, AlazarProgram]
 
+        self._record_size_factor = None
+
     @property
     def card(self) -> Any:
         return self.__card
+
+     @property
+     def record_size_factor(self) -> int:
+        """The total record size of each measurement gets extended to be a multiple of this. None means that the
+        minimal value supported by the card is taken."""
+        if self._record_size_factor is None:
+            return self.__card.minimum_record_size
+        else:
+            return self._record_size_factor
+
+    @record_size_factor.setter
+    def record_size_factor(self, value: Optional[int]):
+        self._record_size_factor = value
 
     @property
     def config(self):
@@ -285,8 +300,8 @@ class AlazarCard(DAC):
 
             assert total_record_size > 0
 
-            minimum_record_size = self.__card.minimum_record_size
-            total_record_size = (((total_record_size - 1) // minimum_record_size) + 1) * minimum_record_size
+            record_size_factor = self.record_size_factor
+            total_record_size = (((total_record_size - 1) // record_size_factor) + 1) * record_size_factor
 
             if config.totalRecordSize == 0:
                 config.totalRecordSize = total_record_size
