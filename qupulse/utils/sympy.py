@@ -9,8 +9,13 @@ import math
 
 import sympy
 import numpy
-from sympy.printing.pycode import NumPyPrinter
 
+try:
+    from sympy.printing.numpy import NumPyPrinter
+except ImportError:
+    # sympy moved NumPyPrinter in release 1.8
+    from sympy.printing.pycode import NumPyPrinter
+    warnings.warn("Please update sympy.", DeprecationWarning)
 
 try:
     import scipy.special as _special_functions
