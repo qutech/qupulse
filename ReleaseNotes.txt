@@ -6,6 +6,9 @@
  - Expressions:
     - Add `evaluate_with_exact_rationals` method to ExpressionScalar
 
+ - Hardware:
+    - Improve atsaverage backend usability
+
 
 ## 0.5.1 ##
 
