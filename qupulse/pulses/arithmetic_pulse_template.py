@@ -437,6 +437,18 @@ class ArithmeticPulseTemplate(PulseTemplate):
     def parameter_names(self) -> Set[str]:
         return self._pulse_template.parameter_names.union(self._scalar_operand_parameters)
 
+    def get_measurement_windows(self,
+                                parameters: Dict[str, Real],
+                                measurement_mapping: Dict[str, Optional[str]]) -> List[MeasurementWindow]:
+        measurements=[]
+        if isinstance(self.lhs, PulseTemplate):
+            measurements.extend(self.lhs.get_measurement_windows(parameters=parameters,
+                                                       measurement_mapping=measurement_mapping) )
+        if isinstance(self.rhs, PulseTemplate):
+            measurements.extend(self.rhs.get_measurement_windows(parameters=parameters,
+                                                       measurement_mapping=measurement_mapping))
+        return measurements
+
 
 def try_operation(lhs: Union[PulseTemplate, ExpressionLike, Mapping[ChannelID, ExpressionLike]],
                   op: str,
