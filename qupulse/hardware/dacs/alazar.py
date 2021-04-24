@@ -291,7 +291,7 @@ class AlazarCard(DAC):
         return mask
 
     def set_measurement_mask(self, program_name, mask_name, begins, lengths) -> Tuple[np.ndarray, np.ndarray]:
-        sample_factor = TimeType(int(self.default_config.captureClockConfiguration.numeric_sample_rate(self.card.model)), 10**9)
+        sample_factor = TimeType.from_fraction(int(self.default_config.captureClockConfiguration.numeric_sample_rate(self.card.model)), 10**9)
         return self._registered_programs[program_name].set_measurement_mask(mask_name, sample_factor, begins, lengths)
 
     def register_measurement_windows(self,

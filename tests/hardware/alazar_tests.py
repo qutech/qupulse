@@ -130,7 +130,7 @@ class AlazarTest(unittest.TestCase):
         card.register_mask_for_channel('A', 3, 'auto')
         card.register_mask_for_channel('B', 1, 'auto')
 
-        card.config = dummy_modules.dummy_atsaverage.config.ScanlineConfiguration()
+        card.default_config = dummy_modules.dummy_atsaverage.config.ScanlineConfiguration()
 
         card.register_measurement_windows('empty', dict())
 
@@ -169,7 +169,7 @@ class AlazarTest(unittest.TestCase):
 
         card.register_operations('otto', [])
 
-        card.config = dummy_modules.dummy_atsaverage.config.ScanlineConfiguration()
+        card.default_config = dummy_modules.dummy_atsaverage.config.ScanlineConfiguration()
 
         with self.assertRaisesRegex(RuntimeError, 'No operations'):
             card.arm_program('otto')
