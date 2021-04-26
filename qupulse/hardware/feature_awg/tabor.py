@@ -554,6 +554,7 @@ class TaborProgramManagement(ProgramManagement):
         else:
             raise ValueError("{} is no vaild repetition mode".format(repetition_mode))
 
+    #TODO: erweitern
     @property
     def supported_repetition_modes(self) -> Set[RepetitionMode]:
         return {RepetitionMode.INFINITE}
@@ -1366,11 +1367,12 @@ class TaborMarkerChannel(AWGMarkerChannel):
         self.device.channels[int((self.idn - 1) / 2)]._select()
         self.device[SCPI].send_cmd(":SOUR:MARK:SEL {marker}".format(marker=(((self.idn - 1) % 2) + 1)))
 
+########################################################################################################################
 
 class TaborUndefinedState(TaborException):
     """
     If this exception is raised the attached tabor device is in an undefined state.
-    It is highly recommended to call reset it.f
+    It is highly recommended to call reset it.
     """
 
     def __init__(self, *args, device: Union[TaborDevice, TaborChannelTuple]):
