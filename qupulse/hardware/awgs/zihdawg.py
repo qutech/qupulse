@@ -80,7 +80,7 @@ class HDAWGRepresentation:
             # Create a base configuration: Disable all available outputs, awgs, demods, scopes,...
             zhinst.utils.disable_everything(self.api_session, self.serial)
 
-        self._initialize()
+        self._initialize(force_defaults=reset)
 
         waveform_path = pathlib.Path(self.api_session.awgModule().getString('directory'), 'awg', 'waves')
         self._waveform_file_system = WaveformFileSystem(waveform_path)
@@ -135,13 +135,19 @@ class HDAWGRepresentation:
         return self._dev_ser
 
     def _default_settings(self) -> Dict[str, Any]:
-        """Set parameters that might be changed by the user to some sensible default"""
+        """Sensible default settings that might be changed by the user"""
+        # TODO: de-hardcode channel count of 8
+        marker_default_values = [HDAWGTriggerOutSource.OUT_1_MARK_1.value, HDAWGTriggerOutSource.OUT_1_MARK_2.value] * 4
+        marker_default_values = {
+            f'/{self.serial}/triggers/out/{ch}/source': value for ch, value in enumerate(marker_default_values)
+        }
+
         return {
             f'/{self.serial}/awgs/*/time': 0,  # Maximum sampling rate.
             f'/{self.serial}/sigouts/*/range': HDAWGVoltageRange.RNG_1V.value,
             f'/{self.serial}/awgs/*/outputs/*/amplitude': 0,
             f'/{self.serial}/awgs/*/outputs/*/modulation/mode': HDAWGModulationMode.OFF.value,
-            f'/{self.serial}/awgs/*/userregs/*': 0,
+            **marker_default_values
         }
 
     def _required_settings(self) -> Dict[str, Any]:
@@ -152,45 +158,21 @@ class HDAWGRepresentation:
         }
 
     def _initialize(self, force_defaults=False) -> None:
+        """Initialize the required settings of AWG to work as expected (single execution mode and user registers)
+        Args:
+            force_defaults: If true: Additionally sets sensible default settings for not required settings
+            (like marker source)
+        """
         settings = self._required_settings()
         if force_defaults:
             settings.update(self._default_settings())
-
-        settings = []
-        settings.append(['/{}/awgs/*/userregs/*'.format(self.serial), 0])  # Reset all user registers to 0.
-        settings.append(['/{}/awgs/*/single'.format(self.serial), 1])  # Single execution mode of sequence.
-        for ch in range(0, 8):  # Route marker 1 signal for each channel to marker output.
-            if ch % 2 == 0:
-                output = HDAWGTriggerOutSource.OUT_1_MARK_1.value
-            else:
-                output = HDAWGTriggerOutSource.OUT_1_MARK_2.value
-            settings.append(['/{}/triggers/out/{}/source'.format(self.serial, ch), output])
 
         self.api_session.set(settings)
         self.api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
 
     def reset(self) -> None:
         zhinst.utils.disable_everything(self.api_session, self.serial)
-        self._initialize()
-        for channel_tuple in self.channel_tuples:
-            channel_tuple.clear()
-        self.api_session.set([
-            (f'/{self.serial}/awgs/*/time', 0),
-            (f'/{self.serial}/sigouts/*/range', HDAWGVoltageRange.RNG_1V.value),
-            (f'/{self.serial}/awgs/*/outputs/*/amplitude', 1.0),
-            (f'/{self.serial}/outputs/*/modulation/mode', HDAWGModulationMode.OFF.value),
-        ])
-
-        # marker outputs
-        marker_settings = []
-        for ch in range(0, 8):  # Route marker 1 signal for each channel to marker output.
-            if ch % 2 == 0:
-                output = HDAWGTriggerOutSource.OUT_1_MARK_1.value
-            else:
-                output = HDAWGTriggerOutSource.OUT_1_MARK_2.value
-            marker_settings.append([f'/{self.serial}/triggers/out/{ch}/source', output])
-        self.api_session.set(marker_settings)
-        self.api_session.sync()
+        self._initialize(force_defaults=True)
 
     def _mark_source_setting(self, marker_idx: int, source: 'HDAWGTriggerOutSource') -> (str, Any):
         assert marker_idx in range(8)
