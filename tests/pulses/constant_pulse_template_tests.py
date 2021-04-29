@@ -10,11 +10,18 @@ from qupulse._program._loop import make_compatible
 
 from qupulse.pulses.constant_pulse_template import ConstantPulseTemplate
 
+
 class TestConstantPulseTemplate(unittest.TestCase):
 
     def test_ConstantPulseTemplate(self):
         pt = ConstantPulseTemplate(100, {'P1': .5, 'P2': .25})
         self.assertEqual(pt.integral, {'P1': 50, 'P2': 25})
+
+        data = pt.get_serialization_data()
+        self.assertEqual(data['name'], pt._name)
+
+        self.assertIn('ConstantPulseTemplate', str(pt))
+        self.assertIn('ConstantPulseTemplate', repr(pt))
 
     def test_zero_duration(self):
         p1 = ConstantPulseTemplate(10, {'P1': 1.})
@@ -30,7 +37,7 @@ class TestConstantPulseTemplate(unittest.TestCase):
         self.assertEqual(pulse.duration, 12)
 
     def test_regression_duration_conversion(self):
-        old_value = qupulse._program.waveforms.PULSE_TO_WAVEFORM_ERROR 
+        old_value = qupulse._program.waveforms.PULSE_TO_WAVEFORM_ERROR
 
         try:
             qupulse._program.waveforms.PULSE_TO_WAVEFORM_ERROR = 1e-6
@@ -39,14 +46,14 @@ class TestConstantPulseTemplate(unittest.TestCase):
                 number_of_samples = p.create_program().duration * 2.4
                 make_compatible(p.create_program(), 8, 8, 2.4)
                 self.assertEqual(number_of_samples.denominator, 1)
-    
-                p2 = ConstantPulseTemplate((duration_in_samples +1) / 2.4, {'a': 0})
+
+                p2 = ConstantPulseTemplate((duration_in_samples + 1) / 2.4, {'a': 0})
                 self.assertNotEqual(p.create_program().duration, p2.create_program().duration)
         finally:
             qupulse._program.waveforms.PULSE_TO_WAVEFORM_ERROR = old_value
 
     def test_regression_duration_conversion_functionpt(self):
-        old_value = qupulse._program.waveforms.PULSE_TO_WAVEFORM_ERROR 
+        old_value = qupulse._program.waveforms.PULSE_TO_WAVEFORM_ERROR
 
         try:
             qupulse._program.waveforms.PULSE_TO_WAVEFORM_ERROR = 1e-6
