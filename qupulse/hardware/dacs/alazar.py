@@ -1,9 +1,11 @@
 from typing import Dict, Any, Optional, Tuple, List, Iterable, Callable, Sequence
 from collections import defaultdict
-import logging
+import copy
+import warnings
 import math
 import functools
 import abc
+import logging
 
 import numpy as np
 
@@ -206,9 +208,14 @@ class AlazarCard(DAC):
         self.update_settings = True
 
         self.__definitions = dict()
-        self.config = config
 
-        # defaults to self.__card.minimum_record_size
+        # this ScanlineConfig is used by default for each program
+        # masks and operations are overwritten
+        self.default_config = config
+
+        # the currently active ScanlineConfig
+        self._current_config = None
+
         self._buffer_strategy = None
 
         self._remaining_auto_triggers = 0
@@ -217,14 +224,45 @@ class AlazarCard(DAC):
 
         self._registered_programs = defaultdict(AlazarProgram)  # type: Dict[str, AlazarProgram]
 
+        # defaults to self.__card.minimum_record_size if None
+        # we use a page size here because this is allocated anyways for a buffer
+        # This might lead to problems with small sample rates
+        self._record_size_factor = 1024 * 4
+
     @property
     def card(self) -> Any:
         return self.__card
 
     @property
+    def record_size_factor(self) -> int:
+        """The total record size of each measurement gets extended to be a multiple of this. None means that the
+        minimal value supported by the card is taken."""
+        if self._record_size_factor is None:
+            return self.__card.minimum_record_size
+        else:
+            return self._record_size_factor
+
+    @record_size_factor.setter
+    def record_size_factor(self, value: Optional[int]):
+        self._record_size_factor = value
+
+    @property
+    def config(self):
+        warnings.warn("AlazarCard.config is deprecated. Use AlazarCard.default_config or AlazarCard.current_config",
+                      DeprecationWarning)
+        if self._current_config is None:
+            return self.default_config
+        else:
+            return self._current_config
+
+    @property
+    def current_config(self):
+        return self._current_config
+
+    @property
     def buffer_strategy(self) -> BufferStrategy:
         if self._buffer_strategy is None:
-            return AvoidSingleBufferAcquisition(ForceBufferSize(self.config.aimedBufferSize))
+            return AvoidSingleBufferAcquisition(ForceBufferSize(self.default_config.aimedBufferSize))
         else:
             return self._buffer_strategy
 
@@ -240,6 +278,9 @@ class AlazarCard(DAC):
 
         hardware_channel, mask_type = self._mask_prototypes[mask_id]
 
+        if mask_type not in ('auto', 'cross_buffer', None):
+            warnings.warn("Currently only CrossBufferMask is implemented.")
+
         if np.any(begins[:-1]+lengths[:-1] > begins[1:]):
             raise ValueError('Found overlapping windows in begins')
 
@@ -251,15 +292,15 @@ class AlazarCard(DAC):
         return mask
 
     def set_measurement_mask(self, program_name, mask_name, begins, lengths) -> Tuple[np.ndarray, np.ndarray]:
-        sample_factor = TimeType(int(self.config.captureClockConfiguration.numeric_sample_rate(self.card.model)), 10**9)
+        sample_factor = TimeType.from_fraction(int(self.default_config.captureClockConfiguration.numeric_sample_rate(self.card.model)), 10**9)
         return self._registered_programs[program_name].set_measurement_mask(mask_name, sample_factor, begins, lengths)
 
     def register_measurement_windows(self,
                                      program_name: str,
                                      windows: Dict[str, Tuple[np.ndarray, np.ndarray]]) -> None:
         program = self._registered_programs[program_name]
-        sample_factor = TimeType.from_fraction(int(self.config.captureClockConfiguration.numeric_sample_rate(self.card.model)),
-                                 10 ** 9)
+        sample_factor = TimeType.from_fraction(int(self.default_config.captureClockConfiguration.numeric_sample_rate(self.card.model)),
+                                               10 ** 9)
         program.clear_masks()
 
         for mask_name, (begins, lengths) in windows.items():
@@ -276,12 +317,14 @@ class AlazarCard(DAC):
             logger.info("Arming %r by calling applyConfiguration. Update settings flag: %r",
                         self.__card, self.update_settings)
 
-            config = self.config
+            config = copy.deepcopy(self.default_config)
             config.masks, config.operations, total_record_size = self._registered_programs[program_name].iter(
                 self._make_mask)
 
-            sample_factor = TimeType.from_fraction(self.config.captureClockConfiguration.numeric_sample_rate(self.card.model),
-                                                   10 ** 9)
+            sample_rate = config.captureClockConfiguration.numeric_sample_rate(self.card.model)
+
+            # sample rate in GHz
+            sample_factor = TimeType.from_fraction(sample_rate, 10 ** 9)
 
             if not config.operations:
                 raise RuntimeError("No operations: Arming program without operations is an error as there will "
@@ -296,20 +339,17 @@ class AlazarCard(DAC):
 
             assert total_record_size > 0
 
-            minimum_record_size = self.__card.minimum_record_size
-            total_record_size = (((total_record_size - 1) // minimum_record_size) + 1) * minimum_record_size
+            # extend the total record size to be a multiple of record_size_factor
+            record_size_factor = self.record_size_factor
+            total_record_size = (((total_record_size - 1) // record_size_factor) + 1) * record_size_factor
 
             if config.totalRecordSize == 0:
                 config.totalRecordSize = total_record_size
             elif config.totalRecordSize < total_record_size:
                 raise ValueError('specified total record size is smaller than needed {} < {}'.format(config.totalRecordSize,
                                                                                                      total_record_size))
-            old_aimed_buffer_size = config.aimedBufferSize
-
             self.__card.applyConfiguration(config, True)
-
-            # Keep user value
-            config.aimedBufferSize = old_aimed_buffer_size
+            self._current_config = config
 
             self.update_settings = False
             self.__armed_program = to_arm
