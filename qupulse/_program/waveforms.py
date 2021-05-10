@@ -277,7 +277,7 @@ class ConstantWaveform(Waveform):
                       sample_times: np.ndarray,
                       output_array: Union[np.ndarray, None] = None) -> np.ndarray:
         if output_array is None:
-            output_array = np.empty_like(sample_times)
+            output_array = np.empty_like(sample_times, dtype=float)
         output_array[:] = self._amplitude
         return output_array
 

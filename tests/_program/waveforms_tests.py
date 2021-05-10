@@ -345,10 +345,10 @@ class ConstantWaveformTests(unittest.TestCase):
         self.assertEqual(waveform.duration, 10)
 
     def test_waveform_sample(self):
-        waveform = ConstantWaveform(10, 1.1, 'P1')
+        waveform = ConstantWaveform(10, .1, 'P1')
         sample_times = [-1, 0, 1, 2]
         result = waveform.unsafe_sample('P1', sample_times)
-        self.assertTrue(np.all(result == 1.1))
+        self.assertTrue(np.all(result == .1))
 
 
 class TableWaveformTests(unittest.TestCase):
