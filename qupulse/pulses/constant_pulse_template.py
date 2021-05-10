@@ -6,20 +6,19 @@ Classes:
         declared parameters.
 """
 
-from typing import Union, Dict, List, Set, Optional, Any, Tuple, Sequence, NamedTuple, Callable
-import numbers
 import logging
-import numpy as np
+import numbers
+from typing import Any, Dict, List, Optional, Set, Union
 
-from qupulse.pulses.pulse_template import ChannelID, Transformation, AtomicPulseTemplate, Loop, PulseTemplate
-from qupulse.utils.types import ChannelID
-from qupulse.pulses.parameters import ParameterNotProvidedException, ParameterConstraint, ParameterConstrainer
-from qupulse.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration, PulseTemplate
 from qupulse._program.waveforms import ConstantWaveform
 from qupulse.expressions import ExpressionScalar
-from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
 from qupulse.parameter_scope import Scope
-
+from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
+from qupulse.pulses.parameters import ParameterNotProvidedException
+from qupulse.pulses.pulse_template import (AtomicPulseTemplate, ChannelID,
+                                           Loop, MeasurementDeclaration,
+                                           PulseTemplate, Transformation,
+                                           TransformingWaveform)
 
 __all__ = ["ConstantPulseTemplate"]
 
