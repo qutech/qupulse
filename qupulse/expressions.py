@@ -103,8 +103,10 @@ class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
         else:
             e = self.evaluate_numeric()
             return float(e)
-    
+
     def evaluate_symbolic(self, substitutions: Mapping[Any, Any]) -> 'Expression':
+        if len(substitutions)==0:
+            return self.underlying_expression
         return Expression.make(recursive_substitution(sympify(self.underlying_expression), substitutions))
 
     @property
