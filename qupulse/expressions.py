@@ -248,7 +248,7 @@ class ExpressionScalar(Expression):
         super().__init__()
 
         if isinstance(ex, sympy.Expr):
-            self._original_expression = str(ex)
+            self._original_expression = ex
             self._sympified_expression = ex
         else:
             self._original_expression = ex
