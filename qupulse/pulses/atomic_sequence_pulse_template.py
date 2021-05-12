@@ -12,8 +12,6 @@ import unittest
 import functools
 import logging
 import numbers
-import warnings
-from functools import wraps
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 import numpy as np
@@ -25,6 +23,8 @@ from qupulse.pulses.constant_pulse_template import ConstantPulseTemplate
 from qupulse.pulses.measurement import (MeasurementDeclaration,
                                         MeasurementDefiner)
 from qupulse.pulses.parameters import ParameterNotProvidedException
+from qupulse.pulses.parameters import Parameter, ParameterConstrainer
+
 from qupulse.pulses.pulse_template import (AtomicPulseTemplate, ChannelID,
                                            Loop, MeasurementDeclaration,
                                            PulseTemplate, Transformation,
@@ -33,24 +33,6 @@ from qupulse.pulses.sequence_pulse_template import SequencePulseTemplate
 from qupulse.utils.types import FrozenDict, MeasurementWindow
 
 __all__ = ["AtomicSequencePulseTemplate"]
-
-
-class ignore_warning_decorator:
-    def __init__(self, message: str, **kwargs: Any):
-        """ Ignore warnings messages using a decorator """
-        self.warning_message = message
-        self.__dict__.update(kwargs)
-
-    def __call__(self, method: Any) -> Any:
-        @wraps(method)
-        def wrapper(*args: Any, **kw: Any) -> Any:
-
-            with warnings.catch_warnings():
-                warnings.filterwarnings('ignore', self.warning_message)
-                print(f'ignore: {self.warning_message}')
-                result = method(*args, **kw)
-            return result
-        return wrapper
 
 
 def flatten_sets(x: Sequence[Set[Any]]) -> Set[Any]:
@@ -201,7 +183,7 @@ class AtomicSequencePulseTemplate(AtomicPulseTemplate):  # type: ignore
 
     def build_waveform(self,
                        parameters: Dict[str, numbers.Real],
-                       channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> SequenceWaveform:
+                       channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[SequenceWaveform]:
         logging.debug(
             f'{self}.build_waveform: channel_mapping {channel_mapping}, defined_channels {self.defined_channels}')
         if all(channel_mapping[channel] is None
@@ -211,44 +193,8 @@ class AtomicSequencePulseTemplate(AtomicPulseTemplate):  # type: ignore
         if self.duration.evaluate_numeric(**parameters) == 0:
             return None
 
-        sub_waveforms = [p.build_waveform(parameters, channel_mapping) for p in self._subtemplates]
+        sub_waveforms = [sub_template.build_waveform(parameters, channel_mapping) for sub_template in self._subtemplates]
 
         return SequenceWaveform(sub_waveforms)
 
 
-class TestAtomicSequencePulseTemplate(unittest.TestCase):
-
-    def test_AtomicSequencePulseTemplate_integral(self):
-        p1 = ConstantPulseTemplate(10, {'P1': 1.0})
-        p2 = ConstantPulseTemplate(10, {'P1': 2.0})
-        pt = AtomicSequencePulseTemplate(p1, p2,)
-        self.assertDictEqual(pt.integral, {'P1': 30.})
-
-    def test_AtomicSequencePulseTemplate_measurements(self):
-
-        p1 = ConstantPulseTemplate(10, {'P1': 1.0}, measurements=[('a', 0, 2)])
-        p2 = ConstantPulseTemplate(10, {'P1': 2.0}, measurements=[('a', 0, 2), ('b', 0, 5)])
-
-        pt = SequencePulseTemplate(p1, p2, measurements=[('c', 0, 3)])
-
-        measurement_windows0 = pt.create_program().get_measurement_windows()
-
-        pt = AtomicSequencePulseTemplate(p1, p2, measurements=[('c', 0, 3)])
-        measurement_windows = pt.create_program().get_measurement_windows()
-
-        self.assertEqual(measurement_windows0.keys(), measurement_windows.keys())
-        for key in measurement_windows0:
-            np.testing.assert_array_equal(measurement_windows0[key], measurement_windows[key])
-
-    def test_AtomicSequencePulseTemplate_measurement_names(self):
-        p1 = ConstantPulseTemplate(10, {'P1': 1.0})
-        p2 = ConstantPulseTemplate(10, {'P1': 2.0})
-        pt = AtomicSequencePulseTemplate(p1, p2,)
-        self.assertEqual(pt.measurement_names, set())
-        pt = AtomicSequencePulseTemplate(p1, p2, measurements=[('c', 0, 3)])
-        self.assertEqual(pt.measurement_names, {'c'})
-
-
-if __name__ == '__main__':
-    import unittest
-    unittest.main()
