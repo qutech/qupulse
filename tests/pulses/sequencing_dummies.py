@@ -1,5 +1,5 @@
 """STANDARD LIBRARY IMPORTS"""
-from typing import Tuple, List, Dict, Optional, Set, Any, Union
+from typing import Tuple, List, Dict, Optional, Set, Any, Union, Mapping
 import copy
 
 import numpy
@@ -208,6 +208,9 @@ class DummyPulseTemplate(AtomicPulseTemplate):
         self.create_program_calls = []
         self._program = program
         self._register(registry=registry)
+
+        if integrals is not None:
+            assert isinstance(integrals, Mapping)
 
     @property
     def duration(self):

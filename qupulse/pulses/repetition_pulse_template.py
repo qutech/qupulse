@@ -160,7 +160,7 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
     @property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
         body_integral = self.body.integral
-        return [self.repetition_count * c for c in body_integral]
+        return {channel: self.repetition_count * value for channel, value in body_integral.items()}
 
 
 class ParameterNotIntegerException(Exception):

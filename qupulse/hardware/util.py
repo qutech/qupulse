@@ -105,6 +105,42 @@ def find_positions(data: Sequence, to_find: Sequence) -> np.ndarray:
 
     return positions
 
+def get_waveform_length(waveform: Waveform,
+                     sample_rate_in_GHz: TimeType, tolerance: float = 1e-10) -> int:
+    """Calculates the number of samples in a waveform
+
+    If only one waveform is given, the number of samples has shape ()
+
+    Raises a ValueError if the waveform has a length that is zero or not a multiple of the inverse sample rate.
+
+    Args:
+        waveform: A waveform
+        sample_rate_in_GHz: The sample rate in GHz
+        tolerance: Allowed deviation from an integer sample count
+
+    Returns:
+        Number of samples for the waveform
+    """
+    segment_length = waveform.duration * sample_rate_in_GHz
+
+    # __round__ is implemented for Fraction and gmpy2.mpq
+    rounded_segment_length = round(segment_length)
+
+    if abs(segment_length - rounded_segment_length) > tolerance:
+        deviation = abs(segment_length - rounded_segment_length)
+        raise ValueError("Error while sampling waveforms. One waveform has a non integer length in samples of "
+                         "{segment_length} at the given sample rate of {sample_rate}GHz. This is a deviation of "
+                         "{deviation} from the nearest integer {rounded_segment_length}."
+                         "".format(segment_length=segment_length,
+                                   sample_rate=sample_rate_in_GHz,
+                                   deviation=deviation,
+                                   rounded_segment_length=rounded_segment_length))
+    if rounded_segment_length <= 0:
+        raise ValueError("Error while sampling waveform. Waveform has a length <= zero at the given sample "
+                         "rate of %rGHz" % sample_rate_in_GHz)
+    segment_length = np.uint64(rounded_segment_length)
+
+    return segment_length
 
 def get_sample_times(waveforms: Union[Collection[Waveform], Waveform],
                      sample_rate_in_GHz: TimeType, tolerance: float = 1e-10) -> Tuple[np.array, np.array]:
@@ -132,23 +168,7 @@ def get_sample_times(waveforms: Union[Collection[Waveform], Waveform],
 
     segment_lengths = []
     for waveform in waveforms:
-        segment_length = waveform.duration * sample_rate_in_GHz
-
-        # __round__ is implemented for Fraction and gmpy2.mpq
-        rounded_segment_length = round(segment_length)
-
-        if abs(segment_length - rounded_segment_length) > tolerance:
-            deviation = abs(segment_length - rounded_segment_length)
-            raise ValueError("Error while sampling waveforms. One waveform has a non integer length in samples of "
-                             "{segment_length} at the given sample rate of {sample_rate}GHz. This is a deviation of "
-                             "{deviation} from the nearest integer {rounded_segment_length}."
-                             "".format(segment_length=segment_length,
-                                       sample_rate=sample_rate_in_GHz,
-                                       deviation=deviation,
-                                       rounded_segment_length=rounded_segment_length))
-        if rounded_segment_length <= 0:
-            raise ValueError("Error while sampling waveforms. One waveform has a length <= zero at the given sample "
-                             "rate of %rGHz" % sample_rate_in_GHz)
+        rounded_segment_length = get_waveform_length(waveform, sample_rate_in_GHz=sample_rate_in_GHz, tolerance=tolerance)
         segment_lengths.append(rounded_segment_length)
 
     segment_lengths = np.asarray(segment_lengths, dtype=np.uint64)

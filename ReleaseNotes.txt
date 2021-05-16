@@ -2,9 +2,13 @@
  - General:
     - Fix TimeType comparisons with non-finite floats (inf, -inf, NaN)
     - Drop python 3.5 support
-
+    - Added ConstantPulseTemplate (#565)
+    
  - Expressions:
     - Add `evaluate_with_exact_rationals` method to ExpressionScalar
+
+ - Hardware:
+    - Improve atsaverage backend usability
 
 
 ## 0.5.1 ##
