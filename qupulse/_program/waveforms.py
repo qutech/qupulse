@@ -20,6 +20,7 @@ from qupulse.comparable import Comparable
 from qupulse.expressions import ExpressionScalar
 from qupulse.pulses.interpolation import InterpolationStrategy
 from qupulse._program.transformation import Transformation
+from qupulse.utils import pairwise
 
 
 __all__ = ["Waveform", "TableWaveform", "TableWaveformEntry", "FunctionWaveform", "SequenceWaveform",
@@ -223,7 +224,14 @@ class TableWaveform(Waveform):
         if output_array is None:
             output_array = np.empty_like(sample_times)
 
-        for entry1, entry2 in zip(self._table[:-1], self._table[1:]):
+        if PULSE_TO_WAVEFORM_ERROR:
+            # we need to replace the last entry's t with self.duration
+            *entries, last = self._table
+            entries.append(TableWaveformEntry(float(self.duration), last.v, last.interp))
+        else:
+            entries = self._table
+
+        for entry1, entry2 in pairwise(entries):
             indices = slice(np.searchsorted(sample_times, entry1.t, 'left'),
                             np.searchsorted(sample_times, entry2.t, 'right'))
             output_array[indices] = \
