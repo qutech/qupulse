@@ -8,7 +8,7 @@ from qupulse.utils.types import TimeType
 from qupulse.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy,\
     JumpInterpolationStrategy
 from qupulse._program.waveforms import MultiChannelWaveform, RepetitionWaveform, SequenceWaveform,\
-    TableWaveformEntry, TableWaveform, TransformingWaveform, SubsetWaveform, ArithmeticWaveform
+    TableWaveformEntry, TableWaveform, TransformingWaveform, SubsetWaveform, ArithmeticWaveform, ConstantWaveform
 from qupulse._program.transformation import Transformation
 
 from tests.pulses.sequencing_dummies import DummyWaveform, DummyInterpolationStrategy
@@ -30,8 +30,8 @@ class WaveformTest(unittest.TestCase):
             wf.get_sampled(channel='A',
                            sample_times=numpy.asarray([-12, 1], dtype=float))
         with self.assertRaises(KeyError):
-                wf.get_sampled(channel='C',
-                               sample_times=numpy.asarray([0.5, 1], dtype=float))
+            wf.get_sampled(channel='C',
+                           sample_times=numpy.asarray([0.5, 1], dtype=float))
         with self.assertRaises(ValueError):
             wf.get_sampled(channel='A',
                            sample_times=numpy.asarray([0.5, 1], dtype=float),
@@ -299,7 +299,8 @@ class SequenceWaveformTest(unittest.TestCase):
             expected_inputs = sample_times[0:10], sample_times[10:40] - 1, sample_times[40:] - 4
 
             swf.unsafe_sample('A', sample_times=sample_times)
-            inputs = [call_args[1]['sample_times'] for call_args in unsafe_sample_patch.call_args_list] # type: List[np.ndarray]
+            inputs = [call_args[1]['sample_times']
+                      for call_args in unsafe_sample_patch.call_args_list]  # type: List[np.ndarray]
             np.testing.assert_equal(expected_inputs, inputs)
             self.assertEqual([input.dtype for input in inputs], [np.float64 for _ in inputs])
 
@@ -337,6 +338,18 @@ class SequenceWaveformTest(unittest.TestCase):
         self.assertEqual(sub_wf.compare_key[1].duration, TimeType.from_float(3.3))
 
 
+class ConstantWaveformTests(unittest.TestCase):
+
+    def test_waveform_duration(self):
+        waveform = ConstantWaveform(10, 1., 'P1')
+        self.assertEqual(waveform.duration, 10)
+
+    def test_waveform_sample(self):
+        waveform = ConstantWaveform(10, .1, 'P1')
+        sample_times = [-1, 0, 1, 2]
+        result = waveform.unsafe_sample('P1', sample_times)
+        self.assertTrue(np.all(result == .1))
+
 
 class TableWaveformTests(unittest.TestCase):
 
@@ -370,10 +383,9 @@ class TableWaveformTests(unittest.TestCase):
                                      TableWaveformEntry(0.1, 0.3, HoldInterpolationStrategy()),
                                      TableWaveformEntry(0.3, 0.3, JumpInterpolationStrategy())))
 
-
-
     def test_duration(self) -> None:
-        entries = [TableWaveformEntry(0, 0, HoldInterpolationStrategy()), TableWaveformEntry(5, 1, HoldInterpolationStrategy())]
+        entries = [TableWaveformEntry(0, 0, HoldInterpolationStrategy()),
+                   TableWaveformEntry(5, 1, HoldInterpolationStrategy())]
         waveform = TableWaveform('A', entries)
         self.assertEqual(5, waveform.duration)
 
