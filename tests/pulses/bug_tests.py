@@ -1,4 +1,7 @@
 import unittest
+from unittest import mock
+
+import numpy as np
 
 from qupulse.pulses.table_pulse_template import TablePulseTemplate
 from qupulse.pulses.function_pulse_template import FunctionPulseTemplate
@@ -9,6 +12,8 @@ from qupulse.pulses.mapping_pulse_template import MappingPulseTemplate
 
 from qupulse.pulses.plotting import plot
 
+from qupulse._program._loop import to_waveform
+from qupulse.utils import isclose
 
 class BugTests(unittest.TestCase):
 
@@ -66,3 +71,26 @@ class BugTests(unittest.TestCase):
         parameter_values = dict(omega=1.0, a=1.0, t_duration="2*pi")
 
         _ = plot(both, parameters=parameter_values, sample_rate=100)
+
+    def test_issue_584_uninitialized_table_sample(self):
+        """issue 584"""
+        d = 598.3333333333334 - 480
+        tpt = TablePulseTemplate(entries={'P': [(0, 1.0, 'hold'), (d, 1.0, 'hold')]})
+        with mock.patch('qupulse._program.waveforms.PULSE_TO_WAVEFORM_ERROR', 1e-6):
+            wf = to_waveform(tpt.create_program())
+            self.assertTrue(isclose(d, wf.duration, abs_tol=1e-6))
+
+            start_time = 0.
+            end_time = wf.duration
+            sample_rate = 3.
+
+            sample_count = (end_time - start_time) * sample_rate + 1
+
+            times = np.linspace(float(start_time), float(wf.duration), num=int(sample_count), dtype=float)
+            times[-1] = np.nextafter(times[-1], times[-2])
+
+            out = np.full_like(times, fill_value=np.nan)
+            sampled = wf.get_sampled(channel='P', sample_times=times, output_array=out)
+
+            expected = np.full_like(times, fill_value=1.)
+            np.testing.assert_array_equal(expected, sampled)
