@@ -31,6 +31,10 @@ __all__ = ["Waveform", "TableWaveform", "TableWaveformEntry", "FunctionWaveform"
 
 PULSE_TO_WAVEFORM_ERROR = None  # error margin in pulse template to waveform conversion
 
+#  these are private because there probably will be changes here
+_ALLOCATION_FUNCTION = np.full_like  # pre_allocated = ALLOCATION_FUNCTION(sample_times, **ALLOCATION_FUNCTION_KWARGS)
+_ALLOCATION_FUNCTION_KWARGS = dict(fill_value=np.nan, dtype=float)
+
 
 class Waveform(Comparable, metaclass=ABCMeta):
     """Represents an instantiated PulseTemplate which can be sampled to retrieve arrays of voltage
@@ -227,7 +231,7 @@ class TableWaveform(Waveform):
                       sample_times: np.ndarray,
                       output_array: Union[np.ndarray, None] = None) -> np.ndarray:
         if output_array is None:
-            output_array = np.empty_like(sample_times)
+            output_array = _ALLOCATION_FUNCTION(sample_times, **_ALLOCATION_FUNCTION_KWARGS)
 
         if PULSE_TO_WAVEFORM_ERROR:
             # we need to replace the last entry's t with self.duration
@@ -287,9 +291,10 @@ class ConstantWaveform(Waveform):
                       sample_times: np.ndarray,
                       output_array: Union[np.ndarray, None] = None) -> np.ndarray:
         if output_array is None:
-            output_array = np.empty_like(sample_times, dtype=float)
-        output_array[:] = self._amplitude
-        return output_array
+            return np.full_like(sample_times, fill_value=self._amplitude, dtype=float)
+        else:
+            output_array[:] = self._amplitude
+            return output_array
 
     def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> Waveform:
         """Unsafe version of :func:`~qupulse.pulses.instructions.get_measurement_windows`."""
@@ -335,10 +340,12 @@ class FunctionWaveform(Waveform):
                       channel: ChannelID,
                       sample_times: np.ndarray,
                       output_array: Union[np.ndarray, None] = None) -> np.ndarray:
+        evaluated = self._expression.evaluate_numeric(t=sample_times)
         if output_array is None:
-            output_array = np.empty(len(sample_times))
-        output_array[:] = self._expression.evaluate_numeric(t=sample_times)
-        return output_array
+            return evaluated.astype(float)
+        else:
+            output_array[:] = evaluated
+            return output_array
 
     def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> Waveform:
         return self
@@ -380,7 +387,7 @@ class SequenceWaveform(Waveform):
                       sample_times: np.ndarray,
                       output_array: Union[np.ndarray, None] = None) -> np.ndarray:
         if output_array is None:
-            output_array = np.empty_like(sample_times)
+            output_array = _ALLOCATION_FUNCTION(sample_times, **_ALLOCATION_FUNCTION_KWARGS)
         time = 0
         for subwaveform in self._sequenced_waveforms:
             # before you change anything here, make sure to understand the difference between basic and advanced
@@ -545,7 +552,7 @@ class RepetitionWaveform(Waveform):
                       sample_times: np.ndarray,
                       output_array: Union[np.ndarray, None] = None) -> np.ndarray:
         if output_array is None:
-            output_array = np.empty_like(sample_times)
+            output_array = _ALLOCATION_FUNCTION(sample_times, **_ALLOCATION_FUNCTION_KWARGS)
         body_duration = self._body.duration
         time = 0
         for _ in range(self._repetition_count):
