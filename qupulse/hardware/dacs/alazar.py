@@ -76,7 +76,7 @@ class AlazarProgram:
         elif sample_factor != self._sample_factor:
             raise RuntimeError('class AlazarProgram has already masks with differing sample factor')
 
-        assert begins.dtype == np.float and lengths.dtype == np.float
+        assert begins.dtype == float and lengths.dtype == float
 
         # optimization potential here (hash input?)
         begins = np.rint(begins * float(sample_factor)).astype(dtype=np.uint64)
