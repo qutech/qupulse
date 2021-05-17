@@ -1,0 +1,1 @@
+Fix TimeType comparisons with non-finite floats (inf, -inf, NaN)
