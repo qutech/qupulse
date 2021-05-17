@@ -549,7 +549,7 @@ class TaborProgramManagement(ProgramManagement):
         Throws:
             ValueError: this Exception is thrown when an invalid repetition mode is given
         """
-        if repetition_mode is "infinite" or repetition_mode is "once":
+        if repetition_mode in ("infinite", "once"):
             self._channel_tuple._known_programs[program_name].program._repetition_mode = repetition_mode
         else:
             raise ValueError("{} is no vaild repetition mode".format(repetition_mode))
@@ -721,7 +721,7 @@ class TaborProgramManagement(ProgramManagement):
                 if self._channel_tuple._current_program:
                     repetition_mode = self._channel_tuple._known_programs[
                         self._channel_tuple._current_program].program._repetition_mode
-                    if repetition_mode is "infinite":
+                    if repetition_mode == "infinite":
                         self._cont_repetition_mode()
                         self._channel_tuple.device[SCPI].send_cmd(':TRIG',
                                                                     paranoia_level=self._channel_tuple.internal_paranoia_level)
@@ -737,7 +737,7 @@ class TaborProgramManagement(ProgramManagement):
             if self._channel_tuple._current_program:
                 repetition_mode = self._channel_tuple._known_programs[
                     self._channel_tuple._current_program].program._repetition_mode
-                if repetition_mode is "infinite":
+                if repetition_mode == "infinite":
                     self._cont_repetition_mode()
                     self._channel_tuple.device[SCPI].send_cmd(':TRIG', paranoia_level=self._channel_tuple.internal_paranoia_level)
                 else:
