@@ -9,15 +9,15 @@ from qupulse.utils.types import TimeType
 from qupulse.utils import pairwise
 
 try:
-    import numba as nb
-    njit = nb.njit
+    import numba
+    njit = numba.njit
 except ImportError:
-    nb = mock.MagicMock()
+    numba = None
     njit = lambda x: x
 
 try:
     import zhinst
-except ImportError:
+except ImportError:  # pragma: no cover
     zhinst = None
 
 __all__ = ['voltage_to_uint16', 'get_sample_times', 'zhinst_voltage_to_uint16']
@@ -79,7 +79,7 @@ def voltage_to_uint16(voltage: np.ndarray, output_amplitude: float, output_offse
         raise ValueError('The resolution must be an integer > 0')
 
     try:
-        if nb:
+        if numba:
             impl = _voltage_to_uint16_numba
         else:
             impl = _voltage_to_uint16_numpy
@@ -105,8 +105,9 @@ def find_positions(data: Sequence, to_find: Sequence) -> np.ndarray:
 
     return positions
 
+
 def get_waveform_length(waveform: Waveform,
-                     sample_rate_in_GHz: TimeType, tolerance: float = 1e-10) -> int:
+                        sample_rate_in_GHz: TimeType, tolerance: float = 1e-10) -> int:
     """Calculates the number of samples in a waveform
 
     If only one waveform is given, the number of samples has shape ()
@@ -141,6 +142,7 @@ def get_waveform_length(waveform: Waveform,
     segment_length = np.uint64(rounded_segment_length)
 
     return segment_length
+
 
 def get_sample_times(waveforms: Union[Collection[Waveform], Waveform],
                      sample_rate_in_GHz: TimeType, tolerance: float = 1e-10) -> Tuple[np.array, np.array]:
@@ -187,6 +189,12 @@ def _zhinst_voltage_to_uint16_numba(size: int, ch1: Optional[np.ndarray], ch2: O
     scale = float(2**15 - 1)
 
     invalid_value = None
+
+    def has_invalid_size(arr):
+        return arr is not None and len(arr) != size
+
+    if has_invalid_size(ch1) or has_invalid_size(ch2) or has_invalid_size(m1_front) or has_invalid_size(m1_back) or has_invalid_size(m2_front) or has_invalid_size(m2_back):
+        raise ValueError("One of the inputs does not have the given size.")
 
     for i in range(size):
         if ch1 is not None:
@@ -255,13 +263,15 @@ def zhinst_voltage_to_uint16(ch1: Optional[np.ndarray], ch2: Optional[np.ndarray
         as i16.
     """
     all_input = (ch1, ch2, *markers)
-    assert any(x is not None for x in all_input)
     size = {x.size for x in all_input if x is not None}
-    assert len(size) == 1, "Inputs have incompatible dimension"
+    if not size:
+        raise ValueError("No input arrays")
+    elif len(size) != 1:
+        raise ValueError("Inputs have incompatible dimension")
     size, = size
     size = int(size)
 
-    if nb is not None:
+    if numba is not None:
         try:
             return _zhinst_voltage_to_uint16_numba(size, *all_input)
         except ValueError:
