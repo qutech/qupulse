@@ -3,19 +3,18 @@
 0.5.1
 =====
 
- - General:
-    - Unify `TimeType.from_float` between fractions and gmpy2 backend behaviour (fixes issue 529).
+- General:
+   - Unify `TimeType.from_float` between fractions and gmpy2 backend behaviour (fixes issue 529).
 
 0.5
 =====
 
- - General:
+- General:
    - Improve `TimeType` consistency by leveraging str(float) for rounding by default.
    - Add support for sympy==1.5
-   - Add volatile parameters. Repetition counts can now be changed at runtime in some cases (useful for DNP). See
-     `volatile` kwarg of `create_program`
+   - Add volatile parameters. Repetition counts can now be changed at runtime in some cases (useful for DNP). See `volatile` kwarg of `create_program`
 
- - Hardware:
+- Hardware:
    - Add a `measure_program` method to the DAC interface. This method is used by the QCoDeS integration.
    - Add a `set_measurement_mask` to DAC interface. This method is used by the QCoDeS integration.
    - Add a `get_sample_times` util method to share code for exact and fast sample time calculation
@@ -90,14 +89,12 @@
 =====
 
 - General:
-
-    - officially removed support for Python 3.3 (qupulse and dependencies are not compatible anymore)
+   - officially removed support for Python 3.3 (qupulse and dependencies are not compatible anymore)
 
 - Serialization / Storage:
-
-    - Added functionality to easily access available content/identifiers in `PulseStorage` and `StorageBackend`.
-    - DEPRECATED `list_contents()` of `StorageBackend` (use `contents property` instead).
-    - DEPRECATED: `CachingBackend` because its functionality is a subset of `PulseStorage`.
+   - Added functionality to easily access available content/identifiers in `PulseStorage` and `StorageBackend`.
+   - DEPRECATED `list_contents()` of `StorageBackend` (use `contents property` instead).
+   - DEPRECATED: `CachingBackend` because its functionality is a subset of `PulseStorage`.
 
 - Expressions:
-    - Fixed bug in `Expression.evaluate_numeric` if result is array of numeric sympy objects
+   - Fixed bug in `Expression.evaluate_numeric` if result is array of numeric sympy objects
