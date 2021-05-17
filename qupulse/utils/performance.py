@@ -9,15 +9,18 @@ except ImportError:
 
 
 @njit
-def _is_monotonic_numba(x: np.ndarray):
+def _is_monotonic_numba(x: np.ndarray) -> bool:
+    # No early return because we optimize for the monotonic case and are branch-free.
+    monotonic = True
     for i in range(1, len(x)):
-        if x[i - 1] >= x[i]:
-            return False
-    return True
+        monotonic &= x[i - 1] <= x[i]
+    return monotonic
 
 
-def _is_monotonic_numpy(arr: np.ndarray):
-    return np.all(arr[1:] > arr[:-1])
+def _is_monotonic_numpy(arr: np.ndarray) -> bool:
+    # A bit faster than np.all(np.diff(arr) > 0) for small arrays
+    # No difference for big arrays
+    return np.all(arr[1:] >= arr[:-1])
 
 
 if numba is None:
