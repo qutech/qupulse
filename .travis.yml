@@ -5,7 +5,7 @@ python:
   - 3.8
 env:
   - INSTALL_EXTRAS=[plotting,zurich-instruments,tektronix]
-  - INSTALL_EXTRAS=[plotting,zurich-instruments,tektronix,Faster-fractions]
+  - INSTALL_EXTRAS=[plotting,zurich-instruments,tektronix,Faster-fractions,faster-sampling]
 
 #use container based infrastructure
 sudo: false
