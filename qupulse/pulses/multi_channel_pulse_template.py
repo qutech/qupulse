@@ -32,7 +32,6 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
     """Combines multiple PulseTemplates that are defined on different channels into an AtomicPulseTemplate."""
     def __init__(self,
                  *subtemplates: Union[AtomicPulseTemplate, MappingTuple, MappingPulseTemplate],
-                 external_parameters: Optional[Set[str]]=None,
                  identifier: Optional[str]=None,
                  parameter_constraints: Optional[List]=None,
                  measurements: Optional[List[MeasurementDeclaration]]=None,
@@ -50,7 +49,6 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
             measurements: Forwarded to AtomicPulseTemplate.__init__
             duration: Enforced duration of the pulse template on instantiation. build_waveform checks all sub-waveforms
             have this duration. If True the equality of durations is only checked durtin instantiation not construction.
-            external_parameters: No functionality. (Deprecated)
         """
         AtomicPulseTemplate.__init__(self, identifier=identifier, measurements=measurements)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
@@ -81,10 +79,6 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
                     raise ChannelMappingException('subtemplate {}'.format(i + 1),
                                                   'subtemplate {}'.format(i + 2 + j),
                                                   (channels_i & channels_j).pop())
-
-        if external_parameters is not None:
-            warnings.warn("external_parameters is an obsolete argument and will be removed in the future.",
-                          category=DeprecationWarning)
 
         if not duration:
             duration = self._subtemplates[0].duration
