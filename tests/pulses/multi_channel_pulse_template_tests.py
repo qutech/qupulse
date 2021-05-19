@@ -111,11 +111,6 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
         amcpt.build_waveform(parameters=dict(t_1=3+1e-11, t_2=3, t_3=3, t_0=3),
                              channel_mapping={ch: ch for ch in 'c1 c2 c3'.split()})
 
-    def test_external_parameters_warning(self):
-        with self.assertWarnsRegex(DeprecationWarning, "external_parameters",
-                                   msg="AtomicMultiChannelPulseTemplate did not issue a warning for argument external_parameters"):
-            AtomicMultiChannelPulseTemplate(DummyPulseTemplate(), external_parameters={'a'})
-
     def test_duration(self):
         sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'}),
                DummyPulseTemplate(duration='t1', defined_channels={'B'}),
