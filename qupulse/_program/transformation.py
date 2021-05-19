@@ -39,6 +39,10 @@ class Transformation(Comparable):
         else:
             return chain_transformations(self, next_transformation)
 
+    def is_constant_invariant(self):
+        """Signals if the transformation always maps constants to constants."""
+        return False
+
 
 class IdentityTransformation(Transformation, metaclass=SingletonABCMeta):
     def __call__(self, time: np.ndarray, data: Mapping[ChannelID, np.ndarray]) -> Mapping[ChannelID, np.ndarray]:
@@ -59,6 +63,10 @@ class IdentityTransformation(Transformation, metaclass=SingletonABCMeta):
 
     def __repr__(self):
         return 'IdentityTransformation()'
+
+    def is_constant_invariant(self):
+        """Signals if the transformation always maps constants to constants."""
+        return True
 
 
 class ChainedTransformation(Transformation):
@@ -93,6 +101,10 @@ class ChainedTransformation(Transformation):
 
     def __repr__(self):
         return 'ChainedTransformation%r' % (self._transformations,)
+
+    def is_constant_invariant(self):
+        """Signals if the transformation always maps constants to constants."""
+        return all(trafo.is_constant_invariant() for trafo in self._transformations)
 
 
 class LinearTransformation(Transformation):
@@ -138,7 +150,7 @@ class LinearTransformation(Transformation):
         transformed_data = self._matrix @ data_in
 
         for idx, out_channel in enumerate(self._output_channels):
-            data_out[out_channel] = transformed_data[idx, :]
+            data_out[out_channel] = transformed_data[idx, ...]
 
         return data_out
 
@@ -169,6 +181,10 @@ class LinearTransformation(Transformation):
                                                              input_channels=self._input_channels,
                                                              output_channels=self._output_channels)
 
+    def is_constant_invariant(self):
+        """Signals if the transformation always maps constants to constants."""
+        return True
+
 
 class OffsetTransformation(Transformation):
     def __init__(self, offsets: Mapping[ChannelID, Real]):
@@ -198,6 +214,10 @@ class OffsetTransformation(Transformation):
     def __repr__(self):
         return 'OffsetTransformation(%r)' % self._offsets
 
+    def is_constant_invariant(self):
+        """Signals if the transformation always maps constants to constants."""
+        return True
+
 
 class ScalingTransformation(Transformation):
     def __init__(self, factors: Mapping[ChannelID, Real]):
@@ -219,6 +239,10 @@ class ScalingTransformation(Transformation):
 
     def __repr__(self):
         return 'ScalingTransformation(%r)' % self._factors
+
+    def is_constant_invariant(self):
+        """Signals if the transformation always maps constants to constants."""
+        return True
 
 
 try:
@@ -267,6 +291,10 @@ class ParallelConstantChannelTransformation(Transformation):
 
     def __repr__(self):
         return 'ParallelConstantChannelTransformation(%r)' % self._channels
+
+    def is_constant_invariant(self):
+        """Signals if the transformation always maps constants to constants."""
+        return True
 
 
 def chain_transformations(*transformations: Transformation) -> Transformation:
