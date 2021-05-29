@@ -322,6 +322,7 @@ class TableWaveform(Waveform):
 
 class ConstantWaveform(Waveform):
 
+    # TODO: remove
     _is_constant_waveform = True
 
     def __init__(self, duration: float, amplitude: Any, channel: ChannelID):
@@ -330,6 +331,16 @@ class ConstantWaveform(Waveform):
         self._amplitude = amplitude
         self._channel = channel
 
+    def is_constant(self) -> bool:
+        return True
+
+    def constant_value(self, channel: ChannelID) -> Optional[float]:
+        assert channel == self._channel
+        return self._amplitude
+
+    def constant_value_dict(self) -> Optional[Mapping[ChannelID, float]]:
+        # only correct if `from_table` is used
+        return {self._channel: self._amplitude}
 
     @property
     def duration(self) -> TimeType:
@@ -379,10 +390,28 @@ class FunctionWaveform(Waveform):
         super().__init__()
         if set(expression.variables) - set('t'):
             raise ValueError('FunctionWaveforms may not depend on anything but "t"')
+        elif not expression.variables:
+            warnings.warn("Constant FunctionWaveform is not recommended as the constant propagation will be suboptimal",
+                          category=UserWarning)
 
         self._expression = expression
         self._duration = TimeType.from_float(duration, absolute_error=PULSE_TO_WAVEFORM_ERROR)
         self._channel_id = channel
+
+    @classmethod
+    def from_expression(cls, expression: ExpressionScalar, duration: float, channel: ChannelID) -> Union['FunctionWaveform', ConstantWaveform]:
+        if expression.variables:
+            return cls(expression, duration, channel)
+        else:
+            return ConstantWaveform(expression.evaluate_numeric(), duration, channel)
+
+    def is_constant(self) -> bool:
+        # only correct if `from_expression` is used
+        return False
+
+    def constant_value_dict(self) -> Optional[Mapping[ChannelID, float]]:
+        # only correct if `from_table` is used
+        return None
 
     @property
     def defined_channels(self) -> Set[ChannelID]:
