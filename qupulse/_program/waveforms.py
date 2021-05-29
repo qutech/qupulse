@@ -10,7 +10,7 @@ from abc import ABCMeta, abstractmethod
 from numbers import Real
 from typing import (
     AbstractSet, Any, FrozenSet, Iterable, Mapping, NamedTuple, Sequence, Set,
-    Tuple, Union, cast)
+    Tuple, Union, cast, Optional)
 from weakref import WeakValueDictionary, ref
 
 import numpy as np
@@ -98,21 +98,29 @@ class Waveform(Comparable, metaclass=ABCMeta):
         if channel not in self.defined_channels:
             raise KeyError('Channel not defined in this waveform: {}'.format(channel))
 
-        if output_array is None:
-            # cache the result to save memory
-            result = self.unsafe_sample(channel, sample_times)
-            result.flags.writeable = False
-            key = hash(bytes(result))
-            if key not in self.__sampled_cache:
-                self.__sampled_cache[key] = result
-            return self.__sampled_cache[key]
+        constant_value = self.constant_value(channel)
+        if constant_value is None:
+            if output_array is None:
+                # cache the result to save memory
+                result = self.unsafe_sample(channel, sample_times)
+                result.flags.writeable = False
+                key = hash(bytes(result))
+                if key not in self.__sampled_cache:
+                    self.__sampled_cache[key] = result
+                return self.__sampled_cache[key]
+            else:
+                if len(output_array) != len(sample_times):
+                    raise ValueError('Output array length and sample time length are different')
+                # use the user provided memory
+                return self.unsafe_sample(channel=channel,
+                                          sample_times=sample_times,
+                                          output_array=output_array)
         else:
-            if len(output_array) != len(sample_times):
-                raise ValueError('Output array length and sample time length are different')
-            # use the user provided memory
-            return self.unsafe_sample(channel=channel,
-                                      sample_times=sample_times,
-                                      output_array=output_array)
+            if output_array is None:
+                output_array = np.full_like(sample_times, fill_value=constant_value, dtype=float)
+            else:
+                output_array[:] = constant_value
+            return output_array
 
     @property
     @abstractmethod
@@ -141,6 +149,36 @@ class Waveform(Comparable, metaclass=ABCMeta):
         if channels == self.defined_channels:
             return self
         return self.unsafe_get_subset_for_channels(channels=channels)
+
+    def is_constant(self) -> bool:
+        """Convenience function to check if all channels are constant. The result is equal to
+        `all(waveform.constant_value(ch) is not None for ch in waveform.defined_channels)` but might be more performant.
+
+        Returns:
+            True if all channels have constant values.
+        """
+        return self.constant_value_dict() is None
+
+    def constant_value_dict(self) -> Optional[Mapping[ChannelID, float]]:
+        result = {ch: self.constant_value(ch) for ch in self.defined_channels}
+        if None in result.values():
+            return None
+        else:
+            return result
+
+    def constant_value(self, channel: ChannelID) -> Optional[float]:
+        """Checks if the requested channel has a constant value and returns it if so.
+
+        Guarantee that this assertion passes for every t in waveform duration:
+        >>> assert waveform.constant_value(channel) is None or waveform.constant_value(t) = waveform.get_sampled(channel, t)
+
+        Args:
+            channel: The channel to check
+
+        Returns:
+            None if there is no guarantee that the channel is constant. The value otherwise.
+        """
+        return None
 
     def __neg__(self):
         return FunctorWaveform(self, {ch: np.negative for ch in self.defined_channels})
