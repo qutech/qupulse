@@ -6,6 +6,7 @@ Classes:
 
 import itertools
 import operator
+import warnings
 from abc import ABCMeta, abstractmethod
 from numbers import Real
 from typing import (
@@ -205,16 +206,20 @@ class TableWaveform(Waveform):
 
     def __init__(self,
                  channel: ChannelID,
-                 waveform_table: Sequence[EntryInInit]) -> None:
+                 waveform_table: Tuple[TableWaveformEntry, ...]) -> None:
         """Create a new TableWaveform instance.
 
         Args:
-            waveform_table (ImmutableList(WaveformTableEntry)): A list of instantiated table
-                entries of the form (time as float, voltage as float, interpolation strategy).
+            waveform_table: A tuple of instantiated and validated table entries
         """
         super().__init__()
 
-        self._table = self._validate_input(waveform_table)
+        if not isinstance(waveform_table, tuple):
+            warnings.warn("Please use a tuple of TableWaveformEntry to construct TableWaveform directly",
+                          category=DeprecationWarning)
+            waveform_table = self._validate_input(waveform_table)
+
+        self._table = waveform_table
         self._channel_id = channel
 
     @staticmethod
@@ -255,6 +260,23 @@ class TableWaveform(Waveform):
                 output_waveform_table.append(TableWaveformEntry(t, v, interp))
 
         return tuple(output_waveform_table)
+
+    def is_constant(self) -> bool:
+        # only correct if `from_table` is used
+        return False
+
+    def constant_value_dict(self) -> Optional[Mapping[ChannelID, float]]:
+        # only correct if `from_table` is used
+        return None
+
+    @classmethod
+    def from_table(cls, channel: ChannelID, table: Sequence[EntryInInit]) -> Union['TableWaveform', 'ConstantWaveform']:
+        table = cls._validate_input(table)
+        v = table[0].v
+        if all(entry.v == v for entry in table):
+            return ConstantWaveform(table[-1].t, v, channel)
+        else:
+            return TableWaveform(channel, table)
 
     @property
     def compare_key(self) -> Any:
