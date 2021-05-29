@@ -342,7 +342,10 @@ class FunctionWaveform(Waveform):
                       output_array: Union[np.ndarray, None] = None) -> np.ndarray:
         evaluated = self._expression.evaluate_numeric(t=sample_times)
         if output_array is None:
-            return evaluated.astype(float)
+            if self._expression.variables:
+                return evaluated.astype(float)
+            else:
+                return np.full_like(sample_times, fill_value=float(evaluated), dtype=float)
         else:
             output_array[:] = evaluated
             return output_array
