@@ -777,6 +777,34 @@ class TransformingWaveform(Waveform):
         self._cached_data = None
         self._cached_times = lambda: None
 
+    @classmethod
+    def from_transformation(cls, inner_waveform: Waveform, transformation: Transformation) -> Waveform:
+        constant_values = inner_waveform.constant_value_dict()
+
+        if constant_values is None or not transformation.is_constant_invariant():
+            return cls(inner_waveform, transformation)
+
+        transformed_constant_values = transformation(0., constant_values)
+        return ConstantWaveform.from_mapping(inner_waveform.duration, transformed_constant_values)
+
+    def is_constant(self) -> bool:
+        # only true if `from_transformation` was used
+        return False
+
+    def constant_value_dict(self) -> Optional[Mapping[ChannelID, float]]:
+        # only true if `from_transformation` was used
+        return None
+
+    def constant_value(self, channel: ChannelID) -> Optional[float]:
+        if not self._transformation.is_constant_invariant():
+            return None
+        in_channels = self._transformation.get_input_channels({channel})
+        in_values = {ch: self._inner_waveform.constant_value(ch) for ch in in_channels}
+        if any(val is None for val in in_values.values()):
+            return None
+        else:
+            return self._transformation(0., in_values)[channel][0]
+
     @property
     def inner_waveform(self) -> Waveform:
         return self._inner_waveform
@@ -831,6 +859,8 @@ class SubsetWaveform(Waveform):
         self._inner_waveform = inner_waveform
         self._channel_subset = frozenset(channel_subset)
 
+        self.constant_value = self._inner_waveform.constant_value
+
     @property
     def inner_waveform(self) -> Waveform:
         return self._inner_waveform
@@ -881,6 +911,16 @@ class ArithmeticWaveform(Waveform):
 
         assert np.isclose(float(self._lhs.duration), float(self._rhs.duration))
         assert arithmetic_operator in self.operator_map
+
+    def constant_value(self, channel: ChannelID) -> Optional[float]:
+        lhs = self._lhs.constant_value(channel)
+        if lhs is not None and lhs == self._rhs.constant_value(channel):
+            return lhs
+        else:
+            return None
+
+    def is_constant(self) -> bool:
+        return self.lhs.is_constant() and self.rhs.is_constant()
 
     @property
     def lhs(self) -> Waveform:
@@ -942,12 +982,39 @@ class ArithmeticWaveform(Waveform):
 class FunctorWaveform(Waveform):
     """Apply a channel wise functor that works inplace to all results"""
 
+    CONSTANT_INVARIANT_FUNCTORS = (np.negative,)
+
     def __init__(self, inner_waveform: Waveform, functor: Mapping[ChannelID, 'Callable']):
         self._inner_waveform = inner_waveform
         self._functor = dict(functor.items())
 
         assert set(functor.keys()) == inner_waveform.defined_channels, ("There is no default identity mapping (yet)."
                                                                         "File an issue on github if you need it.")
+
+    @classmethod
+    def from_functor(cls, inner_waveform: Waveform, functor: Mapping[ChannelID, callable]):
+        constant_values = inner_waveform.constant_value_dict()
+        if constant_values is None or functor not in cls.CONSTANT_INVARIANT_FUNCTORS:
+            return FunctorWaveform(inner_waveform, functor)
+
+        funced_constant_values = {ch: functor[ch](val) for ch, val in constant_values.items()}
+        return ConstantWaveform.from_mapping(inner_waveform.duration, funced_constant_values)
+
+    def is_constant(self) -> bool:
+        # only correct if `from_functor` was used
+        return False
+
+    def constant_value_dict(self) -> Optional[Mapping[ChannelID, float]]:
+        # only correct if `from_functor` was used
+        return None
+
+    def constant_value(self, channel: ChannelID) -> Optional[float]:
+        inner = self._inner_waveform.constant_value(channel)
+        func = self._functor[channel]
+        if inner is None or func not in self.CONSTANT_INVARIANT_FUNCTORS:
+            return None
+        else:
+            return func(inner)
 
     @property
     def duration(self) -> TimeType:
