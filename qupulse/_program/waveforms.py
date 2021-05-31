@@ -125,7 +125,7 @@ class Waveform(Comparable, metaclass=ABCMeta):
 
     @property
     @abstractmethod
-    def defined_channels(self) -> Set[ChannelID]:
+    def defined_channels(self) -> AbstractSet[ChannelID]:
         """The channels this waveform should played on. Use
             :func:`~qupulse.pulses.instructions.get_measurement_windows` to get a waveform for a subset of these."""
 
@@ -310,7 +310,7 @@ class TableWaveform(Waveform):
         return output_array
 
     @property
-    def defined_channels(self) -> Set[ChannelID]:
+    def defined_channels(self) -> AbstractSet[ChannelID]:
         return {self._channel_id}
 
     def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> 'Waveform':
@@ -347,7 +347,7 @@ class ConstantWaveform(Waveform):
         return time_from_float(float(self._duration), absolute_error=PULSE_TO_WAVEFORM_ERROR)
 
     @property
-    def defined_channels(self) -> Set[ChannelID]:
+    def defined_channels(self) -> AbstractSet[ChannelID]:
         """The channels this waveform should played on. Use
             :func:`~qupulse.pulses.instructions.get_measurement_windows` to get a waveform for a subset of these."""
 
@@ -414,7 +414,7 @@ class FunctionWaveform(Waveform):
         return None
 
     @property
-    def defined_channels(self) -> Set[ChannelID]:
+    def defined_channels(self) -> AbstractSet[ChannelID]:
         return {self._channel_id}
 
     @property
@@ -468,7 +468,7 @@ class SequenceWaveform(Waveform):
             )
 
     @property
-    def defined_channels(self) -> Set[ChannelID]:
+    def defined_channels(self) -> AbstractSet[ChannelID]:
         return self._sequenced_waveforms[0].defined_channels
 
     def unsafe_sample(self,
@@ -562,12 +562,13 @@ class MultiChannelWaveform(Waveform):
         self._sub_waveforms = tuple(sorted(flatten_sub_waveforms(sub_waveforms),
                                            key=get_sub_waveform_sort_key))
 
-        self.__defined_channels = set()
+        defined_channels = set()
         for waveform in self._sub_waveforms:
-            if waveform.defined_channels & self.__defined_channels:
+            if waveform.defined_channels & defined_channels:
                 raise ValueError('Channel may not be defined in multiple waveforms',
-                                 waveform.defined_channels & self.__defined_channels)
-            self.__defined_channels |= waveform.defined_channels
+                                 waveform.defined_channels & defined_channels)
+            defined_channels |= waveform.defined_channels
+        self._defined_channels = frozenset(defined_channels)
 
         if not all(isclose(waveform.duration, self._sub_waveforms[0].duration) for waveform in self._sub_waveforms[1:]):
             # meaningful error message:
@@ -597,8 +598,8 @@ class MultiChannelWaveform(Waveform):
         raise KeyError('Unknown channel ID: {}'.format(key), key)
 
     @property
-    def defined_channels(self) -> Set[ChannelID]:
-        return self.__defined_channels
+    def defined_channels(self) -> AbstractSet[ChannelID]:
+        return self._defined_channels
 
     @property
     def compare_key(self) -> Any:
@@ -633,7 +634,7 @@ class RepetitionWaveform(Waveform):
             raise ValueError('Repetition count must be an integer >0')
 
     @property
-    def defined_channels(self) -> Set[ChannelID]:
+    def defined_channels(self) -> AbstractSet[ChannelID]:
         return self._body.defined_channels
 
     def unsafe_sample(self,
@@ -685,7 +686,7 @@ class TransformingWaveform(Waveform):
         return self._transformation
 
     @property
-    def defined_channels(self) -> Set[ChannelID]:
+    def defined_channels(self) -> AbstractSet[ChannelID]:
         return self.transformation.get_output_channels(self.inner_waveform.defined_channels)
 
     @property
@@ -798,8 +799,8 @@ class ArithmeticWaveform(Waveform):
         return self._lhs.duration
 
     @property
-    def defined_channels(self) -> Set[ChannelID]:
-        return set.union(self._lhs.defined_channels, self._rhs.defined_channels)
+    def defined_channels(self) -> AbstractSet[ChannelID]:
+        return self._lhs.defined_channels | self._rhs.defined_channels
 
     def unsafe_sample(self,
                       channel: ChannelID,
@@ -853,7 +854,7 @@ class FunctorWaveform(Waveform):
         return self._inner_waveform.duration
 
     @property
-    def defined_channels(self) -> Set[ChannelID]:
+    def defined_channels(self) -> AbstractSet[ChannelID]:
         return self._inner_waveform.defined_channels
 
     def unsafe_sample(self,
