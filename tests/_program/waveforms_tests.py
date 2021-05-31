@@ -136,7 +136,7 @@ class MultiChannelWaveformTest(unittest.TestCase):
             MultiChannelWaveform((dwf_a, dwf_a))
 
         dwf_c_valid = DummyWaveform(duration=2.2, defined_channels={'C'})
-        waveform_flat = MultiChannelWaveform((waveform, dwf_c_valid))
+        waveform_flat = MultiChannelWaveform.from_parallel((waveform, dwf_c_valid))
         self.assertEqual(len(waveform_flat.compare_key), 3)
 
     def test_unsafe_sample(self) -> None:
@@ -281,7 +281,7 @@ class SequenceWaveformTest(unittest.TestCase):
         self.assertEqual(swf1.duration, 2*dwf_ab.duration)
         self.assertEqual(len(swf1.compare_key), 2)
 
-        swf2 = SequenceWaveform((swf1, dwf_ab))
+        swf2 = SequenceWaveform.from_sequence((swf1, dwf_ab))
         self.assertEqual(swf2.duration, 3 * dwf_ab.duration)
 
         self.assertEqual(len(swf2.compare_key), 3)
@@ -386,33 +386,32 @@ class TableWaveformTests(unittest.TestCase):
     def test_duration(self) -> None:
         entries = [TableWaveformEntry(0, 0, HoldInterpolationStrategy()),
                    TableWaveformEntry(5, 1, HoldInterpolationStrategy())]
-        waveform = TableWaveform('A', entries)
+        waveform = TableWaveform.from_table('A', entries)
         self.assertEqual(5, waveform.duration)
 
     def test_duration_no_entries_exception(self) -> None:
         with self.assertRaises(ValueError):
-            waveform = TableWaveform('A', [])
-            self.assertEqual(0, waveform.duration)
+            TableWaveform.from_table('A', [])
 
     def test_few_entries(self) -> None:
         with self.assertRaises(ValueError):
-            TableWaveform('A', [[]])
+            TableWaveform.from_table('A', [])
         with self.assertRaises(ValueError):
-            TableWaveform('A', [TableWaveformEntry(0, 0, HoldInterpolationStrategy())])
+            TableWaveform.from_table('A', [TableWaveformEntry(0, 0, HoldInterpolationStrategy())])
 
     def test_unsafe_get_subset_for_channels(self):
         interp = DummyInterpolationStrategy()
-        entries = [TableWaveformEntry(0, 0, interp),
+        entries = (TableWaveformEntry(0, 0, interp),
                    TableWaveformEntry(2.1, -33.2, interp),
-                   TableWaveformEntry(5.7, 123.4, interp)]
+                   TableWaveformEntry(5.7, 123.4, interp))
         waveform = TableWaveform('A', entries)
         self.assertIs(waveform.unsafe_get_subset_for_channels({'A'}), waveform)
 
     def test_unsafe_sample(self) -> None:
         interp = DummyInterpolationStrategy()
-        entries = [TableWaveformEntry(0, 0, interp),
+        entries = (TableWaveformEntry(0, 0, interp),
                    TableWaveformEntry(2.1, -33.2, interp),
-                   TableWaveformEntry(5.7, 123.4, interp)]
+                   TableWaveformEntry(5.7, 123.4, interp))
         waveform = TableWaveform('A', entries)
         sample_times = numpy.linspace(.5, 5.5, num=11)
 
@@ -436,7 +435,7 @@ class TableWaveformTests(unittest.TestCase):
                    TableWaveformEntry(2.1, -33.2, interp),
                    TableWaveformEntry(5.7, 123.4, interp)]
         chan = 'A'
-        waveform = TableWaveform(chan, entries)
+        waveform = TableWaveform.from_table(chan, entries)
 
         self.assertEqual(waveform.defined_channels, {chan})
         self.assertIs(waveform.unsafe_get_subset_for_channels({'A'}), waveform)
