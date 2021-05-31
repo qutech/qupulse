@@ -721,6 +721,18 @@ class RepetitionWaveform(Waveform):
         if repetition_count < 1 or not isinstance(repetition_count, int):
             raise ValueError('Repetition count must be an integer >0')
 
+        self.is_constant = self._body.is_constant
+        self.constant_value = self._body.constant_value
+        self.constant_value_dict = self._body.constant_value_dict
+
+    @classmethod
+    def from_repetition_count(cls, body: Waveform, repetition_count: int) -> Waveform:
+        constant_values = body.constant_value_dict()
+        if constant_values is None:
+            return RepetitionWaveform(body, repetition_count)
+        else:
+            return ConstantWaveform.from_mapping(body.duration * repetition_count, constant_values)
+
     @property
     def defined_channels(self) -> AbstractSet[ChannelID]:
         return self._body.defined_channels
