@@ -15,7 +15,8 @@ class Transformation(Comparable):
      of input and output channels might differ."""
 
     @abstractmethod
-    def __call__(self, time: np.ndarray, data: Mapping[ChannelID, np.ndarray]) -> Mapping[ChannelID, np.ndarray]:
+    def __call__(self, time: Union[np.ndarray, float],
+                 data: Mapping[ChannelID, Union[np.ndarray, float]]) -> Mapping[ChannelID, Union[np.ndarray, float]]:
         """Apply transformation to data
         Args:
             time:
@@ -45,7 +46,8 @@ class Transformation(Comparable):
 
 
 class IdentityTransformation(Transformation, metaclass=SingletonABCMeta):
-    def __call__(self, time: np.ndarray, data: Mapping[ChannelID, np.ndarray]) -> Mapping[ChannelID, np.ndarray]:
+    def __call__(self, time: Union[np.ndarray, float],
+                 data: Mapping[ChannelID, Union[np.ndarray, float]]) -> Mapping[ChannelID, Union[np.ndarray, float]]:
         return data
 
     def get_output_channels(self, input_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
@@ -87,7 +89,8 @@ class ChainedTransformation(Transformation):
             output_channels = transformation.get_input_channels(output_channels)
         return output_channels
 
-    def __call__(self, time: np.ndarray, data: Mapping[ChannelID, np.ndarray]) -> Mapping[ChannelID, np.ndarray]:
+    def __call__(self, time: Union[np.ndarray, float],
+                 data: Mapping[ChannelID, Union[np.ndarray, float]]) -> Mapping[ChannelID, Union[np.ndarray, float]]:
         for transformation in self._transformations:
             data = transformation(time, data)
         return data
@@ -136,7 +139,8 @@ class LinearTransformation(Transformation):
         self._input_channels_set = frozenset(self._input_channels)
         self._output_channels_set = frozenset(self._output_channels)
 
-    def __call__(self, time: np.ndarray, data: Mapping[ChannelID, np.ndarray]) -> Mapping[ChannelID, np.ndarray]:
+    def __call__(self, time: Union[np.ndarray, float],
+                 data: Mapping[ChannelID, Union[np.ndarray, float]]) -> Mapping[ChannelID, Union[np.ndarray, float]]:
         data_out = {forwarded_channel: data[forwarded_channel]
                     for forwarded_channel in set(data.keys()).difference(self._input_channels)}
 
@@ -200,7 +204,8 @@ class OffsetTransformation(Transformation):
         """
         self._offsets = dict(offsets.items())
 
-    def __call__(self, time: np.ndarray, data: Mapping[ChannelID, np.ndarray]) -> Mapping[ChannelID, np.ndarray]:
+    def __call__(self, time: Union[np.ndarray, float],
+                 data: Mapping[ChannelID, Union[np.ndarray, float]]) -> Mapping[ChannelID, Union[np.ndarray, float]]:
         return {channel: channel_values + self._offsets[channel] if channel in self._offsets else channel_values
                 for channel, channel_values in data.items()}
 
@@ -226,7 +231,8 @@ class ScalingTransformation(Transformation):
     def __init__(self, factors: Mapping[ChannelID, Real]):
         self._factors = dict(factors.items())
 
-    def __call__(self, time: np.ndarray, data: Mapping[ChannelID, np.ndarray]) -> Mapping[ChannelID, np.ndarray]:
+    def __call__(self, time: Union[np.ndarray, float],
+                 data: Mapping[ChannelID, Union[np.ndarray, float]]) -> Mapping[ChannelID, Union[np.ndarray, float]]:
         return {channel: channel_values * self._factors[channel] if channel in self._factors else channel_values
                 for channel, channel_values in data.items()}
 
@@ -277,7 +283,8 @@ class ParallelConstantChannelTransformation(Transformation):
         self._channels = {channel: float(value)
                           for channel, value in channels.items()}
 
-    def __call__(self, time: np.ndarray, data: Mapping[ChannelID, np.ndarray]) -> Mapping[ChannelID, np.ndarray]:
+    def __call__(self, time: Union[np.ndarray, float],
+                 data: Mapping[ChannelID, Union[np.ndarray, float]]) -> Mapping[ChannelID, Union[np.ndarray, float]]:
         overwritten = {channel: np.full_like(time, fill_value=value, dtype=float)
                        for channel, value in self._channels.items()}
         return {**data, **overwritten}
