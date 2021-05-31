@@ -463,20 +463,61 @@ class SequenceWaveform(Waveform):
                 "SequenceWaveform cannot be constructed without channel waveforms."
             )
 
-        def flattened_sub_waveforms() -> Iterable[Waveform]:
-            for sub_waveform in sub_waveforms:
-                if isinstance(sub_waveform, SequenceWaveform):
-                    yield from sub_waveform._sequenced_waveforms
-                else:
-                    yield sub_waveform
-
-        self._sequenced_waveforms = tuple(flattened_sub_waveforms())
+        self._sequenced_waveforms = tuple(sub_waveforms)
         self._duration = sum(waveform.duration for waveform in self._sequenced_waveforms)
-        if not all(waveform.defined_channels == self.defined_channels for waveform in self._sequenced_waveforms[1:]):
+
+        defined_channels = self._sequenced_waveforms[0].defined_channels
+        if not all(waveform.defined_channels == defined_channels
+                   for waveform in itertools.islice(self._sequenced_waveforms, 1, None)):
             raise ValueError(
                 "SequenceWaveform cannot be constructed from waveforms of different"
                 "defined channels."
             )
+
+    @classmethod
+    def from_sequence(cls, waveforms: Sequence['Waveform']) -> 'Waveform':
+        """Returns a waveform the represents the given sequence of waveforms. Applies some optimizations."""
+        assert waveforms, "Sequence must not be empty"
+        if len(waveforms) == 1:
+            return waveforms[0]
+
+        flattened = []
+        constant_values = waveforms[0].constant_value_dict()
+        for wf in waveforms:
+            if constant_values and constant_values != wf.constant_value_dict():
+                constant_values = None
+            if isinstance(wf, cls):
+                flattened.extend(wf.sequenced_waveforms)
+            else:
+                flattened.append(wf)
+        if constant_values is None:
+            return cls(sub_waveforms=flattened)
+        else:
+            duration = sum(wf.duration for wf in flattened)
+            ConstantWaveform.from_mapping(duration, constant_values)
+
+    def is_constant(self) -> bool:
+        # only correct if from_sequence is used for construction
+        return False
+
+    def constant_value_dict(self) -> Optional[Mapping[ChannelID, float]]:
+        # only correct if from_sequence is used for construction
+        return None
+
+    def constant_value(self, channel: ChannelID) -> Optional[float]:
+        v = None
+        for wf in self._sequenced_waveforms:
+            wf_cv = wf.constant_value(channel)
+            if wf_cv is None:
+                return None
+            elif wf_cv == v:
+                continue
+            elif v is None:
+                v = wf_cv
+            else:
+                assert v != wf_cv
+                return None
+        return v
 
     @property
     def defined_channels(self) -> AbstractSet[ChannelID]:
@@ -513,6 +554,10 @@ class SequenceWaveform(Waveform):
         return SequenceWaveform(
             sub_waveform.unsafe_get_subset_for_channels(channels & sub_waveform.defined_channels)
             for sub_waveform in self._sequenced_waveforms if sub_waveform.defined_channels & channels)
+
+    @property
+    def sequenced_waveforms(self) -> Sequence[Waveform]:
+        return self._sequenced_waveforms
 
 
 class MultiChannelWaveform(Waveform):
