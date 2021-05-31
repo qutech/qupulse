@@ -376,6 +376,9 @@ class SequenceWaveform(Waveform):
         self._sequenced_waveforms = tuple(flattened_sub_waveforms())
         self._duration = sum(waveform.duration for waveform in self._sequenced_waveforms)
         if not all(waveform.defined_channels == self.defined_channels for waveform in self._sequenced_waveforms[1:]):
+            for waveform in self._sequenced_waveforms[1:]:
+                 if not waveform.defined_channels == self.defined_channels:
+                     print(f"SequenceWaveform: defined channels {self.defined_channels} do not match {waveform.defined_channels} ")
             raise ValueError(
                 "SequenceWaveform cannot be constructed from waveforms of different"
                 "defined channels."
