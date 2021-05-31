@@ -1,4 +1,4 @@
-from typing import Mapping, Set, Tuple, Sequence
+from typing import Mapping, Set, Tuple, Sequence, AbstractSet, Union
 from abc import abstractmethod
 from numbers import Real
 
@@ -26,11 +26,11 @@ class Transformation(Comparable):
         """
 
     @abstractmethod
-    def get_output_channels(self, input_channels: Set[ChannelID]) -> Set[ChannelID]:
+    def get_output_channels(self, input_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
         """Return the channel identifiers"""
 
     @abstractmethod
-    def get_input_channels(self, output_channels: Set[ChannelID]) -> Set[ChannelID]:
+    def get_input_channels(self, output_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
         """Channels that are required for getting data for the requested output channel"""
 
     def chain(self, next_transformation: 'Transformation') -> 'Transformation':
@@ -48,14 +48,14 @@ class IdentityTransformation(Transformation, metaclass=SingletonABCMeta):
     def __call__(self, time: np.ndarray, data: Mapping[ChannelID, np.ndarray]) -> Mapping[ChannelID, np.ndarray]:
         return data
 
-    def get_output_channels(self, input_channels: Set[ChannelID]) -> Set[ChannelID]:
+    def get_output_channels(self, input_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
         return input_channels
 
     @property
     def compare_key(self) -> None:
         return None
 
-    def get_input_channels(self, output_channels: Set[ChannelID]) -> Set[ChannelID]:
+    def get_input_channels(self, output_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
         return output_channels
 
     def chain(self, next_transformation: Transformation) -> Transformation:
@@ -77,12 +77,12 @@ class ChainedTransformation(Transformation):
     def transformations(self) -> Tuple[Transformation, ...]:
         return self._transformations
 
-    def get_output_channels(self, input_channels: Set[ChannelID]) -> Set[ChannelID]:
+    def get_output_channels(self, input_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
         for transformation in self._transformations:
             input_channels = transformation.get_output_channels(input_channels)
         return input_channels
 
-    def get_input_channels(self, output_channels: Set[ChannelID]) -> Set[ChannelID]:
+    def get_input_channels(self, output_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
         for transformation in reversed(self._transformations):
             output_channels = transformation.get_input_channels(output_channels)
         return output_channels
@@ -96,7 +96,7 @@ class ChainedTransformation(Transformation):
     def compare_key(self) -> Tuple[Transformation, ...]:
         return self._transformations
 
-    def chain(self, next_transformation) -> 'ChainedTransformation':
+    def chain(self, next_transformation) -> Transformation:
         return chain_transformations(*self.transformations, next_transformation)
 
     def __repr__(self):
@@ -133,6 +133,8 @@ class LinearTransformation(Transformation):
         self._matrix = transformation_matrix
         self._input_channels = tuple(sorted(input_channels))
         self._output_channels = tuple(sorted(output_channels))
+        self._input_channels_set = frozenset(self._input_channels)
+        self._output_channels_set = frozenset(self._output_channels)
 
     def __call__(self, time: np.ndarray, data: Mapping[ChannelID, np.ndarray]) -> Mapping[ChannelID, np.ndarray]:
         data_out = {forwarded_channel: data[forwarded_channel]
@@ -154,20 +156,21 @@ class LinearTransformation(Transformation):
 
         return data_out
 
-    def get_output_channels(self, input_channels: Set[ChannelID]) -> Set[ChannelID]:
-        if not input_channels.issuperset(self._input_channels):
-            raise KeyError('Invalid input channels', input_channels, set(self._input_channels))
+    def get_output_channels(self, input_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
+        if not input_channels >= self._input_channels_set:
+            # input_channels is not a superset of the required input channels
+            raise KeyError('Invalid input channels', input_channels, self._input_channels_set)
 
-        return input_channels.difference(self._input_channels).union(self._output_channels)
+        return (input_channels - self._input_channels_set) | self._output_channels_set
 
-    def get_input_channels(self, output_channels: Set[ChannelID]) -> Set[ChannelID]:
-        forwarded = output_channels.difference(self._output_channels)
+    def get_input_channels(self, output_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
+        forwarded = output_channels - self._output_channels_set
         if not forwarded.isdisjoint(self._input_channels):
-            raise KeyError('Is input channel', forwarded.intersection(self._input_channels))
+            raise KeyError('Is input channel', forwarded & self._input_channels_set)
         elif output_channels.isdisjoint(self._output_channels):
             return output_channels
         else:
-            return forwarded.union(self._input_channels)
+            return forwarded | self._input_channels_set
 
     @property
     def compare_key(self) -> Tuple[Tuple[ChannelID], Tuple[ChannelID], bytes]:
@@ -201,10 +204,10 @@ class OffsetTransformation(Transformation):
         return {channel: channel_values + self._offsets[channel] if channel in self._offsets else channel_values
                 for channel, channel_values in data.items()}
 
-    def get_input_channels(self, output_channels: Set[ChannelID]):
+    def get_input_channels(self, output_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
         return output_channels
 
-    def get_output_channels(self, input_channels: Set[ChannelID]):
+    def get_output_channels(self, input_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
         return input_channels
 
     @property
@@ -227,10 +230,10 @@ class ScalingTransformation(Transformation):
         return {channel: channel_values * self._factors[channel] if channel in self._factors else channel_values
                 for channel, channel_values in data.items()}
 
-    def get_input_channels(self, output_channels: Set[ChannelID]):
+    def get_input_channels(self, output_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
         return output_channels
 
-    def get_output_channels(self, input_channels: Set[ChannelID]):
+    def get_output_channels(self, input_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
         return input_channels
 
     @property
@@ -283,10 +286,10 @@ class ParallelConstantChannelTransformation(Transformation):
     def compare_key(self) -> Tuple[Tuple[ChannelID, float], ...]:
         return tuple(sorted(self._channels.items()))
 
-    def get_input_channels(self, output_channels: Set[ChannelID]) -> Set[ChannelID]:
+    def get_input_channels(self, output_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
         return output_channels - self._channels.keys()
 
-    def get_output_channels(self, input_channels: Set[ChannelID]) -> Set[ChannelID]:
+    def get_output_channels(self, input_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
         return input_channels | self._channels.keys()
 
     def __repr__(self):
