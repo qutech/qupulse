@@ -331,6 +331,17 @@ class ConstantWaveform(Waveform):
         self._amplitude = amplitude
         self._channel = channel
 
+    @classmethod
+    def from_mapping(cls, duration: Real, constant_values: Mapping[ChannelID, float]) -> Waveform:
+        """Construct a ConstantWaveform or a MultiChannelWaveform of ConstantWaveforms with given duration and values"""
+        assert constant_values
+        if len(constant_values) == 1:
+            (channel, amplitude), = constant_values.items()
+            return cls(duration, amplitude=amplitude, channel=channel)
+        else:
+            return MultiChannelWaveform([cls(duration, amplitude=amplitude, channel=channel)
+                                         for channel, amplitude in constant_values.items()])
+
     def is_constant(self) -> bool:
         return True
 
