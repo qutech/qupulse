@@ -187,6 +187,11 @@ class Waveform(Comparable, metaclass=ABCMeta):
     def __pos__(self):
         return self
 
+    def _sort_key_for_channels(self) -> Sequence[Tuple[str, int]]:
+        """Makes reproducible sorting by defined channels possible"""
+        return sorted((ch, 0) if isinstance(ch, str) else ('', ch) for ch in self.defined_channels)
+
+
 
 class TableWaveformEntry(NamedTuple('TableWaveformEntry', [('t', Real),
                                                            ('v', float),
@@ -579,16 +584,17 @@ class MultiChannelWaveform(Waveform):
         assigned more than one channel of any Waveform object it consists of
     """
 
-    def __init__(self, sub_waveforms: Iterable[Waveform]) -> None:
+    def __init__(self, sub_waveforms: List[Waveform]) -> None:
         """Create a new MultiChannelWaveform instance.
+        Use `MultiChannelWaveform.from_parallel` for optimal construction.
 
         Requires a list of subwaveforms in the form (Waveform, List(int)) where the list defines
         the channel mapping, i.e., a value y at index x in the list means that channel x of the
         subwaveform will be mapped to channel y of this MultiChannelWaveform object.
 
         Args:
-            sub_waveforms (Iterable( Waveform )): The list of sub waveforms of this
-                MultiChannelWaveform
+            sub_waveforms: The list of sub waveforms of this
+                MultiChannelWaveform. List might get sorted!
         Raises:
             ValueError, if a channel mapping is out of bounds of the channels defined by this
                 MultiChannelWaveform
@@ -602,21 +608,12 @@ class MultiChannelWaveform(Waveform):
                 "MultiChannelWaveform cannot be constructed without channel waveforms."
             )
 
-        # avoid unnecessary multi channel nesting
-        def flatten_sub_waveforms(to_flatten):
-            for sub_waveform in to_flatten:
-                if isinstance(sub_waveform, MultiChannelWaveform):
-                    yield from sub_waveform._sub_waveforms
-                else:
-                    yield sub_waveform
-
         # sort the waveforms with their defined channels to make compare key reproducible
-        def get_sub_waveform_sort_key(waveform):
-            return tuple(sorted(tuple('{}_stringified_numeric_channel'.format(ch) if isinstance(ch, int) else ch
-                                      for ch in waveform.defined_channels)))
+        if not isinstance(sub_waveforms, list):
+            sub_waveforms = list(sub_waveforms)
+        sub_waveforms.sort(key=lambda wf: wf._sort_key_for_channels())
 
-        self._sub_waveforms = tuple(sorted(flatten_sub_waveforms(sub_waveforms),
-                                           key=get_sub_waveform_sort_key))
+        self._sub_waveforms = tuple(sub_waveforms)
 
         defined_channels = set()
         for waveform in self._sub_waveforms:
@@ -642,6 +639,41 @@ class MultiChannelWaveform(Waveform):
                 "MultiChannelWaveform cannot be constructed from channel waveforms of different durations.",
                 durations
             )
+
+    @staticmethod
+    def from_parallel(waveforms: Sequence[Waveform]) -> Waveform:
+        assert waveforms, "ARgument must not be empty"
+        if len(waveforms) == 1:
+            return waveforms[0]
+
+        # we do not look at constant values here because there is no benefit. We would need to construct a new
+        # MultiChannelWaveform anyways
+
+        # avoid unnecessary multi channel nesting
+        flattened = []
+        for waveform in waveforms:
+            if isinstance(waveform, MultiChannelWaveform):
+                flattened.extend(waveform._sub_waveforms)
+            else:
+                flattened.append(waveform)
+
+        return MultiChannelWaveform(flattened)
+
+    def is_constant(self) -> bool:
+        return all(wf.is_constant() for wf in self._sub_waveforms)
+
+    def constant_value(self, channel: ChannelID) -> Optional[float]:
+        return self[channel].constant_value(channel)
+
+    def constant_value_dict(self) -> Optional[Mapping[ChannelID, float]]:
+        d = {}
+        for wf in self._sub_waveforms:
+            wf_d = wf.constant_value_dict()
+            if wf_d is None:
+                return None
+            else:
+                d.update(wf_d)
+        return d
 
     @property
     def duration(self) -> TimeType:
@@ -669,13 +701,13 @@ class MultiChannelWaveform(Waveform):
         return self[channel].unsafe_sample(channel, sample_times, output_array)
 
     def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> 'Waveform':
-        relevant_sub_waveforms = tuple(swf for swf in self._sub_waveforms if swf.defined_channels & channels)
+        relevant_sub_waveforms = [swf for swf in self._sub_waveforms if swf.defined_channels & channels]
         if len(relevant_sub_waveforms) == 1:
             return relevant_sub_waveforms[0].get_subset_for_channels(channels)
         elif len(relevant_sub_waveforms) > 1:
-            return MultiChannelWaveform(
-                sub_waveform.get_subset_for_channels(channels & sub_waveform.defined_channels)
-                for sub_waveform in relevant_sub_waveforms)
+            return MultiChannelWaveform.from_parallel(
+                [sub_waveform.get_subset_for_channels(channels & sub_waveform.defined_channels)
+                 for sub_waveform in relevant_sub_waveforms])
         else:
             raise KeyError('Unknown channels: {}'.format(channels))
 
