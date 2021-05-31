@@ -11,7 +11,7 @@ from abc import ABCMeta, abstractmethod
 from numbers import Real
 from typing import (
     AbstractSet, Any, FrozenSet, Iterable, Mapping, NamedTuple, Sequence, Set,
-    Tuple, Union, cast, Optional)
+    Tuple, Union, cast, Optional, List)
 from weakref import WeakValueDictionary, ref
 
 import numpy as np
@@ -355,7 +355,6 @@ class ConstantWaveform(Waveform):
         return self._amplitude
 
     def constant_value_dict(self) -> Optional[Mapping[ChannelID, float]]:
-        # only correct if `from_table` is used
         return {self._channel: self._amplitude}
 
     @property
@@ -370,7 +369,7 @@ class ConstantWaveform(Waveform):
         return {self._channel}
 
     @property
-    def compare_key(self) -> Tuple[Any]:
+    def compare_key(self) -> Tuple[Any, ...]:
         return self._duration, self._amplitude, self._channel
 
     def unsafe_sample(self,
@@ -426,7 +425,7 @@ class FunctionWaveform(Waveform):
         return False
 
     def constant_value_dict(self) -> Optional[Mapping[ChannelID, float]]:
-        # only correct if `from_table` is used
+        # only correct if `from_expression` is used
         return None
 
     @property
@@ -459,7 +458,7 @@ class FunctionWaveform(Waveform):
 class SequenceWaveform(Waveform):
     """This class allows putting multiple PulseTemplate together in one waveform on the hardware."""
     def __init__(self, sub_waveforms: Iterable[Waveform]):
-        """
+        """Use Waveform.from_sequence for optimal construction
 
         :param subwaveforms: All waveforms must have the same defined channels
         """
