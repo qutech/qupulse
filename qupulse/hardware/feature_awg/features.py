@@ -4,8 +4,8 @@ from numbers import Real
 from enum import Enum
 
 from qupulse._program._loop import Loop
-from qupulse.hardware.feature_awg.base import AWGDeviceFeature, AWGChannelFeature, AWGChannelTupleFeature,\
-    AWGChannelTuple
+from qupulse.hardware.feature_awg.base import AWGDeviceFeature, AWGChannelFeature, AWGChannelTupleFeature, \
+    AWGChannelTuple, AWGDevice
 from qupulse.utils.types import ChannelID
 
 import pyvisa
@@ -20,8 +20,8 @@ class SCPI(AWGDeviceFeature, ABC):
     https://en.wikipedia.org/wiki/Standard_Commands_for_Programmable_Instruments
     """
 
-    def __init__(self, visa: pyvisa.resources.MessageBasedResource):
-        super().__init__()
+    def __init__(self, device: 'AWGDevice', visa: pyvisa.resources.MessageBasedResource):
+        super().__init__(device)
         self._socket = visa
 
     def send_cmd(self, cmd_str):

@@ -8,8 +8,9 @@ import numbers
 
 import numpy as np
 
+from qupulse.hardware.feature_awg.features import RepetitionMode
 from qupulse.utils.types import ChannelID, TimeType
-from qupulse.hardware.feature_awg.base import ProgramEntry
+from qupulse.hardware.awgs.base import ProgramEntry
 from qupulse.hardware.util import get_sample_times, voltage_to_uint16
 from qupulse._program.waveforms import Waveform
 from qupulse._program._loop import Loop
@@ -389,7 +390,7 @@ class TaborProgram(ProgramEntry):
                  voltage_transformations: Tuple[Optional[callable], Optional[callable]],
                  sample_rate: TimeType,
                  mode: TaborSequencing = None,
-                 repetition_mode: str = "infinite",
+                 repetition_mode: Union[str, RepetitionMode] = "infinite",
                  ):
         if len(channels) != device_properties['chan_per_part']:
             raise TaborException('TaborProgram only supports {} channels'.format(device_properties['chan_per_part']))
@@ -420,7 +421,7 @@ class TaborProgram(ProgramEntry):
         self._parsed_program = None  # type: Optional[ParsedProgram]
         self._mode = None
         self._device_properties = device_properties
-        self._repetition_mode = repetition_mode
+        self._repetition_mode = RepetitionMode(repetition_mode)
 
         assert mode in (TaborSequencing.ADVANCED, TaborSequencing.SINGLE), "Invalid mode"
         if mode == TaborSequencing.SINGLE:

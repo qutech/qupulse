@@ -3,7 +3,7 @@ import logging
 import numbers
 import sys
 import weakref
-from typing import List, Tuple, Set, Callable, Optional, Any, cast, Union, Dict, Mapping, NamedTuple, Iterable,\
+from typing import List, Tuple, Set, Callable, Optional, Any, cast, Union, Dict, Mapping, NamedTuple, Iterable, \
     Collection
 from collections import OrderedDict
 import numpy as np
@@ -75,27 +75,25 @@ def with_select(function_object: Callable[["TaborChannelTuple", Any], Any]) -> C
 # Features
 class TaborSCPI(SCPI):
     def __init__(self, device: "TaborDevice", visa: pyvisa.resources.MessageBasedResource):
-        super().__init__(visa)
-
-        self._parent = weakref.ref(device)
+        super().__init__(device=device, visa=visa)
 
     def send_cmd(self, cmd_str, paranoia_level=None):
-        for instr in self._parent().all_devices:
+        for instr in self._device.all_devices:
             instr.send_cmd(cmd_str=cmd_str, paranoia_level=paranoia_level)
 
     def send_query(self, query_str, query_mirrors=False) -> Any:
         if query_mirrors:
-            return tuple(instr.send_query(query_str) for instr in self._parent().all_devices)
+            return tuple(instr.send_query(query_str) for instr in self._device.all_devices)
         else:
-            return self._parent().main_instrument.send_query(query_str)
+            return self._device.main_instrument.send_query(query_str)
 
     def _send_cmd(self, cmd_str, paranoia_level=None) -> Any:
         """Overwrite send_cmd for paranoia_level > 3"""
         if paranoia_level is None:
-            paranoia_level = self._parent().paranoia_level
+            paranoia_level = self._device.paranoia_level
 
         if paranoia_level < 3:
-            self._parent().super().send_cmd(cmd_str=cmd_str, paranoia_level=paranoia_level)  # pragma: no cover
+            self._device.super().send_cmd(cmd_str=cmd_str, paranoia_level=paranoia_level)  # pragma: no cover
         else:
             cmd_str = cmd_str.rstrip()
 
@@ -104,12 +102,12 @@ class TaborSCPI(SCPI):
             else:
                 ask_str = "*OPC?; :SYST:ERR?"
 
-            *answers, opc, error_code_msg = self._parent()._visa_inst.ask(ask_str).split(";")
+            *answers, opc, error_code_msg = self._device._visa_inst.ask(ask_str).split(";")
 
             error_code, error_msg = error_code_msg.split(",")
             error_code = int(error_code)
             if error_code != 0:
-                _ = self._parent()._visa_inst.ask("*CLS; *OPC?")
+                _ = self._device._visa_inst.ask("*CLS; *OPC?")
 
                 if error_code == -450:
                     # query queue overflow
@@ -124,8 +122,7 @@ class TaborChannelSynchronization(ChannelSynchronization):
     """This Feature is used to synchronise a certain ammount of channels"""
 
     def __init__(self, device: "TaborDevice"):
-        super().__init__()
-        self._parent = weakref.ref(device)
+        super().__init__(device=device)
 
     def synchronize_channels(self, group_size: int) -> None:
         """
@@ -136,21 +133,21 @@ class TaborChannelSynchronization(ChannelSynchronization):
             group_size: Number of channels per channel tuple
         """
         if group_size == 2:
-            self._parent()._channel_tuples = []
-            for i in range((int)(len(self._parent().channels) / group_size)):
-                self._parent()._channel_tuples.append(
+            self._device._channel_tuples = []
+            for i in range(int(len(self._device.channels) / group_size)):
+                self._device._channel_tuples.append(
                     TaborChannelTuple((i + 1),
-                                      self._parent(),
-                                      self._parent().channels[(i * group_size):((i * group_size) + group_size)],
-                                      self._parent().marker_channels[(i * group_size):((i * group_size) + group_size)])
+                                      self._device,
+                                      self._device.channels[(i * group_size):((i * group_size) + group_size)],
+                                      self._device.marker_channels[(i * group_size):((i * group_size) + group_size)])
                 )
-            self._parent()[SCPI].send_cmd(":INST:COUP:STAT OFF")
+            self._device[SCPI].send_cmd(":INST:COUP:STAT OFF")
         elif group_size == 4:
-            self._parent()._channel_tuples = [TaborChannelTuple(1,
-                                                                self._parent(),
-                                                                self._parent().channels,
-                                                                self._parent().marker_channels)]
-            self._parent()[SCPI].send_cmd(":INST:COUP:STAT ON")
+            self._device._channel_tuples = [TaborChannelTuple(1,
+                                                                self._device,
+                                                                self._device.channels,
+                                                                self._device.marker_channels)]
+            self._device[SCPI].send_cmd(":INST:COUP:STAT ON")
         else:
             raise TaborException("Invalid group size")
 
@@ -159,31 +156,30 @@ class TaborDeviceControl(DeviceControl):
     """This feature is used for basic communication with a AWG"""
 
     def __init__(self, device: "TaborDevice"):
-        super().__init__()
-        self._parent = weakref.ref(device)
+        super().__init__(device=device)
 
     def reset(self) -> None:
         """
         Resetting the whole device. A command for resetting is send to the Device, the device is initialized again and
         all channel tuples are cleared.
         """
-        self._parent()[SCPI].send_cmd(":RES")
-        self._parent()._coupled = None
+        self._device[SCPI].send_cmd(":RES")
+        self._device._coupled = None
 
-        self._parent()._initialize()
-        for channel_tuple in self._parent().channel_tuples:
+        self._device._initialize()
+        for channel_tuple in self._device.channel_tuples:
             channel_tuple[TaborProgramManagement].clear()
 
     def trigger(self) -> None:
         """
         This method triggers a device remotely.
         """
-        self._parent()[SCPI].send_cmd(":TRIG")
+        self._device[SCPI].send_cmd(":TRIG")
 
 
 class TaborStatusTable(StatusTable):
     def __init__(self, device: "TaborDevice"):
-        super().__init__()
+        super().__init__(device=device)
         self._parent = device
 
     def get_status_table(self) -> Dict[str, Union[str, float, int]]:
@@ -221,8 +217,8 @@ class TaborStatusTable(StatusTable):
 
         data = OrderedDict((name, []) for name, *_ in name_query_type_list)
         for ch in (1, 2, 3, 4):
-            self._parent.channels[ch - 1]._select()
-            self._parent.marker_channels[(ch - 1) % 2]._select()
+            self._device.channels[ch - 1]._select()
+            self._device.marker_channels[(ch - 1) % 2]._select()
             for name, query, dtype in name_query_type_list:
                 data[name].append(dtype(self._parent[SCPI].send_query(query)))
         return data
@@ -413,25 +409,24 @@ class TaborDevice(AWGDevice):
 # Features
 class TaborVoltageRange(VoltageRange):
     def __init__(self, channel: "TaborChannel"):
-        super().__init__()
-        self._parent = weakref.ref(channel)
+        super().__init__(channel=channel)
 
     @property
     @with_select
     def offset(self) -> float:
         """Get offset of AWG channel"""
         return float(
-            self._parent().device[SCPI].send_query(":VOLT:OFFS?".format(channel=self._parent().idn)))
+            self._channel.device[SCPI].send_query(":VOLT:OFFS?".format(channel=self._channel.idn)))
 
     @property
     @with_select
     def amplitude(self) -> float:
         """Get amplitude of AWG channel"""
-        coupling = self._parent().device[SCPI].send_query(":OUTP:COUP?")
+        coupling = self._channel.device[SCPI].send_query(":OUTP:COUP?")
         if coupling == "DC":
-            return float(self._parent().device[SCPI].send_query(":VOLT?"))
+            return float(self._channel.device[SCPI].send_query(":VOLT?"))
         elif coupling == "HV":
-            return float(self._parent().device[SCPI].send_query(":VOLT:HV?"))
+            return float(self._channel.device[SCPI].send_query(":VOLT:HV?"))
         else:
             raise TaborException("Unknown coupling: {}".format(coupling))
 
@@ -441,7 +436,7 @@ class TaborVoltageRange(VoltageRange):
         Gets the amplitude and offset handling of this channel. The amplitude-offset controls if the amplitude and
         offset settings are constant or if these should be optimized by the driver
         """
-        return self._parent()._amplitude_offset_handling
+        return self._channel._amplitude_offset_handling
 
     @amplitude_offset_handling.setter
     def amplitude_offset_handling(self, amp_offs_handling: Union[AmplitudeOffsetHandling, str]) -> None:
@@ -449,16 +444,15 @@ class TaborVoltageRange(VoltageRange):
         amp_offs_handling: See possible values at `AWGAmplitudeOffsetHandling`
         """
         amp_offs_handling = AmplitudeOffsetHandling(AmplitudeOffsetHandling)
-        self._parent()._amplitude_offset_handling = amp_offs_handling
+        self._channel._amplitude_offset_handling = amp_offs_handling
 
     def _select(self) -> None:
-        self._parent()._select()
+        self._channel._select()
 
 
 class TaborActivatableChannels(ActivatableChannels):
     def __init__(self, channel: "TaborChannel"):
-        super().__init__()
-        self._parent = weakref.ref(channel)
+        super().__init__(channel=channel)
 
     @property
     def enabled(self) -> bool:
@@ -466,22 +460,23 @@ class TaborActivatableChannels(ActivatableChannels):
         Returns the the state a channel has at the moment. A channel is either activated or deactivated
         True stands for activated and false for deactivated
         """
-        return self._parent().device[SCPI].send_query(":OUTP ?") == "ON"
+        return self._channel.device[SCPI].send_query(":OUTP ?") == "ON"
 
     @with_select
     def enable(self):
         """Enables the output of a certain channel"""
-        command_string = ":OUTP ON".format(ch_id=self._parent().idn)
-        self._parent().device[SCPI].send_cmd(command_string)
+        command_string = ":OUTP ON".format(ch_id=self._channel.idn)
+        self._channel.device[SCPI].send_cmd(command_string)
 
     @with_select
     def disable(self):
         """Disables the output of a certain channel"""
-        command_string = ":OUTP OFF".format(ch_id=self._parent().idn)
-        self._parent().device[SCPI].send_cmd(command_string)
+        command_string = ":OUTP OFF".format(ch_id=self._channel.idn)
+        self._channel.device[SCPI].send_cmd(command_string)
 
     def _select(self) -> None:
-        self._parent()._select()
+        self._channel._select()
+
 
 # Implementation
 class TaborChannel(AWGChannel):
@@ -531,6 +526,9 @@ class TaborProgramManagement(ProgramManagement):
         self._idle_sequence_table = [(1, 1, 0), (1, 1, 0), (1, 1, 0)]
         self._trigger_source = 'BUS'
 
+        # TODO: QUESTION: is this right?
+        self._default_repetition_mode = RepetitionMode("auto_rearm")
+
     def get_repetition_mode(self, program_name: str) -> str:
         """
         Returns the default repetition mode of a certain program
@@ -554,10 +552,10 @@ class TaborProgramManagement(ProgramManagement):
         else:
             raise ValueError("{} is no vaild repetition mode".format(repetition_mode))
 
-    #TODO: erweitern
     @property
+    # TODO: QUESTION: is this right?
     def supported_repetition_modes(self) -> Set[RepetitionMode]:
-        return {RepetitionMode.INFINITE}
+        return {RepetitionMode.INFINITE, RepetitionMode.AUTO_REARM}
 
     @with_configuration_guard
     @with_select
@@ -645,7 +643,7 @@ class TaborProgramManagement(ProgramManagement):
             waveform_to_segment[to_amend] = self._channel_tuple._amend_segments(segments_to_amend)
 
         self._channel_tuple._known_programs[name] = TaborProgramMemory(waveform_to_segment=waveform_to_segment,
-                                                                         program=tabor_program)
+                                                                       program=tabor_program)
 
         # set the default repetionmode for a programm
         self.set_repetition_mode(program_name=name, repetition_mode=repetition_mode)
@@ -677,7 +675,8 @@ class TaborProgramManagement(ProgramManagement):
         self._channel_tuple.device[SCPI].send_cmd(":TRAC:DEF 1, 192")
         self._channel_tuple.device[SCPI].send_cmd(":TRAC:SEL 1")
         self._channel_tuple.device[SCPI].send_cmd(":TRAC:MODE COMB")
-        self._channel_tuple.device._send_binary_data(pref=":TRAC:DATA", bin_dat=self._channel_tuple._idle_segment.get_as_binary())
+        self._channel_tuple.device._send_binary_data(pref=":TRAC:DATA",
+                                                     bin_dat=self._channel_tuple._idle_segment.get_as_binary())
 
         self._channel_tuple._segment_lengths = 192 * np.ones(1, dtype=np.uint32)
         self._channel_tuple._segment_capacity = 192 * np.ones(1, dtype=np.uint32)
@@ -709,7 +708,7 @@ class TaborProgramManagement(ProgramManagement):
         return set(program.name for program in self._channel_tuple._known_programs.keys())
 
     @with_select
-    def run_current_program(self) -> None:
+    def run_current_program(self, repetion_mode: Union[str, RepetitionMode]) -> None:
         """
         This method starts running the active program
 
@@ -720,14 +719,24 @@ class TaborProgramManagement(ProgramManagement):
             # channel tuple is the first channel tuple
             if (self._channel_tuple.device._channel_tuples[0] == self):
                 if self._channel_tuple._current_program:
-                    repetition_mode = self._channel_tuple._known_programs[
-                        self._channel_tuple._current_program].program._repetition_mode
-                    if repetition_mode == "infinite":
-                        self._cont_repetition_mode()
-                        self._channel_tuple.device[SCPI].send_cmd(':TRIG',
-                                                                    paranoia_level=self._channel_tuple.internal_paranoia_level)
+                    default_repetition_mode = RepetitionMode(self._channel_tuple._known_programs[
+                                                                 self._channel_tuple._current_program].program._repetition_mode)
+                    # TODO: QUESTION: Is this right?
+                    cur_repetition_mode = RepetitionMode(repetion_mode)
+
+                    if default_repetition_mode != cur_repetition_mode:
+                        self._change_armed_program(name=self._channel_tuple._current_program,
+                                                   repetion_mode=cur_repetition_mode)
+
+                    if RepetitionMode(default_repetition_mode) == RepetitionMode.INFINITE:
+                        self._infinite_repetition_mode()
+                    elif RepetitionMode(default_repetition_mode) == RepetitionMode.AUTO_REARM:
+                        self._auto_rearm_repetition_mode()
                     else:
-                        raise ValueError("{} is no vaild repetition mode".format(repetition_mode))
+                        raise ValueError("{} is no vaild repetition mode".format(default_repetition_mode))
+
+                    self._channel_tuple.device[TaborSCPI].send_cmd(':TRIG',
+                                                                   paranoia_level=self._channel_tuple.internal_paranoia_level)
                 else:
                     raise RuntimeError("No program active")
             else:
@@ -736,20 +745,36 @@ class TaborProgramManagement(ProgramManagement):
 
         else:
             if self._channel_tuple._current_program:
-                repetition_mode = self._channel_tuple._known_programs[
+                default_repetition_mode = self._channel_tuple._known_programs[
                     self._channel_tuple._current_program].program._repetition_mode
-                if repetition_mode == "infinite":
-                    self._cont_repetition_mode()
-                    self._channel_tuple.device[SCPI].send_cmd(':TRIG', paranoia_level=self._channel_tuple.internal_paranoia_level)
+
+                if RepetitionMode(default_repetition_mode) == RepetitionMode("infinite"):
+                    self._infinite_repetition_mode()
+                elif RepetitionMode(default_repetition_mode) == RepetitionMode("auto_rearm"):
+                    self._auto_rearm_repetition_mode()
                 else:
-                    raise ValueError("{} is no vaild repetition mode".format(repetition_mode))
+                    raise ValueError("{} is no vaild repetition mode".format(default_repetition_mode))
+
+                self._channel_tuple.device[TaborSCPI].send_cmd(':TRIG',
+                                                               paranoia_level=self._channel_tuple.internal_paranoia_level)
             else:
                 raise RuntimeError("No program active")
 
     @with_select
     @with_configuration_guard
-    def _change_armed_program(self, name: Optional[str]) -> None:
+    def _change_armed_program(self, name: Optional[str], repetition_mode: RepetitionMode = None) -> None:
         """The armed program of the channel tuple is changed to the program with the name 'name'"""
+
+        if repetition_mode is None:
+            if name is not None:
+                print("--->", self._channel_tuple._known_programs[name][1])
+                repetition_mode = RepetitionMode(self._channel_tuple._known_programs[name].program._repetition_mode)
+            else:
+                repetition_mode = self.default_repetition_mode
+
+        if repetition_mode not in self.supported_repetition_modes:
+            raise ValueError("{} is no vaild repetition mode".format(repetition_mode))
+
         if name is None:
             sequencer_tables = [self._idle_sequence_table]
             advanced_sequencer_table = [(1, 1, 0)]
@@ -777,24 +802,31 @@ class TaborProgramManagement(ProgramManagement):
                     assert advanced_sequencer_table[0][0] == 1
                     sequencer_tables[1].append((1, 1, 0))
 
-        # insert idle sequence in advanced sequence table
-        advanced_sequencer_table = [(1, 1, 0)] + advanced_sequencer_table
+        # TODO: QUESTION: Is this right?
+        if repetition_mode == RepetitionMode.INFINITE:
+            advanced_sequencer_table = [(1, 1, 0)] + advanced_sequencer_table
+        elif repetition_mode == RepetitionMode.AUTO_REARM:
+            advanced_sequencer_table = [(1, 1, 1)] + advanced_sequencer_table
 
         while len(advanced_sequencer_table) < self._channel_tuple.device.dev_properties["min_aseq_len"]:
             advanced_sequencer_table.append((1, 1, 0))
 
-        self._channel_tuple.device[SCPI].send_cmd("SEQ:DEL:ALL", paranoia_level=self._channel_tuple.internal_paranoia_level)
+        # reset sequencer and advanced sequencer tables to fix bug which occurs when switching between some programs
+        self._channel_tuple.device[SCPI].send_cmd("SEQ:DEL:ALL",
+                                                  paranoia_level=self._channel_tuple.internal_paranoia_level)
         self._channel_tuple._sequencer_tables = []
-        self._channel_tuple.device[SCPI].send_cmd("ASEQ:DEL", paranoia_level=self._channel_tuple.internal_paranoia_level)
+        self._channel_tuple.device[SCPI].send_cmd("ASEQ:DEL",
+                                                  paranoia_level=self._channel_tuple.internal_paranoia_level)
         self._channel_tuple._advanced_sequence_table = []
 
         # download all sequence tables
         for i, sequencer_table in enumerate(sequencer_tables):
             self._channel_tuple.device[SCPI].send_cmd("SEQ:SEL {}".format(i + 1),
-                                                        paranoia_level=self._channel_tuple.internal_paranoia_level)
+                                                      paranoia_level=self._channel_tuple.internal_paranoia_level)
             self._channel_tuple.device._download_sequencer_table(sequencer_table)
         self._channel_tuple._sequencer_tables = sequencer_tables
-        self._channel_tuple.device[SCPI].send_cmd("SEQ:SEL 1", paranoia_level=self._channel_tuple.internal_paranoia_level)
+        self._channel_tuple.device[SCPI].send_cmd("SEQ:SEL 1",
+                                                  paranoia_level=self._channel_tuple.internal_paranoia_level)
 
         self._channel_tuple.device._download_adv_seq_table(advanced_sequencer_table)
         self._channel_tuple._advanced_sequence_table = advanced_sequencer_table
@@ -819,11 +851,19 @@ class TaborProgramManagement(ProgramManagement):
         self._channel_tuple._exit_config_mode()
 
     @with_select
-    def _cont_repetition_mode(self):
-        """Changes the run mode of this channel tuple to continous mode"""
+    def _infinite_repetition_mode(self):
+        # TODO: change Docstring
+        """Changes the run mode of this channel tuple to infinite mode"""
         self._channel_tuple.device[SCPI].send_cmd(f":TRIG:SOUR:ADV EXT")
         self._channel_tuple.device[SCPI].send_cmd(
             f":INIT:GATE OFF; :INIT:CONT ON; :INIT:CONT:ENAB ARM; :INIT:CONT:ENAB:SOUR {self._trigger_source}")
+
+    @with_select
+    def _auto_rearm_repetition_mode(self):
+        """Changes the run mode of this channel tuple to repetition mode"""
+        self._channel_tuple.device[SCPI].send_cmd(f":TRIG:SOUR:ADV EXT")
+        self._channel_tuple.device[SCPI].send_cmd(
+            f":INIT:GATE OFF; :INIT:CONT ON; :INIT:CONT:ENAB SELF; :INIT:CONT:ENAB:SOUR {self._trigger_source}")
 
 
 class TaborVolatileParameters(VolatileParameters):
@@ -893,6 +933,7 @@ class TaborChannelTuple(AWGChannelTuple):
     def __init__(self, idn: int, device: TaborDevice, channels: Iterable["TaborChannel"],
                  marker_channels: Iterable["TaborMarkerChannel"]):
         super().__init__(idn)
+
         self._device = weakref.ref(device)
 
         self._configuration_guard_count = 0
@@ -1219,7 +1260,8 @@ class TaborChannelTuple(AWGChannelTuple):
             chunk_size = 10
             for chunk_start in range(new_end, old_end, chunk_size):
                 self.device[SCPI].send_cmd("; ".join("TRAC:DEL {}".format(i + 1)
-                                               for i in range(chunk_start, min(chunk_start + chunk_size, old_end))))
+                                                     for i in
+                                                     range(chunk_start, min(chunk_start + chunk_size, old_end))))
         except Exception as e:
             raise TaborUndefinedState("Error during cleanup. Device is in undefined state.", device=self) from e
 
@@ -1299,8 +1341,7 @@ class TaborChannelTuple(AWGChannelTuple):
 
 class TaborActivatableMarkerChannels(ActivatableChannels):
     def __init__(self, marker_channel: "TaborMarkerChannel"):
-        super().__init__()
-        self._parent = weakref.ref(marker_channel)
+        super().__init__(marker_channel)
 
     @property
     def enabled(self) -> bool:
@@ -1308,28 +1349,28 @@ class TaborActivatableMarkerChannels(ActivatableChannels):
         Returns the the state a marker channel has at the moment. A channel is either activated or deactivated
         True stands for activated and false for deactivated
         """
-        return self._parent().device[SCPI].send_query(":MARK:STAT ?") == "ON"
+        return self._channel.device[SCPI].send_query(":MARK:STAT ?") == "ON"
 
     @with_select
     def enable(self):
         """Enables the output of a certain marker channel"""
         command_string = "SOUR:MARK:SOUR USER; :SOUR:MARK:STAT ON"
         command_string = command_string.format(
-            channel=self._parent().channel_tuple.channels[0].idn,
-            marker=self._parent().channel_tuple.marker_channels.index(self._parent()) + 1)
-        self._parent().device[SCPI].send_cmd(command_string)
+            channel=self._channel.channel_tuple.channels[0].idn,
+            marker=self._channel.channel_tuple.marker_channels.index(self._channel) + 1)
+        self._channel.device[SCPI].send_cmd(command_string)
 
     @with_select
     def disable(self):
         """Disable the output of a certain marker channel"""
         command_string = ":SOUR:MARK:SOUR USER; :SOUR:MARK:STAT OFF"
         command_string = command_string.format(
-            channel=self._parent().channel_tuple.channels[0].idn,
-            marker=self._parent().channel_tuple.marker_channels.index(self._parent()) + 1)
-        self._parent().device[SCPI].send_cmd(command_string)
+            channel=self._channel.channel_tuple.channels[0].idn,
+            marker=self._channel.channel_tuple.marker_channels.index(self._channel) + 1)
+        self._channel.device[SCPI].send_cmd(command_string)
 
     def _select(self) -> None:
-        self._parent()._select()
+        self._channel._select()
 
 
 # Implementation
@@ -1366,6 +1407,7 @@ class TaborMarkerChannel(AWGMarkerChannel):
         """
         self.device.channels[int((self.idn - 1) / 2)]._select()
         self.device[SCPI].send_cmd(":SOUR:MARK:SEL {marker}".format(marker=(((self.idn - 1) % 2) + 1)))
+
 
 ########################################################################################################################
 
