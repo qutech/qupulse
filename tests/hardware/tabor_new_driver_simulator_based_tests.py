@@ -9,8 +9,9 @@ import pytabor
 import numpy as np
 
 from qupulse._program.tabor import TableDescription, TableEntry
-from qupulse.hardware.feature_awg.features import DeviceControl, VoltageRange, ProgramManagement, SCPI, VolatileParameters
-from qupulse.hardware.feature_awg.tabor import TaborDevice, TaborSegment
+from qupulse.hardware.feature_awg.features import DeviceControl, VoltageRange, ProgramManagement, SCPI, \
+    VolatileParameters, RepetitionMode
+from qupulse.hardware.feature_awg.tabor import TaborDevice, TaborSegment, TaborProgramMemory
 from qupulse.utils.types import TimeType
 
 
@@ -201,12 +202,20 @@ class TaborMemoryReadTests(TaborSimulatorBasedTest):
                                  (0, 1): TableDescription(repetition_count=50, element_id=1, jump_flag=0)}
                 return modifications
 
+            # TODO: QUESTION: is this change okay?
+            @property
+            def _repetition_mode(self):
+                return RepetitionMode.AUTO_REARM
+
+
+
             markers = (None, None)
             channels = (1, 2)
 
             waveform_mode = mode
 
-        self.channel_pair._known_programs['dummy_program'] = (waveform_to_segment_index, DummyProgram)
+        #TODO: QUESTION: is this change okay?
+        self.channel_pair._known_programs['dummy_program'] = TaborProgramMemory(waveform_to_segment_index, DummyProgram)
         self.channel_pair[ProgramManagement]._change_armed_program('dummy_program')
 
     def test_read_waveforms(self):
