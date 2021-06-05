@@ -4,7 +4,7 @@ import time
 import platform
 import os
 
-import pytabor
+import tabor_control
 import numpy as np
 
 from qupulse.hardware.awgs.tabor import TaborAWGRepresentation, TaborChannelPair
@@ -37,7 +37,7 @@ class TaborSimulatorManager:
 
     def start_simulator(self, try_connecting_to_existing_simulator=True, max_wait_time=30):
         if try_connecting_to_existing_simulator:
-            if pytabor.open_session('127.0.0.1') is not None:
+            if tabor_control.open_session('127.0.0.1') is not None:
                 return
 
         if not os.path.isfile(self.simulator_full_path):
@@ -48,7 +48,7 @@ class TaborSimulatorManager:
         self.simulator_process = subprocess.Popen([self.simulator_full_path, '/switch-on', '/gui-in-tray'])
 
         start = time.time()
-        while pytabor.open_session('127.0.0.1') is None:
+        while tabor_control.open_session('127.0.0.1') is None:
             if self.simulator_process.returncode:
                 raise RuntimeError('Simulator exited with return code {}'.format(self.simulator_process.returncode))
             if time.time() - start > max_wait_time:
