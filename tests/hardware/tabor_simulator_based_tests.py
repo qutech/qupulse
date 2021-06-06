@@ -45,6 +45,11 @@ class TaborSimulatorManager:
         return os.path.join(self.simulator_path, self.simulator_executable)
 
     def start_simulator(self, try_connecting_to_existing_simulator=True, max_wait_time=30) -> pyvisa.resources.MessageBasedResource:
+        try:
+            pyvisa.ResourceManager()
+        except ValueError:
+            raise unittest.SkipTest("visalib not available")
+
         if try_connecting_to_existing_simulator:
             try:
                 return tabor_control.open_session('127.0.0.1')
