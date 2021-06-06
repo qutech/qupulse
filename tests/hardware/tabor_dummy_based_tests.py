@@ -7,11 +7,24 @@ from typing import List, Tuple, Optional, Any
 from copy import copy, deepcopy
 
 import numpy as np
+import pyvisa.constants
 
 from qupulse.hardware.awgs.base import AWGAmplitudeOffsetHandling
-from qupulse.hardware.awgs.tabor import TaborProgram, TaborAWGRepresentation, TaborProgramMemory
-from qupulse._program.tabor import TableDescription, TimeType, TableEntry
-from tests.hardware.dummy_modules import import_package
+from qupulse.hardware.feature_awg.tabor import TaborProgramMemory
+from qupulse.hardware.awgs.tabor import TaborAWGRepresentation, TaborChannelPair
+from qupulse.utils.types import TimeType
+from qupulse._program._loop import Loop
+from qupulse._program.tabor import TableDescription, TimeType, TableEntry, TaborSegment, TaborProgram,\
+    make_combined_wave, TaborSequencing
+from qupulse._program.waveforms import ConstantWaveform
+
+from tests.pulses.sequencing_dummies import DummyWaveform
+
+try:
+    import tabor_control.device
+    import tabor_control.util
+except ImportError:
+    tabor_control = None
 
 
 class DummyTaborProgramClass:
@@ -53,58 +66,37 @@ class DummyTaborProgramClass:
         return self.created[-1]
 
 
+@unittest.skipIf(tabor_control is None, "tabor_control not present")
 class TaborDummyBasedTest(unittest.TestCase):
-    to_unload = ['pytabor', 'pyvisa', 'visa', 'teawg', 'qupulse', 'tests.pulses.sequencing_dummies']
-    backup_modules = dict()
-
-    @classmethod
-    def unload_package(cls, package_name):
-        modules_to_delete = [module_name for module_name in sys.modules if module_name.startswith(package_name)]
-
-        for module_name in modules_to_delete:
-            del sys.modules[module_name]
-
-    @classmethod
-    def backup_package(cls, package_name):
-        cls.backup_modules[package_name] = [(module_name, module)
-                                            for module_name, module in sys.modules.items()
-                                            if module_name.startswith(package_name)]
-
-    @classmethod
-    def restore_packages(cls):
-        for package, module_list in cls.backup_modules.items():
-            for module_name, module in module_list:
-                sys.modules[module_name] = module
-
-    @classmethod
-    def setUpClass(cls):
-        for u in cls.to_unload:
-            cls.backup_package(u)
-
-        for u in cls.to_unload:
-            cls.unload_package(u)
-
-        import_package('pytabor')
-        import_package('pyvisa')
-        import_package('teawg')
-
-    @classmethod
-    def tearDownClass(cls):
-        for u in cls.to_unload:
-            cls.unload_package(u)
-
-        cls.restore_packages()
-
     def setUp(self):
-        from qupulse.hardware.awgs.tabor import TaborAWGRepresentation
-        self.instrument = TaborAWGRepresentation('main_instrument',
-                                                 reset=True,
-                                                 paranoia_level=2,
-                                                 mirror_addresses=['mirror_instrument'])
-        self.instrument.main_instrument.visa_inst.answers[':OUTP:COUP'] = 'DC'
-        self.instrument.main_instrument.visa_inst.answers[':VOLT'] = '1.0'
-        self.instrument.main_instrument.visa_inst.answers[':FREQ:RAST'] = '1e9'
-        self.instrument.main_instrument.visa_inst.answers[':VOLT:HV'] = '0.7'
+        self.visa_instr_main = mock.sentinel
+        self.visa_instr_mirror = mock.sentinel
+        self.tewx_awg_main = mock.create_autospec(tabor_control.device.TEWXAwg)
+        self.tewx_awg_mirror = mock.create_autospec(tabor_control.device.TEWXAwg)
+        self.tewx_awg_class = mock.create_autospec(tabor_control.device.TEWXAwg, side_effects=[self.tewx_awg_main, self.tewx_awg_mirror])
+
+        visa_instrs = [self.visa_instr_main, self.visa_instr_mirror]
+        tewx_awgs = [self.tewx_awg_main, self.tewx_awg_mirror]
+
+        device_properties = tabor_control.util.get_device_properties('TE,WX2184C,4,3.01', '1232')
+
+        self.tewx_awg_main.dev_properties = device_properties
+        self.tewx_awg_mirror.dev_properties = device_properties
+
+        with mock.patch('tabor_control.open_session', side_effect=visa_instrs) as open_session:
+            with mock.patch('tabor_control.device.TEWXAwg', side_effect=tewx_awgs) as te_class:
+                self.instrument = TaborAWGRepresentation('main_instrument',
+                                                         reset=True,
+                                                         paranoia_level=2,
+                                                         mirror_addresses=['mirror_instrument'])
+
+                self.assertEqual(open_session.call_args_list, [mock.call('main_instrument'), mock.call('mirror_instrument')])
+                self.assertEqual(te_class.call_args_list, [mock.call(self.visa_instr_main, tabor_control.ParanoiaLevel.SYST_ERR),
+                                                           mock.call(self.visa_instr_mirror, tabor_control.ParanoiaLevel.SYST_ERR)])
+
+    def reset_instrument_logs(self):
+        self.tewx_awg_main.reset_mock()
+        self.tewx_awg_mirror.reset_mock()
 
     @property
     def awg_representation(self):
@@ -114,7 +106,7 @@ class TaborDummyBasedTest(unittest.TestCase):
     def channel_pair(self):
         return self.awg_representation.channel_pair_AB
 
-    def reset_instrument_logs(self):
+    def reset_instrument_logs_(self):
         for device in self.instrument.all_devices:
             device.logged_commands = []
             device._send_binary_data_calls = []
@@ -123,19 +115,46 @@ class TaborDummyBasedTest(unittest.TestCase):
 
     def assertAllCommandLogsEqual(self, expected_log: List):
         for device in self.instrument.all_devices:
-            self.assertEqual(device.logged_commands, expected_log)
+            self.assertEqual(device.send_cmd.call_args_list, expected_log)
+
+    def assert_numpy_calls_equal(self, function: mock.Mock, expected_calls):
+        call_args_list = function.call_args_list
+        self.assertEqual(len(call_args_list), len(expected_calls))
+        for (*_, args, kwargs), (*_, expected_args, expected_kwargs) in zip(call_args_list, expected_calls):
+            np.testing.assert_equal(expected_kwargs, kwargs)
+            np.testing.assert_equal(expected_args, args)
+
+    def assert_written_segment_lengths(self, *expected_segment_lengths):
+        expected_calls = [mock.call(expected, paranoia_level=None) for expected in expected_segment_lengths]
+        for device in self.instrument.all_devices:
+            self.assert_numpy_calls_equal(device.write_segment_lengths, expected_calls)
+
+    def assert_written_segment_data(self, *written_segments):
+        expected_calls = [mock.call(expected, paranoia_level=None) for expected in written_segments]
+        for device in self.instrument.all_devices:
+            self.assert_numpy_calls_equal(device.write_segment_data, expected_calls)
+
+    def assert_written_sequencer_tables(self, *expected_sequencer_tables):
+        expected_calls = [mock.call(expected, paranoia_level=None) for expected in expected_sequencer_tables]
+        for device in self.instrument.all_devices:
+            self.assert_numpy_calls_equal(device.write_sequencer_table, expected_calls)
+
+    def assert_written_advanced_sequencer_tables(self, *advanced_sequencer_tables):
+        expected_calls = [mock.call(expected, paranoia_level=None) for expected in advanced_sequencer_tables]
+        for device in self.instrument.all_devices:
+            self.assert_numpy_calls_equal(device.write_advanced_sequencer_table, expected_calls)
 
 
 class TaborAWGRepresentationDummyBasedTests(TaborDummyBasedTest):
     def test_send_cmd(self):
         self.reset_instrument_logs()
 
-        self.instrument.send_cmd('bleh', paranoia_level=3)
+        self.instrument.send_cmd('bleh', paranoia_level=2)
 
-        self.assertAllCommandLogsEqual([((), dict(paranoia_level=3, cmd_str='bleh'))])
+        self.assertAllCommandLogsEqual([((), dict(paranoia_level=2, cmd_str='bleh'))])
 
         self.instrument.send_cmd('bleho')
-        self.assertAllCommandLogsEqual([((), dict(paranoia_level=3, cmd_str='bleh')),
+        self.assertAllCommandLogsEqual([((), dict(paranoia_level=2, cmd_str='bleh')),
                                         ((), dict(cmd_str='bleho', paranoia_level=None))])
 
     def test_trigger(self):
@@ -145,10 +164,11 @@ class TaborAWGRepresentationDummyBasedTests(TaborDummyBasedTest):
         self.assertAllCommandLogsEqual([((), dict(cmd_str=':TRIG', paranoia_level=None))])
 
     def test_paranoia_level(self):
-        self.assertEqual(self.instrument.paranoia_level, self.instrument.main_instrument.paranoia_level)
-        self.instrument.paranoia_level = 30
+        self.instrument.paranoia_level = tabor_control.ParanoiaLevel.NONE
+        self.assertIn(self.instrument.paranoia_level, (tabor_control.ParanoiaLevel.NONE, 0))
+        self.instrument.paranoia_level = tabor_control.ParanoiaLevel.OPC
         for device in self.instrument.all_devices:
-            self.assertEqual(device.paranoia_level, 30)
+            self.assertIn(device.paranoia_level, (tabor_control.ParanoiaLevel.OPC, 1))
 
     def test_enable(self):
         self.reset_instrument_logs()
@@ -171,34 +191,8 @@ class TaborChannelPairTests(TaborDummyBasedTest):
     def to_new_advanced_sequencer_table(advanced_sequencer_table: List[Tuple[int, int, int]]) -> List[TableDescription]:
         return [TableDescription(*entry) for entry in advanced_sequencer_table]
 
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-
-        from qupulse.hardware.awgs.tabor import TaborChannelPair, TaborProgramMemory, TaborSegment, TaborSequencing
-        from qupulse.pulses.table_pulse_template import TableWaveform
-        from qupulse.pulses.interpolation import HoldInterpolationStrategy
-        from qupulse._program._loop import Loop
-
-        from tests.pulses.sequencing_dummies import DummyWaveform
-
-        from qupulse._program.tabor import make_combined_wave
-
-        cls.DummyWaveform = DummyWaveform
-        cls.TaborChannelPair = TaborChannelPair
-        cls.TaborProgramMemory = TaborProgramMemory
-        cls.TableWaveform = TableWaveform
-        cls.HoldInterpolationStrategy = HoldInterpolationStrategy
-        cls.Loop = Loop
-        cls.TaborSegment = TaborSegment
-        cls.make_combined_wave = staticmethod(make_combined_wave)
-        cls.TaborSequencing = TaborSequencing
-
-    def setUp(self):
-        super().setUp()
-
-    def test__execute_multiple_commands_with_config_guard(self):
-        channel_pair = self.TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
+    def test_execute_multiple_commands_with_config_guard(self):
+        channel_pair = TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
         # prevent entering and exiting configuration mode
         channel_pair._configuration_guard_count = 2
 
@@ -209,7 +203,7 @@ class TaborChannelPairTests(TaborDummyBasedTest):
             send_cmd.assert_called_once_with(expected_command, paranoia_level=channel_pair.internal_paranoia_level)
 
     def test_set_volatile_parameters(self):
-        channel_pair = self.TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
+        channel_pair = TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
 
         parameters = {'var': 2}
         modifications = {1: TableEntry(repetition_count=5, element_number=1, jump_flag=0),
@@ -228,8 +222,8 @@ class TaborChannelPairTests(TaborDummyBasedTest):
 
         with mock.patch.object(program_mock, 'update_volatile_parameters', return_value=modifications) as update_prog:
             with mock.patch.object(channel_pair, '_execute_multiple_commands_with_config_guard') as ex_com:
-                with mock.patch.object(channel_pair.device.main_instrument._visa_inst, 'query'):
-                    channel_pair.set_volatile_parameters('other_program', parameters)
+                #with mock.patch.object(channel_pair.device.main_instrument, 'send_query'):
+                channel_pair.set_volatile_parameters('other_program', parameters)
                 ex_com.assert_not_called()
                 update_prog.assert_called_once_with(parameters)
 
@@ -258,7 +252,7 @@ class TaborChannelPairTests(TaborDummyBasedTest):
                 update_prog.assert_called_once_with(parameters)
 
     def test_copy(self):
-        channel_pair = self.TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
+        channel_pair = TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
         with self.assertRaises(NotImplementedError):
             copy(channel_pair)
         with self.assertRaises(NotImplementedError):
@@ -266,15 +260,15 @@ class TaborChannelPairTests(TaborDummyBasedTest):
 
     def test_init(self):
         with self.assertRaises(ValueError):
-            self.TaborChannelPair(self.instrument, identifier='asd', channels=(1, 3))
+            TaborChannelPair(self.instrument, identifier='asd', channels=(1, 3))
 
     def test_free_program(self):
-        channel_pair = self.TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
+        channel_pair = TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
 
         with self.assertRaises(KeyError):
             channel_pair.free_program('test')
 
-        program = self.TaborProgramMemory(np.array([1, 2], dtype=np.int64), None)
+        program = TaborProgramMemory(np.array([1, 2], dtype=np.int64), None)
 
         channel_pair._segment_references = np.array([1, 3, 1, 0])
         channel_pair._known_programs['test'] = program
@@ -284,12 +278,11 @@ class TaborChannelPairTests(TaborDummyBasedTest):
 
     def test_upload_exceptions(self):
 
-        wv = self.TableWaveform(1, [(0, 0.1, self.HoldInterpolationStrategy()),
-                                    (192, 0.1, self.HoldInterpolationStrategy())])
+        wv = ConstantWaveform(channel=1, duration=192, amplitude=0.1)
 
-        channel_pair = self.TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
+        channel_pair = TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
 
-        program = self.Loop(waveform=wv)
+        program = Loop(waveform=wv)
         with self.assertRaises(ValueError):
             channel_pair.upload('test', program, (1, 2, 3), (5, 6), (lambda x: x, lambda x: x))
         with self.assertRaises(ValueError):
@@ -303,7 +296,7 @@ class TaborChannelPairTests(TaborDummyBasedTest):
             channel_pair.upload('test', program, (1, None), (None, None), (lambda x: x, lambda x: x))
         channel_pair._amplitude_offset_handling = old
 
-        channel_pair._known_programs['test'] = self.TaborProgramMemory(np.array([0]), None)
+        channel_pair._known_programs['test'] = TaborProgramMemory(np.array([0]), None)
         with self.assertRaises(ValueError):
             channel_pair.upload('test', program, (1, 2), (3, 4), (lambda x: x, lambda x: x))
 
@@ -326,9 +319,9 @@ class TaborChannelPairTests(TaborDummyBasedTest):
             tabor_program = DummyTaborProgram.return_value
             tabor_program.get_sampled_segments.return_value = (segments, segment_lengths)
 
-            program = self.Loop(waveform=self.DummyWaveform(duration=192))
+            program = Loop(waveform=DummyWaveform(duration=192))
 
-            channel_pair = self.TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
+            channel_pair = TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
             channel_pair._segment_references = segment_references
 
             def dummy_find_place(segments_, segement_lengths_):
@@ -343,6 +336,9 @@ class TaborChannelPairTests(TaborDummyBasedTest):
             def dummy_amend_segments(segments_):
                 np.testing.assert_equal(segments_, np.array([1, 5]))
                 return np.array([5, 6], dtype=np.int64)
+
+            self.instrument.amplitude = mock.Mock(return_value=1.)
+            self.instrument.sample_rate = mock.Mock(return_value=10**9)
 
             channel_pair._find_place_for_segments_in_memory = dummy_find_place
             channel_pair._upload_segment = dummy_upload_segment
@@ -361,6 +357,12 @@ class TaborChannelPairTests(TaborDummyBasedTest):
                 voltage_transformations=voltage_transformations
             )
 
+            self.assertEqual(
+                self.instrument.amplitude.call_args_list,
+                [mock.call(1), mock.call(2)]
+            )
+            self.instrument.sample_rate.assert_called_once_with(1)
+
             # the other references are increased in amend and upload segment method
             np.testing.assert_equal(channel_pair._segment_references, np.array([1, 2, 3, 0, 1]))
 
@@ -370,10 +372,9 @@ class TaborChannelPairTests(TaborDummyBasedTest):
 
     def test_upload_offset_handling(self):
 
-        program = self.Loop(waveform=self.TableWaveform(1, [(0, 0.1, self.HoldInterpolationStrategy()),
-                                                            (192, 0.1, self.HoldInterpolationStrategy())]))
+        program = Loop(waveform=ConstantWaveform(channel=1, duration=192, amplitude=0.1))
 
-        channel_pair = self.TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
+        channel_pair = TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
 
         channels = (1, None)
         markers = (None, None)
@@ -383,15 +384,19 @@ class TaborChannelPairTests(TaborDummyBasedTest):
             markers=markers,
             device_properties=channel_pair.device.dev_properties)
 
+        amplitudes = (0.5, 0.3)
+
         test_sample_rate = TimeType.from_fraction(1, 1)
-        test_amplitudes = (channel_pair.device.amplitude(channel_pair._channels[0]) / 2,
-                           channel_pair.device.amplitude(channel_pair._channels[1]) / 2)
+        test_amplitudes = (0.5 / 2, 0.3 / 2)
         test_offset = 0.1
         test_transform = (lambda x: x, lambda x: x)
 
         with patch('qupulse.hardware.awgs.tabor.TaborProgram', wraps=TaborProgram) as tabor_program_mock:
             with patch.object(self.instrument, 'offset', return_value=test_offset) as offset_mock:
                 tabor_program_mock.get_sampled_segments = mock.Mock(wraps=tabor_program_mock.get_sampled_segments)
+
+                self.instrument.amplitude = mock.Mock(side_effect=amplitudes)
+                self.instrument.sample_rate = mock.Mock(return_value=10 ** 9)
 
                 channel_pair.amplitude_offset_handling = AWGAmplitudeOffsetHandling.CONSIDER_OFFSET
                 channel_pair.upload('test1', program, channels, markers, test_transform)
@@ -405,6 +410,8 @@ class TaborChannelPairTests(TaborDummyBasedTest):
                 offset_mock.reset_mock()
                 tabor_program_mock.reset_mock()
 
+                self.instrument.amplitude = mock.Mock(side_effect=amplitudes)
+                self.instrument.sample_rate = mock.Mock(return_value=10 ** 9)
                 channel_pair.amplitude_offset_handling = AWGAmplitudeOffsetHandling.IGNORE_OFFSET
                 channel_pair.upload('test2', program, (1, None), (None, None), test_transform)
 
@@ -429,7 +436,7 @@ class TaborChannelPairTests(TaborDummyBasedTest):
                         pass
             return hash(tuple(hash_list))
 
-        channel_pair = self.TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
+        channel_pair = TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
 
         # empty
         segments = np.asarray([-5, -6, -7, -8, -9])
@@ -507,7 +514,7 @@ class TaborChannelPairTests(TaborDummyBasedTest):
         self.assertEqual(hash_before, hash_based_on_dir(channel_pair))
 
     def test_upload_segment(self):
-        channel_pair = self.TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
+        channel_pair = TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
 
         self.reset_instrument_logs()
 
@@ -520,7 +527,7 @@ class TaborChannelPairTests(TaborDummyBasedTest):
         # prevent entering and exiting configuration mode
         channel_pair._configuration_guard_count = 2
 
-        segment = self.TaborSegment.from_sampled(np.ones(192+16, dtype=np.uint16), np.zeros(192+16, dtype=np.uint16), None, None)
+        segment = TaborSegment.from_sampled(np.ones(192+16, dtype=np.uint16), np.zeros(192+16, dtype=np.uint16), None, None)
         segment_binary = segment.get_as_binary()
         with self.assertRaises(ValueError):
             channel_pair._upload_segment(3, segment)
@@ -541,12 +548,10 @@ class TaborChannelPairTests(TaborDummyBasedTest):
                         for cmd in expected_commands]
         self.assertAllCommandLogsEqual(expected_log)
 
-        expected_send_binary_data_log = [(':TRAC:DATA', segment_binary, None)]
-        for device in self.instrument.all_devices:
-            np.testing.assert_equal(device._send_binary_data_calls, expected_send_binary_data_log)
+        self.assert_written_segment_data(segment_binary)
 
     def test_amend_segments_flush(self):
-        channel_pair = self.TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
+        channel_pair = TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
         # prevent entering and exiting configuration mode
         channel_pair._configuration_guard_count = 2
 
@@ -563,8 +568,8 @@ class TaborChannelPairTests(TaborDummyBasedTest):
         channel_pair._segment_hashes = np.array([1, 2, 3, 4], dtype=np.int64)
 
         data = np.ones(192, dtype=np.uint16)
-        segments = [self.TaborSegment.from_sampled(0*data, 1*data, None, None),
-                    self.TaborSegment.from_sampled(1*data, 2*data, None, None)]
+        segments = [TaborSegment.from_sampled(0*data, 1*data, None, None),
+                    TaborSegment.from_sampled(1*data, 2*data, None, None)]
 
         channel_pair._amend_segments(segments)
 
@@ -586,17 +591,15 @@ class TaborChannelPairTests(TaborDummyBasedTest):
         expected_log = [((), dict(cmd_str=cmd, paranoia_level=channel_pair.internal_paranoia_level))
                         for cmd in expected_commands]
         self.assertAllCommandLogsEqual(expected_log)
-        #self.assertEqual(expected_log, instrument.main_instrument.logged_commands)
 
-        expected_download_segment_calls = [(expected_capacities, ':SEGM:DATA', None)]
-        np.testing.assert_equal(self.instrument.main_instrument._download_segment_lengths_calls, expected_download_segment_calls)
+        self.assert_written_segment_lengths(expected_capacities)
 
-        expected_bin_blob = self.make_combined_wave(segments)
-        expected_send_binary_data_log = [(':TRAC:DATA', expected_bin_blob, None)]
-        np.testing.assert_equal(self.instrument.main_instrument._send_binary_data_calls, expected_send_binary_data_log)
+        expected_bin_blob = make_combined_wave(segments)
+
+        self.assert_written_segment_data(expected_bin_blob)
 
     def test_amend_segments_iter(self):
-        channel_pair = self.TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
+        channel_pair = TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
         # prevent entering and exiting configuration mode
         channel_pair._configuration_guard_count = 2
 
@@ -610,8 +613,8 @@ class TaborChannelPairTests(TaborDummyBasedTest):
         channel_pair._segment_hashes = np.array([1, 2, 3, 4], dtype=np.int64)
 
         data = np.ones(192, dtype=np.uint16)
-        segments = [self.TaborSegment.from_sampled(0*data, 1*data, None, None),
-                    self.TaborSegment.from_sampled(1*data, 2*data, None, None)]
+        segments = [TaborSegment.from_sampled(0*data, 1*data, None, None),
+                    TaborSegment.from_sampled(1*data, 2*data, None, None)]
 
         indices = channel_pair._amend_segments(segments)
 
@@ -637,22 +640,17 @@ class TaborChannelPairTests(TaborDummyBasedTest):
                         for cmd in expected_commands]
         self.assertAllCommandLogsEqual(expected_log)
 
-        expected_download_segment_calls = []
-        for device in self.instrument.all_devices:
-            self.assertEqual(device._download_segment_lengths_calls, expected_download_segment_calls)
+        # no segment lengths written
+        self.assert_written_segment_lengths()
 
-        expected_bin_blob = self.make_combined_wave(segments)
-        expected_send_binary_data_log = [(':TRAC:DATA', expected_bin_blob, None)]
-        for device in self.instrument.all_devices:
-            np.testing.assert_equal(device._send_binary_data_calls, expected_send_binary_data_log)
+        expected_bin_blob = make_combined_wave(segments)
+        self.assert_written_segment_data(expected_bin_blob)
 
     def test_cleanup(self):
-        channel_pair = self.TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
+        channel_pair = TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
 
         self.instrument.paranoia_level = 0
-        self.instrument.logged_commands = []
-        self.instrument.logged_queries = []
-        self.instrument._send_binary_data_calls = []
+        self.reset_instrument_logs()
 
         channel_pair._segment_references = np.array([1, 2, 0, 1], dtype=np.uint32)
         channel_pair._segment_capacity = 192 + np.array([0, 16, 32, 32], dtype=np.uint32)
@@ -677,7 +675,7 @@ class TaborChannelPairTests(TaborDummyBasedTest):
         np.testing.assert_equal(channel_pair._segment_hashes, np.array([1, 2, 3, 4], dtype=np.int64))
 
     def test_remove(self):
-        channel_pair = self.TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
+        channel_pair = TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
 
         calls = []
 
@@ -696,7 +694,7 @@ class TaborChannelPairTests(TaborDummyBasedTest):
         self.assertEqual(calls, ['free_program', 'cleanup'])
 
     def test_change_armed_program_single_sequence(self):
-        channel_pair = self.TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
+        channel_pair = TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
         # prevent entering and exiting configuration mode
         channel_pair._configuration_guard_count = 2
 
@@ -716,9 +714,9 @@ class TaborChannelPairTests(TaborDummyBasedTest):
 
         program = DummyTaborProgramClass(advanced_sequencer_table=advanced_sequencer_table,
                                          sequencer_tables=sequencer_tables,
-                                         waveform_mode=self.TaborSequencing.SINGLE)(None, None, None, None)
+                                         waveform_mode=TaborSequencing.SINGLE)(None, None, None, None)
 
-        channel_pair._known_programs['test'] = self.TaborProgramMemory(w2s, program)
+        channel_pair._known_programs['test'] = TaborProgramMemory(w2s, program)
 
         channel_pair.change_armed_program('test')
 
@@ -727,12 +725,11 @@ class TaborChannelPairTests(TaborDummyBasedTest):
                                         for sequencer_table in [channel_pair._idle_sequence_table,
                                                                 expected_sequencer_table]]
 
-        for device in self.instrument.all_devices:
-            self.assertEqual(device._download_adv_seq_table_calls, expected_adv_seq_table_log)
-            self.assertEqual(device._download_sequencer_table_calls, expected_sequencer_table_log)
+        self.assert_written_sequencer_tables(channel_pair._idle_sequence_table, expected_sequencer_table)
+        self.assert_written_advanced_sequencer_tables([(1, 1, 1), (2, 2, 0), (1, 1, 0)])
 
     def test_change_armed_program_single_waveform(self):
-        channel_pair = self.TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
+        channel_pair = TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
         # prevent entering and exiting configuration mode
         channel_pair._configuration_guard_count = 2
 
@@ -752,9 +749,9 @@ class TaborChannelPairTests(TaborDummyBasedTest):
 
         program = DummyTaborProgramClass(advanced_sequencer_table=advanced_sequencer_table,
                                          sequencer_tables=sequencer_tables,
-                                         waveform_mode=self.TaborSequencing.SINGLE)(None, None, None, None)
+                                         waveform_mode=TaborSequencing.SINGLE)(None, None, None, None)
 
-        channel_pair._known_programs['test'] = self.TaborProgramMemory(w2s, program)
+        channel_pair._known_programs['test'] = TaborProgramMemory(w2s, program)
 
         channel_pair.change_armed_program('test')
 
@@ -763,12 +760,11 @@ class TaborChannelPairTests(TaborDummyBasedTest):
                                         for sequencer_table in [channel_pair._idle_sequence_table,
                                                                 expected_sequencer_table]]
 
-        for device in self.instrument.all_devices:
-            self.assertEqual(device._download_adv_seq_table_calls, expected_adv_seq_table_log)
-            self.assertEqual(device._download_sequencer_table_calls, expected_sequencer_table_log)
+        self.assert_written_sequencer_tables(channel_pair._idle_sequence_table, expected_sequencer_table)
+        self.assert_written_advanced_sequencer_tables([(1, 1, 1), (1, 2, 0), (1, 1, 0)])
 
     def test_change_armed_program_advanced_sequence(self):
-        channel_pair = self.TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
+        channel_pair = TaborChannelPair(self.instrument, identifier='asd', channels=(1, 2))
         # prevent entering and exiting configuration mode
         channel_pair._configuration_guard_count = 2
 
@@ -792,9 +788,9 @@ class TaborChannelPairTests(TaborDummyBasedTest):
 
         program = DummyTaborProgramClass(advanced_sequencer_table=advanced_sequencer_table,
                                          sequencer_tables=sequencer_tables,
-                                         waveform_mode=self.TaborSequencing.ADVANCED)(None, None, None, None)
+                                         waveform_mode=TaborSequencing.ADVANCED)(None, None, None, None)
 
-        channel_pair._known_programs['test'] = self.TaborProgramMemory(wf_idx2seg_idx, program)
+        channel_pair._known_programs['test'] = TaborProgramMemory(wf_idx2seg_idx, program)
 
         channel_pair.change_armed_program('test')
 
@@ -803,6 +799,5 @@ class TaborChannelPairTests(TaborDummyBasedTest):
                                         for sequencer_table in [channel_pair._idle_sequence_table] +
                                         expected_sequencer_tables]
 
-        for device in self.instrument.all_devices:
-            self.assertEqual(device._download_adv_seq_table_calls, expected_adv_seq_table_log)
-            self.assertEqual(device._download_sequencer_table_calls, expected_sequencer_table_log)
+        self.assert_written_sequencer_tables(channel_pair._idle_sequence_table, *expected_sequencer_tables)
+        self.assert_written_advanced_sequencer_tables([(1, 1, 1), (2, 2, 0), (3, 3, 0)])

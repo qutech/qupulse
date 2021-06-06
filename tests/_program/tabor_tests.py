@@ -23,8 +23,6 @@ from qupulse.parameter_scope import DictScope
 from tests.pulses.sequencing_dummies import DummyWaveform
 from tests._program.loop_tests import LoopTests, WaveformGenerator
 
-from tests.hardware import dummy_modules
-
 
 class PlottableProgramTests(unittest.TestCase):
     def setUp(self):
@@ -667,7 +665,7 @@ class TaborMakeCombinedTest(unittest.TestCase):
         self.assertEqual(len(combined), 0)
 
 
-@unittest.skipIf(pytabor in (dummy_modules.dummy_pytabor, None), "Cannot compare to pytabor results")
+@unittest.skipIf(pytabor is None, "Cannot compare to pytabor results")
 class TaborMakeCombinedPyTaborCompareTest(TaborMakeCombinedTest):
     def exec_general(self, data_1, data_2, fill_value=None):
         tabor_segments = [TaborSegment.from_sampled(d1, d2, None, None) for d1, d2 in zip(data_1, data_2)]
