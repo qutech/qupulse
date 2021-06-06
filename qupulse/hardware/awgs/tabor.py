@@ -775,7 +775,7 @@ class TaborChannelPair(AWG):
             self._execute_multiple_commands_with_config_guard(commands)
 
         # Wait until AWG is finished
-        _ = self.device.main_instrument._visa_inst.query('*OPC?')
+        _ = self.device.main_instrument.send_query('*OPC?')
 
     def set_marker_state(self, marker: int, active: bool) -> None:
         """Sets the marker state of this channel pair.
