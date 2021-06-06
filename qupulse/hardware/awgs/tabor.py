@@ -75,10 +75,12 @@ class TaborAWGRepresentation:
 
     @property
     def paranoia_level(self) -> int:
-        return int(self._instr.paranoia_level)
+        return self._instr.paranoia_level.value
 
     @paranoia_level.setter
     def paranoia_level(self, val):
+        if isinstance(val, int):
+            val = min(max(val, 0), 2)
         for instr in self.all_devices:
             instr.paranoia_level = val
 
