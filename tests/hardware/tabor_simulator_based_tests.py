@@ -4,6 +4,7 @@ import time
 import platform
 import os
 
+import pyvisa.resources
 import tabor_control
 import numpy as np
 
@@ -35,10 +36,12 @@ class TaborSimulatorManager:
     def simulator_full_path(self):
         return os.path.join(self.simulator_path, self.simulator_executable)
 
-    def start_simulator(self, try_connecting_to_existing_simulator=True, max_wait_time=30):
+    def start_simulator(self, try_connecting_to_existing_simulator=True, max_wait_time=30) -> pyvisa.resources.MessageBasedResource:
         if try_connecting_to_existing_simulator:
-            if tabor_control.open_session('127.0.0.1') is not None:
-                return
+            try:
+                return tabor_control.open_session('127.0.0.1')
+            except pyvisa.VisaIOError:
+                pass
 
         if not os.path.isfile(self.simulator_full_path):
             raise RuntimeError('Cannot locate simulator executable.')
@@ -48,12 +51,15 @@ class TaborSimulatorManager:
         self.simulator_process = subprocess.Popen([self.simulator_full_path, '/switch-on', '/gui-in-tray'])
 
         start = time.time()
-        while tabor_control.open_session('127.0.0.1') is None:
+        while time.time() - start <= max_wait_time:
+            time.sleep(0.1)
+            try:
+                return tabor_control.open_session('127.0.0.1')
+            except pyvisa.VisaIOError:
+                pass
             if self.simulator_process.returncode:
                 raise RuntimeError('Simulator exited with return code {}'.format(self.simulator_process.returncode))
-            if time.time() - start > max_wait_time:
-                raise RuntimeError('Could not connect to simulator')
-            time.sleep(0.1)
+        raise RuntimeError('Could not connect to simulator')
 
     def connect(self):
         self.instrument = TaborAWGRepresentation('127.0.0.1',
