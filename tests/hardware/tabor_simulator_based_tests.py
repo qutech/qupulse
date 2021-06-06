@@ -12,8 +12,12 @@ from qupulse.hardware.awgs.tabor import TaborAWGRepresentation, TaborChannelPair
 from qupulse._program.tabor import TaborSegment, PlottableProgram, TaborException, TableDescription, TableEntry
 from typing import List, Tuple, Optional, Any
 
+
 class TaborSimulatorManager:
     def __init__(self,
+                 instrument_type: type,
+                 address_kwarg_name: str,
+                 instrument_kwargs: dict,
                  simulator_executable='WX2184C.exe',
                  simulator_path=os.path.realpath(os.path.dirname(__file__))):
         self.simulator_executable = simulator_executable
@@ -21,13 +25,17 @@ class TaborSimulatorManager:
 
         self.started_simulator = False
 
+        self.address_kwarg_name = address_kwarg_name
+        self.instrument_type = instrument_type
+        self.instrument_kwargs = instrument_kwargs
+
         self.simulator_process = None
         self.instrument = None
 
     def kill_running_simulators(self):
-        command = 'Taskkill', '/IM {simulator_executable}'.format(simulator_executable=self.simulator_executable)
+        command = ['Taskkill', '/IM {simulator_executable}'.format(simulator_executable=self.simulator_executable)]
         try:
-            subprocess.run([command],
+            subprocess.run(command,
                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         except FileNotFoundError:
             pass
@@ -62,9 +70,7 @@ class TaborSimulatorManager:
         raise RuntimeError('Could not connect to simulator')
 
     def connect(self):
-        self.instrument = TaborAWGRepresentation('127.0.0.1',
-                                                 reset=True,
-                                                 paranoia_level=2)
+        self.instrument = self.instrument_type(**{**self.instrument_kwargs, self.address_kwarg_name: '127.0.0.1'})
 
         if self.instrument.main_instrument.visa_inst is None:
             raise RuntimeError('Could not connect to simulator')
@@ -82,6 +88,8 @@ class TaborSimulatorManager:
 
 @unittest.skipIf(platform.system() != 'Windows', "Simulator currently only available on Windows :(")
 class TaborSimulatorBasedTest(unittest.TestCase):
+    simulator_manager = None
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -89,7 +97,9 @@ class TaborSimulatorBasedTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.simulator_manager = TaborSimulatorManager('WX2184C.exe', os.path.dirname(__file__))
+        cls.simulator_manager = TaborSimulatorManager(TaborAWGRepresentation, 'instr_addr',
+                                                      dict(reset=True, paranoia_level=2),
+                                                      'WX2184C.exe', os.path.dirname(__file__))
         try:
             cls.simulator_manager.start_simulator()
         except RuntimeError as err:
