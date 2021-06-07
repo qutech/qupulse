@@ -7,11 +7,8 @@ from typing import List, Tuple, Optional, Any
 from copy import copy, deepcopy
 
 import numpy as np
-import pyvisa.constants
 
 from qupulse.hardware.awgs.base import AWGAmplitudeOffsetHandling
-from qupulse.hardware.feature_awg.tabor import TaborProgramMemory
-from qupulse.hardware.awgs.tabor import TaborAWGRepresentation, TaborChannelPair
 from qupulse.utils.types import TimeType
 from qupulse._program._loop import Loop
 from qupulse._program.tabor import TableDescription, TimeType, TableEntry, TaborSegment, TaborProgram,\
@@ -25,6 +22,11 @@ try:
     import tabor_control.util
 except ImportError:
     tabor_control = None
+
+if tabor_control is not None:
+    # not used if tabor_control is None because all tests are skipped
+    from qupulse.hardware.feature_awg.tabor import TaborProgramMemory
+    from qupulse.hardware.awgs.tabor import TaborAWGRepresentation, TaborChannelPair, TaborException
 
 
 class DummyTaborProgramClass:
@@ -178,6 +180,20 @@ class TaborAWGRepresentationDummyBasedTests(TaborDummyBasedTest):
         expected_log = [((), dict(cmd_str=cmd, paranoia_level=None))
                         for cmd in expected_commands]
         self.assertAllCommandLogsEqual(expected_log)
+
+    def test_amplitude(self):
+        self.reset_instrument_logs()
+
+        with self.assertRaisesRegex(TaborException, "Invalid"):
+            self.instrument.amplitude(0)
+
+        with mock.patch.object(self.instrument, 'send_query', side_effect=['DC', '0.3']) as send_query:
+            self.assertEqual(self.instrument.amplitude(4), 0.3)
+            send_query.assert_has_calls([mock.call(':INST:SEL 4; :OUTP:COUP?'),
+                                         mock.call(':VOLT?')])
+
+
+
 
 
 class TaborChannelPairTests(TaborDummyBasedTest):

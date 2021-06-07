@@ -8,7 +8,11 @@ from qupulse.hardware.feature_awg.base import AWGDeviceFeature, AWGChannelFeatur
     AWGChannelTuple
 from qupulse.utils.types import ChannelID
 
-import pyvisa
+try:
+    # only required for type annotations
+    import pyvisa
+except ImportError:
+    pyvisa = None
 
 
 ########################################################################################################################
@@ -20,7 +24,7 @@ class SCPI(AWGDeviceFeature, ABC):
     https://en.wikipedia.org/wiki/Standard_Commands_for_Programmable_Instruments
     """
 
-    def __init__(self, visa: pyvisa.resources.MessageBasedResource):
+    def __init__(self, visa: 'pyvisa.resources.MessageBasedResource'):
         super().__init__()
         self._socket = visa
 
