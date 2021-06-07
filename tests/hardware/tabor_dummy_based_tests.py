@@ -192,8 +192,31 @@ class TaborAWGRepresentationDummyBasedTests(TaborDummyBasedTest):
             send_query.assert_has_calls([mock.call(':INST:SEL 4; :OUTP:COUP?'),
                                          mock.call(':VOLT?')])
 
+        with mock.patch.object(self.instrument, 'send_query', side_effect=['HV', '0.1']) as send_query:
+            self.assertEqual(self.instrument.amplitude(2), 0.1)
+            send_query.assert_has_calls([mock.call(':INST:SEL 2; :OUTP:COUP?'),
+                                         mock.call(':VOLT:HV?')])
 
+        with self.assertRaisesRegex(TaborException, "Unknown"):
+            with mock.patch.object(self.instrument, 'send_query', side_effect=['HC']) as send_query:
+                self.instrument.amplitude(3)
+        send_query.assert_called_once_with(':INST:SEL 3; :OUTP:COUP?')
 
+    def test_samplerate(self):
+        with self.assertRaisesRegex(TaborException, "Invalid"):
+            self.instrument.sample_rate(0)
+
+        with mock.patch.object(self.instrument, 'send_query', side_effect=['1e9']) as send_query:
+            self.assertEqual(self.instrument.sample_rate(4), 10**9)
+            send_query.assert_called_once_with(':INST:SEL 4; :FREQ:RAST?')
+
+    def test_select_marker(self):
+        with self.assertRaisesRegex(TaborException, "Invalid"):
+            self.instrument.select_marker(3)
+
+        with mock.patch.object(self.instrument, 'send_cmd') as send_cmd:
+            self.instrument.select_marker(2)
+            send_cmd.assert_called_once_with(":SOUR:MARK:SEL 2")
 
 
 class TaborChannelPairTests(TaborDummyBasedTest):
