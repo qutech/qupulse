@@ -19,7 +19,7 @@ except ImportError:
 def install_requirements(vendor: str):
     package_repos = {
         'tektronix': 'tek_awg',
-        'tabor': 'https://git.rwth-aachen.de/qutech/python-TaborDriver/-/archive/python3/python-TaborDriver-python3.zip'
+        'tabor': 'tabor_control'
     }
 
     if vendor not in package_repos:

@@ -1,15 +1,13 @@
 import fractions
 import functools
+import warnings
 import weakref
 import logging
 import numbers
 from typing import List, Tuple, Set, Callable, Optional, Any, Sequence, cast, Union, Dict, Mapping, NamedTuple
 from collections import OrderedDict
 
-# Provided by Tabor electronics for python 2.7
-# a python 3 version is in a private repository on https://git.rwth-aachen.de/qutech
-# Beware of the string encoding change!
-import teawg
+import tabor_control.device
 import numpy as np
 
 from qupulse.utils.types import ChannelID
@@ -26,14 +24,18 @@ __all__ = ['TaborAWGRepresentation', 'TaborChannelPair']
 class TaborAWGRepresentation:
     def __init__(self, instr_addr=None, paranoia_level=1, external_trigger=False, reset=False, mirror_addresses=()):
         """
-        :param instr_addr:        Instrument address that is forwarded to teawg
-        :param paranoia_level:    Paranoia level that is forwarded to teawg
+        :param instr_addr:        Instrument address that is forwarded to tabor_control
+        :param paranoia_level:    Paranoia level that is forwarded to tabor_control
         :param external_trigger:  Not supported yet
         :param reset:
         :param mirror_addresses:
         """
-        self._instr = teawg.TEWXAwg(instr_addr, paranoia_level)
-        self._mirrors = tuple(teawg.TEWXAwg(address, paranoia_level) for address in mirror_addresses)
+        visa_instr = tabor_control.open_session(instr_addr)
+        paranoia_level = tabor_control.ParanoiaLevel(paranoia_level)
+
+        self._instr = tabor_control.device.TEWXAwg(visa_instr, paranoia_level)
+        self._mirrors = tuple(tabor_control.device.TEWXAwg(tabor_control.open_session(address), paranoia_level)
+                              for address in mirror_addresses)
         self._coupled = None
 
         self._clock_marker = [0, 0, 0, 0]
@@ -64,28 +66,30 @@ class TaborAWGRepresentation:
         return self._channel_pair_CD
 
     @property
-    def main_instrument(self) -> teawg.TEWXAwg:
+    def main_instrument(self) -> tabor_control.device.TEWXAwg:
         return self._instr
 
     @property
-    def mirrored_instruments(self) -> Sequence[teawg.TEWXAwg]:
+    def mirrored_instruments(self) -> Sequence[tabor_control.device.TEWXAwg]:
         return self._mirrors
 
     @property
     def paranoia_level(self) -> int:
-        return self._instr.paranoia_level
+        return self._instr.paranoia_level.value
 
     @paranoia_level.setter
     def paranoia_level(self, val):
+        if isinstance(val, int):
+            val = min(max(val, 0), 2)
         for instr in self.all_devices:
             instr.paranoia_level = val
 
     @property
     def dev_properties(self) -> dict:
-        return self._instr.dev_properties
+        return self._instr.dev_properties.as_dict()
 
     @property
-    def all_devices(self) -> Sequence[teawg.TEWXAwg]:
+    def all_devices(self) -> Sequence[tabor_control.device.TEWXAwg]:
         return (self._instr, ) + self._mirrors
 
     def send_cmd(self, cmd_str, paranoia_level=None):
@@ -99,20 +103,24 @@ class TaborAWGRepresentation:
             return self._instr.send_query(query_str)
 
     def send_binary_data(self, pref, bin_dat, paranoia_level=None):
+        assert pref == ':TRAC:DATA'
         for instr in self.all_devices:
-            instr.send_binary_data(pref, bin_dat=bin_dat, paranoia_level=paranoia_level)
+            instr.write_segment_data(bin_dat, paranoia_level=paranoia_level)
 
     def download_segment_lengths(self, seg_len_list, pref=':SEGM:DATA', paranoia_level=None):
+        assert pref == ':SEGM:DATA'
         for instr in self.all_devices:
-            instr.download_segment_lengths(seg_len_list, pref=pref, paranoia_level=paranoia_level)
+            instr.write_segment_lengths(seg_len_list, paranoia_level=paranoia_level)
 
     def download_sequencer_table(self, seq_table, pref=':SEQ:DATA', paranoia_level=None):
+        assert pref == ':SEQ:DATA'
         for instr in self.all_devices:
-            instr.download_sequencer_table(seq_table, pref=pref, paranoia_level=paranoia_level)
+            instr.write_sequencer_table(seq_table, paranoia_level=paranoia_level)
 
     def download_adv_seq_table(self, seq_table, pref=':ASEQ:DATA', paranoia_level=None):
+        assert pref == ':ASEQ:DATA'
         for instr in self.all_devices:
-            instr.download_adv_seq_table(seq_table, pref=pref, paranoia_level=paranoia_level)
+            instr.write_advanced_sequencer_table(seq_table, paranoia_level=paranoia_level)
 
     def _send_cmd(self, cmd_str, paranoia_level=None) -> Any:
         """Overwrite send_cmd for paranoia_level > 3"""
@@ -254,9 +262,9 @@ class TaborAWGRepresentation:
     def trigger(self) -> None:
         self.send_cmd(':TRIG')
 
-    def get_readable_device(self, simulator=True) -> teawg.TEWXAwg:
+    def get_readable_device(self, simulator=True) -> tabor_control.device.TEWXAwg:
         for device in self.all_devices:
-            if device.fw_ver >= 3.0:
+            if device.supports_basic_reading():
                 if simulator:
                     if device.is_simulator:
                         return device
@@ -396,14 +404,16 @@ class TaborChannelPair(AWG):
     @with_select
     def read_waveforms(self) -> List[np.ndarray]:
         device = self.device.get_readable_device(simulator=True)
-
         old_segment = device.send_query(':TRAC:SEL?')
-        waveforms = []
-        uploaded_waveform_indices = np.flatnonzero(self._segment_references) + 1
-        for segment in uploaded_waveform_indices:
-            device.send_cmd(':TRAC:SEL {}'.format(segment), paranoia_level=self.internal_paranoia_level)
-            waveforms.append(device.read_act_seg_dat())
-        device.send_cmd(':TRAC:SEL {}'.format(old_segment), paranoia_level=self.internal_paranoia_level)
+
+        try:
+            waveforms = []
+            uploaded_waveform_indices = np.flatnonzero(self._segment_references) + 1
+            for segment in uploaded_waveform_indices:
+                device.send_cmd(':TRAC:SEL {}'.format(segment), paranoia_level=self.internal_paranoia_level)
+                waveforms.append(device.read_segment_data())
+        finally:
+            device.send_cmd(':TRAC:SEL {}'.format(old_segment), paranoia_level=self.internal_paranoia_level)
         return waveforms
 
     @with_select
@@ -415,13 +425,15 @@ class TaborChannelPair(AWG):
         uploaded_sequence_indices = np.arange(len(self._sequencer_tables)) + 1
         for sequence in uploaded_sequence_indices:
             device.send_cmd(':SEQ:SEL {}'.format(sequence), paranoia_level=self.internal_paranoia_level)
-            sequences.append(device.read_sequencer_table())
+            sequencer_table = device.read_sequencer_table()
+            sequences.append((sequencer_table['repeats'], sequencer_table['segment_no'], sequencer_table['jump_flag']))
         device.send_cmd(':SEQ:SEL {}'.format(old_sequence), paranoia_level=self.internal_paranoia_level)
         return sequences
 
     @with_select
     def read_advanced_sequencer_table(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        return self.device.get_readable_device(simulator=True).read_adv_seq_table()
+        adv_seq_table = self.device.get_readable_device(simulator=True).read_advanced_sequencer_table()
+        return adv_seq_table['repeats'], adv_seq_table['segment_no'], adv_seq_table['jump_flag']
 
     def read_complete_program(self) -> PlottableProgram:
         return PlottableProgram.from_read_data(self.read_waveforms(),
@@ -765,7 +777,7 @@ class TaborChannelPair(AWG):
             self._execute_multiple_commands_with_config_guard(commands)
 
         # Wait until AWG is finished
-        _ = self.device.main_instrument._visa_inst.query('*OPC?')
+        _ = self.device.main_instrument.send_query('*OPC?')
 
     def set_marker_state(self, marker: int, active: bool) -> None:
         """Sets the marker state of this channel pair.

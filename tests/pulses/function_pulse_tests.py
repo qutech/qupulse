@@ -250,6 +250,19 @@ class FunctionWaveformTest(unittest.TestCase):
         np.testing.assert_equal(result, expected_result)
         self.assertIs(result, out_array)
 
+    def test_constant_evaluation(self):
+        # cause for 596
+        fw = FunctionWaveform(Expression(3), 5, channel='A')
+        t = np.linspace(0, 5, dtype=float)
+        expected_result = np.full_like(t, fill_value=3.)
+        out_array = np.full_like(t, fill_value=np.nan)
+        result = fw.unsafe_sample(channel='A', sample_times=t, output_array=out_array)
+        self.assertIs(result, out_array)
+        np.testing.assert_equal(result, expected_result)
+
+        result = fw.unsafe_sample(channel='A', sample_times=t)
+        np.testing.assert_equal(result, expected_result)
+
     def test_unsafe_get_subset_for_channels(self):
         fw = FunctionWaveform(Expression('sin(2*pi*t) + 3'), 5, channel='A')
         self.assertIs(fw.unsafe_get_subset_for_channels({'A'}), fw)

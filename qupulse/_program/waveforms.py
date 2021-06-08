@@ -446,7 +446,10 @@ class FunctionWaveform(Waveform):
                       output_array: Union[np.ndarray, None] = None) -> np.ndarray:
         evaluated = self._expression.evaluate_numeric(t=sample_times)
         if output_array is None:
-            return evaluated.astype(float)
+            if self._expression.variables:
+                return evaluated.astype(float)
+            else:
+                return np.full_like(sample_times, fill_value=float(evaluated), dtype=float)
         else:
             output_array[:] = evaluated
             return output_array
@@ -473,6 +476,9 @@ class SequenceWaveform(Waveform):
         defined_channels = self._sequenced_waveforms[0].defined_channels
         if not all(waveform.defined_channels == defined_channels
                    for waveform in itertools.islice(self._sequenced_waveforms, 1, None)):
+            for waveform in self._sequenced_waveforms[1:]:
+                 if not waveform.defined_channels == self.defined_channels:
+                     print(f"SequenceWaveform: defined channels {self.defined_channels} do not match {waveform.defined_channels} ")
             raise ValueError(
                 "SequenceWaveform cannot be constructed from waveforms of different"
                 "defined channels."
