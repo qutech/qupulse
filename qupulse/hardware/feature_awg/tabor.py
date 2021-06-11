@@ -526,7 +526,7 @@ class TaborProgramManagement(ProgramManagement):
         self._idle_sequence_table = [(1, 1, 0), (1, 1, 0), (1, 1, 0)]
         self._trigger_source = 'BUS'
 
-        # TODO: QUESTION: is this right?
+        # TODO: QUESTION: is this right? - Is auto_ream the default repetition mode
         self._default_repetition_mode = RepetitionMode("auto_rearm")
 
     def get_repetition_mode(self, program_name: str) -> str:
@@ -555,7 +555,7 @@ class TaborProgramManagement(ProgramManagement):
             raise ValueError("{} is no vaild repetition mode".format(repetition_mode))
 
     @property
-    # TODO: QUESTION: is this right?
+    # TODO: QUESTION: is this right? - Are these the two run modes the are supported?
     def supported_repetition_modes(self) -> Set[RepetitionMode]:
         return {RepetitionMode.INFINITE, RepetitionMode.AUTO_REARM}
 
@@ -728,7 +728,7 @@ class TaborProgramManagement(ProgramManagement):
                 if self._channel_tuple._current_program:
                     default_repetition_mode = RepetitionMode(self._channel_tuple._known_programs[
                                                                  self._channel_tuple._current_program].program._repetition_mode)
-                    # TODO: QUESTION: Is this right?
+
                     if repetition_mode is not None:
                         cur_repetition_mode = RepetitionMode(repetition_mode)
 
@@ -809,7 +809,7 @@ class TaborProgramManagement(ProgramManagement):
                     assert advanced_sequencer_table[0][0] == 1
                     sequencer_tables[1].append((1, 1, 0))
 
-        # TODO: QUESTION: Is this right?
+        # TODO: QUESTION: Is this right? - are the things that are attached at the end correct?
         if repetition_mode == RepetitionMode.INFINITE:
             advanced_sequencer_table = [(1, 1, 0)] + advanced_sequencer_table
         elif repetition_mode == RepetitionMode.AUTO_REARM:
