@@ -934,15 +934,53 @@ class ArithmeticWaveform(Waveform):
         assert np.isclose(float(self._lhs.duration), float(self._rhs.duration))
         assert arithmetic_operator in self.operator_map
 
-    def constant_value(self, channel: ChannelID) -> Optional[float]:
-        lhs = self._lhs.constant_value(channel)
-        if lhs is not None and lhs == self._rhs.constant_value(channel):
-            return lhs
+    @classmethod
+    def from_operator(cls, lhs: Waveform, arithmetic_operator: str, rhs: Waveform):
+        # one could optimize rhs_cv to being only created if lhs_cv is not None but this makes the code harder to read
+        lhs_cv = lhs.constant_value_dict()
+        rhs_cv = rhs.constant_value_dict()
+        if lhs_cv is None or rhs_cv is None:
+            return cls(lhs, arithmetic_operator, rhs)
+
         else:
+            constant_values = dict(lhs_cv)
+            op = cls.operator_map[arithmetic_operator]
+            rhs_op = cls.rhs_only_map[arithmetic_operator]
+
+            for ch, rhs_val in rhs_cv.items():
+                if ch in constant_values:
+                    constant_values[ch] = op(constant_values[ch], rhs_val)
+                else:
+                    constant_values[ch] = rhs_op(rhs_val)
+
+            duration = lhs.duration
+            assert isclose(duration, rhs.duration)
+
+            return ConstantWaveform.from_mapping(duration, constant_values)
+
+    def constant_value(self, channel: ChannelID) -> Optional[float]:
+        if channel not in self._rhs.defined_channels:
+            return self._lhs.constant_value(channel)
+        rhs = self._rhs.constant_value(channel)
+        if rhs is None:
             return None
 
+        if channel in self._lhs.defined_channels:
+            lhs = self._lhs.constant_value(channel)
+            if lhs is None:
+                return None
+
+            return self.operator_map[self._arithmetic_operator](lhs, rhs)
+        else:
+            return self.rhs_only_map[self._arithmetic_operator](rhs)
+
     def is_constant(self) -> bool:
-        return self.lhs.is_constant() and self.rhs.is_constant()
+        # only correct if from_operator is used
+        return False
+
+    def constant_value_dict(self) -> Optional[Mapping[ChannelID, float]]:
+        # only correct if from_operator is used
+        return None
 
     @property
     def lhs(self) -> Waveform:
