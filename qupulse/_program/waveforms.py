@@ -158,7 +158,7 @@ class Waveform(Comparable, metaclass=ABCMeta):
         Returns:
             True if all channels have constant values.
         """
-        return self.constant_value_dict() is None
+        return self.constant_value_dict() is not None
 
     def constant_value_dict(self) -> Optional[Mapping[ChannelID, float]]:
         result = {ch: self.constant_value(ch) for ch in self.defined_channels}
@@ -422,7 +422,7 @@ class FunctionWaveform(Waveform):
         if expression.variables:
             return cls(expression, duration, channel)
         else:
-            return ConstantWaveform(expression.evaluate_numeric(), duration, channel)
+            return ConstantWaveform(amplitude=expression.evaluate_numeric(), duration=duration, channel=channel)
 
     def is_constant(self) -> bool:
         # only correct if `from_expression` is used
@@ -512,7 +512,7 @@ class SequenceWaveform(Waveform):
             return cls(sub_waveforms=flattened)
         else:
             duration = sum(wf.duration for wf in flattened)
-            ConstantWaveform.from_mapping(duration, constant_values)
+            return ConstantWaveform.from_mapping(duration, constant_values)
 
     def is_constant(self) -> bool:
         # only correct if from_sequence is used for construction
@@ -825,7 +825,7 @@ class TransformingWaveform(Waveform):
         if any(val is None for val in in_values.values()):
             return None
         else:
-            return self._transformation(0., in_values)[channel][0]
+            return self._transformation(0., in_values)[channel]
 
     @property
     def inner_waveform(self) -> Waveform:
