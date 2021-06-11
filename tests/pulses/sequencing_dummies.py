@@ -154,15 +154,16 @@ class DummyWaveform(Waveform):
 
 class DummyInterpolationStrategy(InterpolationStrategy):
 
-    def __init__(self) -> None:
+    def __init__(self, id_ = None) -> None:
         self.call_arguments = []
+        self._id = id(self) if id_ is None else id_
 
     def __call__(self, start: Tuple[float, float], end: Tuple[float, float], times: numpy.ndarray) -> numpy.ndarray:
         self.call_arguments.append((start, end, list(times)))
         return times
 
     def __repr__(self) -> str:
-        return "DummyInterpolationStrategy {}".format(id(self))
+        return f"DummyInterpolationStrategy({id(self)})"
 
     @property
     def integral(self) -> ExpressionScalar:
