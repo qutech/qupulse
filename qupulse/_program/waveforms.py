@@ -201,7 +201,7 @@ class TableWaveformEntry(NamedTuple('TableWaveformEntry', [('t', Real),
             raise TypeError('{} is neither callable nor of type InterpolationStrategy'.format(interp))
 
     def __repr__(self):
-        return f'{type(self).__name__}(t={self.t}, v={self.v}, interp="{self.interp}")'
+        return f'{type(self).__name__}(t={self.t!r}, v={self.v!r}, interp={self.interp!r})'
 
 
 class TableWaveform(Waveform):
@@ -322,7 +322,7 @@ class TableWaveform(Waveform):
         return self
 
     def __repr__(self):
-        return f'{type(self).__name__}(channel={self._channel_id}, waveform_table={self._table})'
+        return f'{type(self).__name__}(channel={self._channel_id!r}, waveform_table={self._table!r})'
 
 
 class ConstantWaveform(Waveform):
@@ -385,6 +385,10 @@ class ConstantWaveform(Waveform):
     def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> Waveform:
         """Unsafe version of :func:`~qupulse.pulses.instructions.get_measurement_windows`."""
         return self
+
+    def __repr__(self):
+        return f"{type(self).__name__}(duration={self.duration!r}, "\
+               f"amplitude={self._amplitude!r}, channel={self._channel!r})"
 
 
 class FunctionWaveform(Waveform):
@@ -456,6 +460,10 @@ class FunctionWaveform(Waveform):
 
     def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> Waveform:
         return self
+
+    def __repr__(self):
+        return f"{type(self).__name__}(duration={self.duration!r}, "\
+               f"expression={self._expression!r}, channel={self._channel_id!r})"
 
 
 class SequenceWaveform(Waveform):
@@ -568,6 +576,9 @@ class SequenceWaveform(Waveform):
     @property
     def sequenced_waveforms(self) -> Sequence[Waveform]:
         return self._sequenced_waveforms
+
+    def __repr__(self):
+        return f"{type(self).__name__}({self._sequenced_waveforms})"
 
 
 class MultiChannelWaveform(Waveform):
@@ -716,6 +727,9 @@ class MultiChannelWaveform(Waveform):
         else:
             raise KeyError('Unknown channels: {}'.format(channels))
 
+    def __repr__(self):
+        return f"{type(self).__name__}({self._sub_waveforms!r})"
+
 
 class RepetitionWaveform(Waveform):
     """This class allows putting multiple PulseTemplate together in one waveform on the hardware."""
@@ -770,6 +784,9 @@ class RepetitionWaveform(Waveform):
     def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> 'RepetitionWaveform':
         return RepetitionWaveform(body=self._body.unsafe_get_subset_for_channels(channels),
                                   repetition_count=self._repetition_count)
+
+    def __repr__(self):
+        return f"{type(self).__name__}(body={self._body!r}, repetition_count={self._repetition_count!r})"
 
 
 class TransformingWaveform(Waveform):
