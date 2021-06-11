@@ -165,10 +165,10 @@ class TaborMemoryReadTests(TaborSimulatorBasedTest):
     def setUp(self):
         super().setUp()
 
-        ramp_up = np.linspace(0, 2**14-1, num=192, dtype=np.uint16)
+        ramp_up = np.linspace(0, 2 ** 14 - 1, num=192, dtype=np.uint16)
         ramp_down = ramp_up[::-1]
-        zero = np.ones(192, dtype=np.uint16) * 2**13
-        sine = ((np.sin(np.linspace(0, 2*np.pi, 192+64)) + 1) / 2 * (2**14 - 1)).astype(np.uint16)
+        zero = np.ones(192, dtype=np.uint16) * 2 ** 13
+        sine = ((np.sin(np.linspace(0, 2 * np.pi, 192 + 64)) + 1) / 2 * (2 ** 14 - 1)).astype(np.uint16)
 
         self.segments = [TaborSegment.from_sampled(ramp_up, ramp_up, None, None),
                          TaborSegment.from_sampled(ramp_down, zero, None, None),
@@ -188,34 +188,28 @@ class TaborMemoryReadTests(TaborSimulatorBasedTest):
 
     def arm_program(self, sequencer_tables, advanced_sequencer_table, mode, waveform_to_segment_index):
         class DummyProgram:
-            @staticmethod
-            def get_sequencer_tables():
+            def __init__(self):
+                self._repetition_mode = RepetitionMode.INFINITE
+
+            def get_sequencer_tables(self):
                 return sequencer_tables
 
-            @staticmethod
-            def get_advanced_sequencer_table():
+            def get_advanced_sequencer_table(self):
                 return advanced_sequencer_table
 
-            @staticmethod
-            def update_volatile_parameters(parameters):
+            def update_volatile_parameters(self, parameters):
                 modifications = {1: TableEntry(repetition_count=5, element_number=2, jump_flag=0),
                                  (0, 1): TableDescription(repetition_count=50, element_id=1, jump_flag=0)}
                 return modifications
-
-            # TODO: QUESTION: is this change okay?
-            @property
-            def _repetition_mode(self):
-                return RepetitionMode.AUTO_REARM
-
-
 
             markers = (None, None)
             channels = (1, 2)
 
             waveform_mode = mode
 
-        #TODO: QUESTION: is this change okay?
-        self.channel_pair._known_programs['dummy_program'] = TaborProgramMemory(waveform_to_segment_index, DummyProgram)
+        # TODO: QUESTION: is this change okay?
+        self.channel_pair._known_programs['dummy_program'] = TaborProgramMemory(waveform_to_segment_index,
+                                                                                DummyProgram())
         self.channel_pair[ProgramManagement]._change_armed_program('dummy_program')
 
     def test_read_waveforms(self):
@@ -242,9 +236,11 @@ class TaborMemoryReadTests(TaborSimulatorBasedTest):
 
         sequence_tables = self.channel_pair.read_sequence_tables()
 
-        actual_sequence_tables = [self.channel_pair[ProgramManagement]._idle_sequence_table] + [[(rep, index+2, jump)
-                                                                             for rep, index, jump in table]
-                                                                             for table in self.sequence_tables_raw]
+        actual_sequence_tables = [self.channel_pair[ProgramManagement]._idle_sequence_table] + [[(rep, index + 2, jump)
+                                                                                                 for rep, index, jump in
+                                                                                                 table]
+                                                                                                for table in
+                                                                                                self.sequence_tables_raw]
 
         expected = list(tuple(np.asarray(d)
                               for d in zip(*table))
@@ -270,8 +266,10 @@ class TaborMemoryReadTests(TaborSimulatorBasedTest):
 
         para = {'a': 5}
         actual_sequence_tables = [self.channel_pair[ProgramManagement]._idle_sequence_table] + [[(rep, index + 2, jump)
-                                                                              for rep, index, jump in table]
-                                                                             for table in self.sequence_tables_raw]
+                                                                                                 for rep, index, jump in
+                                                                                                 table]
+                                                                                                for table in
+                                                                                                self.sequence_tables_raw]
 
         actual_advanced_table = [(1, 1, 0)] + [(rep, idx + 1, jmp) for rep, idx, jmp in self.advanced_sequence_table]
 
