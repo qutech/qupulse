@@ -941,7 +941,10 @@ class TaborChannelTuple(AWGChannelTuple):
                  marker_channels: Iterable["TaborMarkerChannel"]):
         super().__init__(idn)
 
-        self._device = weakref.ref(device)
+        if isinstance(device, weakref.ProxyType):
+            self._device = device
+        else:
+            self._device = weakref.ref(device)
 
         self._configuration_guard_count = 0
         self._is_in_config_mode = False
@@ -1005,7 +1008,7 @@ class TaborChannelTuple(AWGChannelTuple):
     @property
     def device(self) -> TaborDevice:
         """Returns the device that the channel tuple belongs to"""
-        return self._device()
+        return self._device
 
     @property
     def channels(self) -> Collection["TaborChannel"]:
