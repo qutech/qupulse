@@ -144,9 +144,9 @@ class TaborChannelSynchronization(ChannelSynchronization):
             self._device[SCPI].send_cmd(":INST:COUP:STAT OFF")
         elif group_size == 4:
             self._device._channel_tuples = [TaborChannelTuple(1,
-                                                                self._device,
-                                                                self._device.channels,
-                                                                self._device.marker_channels)]
+                                                              self._device,
+                                                              self._device.channels,
+                                                              self._device.marker_channels)]
             self._device[SCPI].send_cmd(":INST:COUP:STAT ON")
         else:
             raise TaborException("Invalid group size")
@@ -537,7 +537,7 @@ class TaborProgramManagement(ProgramManagement):
         """
         return self._channel_tuple._known_programs[program_name].program._repetition_mode
 
-    def set_repetition_mode(self, program_name: str, repetition_mode: str) -> None:
+    def set_repetition_mode(self, program_name: str, repetition_mode: Union[str, RepetitionMode]) -> None:
         """
         Changes the default repetition mode of a certain program
 
@@ -547,7 +547,9 @@ class TaborProgramManagement(ProgramManagement):
         Throws:
             ValueError: this Exception is thrown when an invalid repetition mode is given
         """
-        if repetition_mode == "infinite" or repetition_mode == "once":
+        cur_repetition_mode = RepetitionMode(repetition_mode)
+
+        if cur_repetition_mode in self.supported_repetition_modes:
             self._channel_tuple._known_programs[program_name].program._repetition_mode = repetition_mode
         else:
             raise ValueError("{} is no vaild repetition mode".format(repetition_mode))
@@ -708,12 +710,17 @@ class TaborProgramManagement(ProgramManagement):
         return set(program.name for program in self._channel_tuple._known_programs.keys())
 
     @with_select
-    def run_current_program(self, repetion_mode: Union[str, RepetitionMode]) -> None:
+    def run_current_program(self, repetition_mode: Union[str, RepetitionMode] = None) -> None:
         """
         This method starts running the active program
 
+        Args:
+            repetition_mode (Union[str, RepetitionMode]): The repetition mode with which the program is executed.
+                                                          If the repetition mode is none, the default repetition mode of
+                                                          program is used.
+
         Throws:
-            RuntimeError: This exception is thrown if there is no active program for this device
+        RuntimeError: This exception is thrown if there is no active program for this device
         """
         if (self._channel_tuple.device._is_coupled()):
             # channel tuple is the first channel tuple
@@ -722,11 +729,12 @@ class TaborProgramManagement(ProgramManagement):
                     default_repetition_mode = RepetitionMode(self._channel_tuple._known_programs[
                                                                  self._channel_tuple._current_program].program._repetition_mode)
                     # TODO: QUESTION: Is this right?
-                    cur_repetition_mode = RepetitionMode(repetion_mode)
+                    if repetition_mode is not None:
+                        cur_repetition_mode = RepetitionMode(repetition_mode)
 
-                    if default_repetition_mode != cur_repetition_mode:
-                        self._change_armed_program(name=self._channel_tuple._current_program,
-                                                   repetion_mode=cur_repetition_mode)
+                        if default_repetition_mode != cur_repetition_mode:
+                            self._change_armed_program(name=self._channel_tuple._current_program,
+                                                       repetion_mode=cur_repetition_mode)
 
                     if RepetitionMode(default_repetition_mode) == RepetitionMode.INFINITE:
                         self._infinite_repetition_mode()
@@ -767,7 +775,6 @@ class TaborProgramManagement(ProgramManagement):
 
         if repetition_mode is None:
             if name is not None:
-                print("--->", self._channel_tuple._known_programs[name][1])
                 repetition_mode = RepetitionMode(self._channel_tuple._known_programs[name].program._repetition_mode)
             else:
                 repetition_mode = self.default_repetition_mode
