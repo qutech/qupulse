@@ -1040,11 +1040,11 @@ class ArithmeticWaveform(Waveform):
 
 
 class FunctorWaveform(Waveform):
-    """Apply a channel wise functor that works inplace to all results"""
+    # TODO: Use Protocol to enforce that it accepts second argument has the keyword out
+    Functor = callable
 
-    CONSTANT_INVARIANT_FUNCTORS = (np.negative,)
-
-    def __init__(self, inner_waveform: Waveform, functor: Mapping[ChannelID, 'Callable']):
+    """Apply a channel wise functor that works inplace to all results. The functor must accept two arguments"""
+    def __init__(self, inner_waveform: Waveform, functor: Mapping[ChannelID, Functor]):
         self._inner_waveform = inner_waveform
         self._functor = dict(functor.items())
 
@@ -1052,9 +1052,9 @@ class FunctorWaveform(Waveform):
                                                                         "File an issue on github if you need it.")
 
     @classmethod
-    def from_functor(cls, inner_waveform: Waveform, functor: Mapping[ChannelID, callable]):
+    def from_functor(cls, inner_waveform: Waveform, functor: Mapping[ChannelID, Functor]):
         constant_values = inner_waveform.constant_value_dict()
-        if constant_values is None or functor not in cls.CONSTANT_INVARIANT_FUNCTORS:
+        if constant_values is None:
             return FunctorWaveform(inner_waveform, functor)
 
         funced_constant_values = {ch: functor[ch](val) for ch, val in constant_values.items()}
@@ -1070,11 +1070,10 @@ class FunctorWaveform(Waveform):
 
     def constant_value(self, channel: ChannelID) -> Optional[float]:
         inner = self._inner_waveform.constant_value(channel)
-        func = self._functor[channel]
-        if inner is None or func not in self.CONSTANT_INVARIANT_FUNCTORS:
+        if inner is None:
             return None
         else:
-            return func(inner)
+            return self._functor[channel](inner)
 
     @property
     def duration(self) -> TimeType:
@@ -1088,10 +1087,12 @@ class FunctorWaveform(Waveform):
                       channel: ChannelID,
                       sample_times: np.ndarray,
                       output_array: Union[np.ndarray, None] = None) -> np.ndarray:
-        return self._functor[channel](self._inner_waveform.unsafe_sample(channel, sample_times, output_array))
+        inner_output = self._inner_waveform.unsafe_sample(channel, sample_times, output_array)
+        return self._functor[channel](inner_output, out=inner_output)
 
     def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> Waveform:
-        return SubsetWaveform(self, channels)
+        return FunctorWaveform(self._inner_waveform.unsafe_get_subset_for_channels(channels),
+                               {ch: self._functor[ch] for ch in channels})
 
     @property
     def compare_key(self) -> Tuple[Waveform, FrozenSet]:
