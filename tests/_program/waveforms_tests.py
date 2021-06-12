@@ -11,7 +11,7 @@ from qupulse._program.waveforms import MultiChannelWaveform, RepetitionWaveform,
     TableWaveformEntry, TableWaveform, TransformingWaveform, SubsetWaveform, ArithmeticWaveform, ConstantWaveform,\
     Waveform, FunctorWaveform, FunctionWaveform
 from qupulse._program.transformation import LinearTransformation
-from qupulse.expressions import ExpressionScalar
+from qupulse.expressions import ExpressionScalar, Expression
 
 from tests.pulses.sequencing_dummies import DummyWaveform, DummyInterpolationStrategy
 from tests._program.transformation_tests import TransformationStub
@@ -357,6 +357,12 @@ class RepetitionWaveformTest(unittest.TestCase):
         self.assertIs(output_expected, output_received)
         np.testing.assert_equal(output_received, inner_sample_times)
 
+    def test_repr(self):
+        body_wf = ConstantWaveform(amplitude=1.1, duration=1.3, channel='3')
+        wf = RepetitionWaveform(body_wf, 3)
+        r = repr(wf)
+        self.assertEqual(wf, eval(r))
+
 
 class SequenceWaveformTest(unittest.TestCase):
     def __init__(self, *args, **kwargs) -> None:
@@ -389,6 +395,9 @@ class SequenceWaveformTest(unittest.TestCase):
         swf1 = SequenceWaveform.from_sequence((dwf, dwf))
         swf2 = SequenceWaveform.from_sequence((swf1, dwf))
 
+        assert_constant_consistent(self, swf1)
+        assert_constant_consistent(self, swf2)
+
         self.assertEqual(3*(dwf,), swf2.sequenced_waveforms)
 
         cwf_2_a = ConstantWaveform(duration=1.1, amplitude=2.2, channel='A')
@@ -402,9 +411,13 @@ class SequenceWaveformTest(unittest.TestCase):
 
         swf3 = SequenceWaveform.from_sequence((cwf_2_a, dwf))
         self.assertEqual((cwf_2_a, dwf), swf3.sequenced_waveforms)
+        self.assertIsNone(swf3.constant_value('A'))
+        assert_constant_consistent(self, swf3)
 
         swf3 = SequenceWaveform.from_sequence((cwf_2_a, cwf_3))
         self.assertEqual((cwf_2_a, cwf_3), swf3.sequenced_waveforms)
+        self.assertIsNone(swf3.constant_value('A'))
+        assert_constant_consistent(self, swf3)
 
     def test_sample_times_type(self) -> None:
         with mock.patch.object(DummyWaveform, 'unsafe_sample') as unsafe_sample_patch:
@@ -457,6 +470,13 @@ class SequenceWaveformTest(unittest.TestCase):
         self.assertEqual(sub_wf.compare_key[0].duration, TimeType.from_float(2.2))
         self.assertEqual(sub_wf.compare_key[1].duration, TimeType.from_float(3.3))
 
+    def test_repr(self):
+        cwf_2_a = ConstantWaveform(duration=1.1, amplitude=2.2, channel='A')
+        cwf_3 = ConstantWaveform(duration=1.1, amplitude=3.3, channel='A')
+        swf = SequenceWaveform([cwf_2_a, cwf_3])
+        r = repr(swf)
+        self.assertEqual(swf, eval(r))
+
 
 class ConstantWaveformTests(unittest.TestCase):
     def test_waveform_duration(self):
@@ -488,6 +508,15 @@ class ConstantWaveformTests(unittest.TestCase):
 
 
 class TableWaveformTests(unittest.TestCase):
+
+    def test_from_table(self):
+        expected = ConstantWaveform(0.1, 0.2, 'A')
+
+        for interp in (HoldInterpolationStrategy(), JumpInterpolationStrategy(), LinearInterpolationStrategy()):
+            wf = TableWaveform.from_table('A',
+                                          [TableWaveformEntry(0.0, 0.2, interp),
+                                           TableWaveformEntry(0.1, 0.2, interp)])
+            self.assertEqual(expected, wf)
 
     def test_validate_input_errors(self):
         with self.assertRaises(ValueError):
@@ -786,15 +815,17 @@ class ArithmeticWaveformTest(unittest.TestCase):
 
     def test_const_propagation(self):
         lhs = MultiChannelWaveform([
-            DummyWaveform(duration=1.5, defined_channels={'a', 'c', 'd'}),
+            DummyWaveform(duration=1.5, defined_channels={'a', 'c', 'd', 'i'}),
             ConstantWaveform.from_mapping(1.5, {'e': 1.2, 'f': 1.3, 'h': 4.6})
         ])
         rhs = MultiChannelWaveform([
             DummyWaveform(duration=1.5, defined_channels={'a', 'b', 'e'}),
-            ConstantWaveform.from_mapping(1.5, {'f': 2.5, 'g': 3.5})
+            ConstantWaveform.from_mapping(1.5, {'f': 2.5, 'g': 3.5, 'i': 6.4})
         ])
 
         wf = ArithmeticWaveform(lhs, '-', rhs)
+
+        assert_constant_consistent(self, wf)
 
         expected = {'a': None,
                     'b': None,
@@ -803,12 +834,11 @@ class ArithmeticWaveformTest(unittest.TestCase):
                     'e': None,
                     'f': 1.3-2.5,
                     'g': -3.5,
-                    'h': 4.6}
+                    'h': 4.6,
+                    'i': None}
 
         actual = {ch: wf.constant_value(ch) for ch in wf.defined_channels}
         self.assertEqual(expected, actual)
-
-
 
     def test_simple_properties(self):
         lhs = DummyWaveform(duration=1.5, defined_channels={'a', 'b', 'c'})
@@ -932,8 +962,18 @@ class FunctionWaveformTest(unittest.TestCase):
         expected_linear = FunctionWaveform(ExpressionScalar('4.*t'), 5, 'A')
         self.assertEqual(expected_linear, linear)
 
+    def test_repr(self):
+        wf = FunctionWaveform(ExpressionScalar('sin(2*pi*t) + 3'), 5, channel='A')
+        r = repr(wf)
+        self.assertEqual(wf, eval(r))
+
 
 class FunctorWaveformTests(unittest.TestCase):
+    def test_duration(self):
+        dummy_wf = DummyWaveform(1.5, defined_channels={'A', 'B'})
+        f_wf = FunctorWaveform.from_functor(dummy_wf, {'A': np.negative, 'B': np.positive})
+        self.assertIs(dummy_wf.duration, f_wf.duration)
+
     def test_from_functor(self):
         dummy_wf = DummyWaveform(1.5, defined_channels={'A', 'B'})
         const_wf = ConstantWaveform.from_mapping(1.5, {'A': 1.1, 'B': 2.2})
