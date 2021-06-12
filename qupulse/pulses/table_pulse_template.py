@@ -316,24 +316,20 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
                                                                                                 MultiChannelWaveform]]:
         self.validate_parameter_constraints(parameters, volatile=set())
 
-        if all(channel_mapping[channel] is None
-               for channel in self.defined_channels):
-            return None
-
         instantiated = [(channel_mapping[channel], instantiated_channel)
                         for channel, instantiated_channel in self.get_entries_instantiated(parameters).items()
                         if channel_mapping[channel] is not None]
 
+        if not instantiated:
+            return None
+
         if self.duration.evaluate_numeric(**parameters) == 0:
             return None
 
-        waveforms = [TableWaveform(*ch_instantiated)
+        waveforms = [TableWaveform.from_table(*ch_instantiated)
                      for ch_instantiated in instantiated]
 
-        if len(waveforms) == 1:
-            return waveforms.pop()
-        else:
-            return MultiChannelWaveform(waveforms)
+        return MultiChannelWaveform.from_parallel(waveforms)
 
     @staticmethod
     def from_array(times: np.ndarray, voltages: np.ndarray, channels: List[ChannelID]) -> 'TablePulseTemplate':
