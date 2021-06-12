@@ -277,11 +277,19 @@ class TableWaveform(Waveform):
     @classmethod
     def from_table(cls, channel: ChannelID, table: Sequence[EntryInInit]) -> Union['TableWaveform', 'ConstantWaveform']:
         table = cls._validate_input(table)
-        v = table[0].v
-        if all(entry.v == v for entry in table):
-            return ConstantWaveform(table[-1].t, v, channel)
+        v = None
+        for entry1, entry2 in pairwise(table):
+            piece = entry2.interp.constant_value(entry1[:2], entry2[:2])
+            if piece is None:
+                break
+            if v is None:
+                v = piece
+            elif piece != v:
+                break
         else:
-            return TableWaveform(channel, table)
+            return ConstantWaveform(duration=table[-1].t, amplitude=v, channel=channel)
+
+        return TableWaveform(channel, table)
 
     @property
     def compare_key(self) -> Any:
@@ -330,7 +338,7 @@ class ConstantWaveform(Waveform):
     # TODO: remove
     _is_constant_waveform = True
 
-    def __init__(self, duration: float, amplitude: Any, channel: ChannelID):
+    def __init__(self, duration: Real, amplitude: Any, channel: ChannelID):
         """ Create a qupulse waveform corresponding to a ConstantPulseTemplate """
         self._duration = duration
         self._amplitude = amplitude
@@ -359,7 +367,10 @@ class ConstantWaveform(Waveform):
 
     @property
     def duration(self) -> TimeType:
-        return time_from_float(float(self._duration), absolute_error=PULSE_TO_WAVEFORM_ERROR)
+        if isinstance(self._duration, TimeType):
+            return self._duration
+        else:
+            return time_from_float(float(self._duration), absolute_error=PULSE_TO_WAVEFORM_ERROR)
 
     @property
     def defined_channels(self) -> AbstractSet[ChannelID]:
