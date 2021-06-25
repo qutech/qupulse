@@ -34,6 +34,7 @@ from qupulse.utils.types import ChannelID, TimeType
 from qupulse.utils import replace_multiple, grouper
 from qupulse._program.waveforms import Waveform
 from qupulse._program._loop import Loop
+
 from qupulse._program.volatile import VolatileRepetitionCount, VolatileProperty
 from qupulse.hardware.awgs.base import ProgramEntry
 
