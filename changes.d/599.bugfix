@@ -1,1 +1,0 @@
-Replace pytabor and teawg with tabor_control to support newer(>=1.11) pyvisa versions

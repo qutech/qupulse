@@ -1,4 +1,40 @@
+
+
 .. towncrier release notes start
+
+qupulse 0.6 (2021-07-08)
+==========================
+
+Features
+--------
+
+- Add `evaluate_with_exact_rationals` method to `ExpressionScalar` (`#546 <https://github.com/qutech/qupulse/issues/546>`_)
+- New feature based AWG abstraction. Can be found in `qupulse.hardware.feature_awg`. Allows easier code reuse across awg drivers. (`#557 <https://github.com/qutech/qupulse/issues/557>`_)
+- Add ConstantPulseTemplate (`#565 <https://github.com/qutech/qupulse/issues/565>`_)
+- Add interface to use `atsaverage` auto rearm (`#566 <https://github.com/qutech/qupulse/issues/566>`_)
+- Adds the methods `is_constant`, `constant_value_dict` and `constant_value` to Waveform class to allow more efficient AWG usage. (`#588 <https://github.com/qutech/qupulse/issues/588>`_)
+
+
+Bugfixes
+--------
+
+- Fix TimeType comparisons with non-finite floats (inf, -inf, NaN) (`#536 <https://github.com/qutech/qupulse/issues/536>`_)
+- Improve alazar usability:
+    - Do not touch the default config when arming a measurement
+    - Keep current config in a seperate field
+    - Extend record to a multiple of a configurable value (4KB by default) (`#571 <https://github.com/qutech/qupulse/issues/571>`_)
+- Replace pytabor and teawg with tabor_control to support newer(>=1.11) pyvisa versions (`#599 <https://github.com/qutech/qupulse/issues/599>`_)
+- Fix `repr` of `ExpressionScalar` when constructed from a sympy expression. Also replace `Expression` with `ExpressionScalar` in `repr`. (`#604 <https://github.com/qutech/qupulse/issues/604>`_)
+
+
+Deprecations and Removals
+-------------------------
+
+- Deprecate HashableNumpyArray due to its inconsistency. (`#408 <https://github.com/qutech/qupulse/issues/408>`_)
+- Drop support for python 3.5 (`#504 <https://github.com/qutech/qupulse/issues/504>`_)
+- Remove deprecated `external_parameters` keyword argument from SequencePT and AtomicMultiChannelPT (`#592 <https://github.com/qutech/qupulse/issues/592>`_)
+- Deprecate boolean `duration` argument of `AtomicMultiChannelPulseTemplate` and remove duration check in `__init__`. (`#593 <https://github.com/qutech/qupulse/issues/593>`_)
+
 
 0.5.1
 =====
