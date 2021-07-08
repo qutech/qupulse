@@ -364,10 +364,16 @@ class SingletonABCMeta(DocStringABCMeta):
 class HashableNumpyArray(numpy.ndarray):
     """Make numpy arrays hashable.
 
+    Deprecated since 0.6. This is a bad idea.
+
     Example usage:
     my_array = np.zeros([1, 2, 3, 4])
     hashable = my_array.view(HashableNumpyArray)
     """
+    def __array_finalize__(self, obj):
+        warnings.warn("HashableNumpyArray is deprecated since qupulse 0.6 and will be removed in the next release.",
+                      category=DeprecationWarning, stacklevel=2)
+
     def __hash__(self):
         return hash(self.tobytes())
 
