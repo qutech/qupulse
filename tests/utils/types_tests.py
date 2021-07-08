@@ -10,11 +10,12 @@ from qupulse.utils.types import (HashableNumpyArray, SequenceProxy, _FrozenDictB
 class HashableNumpyArrayTest(unittest.TestCase):
     def test_hash(self):
 
-        a = np.array([1, 2, 3]).view(HashableNumpyArray)
+        with self.assertWarns(DeprecationWarning):
+            a = np.array([1, 2, 3]).view(HashableNumpyArray)
 
-        b = np.array([3, 4, 5]).view(HashableNumpyArray)
+            b = np.array([3, 4, 5]).view(HashableNumpyArray)
 
-        c = np.array([1, 2, 3]).view(HashableNumpyArray)
+            c = np.array([1, 2, 3]).view(HashableNumpyArray)
 
         self.assertNotEqual(hash(a), hash(b))
         self.assertEqual(hash(a), hash(c))
