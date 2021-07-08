@@ -533,7 +533,7 @@ class ArithmeticPulseTemplateTest(unittest.TestCase):
 
         with mock.patch.object(DummyPulseTemplate, '__repr__', wraps=lambda *args: 'dummy'):
             r = repr(ArithmeticPulseTemplate(pt, '-', scalar))
-        self.assertEqual("(dummy - Expression('x'))", r)
+        self.assertEqual("(dummy - ExpressionScalar('x'))", r)
 
         arith = ArithmeticPulseTemplate(pt, '-', scalar, identifier='id')
         self.assertEqual(super(ArithmeticPulseTemplate, arith).__repr__(), repr(arith))
