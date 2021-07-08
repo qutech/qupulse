@@ -9,7 +9,7 @@ Classes:
 
 
 from abc import ABCMeta, abstractmethod
-from typing import Any, Tuple
+from typing import Any, Tuple, Optional
 import numpy as np
 
 from qupulse.expressions import ExpressionScalar
@@ -66,7 +66,19 @@ class InterpolationStrategy(metaclass=ABCMeta):
     def __hash__(self) -> int:
         return hash(self.__repr__())
 
-    
+    def constant_value(self, start: Tuple[float, float], end: Tuple[float, float]) -> Optional[float]:
+        """The value of the interpolation if it is constant.
+
+        Args:
+            start: The start point of the interpolation as (time, value) pair.
+            end: The end point of the interpolation as (time, value) pair.
+
+        Returns:
+            The value of the interpolation if it is constant
+        """
+        return None
+
+
 class LinearInterpolationStrategy(InterpolationStrategy):
     """An InterpolationStrategy that interpolates linearly between two points."""
     
@@ -90,6 +102,9 @@ class LinearInterpolationStrategy(InterpolationStrategy):
 
     def __repr__(self) -> str:
         return "<Linear Interpolation>"
+
+    def constant_value(self, start: Tuple[float, float], end: Tuple[float, float]) -> Optional[float]:
+        return start[1] if start[1] == end[1] else None
 
     
 class HoldInterpolationStrategy(InterpolationStrategy):
@@ -122,6 +137,9 @@ class HoldInterpolationStrategy(InterpolationStrategy):
     def __repr__(self) -> str:
         return "<Hold Interpolation>"
 
+    def constant_value(self, start: Tuple[float, float], end: Tuple[float, float]) -> Optional[float]:
+        return start[1]
+
 
 class JumpInterpolationStrategy(InterpolationStrategy):
     """An InterpolationStrategy that interpolates by holding the value of the end point for the
@@ -152,3 +170,6 @@ class JumpInterpolationStrategy(InterpolationStrategy):
 
     def __repr__(self) -> str:
         return "<Jump Interpolation>"
+
+    def constant_value(self, start: Tuple[float, float], end: Tuple[float, float]) -> Optional[float]:
+        return end[1]

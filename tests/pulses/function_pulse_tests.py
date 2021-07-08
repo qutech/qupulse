@@ -3,11 +3,11 @@ import sympy
 import numpy as np
 
 from qupulse.utils.types import TimeType
-from qupulse.pulses.function_pulse_template import FunctionPulseTemplate,\
-    FunctionWaveform
+from qupulse.pulses.function_pulse_template import FunctionPulseTemplate
 from qupulse.serialization import Serializer, Serializable, PulseStorage
 from qupulse.expressions import Expression
 from qupulse.pulses.parameters import ParameterConstraintViolation, ParameterConstraint
+from qupulse._program.waveforms import FunctionWaveform
 
 from tests.serialization_dummies import DummySerializer, DummyStorageBackend
 from tests.pulses.sequencing_dummies import DummyParameter
@@ -216,56 +216,6 @@ class TablePulseTemplateMeasurementTest(MeasurementDefinerTest):
                          to_test_constructor=tpt_constructor, **kwargs)
 
 
-class FunctionWaveformTest(unittest.TestCase):
-
-    def test_equality(self) -> None:
-        wf1a = FunctionWaveform(Expression('2*t'), 3, channel='A')
-        wf1b = FunctionWaveform(Expression('2*t'), 3, channel='A')
-        wf3 = FunctionWaveform(Expression('2*t+2'), 3, channel='A')
-        wf4 = FunctionWaveform(Expression('2*t'), 4, channel='A')
-        self.assertEqual(wf1a, wf1a)
-        self.assertEqual(wf1a, wf1b)
-        self.assertNotEqual(wf1a, wf3)
-        self.assertNotEqual(wf1a, wf4)
-
-    def test_defined_channels(self) -> None:
-        wf = FunctionWaveform(Expression('t'), 4, channel='A')
-        self.assertEqual({'A'}, wf.defined_channels)
-
-    def test_duration(self) -> None:
-        wf = FunctionWaveform(expression=Expression('2*t'), duration=4/5,
-                              channel='A')
-        self.assertEqual(TimeType.from_float(4/5), wf.duration)
-
-    def test_unsafe_sample(self):
-        fw = FunctionWaveform(Expression('sin(2*pi*t) + 3'), 5, channel='A')
-
-        t = np.linspace(0, 5, dtype=float)
-        expected_result = np.sin(2*np.pi*t) + 3
-        result = fw.unsafe_sample(channel='A', sample_times=t)
-        np.testing.assert_equal(result, expected_result)
-
-        out_array = np.empty_like(t)
-        result = fw.unsafe_sample(channel='A', sample_times=t, output_array=out_array)
-        np.testing.assert_equal(result, expected_result)
-        self.assertIs(result, out_array)
-
-    def test_constant_evaluation(self):
-        # cause for 596
-        fw = FunctionWaveform(Expression(3), 5, channel='A')
-        t = np.linspace(0, 5, dtype=float)
-        expected_result = np.full_like(t, fill_value=3.)
-        out_array = np.full_like(t, fill_value=np.nan)
-        result = fw.unsafe_sample(channel='A', sample_times=t, output_array=out_array)
-        self.assertIs(result, out_array)
-        np.testing.assert_equal(result, expected_result)
-
-        result = fw.unsafe_sample(channel='A', sample_times=t)
-        np.testing.assert_equal(result, expected_result)
-
-    def test_unsafe_get_subset_for_channels(self):
-        fw = FunctionWaveform(Expression('sin(2*pi*t) + 3'), 5, channel='A')
-        self.assertIs(fw.unsafe_get_subset_for_channels({'A'}), fw)
 
 
 class FunctionPulseMeasurementTest(unittest.TestCase):
