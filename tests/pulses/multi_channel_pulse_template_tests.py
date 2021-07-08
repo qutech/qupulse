@@ -68,8 +68,6 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
         with self.assertRaises(TypeError):
             AtomicMultiChannelPulseTemplate((non_atomic_pt, {'A': 'C'}), atomic_pt)
 
-    @unittest.skip("This test is skipped because the init check was removed. We keep the code around here because there"
-                   " are plans to introduce a runtime warning instead which could be tested with a few modifications.")
     def test_instantiation_duration_check(self):
         subtemplates = [DummyPulseTemplate(parameter_names={'p1'},
                                            measurement_names={'m1'},
@@ -87,10 +85,11 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
                                            duration='t_3',
                                            waveform=DummyWaveform(duration=4, defined_channels={'c3'}))]
 
-        with self.assertRaisesRegex(ValueError, 'duration equality'):
-            AtomicMultiChannelPulseTemplate(*subtemplates)
+        # with self.assertRaisesRegex(ValueError, 'duration equality'):
+        #     AtomicMultiChannelPulseTemplate(*subtemplates)
 
-        amcpt = AtomicMultiChannelPulseTemplate(*subtemplates, duration=True)
+        with self.assertWarns(DeprecationWarning):
+            amcpt = AtomicMultiChannelPulseTemplate(*subtemplates, duration=True)
         self.assertIs(amcpt.duration, subtemplates[0].duration)
 
         with self.assertRaisesRegex(ValueError, 'duration'):

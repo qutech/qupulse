@@ -58,6 +58,7 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
         if duration in (True, False):
             warnings.warn("Boolean duration is deprecated since qupulse 0.6 and interpreted as None",
                           category=DeprecationWarning, stacklevel=2)
+            duration = None
 
         for subtemplate in self._subtemplates:
             if isinstance(subtemplate, AtomicPulseTemplate):
