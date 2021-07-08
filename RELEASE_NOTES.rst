@@ -2,7 +2,7 @@
 
 .. towncrier release notes start
 
-qupulse 0.5.1 (2021-07-08)
+qupulse 0.6 (2021-07-08)
 ==========================
 
 Features
