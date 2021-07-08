@@ -23,7 +23,7 @@ from qupulse.pulses.pulse_template import PulseTemplate, AtomicPulseTemplate
 from qupulse.pulses.mapping_pulse_template import MappingPulseTemplate, MappingTuple
 from qupulse.pulses.parameters import Parameter, ParameterConstrainer
 from qupulse.pulses.measurement import MeasurementDeclaration, MeasurementWindow
-from qupulse.expressions import Expression, ExpressionScalar
+from qupulse.expressions import Expression, ExpressionScalar, ExpressionLike
 
 __all__ = ["AtomicMultiChannelPulseTemplate", "ParallelConstantChannelPulseTemplate"]
 
@@ -32,15 +32,14 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
     """Combines multiple PulseTemplates that are defined on different channels into an AtomicPulseTemplate."""
     def __init__(self,
                  *subtemplates: Union[AtomicPulseTemplate, MappingTuple, MappingPulseTemplate],
-                 identifier: Optional[str]=None,
-                 parameter_constraints: Optional[List]=None,
-                 measurements: Optional[List[MeasurementDeclaration]]=None,
-                 registry: PulseRegistryType=None,
-                 duration: Union[str, Expression, bool]=False) -> None:
-        """Parallels multiple AtomicPulseTemplates of the same duration. The duration equality check is performed on
-        construction by default. If the duration keyword argument is given the check is performed on instantiation
-        (when build_waveform is called). duration can be a Expression to enforce a certain duration or True for an
-        unspecified duration.
+                 identifier: Optional[str] = None,
+                 parameter_constraints: Optional[List] = None,
+                 measurements: Optional[List[MeasurementDeclaration]] = None,
+                 registry: PulseRegistryType = None,
+                 duration: Optional[ExpressionLike] = None) -> None:
+        """Parallels multiple AtomicPulseTemplates of the same duration. If the duration keyword argument is given
+        it is enforced that the instantiated pulse template has this duration. If duration is None the duration of the
+        PT is the duration of the first subtemplate. There are probably changes to this behaviour in the future.
 
         Args:
             *subtemplates: Positional arguments are subtemplates to combine.
@@ -55,6 +54,10 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
 
         self._subtemplates = [st if isinstance(st, PulseTemplate) else MappingPulseTemplate.from_tuple(st) for st in
                               subtemplates]
+
+        if duration in (True, False):
+            warnings.warn("Boolean duration is deprecated since qupulse 0.6 and interpreted as None",
+                          category=DeprecationWarning, stacklevel=2)
 
         for subtemplate in self._subtemplates:
             if isinstance(subtemplate, AtomicPulseTemplate):
@@ -80,16 +83,7 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
                                                   'subtemplate {}'.format(i + 2 + j),
                                                   (channels_i & channels_j).pop())
 
-        if not duration:
-            duration = self._subtemplates[0].duration
-            for subtemplate in self._subtemplates[1:]:
-                if almost_equal(duration.sympified_expression, subtemplate.duration.sympified_expression):
-                    continue
-                else:
-                    raise ValueError('Could not assert duration equality of {} and {}'.format(duration,
-                                                                                              subtemplate.duration))
-            self._duration = None
-        elif duration is True:
+        if duration is None:
             self._duration = None
         else:
             self._duration = ExpressionScalar(duration)
@@ -98,10 +92,10 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
 
     @property
     def duration(self) -> ExpressionScalar:
-        if self._duration:
-            return self._duration
-        else:
+        if self._duration is None:
             return self._subtemplates[0].duration
+        else:
+            return self._duration
 
     @property
     def parameter_names(self) -> Set[str]:
