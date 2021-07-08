@@ -1,1 +1,0 @@
-Deprecate boolean `duration` argument of `AtomicMultiChannelPulseTemplate` and remove duration check in `__init__`.
