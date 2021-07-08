@@ -265,7 +265,10 @@ class ExpressionScalar(Expression):
         return str(self._sympified_expression)
 
     def __repr__(self) -> str:
-        return 'Expression({})'.format(repr(self._original_expression))
+        if self._original_expression is None:
+            return f"ExpressionScalar('{self._sympified_expression!r}')"
+        else:
+            return f"ExpressionScalar({self._original_expression!r})"
 
     def __format__(self, format_spec):
         if format_spec == '':
