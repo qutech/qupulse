@@ -31,6 +31,35 @@ def take(n, iterable):
     return list(islice(iterable, n))
 
 
+class BinaryWaveformTest(unittest.TestCase):
+    MAX_RATE = 14
+
+    def test_dynamic_rate_reduction(self):
+
+        ones = np.ones(2**(self.MAX_RATE + 2) * 3, np.uint16)
+        zeros = np.zeros(2**(self.MAX_RATE + 2) * 3, np.uint16)
+        irreducibles = [
+            np.array([0, 0, 1, 1, 0, 1] * 16, dtype=np.uint16),
+            np.array([0, 0, 0] * 16 + [0, 1, 0] + [0, 0, 0] * 15, dtype=np.uint16),
+            np.array([0, 0, 0] * 16 + [1, 0, 0] + [0, 0, 0] * 15, dtype=np.uint16),
+        ]
+
+        for max_rate in range(self.MAX_RATE):
+            self.assertEqual(BinaryWaveform(ones[:32 * 3]).dynamic_rate(max_rate=max_rate), 0)
+            self.assertEqual(BinaryWaveform(ones[:(32 + 16) * 3]).dynamic_rate(max_rate=max_rate), 0)
+
+            for n in range(self.MAX_RATE):
+                for irreducible in irreducibles:
+                    data = np.tile(np.tile(irreducible.reshape(-1, 1, 3), (1, 2**n, 1)).ravel(), (16,))
+
+                    dyn_n = BinaryWaveform(data).dynamic_rate(max_rate=max_rate)
+
+                    self.assertEqual(min(max_rate, n), dyn_n)
+
+
+
+
+
 def make_binary_waveform(waveform):
     if waveform.duration == 0:
         data = np.asarray(3 * [1, 2, 3, 4, 5], dtype=np.uint16)

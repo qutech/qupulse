@@ -66,13 +66,13 @@ class BinaryWaveform:
 
     PLAYBACK_QUANTUM = 16
 
-    def __init__(self, data: np.ndarray, quantum: int = None):
+    def __init__(self, data: np.ndarray):
         """ TODO: always use both channels?
 
         Args:
             data: data as returned from zhinst.utils.convert_awg_waveform
         """
-        n_quantum, remainder = divmod(data.size, 3 * (quantum or self.PLAYBACK_QUANTUM))
+        n_quantum, remainder = divmod(data.size, 3 * self.PLAYBACK_QUANTUM)
         assert n_quantum > 1, "Waveform too short (min len is 32)"
         assert remainder == 0, "Waveform has not a valid length"
         assert data.dtype is np.dtype('uint16')
@@ -169,13 +169,14 @@ class BinaryWaveform:
         """Returns if the waveform can be played without padding"""
         return self.data.size % self.PLAYBACK_QUANTUM == 0
 
-    def dynamic_rate(self, max_rate: int = 12, min_len: int = 16):
-        n = 0
-        reduced = self.data.reshape((None, 3))
-        while n <= max_rate and reduced.shape[0] >= min_len and np.all(reduced[::2, :] == reduced[1::2, :]):
+    def dynamic_rate(self, max_rate: int = 12) -> int:
+        reduced = self.data.reshape(-1, 3)
+        for n in range(max_rate):
+            n_quantum, remainder = divmod(reduced.shape[0], self.PLAYBACK_QUANTUM)
+            if n_quantum < 4 or remainder != 0 or np.any(reduced[::2, :] != reduced[1::2, :]):
+                return n
             reduced = reduced[::2, :]
-            n += 1
-        return n
+        return max_rate
 
 
 class ConcatenatedWaveform:
