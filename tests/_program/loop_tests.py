@@ -478,3 +478,7 @@ class ProgramWaveformCompatibilityTest(unittest.TestCase):
 
                 is_compat.assert_called_once_with(program, **priv_kwargs)
                 make_compat.assert_called_once_with(program, **priv_kwargs)
+
+    def test_roll_constant_waveforms(self):
+        raise NotImplementedError()
+
