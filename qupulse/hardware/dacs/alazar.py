@@ -21,6 +21,11 @@ class AlazarProgram:
         self._masks = {}
         self.operations = []
         self._total_length = None
+        self._buffer_strategy = None
+
+    @property
+    def mask_names(self) -> FrozenSet[str]:
+        return frozenset(self._masks.keys())
 
     def masks(self, mask_maker: Callable[[str, np.ndarray, np.ndarray], Mask]) -> List[Mask]:
         return [mask_maker(mask_name, *data) for mask_name, data in self._masks.items()]
@@ -47,6 +52,24 @@ class AlazarProgram:
     def sample_factor(self) -> Optional[TimeType]:
         return self._sample_factor
 
+    def _mask_to_samples(self, begins, lengths) -> Tuple[np.ndarray, np.ndarray]:
+        assert self._sample_factor is not None
+        assert begins.dtype == np.float and lengths.dtype == np.float
+
+        sample_factor = self._sample_factor
+
+        begins = np.rint(begins * float(sample_factor)).astype(dtype=np.uint64)
+        lengths = np.floor_divide(lengths * float(sample_factor.numerator), float(sample_factor.denominator)).astype(
+            dtype=np.uint64)
+
+        sorting_indices = np.argsort(begins)
+        begins = begins[sorting_indices]
+        lengths = lengths[sorting_indices]
+
+        begins.flags.writeable = False
+        lengths.flags.writeable = False
+        return begins, lengths
+
     def set_measurement_mask(self, mask_name: str, sample_factor: TimeType,
                              begins: np.ndarray, lengths: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """Raise error if sample factor has changed"""
@@ -56,27 +79,44 @@ class AlazarProgram:
         elif sample_factor != self._sample_factor:
             raise RuntimeError('class AlazarProgram has already masks with differing sample factor')
 
-        assert begins.dtype == np.float and lengths.dtype == np.float
-
-        # optimization potential here (hash input?)
-        begins = np.rint(begins * float(sample_factor)).astype(dtype=np.uint64)
-        lengths = np.floor_divide(lengths * float(sample_factor.numerator), float(sample_factor.denominator)).astype(dtype=np.uint64)
-
-        sorting_indices = np.argsort(begins)
-        begins = begins[sorting_indices]
-        lengths = lengths[sorting_indices]
-
-        begins.flags.writeable = False
-        lengths.flags.writeable = False
-
-        self._masks[mask_name] = begins, lengths
+        self._masks[mask_name] = self._mask_to_samples(begins, lengths)
 
         return begins, lengths
+
+    def update_measurement_masks(self, sample_factor: TimeType,
+                                 masks: Mapping[str, Tuple[np.ndarray, np.ndarray]]) -> bool:
+        """
+
+        Args:
+            sample_factor:
+            masks:
+
+        Returns:
+            True if the measurement masks changed
+        """
+        self._sample_factor = sample_factor
+
+        update_required = False
+        old_masks = self._masks.copy()
+        self._masks.clear()
+        for mask_name, (begins, lengths) in masks.items():
+            begins, lengths = self._mask_to_samples(begins, lengths)
+            if not update_required:
+                # check if the masks changed
+                if not np.array_equal(old_masks.pop(mask_name, None), (begins, lengths)):
+                    update_required = True
+            self._masks[mask_name] = (begins, lengths)
+
+        if len(old_masks) != 0:
+            # there are removed masks
+            update_required = True
+
+        return update_required
 
     def iter(self, mask_maker):
         yield self.masks(mask_maker)
         yield self.operations
-        yield self.total_length
+        yield self._total_length
 
 
 def gcd_set(data):
@@ -246,6 +286,8 @@ class AlazarCard(DAC):
 
     def set_measurement_mask(self, program_name, mask_name, begins, lengths) -> Tuple[np.ndarray, np.ndarray]:
         sample_factor = TimeType(int(self.default_config.captureClockConfiguration.numeric_sample_rate(self.card.model)), 10**9)
+        if program_name is self.__armed_program:
+            self.update_settings = True
         return self._registered_programs[program_name].set_measurement_mask(mask_name, sample_factor, begins, lengths)
 
     def register_measurement_windows(self,
@@ -254,13 +296,14 @@ class AlazarCard(DAC):
         program = self._registered_programs[program_name]
         sample_factor = TimeType.from_fraction(int(self.default_config.captureClockConfiguration.numeric_sample_rate(self.card.model)),
                                                10 ** 9)
-        program.clear_masks()
-
-        for mask_name, (begins, lengths) in windows.items():
-            program.set_measurement_mask(mask_name, sample_factor, begins, lengths)
+        if program.update_measurement_masks(sample_factor, windows) and program is self.__armed_program:
+            self.update_settings = True
 
     def register_operations(self, program_name: str, operations) -> None:
-        self._registered_programs[program_name].operations = operations
+        program = self._registered_programs[program_name]
+        if program is self.__armed_program and program.operations != operations:
+            self.update_settings = True
+        program.operations = operations
 
     def arm_program(self, program_name: str) -> None:
         to_arm = self._registered_programs[program_name]
@@ -283,16 +326,21 @@ class AlazarCard(DAC):
                 raise RuntimeError("Masks were registered with a different sample rate {}!={}".format(
                     self._registered_programs[program_name].sample_factor, sample_factor))
 
+            if total_record_size is None:
+                buffer_size, total_record_size = self.buffer_strategy.calculate_acquisition_properties(config.masks,
+                                                                                          self.__card.minimum_record_size)
+                config.aimedBufferSize = buffer_size
+
+            else:
+                warnings.warn("Hardcoded record size for program", DeprecationWarning)
+
             assert total_record_size > 0
 
-            minimum_record_size = self.__card.minimum_record_size
-            total_record_size = (((total_record_size - 1) // minimum_record_size) + 1) * minimum_record_size
+            if config.totalRecordSize:
+                warnings.warn("Total record size of config is ignored", DeprecationWarning)
 
-            if config.totalRecordSize == 0:
-                config.totalRecordSize = total_record_size
-            elif config.totalRecordSize < total_record_size:
-                raise ValueError('specified total record size is smaller than needed {} < {}'.format(config.totalRecordSize,
-                                                                                                     total_record_size))
+            config.totalRecordSize = total_record_size
+
             self.__card.applyConfiguration(config, True)
             self._current_config = config
 
@@ -309,8 +357,8 @@ class AlazarCard(DAC):
         self.__armed_program = None
 
     @property
-    def mask_prototypes(self) -> Dict[str, Tuple[int, str]]:
-        return self._mask_prototypes
+    def mask_prototypes(self) -> Mapping[str, Tuple[int, str]]:
+        return types.MappingProxyType(self._mask_prototypes)
 
     def register_mask_for_channel(self, mask_id: str, hw_channel: int, mask_type='auto') -> None:
         """
@@ -324,7 +372,11 @@ class AlazarCard(DAC):
             raise ValueError('{} is not a valid hw channel'.format(hw_channel))
         if mask_type not in ('auto', 'cross_buffer', None):
             raise NotImplementedError('Currently only can do cross buffer mask')
-        self._mask_prototypes[mask_id] = (hw_channel, mask_type)
+        val = (hw_channel, mask_type)
+        if self._mask_prototypes.get(mask_id, None) != val:
+            self._mask_prototypes[mask_id] = val
+            if self.__armed_program is not None and mask_id in self._registered_programs[self.__armed_program].mask_names:
+                self.update_settings = True
 
     def measure_program(self, channels: Iterable[str]) -> Dict[str, np.ndarray]:
         """
