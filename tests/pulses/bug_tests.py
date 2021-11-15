@@ -9,6 +9,7 @@ from qupulse.pulses.sequence_pulse_template import SequencePulseTemplate
 from qupulse.pulses.repetition_pulse_template import RepetitionPulseTemplate
 from qupulse.pulses.multi_channel_pulse_template import AtomicMultiChannelPulseTemplate
 from qupulse.pulses.mapping_pulse_template import MappingPulseTemplate
+from qupulse.pulses.loop_pulse_template import ForLoopPulseTemplate
 
 from qupulse.pulses.plotting import plot
 
@@ -94,3 +95,12 @@ class BugTests(unittest.TestCase):
 
             expected = np.full_like(times, fill_value=1.)
             np.testing.assert_array_equal(expected, sampled)
+
+    def test_issue_612_for_loop_duration(self):
+        fpt = FunctionPulseTemplate('sin(2*pi*i*t*f)', '1/f')
+        pt = ForLoopPulseTemplate(fpt, 'i', 'floor(total_time*f)')
+        self.assertEqual(
+            (500 + 501) // 2,
+            pt.duration.evaluate_in_scope({'f': 1., 'total_time': 500})
+        )
+
