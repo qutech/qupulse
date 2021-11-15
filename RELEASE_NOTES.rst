@@ -1,26 +1,56 @@
-## pending/current ##
- - General:
-    - Fix TimeType comparisons with non-finite floats (inf, -inf, NaN)
-    - Drop python 3.5 support
-
- - Expressions:
-    - Add `evaluate_with_exact_rationals` method to ExpressionScalar
 
 
-## 0.5.1 ##
+.. towncrier release notes start
 
- - General:
-    - Unify `TimeType.from_float` between fractions and gmpy2 backend behaviour (fixes issue 529).
+qupulse 0.6 (2021-07-08)
+==========================
 
-## 0.5 ##
+Features
+--------
 
- - General:
+- Add `evaluate_with_exact_rationals` method to `ExpressionScalar` (`#546 <https://github.com/qutech/qupulse/issues/546>`_)
+- New feature based AWG abstraction. Can be found in `qupulse.hardware.feature_awg`. Allows easier code reuse across awg drivers. (`#557 <https://github.com/qutech/qupulse/issues/557>`_)
+- Add ConstantPulseTemplate (`#565 <https://github.com/qutech/qupulse/issues/565>`_)
+- Add interface to use `atsaverage` auto rearm (`#566 <https://github.com/qutech/qupulse/issues/566>`_)
+- Adds the methods `is_constant`, `constant_value_dict` and `constant_value` to Waveform class to allow more efficient AWG usage. (`#588 <https://github.com/qutech/qupulse/issues/588>`_)
+
+
+Bugfixes
+--------
+
+- Fix TimeType comparisons with non-finite floats (inf, -inf, NaN) (`#536 <https://github.com/qutech/qupulse/issues/536>`_)
+- Improve alazar usability:
+    - Do not touch the default config when arming a measurement
+    - Keep current config in a seperate field
+    - Extend record to a multiple of a configurable value (4KB by default) (`#571 <https://github.com/qutech/qupulse/issues/571>`_)
+- Replace pytabor and teawg with tabor_control to support newer(>=1.11) pyvisa versions (`#599 <https://github.com/qutech/qupulse/issues/599>`_)
+- Fix `repr` of `ExpressionScalar` when constructed from a sympy expression. Also replace `Expression` with `ExpressionScalar` in `repr`. (`#604 <https://github.com/qutech/qupulse/issues/604>`_)
+
+
+Deprecations and Removals
+-------------------------
+
+- Deprecate HashableNumpyArray due to its inconsistency. (`#408 <https://github.com/qutech/qupulse/issues/408>`_)
+- Drop support for python 3.5 (`#504 <https://github.com/qutech/qupulse/issues/504>`_)
+- Remove deprecated `external_parameters` keyword argument from SequencePT and AtomicMultiChannelPT (`#592 <https://github.com/qutech/qupulse/issues/592>`_)
+- Deprecate boolean `duration` argument of `AtomicMultiChannelPulseTemplate` and remove duration check in `__init__`. (`#593 <https://github.com/qutech/qupulse/issues/593>`_)
+
+
+0.5.1
+=====
+
+- General:
+   - Unify `TimeType.from_float` between fractions and gmpy2 backend behaviour (fixes issue 529).
+
+0.5
+=====
+
+- General:
    - Improve `TimeType` consistency by leveraging str(float) for rounding by default.
    - Add support for sympy==1.5
-   - Add volatile parameters. Repetition counts can now be changed at runtime in some cases (useful for DNP). See
-     `volatile` kwarg of `create_program`
+   - Add volatile parameters. Repetition counts can now be changed at runtime in some cases (useful for DNP). See `volatile` kwarg of `create_program`
 
- - Hardware:
+- Hardware:
    - Add a `measure_program` method to the DAC interface. This method is used by the QCoDeS integration.
    - Add a `set_measurement_mask` to DAC interface. This method is used by the QCoDeS integration.
    - Add a `get_sample_times` util method to share code for exact and fast sample time calculation
@@ -52,7 +82,8 @@
       - InstructionBlock: Old representation of programs. Replaced by Loop
       - MultiChannelProgram: Was required in the instruction block framework
 
-## 0.4 ##
+0.4
+=====
 
 - General:
     - Add utility function `qupulse.utils.types.has_type_interface` and use it to circumvent autoreload triggered isinstance fails
@@ -64,7 +95,8 @@
     - Plotting:
         - Make `plotting.render` behaviour and return value consistent between calls with `InstructionBlock` and `Loop`. Render now always returns 3 arguments.
 
-## 0.3 ##
+0.3
+=====
 
 - General:
     - Introduce qupulse.utils.isclose (an alias for math.isclose if available)
@@ -89,19 +121,16 @@
 - Parameters:
     - `ConstantParameter` now accepts a `Expression` without free variables as value (given as `Expression` or string)
 
-## 0.2 ##
+0.2
+=====
 
 - General:
-
-    - officially removed support for Python 3.3 (qupulse and dependencies are not compatible anymore)
+   - officially removed support for Python 3.3 (qupulse and dependencies are not compatible anymore)
 
 - Serialization / Storage:
-
-    - Added functionality to easily access available content/identifiers in `PulseStorage` and `StorageBackend`.
-    - DEPRECATED `list_contents()` of `StorageBackend` (use `contents property` instead).
-    - DEPRECATED: `CachingBackend` because its functionality is a subset of `PulseStorage`.
+   - Added functionality to easily access available content/identifiers in `PulseStorage` and `StorageBackend`.
+   - DEPRECATED `list_contents()` of `StorageBackend` (use `contents property` instead).
+   - DEPRECATED: `CachingBackend` because its functionality is a subset of `PulseStorage`.
 
 - Expressions:
-    - Fixed bug in `Expression.evaluate_numeric` if result is array of numeric sympy objects
-
-## 0.1.2 ##
+   - Fixed bug in `Expression.evaluate_numeric` if result is array of numeric sympy objects

@@ -9,8 +9,13 @@ import math
 
 import sympy
 import numpy
-from sympy.printing.pycode import NumPyPrinter
 
+try:
+    from sympy.printing.numpy import NumPyPrinter
+except ImportError:
+    # sympy moved NumPyPrinter in release 1.8
+    from sympy.printing.pycode import NumPyPrinter
+    warnings.warn("Please update sympy.", DeprecationWarning)
 
 try:
     import scipy.special as _special_functions
@@ -55,7 +60,7 @@ class IndexedBasedFinder(dict):
             raise NotImplementedError("Not a full dict")
 
         for m in vars(dict).keys():
-            if not m.startswith('_'):
+            if not m.startswith('_') and (m not in ('pop',)):
                 setattr(self, m, unimplementded)
 
     def __getitem__(self, k) -> sympy.Expr:
@@ -72,6 +77,16 @@ class IndexedBasedFinder(dict):
         # otherwise track the symbol name and return a SubscriptionChecker instance
         self.symbols.add(k)
         return self.SubscriptionChecker(k)
+
+    def pop(self, key, *args, **kwargs):
+        # this is a workaround for some sympy 1.9 code
+        if args:
+            default, = args
+        elif kwargs:
+            default, = kwargs.values()
+        else:
+            raise KeyError(key)
+        return default
 
     def __setitem__(self, key, value):
         raise NotImplementedError("Not a full dict")
@@ -200,11 +215,28 @@ _NUMPY_COMPATIBLE = {
 }
 
 
+def _float_arr_to_int_arr(float_arr):
+    """Try to cast array to int64. Return original array if data is not representable."""
+    int_arr = float_arr.astype(numpy.int64)
+    if numpy.any(int_arr != float_arr):
+        # we either have a float that is too large or NaN
+        return float_arr
+    else:
+        return int_arr
+
+
 def numpy_compatible_ceiling(input_value: Any) -> Any:
     if isinstance(input_value, numpy.ndarray):
-        return numpy.ceil(input_value).astype(numpy.int64)
+        return _float_arr_to_int_arr(numpy.ceil(input_value))
     else:
         return sympy.ceiling(input_value)
+
+
+def _floor_to_int(input_value: Any) -> Any:
+    if isinstance(input_value, numpy.ndarray):
+        return _float_arr_to_int_arr(numpy.floor(input_value))
+    else:
+        return sympy.floor(input_value)
 
 
 def to_numpy(sympy_array: sympy.NDimArray) -> numpy.ndarray:
@@ -312,7 +344,8 @@ _math_environment = {**_base_environment, **math.__dict__}
 _numpy_environment = {**_base_environment, **numpy.__dict__}
 _sympy_environment = {**_base_environment, **sympy.__dict__}
 
-_lambdify_modules = [{'ceiling': numpy_compatible_ceiling, 'Broadcast': numpy.broadcast_to}, 'numpy', _special_functions]
+_lambdify_modules = [{'ceiling': numpy_compatible_ceiling, 'floor': _floor_to_int,
+                      'Broadcast': numpy.broadcast_to}, 'numpy', _special_functions]
 
 
 def evaluate_compiled(expression: sympy.Expr,

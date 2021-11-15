@@ -5,6 +5,7 @@ import warnings
 import math
 import functools
 import abc
+import logging
 import types
 
 import numpy as np
@@ -14,6 +15,10 @@ from atsaverage.masks import CrossBufferMask, Mask
 
 from qupulse.utils.types import TimeType
 from qupulse.hardware.dacs.dac_base import DAC
+from qupulse.hardware.util import traced
+
+
+logger = logging.getLogger(__name__)
 
 
 class AlazarProgram:
@@ -22,6 +27,7 @@ class AlazarProgram:
         self._masks = {}
         self.operations = []
         self._total_length = None
+        self._auto_rearm_count = 1
         self._buffer_strategy = None
 
     @property
@@ -45,6 +51,21 @@ class AlazarProgram:
     @total_length.setter
     def total_length(self, val: int):
         self._total_length = val
+
+    @property
+    def auto_rearm_count(self) -> int:
+        """This is passed to AlazarCard.startAcquisition. The card will (re-)arm automatically for this many times."""
+        return self._auto_rearm_count
+
+    @auto_rearm_count.setter
+    def auto_rearm_count(self, value: int):
+        trigger_count = int(value)
+        if trigger_count == 0:
+            raise ValueError("Trigger count of 0 is not supported in qupulse (yet) because tracking the number of "
+                             "remaining triggers is too hard in case of infinity :(")
+        if not 0 < trigger_count < 2**64:
+            raise ValueError("Trigger count has to be in the interval [0, 2**64-1]")
+        self._auto_rearm_count = trigger_count
 
     def clear_masks(self):
         self._masks.clear()
@@ -221,6 +242,7 @@ class OneBufferPerWindow(BufferStrategy):
         return 'OneBufferPerWindow()'
 
 
+@traced
 class AlazarCard(DAC):
     def __init__(self, card, config: Optional[ScanlineConfiguration]=None):
         self.__card = card
@@ -229,19 +251,43 @@ class AlazarCard(DAC):
         self.update_settings = True
 
         self.__definitions = dict()
+
+        # this ScanlineConfig is used by default for each program
+        # masks and operations are overwritten
         self.default_config = config
+
+        # the currently active ScanlineConfig
         self._current_config = None
 
-        # defaults to self.__card.minimum_record_size
         self._buffer_strategy = None
+
+        self._remaining_auto_triggers = 0
 
         self._mask_prototypes = dict()  # type: Dict
 
         self._registered_programs = defaultdict(AlazarProgram)  # type: Dict[str, AlazarProgram]
 
+        # defaults to self.__card.minimum_record_size if None
+        # we use a page size here because this is allocated anyways for a buffer
+        # This might lead to problems with small sample rates
+        self._record_size_factor = 1024 * 4
+
     @property
     def card(self) -> Any:
         return self.__card
+
+    @property
+    def record_size_factor(self) -> int:
+        """The total record size of each measurement gets extended to be a multiple of this. None means that the
+        minimal value supported by the card is taken."""
+        if self._record_size_factor is None:
+            return self.__card.minimum_record_size
+        else:
+            return self._record_size_factor
+
+    @record_size_factor.setter
+    def record_size_factor(self, value: Optional[int]):
+        self._record_size_factor = value
 
     @property
     def config(self):
@@ -275,6 +321,9 @@ class AlazarCard(DAC):
 
         hardware_channel, mask_type = self._mask_prototypes[mask_id]
 
+        if mask_type not in ('auto', 'cross_buffer', None):
+            warnings.warn("Currently only CrossBufferMask is implemented.")
+
         if np.any(begins[:-1]+lengths[:-1] > begins[1:]):
             raise ValueError('Found overlapping windows in begins')
 
@@ -286,7 +335,7 @@ class AlazarCard(DAC):
         return mask
 
     def set_measurement_mask(self, program_name, mask_name, begins, lengths) -> Tuple[np.ndarray, np.ndarray]:
-        sample_factor = TimeType(int(self.default_config.captureClockConfiguration.numeric_sample_rate(self.card.model)), 10**9)
+        sample_factor = TimeType.from_fraction(int(self.default_config.captureClockConfiguration.numeric_sample_rate(self.card.model)), 10**9)
         if program_name is self.__armed_program:
             self.update_settings = True
         return self._registered_programs[program_name].set_measurement_mask(mask_name, sample_factor, begins, lengths)
@@ -307,14 +356,21 @@ class AlazarCard(DAC):
         program.operations = operations
 
     def arm_program(self, program_name: str) -> None:
+        logger.debug("Arming program %s on %r", program_name, self.__card)
+
         to_arm = self._registered_programs[program_name]
         if self.update_settings or self.__armed_program is not to_arm:
+            logger.info("Arming %r by calling applyConfiguration. Update settings flag: %r",
+                        self.__card, self.update_settings)
+
             config = copy.deepcopy(self.default_config)
             config.masks, config.operations, total_record_size = self._registered_programs[program_name].iter(
                 self._make_mask)
 
-            sample_factor = TimeType.from_fraction(config.captureClockConfiguration.numeric_sample_rate(self.card.model),
-                                                   10 ** 9)
+            sample_rate = config.captureClockConfiguration.numeric_sample_rate(self.card.model)
+
+            # sample rate in GHz
+            sample_factor = TimeType.from_fraction(sample_rate, 10 ** 9)
 
             if not config.operations:
                 raise RuntimeError("No operations: Arming program without operations is an error as there will "
@@ -328,8 +384,9 @@ class AlazarCard(DAC):
                     self._registered_programs[program_name].sample_factor, sample_factor))
 
             if total_record_size is None:
-                buffer_size, total_record_size = self.buffer_strategy.calculate_acquisition_properties(config.masks,
-                                                                                          self.__card.minimum_record_size)
+                buffer_size, total_record_size = self.buffer_strategy.calculate_acquisition_properties(
+                    config.masks,
+                    self.record_size_factor)
                 config.aimedBufferSize = buffer_size
 
             else:
@@ -347,7 +404,15 @@ class AlazarCard(DAC):
 
             self.update_settings = False
             self.__armed_program = to_arm
-        self.__card.startAcquisition(1)
+
+        elif self.__armed_program is to_arm and self._remaining_auto_triggers > 0:
+            self._remaining_auto_triggers -= 1
+            logger.info("Relying on atsaverage auto-arm with %d auto triggers remaining after this one",
+                        self._remaining_auto_triggers)
+            return
+
+        self.__card.startAcquisition(to_arm.auto_rearm_count)
+        self._remaining_auto_triggers = to_arm.auto_rearm_count - 1
 
     def delete_program(self, program_name: str) -> None:
         self._registered_programs.pop(program_name)

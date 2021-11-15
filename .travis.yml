@@ -4,8 +4,8 @@ python:
   - 3.7
   - 3.8
 env:
-  - INSTALL_EXTRAS=[VISA,plotting,zurich-instruments,tektronix]
-  - INSTALL_EXTRAS=[VISA,plotting,zurich-instruments,tektronix,Faster-fractions]
+  - INSTALL_EXTRAS=[plotting,zurich-instruments,tektronix,tabor-instruments]
+  - INSTALL_EXTRAS=[plotting,zurich-instruments,tektronix,tabor-instruments,Faster-fractions]
 
 #use container based infrastructure
 sudo: false

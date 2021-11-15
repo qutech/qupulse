@@ -103,8 +103,10 @@ class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
         else:
             e = self.evaluate_numeric()
             return float(e)
-    
+
     def evaluate_symbolic(self, substitutions: Mapping[Any, Any]) -> 'Expression':
+        if len(substitutions)==0:
+            return self
         return Expression.make(recursive_substitution(sympify(self.underlying_expression), substitutions))
 
     @property
@@ -246,7 +248,7 @@ class ExpressionScalar(Expression):
         super().__init__()
 
         if isinstance(ex, sympy.Expr):
-            self._original_expression = str(ex)
+            self._original_expression = None
             self._sympified_expression = ex
         else:
             self._original_expression = ex
@@ -263,7 +265,10 @@ class ExpressionScalar(Expression):
         return str(self._sympified_expression)
 
     def __repr__(self) -> str:
-        return 'Expression({})'.format(repr(self._original_expression))
+        if self._original_expression is None:
+            return f"ExpressionScalar('{self._sympified_expression!r}')"
+        else:
+            return f"ExpressionScalar({self._original_expression!r})"
 
     def __format__(self, format_spec):
         if format_spec == '':
@@ -338,7 +343,10 @@ class ExpressionScalar(Expression):
 
     @property
     def original_expression(self) -> Union[str, Number]:
-        return self._original_expression
+        if self._original_expression is None:
+            return str(self._sympified_expression)
+        else:
+            return self._original_expression
 
     @property
     def sympified_expression(self) -> sympy.Expr:

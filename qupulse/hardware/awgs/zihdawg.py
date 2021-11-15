@@ -25,6 +25,7 @@ from qupulse._program._loop import Loop, make_compatible
 from qupulse._program.seqc import HDAWGProgramManager, UserRegister, WaveformFileSystem
 from qupulse.hardware.awgs.base import AWG, ChannelNotFoundException, AWGAmplitudeOffsetHandling
 from qupulse.pulses.parameters import ConstantParameter
+from qupulse.hardware.util import traced
 
 
 logger = logging.getLogger('qupulse.hdawg')
@@ -44,6 +45,7 @@ def valid_channel(function_object):
     return valid_fn
 
 
+@traced
 class HDAWGRepresentation:
     """HDAWGRepresentation represents an HDAWG8 instruments and manages a LabOne data server api session. A data server
     must be running and the device be discoverable. Channels are per default grouped into pairs."""
@@ -291,6 +293,7 @@ class HDAWGModulationMode(Enum):
     ADVANCED = 5  # AWG output modulates corresponding sines from modulation carriers.
 
 
+@traced
 class HDAWGChannelGroup(AWG):
     """Represents a channel pair of the Zurich Instruments HDAWG as an independent AWG entity.
     It represents a set of channels that have to have(hardware enforced) the same control flow and sample rate.
