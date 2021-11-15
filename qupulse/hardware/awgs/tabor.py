@@ -12,7 +12,7 @@ import numpy as np
 
 from qupulse.utils.types import ChannelID
 from qupulse._program._loop import Loop, make_compatible
-from qupulse.hardware.util import voltage_to_uint16, find_positions
+from qupulse.hardware.util import voltage_to_uint16, find_positions, traced
 from qupulse.hardware.awgs.base import AWG, AWGAmplitudeOffsetHandling
 from qupulse._program.tabor import TaborSegment, TaborException, TaborProgram, PlottableProgram, TaborSequencing,\
     make_combined_wave
@@ -21,6 +21,7 @@ from qupulse._program.tabor import TaborSegment, TaborException, TaborProgram, P
 __all__ = ['TaborAWGRepresentation', 'TaborChannelPair']
 
 
+@traced
 class TaborAWGRepresentation:
     def __init__(self, instr_addr=None, paranoia_level=1, external_trigger=False, reset=False, mirror_addresses=()):
         """
@@ -306,6 +307,7 @@ def with_select(function_object: Callable[['TaborChannelPair', Any], Any]) -> Ca
     return selector
 
 
+@traced
 class TaborChannelPair(AWG):
     CONFIG_MODE_PARANOIA_LEVEL = None
 

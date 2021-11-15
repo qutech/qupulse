@@ -14,6 +14,7 @@ from atsaverage.masks import CrossBufferMask, Mask
 
 from qupulse.utils.types import TimeType
 from qupulse.hardware.dacs.dac_base import DAC
+from qupulse.hardware.util import traced
 
 
 logger = logging.getLogger(__name__)
@@ -200,6 +201,7 @@ class OneBufferPerWindow(BufferStrategy):
         return 'OneBufferPerWindow()'
 
 
+@traced
 class AlazarCard(DAC):
     def __init__(self, card, config: Optional[ScanlineConfiguration]=None):
         self.__card = card

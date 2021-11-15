@@ -3,11 +3,19 @@ import itertools
 
 import numpy as np
 
+try:
+    from autologging import traced
+except ImportError:
+    def traced(obj):
+        """Noop traced that is used if autologging package is not available"""
+        return obj
+
 from qupulse._program.waveforms import Waveform
 from qupulse.utils.types import TimeType
 from qupulse.utils import pairwise
 
-__all__ = ['voltage_to_uint16', 'get_sample_times']
+
+__all__ = ['voltage_to_uint16', 'get_sample_times', 'traced']
 
 
 def voltage_to_uint16(voltage: np.ndarray, output_amplitude: float, output_offset: float, resolution: int) -> np.ndarray:
