@@ -60,7 +60,7 @@ class IndexedBasedFinder(dict):
             raise NotImplementedError("Not a full dict")
 
         for m in vars(dict).keys():
-            if not m.startswith('_'):
+            if not m.startswith('_') and (m not in ('pop',)):
                 setattr(self, m, unimplementded)
 
     def __getitem__(self, k) -> sympy.Expr:
@@ -77,6 +77,16 @@ class IndexedBasedFinder(dict):
         # otherwise track the symbol name and return a SubscriptionChecker instance
         self.symbols.add(k)
         return self.SubscriptionChecker(k)
+
+    def pop(self, key, *args, **kwargs):
+        # this is a workaround for some sympy 1.9 code
+        if args:
+            default, = args
+        elif kwargs:
+            default, = kwargs.values()
+        else:
+            raise KeyError(key)
+        return default
 
     def __setitem__(self, key, value):
         raise NotImplementedError("Not a full dict")
