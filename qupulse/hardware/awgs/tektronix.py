@@ -19,7 +19,7 @@ from qupulse import ChannelID
 from qupulse._program._loop import Loop, make_compatible
 from qupulse._program.waveforms import Waveform as QuPulseWaveform
 from qupulse.utils.types import TimeType
-from qupulse.hardware.util import voltage_to_uint16, get_sample_times
+from qupulse.hardware.util import voltage_to_uint16, get_sample_times, traced
 from qupulse.utils import pairwise
 
 
@@ -238,6 +238,7 @@ class TektronixProgram:
         return self._amplitudes
 
 
+@traced
 class TektronixAWG(AWG):
     """Driver for Tektronix AWG object (5000/7000 series).
 
