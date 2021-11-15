@@ -65,6 +65,7 @@ class BinaryWaveform:
     __slots__ = ('data',)
 
     PLAYBACK_QUANTUM = 16
+    PLAYBACK_MIN_QUANTA = 2
 
     def __init__(self, data: np.ndarray):
         """ TODO: always use both channels?
@@ -170,10 +171,12 @@ class BinaryWaveform:
         return self.data.size % self.PLAYBACK_QUANTUM == 0
 
     def dynamic_rate(self, max_rate: int = 12) -> int:
+        min_pre_division_quanta = 2 * self.PLAYBACK_QUANTUM
+
         reduced = self.data.reshape(-1, 3)
         for n in range(max_rate):
-            n_quantum, remainder = divmod(reduced.shape[0], self.PLAYBACK_QUANTUM)
-            if n_quantum < 4 or remainder != 0 or np.any(reduced[::2, :] != reduced[1::2, :]):
+            n_quantum, remainder = divmod(reduced.shape[0], min_pre_division_quanta)
+            if remainder != 0 or n_quantum < self.PLAYBACK_MIN_QUANTA or np.any(reduced[::2, :] != reduced[1::2, :]):
                 return n
             reduced = reduced[::2, :]
         return max_rate
@@ -1379,6 +1382,9 @@ class WaveformPlayback(SEQCNode):
 
     def __init__(self, waveform: Tuple[BinaryWaveform, ...], shared: bool = False, rate: int = None):
         assert isinstance(waveform, tuple)
+        if self.ENABLE_DYNAMIC_RATE_REDUCTION and rate is None:
+            for wf in waveform:
+                rate = wf.dynamic_rate(12 if rate is None else rate)
         self.waveform = waveform
         self.shared = shared
         self.rate = rate
@@ -1399,8 +1405,8 @@ class WaveformPlayback(SEQCNode):
         if self.rate is None:
             return self.waveform
         else:
-            tuple(BinaryWaveform(wf.data.reshape((None, 3))[::(1 << self.rate), :].ravel())
-                  for wf in self.waveform)
+            return tuple(BinaryWaveform(wf.data.reshape((-1, 3))[::(1 << self.rate), :].ravel())
+                         for wf in self.waveform)
 
     def stepping_hash(self) -> int:
         if self.shared:
