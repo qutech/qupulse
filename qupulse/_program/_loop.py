@@ -624,7 +624,7 @@ def roll_constant_waveforms(program: Loop, minimal_waveform_quanta: int, wavefor
         additional_repetition_count = waveform_quanta // new_waveform_quanta
 
         new_waveform = ConstantWaveform.from_mapping(
-            duration=new_waveform_quanta / sample_rate,
+            duration=waveform_quantum * new_waveform_quanta / sample_rate,
             constant_values=const_values)
 
         # use the private properties to avoid invalidating the duration cache of the parent loop
