@@ -517,7 +517,7 @@ class IndexedBasedFinderTests(unittest.TestCase):
     def test_missing_methods(self):
         fn = IndexedBasedFinder()
 
-        for method in ('pop', 'update', 'get', 'setdefault'):
+        for method in ('update', 'get', 'setdefault'):
             with self.assertRaises(NotImplementedError, msg=method):
                 getattr(fn, method)()
 
