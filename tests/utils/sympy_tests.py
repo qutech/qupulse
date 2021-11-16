@@ -2,7 +2,7 @@ import unittest
 import contextlib
 import math
 import sys
-import distutils
+import distutils.version
 
 from typing import Union
 
