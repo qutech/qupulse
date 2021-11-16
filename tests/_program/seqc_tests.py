@@ -112,9 +112,10 @@ def get_constant_unique_wfs(n=10000, duration=192, defined_channels=frozenset(['
 
         random_values = rng.random(size=(n, len(defined_channels)))
 
+        sorted_channels = sorted(defined_channels)
         get_unique_wfs.cache[key] = [
-            ConstantWaveform.from_mapping(duration, {ch: rng.random()
-                                                     for ch, ch_value in zip(defined_channels, wf_values)})
+            ConstantWaveform.from_mapping(duration, {ch: ch_value
+                                                     for ch, ch_value in zip(sorted_channels, wf_values)})
             for wf_values in random_values
         ]
     return get_unique_wfs.cache[key]
@@ -958,7 +959,7 @@ const PLAYBACK_FINISHED_MASK = 0b1000000000000000000000000000000;
 const PROG_SEL_MASK = 0b111111111111111111111111111111;
 const INVERTED_PROG_SEL_MASK = 0b11000000000000000000000000000000;
 const IDLE_WAIT_CYCLES = 300;
-wave test_concatenated_waveform_0 = "9d22a3c2fc392dc5208eec6140fce5d4b766d583ef428cc640d69c4c41475902";
+wave test_concatenated_waveform_0 = "7fd412eb866ad371f717857ea33b309ec458c6c3469c7e51dcffcdce9a8c2679";
 wave test_shared_waveform_121f5c6e8822793b3836fb3098fa4591b91d4c205cc2d8afd01ee1bf6956e518 = "121f5c6e8822793b3836fb3098fa4591b91d4c205cc2d8afd01ee1bf6956e518";
 
 // function used by manually triggered programs
