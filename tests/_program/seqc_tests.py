@@ -74,15 +74,21 @@ def make_binary_waveform(waveform):
         return (BinaryWaveform.from_sampled(ch1, ch2, markers),)
 
 
+def _key_to_int(n: int, duration: int, defined_channels: frozenset):
+    key_bytes = str((n, duration, sorted(defined_channels))).encode('ascii')
+    key_int64 = int(hashlib.sha256(key_bytes).hexdigest()[:2*8], base=16) // 2
+    return key_int64
+
+
 def get_unique_wfs(n=10000, duration=32, defined_channels=frozenset(['A'])):
     if not hasattr(get_unique_wfs, 'cache'):
         get_unique_wfs.cache = {}
 
-    key = (n, duration)
+    key = (n, duration, defined_channels)
 
     if key not in get_unique_wfs.cache:
         # positive deterministic int64
-        h = int(hashlib.sha256(str(key).encode('ascii')).hexdigest()[:2*8], base=16) // 2
+        h = _key_to_int(n, duration, defined_channels)
         base = np.bitwise_xor(np.linspace(-h, h, num=duration + n, dtype=np.int64), h)
         base = base / np.max(np.abs(base))
 
@@ -98,16 +104,18 @@ def get_constant_unique_wfs(n=10000, duration=192, defined_channels=frozenset(['
     if not hasattr(get_unique_wfs, 'cache'):
         get_unique_wfs.cache = {}
 
-    key = (n, duration)
+    key = (n, duration, defined_channels)
 
     if key not in get_unique_wfs.cache:
-        rng = random.Random(str(key).encode('ascii'))
+        bit_gen = np.random.PCG64(_key_to_int(n, duration, defined_channels))
+        rng = np.random.Generator(bit_gen)
 
-        # positive deterministic int64
+        random_values = rng.random(size=(n, len(defined_channels)))
 
         get_unique_wfs.cache[key] = [
-            ConstantWaveform.from_mapping(duration, {ch: rng.random() for ch in defined_channels})
-            for _ in range(n)
+            ConstantWaveform.from_mapping(duration, {ch: rng.random()
+                                                     for ch, ch_value in zip(defined_channels, wf_values)})
+            for wf_values in random_values
         ]
     return get_unique_wfs.cache[key]
 
@@ -817,7 +825,7 @@ const PLAYBACK_FINISHED_MASK = 0b1000000000000000000000000000000;
 const PROG_SEL_MASK = 0b111111111111111111111111111111;
 const INVERTED_PROG_SEL_MASK = 0b11000000000000000000000000000000;
 const IDLE_WAIT_CYCLES = 300;
-wave test_concatenated_waveform_0 = "c583e709957ec1536986ae1c7a6ad6311c89e052405d2a5c786760fc2fcdf6e3";
+wave test_concatenated_waveform_0 = "c45d955d9dc472d46bf74f7eb9ae2ed4d159adea7d6fe9ce3f48c95423535333";
 wave test_shared_waveform_121f5c6e8822793b3836fb3098fa4591b91d4c205cc2d8afd01ee1bf6956e518 = "121f5c6e8822793b3836fb3098fa4591b91d4c205cc2d8afd01ee1bf6956e518";
 
 // function used by manually triggered programs
@@ -950,7 +958,7 @@ const PLAYBACK_FINISHED_MASK = 0b1000000000000000000000000000000;
 const PROG_SEL_MASK = 0b111111111111111111111111111111;
 const INVERTED_PROG_SEL_MASK = 0b11000000000000000000000000000000;
 const IDLE_WAIT_CYCLES = 300;
-wave test_concatenated_waveform_0 = "808fb305aa38f44d55a59792a032696d28244040f86ec35e828c829eade2b79f";
+wave test_concatenated_waveform_0 = "9d22a3c2fc392dc5208eec6140fce5d4b766d583ef428cc640d69c4c41475902";
 wave test_shared_waveform_121f5c6e8822793b3836fb3098fa4591b91d4c205cc2d8afd01ee1bf6956e518 = "121f5c6e8822793b3836fb3098fa4591b91d4c205cc2d8afd01ee1bf6956e518";
 
 // function used by manually triggered programs
