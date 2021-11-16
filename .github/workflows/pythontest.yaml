@@ -1,11 +1,11 @@
 name: Pytest and coveralls
 
 on:
+  workflow_dispatch:
   push:
     branches: [ $default-branch ]
   pull_request:
     branches: [ $default-branch ]
-  workflow_dispatch
 
 jobs:
   build:
