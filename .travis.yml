@@ -5,10 +5,11 @@ python:
   - 3.8
   - 3.9
 env:
-  - INSTALL_EXTRAS=[plotting,zurich-instruments,tektronix,tabor-instruments]
-  - INSTALL_EXTRAS=[plotting,zurich-instruments,tektronix,tabor-instruments,Faster-fractions]
+  - INSTALL_EXTRAS=[tests,plotting,zurich-instruments,tektronix,tabor-instruments]
+  - INSTALL_EXTRAS=[tests,plotting,zurich-instruments,tektronix,tabor-instruments,Faster-fractions]
 
 # Ubuntu 20.04 LTS
+os: linux
 dist: focal
 
 # these directories are persistent
@@ -29,7 +30,7 @@ before_install:
 install:
   - pip install .$INSTALL_EXTRAS
 script:
-  - "coverage run --source=qupulse --rcfile=coverage.ini -m pytest"
+  - "coverage run -m pytest"
 after_success:
   - coveralls
 
