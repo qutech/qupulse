@@ -14,15 +14,14 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.6", "3.7"] # "3.8", "3.9" deactivated for faster turnaround
-        install-extras:   ["tests,plotting,zurich-instruments,tektronix,tabor-instruments",
-                           "tests,plotting,zurich-instruments,tektronix,tabor-instruments,Faster-fractions"]
+        install-extras: ["tests,plotting,zurich-instruments,tektronix,tabor-instruments", "tests,plotting,zurich-instruments,tektronix,tabor-instruments,Faster-fractions"]
 
     steps:
     - name: Checkout repository
-    - uses: actions/checkout@v2
+      uses: actions/checkout@v2
 
     - name: Set up Python ${{ matrix.python-version }}
-    - uses: actions/setup-python@v2
+      uses: actions/setup-python@v2
       with:
         python-version: ${{ matrix.python-version }}
         # caching is currently (2021.11) only available on actions/setup-python@main branch
