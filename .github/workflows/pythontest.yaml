@@ -8,13 +8,12 @@ on:
     branches: [ $default-branch ]
 
 jobs:
-  build:
-
+  test:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.6", "3.7", "3.8", "3.9"]
+        python-version: ["3.6", "3.7"] # "3.8", "3.9" deactivated for faster turnaround
         install-extras:   ["tests,plotting,zurich-instruments,tektronix,tabor-instruments",
                            "tests,plotting,zurich-instruments,tektronix,tabor-instruments,Faster-fractions"]
 
@@ -24,17 +23,40 @@ jobs:
       uses: actions/setup-python@v2
       with:
         python-version: ${{ matrix.python-version }}
+        cache: pip
+        cache-dependency-path: setup.cfg
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        python -m pip install coverage
+        python -m pip install coverage coveragepy-lcov
+
     - name: Install package
       run: |
         python -m pip install .[${{ matrix.install-extras }}]
+
     - name: Test with pytest
       run: |
         coverage run -m pytest
+
+    - name: Convert .coverage to LCOV
+      run: |
+        coveragepy-lcov
+
     - name: Upload to coveralls
       uses: coverallsapp/github-action@master
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }}
+        parallel: true
+        flag-name: python-${{ matrix.python-version }}-${{ matrix.install-extras }}
+        path-to-lcov: lcov.info
+
+  finish:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+    - name: Coveralls Finished
+      uses: coverallsapp/github-action@master
+      with:
+        github-token: ${{ secrets.github_token }}
+        parallel-finished: true
