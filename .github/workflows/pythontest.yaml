@@ -11,9 +11,9 @@ jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
-        python-version: ["3.6", "3.9"] # "3.7", "3.9" deactivated for faster turnaround
+        python-version: ["3.6", "3.7", "3.8", "3.9"]
         install-extras: ["tests,plotting,zurich-instruments,tektronix,tabor-instruments", "tests,plotting,zurich-instruments,tektronix,tabor-instruments,Faster-fractions"]
 
     steps:
