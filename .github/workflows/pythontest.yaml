@@ -31,8 +31,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        python -m pip install coverage
-        python -m pip install git+git://github.com/chaychoong/coveragepy-lcov.git@0.1.1#egg=coveragepy-lcov
+        python -m pip install coverage coveralls
 
     - name: Install package
       run: |
