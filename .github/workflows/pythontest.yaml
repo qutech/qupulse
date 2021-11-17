@@ -11,25 +11,33 @@ jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
-        python-version: ["3.6", "3.7"] # "3.8", "3.9" deactivated for faster turnaround
-        install-extras:   ["tests,plotting,zurich-instruments,tektronix,tabor-instruments",
-                           "tests,plotting,zurich-instruments,tektronix,tabor-instruments,Faster-fractions"]
+        python-version: ["3.6", "3.7", "3.8", "3.9"]
+        install-extras: ["tests,plotting,zurich-instruments,tektronix,tabor-instruments", "tests,plotting,zurich-instruments,tektronix,tabor-instruments,Faster-fractions"]
 
     steps:
-    - uses: actions/checkout@v2
+    - name: Install gmpy2 build dependencies if required
+      run: |
+        if [[ ${{ matrix.install-extras }} == *Faster-fractions* ]]; then
+          sudo apt-get install -y libgmp-dev libmpfr-dev libmpc-dev
+        fi
+    
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v2
       with:
         python-version: ${{ matrix.python-version }}
+        # supported since 2.3
         cache: pip
         cache-dependency-path: setup.cfg
 
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        python -m pip install coverage coveragepy-lcov
+        python -m pip install coverage coveralls
 
     - name: Install package
       run: |
@@ -39,24 +47,22 @@ jobs:
       run: |
         coverage run -m pytest
 
-    - name: Convert .coverage to LCOV
-      run: |
-        coveragepy-lcov
+    - name: Upload coverage data to coveralls.io
+      run: coveralls --service=github
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        COVERALLS_FLAG_NAME: python-${{ matrix.python-version }}-${{ matrix.install-extras }}
+        COVERALLS_PARALLEL: true
 
-    - name: Upload to coveralls
-      uses: coverallsapp/github-action@master
-      with:
-        github-token: ${{ secrets.GITHUB_TOKEN }}
-        parallel: true
-        flag-name: python-${{ matrix.python-version }}-${{ matrix.install-extras }}
-        path-to-lcov: lcov.info
-
-  finish:
+  coveralls:
+    name: Indicate completion to coveralls.io
     needs: test
     runs-on: ubuntu-latest
+    container: python:3-slim
     steps:
-    - name: Coveralls Finished
-      uses: coverallsapp/github-action@master
-      with:
-        github-token: ${{ secrets.github_token }}
-        parallel-finished: true
+    - name: Finished
+      run: |
+        pip3 install --upgrade coveralls
+        coveralls --service=github --finish
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
