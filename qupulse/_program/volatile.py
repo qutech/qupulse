@@ -62,3 +62,9 @@ class VolatileRepetitionCount(VolatileValue):
     def update_volatile_dependencies(self, new_constants: Mapping[str, numbers.Number]) -> int:
         self._scope = self._scope.change_constants(new_constants)
         return int(self)
+
+    def __eq__(self, other):
+        if type(self) == type(other):
+            return self._scope is other._scope and self._expression == other._expression
+        else:
+            return NotImplemented

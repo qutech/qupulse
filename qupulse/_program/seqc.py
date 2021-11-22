@@ -64,13 +64,16 @@ class BinaryWaveform:
     """
     __slots__ = ('data',)
 
+    PLAYBACK_QUANTUM = 16
+    PLAYBACK_MIN_QUANTA = 2
+
     def __init__(self, data: np.ndarray):
-        """ always use both channels?
+        """ TODO: always use both channels?
 
         Args:
             data: data as returned from zhinst.utils.convert_awg_waveform
         """
-        n_quantum, remainder = divmod(data.size, 3 * 16)
+        n_quantum, remainder = divmod(data.size, 3 * self.PLAYBACK_QUANTUM)
         assert n_quantum > 1, "Waveform too short (min len is 32)"
         assert remainder == 0, "Waveform has not a valid length"
         assert data.dtype is np.dtype('uint16')
@@ -152,6 +155,8 @@ class BinaryWaveform:
 
         >>> np.savetxt(waveform_dir, binary_waveform.to_csv_compatible_table(), fmt='%u')
         """
+        assert self.data.size % self.PLAYBACK_QUANTUM == 0, "conversion to csv requires a valid length"
+
         table = np.zeros((len(self), 2), dtype=np.uint32)
         table[:, 0] = self.ch1
         table[:, 1] = self.ch2
@@ -160,6 +165,21 @@ class BinaryWaveform:
         table[:, 1] += self.markers_ch2
 
         return table
+
+    def playback_possible(self) -> bool:
+        """Returns if the waveform can be played without padding"""
+        return self.data.size % self.PLAYBACK_QUANTUM == 0
+
+    def dynamic_rate(self, max_rate: int = 12) -> int:
+        min_pre_division_quanta = 2 * self.PLAYBACK_QUANTUM
+
+        reduced = self.data.reshape(-1, 3)
+        for n in range(max_rate):
+            n_quantum, remainder = divmod(reduced.shape[0], min_pre_division_quanta)
+            if remainder != 0 or n_quantum < self.PLAYBACK_MIN_QUANTA or np.any(reduced[::2, :] != reduced[1::2, :]):
+                return n
+            reduced = reduced[::2, :]
+        return max_rate
 
 
 class ConcatenatedWaveform:
@@ -1356,22 +1376,37 @@ class SteppingRepeat(SEQCNode):
 
 class WaveformPlayback(SEQCNode):
     ADVANCE_DISABLED_COMMENT = ' // advance disabled do to parent repetition'
+    ENABLE_DYNAMIC_RATE_REDUCTION = False
 
-    __slots__ = ('waveform', 'shared')
+    __slots__ = ('waveform', 'shared', 'rate')
 
-    def __init__(self, waveform: Tuple[BinaryWaveform, ...], shared: bool = False):
+    def __init__(self, waveform: Tuple[BinaryWaveform, ...], shared: bool = False, rate: int = None):
         assert isinstance(waveform, tuple)
+        if self.ENABLE_DYNAMIC_RATE_REDUCTION and rate is None:
+            for wf in waveform:
+                rate = wf.dynamic_rate(12 if rate is None else rate)
         self.waveform = waveform
         self.shared = shared
+        self.rate = rate
 
     def samples(self) -> int:
+        """Samples consumed in the big concatenated waveform"""
         if self.shared:
             return 0
         else:
             wf_lens = set(map(len, self.waveform))
             assert len(wf_lens) == 1
             wf_len, = wf_lens
+            if self.rate is not None:
+                wf_len //= (1 << self.rate)
             return wf_len
+
+    def rate_reduced_waveform(self) -> Tuple[BinaryWaveform]:
+        if self.rate is None:
+            return self.waveform
+        else:
+            return tuple(BinaryWaveform(wf.data.reshape((-1, 3))[::(1 << self.rate), :].ravel())
+                         for wf in self.waveform)
 
     def stepping_hash(self) -> int:
         if self.shared:
@@ -1382,7 +1417,7 @@ class WaveformPlayback(SEQCNode):
     def same_stepping(self, other: 'WaveformPlayback') -> bool:
         same_type = type(self) is type(other) and self.shared == other.shared
         if self.shared:
-            return same_type and self.waveform == other.waveform
+            return same_type and self.rate == other.rate and self.waveform == other.waveform
         else:
             return same_type and self.samples() == other.samples()
 
@@ -1391,24 +1426,23 @@ class WaveformPlayback(SEQCNode):
 
     def _visit_nodes(self, waveform_manager: ProgramWaveformManager):
         if not self.shared:
-            waveform_manager.request_concatenated(self.waveform)
+            waveform_manager.request_concatenated(self.rate_reduced_waveform())
 
     def to_source_code(self, waveform_manager: ProgramWaveformManager,
                        node_name_generator: Iterator[str], line_prefix: str, pos_var_name: str,
                        advance_pos_var: bool = True):
+        rate_adjustment = "" if self.rate is None else f", {self.rate}"
         if self.shared:
-            yield '{line_prefix}playWave({waveform});'.format(waveform=waveform_manager.request_shared(self.waveform),
-                                                              line_prefix=line_prefix)
+            yield f'{line_prefix}playWave(' \
+                  f'{waveform_manager.request_shared(self.rate_reduced_waveform())}' \
+                  f'{rate_adjustment});'
         else:
-            wf_name = waveform_manager.request_concatenated(self.waveform)
+            wf_name = waveform_manager.request_concatenated(self.rate_reduced_waveform())
             wf_len = self.samples()
-            play_cmd = '{line_prefix}playWaveIndexed({wf_name}, {pos_var_name}, {wf_len});'
+            play_cmd = f'{line_prefix}playWaveIndexed({wf_name}, {pos_var_name}, {wf_len}{rate_adjustment});'
 
             if advance_pos_var:
-                advance_cmd = ' {pos_var_name} = {pos_var_name} + {wf_len};'
+                advance_cmd = f' {pos_var_name} = {pos_var_name} + {wf_len};'
             else:
                 advance_cmd = self.ADVANCE_DISABLED_COMMENT
-            yield (play_cmd + advance_cmd).format(wf_name=wf_name,
-                                                  wf_len=wf_len,
-                                                  pos_var_name=pos_var_name,
-                                                  line_prefix=line_prefix)
+            yield play_cmd + advance_cmd
