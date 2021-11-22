@@ -58,10 +58,10 @@ class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
                 return result
             else:
                 obj_types = set(map(type, result.flat))
-                if obj_types == {sympy.Float} or obj_types == {sympy.Float, sympy.Integer}:
-                    return result.astype(float)
-                elif obj_types == {sympy.Integer}:
+                if all(issubclass(obj_type, sympy.Integer) for obj_type in obj_types):
                     return result.astype(numpy.int64)
+                if all(issubclass(obj_type, (sympy.Integer, sympy.Float)) for obj_type in obj_types):
+                    return result.astype(float)
                 else:
                     raise NonNumericEvaluation(self, result, call_arguments)
         elif isinstance(result, allowed_types):
