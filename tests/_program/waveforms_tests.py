@@ -357,6 +357,16 @@ class RepetitionWaveformTest(unittest.TestCase):
         self.assertIs(output_expected, output_received)
         np.testing.assert_equal(output_received, inner_sample_times)
 
+    def test_float_sample_time(self):
+        # issue 624
+        body_wf = FunctionWaveform.from_expression(ExpressionScalar('sin(t)'), 1./3., channel='a')
+        rwf = RepetitionWaveform(body_wf, 2)
+
+        sample_times = np.arange(160) / 80. / 3.
+        sampled = rwf.unsafe_sample(sample_times=sample_times, channel='a')
+        inner_sample_times = np.concatenate((sample_times[:80], sample_times[80:] - 1./3.))
+        np.testing.assert_equal(sampled, np.sin(inner_sample_times))
+
     def test_repr(self):
         body_wf = ConstantWaveform(amplitude=1.1, duration=1.3, channel='3')
         wf = RepetitionWaveform(body_wf, 3)

@@ -779,7 +779,7 @@ class RepetitionWaveform(Waveform):
             end = time + body_duration
             indices = slice(*np.searchsorted(sample_times, (float(time), float(end)), 'left'))
             self._body.unsafe_sample(channel=channel,
-                                     sample_times=sample_times[indices] - time,
+                                     sample_times=sample_times[indices] - float(time),
                                      output_array=output_array[indices])
             time = end
         return output_array
