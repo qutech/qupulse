@@ -2,8 +2,6 @@ name: Pytest and coveralls
 
 on:
   workflow_dispatch: ~
-  push:
-    branches: [ $default-branch ]
   pull_request:
     branches: [ $default-branch ]
 
@@ -11,16 +9,18 @@ jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         python-version: ["3.6", "3.7", "3.8", "3.9"]
-        install-extras: ["tests,plotting,zurich-instruments,tektronix,tabor-instruments", "tests,plotting,zurich-instruments,tektronix,tabor-instruments,Faster-fractions"]
+        time-type: ["fractions", "gmpy2"]
 
     steps:
-    - name: Install gmpy2 build dependencies if required
+    - name: Prepare gmpy2 build dependencies if required
       run: |
-        if [[ ${{ matrix.install-extras }} == *Faster-fractions* ]]; then
+        export INSTALL_EXTRAS="tests,plotting,zurich-instruments,tektronix,tabor-instruments"
+        if [[ ${{ matrix.time-type }} == *gmpy2* ]]; then
           sudo apt-get install -y libgmp-dev libmpfr-dev libmpc-dev
+          export INSTALL_EXTRAS=$INSTALL_EXTRAS",Faster-fractions"
         fi
     
     - name: Checkout repository
@@ -41,18 +41,26 @@ jobs:
 
     - name: Install package
       run: |
-        python -m pip install .[${{ matrix.install-extras }}]
+        python -m pip install .[$INSTALL_EXTRAS]
 
     - name: Test with pytest
       run: |
-        coverage run -m pytest
+        coverage run -m pytest --junit-xml pytest.xml
 
     - name: Upload coverage data to coveralls.io
       run: coveralls --service=github
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        COVERALLS_FLAG_NAME: python-${{ matrix.python-version }}-${{ matrix.install-extras }}
+        COVERALLS_FLAG_NAME: python-${{ matrix.python-version }}-${{ matrix.time-type }}
         COVERALLS_PARALLEL: true
+    
+    - name: Upload Test Results
+      if: always()
+      uses: actions/upload-artifact@v2
+      with:
+        name: Unit Test Results ( ${{ matrix.python-version }}-${{ matrix.time-type }} )
+        path: |
+          pytest.xml
 
   coveralls:
     name: Indicate completion to coveralls.io
@@ -66,3 +74,13 @@ jobs:
         coveralls --service=github --finish
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  event_file:
+    name: "Event File"
+    runs-on: ubuntu-latest
+    steps:
+    - name: Upload
+      uses: actions/upload-artifact@v2
+      with:
+        name: Event File
+        path: ${{ github.event_path }}
