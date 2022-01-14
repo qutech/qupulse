@@ -23,15 +23,16 @@ jobs:
       matrix:
         python-version: ["3.6", "3.7", "3.8", "3.9"]
         time-type: ["fractions", "gmpy2"]
+    env:
+      INSTALL_EXTRAS: tests,plotting,zurich-instruments,tektronix,tabor-instruments
+
 
     steps:
-    - name: Prepare gmpy2 build dependencies if required
+    - name: Prepare gmpy2 build dependencies
+      if: ${{ matrix.time-type }} == 'gmpy2'
       run: |
-        export INSTALL_EXTRAS="tests,plotting,zurich-instruments,tektronix,tabor-instruments"
-        if [[ ${{ matrix.time-type }} == *gmpy2* ]]; then
-          sudo apt-get install -y libgmp-dev libmpfr-dev libmpc-dev
-          export INSTALL_EXTRAS=$INSTALL_EXTRAS",Faster-fractions"
-        fi
+        sudo apt-get install -y libgmp-dev libmpfr-dev libmpc-dev
+        echo "INSTALL_EXTRAS=${{ env.INSTALL_EXTRAS }},Faster-fractions" >> $GITHUB_ENV
     
     - name: Checkout repository
       uses: actions/checkout@v2
@@ -51,7 +52,7 @@ jobs:
 
     - name: Install package
       run: |
-        python -m pip install .[$INSTALL_EXTRAS]
+        python -m pip install .[${{ env.INSTALL_EXTRAS }}]
 
     - name: Test with pytest
       run: |
