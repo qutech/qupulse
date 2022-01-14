@@ -2,16 +2,18 @@ from typing import Union, Dict, Iterable, Tuple, cast, List, Optional, Generator
 from collections import defaultdict
 from enum import Enum
 import warnings
+import bisect
 
 import numpy as np
+import sympy.ntheory
 
-
-from qupulse._program.waveforms import Waveform
+from qupulse._program.waveforms import Waveform, ConstantWaveform
 from qupulse._program.volatile import VolatileRepetitionCount, VolatileProperty
 
 from qupulse.utils import is_integer
 from qupulse.utils.types import TimeType, MeasurementWindow
 from qupulse.utils.tree import Node, is_tree_circular
+from qupulse.utils.numeric import smallest_factor_ge
 
 from qupulse._program.waveforms import SequenceWaveform, RepetitionWaveform
 
@@ -576,6 +578,58 @@ def make_compatible(program: Loop, minimal_waveform_length: int, waveform_quantu
 
     else:
         assert comp_level == _CompatibilityLevel.compatible
+
+
+def roll_constant_waveforms(program: Loop, minimal_waveform_quanta: int, waveform_quantum: int, sample_rate: TimeType):
+    """This function finds waveforms in program that can be replaced with repetitions of shorter waveforms and replaces
+    them. Complexity O(N_waveforms)
+
+    This is possible if:
+     - The waveform is constant on all channels
+     - waveform.duration * sample_rate / waveform_quantum has a factor that is bigger than minimal_waveform_quanta
+
+    Args:
+        program:
+        minimal_waveform_quanta:
+        waveform_quantum:
+        sample_rate:
+    """
+    waveform = program.waveform
+
+    if waveform is None:
+        for child in program:
+            roll_constant_waveforms(child, minimal_waveform_quanta, waveform_quantum, sample_rate)
+    else:
+        waveform_quanta = (waveform.duration * sample_rate) // waveform_quantum
+
+        # example
+        # waveform_quanta = 15
+        # minimal_waveform_quanta = 2
+        # => repetition_count = 5, new_waveform_quanta = 3
+        if waveform_quanta < minimal_waveform_quanta * 2:
+            # there is no way to roll this waveform because it is too short
+            return
+
+        const_values = waveform.constant_value_dict()
+        if const_values is None:
+            # The waveform is not constant
+            return
+
+        new_waveform_quanta = smallest_factor_ge(waveform_quanta, min_factor=minimal_waveform_quanta)
+        if new_waveform_quanta == waveform_quanta:
+            # the waveform duration in samples has no suitable factor
+            # TODO: Option to insert multiple Loop objects
+            return
+
+        additional_repetition_count = waveform_quanta // new_waveform_quanta
+
+        new_waveform = ConstantWaveform.from_mapping(
+            duration=waveform_quantum * new_waveform_quanta / sample_rate,
+            constant_values=const_values)
+
+        # use the private properties to avoid invalidating the duration cache of the parent loop
+        program._repetition_definition = program.repetition_definition * additional_repetition_count
+        program._waveform = new_waveform
 
 
 class MakeCompatibleWarning(ResourceWarning):
