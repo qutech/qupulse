@@ -2,8 +2,12 @@ name: Pytest and coveralls
 
 on:
   pull_request:
-    types: [opened, reopened, synchronize]
-    branches: [ $default-branch ]
+    types:
+     - opened
+     - reopened
+     - synchronize
+    branches:
+     - '**'
     paths:
      - 'qupulse/**y'
      - 'qctoolkit/**'
