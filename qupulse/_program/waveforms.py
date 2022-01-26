@@ -650,17 +650,19 @@ class MultiChannelWaveform(Waveform):
             defined_channels |= waveform.defined_channels
         self._defined_channels = frozenset(defined_channels)
 
-        if not all(isclose(waveform.duration, self._sub_waveforms[0].duration) for waveform in self._sub_waveforms[1:]):
+        waveform_duration = waveform.duration
+        if not all(isclose(waveform_duration, self._sub_waveforms[0].duration) for waveform in self._sub_waveforms[1:]):
             # meaningful error message:
             durations = {}
 
             for waveform in self._sub_waveforms:
+                waveform_duration = waveform.duration
                 for duration, channels in durations.items():
-                    if isclose(waveform.duration, duration):
+                    if isclose(waveform_duration, duration):
                         channels.update(waveform.defined_channels)
                         break
                 else:
-                    durations[waveform.duration] = set(waveform.defined_channels)
+                    durations[waveform_duration] = set(waveform.defined_channels)
 
             raise ValueError(
                 "MultiChannelWaveform cannot be constructed from channel waveforms of different durations.",
