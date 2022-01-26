@@ -61,6 +61,10 @@ class BinaryWaveformTest(unittest.TestCase):
 
 
 def make_binary_waveform(waveform):
+    if zhinst is None:
+        # TODO: mock used function
+        raise unittest.SkipTest("zhinst not present")
+
     if waveform.duration == 0:
         data = np.asarray(3 * [1, 2, 3, 4, 5], dtype=np.uint16)
         return (BinaryWaveform(data),)

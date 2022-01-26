@@ -4,6 +4,11 @@ from collections import OrderedDict
 
 import numpy as np
 
+try:
+    import zhinst
+except ImportError as err:
+    raise unittest.SkipTest("zhinst not present") from err
+
 from qupulse.utils.types import TimeType
 from qupulse._program._loop import Loop
 from tests.pulses.sequencing_dummies import DummyWaveform
