@@ -6,6 +6,11 @@ import importlib.util
 import sys
 import warnings
 
+try:
+    import tabor_control
+except ImportError as err:
+    raise unittest.SkipTest("tabor_control not present") from err
+
 from tests.hardware.tabor_simulator_based_tests import TaborSimulatorManager
 from tests.hardware.dummy_devices import DummyDAC
 from tests.backward_compatibility.hardware_test_helper import LoadingAndSequencingHelper

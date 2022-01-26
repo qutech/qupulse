@@ -14,8 +14,8 @@ from qupulse.hardware.feature_awg.features import ChannelSynchronization, Progra
 # Example Features
 ########################################################################################################################
 
-class TestSynchronizeChannelsFeature(ChannelSynchronization):
-    def __init__(self, device: "TestAWGDevice"):
+class DummySynchronizeChannelsFeature(ChannelSynchronization):
+    def __init__(self, device: "DummyAWGDevice"):
         super().__init__()
         self._parent = device
 
@@ -24,13 +24,13 @@ class TestSynchronizeChannelsFeature(ChannelSynchronization):
         self._parent.synchronize_channels(group_size)
 
 
-class TestVolatileParameters(VolatileParameters):
+class DummyVolatileParameters(VolatileParameters):
     def set_volatile_parameters(self, program_name: str, parameters) -> None:
         raise NotImplementedError()
 
 
-class TestVoltageRangeFeature(VoltageRange):
-    def __init__(self, channel: "TestAWGChannel"):
+class DummyVoltageRangeFeature(VoltageRange):
+    def __init__(self, channel: "DummyAWGChannel"):
         super().__init__()
         self._parent = channel
 
@@ -65,7 +65,7 @@ class TestVoltageRangeFeature(VoltageRange):
         self._parent._ampl_offs_handling = ampl_offs_handling
 
 
-class TestProgramManagementFeature(ProgramManagement):
+class DummyProgramManagementFeature(ProgramManagement):
     def __init__(self, channel_tuple):
         super().__init__(channel_tuple=channel_tuple)
         self._programs = {}
@@ -113,15 +113,15 @@ class TestProgramManagementFeature(ProgramManagement):
 # Device & Channels
 ########################################################################################################################
 
-class TestAWGDevice(AWGDevice):
+class DummyAWGDevice(AWGDevice):
     def __init__(self, name: str):
         super().__init__(name)
 
         # Add feature to this object (self)
         # During this call, the function of the feature is dynamically added to this object
-        self.add_feature(TestSynchronizeChannelsFeature(self))
+        self.add_feature(DummySynchronizeChannelsFeature(self))
 
-        self._channels = [TestAWGChannel(i, self) for i in range(8)]  # 8 channels
+        self._channels = [DummyAWGChannel(i, self) for i in range(8)]  # 8 channels
         self._channel_tuples = []
 
         # Call the feature function, with the feature's signature
@@ -134,7 +134,7 @@ class TestAWGDevice(AWGDevice):
         self._channel_tuples.clear()
 
     @property
-    def channels(self) -> Collection["TestAWGChannel"]:
+    def channels(self) -> Collection["DummyAWGChannel"]:
         return self._channels
 
     @property
@@ -142,7 +142,7 @@ class TestAWGDevice(AWGDevice):
         return []
 
     @property
-    def channel_tuples(self) -> Collection["TestAWGChannelTuple"]:
+    def channel_tuples(self) -> Collection["DummyAWGChannelTuple"]:
         return self._channel_tuples
 
     def synchronize_channels(self, group_size: int) -> None:
@@ -159,19 +159,19 @@ class TestAWGDevice(AWGDevice):
 
         # Create channel tuples with its belonging channels and refer to their parent tuple
         for i, tmp_channel_tuple in enumerate(tmp_channel_tuples):
-            channel_tuple = TestAWGChannelTuple(i, self, tmp_channel_tuple)
+            channel_tuple = DummyAWGChannelTuple(i, self, tmp_channel_tuple)
             self._channel_tuples.append(channel_tuple)
             for channel in tmp_channel_tuple:
                 channel._set_channel_tuple(channel_tuple)
 
 
-class TestAWGChannelTuple(AWGChannelTuple):
-    def __init__(self, idn: int, device: TestAWGDevice, channels: Iterable["TestAWGChannel"]):
+class DummyAWGChannelTuple(AWGChannelTuple):
+    def __init__(self, idn: int, device: DummyAWGDevice, channels: Iterable["DummyAWGChannel"]):
         super().__init__(idn)
 
         # Add feature to this object (self)
         # During this call, the function of the feature is dynamically added to this object
-        self.add_feature(TestProgramManagementFeature(channel_tuple=self))
+        self.add_feature(DummyProgramManagementFeature(channel_tuple=self))
 
         self._device = device
         self._channels = tuple(channels)
@@ -190,11 +190,11 @@ class TestAWGChannelTuple(AWGChannelTuple):
         self._sample_rate = sample_rate
 
     @property
-    def device(self) -> TestAWGDevice:
+    def device(self) -> DummyAWGDevice:
         return self._device
 
     @property
-    def channels(self) -> Collection["TestAWGChannel"]:
+    def channels(self) -> Collection["DummyAWGChannel"]:
         return self._channels
 
     @property
@@ -202,13 +202,13 @@ class TestAWGChannelTuple(AWGChannelTuple):
         return []
 
 
-class TestAWGChannel(AWGChannel):
-    def __init__(self, idn: int, device: TestAWGDevice):
+class DummyAWGChannel(AWGChannel):
+    def __init__(self, idn: int, device: DummyAWGDevice):
         super().__init__(idn)
 
         # Add feature to this object (self)
         # During this call, all functions of the feature are dynamically added to this object
-        self.add_feature(TestVoltageRangeFeature(self))
+        self.add_feature(DummyVoltageRangeFeature(self))
 
         self._device = device
         self._channel_tuple = None
@@ -217,21 +217,21 @@ class TestAWGChannel(AWGChannel):
         self._ampl_offs_handling = AmplitudeOffsetHandling.IGNORE_OFFSET
 
     @property
-    def device(self) -> TestAWGDevice:
+    def device(self) -> DummyAWGDevice:
         return self._device
 
     @property
-    def channel_tuple(self) -> Optional[TestAWGChannelTuple]:
+    def channel_tuple(self) -> Optional[DummyAWGChannelTuple]:
         return self._channel_tuple
 
-    def _set_channel_tuple(self, channel_tuple: TestAWGChannelTuple) -> None:
+    def _set_channel_tuple(self, channel_tuple: DummyAWGChannelTuple) -> None:
         self._channel_tuple = channel_tuple
 
 
 class TestBaseClasses(unittest.TestCase):
     def setUp(self):
         self.device_name = "My device"
-        self.device = TestAWGDevice(self.device_name)
+        self.device = DummyAWGDevice(self.device_name)
 
     def test_device(self):
         self.assertEqual(self.device.name, self.device_name, "Invalid name for device")
@@ -274,10 +274,10 @@ class TestBaseClasses(unittest.TestCase):
             self.device[ChannelSynchronization].synchronize_channels(3)
 
         with self.assertRaises(KeyError):
-            self.device.add_feature(TestSynchronizeChannelsFeature(self.device))
+            self.device.add_feature(DummySynchronizeChannelsFeature(self.device))
 
         with self.assertRaises(TypeError):
-            self.device.add_feature(TestProgramManagementFeature())
+            self.device.add_feature(DummyProgramManagementFeature())
 
         with self.assertRaises(TypeError):
             self.device.features[ChannelSynchronization] = None
