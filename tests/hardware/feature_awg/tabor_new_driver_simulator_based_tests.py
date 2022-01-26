@@ -5,7 +5,10 @@ import platform
 import os
 from typing import List, Tuple, Optional, Any
 
-import tabor_control
+try:
+    import tabor_control
+except ImportError as err:
+    raise unittest.SkipTest("tabor_control not present") from err
 import numpy as np
 
 from qupulse._program.tabor import TableDescription, TableEntry

@@ -2,14 +2,14 @@ from unittest import TestCase, mock
 
 from qupulse.hardware.feature_awg.features import ProgramManagement, VolatileParameters
 
-from tests.hardware.feature_awg.awg_new_driver_base_tests import TestAWGChannelTuple, TestAWGDevice, TestAWGChannel, TestVolatileParameters
+from tests.hardware.feature_awg.awg_new_driver_base_tests import DummyAWGChannelTuple, DummyAWGDevice, DummyAWGChannel, DummyVolatileParameters
 
 
 class ChannelTupleAdapterTest(TestCase):
     def setUp(self):
-        self.device = TestAWGDevice("device")
-        self.channels = [TestAWGChannel(0, self.device), TestAWGChannel(1, self.device)]
-        self.tuple = TestAWGChannelTuple(0, device=self.device, channels=self.channels)
+        self.device = DummyAWGDevice("device")
+        self.channels = [DummyAWGChannel(0, self.device), DummyAWGChannel(1, self.device)]
+        self.tuple = DummyAWGChannelTuple(0, device=self.device, channels=self.channels)
 
     def test_simple_properties(self):
         adapter = self.tuple.channel_tuple_adapter
@@ -60,7 +60,7 @@ class ChannelTupleAdapterTest(TestCase):
     def test_set_volatile_parameters(self):
         adapter = self.tuple.channel_tuple_adapter
 
-        self.tuple.add_feature(TestVolatileParameters(self.tuple))
+        self.tuple.add_feature(DummyVolatileParameters(self.tuple))
 
         with mock.patch.object(self.tuple[VolatileParameters], 'set_volatile_parameters') as set_volatile_parameters_mock:
             adapter.set_volatile_parameters('wurst', {'a': 5.})
