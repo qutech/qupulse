@@ -2,7 +2,11 @@ import unittest
 import contextlib
 import math
 import sys
-import distutils.version
+
+try:
+    from packaging.version import Version
+except ImportError:
+    from distutils.version import StrictVersion as Version
 
 from typing import Union
 
@@ -486,7 +490,7 @@ class BroadcastTests(unittest.TestCase):
         self.assertEqual(expr_with_int, expr_with_int_other_order)
         self.assertEqual(expr_with_float, expr_with_int_other_order)
 
-    test_numeric_equal = unittest.expectedFailure(test_expression_equality) if distutils.version.StrictVersion(sympy.__version__) >= distutils.version.StrictVersion('1.5') else test_expression_equality
+    test_numeric_equal = unittest.expectedFailure(test_expression_equality) if Version(sympy.__version__) >= Version('1.5') else test_expression_equality
 
     def test_integral(self):
         symbolic = Broadcast(a*c, (3,))
