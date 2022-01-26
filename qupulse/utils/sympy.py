@@ -316,6 +316,11 @@ def substitute_with_eval(expression: sympy.Expr,
     return eval(string_representation, sympy.__dict__, {'Symbol': substitutions.__getitem__,
                                                         'Mul': numpy_compatible_mul,
                                                         'Add': numpy_compatible_add})
+from functools import lru_cache
+
+@lru_cache
+def get_free_symbols_cache(expression, maxsize=2048):
+    return get_free_symbols(expression)
 
 
 def _recursive_substitution(expression: sympy.Expr,
@@ -326,13 +331,16 @@ def _recursive_substitution(expression: sympy.Expr,
         return substitutions.get(expression, expression)
 
     func = _NUMPY_COMPATIBLE.get(expression.func, expression.func)
-    substitutions = {s: substitutions.get(s, s) for s in get_free_symbols(expression)}
+    substitutions = {s: substitutions.get(s, s) for s in get_free_symbols_cache(expression)}
     return func(*(_recursive_substitution(arg, substitutions) for arg in expression.args))
 
+@lru_cache
+def sympify_cache(value, maxsize=2048):
+    return sympify(value)
 
 def recursive_substitution(expression: sympy.Expr,
                            substitutions: Dict[str, Union[sympy.Expr, numpy.ndarray, str]]) -> sympy.Expr:
-    substitutions = {k if isinstance(k, (sympy.Symbol, sympy.Dummy)) else sympy.Symbol(k): sympify(v)
+    substitutions = {k if isinstance(k, (sympy.Symbol, sympy.Dummy)) else sympy.Symbol(k): sympify_cache(v)
                      for k, v in substitutions.items()}
     for s in get_free_symbols(expression):
         substitutions.setdefault(s, s)
