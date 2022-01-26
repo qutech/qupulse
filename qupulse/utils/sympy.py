@@ -434,7 +434,9 @@ def _parse_broadcast_shape(shape: Tuple[int], user: type) -> Optional[Tuple[int]
     except TypeError as err:
         warnings.warn(f"The shape passed to {user.__module__}.{user.__name__} is not convertible to a tuple of integers: {err}\n"
                       "Be aware that using a symbolic shape can lead to unexpected behaviour.",
-                      category=UnsupportedBroadcastArgumentWarning)
+                      category=UnsupportedBroadcastArgumentWarning,
+                      # probably sympy version dependent what is most useful here...
+                      stacklevel=7)
     return None
 
 
@@ -444,5 +446,7 @@ def _parse_broadcast_index(idx: int, user: type) -> Optional[int]:
     except TypeError as err:
         warnings.warn(f"The index passed to {user.__module__}.{user.__name__} is not convertible to an integer: {err}\n"
                       "Be aware that using a symbolic index can lead to unexpected behaviour.",
-                      category=UnsupportedBroadcastArgumentWarning)
+                      category=UnsupportedBroadcastArgumentWarning,
+                      # probably sympy version dependent what is most useful here...
+                      stacklevel=7)
     return None
