@@ -184,7 +184,7 @@ class JumpInterpolationStrategy(InterpolationStrategy):
         return self._integral_expression
 
     def evaluate_integral(self, t0, v0, t1, v1):
-        self._integral_method(t0, v0, t1, v1)
+        return self._integral_method(t0, v0, t1, v1)
 
     @property
     def expression(self) -> ExpressionScalar:
