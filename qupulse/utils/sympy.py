@@ -316,10 +316,12 @@ def substitute_with_eval(expression: sympy.Expr,
     return eval(string_representation, sympy.__dict__, {'Symbol': substitutions.__getitem__,
                                                         'Mul': numpy_compatible_mul,
                                                         'Add': numpy_compatible_add})
-from functools import lru_cache
+
+
+lru_cache = functools.lru_cache(maxsize=2048)
 
 @lru_cache
-def get_free_symbols_cache(expression, maxsize=2048):
+def get_free_symbols_cache(expression):
     return get_free_symbols(expression)
 
 
@@ -335,7 +337,7 @@ def _recursive_substitution(expression: sympy.Expr,
     return func(*(_recursive_substitution(arg, substitutions) for arg in expression.args))
 
 @lru_cache
-def sympify_cache(value, maxsize=2048):
+def sympify_cache(value):
     return sympify(value)
 
 def recursive_substitution(expression: sympy.Expr,
