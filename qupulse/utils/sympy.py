@@ -340,7 +340,7 @@ def _recursive_substitution(expression: sympy.Expr,
 
 @lru_cache
 def sympify_cache(value):
-    return sympify_cache_core(value)
+    return sympify(value)
 
 def recursive_substitution(expression: sympy.Expr,
                            substitutions: Dict[str, Union[sympy.Expr, numpy.ndarray, str]]) -> sympy.Expr:
