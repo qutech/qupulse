@@ -334,17 +334,13 @@ def _recursive_substitution(expression: sympy.Expr,
 
     func = _NUMPY_COMPATIBLE.get(expression.func, expression.func)
     substitutions = {s: substitutions.get(s, s) for s in get_free_symbols_cache(expression)}
-    return func(*(_recursive_substitution(arg, substitutions) for arg in expression.args))
+    operands = (_recursive_substitution(arg, substitutions) for arg in expression.args)
+    return func(*operands)
+
 
 @lru_cache
-def sympify_cache_core(value):
-    return sympify(value)
-
 def sympify_cache(value):
-    if isinstance(value, numpy.ndarray):
-        return value
-    else:
-        return sympify_cache_core(value)
+    return sympify_cache_core(value)
 
 def recursive_substitution(expression: sympy.Expr,
                            substitutions: Dict[str, Union[sympy.Expr, numpy.ndarray, str]]) -> sympy.Expr:
