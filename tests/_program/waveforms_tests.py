@@ -29,6 +29,10 @@ def assert_constant_consistent(test_case: unittest.TestCase, wf: Waveform):
 
 
 class WaveformStub(Waveform):
+    """Not a slot class to allow easier mocking"""
+    def __init__(self):
+        super(WaveformStub, self).__init__(duration=None)
+    
     @property
     def defined_channels(self):
         raise NotImplementedError()
@@ -48,7 +52,7 @@ class WaveformStub(Waveform):
 
     @property
     def duration(self) -> TimeType:
-        raise NotImplementedError()
+        pass
 
 
 class WaveformTest(unittest.TestCase):
@@ -141,6 +145,11 @@ class WaveformTest(unittest.TestCase):
 
         expected_neg = FunctorWaveform(wf, {'A': np.negative, 'B': np.negative})
         self.assertEqual(expected_neg, -wf)
+
+    def test_slot(self):
+        wf = ConstantWaveform.from_mapping(1, {'f': 3})
+        with self.assertRaises(AttributeError):
+            wf.asd = 5
 
 
 class MultiChannelWaveformTest(unittest.TestCase):
