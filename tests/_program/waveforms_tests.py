@@ -50,10 +50,6 @@ class WaveformStub(Waveform):
     def compare_key(self):
         raise NotImplementedError()
 
-    @property
-    def duration(self) -> TimeType:
-        pass
-
 
 class WaveformTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
