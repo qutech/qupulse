@@ -650,8 +650,9 @@ class MultiChannelWaveform(Waveform):
             defined_channels |= waveform.defined_channels
         self._defined_channels = frozenset(defined_channels)
 
-        waveform_duration = waveform.duration
-        if not all(isclose(waveform_duration, self._sub_waveforms[0].duration) for waveform in self._sub_waveforms[1:]):
+        
+        subwaveform_zero_duration = self._sub_waveforms[0].duration
+        if not all(isclose(waveform.duration, subwaveform_zero_duration) for waveform in self._sub_waveforms[1:]):
             # meaningful error message:
             durations = {}
 
