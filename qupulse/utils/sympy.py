@@ -31,6 +31,9 @@ __all__ = ["sympify", "substitute_with_eval", "to_numpy", "get_variables", "get_
            "evaluate_lambdified", "get_most_simple_representation"]
 
 
+_lru_cache = functools.lru_cache(maxsize=2048, typed=True)
+
+
 Sympifyable = Union[str, Number, sympy.Expr, numpy.str_]
 
 SYMPY_DURATION_ERROR_MARGIN = 1e-15 # error margin when checking sympy expression durations
@@ -318,6 +321,9 @@ def substitute_with_eval(expression: sympy.Expr,
                                                         'Add': numpy_compatible_add})
 
 
+get_free_symbols_cache = _lru_cache(get_free_symbols)
+
+
 def _recursive_substitution(expression: sympy.Expr,
                            substitutions: Dict[sympy.Symbol, sympy.Expr]) -> sympy.Expr:
     if not expression.free_symbols:
@@ -326,13 +332,29 @@ def _recursive_substitution(expression: sympy.Expr,
         return substitutions.get(expression, expression)
 
     func = _NUMPY_COMPATIBLE.get(expression.func, expression.func)
-    substitutions = {s: substitutions.get(s, s) for s in get_free_symbols(expression)}
-    return func(*(_recursive_substitution(arg, substitutions) for arg in expression.args))
+    substitutions = {s: substitutions.get(s, s) for s in get_free_symbols_cache(expression)}
+    operands = (_recursive_substitution(arg, substitutions) for arg in expression.args)
+    return func(*operands)
+
+
+
+_cached_sympify = _lru_cache(sympify)
+
+
+def sympify_cache(value):
+    """Cache sympify result for all hashable types"""
+    if getattr(value, '__hash__', None) is not None:
+        try:
+            return _cached_sympify(value)
+        except TypeError:
+            pass
+    # type is either not hashable or the sympification failed for another reason
+    return sympify(value)
 
 
 def recursive_substitution(expression: sympy.Expr,
                            substitutions: Dict[str, Union[sympy.Expr, numpy.ndarray, str]]) -> sympy.Expr:
-    substitutions = {k if isinstance(k, (sympy.Symbol, sympy.Dummy)) else sympy.Symbol(k): sympify(v)
+    substitutions = {k if isinstance(k, (sympy.Symbol, sympy.Dummy)) else sympy.Symbol(k): sympify_cache(v)
                      for k, v in substitutions.items()}
     for s in get_free_symbols(expression):
         substitutions.setdefault(s, s)
