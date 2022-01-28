@@ -168,7 +168,10 @@ class DummyInterpolationStrategy(InterpolationStrategy):
     def expression(self) -> ExpressionScalar:
         raise NotImplementedError()
 
-
+    def evaluate_integral(self, t0, v0, t1, v1):
+        """ Evaluate integral using arguments v0, t0, v1, t1 """
+        raise
+        
 class DummyPulseTemplate(AtomicPulseTemplate):
 
     def __init__(self,

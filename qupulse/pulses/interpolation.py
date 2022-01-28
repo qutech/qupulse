@@ -11,9 +11,9 @@ Classes:
 from abc import ABCMeta, abstractmethod
 from typing import Any, Tuple, Optional
 import numpy as np
+from sympy.utilities import lambdify
 
 from qupulse.expressions import ExpressionScalar
-
 
 __all__ = ["InterpolationStrategy", "HoldInterpolationStrategy",
            "JumpInterpolationStrategy", "LinearInterpolationStrategy"]
@@ -53,6 +53,10 @@ class InterpolationStrategy(metaclass=ABCMeta):
         between t0 and t1."""
 
     @abstractmethod
+    def evaluate_integral(self, t0, v0, t1, v1):
+        """ Evaluate integral using arguments v0, t0, v1, t1 """
+
+    @abstractmethod
     def __repr__(self) -> str:
         """String representation of the Interpolation Strategy Class"""
 
@@ -81,6 +85,9 @@ class InterpolationStrategy(metaclass=ABCMeta):
 
 class LinearInterpolationStrategy(InterpolationStrategy):
     """An InterpolationStrategy that interpolates linearly between two points."""
+
+    _integral_expression = ExpressionScalar('(t1-t0) * (v0 + v1) / 2')
+    _expression = ExpressionScalar('v0 + (v1-v0) * (t-t0)/(t1-t0)')
     
     def __call__(self,
                  start: Tuple[float, float],
@@ -91,11 +98,14 @@ class LinearInterpolationStrategy(InterpolationStrategy):
 
     @property
     def integral(self) -> ExpressionScalar:
-        return ExpressionScalar('(t1-t0) * (v0 + v1) / 2')
+        return self._integral_expression
+
+    def evaluate_integral(self, t0, v0, t1, v1):
+        return (t1-t0) * (v0 + v1) / 2
 
     @property
     def expression(self) -> ExpressionScalar:
-        return ExpressionScalar('v0 + (v1-v0) * (t-t0)/(t1-t0)')
+        return self._expression
 
     def __str__(self) -> str:
         return 'linear'
@@ -111,6 +121,9 @@ class HoldInterpolationStrategy(InterpolationStrategy):
     """An InterpolationStrategy that interpolates by holding the value of the start point for the
     entire intermediate space."""
 
+    _integral_expression = ExpressionScalar('v0*(t1-t0)')
+    _expression = ExpressionScalar('v0')
+    
     def __call__(self,
                  start: Tuple[float, float],
                  end: Tuple[float, float],
@@ -125,11 +138,14 @@ class HoldInterpolationStrategy(InterpolationStrategy):
 
     @property
     def integral(self) -> ExpressionScalar:
-        return ExpressionScalar('v0*(t1-t0)')
+        return self._integral_expression
+
+    def evaluate_integral(self, t0, v0, t1, v1):
+        return v0*(t1-t0)
 
     @property
     def expression(self) -> ExpressionScalar:
-        return ExpressionScalar('v0')
+        return self._expression
 
     def __str__(self) -> str:
         return 'hold'
@@ -145,6 +161,9 @@ class JumpInterpolationStrategy(InterpolationStrategy):
     """An InterpolationStrategy that interpolates by holding the value of the end point for the
     entire intermediate space."""
 
+    _integral_expression = ExpressionScalar('v1*(t1-t0)')
+    _expression = ExpressionScalar('v1')
+
     def __call__(self,
                  start: Tuple[float, float],
                  end: Tuple[float, float],
@@ -159,11 +178,14 @@ class JumpInterpolationStrategy(InterpolationStrategy):
 
     @property
     def integral(self) -> ExpressionScalar:
-        return ExpressionScalar('v1*(t1-t0)')
+        return self._integral_expression
+
+    def evaluate_integral(self, t0, v0, t1, v1):
+        return v1*(t1-t0)
 
     @property
     def expression(self) -> ExpressionScalar:
-        return ExpressionScalar('v1')
+        return self._expression
 
     def __str__(self) -> str:
         return 'jump'

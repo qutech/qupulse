@@ -75,12 +75,11 @@ class TableEntry(NamedTuple('TableEntry', [('t', ExpressionScalar),
             Scalar expression for the integral.
         """
         expr = 0
-        for first_entry, second_entry in pairwise(entry_sequence):
-            substitutions = {'t0': first_entry.t.sympified_expression,
-                             'v0': expression_extractor(first_entry.v),
-                             't1': second_entry.t.sympified_expression,
-                             'v1': expression_extractor(second_entry.v)}
-            expr += second_entry.interp.integral.sympified_expression.subs(substitutions, simultaneous=True)
+        time_value_pairs = [(entry.t.sympified_expression,expression_extractor(entry.v)) for entry in entry_sequence]
+        for idx, (first, second) in enumerate(pairwise(time_value_pairs)):
+            parameters = first[0], first[1], second[0], second[1]
+            second_entry = entry_sequence[idx+1]
+            expr += second_entry.interp.evaluate_integral(*parameters)
         return ExpressionScalar(expr)
 
     @classmethod
