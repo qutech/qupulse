@@ -262,6 +262,12 @@ class ExpressionScalar(Expression):
 
         self._exact_rational_lambdified = None
 
+    def __float__(self):
+        if isinstance(self._original_expression, float):
+            return self._original_expression
+        else:
+            return super().__float__()
+
     @property
     def underlying_expression(self) -> sympy.Expr:
         return self._sympified_expression
