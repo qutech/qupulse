@@ -37,6 +37,13 @@ _ALLOCATION_FUNCTION = np.full_like  # pre_allocated = ALLOCATION_FUNCTION(sampl
 _ALLOCATION_FUNCTION_KWARGS = dict(fill_value=np.nan, dtype=float)
 
 
+def _to_time_type(duration: Real) -> TimeType:
+    if isinstance(duration, TimeType):
+        return duration
+    else:
+        return time_from_float(float(duration), absolute_error=PULSE_TO_WAVEFORM_ERROR)
+
+
 class Waveform(Comparable, metaclass=ABCMeta):
     """Represents an instantiated PulseTemplate which can be sampled to retrieve arrays of voltage
     values for the hardware."""
@@ -228,7 +235,7 @@ class TableWaveform(Waveform):
                           category=DeprecationWarning)
             waveform_table = self._validate_input(waveform_table)
 
-        super().__init__(duration=TimeType.from_float(waveform_table[-1].t, absolute_error=PULSE_TO_WAVEFORM_ERROR))
+        super().__init__(duration=_to_time_type(waveform_table[-1].t))
 
         self._table = waveform_table
         self._channel_id = channel
@@ -344,21 +351,16 @@ class ConstantWaveform(Waveform):
 
     def __init__(self, duration: Real, amplitude: Any, channel: ChannelID):
         """ Create a qupulse waveform corresponding to a ConstantPulseTemplate """
-        if not isinstance(duration, TimeType):
-            duration = self.to_time_type(float(duration))
-
-        super().__init__(duration=duration)
+        super().__init__(duration=_to_time_type(duration))
         self._amplitude = amplitude
         self._channel = channel
 
     @classmethod
-    def to_time_type(cls, duration: Real) -> TimeType:
-        return time_from_float(float(duration), absolute_error=PULSE_TO_WAVEFORM_ERROR)
-    
-    @classmethod
-    def from_mapping(cls, duration: Real, constant_values: Mapping[ChannelID, float]) -> Waveform:
+    def from_mapping(cls, duration: Real, constant_values: Mapping[ChannelID, float]) -> Union['ConstantWaveform',
+                                                                                               'MultiChannelWaveform']:
         """Construct a ConstantWaveform or a MultiChannelWaveform of ConstantWaveforms with given duration and values"""
         assert constant_values
+        duration = _to_time_type(duration)
         if len(constant_values) == 1:
             (channel, amplitude), = constant_values.items()
             return cls(duration, amplitude=amplitude, channel=channel)
@@ -429,7 +431,7 @@ class FunctionWaveform(Waveform):
         elif not expression.variables:
             warnings.warn("Constant FunctionWaveform is not recommended as the constant propagation will be suboptimal",
                           category=UserWarning)
-        super().__init__(duration=TimeType.from_float(duration, absolute_error=PULSE_TO_WAVEFORM_ERROR))
+        super().__init__(duration=_to_time_type(duration))
         self._expression = expression
         self._channel_id = channel
 
