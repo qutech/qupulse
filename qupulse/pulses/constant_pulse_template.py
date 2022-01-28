@@ -123,8 +123,8 @@ class ConstantPulseTemplate(AtomicPulseTemplate):  # type: ignore
                for channel in self.defined_channels):
             return None
 
-        
-        waveforms = [ConstantWaveform(self.duration, amplitude, channel)
+        duration = ConstantWaveform.to_time_type(self.duration)
+        waveforms = [ConstantWaveform(duration, amplitude, channel)
                      for channel, amplitude in self._amplitude_dict.items() if channel_mapping[channel] is not None]
 
         if len(waveforms) == 1:

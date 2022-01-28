@@ -345,12 +345,16 @@ class ConstantWaveform(Waveform):
     def __init__(self, duration: Real, amplitude: Any, channel: ChannelID):
         """ Create a qupulse waveform corresponding to a ConstantPulseTemplate """
         if not isinstance(duration, TimeType):
-            duration = time_from_float(float(duration), absolute_error=PULSE_TO_WAVEFORM_ERROR)
+            duration = self.to_time_type(float(duration))
 
         super().__init__(duration=duration)
         self._amplitude = amplitude
         self._channel = channel
 
+    @classmethod
+    def to_time_type(cls, duration: Real) -> TimeType:
+        return time_from_float(float(duration), absolute_error=PULSE_TO_WAVEFORM_ERROR)
+    
     @classmethod
     def from_mapping(cls, duration: Real, constant_values: Mapping[ChannelID, float]) -> Waveform:
         """Construct a ConstantWaveform or a MultiChannelWaveform of ConstantWaveforms with given duration and values"""
