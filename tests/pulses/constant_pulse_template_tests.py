@@ -7,6 +7,7 @@ from qupulse.pulses import TablePT, FunctionPT, AtomicMultiChannelPT, MappingPT
 from qupulse.pulses.plotting import plot
 from qupulse.pulses.sequence_pulse_template import SequencePulseTemplate
 from qupulse._program._loop import make_compatible
+from qupulse._program.waveforms import ConstantWaveform
 
 from qupulse.pulses.constant_pulse_template import ConstantPulseTemplate
 
@@ -85,3 +86,32 @@ class TestConstantPulseTemplate(unittest.TestCase):
         p = MappingPT(qupulse_template, channel_mapping=channel_mapping)
         plot(p)
         self.assertEqual(p.defined_channels, {'C2'})
+
+    def test_build_waveform(self):
+        tpt = ConstantPulseTemplate(200, {'C1': 2, 'C2': 3})
+
+        wf_id = tpt.build_waveform({}, {'C1': 'C1', 'C2': 'C2'})
+        self.assertEqual(
+            ConstantWaveform.from_mapping(200, {'C1': 2, 'C2': 3}),
+            wf_id
+        )
+
+        wf_1 = tpt.build_waveform({}, {'C1': 'C1', 'C2': None})
+        self.assertEqual(
+            ConstantWaveform.from_mapping(200, {'C1': 2}),
+            wf_1
+        )
+
+        wf_2 = tpt.build_waveform({}, {'C1': None, 'C2': 'A'})
+        self.assertEqual(
+            ConstantWaveform.from_mapping(200, {'A': 3}),
+            wf_2
+        )
+
+        wf_all = tpt.build_waveform({}, {'C1': 'B', 'C2': 'A'})
+        self.assertEqual(
+            ConstantWaveform.from_mapping(200, {'A': 3, 'B': 2}),
+            wf_all
+        )
+
+        self.assertIsNone(tpt.build_waveform({}, {'C1': None, 'C2': None}))

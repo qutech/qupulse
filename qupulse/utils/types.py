@@ -55,8 +55,15 @@ class TimeType:
     _InternalType = fractions.Fraction if gmpy2 is None else type(gmpy2.mpq())
     _to_internal = fractions.Fraction if gmpy2 is None else gmpy2.mpq
 
-    def __init__(self, value: numbers.Rational = 0.):
-        if type(getattr(value, '_value', None)) is self._InternalType:
+    def __init__(self, value: typing.Union[numbers.Rational, int] = 0., denominator: typing.Optional[int] = None):
+        """
+        Args:
+            value: interpreted as Rational if denominator is None. interpreted as numerator otherwise
+            denominator: Denominator of the Fraction if not None
+        """
+        if denominator is not None:
+            self._value = self._to_internal(value, denominator)
+        elif type(getattr(value, '_value', None)) is self._InternalType:
             self._value = value._value
         else:
             try:
@@ -284,10 +291,10 @@ class TimeType:
             numerator: Numerator of the time fraction
             denominator: Denominator of the time fraction
         """
-        return cls(cls._to_internal(numerator, denominator))
+        return cls(numerator, denominator)
 
     def __repr__(self):
-        return 'TimeType(%s)' % self.__str__()
+        return f'TimeType({self._value.numerator}, {self._value.denominator})'
 
     def __str__(self):
         return '%d/%d' % (self._value.numerator, self._value.denominator)
