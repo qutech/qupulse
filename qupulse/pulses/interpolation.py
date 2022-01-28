@@ -88,7 +88,6 @@ class LinearInterpolationStrategy(InterpolationStrategy):
 
     _integral_expression = ExpressionScalar('(t1-t0) * (v0 + v1) / 2')
     _expression = ExpressionScalar('v0 + (v1-v0) * (t-t0)/(t1-t0)')
-    _integral_method = staticmethod(lambdify(['t0', 'v0', 't1', 'v1'], _integral_expression.sympified_expression))
     
     def __call__(self,
                  start: Tuple[float, float],
@@ -102,7 +101,7 @@ class LinearInterpolationStrategy(InterpolationStrategy):
         return self._integral_expression
 
     def evaluate_integral(self, t0, v0, t1, v1):
-        return self._integral_method(t0, v0, t1, v1)
+        return (t1-t0) * (v0 + v1) / 2
 
     @property
     def expression(self) -> ExpressionScalar:
@@ -124,7 +123,6 @@ class HoldInterpolationStrategy(InterpolationStrategy):
 
     _integral_expression = ExpressionScalar('v0*(t1-t0)')
     _expression = ExpressionScalar('v0')
-    _integral_method = staticmethod(lambdify(['t0', 'v0', 't1', 'v1'], _integral_expression.sympified_expression))
     
     def __call__(self,
                  start: Tuple[float, float],
@@ -143,7 +141,7 @@ class HoldInterpolationStrategy(InterpolationStrategy):
         return self._integral_expression
 
     def evaluate_integral(self, t0, v0, t1, v1):
-        return self._integral_method(t0, v0, t1, v1)
+        return v0*(t1-t0)
 
     @property
     def expression(self) -> ExpressionScalar:
@@ -165,7 +163,6 @@ class JumpInterpolationStrategy(InterpolationStrategy):
 
     _integral_expression = ExpressionScalar('v1*(t1-t0)')
     _expression = ExpressionScalar('v1')
-    _integral_method = staticmethod(lambdify(['t0', 'v0', 't1', 'v1'], _integral_expression.sympified_expression))
 
     def __call__(self,
                  start: Tuple[float, float],
@@ -184,7 +181,7 @@ class JumpInterpolationStrategy(InterpolationStrategy):
         return self._integral_expression
 
     def evaluate_integral(self, t0, v0, t1, v1):
-        return self._integral_method(t0, v0, t1, v1)
+        return v1*(t1-t0)
 
     @property
     def expression(self) -> ExpressionScalar:
