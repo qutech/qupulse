@@ -4,8 +4,12 @@ import time
 import platform
 import os
 
-import pyvisa.resources
-import tabor_control
+try:
+    import pyvisa.resources
+    import tabor_control
+except ImportError as err:
+    raise unittest.SkipTest("pyvisa and/or tabor_control not present") from err
+
 import numpy as np
 
 from qupulse.hardware.awgs.tabor import TaborAWGRepresentation, TaborChannelPair

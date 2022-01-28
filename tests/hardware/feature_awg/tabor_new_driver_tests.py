@@ -1,5 +1,10 @@
 import unittest
 
+try:
+    import tabor_control
+except ImportError as err:
+    raise unittest.SkipTest("tabor_control not present") from err
+
 from qupulse.hardware.feature_awg.tabor import with_configuration_guard
 
 
