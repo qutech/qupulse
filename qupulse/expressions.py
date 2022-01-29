@@ -255,6 +255,10 @@ class ExpressionScalar(Expression):
             self._original_expression = ex._original_expression
             self._sympified_expression = ex._sympified_expression            
             self._variables = ex._variables
+        elif isinstance(ex, (int, float)):
+            self._original_expression = ex
+            self._sympified_expression = sympify(ex)
+            self._variables = ()
         else:
             self._original_expression = ex
             self._sympified_expression = sympify(ex)
