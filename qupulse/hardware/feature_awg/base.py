@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional, Collection
+from typing import Optional, Collection, Union
 import weakref
 
 from qupulse.hardware.awgs.base import AWG
@@ -11,14 +11,16 @@ __all__ = ["AWGDevice", "AWGChannelTuple", "AWGChannel", "AWGMarkerChannel", "AW
 
 class AWGDeviceFeature(Feature):
     """Base class for features that are used for `AWGDevice`s"""
-    def __init__(self):
+    def __init__(self, device: 'AWGDevice'):
         super().__init__(AWGDevice)
+        self._device = weakref.proxy(device)
 
 
 class AWGChannelFeature(Feature):
     """Base class for features that are used for `AWGChannel`s"""
-    def __init__(self):
+    def __init__(self, channel: Union['AWGChannel', 'AWGMarkerChannel']):
         super().__init__(_BaseAWGChannel)
+        self._channel = weakref.proxy(channel)
 
 
 class AWGChannelTupleFeature(Feature):
