@@ -1,6 +1,9 @@
+import copy
 import unittest
 from unittest import mock
 import itertools
+
+import numpy as np
 
 from string import ascii_uppercase
 
@@ -10,9 +13,10 @@ from qupulse.parameter_scope import DictScope
 from qupulse.utils.types import TimeType, time_from_float
 from qupulse._program.volatile import VolatileRepetitionCount
 from qupulse._program._loop import Loop, _make_compatible, _is_compatible, _CompatibilityLevel,\
-    RepetitionWaveform, SequenceWaveform, make_compatible, MakeCompatibleWarning, DroppedMeasurementWarning, VolatileModificationWarning
+    RepetitionWaveform, SequenceWaveform, make_compatible, MakeCompatibleWarning, DroppedMeasurementWarning,\
+    VolatileModificationWarning, roll_constant_waveforms
 from qupulse._program._loop import Loop, _make_compatible, _is_compatible, _CompatibilityLevel,\
-    RepetitionWaveform, SequenceWaveform, make_compatible, MakeCompatibleWarning
+    RepetitionWaveform, SequenceWaveform, make_compatible, MakeCompatibleWarning, ConstantWaveform
 from tests.pulses.sequencing_dummies import DummyWaveform
 from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
 
@@ -478,3 +482,59 @@ class ProgramWaveformCompatibilityTest(unittest.TestCase):
 
                 is_compat.assert_called_once_with(program, **priv_kwargs)
                 make_compat.assert_called_once_with(program, **priv_kwargs)
+
+    def test_roll_constant_waveforms(self):
+        root = Loop(waveform=ConstantWaveform.from_mapping(16, {'A': 1., 'B': 0.5}), repetition_count=4)
+        expected = copy.deepcopy(root)
+        roll_constant_waveforms(root, 1, 16, TimeType.from_fraction(1, 1))
+        self.assertEqual(root, expected)
+
+        root = Loop(waveform=ConstantWaveform.from_mapping(32, {'A': 1., 'B': 0.5}), repetition_count=4)
+        expected = Loop(waveform=ConstantWaveform.from_mapping(16, {'A': 1., 'B': 0.5}), repetition_count=8)
+        roll_constant_waveforms(root, 1, 16, TimeType.from_fraction(1, 1))
+        self.assertEqual(root, expected)
+
+        root = Loop(waveform=ConstantWaveform.from_mapping(16*3, {'A': 1., 'B': 0.5}), repetition_count=4)
+        expected = Loop(waveform=ConstantWaveform.from_mapping(16, {'A': 1., 'B': 0.5}), repetition_count=12)
+        roll_constant_waveforms(root, 1, 16, TimeType.from_fraction(1, 1))
+        self.assertEqual(root, expected)
+
+        root = Loop(waveform=ConstantWaveform.from_mapping(16*3, {'A': 1., 'B': 0.5}), repetition_count=4)
+        expected = copy.deepcopy(root)
+        roll_constant_waveforms(root, 2, 16, TimeType.from_fraction(1, 1))
+        self.assertEqual(root, expected)
+
+        root = Loop(waveform=ConstantWaveform.from_mapping(16*5, {'A': 1., 'B': 0.5}), repetition_count=4)
+        expected = copy.deepcopy(root)
+        roll_constant_waveforms(root, 2, 16, TimeType.from_fraction(1, 1))
+        self.assertEqual(root, expected)
+
+        root = Loop(children=[
+            Loop(waveform=ConstantWaveform.from_mapping(32, {'A': 1., 'B': 0.5}), repetition_count=4),
+            Loop(waveform=ConstantWaveform.from_mapping(16, {'A': 1., 'B': 0.3}), repetition_count=4),
+            Loop(waveform=ConstantWaveform.from_mapping(128, {'A': .1, 'B': 0.5}), repetition_count=2)
+        ])
+        expected = Loop(children=[
+            Loop(waveform=ConstantWaveform.from_mapping(16, {'A': 1., 'B': 0.5}), repetition_count=8),
+            Loop(waveform=ConstantWaveform.from_mapping(16, {'A': 1., 'B': 0.3}), repetition_count=4),
+            Loop(waveform=ConstantWaveform.from_mapping(16, {'A': .1, 'B': 0.5}), repetition_count=2*128//16)
+        ])
+        roll_constant_waveforms(root, 1, 16, TimeType.from_fraction(1, 1))
+        self.assertEqual(root, expected)
+
+        not_constant_wf = DummyWaveform(sample_output=np.array([.1, .2, .3]),
+                                        duration=TimeType.from_fraction(32, 1),
+                                        defined_channels={'A', 'B'})
+
+        root = Loop(waveform=not_constant_wf, repetition_count=4)
+        expected = copy.deepcopy(root)
+        roll_constant_waveforms(root, 1, 16, TimeType.from_fraction(1, 1))
+        self.assertEqual(root, expected)
+
+        scope = DictScope.from_mapping({'a': 4, 'b': 3}, volatile={'a'})
+        rep_count = VolatileRepetitionCount(expression=ExpressionScalar('a+b'), scope=scope)
+        root = Loop(waveform=ConstantWaveform.from_mapping(32, {'A': 1., 'B': 0.5}), repetition_count=rep_count)
+        expected = Loop(waveform=ConstantWaveform.from_mapping(16, {'A': 1., 'B': 0.5}), repetition_count=rep_count * 2)
+        self.assertNotEqual(root.repetition_count, expected.repetition_count)
+        roll_constant_waveforms(root, 1, 16, TimeType.from_fraction(1, 1))
+        self.assertEqual(root, expected)

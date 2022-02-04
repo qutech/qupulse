@@ -2,7 +2,12 @@ import unittest
 import contextlib
 import math
 import sys
-import distutils
+import warnings
+
+try:
+    from packaging.version import Version
+except ImportError:
+    from distutils.version import StrictVersion as Version
 
 from typing import Union
 
@@ -18,7 +23,8 @@ dummy_a = sympy.Dummy('a')
 
 from qupulse.utils.sympy import sympify as qc_sympify, substitute_with_eval, recursive_substitution, Len,\
     evaluate_lambdified, evaluate_compiled, get_most_simple_representation, get_variables, get_free_symbols,\
-    almost_equal, Broadcast, IndexedBasedFinder, IndexedBroadcast, evaluate_lamdified_exact_rational
+    almost_equal, Broadcast, IndexedBasedFinder, IndexedBroadcast, evaluate_lamdified_exact_rational,\
+    UnsupportedBroadcastArgumentWarning
 from qupulse.utils.types import TimeType
 
 
@@ -393,7 +399,8 @@ class AlmostEqualTests(unittest.TestCase):
 
 class BroadcastTests(unittest.TestCase):
     def test_symbolic_shape(self):
-        symbolic = Broadcast(a, (b,))
+        with self.assertWarns(UnsupportedBroadcastArgumentWarning):
+            symbolic = Broadcast(a, (b,))
         self.assertIs(symbolic.func, Broadcast)
         self.assertEqual(symbolic.args, (a, (b,)))
 
@@ -446,20 +453,23 @@ class BroadcastTests(unittest.TestCase):
         self.assertEqual(expected, Broadcast(expected, (4,)))
 
     def test_numeric_evaluation(self):
-        symbolic = Broadcast(a, (b,))
+        with self.assertWarns(UnsupportedBroadcastArgumentWarning):
+            # use c (and not b as above)
+            # here because sympy caches function call results and we want the warning everytime
+            symbolic = Broadcast(a, (c,))
 
-        arguments = {'a': (1, 2., 3), 'b': 3}
+        arguments = {'a': (1, 2., 3), 'c': 3}
         expected = np.asarray([1, 2., 3])
-        result, _ = evaluate_lambdified(symbolic, ['a', 'b'], arguments, None)
+        result, _ = evaluate_lambdified(symbolic, ['a', 'c'], arguments, None)
         np.testing.assert_array_equal(expected, result)
 
         with self.assertRaises(ValueError):
-            arguments = {'a': (1, 2., 3), 'b': 4}
-            evaluate_lambdified(symbolic, ['a', 'b'], arguments, None)
+            arguments = {'a': (1, 2., 3), 'c': 4}
+            evaluate_lambdified(symbolic, ['a', 'c'], arguments, None)
 
-        arguments = {'a': 1, 'b': 3}
+        arguments = {'a': 1, 'c': 3}
         expected = np.asarray([1, 1, 1])
-        result, _ = evaluate_lambdified(symbolic, ['a', 'b'], arguments, None)
+        result, _ = evaluate_lambdified(symbolic, ['a', 'c'], arguments, None)
         np.testing.assert_array_equal(expected, result)
 
     def test_sympification(self):
@@ -486,7 +496,7 @@ class BroadcastTests(unittest.TestCase):
         self.assertEqual(expr_with_int, expr_with_int_other_order)
         self.assertEqual(expr_with_float, expr_with_int_other_order)
 
-    test_numeric_equal = unittest.expectedFailure(test_expression_equality) if distutils.version.StrictVersion(sympy.__version__) >= distutils.version.StrictVersion('1.5') else test_expression_equality
+    test_numeric_equal = unittest.expectedFailure(test_expression_equality) if Version(sympy.__version__) >= Version('1.5') else test_expression_equality
 
     def test_integral(self):
         symbolic = Broadcast(a*c, (3,))

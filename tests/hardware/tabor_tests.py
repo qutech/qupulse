@@ -2,6 +2,11 @@ import unittest
 import itertools
 import numpy as np
 
+try:
+    import tabor_control
+except ImportError as err:
+    raise unittest.SkipTest("tabor_control not present") from err
+
 from qupulse.hardware.awgs.tabor import TaborException, TaborProgram, \
     TaborSegment, TaborSequencing, with_configuration_guard, PlottableProgram
 from qupulse._program._loop import Loop

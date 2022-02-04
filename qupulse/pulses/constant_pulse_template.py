@@ -118,16 +118,16 @@ class ConstantPulseTemplate(AtomicPulseTemplate):  # type: ignore
                        parameters: Dict[str, numbers.Real],
                        channel_mapping: Dict[ChannelID, Optional[ChannelID]]) -> Optional[Union[ConstantWaveform,
                                                                                                 MultiChannelWaveform]]:
-        logging.debug(f'build_waveform of ConstantPulse: channel_mapping {channel_mapping}, defined_channels {self.defined_channels} ')
-        if all(channel_mapping.get(channel, None) is None
-               for channel in self.defined_channels):
-            return None
+        logging.debug(f'build_waveform of ConstantPulse: channel_mapping {channel_mapping}, '
+                      f'defined_channels {self.defined_channels}')
 
-        
-        waveforms = [ConstantWaveform(self.duration, amplitude, channel)
-                     for channel, amplitude in self._amplitude_dict.items() if channel_mapping[channel] is not None]
+        constant_values = {}
+        for channel, value in self._amplitude_dict.items():
+            mapped_channel = channel_mapping[channel]
+            if mapped_channel is not None:
+                constant_values[mapped_channel] = value
 
-        if len(waveforms) == 1:
-            return waveforms.pop()
+        if constant_values:
+            return ConstantWaveform.from_mapping(self.duration, constant_values)
         else:
-            return MultiChannelWaveform(waveforms)
+            return None

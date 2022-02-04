@@ -76,8 +76,7 @@ class DummyNoValueParameter(Parameter):
 class DummyWaveform(Waveform):
 
     def __init__(self, duration: Union[float, TimeType]=0, sample_output: Union[numpy.ndarray, dict]=None, defined_channels=None) -> None:
-        super().__init__()
-        self.duration_ = duration if isinstance(duration, TimeType) else TimeType.from_float(duration)
+        super().__init__(duration=duration if isinstance(duration, TimeType) else TimeType.from_float(duration))
         self.sample_output = sample_output
         if defined_channels is None:
             if isinstance(sample_output, dict):
@@ -99,10 +98,6 @@ class DummyWaveform(Waveform):
             )
         else:
             return id(self)
-
-    @property
-    def duration(self) -> TimeType:
-        return self.duration_
 
     @property
     def measurement_windows(self):
@@ -173,7 +168,10 @@ class DummyInterpolationStrategy(InterpolationStrategy):
     def expression(self) -> ExpressionScalar:
         raise NotImplementedError()
 
-
+    def evaluate_integral(self, t0, v0, t1, v1):
+        """ Evaluate integral using arguments v0, t0, v1, t1 """
+        raise
+        
 class DummyPulseTemplate(AtomicPulseTemplate):
 
     def __init__(self,

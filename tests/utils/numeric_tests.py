@@ -5,7 +5,7 @@ from fractions import Fraction
 from collections import deque
 from itertools import islice
 
-from qupulse.utils.numeric import approximate_rational, approximate_double
+from qupulse.utils.numeric import approximate_rational, approximate_double, smallest_factor_ge
 
 
 def stern_brocot_sequence() -> Iterator[int]:
@@ -109,3 +109,14 @@ class ApproximationTests(unittest.TestCase):
                                                    'which is not the expected {expected}'.format(x=x, err=err,
                                                                                                  result=result,
                                                                                                  expected=expected))
+
+
+class FactorizationTests(unittest.TestCase):
+    def test_smallest_factor_ge(self):
+        for brute_force in range(100):
+            self.assertEqual(smallest_factor_ge(15, 2), 3, brute_force)
+            self.assertEqual(smallest_factor_ge(15, 4), 5, brute_force)
+            self.assertEqual(smallest_factor_ge(45, 2), 3, brute_force)
+            self.assertEqual(smallest_factor_ge(45, 4), 5, brute_force)
+            self.assertEqual(smallest_factor_ge(45, 5), 5, brute_force)
+            self.assertEqual(smallest_factor_ge(36, 8), 9, brute_force)

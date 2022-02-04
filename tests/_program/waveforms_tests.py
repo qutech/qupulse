@@ -29,6 +29,10 @@ def assert_constant_consistent(test_case: unittest.TestCase, wf: Waveform):
 
 
 class WaveformStub(Waveform):
+    """Not a slot class to allow easier mocking"""
+    def __init__(self):
+        super(WaveformStub, self).__init__(duration=None)
+    
     @property
     def defined_channels(self):
         raise NotImplementedError()
@@ -44,10 +48,6 @@ class WaveformStub(Waveform):
 
     @property
     def compare_key(self):
-        raise NotImplementedError()
-
-    @property
-    def duration(self) -> TimeType:
         raise NotImplementedError()
 
 
@@ -141,6 +141,11 @@ class WaveformTest(unittest.TestCase):
 
         expected_neg = FunctorWaveform(wf, {'A': np.negative, 'B': np.negative})
         self.assertEqual(expected_neg, -wf)
+
+    def test_slot(self):
+        wf = ConstantWaveform.from_mapping(1, {'f': 3})
+        with self.assertRaises(AttributeError):
+            wf.asd = 5
 
 
 class MultiChannelWaveformTest(unittest.TestCase):
@@ -356,6 +361,16 @@ class RepetitionWaveformTest(unittest.TestCase):
         output_received = rwf.unsafe_sample(channel='A', sample_times=sample_times, output_array=output_expected)
         self.assertIs(output_expected, output_received)
         np.testing.assert_equal(output_received, inner_sample_times)
+
+    def test_float_sample_time(self):
+        # issue 624
+        body_wf = FunctionWaveform.from_expression(ExpressionScalar('sin(t)'), 1./3., channel='a')
+        rwf = RepetitionWaveform(body_wf, 2)
+
+        sample_times = np.arange(160) / 80. / 3.
+        sampled = rwf.unsafe_sample(sample_times=sample_times, channel='a')
+        inner_sample_times = np.concatenate((sample_times[:80], sample_times[80:] - 1./3.))
+        np.testing.assert_equal(sampled, np.sin(inner_sample_times))
 
     def test_repr(self):
         body_wf = ConstantWaveform(amplitude=1.1, duration=1.3, channel='3')

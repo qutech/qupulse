@@ -1,11 +1,37 @@
 from typing import Tuple, Type
 from numbers import Rational
 from math import gcd
+from operator import le
+from functools import partial
+
+import sympy
 
 
 def lcm(a: int, b: int):
     """least common multiple"""
     return a * b // gcd(a, b)
+
+
+def smallest_factor_ge(n: int, min_factor: int, brute_force: int = 5):
+    """Find the smallest factor of n that is greater or equal min_factor
+
+    Args:
+        n: number to factorize
+        min_factor: factor must be larger this
+        brute_force: range(min_factor, min(min_factor + brute_force)) is probed by brute force
+
+    Returns:
+        Smallest factor of n that is greater or equal min_factor
+    """
+    assert min_factor <= n
+
+    # this shortcut force shortcut costs 1us max
+    for factor in range(min_factor, min(min_factor + brute_force, n)):
+        if n % factor == 0:
+            return factor
+    else:
+        return min(filter(partial(le, min_factor),
+                          sympy.ntheory.divisors(n, generator=True)))
 
 
 def _approximate_int(alpha_num: int, d_num: int, den: int) -> Tuple[int, int]:

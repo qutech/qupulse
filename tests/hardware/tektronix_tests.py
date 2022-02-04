@@ -6,13 +6,10 @@ from unittest import mock
 import numpy as np
 try:
     import tek_awg
-except ImportError:
-    tek_awg = None
+except ImportError as err:
+    raise unittest.SkipTest("tek_awg not present") from err
 
-try:
-    import qupulse.hardware.awgs.tektronix as tektronix
-except ImportError:
-    tektronix = None
+import qupulse.hardware.awgs.tektronix as tektronix
 
 from qupulse.hardware.awgs.tektronix import TektronixAWG, TektronixProgram, parse_program, _make_binary_waveform,\
     voltage_to_uint16, WaveformEntry, WaveformStorage

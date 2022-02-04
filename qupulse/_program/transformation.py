@@ -149,7 +149,7 @@ class LinearTransformation(Transformation):
             return data_out
 
         try:
-            data_in = np.stack(data[in_channel] for in_channel in self._input_channels)
+            data_in = np.stack([data[in_channel] for in_channel in self._input_channels])
         except KeyError as error:
             raise KeyError('Invalid input channels', set(data.keys()), set(self._input_channels)) from error
 

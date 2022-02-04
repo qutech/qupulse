@@ -250,12 +250,27 @@ class ExpressionScalar(Expression):
         if isinstance(ex, sympy.Expr):
             self._original_expression = None
             self._sympified_expression = ex
+            self._variables = get_variables(self._sympified_expression)
+        elif isinstance(ex, ExpressionScalar):
+            self._original_expression = ex._original_expression
+            self._sympified_expression = ex._sympified_expression            
+            self._variables = ex._variables
+        elif isinstance(ex, (int, float)):
+            self._original_expression = ex
+            self._sympified_expression = sympify(ex)
+            self._variables = ()
         else:
             self._original_expression = ex
             self._sympified_expression = sympify(ex)
+            self._variables = get_variables(self._sympified_expression)
 
-        self._variables = get_variables(self._sympified_expression)
         self._exact_rational_lambdified = None
+
+    def __float__(self):
+        if isinstance(self._original_expression, float):
+            return self._original_expression
+        else:
+            return super().__float__()
 
     @property
     def underlying_expression(self) -> sympy.Expr:

@@ -82,7 +82,8 @@ def render(program: Union[Loop],
         raise PlottingNotPossibleException(pulse=None,
                                            description='cannot render sequence with less than 2 data points')
     if not round(float(sample_count), 10).is_integer():
-        warnings.warn("Sample count {sample_count} is not an integer. Will be rounded (this changes the sample rate).".format(sample_count=sample_count))
+        warnings.warn(f"Sample count {sample_count} is not an integer. Will be rounded (this changes the sample rate).",
+                      stacklevel=2)
 
     times = np.linspace(float(start_time), float(end_time), num=int(sample_count), dtype=float)
     times[-1] = np.nextafter(times[-1], times[-2])
@@ -175,8 +176,8 @@ def plot(pulse: PulseTemplate,
         warnings.warn("Pulse to be plotted is empty!")
     elif times.size > maximum_points:
         # todo [2018-05-30]: since it results in an empty return value this should arguably be an exception, not just a warning
-        warnings.warn("Sampled pulse of size {wf_len} is lager than {max_points}".format(wf_len=times.size,
-                                                                                         max_points=maximum_points))
+        warnings.warn(f"Sampled pulse of size {times.size} is lager than {maximum_points}",
+                      stacklevel=2)
         return None
     else:
         duration = times[-1]
