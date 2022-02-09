@@ -450,6 +450,14 @@ class Loop(Node):
         else:
             return self.repetition_count, tuple(child.get_duration_structure() for child in self)
 
+    def reverse_inplace(self):
+        if self.is_leaf():
+            self._waveform = self._waveform.reversed()
+        else:
+            self._reverse_children()
+            for child in self:
+                child.reverse_inplace()
+
 
 class ChannelSplit(Exception):
     def __init__(self, channel_sets):
