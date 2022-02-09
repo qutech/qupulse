@@ -256,6 +256,8 @@ class ExpressionScalar(Expression):
             self._sympified_expression = ex._sympified_expression            
             self._variables = ex._variables
         elif isinstance(ex, (int, float)):
+            if isinstance(ex, numpy.float64):
+                ex = float(ex)
             self._original_expression = ex
             self._sympified_expression = sympify(ex)
             self._variables = ()
