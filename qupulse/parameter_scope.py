@@ -1,9 +1,10 @@
 """Contains various implementations of the parameter lookup interface :class:`.Scope`"""
 
 from abc import abstractmethod
-from typing import Mapping, AbstractSet, ValuesView, Tuple
+from typing import Mapping, AbstractSet, ValuesView, Tuple, Optional
 from numbers import Number
 import warnings
+import itertools
 
 from qupulse.expressions import Expression, ExpressionVariableMissingException
 from qupulse.utils.types import FrozenMapping, FrozenDict
@@ -26,7 +27,7 @@ class Scope(Mapping[str, Number]):
         self._as_dict = None
 
     @abstractmethod
-    def get_volatile_parameters(self) -> FrozenDict[str, Expression]:
+    def get_volatile_parameters(self) -> FrozenMapping[str, Expression]:
         """
         Returns:
             A mapping where the keys are the volatile parameters and the
@@ -75,7 +76,7 @@ class Scope(Mapping[str, Number]):
         return MappedScope(self, FrozenDict((name, Expression(value))
                                             for name, value in to_overwrite.items()))
 
-    def as_dict(self) -> FrozenDict[str, Number]:
+    def as_dict(self) -> FrozenMapping[str, Number]:
         if self._as_dict is None:
             self._as_dict = FrozenDict(self.items())
         return self._as_dict
@@ -101,7 +102,7 @@ class MappedScope(Scope):
     def values(self) -> ValuesView[Number]:
         return self.as_dict().values()
 
-    def as_dict(self) -> FrozenDict[str, Number]:
+    def as_dict(self) -> FrozenMapping[str, Number]:
         if self._as_dict is None:
             self._as_dict = FrozenDict((parameter_name, self.get_parameter(parameter_name))
                                        for parameter_name in self.keys())
@@ -152,7 +153,7 @@ class MappedScope(Scope):
                 mapping=self._mapping
             )
 
-    def _collect_volatile_parameters(self) -> FrozenDict[str, Expression]:
+    def _collect_volatile_parameters(self) -> FrozenMapping[str, Expression]:
         inner_volatile = self._scope.get_volatile_parameters()
         if inner_volatile:
             volatile = inner_volatile.to_dict()
@@ -235,7 +236,7 @@ class DictScope(Scope):
         else:
             return self
 
-    def get_volatile_parameters(self) -> FrozenDict[str, Expression]:
+    def get_volatile_parameters(self) -> FrozenMapping[str, Expression]:
         return self._volatile_parameters
 
     @classmethod
@@ -282,7 +283,7 @@ class JointScope(Scope):
             (parameter_name, scope.change_constants(new_constants)) for parameter_name, scope in self._lookup.items()
         ))
 
-    def get_volatile_parameters(self) -> FrozenDict[str, Expression]:
+    def get_volatile_parameters(self) -> FrozenMapping[str, Expression]:
         if self._volatile_parameters is None:
             volatile_parameters = {}
             for parameter_name, scope in self._lookup:

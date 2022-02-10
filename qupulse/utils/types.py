@@ -11,6 +11,11 @@ import operator
 import numpy
 import sympy
 
+try:
+    from frozendict import frozendict
+except ImportError:
+    frozendict = None
+
 import qupulse.utils.numeric as qupulse_numeric
 
 __all__ = ["MeasurementWindow", "ChannelID", "HashableNumpyArray", "TimeType", "time_from_float", "DocStringABCMeta",
@@ -505,7 +510,10 @@ class _FrozenDictByWrapping(FrozenMapping):
         return self._dict.copy()
 
 
-FrozenDict = _FrozenDictByWrapping
+if frozendict is None:
+    FrozenDict = _FrozenDictByWrapping
+else:
+    FrozenDict = frozendict
 
 
 class SequenceProxy(collections.abc.Sequence):
