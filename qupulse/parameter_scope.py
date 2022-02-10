@@ -72,9 +72,7 @@ class Scope(Mapping[str, Number]):
         """
 
     def overwrite(self, to_overwrite: Mapping[str, Number]) -> 'Scope':
-        # TODO: replace with OverwritingScope
-        return MappedScope(self, FrozenDict((name, Expression(value))
-                                            for name, value in to_overwrite.items()))
+        return OverwritingScope(FrozenDict(to_overwrite), self)
 
     def as_dict(self) -> FrozenMapping[str, Number]:
         if self._as_dict is None:
@@ -178,6 +176,62 @@ class MappedScope(Scope):
         if self._volatile_parameters_cache is None:
             self._volatile_parameters_cache = self._collect_volatile_parameters()
         return self._volatile_parameters_cache
+
+
+class OverwritingScope(Scope):
+    __slots__ = ('_new_values', '_inner')
+
+    def __init__(self, new_values: FrozenMapping[str, Number], inner: Optional[Scope]):
+        super(OverwritingScope, self).__init__()
+        self._new_values = new_values
+        self._inner = inner
+
+    def keys(self) -> AbstractSet[str]:
+        self.as_dict().keys()
+
+    def items(self) -> AbstractSet[Tuple[str, Number]]:
+        return self.as_dict().items()
+
+    def values(self) -> ValuesView[Number]:
+        return self.as_dict().values()
+
+    def as_dict(self) -> FrozenMapping[str, Number]:
+        if self._inner is None:
+            return self._new_values
+        elif self._as_dict is None:
+            self._as_dict = FrozenDict(itertools.chain(self._inner.items(), self._new_values.items()))
+        return self._as_dict
+
+    def __contains__(self, item):
+        return item in self._new_values or (self._inner and item in self._inner)
+
+    def __iter__(self):
+        return iter(self.as_dict())
+
+    def __len__(self):
+        return len(self.as_dict())
+
+    def __repr__(self):
+        return f'OverwritingScope(new_values={self._new_values!r}, inner={self._inner!r})'
+
+    def get_volatile_parameters(self) -> FrozenMapping[str, Expression]:
+        return self._inner and self._inner.get_volatile_parameters() or FrozenDict()
+
+    def __hash__(self):
+        return hash((self._inner, self._new_values))
+
+    def __eq__(self, other: 'OverwritingScope'):
+        return self._inner == other._inner and self._new_values == other._new_values
+
+    def get_parameter(self, parameter_name: str) -> Number:
+        if self._inner and parameter_name not in self._new_values:
+            return self._inner.get_parameter(parameter_name)
+        else:
+            return self._new_values[parameter_name]
+
+    def change_constants(self, new_constants: Mapping[str, Number]) -> 'Scope':
+        return OverwritingScope(self._new_values,
+                                self._inner and self._inner.change_constants(new_constants))
 
 
 class DictScope(Scope):
