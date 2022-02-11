@@ -340,7 +340,8 @@ class LamdifiedExactRationalEvaluationTest(EvaluationTestsBase, unittest.TestCas
             variables = get_variables(expression)
         return evaluate_lamdified_exact_rational(expression,
                                                  variables=list(variables),
-                                                 parameters=parameters,
+                                                 call_args=(),
+                                                 call_kwargs=parameters,
                                                  lambdified=None)[0]
 
     @unittest.skipIf(sys.version_info[0] == 3 and sys.version_info[1] < 7, "causes syntax error for python < 3.7")
