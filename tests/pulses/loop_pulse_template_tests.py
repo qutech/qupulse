@@ -6,7 +6,7 @@ from qupulse.utils.types import FrozenDict
 
 from qupulse.expressions import Expression, ExpressionScalar
 from qupulse.pulses.loop_pulse_template import ForLoopPulseTemplate, ParametrizedRange,\
-    LoopIndexNotUsedException, LoopPulseTemplate
+    LoopIndexNotUsedException, LoopPulseTemplate, _get_for_loop_scope
 from qupulse.pulses.parameters import ConstantParameter, InvalidParameterNameException, ParameterConstraintViolation,\
     ParameterNotProvidedException, ParameterConstraint
 
@@ -363,7 +363,7 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
                                               to_single_waveform=to_single_waveform,
                                               parent_loop=program)
         expected_create_program_calls = [mock.call(**expected_create_program_kwargs,
-                                                   scope=scope.overwrite(dict(i=i)))
+                                                   scope=_get_for_loop_scope(scope, 'i', i))
                                          for i in (1, 3)]
 
         with mock.patch.object(flt, 'validate_scope') as validate_scope:

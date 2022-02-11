@@ -492,7 +492,7 @@ class _FrozenDictByWrapping(FrozenMapping):
         # use the local variable h to minimize getattr calls to minimum and reduce caching overhead
         h = self._hash
         if h is None:
-            self._hash = h = functools.reduce(operator.xor, map(hash, self.items()))
+            self._hash = h = functools.reduce(operator.xor, map(hash, self.items()), 0xABCD0)
         return h
 
     def __eq__(self, other: typing.Mapping):

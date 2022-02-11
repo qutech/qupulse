@@ -140,7 +140,10 @@ class MappedScope(Scope):
         return hash((self._scope, self._mapping))
 
     def __eq__(self, other: 'MappedScope'):
-        return self._scope == other._scope and self._mapping == other._mapping
+        try:
+            return self._scope == other._scope and self._mapping == other._mapping
+        except AttributeError:
+            return NotImplemented
 
     def change_constants(self, new_constants: Mapping[str, Number]) -> 'MappedScope':
         scope = self._scope.change_constants(new_constants)
