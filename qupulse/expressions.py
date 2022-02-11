@@ -287,7 +287,12 @@ class ExpressionScalar2:
         else:
             return sympy.sympify('nan') == self._sympified_expression
 
-    underlying_expression = sympified_expression
+    @property
+    def underlying_expression(self):
+        if self._sympified_expression is None:
+            return self._original_expression
+        else:
+            return self._sympified_expression
 
     def __hash__(self):
         return hash(self._sympified_expression or self._original_expression)
