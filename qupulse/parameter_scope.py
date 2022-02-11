@@ -154,7 +154,7 @@ class MappedScope(Scope):
     def _collect_volatile_parameters(self) -> FrozenMapping[str, Expression]:
         inner_volatile = self._scope.get_volatile_parameters()
         if inner_volatile:
-            volatile = inner_volatile.to_dict()
+            volatile = dict(inner_volatile)
             for mapped_parameter, expression in self._mapping.items():
                 volatile_expr_dep = inner_volatile.keys() & expression.variables
                 if volatile_expr_dep:
@@ -172,7 +172,7 @@ class MappedScope(Scope):
         else:
             return inner_volatile
 
-    def get_volatile_parameters(self) -> AbstractSet[str]:
+    def get_volatile_parameters(self) -> FrozenMapping[str, Expression]:
         if self._volatile_parameters_cache is None:
             self._volatile_parameters_cache = self._collect_volatile_parameters()
         return self._volatile_parameters_cache

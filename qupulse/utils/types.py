@@ -14,6 +14,8 @@ import sympy
 try:
     from frozendict import frozendict
 except ImportError:
+    warnings.warn("The frozendict package is not installed. We currently also ship a fallback frozendict which "
+                  "will be removed in a future release.", category=DeprecationWarning)
     frozendict = None
 
 import qupulse.utils.numeric as qupulse_numeric
