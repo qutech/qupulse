@@ -1,0 +1,1 @@
+Drop `cached_property` dependency for python>=3.8.

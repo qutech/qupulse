@@ -30,7 +30,7 @@ class PointPulseEntry(TableEntry):
         vs = self.v.evaluate_in_scope(parameters)
 
         if isinstance(vs, numbers.Number):
-            vs = np.full(num_channels, vs, dtype=type(vs))
+            vs = (vs,) * num_channels
         elif len(vs) != num_channels:
             raise InvalidPointDimension(expected=num_channels, received=len(vs))
 

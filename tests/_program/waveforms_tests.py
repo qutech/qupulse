@@ -563,10 +563,10 @@ class TableWaveformTests(unittest.TestCase):
                                                    TableWaveformEntry(0.2, 0.3, LinearInterpolationStrategy()),
                                                    TableWaveformEntry(0.3, 0.3, JumpInterpolationStrategy())])
 
-        self.assertEqual(validated, (TableWaveformEntry(0.0, 0.2, HoldInterpolationStrategy()),
+        self.assertEqual(validated, [TableWaveformEntry(0.0, 0.2, HoldInterpolationStrategy()),
                                      TableWaveformEntry(0.1, 0.2, LinearInterpolationStrategy()),
                                      TableWaveformEntry(0.1, 0.3, HoldInterpolationStrategy()),
-                                     TableWaveformEntry(0.3, 0.3, JumpInterpolationStrategy())))
+                                     TableWaveformEntry(0.3, 0.3, JumpInterpolationStrategy())])
 
     def test_duration(self) -> None:
         entries = [TableWaveformEntry(0, 0, HoldInterpolationStrategy()),

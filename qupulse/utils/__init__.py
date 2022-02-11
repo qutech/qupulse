@@ -1,6 +1,6 @@
 """This package contains utility functions and classes as well as custom sympy extensions(hacks)."""
 
-from typing import Union, Iterable, Any, Tuple, Mapping, Iterator, cast
+from typing import Union, Iterable, Any, Tuple, Mapping, Iterator, cast, TypeVar
 import itertools
 import re
 import numbers
@@ -14,7 +14,16 @@ except ImportError:
     # py version < 3.5
     isclose = None
 
-__all__ = ["checked_int_cast", "is_integer", "isclose", "pairwise", "replace_multiple"]
+try:
+    from functools import cached_property
+except ImportError:
+    # py version < 3.8
+    from cached_property import cached_property
+
+_T = TypeVar('_T')
+
+
+__all__ = ["checked_int_cast", "is_integer", "isclose", "pairwise", "replace_multiple", "cached_property"]
 
 
 def checked_int_cast(x: Union[float, int, numpy.ndarray], epsilon: float=1e-6) -> int:
@@ -43,21 +52,23 @@ if not isclose:
     isclose = _fallback_is_close
 
 
-def pairwise(iterable: Iterable[Any],
-             zip_function=zip, **kwargs) -> Iterator[Tuple[Any, Any]]:
+def _fallback_pairwise(iterable: Iterable[_T]) -> Iterator[Tuple[_T, _T]]:
     """s -> (s0,s1), (s1,s2), (s2, s3), ...
 
     Args:
         iterable: Iterable to iterate over pairwise
-        zip_function: Either zip(default) or itertools.zip_longest
-        **kwargs: Gets passed to zip_function
 
     Returns:
-        An iterable that yield neighbouring elements
+        An iterable that yields neighbouring elements
     """
-    a, b = itertools.tee(iterable)
-    next(b, None)
-    return cast(Iterator[Tuple[Any, Any]], zip_function(a, b, **kwargs))
+    return zip(iterable, itertools.islice(iterable, 1, None))
+
+
+if hasattr(itertools, 'pairwise'):
+    pairwise = itertools.pairwise
+else:
+    # py version < 3.10
+    pairwise = _fallback_pairwise
 
 
 def grouper(iterable: Iterable[Any], n: int, fillvalue=None) -> Iterable[Tuple[Any, ...]]:
