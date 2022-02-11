@@ -107,13 +107,13 @@ class TableEntry(NamedTuple('TableEntry', [('t', ExpressionScalar),
 
         # first define out of sequence values. Otherwise integration might produce strange results
         if pre_value is not None:
-            piecewise_args.append((pre_value, t < entry_sequence[0].t.sympified_expression))
+            piecewise_args.append((pre_value, t < entry_sequence[0].t.underlying_expression))
 
         if post_value is not None:
-            piecewise_args.append((post_value, t >= entry_sequence[-1].t.sympified_expression))
+            piecewise_args.append((post_value, t >= entry_sequence[-1].t.underlying_expression))
 
         for first_entry, second_entry in pairwise(entry_sequence):
-            t0, t1 = first_entry.t.sympified_expression, second_entry.t.sympified_expression
+            t0, t1 = first_entry.t.underlying_expression, second_entry.t.underlying_expression
             substitutions = {'t0': t0,
                              'v0': expression_extractor(first_entry.v),
                              't1': t1,
