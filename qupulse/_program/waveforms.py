@@ -207,10 +207,6 @@ class Waveform(Comparable, metaclass=ABCMeta):
 class TableWaveformEntry(NamedTuple('TableWaveformEntry', [('t', Real),
                                                            ('v', float),
                                                            ('interp', InterpolationStrategy)])):
-    def __init__(self, t: float, v: float, interp: InterpolationStrategy):
-        if not callable(interp):
-            raise TypeError('{} is neither callable nor of type InterpolationStrategy'.format(interp))
-
     def __repr__(self):
         return f'{type(self).__name__}(t={self.t!r}, v={self.v!r}, interp={self.interp!r})'
 
