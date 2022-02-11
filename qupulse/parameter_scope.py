@@ -137,6 +137,8 @@ class MappedScope(Scope):
             self._cache[parameter_name] = result = self._calc_parameter(parameter_name)
         return result
 
+    __getitem__ = get_parameter
+
     def __hash__(self):
         return hash((self._scope, self._mapping))
 
@@ -215,6 +217,8 @@ class DictScope(Scope):
         except KeyError:
             raise ParameterNotProvidedException(parameter_name)
 
+    __getitem__ = get_parameter
+
     def __hash__(self):
         return hash((self._values, self._volatile_parameters))
 
@@ -273,6 +277,8 @@ class JointScope(Scope):
 
     def get_parameter(self, parameter_name: str) -> Number:
         return self._lookup[parameter_name].get_parameter(parameter_name)
+
+    __getitem__ = get_parameter
 
     def __hash__(self):
         return hash(self._lookup)
