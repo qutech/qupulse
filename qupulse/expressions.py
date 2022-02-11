@@ -295,7 +295,10 @@ class ExpressionScalar2:
             return self._sympified_expression
 
     def __hash__(self):
-        return hash(self._sympified_expression or self._original_expression)
+        if self._sympified_expression is None:
+            return hash(self._original_expression)
+        else:
+            return hash(self._sympified_expression)
 
     def __eq__(self, other: 'ExpressionScalar2'):
         if self.__slots__ != getattr(other, '__slots__', None):
@@ -367,7 +370,7 @@ class ExpressionScalar2:
         return type(self)(self.sympified_expression.__rsub__(sympify(other)))
 
     def __mul__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> 'ExpressionScalar2':
-        return type(self)(self._sympified_expression.__mul__(sympify(other)))
+        return type(self)(self.sympified_expression.__mul__(sympify(other)))
 
     def __rmul__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> 'ExpressionScalar2':
         return type(self)(self.sympified_expression.__rmul__(sympify(other)))
