@@ -322,7 +322,7 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
         if not instantiated:
             return None
 
-        if self.duration.evaluate_numeric(**parameters) == 0:
+        if self.duration.evaluate_in_scope(parameters) == 0:
             return None
 
         waveforms = [TableWaveform.from_table(*ch_instantiated)

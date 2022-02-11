@@ -466,7 +466,7 @@ class FunctionWaveform(Waveform):
                       channel: ChannelID,
                       sample_times: np.ndarray,
                       output_array: Union[np.ndarray, None] = None) -> np.ndarray:
-        evaluated = self._expression.evaluate_numeric(t=sample_times)
+        evaluated = self._expression.evaluate_in_scope(FrozenDict(t=sample_times))
         if output_array is None:
             if self._expression.variables:
                 return evaluated.astype(float)
