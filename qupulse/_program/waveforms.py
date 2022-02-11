@@ -22,7 +22,7 @@ from qupulse.comparable import Comparable
 from qupulse.expressions import ExpressionScalar
 from qupulse.pulses.interpolation import InterpolationStrategy
 from qupulse.utils import checked_int_cast, isclose
-from qupulse.utils.types import TimeType, time_from_float
+from qupulse.utils.types import TimeType, time_from_float, FrozenDict
 from qupulse._program.transformation import Transformation
 from qupulse.utils import pairwise
 
@@ -241,43 +241,84 @@ class TableWaveform(Waveform):
         self._channel_id = channel
 
     @staticmethod
-    def _validate_input(input_waveform_table: Sequence[EntryInInit]) -> Tuple[TableWaveformEntry, ...]:
+    def _validate_input(input_waveform_table: Sequence[EntryInInit]) -> Union[Tuple[Real, Real],
+                                                                              List[TableWaveformEntry]]:
         """ Checks that:
          - the time is increasing,
          - there are at least two entries
-        and removes subsequent entries with same time or voltage values.
 
-        :param input_waveform_table:
-        :return:
+        Optimizations:
+          - removes subsequent entries with same time or voltage values.
+          - checks if the complete waveform is constant. Returns a (duration, value) tuple if this is the case
+
+        Raises:
+            ValueError:
+              - there are less than two entries
+              - the entries are not ordered in time
+              - Any time is negative
+              - The total length is zero
+
+        Returns:
+            A list of de-duplicated table entries
+            OR
+            A (duration, value) tuple if the waveform is constant
         """
-        if len(input_waveform_table) < 2:
-            raise ValueError("Waveform table has less than two entries.")
+        # we use an iterator here to avoid duplicate work and be maximally efficient for short tables
+        # We never use StopIteration to abort iteration. It always signifies an error.
+        input_iter = iter(input_waveform_table)
+        try:
+            first_t, first_v, first_interp = next(input_iter)
+        except StopIteration:
+            raise ValueError("Waveform table mut not be empty")
 
-        if input_waveform_table[0][0] != 0:
+        if first_t != 0.0:
             raise ValueError('First time entry is not zero.')
 
-        if input_waveform_table[-1][0] == 0:
-            raise ValueError('Last time entry is zero.')
+        previous_t = 0.0
+        previous_v = first_v
+        output_waveform_table = [TableWaveformEntry(0.0, first_v, first_interp)]
 
-        output_waveform_table = []
+        try:
+            t, v, interp = next(input_iter)
+        except StopIteration:
+            raise ValueError("Waveform table has less than two entries.")
+        if t < 0:
+            raise ValueError('Negative time values are not allowed.')
 
-        previous_t = 0
-        previous_v = None
-        for (t, v, interp), (next_t, next_v, _) in itertools.zip_longest(input_waveform_table,
-                                                                         input_waveform_table[1:],
-                                                                         fillvalue=(float('inf'), None, None)):
+        # constant_v is None <=> the waveform is constant until up to the current entry
+        constant_v = first_interp.constant_value((previous_t, previous_v), (t, v))
+
+        for next_t, next_v, next_interp in input_iter:
             if next_t < t:
                 if next_t < 0:
                     raise ValueError('Negative time values are not allowed.')
                 else:
                     raise ValueError('Times are not increasing.')
 
+            if constant_v is not None and interp.constant_value((t, v), (next_t, next_v)) != constant_v:
+                constant_v = None
+
             if (previous_t != t or t != next_t) and (previous_v != v or v != next_v):
+                # the time and the value differ both either from the next or the previous
+                # otherwise we skip the entry
                 previous_t = t
                 previous_v = v
                 output_waveform_table.append(TableWaveformEntry(t, v, interp))
 
-        return tuple(output_waveform_table)
+            t, v, interp = next_t, next_v, next_interp
+
+        # Until now, we only checked that the time does not decrease. We require an increase because duration == 0
+        # waveforms are ill-formed. t is now the time of the last entry.
+        if t == 0:
+            raise ValueError('Last time entry is zero.')
+
+        if constant_v is not None:
+            # the waveform is constant
+            return t, constant_v
+        else:
+            # we must still add the last entry to the table
+            output_waveform_table.append(TableWaveformEntry(t, v, interp))
+            return output_waveform_table
 
     def is_constant(self) -> bool:
         # only correct if `from_table` is used
@@ -290,19 +331,11 @@ class TableWaveform(Waveform):
     @classmethod
     def from_table(cls, channel: ChannelID, table: Sequence[EntryInInit]) -> Union['TableWaveform', 'ConstantWaveform']:
         table = cls._validate_input(table)
-        v = None
-        for entry1, entry2 in pairwise(table):
-            piece = entry2.interp.constant_value(entry1[:2], entry2[:2])
-            if piece is None:
-                break
-            if v is None:
-                v = piece
-            elif piece != v:
-                break
+        if isinstance(table, tuple):
+            duration, amplitude = table
+            return ConstantWaveform(duration=duration, amplitude=amplitude, channel=channel)
         else:
-            return ConstantWaveform(duration=table[-1].t, amplitude=v, channel=channel)
-
-        return TableWaveform(channel, table)
+            return TableWaveform(channel, tuple(table))
 
     @property
     def compare_key(self) -> Any:
