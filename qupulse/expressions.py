@@ -115,10 +115,12 @@ def _parse_evaluate_numeric_scalar(expression,
     if isinstance(result, allowed_types):
         return result
 
-    elif isinstance(result, sympy.Float):
-        return float(result)
-    elif isinstance(result, sympy.Integer):
+    elif isinstance(result, (sympy.Integral, symengine.Integer)):
         return int(result)
+    elif isinstance(result, (sympy.Rational, symengine.Rational)):
+        return TimeType(result)
+    elif isinstance(result, (sympy.Float, symengine.RealNumber)):
+        return float(result)
     else:
         raise NonNumericEvaluation(expression, result, call_arguments)
 
@@ -185,7 +187,12 @@ class ExpressionScalar2:
         self._expression_lambdified = None
         self._exact_rational_lambdified = None
 
-        if isinstance(ex, self._SYMBOLIC_TYPES):
+        if isinstance(ex, self._NUMERIC_TYPES):
+            self._original_expression = ex
+            self._sympified_expression = None
+            self._variables = ()
+
+        elif isinstance(ex, self._SYMBOLIC_TYPES):
             self._original_expression = None
             self._sympified_expression = ex
             self._variables = None
@@ -196,11 +203,6 @@ class ExpressionScalar2:
             self._variables = ex._variables
             self._expression_lambdified = ex._expression_lambdified
             self._exact_rational_lambdified = ex._exact_rational_lambdified
-
-        elif isinstance(ex, self._NUMERIC_TYPES):
-            self._original_expression = ex
-            self._sympified_expression = None
-            self._variables = ()
 
         else:
             self._original_expression = ex
