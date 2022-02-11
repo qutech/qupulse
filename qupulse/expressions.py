@@ -93,7 +93,7 @@ def _parse_evaluate_numeric_scalar(expression,
     allowed_types = (float, numpy.number, int, complex, bool, numpy.bool_, TimeType)
     if isinstance(result, (tuple, list)):
         if len(result) > 1:
-            result = np.asarray(result)
+            result = numpy.asarray(result)
         else:
             result, = result
     if isinstance(result, numpy.ndarray):
