@@ -6,7 +6,7 @@ from qupulse.utils.types import FrozenDict
 
 from qupulse.expressions import Expression, ExpressionScalar
 from qupulse.pulses.loop_pulse_template import ForLoopPulseTemplate, ParametrizedRange,\
-    LoopIndexNotUsedException, LoopPulseTemplate
+    LoopIndexNotUsedException, LoopPulseTemplate, _get_for_loop_scope, _ForLoopScope
 from qupulse.pulses.parameters import ConstantParameter, InvalidParameterNameException, ParameterConstraintViolation,\
     ParameterNotProvidedException, ParameterConstraint
 
@@ -363,7 +363,7 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
                                               to_single_waveform=to_single_waveform,
                                               parent_loop=program)
         expected_create_program_calls = [mock.call(**expected_create_program_kwargs,
-                                                   scope=scope.overwrite(dict(i=i)))
+                                                   scope=_get_for_loop_scope(scope, 'i', i))
                                          for i in (1, 3)]
 
         with mock.patch.object(flt, 'validate_scope') as validate_scope:
@@ -544,9 +544,57 @@ class ForLoopPulseTemplateOldSerializationTests(unittest.TestCase):
             self.assertEqual([str(c) for c in flt.parameter_constraints], parameter_constraints)
 
 
+class ForLoopScopeTests(unittest.TestCase):
+    def test_overwrite(self):
+        inner = DictScope(FrozenDict({'a': 0.5, 'i': 3}), volatile=frozenset(['a']))
+
+        fscope = _ForLoopScope(inner, 'i', 4)
+        self.assertIn('i', fscope)
+        self.assertIn('a', fscope)
+        self.assertNotIn('j', fscope)
+
+        equivalent = {'a': 0.5, 'i': 4}
+        self.assertEqual(equivalent, dict(fscope))
+        self.assertEqual(equivalent.items(), fscope.items())
+        self.assertEqual(equivalent.keys(), fscope.keys())
+        self.assertEqual(set(equivalent.values()), set(fscope.values()))
+
+        self.assertEqual(0.5, fscope['a'])
+        self.assertEqual(4, fscope['i'])
+
+        self.assertEqual(FrozenDict({'a': ExpressionScalar('a')}), fscope.get_volatile_parameters())
+
+        inner = DictScope(FrozenDict({'a': 0.5, 'i': 3}), volatile=frozenset(['a', 'i']))
+        fscope = _ForLoopScope(inner, 'i', 4)
+        self.assertEqual(FrozenDict({'a': ExpressionScalar('a')}), fscope.get_volatile_parameters())
+
+    def test_additional(self):
+        inner = DictScope(FrozenDict({'a': 0.5, 'j': 3}), volatile=frozenset(['a']))
+
+        fscope = _ForLoopScope(inner, 'i', 4)
+        self.assertIn('i', fscope)
+        self.assertIn('a', fscope)
+        self.assertIn('j', fscope)
+        self.assertNotIn('k', fscope)
+
+        equivalent = {'a': 0.5, 'i': 4, 'j': 3}
+        self.assertEqual(equivalent, dict(fscope))
+        self.assertEqual(equivalent.items(), fscope.items())
+        self.assertEqual(equivalent.keys(), fscope.keys())
+        self.assertEqual(set(equivalent.values()), set(fscope.values()))
+
+        self.assertEqual(0.5, fscope['a'])
+        self.assertEqual(4, fscope['i'])
+
+        self.assertEqual(FrozenDict({'a': ExpressionScalar('a')}), fscope.get_volatile_parameters())
+
+
 class LoopIndexNotUsedExceptionTest(unittest.TestCase):
     def str_test(self):
         self.assertEqual(str(LoopIndexNotUsedException('a', {'b', 'c'})), "The parameter a is missing in the body's parameter names: {}".format({'b', 'c'}))
+
+
+
 
 
 if __name__ == "__main__":
