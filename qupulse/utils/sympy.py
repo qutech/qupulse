@@ -1,4 +1,4 @@
-from typing import Union, Dict, Tuple, Any, Sequence, Optional, Callable
+from typing import Union, Dict, Tuple, Any, Sequence, Optional, Callable, Mapping
 from numbers import Number
 from types import CodeType
 import warnings
@@ -353,7 +353,7 @@ def sympify_cache(value):
 
 
 def recursive_substitution(expression: sympy.Expr,
-                           substitutions: Dict[str, Union[sympy.Expr, numpy.ndarray, str]]) -> sympy.Expr:
+                           substitutions: Mapping[str, Union[sympy.Expr, numpy.ndarray, str]]) -> sympy.Expr:
     substitutions = {k if isinstance(k, (sympy.Symbol, sympy.Dummy)) else sympy.Symbol(k): sympify_cache(v)
                      for k, v in substitutions.items()}
     for s in get_free_symbols(expression):
@@ -389,7 +389,7 @@ def evaluate_compiled(expression: sympy.Expr,
 
 def evaluate_lambdified(expression: Union[sympy.Expr, numpy.ndarray],
                         variables: Sequence[str],
-                        parameters: Dict[str, Union[numpy.ndarray, Number]],
+                        parameters: Sequence[Union[numpy.ndarray, Number]],
                         lambdified: Optional[Callable]) -> Tuple[Any, Any]:
     lambdified = lambdified or sympy.lambdify(variables, expression, _lambdify_modules)
     return lambdified(**parameters), lambdified
@@ -421,14 +421,15 @@ class HighPrecPrinter(NumPyPrinter):
 
 def evaluate_lamdified_exact_rational(expression: sympy.Expr,
                                       variables: Sequence[str],
-                                      parameters: Dict[str, Union[numpy.ndarray, Number]],
+                                      call_args: Tuple,
+                                      call_kwargs: Dict[str, Union[numpy.ndarray, Number]],
                                       lambdified: Optional[Callable]) -> Tuple[Any, Any]:
     """Evaluates Rational as TimeType. Only supports scalar expressions"""
     from qupulse.utils.types import TimeType
     _lambdify_modules[0]['TimeType'] = TimeType
     printer = HighPrecPrinter.make(expression, _lambdify_modules, use_imps=False)
     lambdified = lambdified or sympy.lambdify(variables, expression, _lambdify_modules, printer=printer)
-    return lambdified(**parameters), lambdified
+    return lambdified(*call_args, **call_kwargs), lambdified
 
 
 def almost_equal(lhs: sympy.Expr, rhs: sympy.Expr, epsilon: Optional[float]=None) -> Optional[bool]:

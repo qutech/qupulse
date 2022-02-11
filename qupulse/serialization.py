@@ -588,7 +588,7 @@ class Serializable(metaclass=SerializableMeta):
         return self.deserialize(registry=registry, identifier=new_identifier, **data)
 
 
-class AnonymousSerializable:
+class AnonymousSerializable(metaclass=ABCMeta):
     """Any object that can be converted into a serialized representation for storage and back which NEVER has an
     identifier. This class is used for implicit serialization and does not work necessarily with dicts.
 
@@ -600,13 +600,13 @@ class AnonymousSerializable:
     # todo (lumip, 2018-05-30): this does not really have a purpose, especially in the new serialization ecosystem.. we should deprecate and remove it
     """
 
+    @abstractmethod
     def get_serialization_data(self) -> Any:
         """Return all data relevant for serialization as a JSON compatible type that is accepted as constructor argument
 
         Returns:
             A JSON compatible type that can be used to construct an equal object.
         """
-        raise NotImplementedError()
 
 
 class Serializer(object):

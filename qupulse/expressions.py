@@ -2,19 +2,28 @@
 This module defines the class Expression to represent mathematical expression as well as
 corresponding exception classes.
 """
-from typing import Any, Dict, Union, Sequence, Callable, TypeVar, Type, Mapping
+import math
+import numbers
+from typing import Any, Dict, Union, Sequence, Callable, TypeVar, Type, Mapping, Tuple
 from numbers import Number
 import warnings
 import functools
 import array
 import itertools
+import dataclasses
 
 import sympy
 import numpy
 
+try:
+    import symengine
+except ImportError:
+    symengine = None
+
+from abc import ABCMeta, abstractmethod
 from qupulse.serialization import AnonymousSerializable
 from qupulse.utils.sympy import sympify, to_numpy, recursive_substitution, evaluate_lambdified,\
-    get_most_simple_representation, get_variables, evaluate_lamdified_exact_rational
+    get_most_simple_representation, get_variables, evaluate_lamdified_exact_rational, _lambdify_modules
 from qupulse.utils.types import TimeType
 
 __all__ = ["Expression", "ExpressionVariableMissingException", "ExpressionScalar", "ExpressionVector", "ExpressionLike"]
@@ -32,10 +41,446 @@ class _ExpressionMeta(type):
             return type.__call__(cls, *args, **kwargs)
 
 
-class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
+class _ExpressionMeta2(ABCMeta):
+    """Metaclass that forwards calls to Expression(...) to Expression.make(...) to make subclass objects"""
+    def __call__(cls: Type[_ExpressionType], *args, **kwargs) -> _ExpressionType:
+        return _make(cls, *args, **kwargs)
+
+
+if symengine is None:
+    _to_symbolic_float = sympy.Float
+    _to_symbolic_int = sympy.Integer
+else:
+    _to_symbolic_float = symengine.RealDouble
+    _to_symbolic_int = symengine.Integer
+
+
+def _make(cls,
+         expression_or_dict) -> Union['ExpressionScalar', 'ExpressionVector']:
+    """Backward compatible expression generation"""
+    if isinstance(expression_or_dict, dict):
+        expression = expression_or_dict['expression']
+    elif isinstance(expression_or_dict, cls):
+        return expression_or_dict
+    else:
+        expression = expression_or_dict
+
+    if cls is ExpressionVector:
+        return ExpressionVector(expression)
+    if cls is ExpressionScalar:
+        return ExpressionScalar(expression)
+    else:
+        if isinstance(expression, (list, tuple, numpy.ndarray, sympy.NDimArray, array.array)):
+            return ExpressionVector(expression)
+        else:
+            return ExpressionScalar(expression)
+
+
+def _parse_evaluate_numeric_arguments(expression, eval_args: Mapping[str, Number]) -> Tuple[Any, ...]:
+    try:
+        return tuple(eval_args[v] for v in expression.variables)
+    except KeyError as key_error:
+        if type(key_error).__module__.startswith('qupulse'):
+            # we forward qupulse errors
+            raise
+        else:
+            raise ExpressionVariableMissingException(key_error.args[0], expression) from key_error
+
+
+def _parse_evaluate_numeric_scalar(expression,
+                                   result: Union[Number, numpy.ndarray],
+                                   call_arguments: Any) -> Union[Number, numpy.ndarray]:
+    allowed_types = (float, numpy.number, int, complex, bool, numpy.bool_, TimeType)
+    if isinstance(result, (tuple, list)):
+        if len(result) > 1:
+            result = np.asarray(result)
+        else:
+            result, = result
+    if isinstance(result, numpy.ndarray):
+        result = numpy.squeeze(result)
+        if result.shape == ():
+            result = result[()]
+        elif issubclass(result.dtype.type, allowed_types):
+            return result
+        obj_types = set(map(type, result.flat))
+        if all(issubclass(obj_type, numbers.Integral) for obj_type in obj_types):
+            return result.astype(numpy.int64)
+        if all(issubclass(obj_type, (numbers.Real, numbers.Integral)) for obj_type in obj_types):
+            return result.astype(numpy.float64)
+        if all(issubclass(obj_type, numbers.Rational) for obj_type in obj_types):
+            return result.astype(TimeType)
+        else:
+            raise NonNumericEvaluation(expression, result, call_arguments)
+
+    if isinstance(result, allowed_types):
+        return result
+
+    elif isinstance(result, sympy.Float):
+        return float(result)
+    elif isinstance(result, sympy.Integer):
+        return int(result)
+    else:
+        raise NonNumericEvaluation(expression, result, call_arguments)
+
+
+class Expression2(metaclass=_ExpressionMeta2):
+    """This is just an interface class."""
+
+    def __call__(cls: Type[_ExpressionType], *args, **kwargs) -> _ExpressionType:
+        return cls.make(*args, **kwargs)
+
+    def __init__(self, *args, **kwargs):
+        raise NotImplementedError()
+
+    @classmethod
+    def make(cls, expression_or_dict) -> Union['ExpressionScalar', 'ExpressionVector']:
+        """Backward compatible expression generation"""
+        return _make(cls, expression_or_dict)
+
+    @abstractmethod
+    def evaluate_in_scope(self, scope: Mapping) -> Union[Number, numpy.ndarray]:
+        """Evaluate the expression by taking the variables from the given scope (typically of type Scope but it can be
+        any mapping.)
+        Args:
+            scope:
+
+        Returns:
+
+        """
+
+    @abstractmethod
+    def evaluate_numeric(self, **kwargs) -> Union[Number, numpy.ndarray]:
+        """TODO: deprecation warning?"""
+
+    @abstractmethod
+    def evaluate_symbolic(self, substitutions: Mapping[Any, Any]) -> 'Expression':
+        """"""
+
+    @property
+    @abstractmethod
+    def variables(self) -> Sequence[str]:
+        """ Get all free variables in the expression.
+
+        Returns:
+            A collection of all free variables occurring in the expression.
+        """
+
+
+Expression = Expression2
+
+
+class ExpressionScalar2:
+    __slots__ = (
+        '_original_expression',
+        '_sympified_expression',
+        '_variables',
+        '_expression_lambdified',
+        '_exact_rational_lambdified',
+    )
+
+    _SYMBOLIC_TYPES = (sympy.Expr, symengine.Expr)
+    _NUMERIC_TYPES = (int, float)
+
+    def __init__(self, ex: Union[str, Number, sympy.Expr]):
+        self._expression_lambdified = None
+        self._exact_rational_lambdified = None
+
+        if isinstance(ex, self._SYMBOLIC_TYPES):
+            self._original_expression = None
+            self._sympified_expression = ex
+            self._variables = None
+
+        elif isinstance(ex, ExpressionScalar2):
+            self._original_expression = ex._original_expression
+            self._sympified_expression = ex._sympified_expression
+            self._variables = ex._variables
+            self._expression_lambdified = ex._expression_lambdified
+            self._exact_rational_lambdified = ex._exact_rational_lambdified
+
+        elif isinstance(ex, self._NUMERIC_TYPES):
+            self._original_expression = ex
+            self._sympified_expression = None
+            self._variables = ()
+
+        else:
+            self._original_expression = ex
+            self._sympified_expression = sympify(ex)
+            self._variables = None
+
+    @classmethod
+    def make(cls, expression_or_dict):
+        return _make(cls, expression_or_dict)
+
+    def evaluate_in_scope(self, scope: Mapping) -> Union[Number, numpy.ndarray]:
+        if self._sympified_expression is None:
+            return self._original_expression
+        elif symengine and isinstance(self._sympified_expression, symengine.Expr):
+            result = self._sympified_expression.subs(scope)
+        else:
+            args = _parse_evaluate_numeric_arguments(self, scope)
+            lambified = self._expression_lambdified or sympy.lambdify(self.variables,
+                                                                      self._sympified_expression,
+                                                                      _lambdify_modules)
+            self._expression_lambdified = lambified
+            result = lambified(*args)
+        return _parse_evaluate_numeric_scalar(self, result, scope)
+
+    def evaluate_numeric(self, **kwargs) -> Union[Number, numpy.ndarray]:
+        return self.evaluate_in_scope(kwargs)
+
+    def evaluate_symbolic(self, substitutions: Mapping[Any, Any]) -> 'ExpressionScalar2':
+        if self._sympified_expression is None or not substitutions:
+            return self
+        else:
+            # find a way to use self._sympified_expression.subs(substitutions) if it works
+            return ExpressionScalar2(recursive_substitution(self._sympified_expression, substitutions))
+
+    def evaluate_with_exact_rationals(self, scope: Mapping) -> Number:
+        if self._sympified_expression is None:
+            return self._original_expression
+
+        args = _parse_evaluate_numeric_arguments(self, scope)
+        result, self._exact_rational_lambdified = evaluate_lamdified_exact_rational(self._sympified_expression,
+                                                                                    self.variables,
+                                                                                    args, {},
+                                                                                    self._exact_rational_lambdified)
+        return _parse_evaluate_numeric_scalar(self, result, scope)
+
+    @property
+    def variables(self) -> Sequence[str]:
+        if self._variables is None:
+            self._variables = get_variables(self._sympified_expression)
+        return self._variables
+
+    @property
+    def sympified_expression(self):
+        if self._sympified_expression is None:
+            if isinstance(self._original_expression, float):
+                return _to_symbolic_float(self._original_expression)
+            else:
+                return _to_symbolic_int(self._original_expression)
+        else:
+            return self._sympified_expression
+
+    @property
+    def original_expression(self) -> Union[str, Number]:
+        if self._original_expression is None:
+            return str(self._sympified_expression)
+        else:
+            return self._original_expression
+
+    def get_serialization_data(self) -> Union[str, float, int]:
+        if self._sympified_expression is None:
+            return self._original_expression
+        else:
+            serialized = get_most_simple_representation(self._sympified_expression)
+            if isinstance(serialized, str):
+                return self.original_expression
+            else:
+                return serialized
+
+    def is_nan(self) -> bool:
+        if self._sympified_expression is None:
+            return math.isnan(self._original_expression)
+        else:
+            return sympy.sympify('nan') == self._sympified_expression
+
+    underlying_expression = sympified_expression
+
+    def __hash__(self):
+        return hash(self._sympified_expression or self._original_expression)
+
+    def __eq__(self, other: 'ExpressionScalar2'):
+        if self.__slots__ != getattr(other, '__slots__', None):
+            if isinstance(other, numbers.Number):
+                if self._sympified_expression is None:
+                    return self._original_expression == other
+                else:
+                    return self._sympified_expression == other
+            if isinstance(other, (sympy.Expr, symengine.Expr)):
+                return self.sympified_expression == other
+            elif isinstance(other, str):
+                return self.sympified_expression == sympify(other)
+            return NotImplemented
+        else:
+            if self._sympified_expression is None and other._sympified_expression is None:
+                return self._original_expression == other._original_expression
+            else:
+                return self.sympified_expression == other.sympified_expression
+
+    def __float__(self):
+        if self._sympified_expression is None:
+            return float(self._original_expression)
+        else:
+            return float(self._sympified_expression)
+
+    def __str__(self) -> str:
+        if self._sympified_expression is None:
+            return str(self._original_expression)
+        else:
+            return str(self._sympified_expression)
+
+    def __repr__(self) -> str:
+        if self._original_expression is None:
+            return f"ExpressionScalar('{self._sympified_expression!r}')"
+        else:
+            return f"ExpressionScalar({self._original_expression!r})"
+
+    def __format__(self, format_spec):
+        if format_spec == '':
+            return str(self)
+        return format(float(self), format_spec)
+
+    def __lt__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> Union[bool, None]:
+        result = self.sympified_expression < type(self)(other).sympified_expression
+        return bool(result) if result.is_Boolean else None
+
+    def __gt__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> Union[bool, None]:
+        result = self.sympified_expression > type(self)(other).sympified_expression
+        return bool(result) if result.is_Boolean else None
+
+    def __ge__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> Union[bool, None]:
+        result = self.sympified_expression >= type(self)(other).sympified_expression
+        return bool(result) if result.is_Boolean else None
+
+    def __le__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> Union[bool, None]:
+        result = self.sympified_expression <= type(self)(other).sympified_expression
+        return bool(result) if result.is_Boolean else None
+
+    def __add__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> 'ExpressionScalar2':
+        return type(self)(self.sympified_expression.__add__(sympify(other)))
+
+    def __radd__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> 'ExpressionScalar2':
+        return type(self)(sympify(other).__radd__(self.sympified_expression))
+
+    def __sub__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> 'ExpressionScalar2':
+        return type(self)(self.sympified_expression.__sub__(sympify(other)))
+
+    def __rsub__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> 'ExpressionScalar2':
+        return type(self)(self.sympified_expression.__rsub__(sympify(other)))
+
+    def __mul__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> 'ExpressionScalar2':
+        return type(self)(self._sympified_expression.__mul__(sympify(other)))
+
+    def __rmul__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> 'ExpressionScalar2':
+        return type(self)(self.sympified_expression.__rmul__(sympify(other)))
+
+    def __truediv__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> 'ExpressionScalar2':
+        return type(self)(self.sympified_expression.__truediv__(sympify(other)))
+
+    def __rtruediv__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> 'ExpressionScalar2':
+        return type(self)(self.sympified_expression.__rtruediv__(sympify(other)))
+
+    def __neg__(self) -> 'ExpressionScalar2':
+        return type(self)(self.sympified_expression.__neg__())
+
+    def __pos__(self):
+        return type(self)(self.sympified_expression.__pos__())
+
+    def _sympy_(self):
+        return self.sympified_expression
+
+
+Expression2.register(ExpressionScalar2)
+
+
+class ExpressionVector2:
+    __slots__ = ('_expression_vector', '_variables', '_expression_lambda')
+    """N-dimensional expression.
+    TODO: write doc!
+    TODO: write tests!
+    """
+
+    sympify_vector = numpy.vectorize(sympify)
+
+    def __init__(self, expression_vector: Sequence):
+        if isinstance(expression_vector, ExpressionVector):
+            self._expression_vector = expression_vector._expression_vector
+            self._expression_lambda = expression_vector._expression_lambda
+            self._variables = expression_vector._variables
+        if isinstance(expression_vector, sympy.NDimArray):
+            expression_vector = to_numpy(expression_vector)
+        self._expression_vector = self.sympify_vector(expression_vector)
+        self._expression_lambda = None
+        self._variables = None
+
+    make = classmethod(_make)
+
+    @property
+    def variables(self) -> Sequence[str]:
+        if self._variables is None:
+            variables = set(itertools.chain.from_iterable(map(get_variables, self._expression_vector.flat)))
+            self._variables = tuple(variables)
+        return self._variables
+
+    def evaluate_in_scope(self, scope: Mapping) -> Union[Number, numpy.ndarray]:
+        parsed_args = _parse_evaluate_numeric_arguments(self, scope)
+
+        self._expression_lambda = self._expression_lambda or sympy.lambdify(self.variables,
+                                                                            self.underlying_expression,
+                                                                            _lambdify_modules)
+        result = self._expression_lambda(*parsed_args)
+
+        return _parse_evaluate_numeric_scalar(self, numpy.array(result), scope)
+
+    def evaluate_symbolic(self, substitutions: Mapping[Any, Any]) -> 'Expression':
+        if substitutions:
+            return Expression.make(recursive_substitution(sympy.NDimArray(self._expression_vector), substitutions))
+        else:
+            return self
+
+    def evaluate_numeric(self, **kwargs) -> Union[numpy.ndarray, Number]:
+        return self.evaluate_in_scope(kwargs)
+
+    def get_serialization_data(self) -> Sequence[str]:
+        def nested_get_most_simple_representation(list_or_expression):
+            if isinstance(list_or_expression, list):
+                return [nested_get_most_simple_representation(entry)
+                        for entry in list_or_expression]
+            else:
+                return get_most_simple_representation(list_or_expression)
+        return nested_get_most_simple_representation(self._expression_vector.tolist())
+
+    def __str__(self):
+        return str(self.get_serialization_data())
+
+    def __repr__(self):
+        return f'ExpressionVector({self.get_serialization_data()!r})'
+
+    def _sympy_(self):
+        return sympy.NDimArray(self._expression_vector)
+
+    def __eq__(self, other):
+        if not isinstance(other, Expression):
+            other = Expression.make(other)
+        if isinstance(other, ExpressionScalar):
+            return self._expression_vector.size == 1 and self._expression_vector[0] == other.underlying_expression
+        if isinstance(other, ExpressionVector) and self._expression_vector.shape != other._expression_vector.shape:
+            return False
+        return numpy.all(self._expression_vector == other.underlying_expression)
+
+    def __getitem__(self, item) -> Expression:
+        return self._expression_vector[item]
+
+    @property
+    def underlying_expression(self) -> numpy.ndarray:
+        return self._expression_vector
+
+
+Expression2.register(ExpressionVector2)
+
+
+ExpressionScalar = ExpressionScalar2
+ExpressionVector = ExpressionVector2
+
+
+class ExpressionOld(metaclass=_ExpressionMeta):
+    __slots__ = ('_expression_lambda', '_variables')
+
     """Base class for expressions."""
     def __init__(self, *args, **kwargs):
         self._expression_lambda = None
+        self._variables = None
 
     def _parse_evaluate_numeric_arguments(self, eval_args: Mapping[str, Number]) -> Dict[str, Number]:
         try:
@@ -82,20 +527,18 @@ class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
         Returns:
 
         """
-        parsed_kwargs = self._parse_evaluate_numeric_arguments(scope)
+        if self._variables:
+            parsed_kwargs = self._parse_evaluate_numeric_arguments(scope)
 
-        result, self._expression_lambda = evaluate_lambdified(self.underlying_expression, self.variables,
-                                                              parsed_kwargs, lambdified=self._expression_lambda)
+            result, self._expression_lambda = evaluate_lambdified(self.underlying_expression, self.variables,
+                                                                  parsed_kwargs, lambdified=self._expression_lambda)
+        else:
+            result = self.underlying_expression
 
         return self._parse_evaluate_numeric_result(result, scope)
 
     def evaluate_numeric(self, **kwargs) -> Union[Number, numpy.ndarray]:
-        parsed_kwargs = self._parse_evaluate_numeric_arguments(kwargs)
-
-        result, self._expression_lambda = evaluate_lambdified(self.underlying_expression, self.variables,
-                                                              parsed_kwargs, lambdified=self._expression_lambda)
-
-        return self._parse_evaluate_numeric_result(result, kwargs)
+        return self.evaluate_in_scope(kwargs)
 
     def __float__(self):
         if self.variables:
@@ -105,9 +548,10 @@ class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
             return float(e)
 
     def evaluate_symbolic(self, substitutions: Mapping[Any, Any]) -> 'Expression':
-        if len(substitutions)==0:
+        if substitutions:
+            return Expression.make(recursive_substitution(sympify(self.underlying_expression), substitutions))
+        else:
             return self
-        return Expression.make(recursive_substitution(sympify(self.underlying_expression), substitutions))
 
     @property
     def variables(self) -> Sequence[str]:
@@ -146,7 +590,8 @@ class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
         raise NotImplementedError()
 
 
-class ExpressionVector(Expression):
+class ExpressionVectorOld(ExpressionOld):
+    __slots__ = ('_expression_vector',)
     """N-dimensional expression.
     TODO: write doc!
     TODO: write tests!
@@ -229,7 +674,8 @@ class ExpressionVector(Expression):
         return self._expression_vector
 
 
-class ExpressionScalar(Expression):
+class ExpressionScalarOld(ExpressionOld):
+    __slots__ = ('_original_expression', '_sympified_expression', '_exact_rational_lambdified')
     """A scalar mathematical expression instantiated from a string representation.
         TODO: update doc!
         TODO: write tests!
@@ -395,6 +841,12 @@ class ExpressionScalar(Expression):
                                                                                     self._exact_rational_lambdified)
         return self._parse_evaluate_numeric_result(result, scope)
 
+    def evaluate_in_scope(self, scope: Mapping) -> Union[Number, numpy.ndarray]:
+        if isinstance(self._original_expression, (float, int)):
+            return self._original_expression
+        else:
+            return super().evaluate_in_scope(scope)
+
 
 class ExpressionVariableMissingException(Exception):
     """An exception indicating that a variable value was not provided during expression evaluation.
@@ -440,3 +892,5 @@ class NonNumericEvaluation(Exception):
 
 
 ExpressionLike = TypeVar('ExpressionLike', str, Number, sympy.Expr, ExpressionScalar)
+
+AnonymousSerializable.register(Expression)
