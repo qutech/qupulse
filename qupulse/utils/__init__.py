@@ -22,7 +22,8 @@ except ImportError:
 
 _T = TypeVar('_T')
 
-__all__ = ["checked_int_cast", "is_integer", "isclose", "pairwise", "replace_multiple"]
+
+__all__ = ["checked_int_cast", "is_integer", "isclose", "pairwise", "replace_multiple", "cached_property"]
 
 
 def checked_int_cast(x: Union[float, int, numpy.ndarray], epsilon: float=1e-6) -> int:

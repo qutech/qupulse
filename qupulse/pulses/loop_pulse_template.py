@@ -7,7 +7,6 @@ import warnings
 from numbers import Number
 
 import sympy
-from cached_property import cached_property
 
 from qupulse.serialization import Serializer, PulseRegistryType
 from qupulse.parameter_scope import Scope, MappedScope, DictScope
@@ -16,7 +15,7 @@ from qupulse.utils.types import FrozenDict
 from qupulse._program._loop import Loop
 
 from qupulse.expressions import ExpressionScalar, ExpressionVariableMissingException
-from qupulse.utils import checked_int_cast
+from qupulse.utils import checked_int_cast, cached_property
 from qupulse.pulses.parameters import InvalidParameterNameException, ParameterConstrainer, ParameterNotProvidedException
 from qupulse.pulses.pulse_template import PulseTemplate, ChannelID, AtomicPulseTemplate
 from qupulse._program.waveforms import SequenceWaveform as ForLoopWaveform
