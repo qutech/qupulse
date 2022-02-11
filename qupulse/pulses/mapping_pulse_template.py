@@ -3,6 +3,7 @@ import itertools
 import numbers
 import collections
 
+from qupulse.utils import cached_property
 from qupulse.utils.types import ChannelID, FrozenDict, FrozenMapping
 from qupulse.expressions import Expression, ExpressionScalar
 from qupulse.parameter_scope import Scope, MappedScope
@@ -195,11 +196,11 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
     def measurement_names(self) -> Set[str]:
         return set(self.__measurement_mapping.values())
 
-    @property
+    @cached_property
     def defined_channels(self) -> Set[ChannelID]:
         return {self.__channel_mapping[k] for k in self.template.defined_channels} - {None}
 
-    @property
+    @cached_property
     def duration(self) -> Expression:
         return self.__template.duration.evaluate_symbolic(
             {parameter_name: expression.underlying_expression

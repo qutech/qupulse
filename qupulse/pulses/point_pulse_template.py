@@ -6,6 +6,7 @@ import numbers
 import sympy
 import numpy as np
 
+from qupulse.utils import cached_property
 from qupulse.utils.sympy import IndexedBroadcast
 from qupulse.utils.types import ChannelID
 from qupulse.expressions import Expression, ExpressionScalar
@@ -127,7 +128,7 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
             for var in itertools.chain(time.variables, point.variables)
         )
 
-    @property
+    @cached_property
     def parameter_names(self) -> Set[str]:
         return self.point_parameters | self.measurement_parameters | self.constrained_parameters
 

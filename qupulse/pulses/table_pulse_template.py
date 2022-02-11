@@ -7,7 +7,7 @@ Classes:
         declared parameters.
 """
 
-from typing import Union, Dict, List, Set, Optional, Any, Tuple, Sequence, NamedTuple, Callable
+from typing import Union, Dict, List, Set, Optional, Any, Tuple, Sequence, NamedTuple, Callable, AbstractSet
 import numbers
 import itertools
 import warnings
@@ -16,7 +16,7 @@ import numpy as np
 import sympy
 from sympy.logic.boolalg import BooleanAtom
 
-from qupulse.utils import pairwise
+from qupulse.utils import pairwise, cached_property
 from qupulse.utils.types import ChannelID
 from qupulse.serialization import Serializer, PulseRegistryType
 from qupulse.pulses.parameters import Parameter, \
@@ -274,7 +274,7 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
     def table_parameters(self) -> Set[str]:
         return self._table_parameters
 
-    @property
+    @cached_property
     def parameter_names(self) -> Set[str]:
         return self.table_parameters | self.measurement_parameters | self.constrained_parameters
 
@@ -288,8 +288,8 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
         return ExpressionScalar(duration_expression)
 
     @property
-    def defined_channels(self) -> Set[ChannelID]:
-        return set(self._entries.keys())
+    def defined_channels(self) -> AbstractSet[ChannelID]:
+        return self._entries.keys()
 
     def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
         data = super().get_serialization_data(serializer)
