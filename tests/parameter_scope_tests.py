@@ -150,12 +150,12 @@ class MappedScopeTests(unittest.TestCase):
         with self.assertRaises(ParameterNotProvidedException):
             ms._calc_parameter('d')
 
-        with mock.patch.object(ms._mapping['x'], 'evaluate_in_scope', return_value=mock_result) as evaluate_in_scope:
+        with mock.patch.object(ExpressionScalar, 'evaluate_in_scope', return_value=mock_result) as evaluate_in_scope:
             self.assertIs(mock_result, ms._calc_parameter('x'))
             evaluate_in_scope.assert_called_once_with(ds)
 
         # effective caching tests
-        with mock.patch.object(ms._mapping['x'], 'evaluate_in_scope', return_value=mock_result) as evaluate_in_scope:
+        with mock.patch.object(ExpressionScalar, 'evaluate_in_scope', return_value=mock_result) as evaluate_in_scope:
             self.assertIs(mock_result, ms.get_parameter('x'))
             self.assertIs(mock_result, ms.get_parameter('x'))
             evaluate_in_scope.assert_called_once_with(ds)
