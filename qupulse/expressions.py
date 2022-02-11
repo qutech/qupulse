@@ -78,7 +78,7 @@ def _make(cls,
 
 def _parse_evaluate_numeric_arguments(expression, eval_args: Mapping[str, Number]) -> Tuple[Any, ...]:
     try:
-        return tuple(eval_args[v] for v in expression.variables)
+        return tuple(map(eval_args.__getitem__, expression.variables))
     except KeyError as key_error:
         if type(key_error).__module__.startswith('qupulse'):
             # we forward qupulse errors
@@ -554,7 +554,7 @@ class ExpressionOld(metaclass=_ExpressionMeta):
         if self.variables:
             return NotImplemented
         else:
-            e = self.evaluate_numeric()
+            e = self.evaluate_in_scope(FrozenDict())
             return float(e)
 
     def evaluate_symbolic(self, substitutions: Mapping[Any, Any]) -> 'Expression':
