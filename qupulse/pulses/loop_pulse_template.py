@@ -199,8 +199,15 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
         loop_range = loop_range if forward else reversed(loop_range)
         loop_index_name = self._loop_index
 
+        get_for_loop_scope = _get_for_loop_scope
+
         for loop_index_value in loop_range:
-            yield _get_for_loop_scope(scope, loop_index_name, loop_index_value)
+            try:
+                yield get_for_loop_scope(scope, loop_index_name, loop_index_value)
+            except TypeError:
+                # we cannot hash the scope so we will not try anymore
+                get_for_loop_scope = _ForLoopScope
+                yield get_for_loop_scope(scope, loop_index_name, loop_index_value)
 
     def _internal_create_program(self, *,
                                  scope: Scope,
@@ -333,6 +340,8 @@ class _ForLoopScope(Scope):
             return self._index_value
         else:
             return self._inner.get_parameter(parameter_name)
+
+    __getitem__ = get_parameter
 
     def change_constants(self, new_constants: Mapping[str, Number]) -> 'Scope':
         return _get_for_loop_scope(self._inner.change_constants(new_constants), self._index_name, self._index_value)
