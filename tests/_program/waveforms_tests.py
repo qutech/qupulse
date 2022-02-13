@@ -149,6 +149,12 @@ class WaveformTest(unittest.TestCase):
 
 
 class MultiChannelWaveformTest(unittest.TestCase):
+    def setUp(self) -> None:
+        TimeType.set_clock(self, 10)
+
+    def tearDown(self) -> None:
+        TimeType.remove_clock(self)
+
     def test_init_no_args(self) -> None:
         with self.assertRaises(ValueError):
             MultiChannelWaveform(dict())
@@ -298,6 +304,12 @@ class RepetitionWaveformTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+    def setUp(self) -> None:
+        TimeType.set_clock(self, 10)
+
+    def tearDown(self) -> None:
+        TimeType.remove_clock(self)
+
     def test_init(self):
         body_wf = DummyWaveform()
 
@@ -364,13 +376,14 @@ class RepetitionWaveformTest(unittest.TestCase):
 
     def test_float_sample_time(self):
         # issue 624
-        body_wf = FunctionWaveform.from_expression(ExpressionScalar('sin(t)'), 1./3., channel='a')
-        rwf = RepetitionWaveform(body_wf, 2)
+        with TimeType.with_clocks(3):
+            body_wf = FunctionWaveform.from_expression(ExpressionScalar('sin(t)'), 1./3., channel='a')
+            rwf = RepetitionWaveform(body_wf, 2)
 
-        sample_times = np.arange(160) / 80. / 3.
-        sampled = rwf.unsafe_sample(sample_times=sample_times, channel='a')
-        inner_sample_times = np.concatenate((sample_times[:80], sample_times[80:] - 1./3.))
-        np.testing.assert_equal(sampled, np.sin(inner_sample_times))
+            sample_times = np.arange(160) / 80. / 3.
+            sampled = rwf.unsafe_sample(sample_times=sample_times, channel='a')
+            inner_sample_times = np.concatenate((sample_times[:80], sample_times[80:] - 1./3.))
+            np.testing.assert_equal(sampled, np.sin(inner_sample_times))
 
     def test_repr(self):
         body_wf = ConstantWaveform(amplitude=1.1, duration=1.3, channel='3')
@@ -380,8 +393,11 @@ class RepetitionWaveformTest(unittest.TestCase):
 
 
 class SequenceWaveformTest(unittest.TestCase):
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
+    def setUp(self) -> None:
+        TimeType.set_clock(self, 10)
+
+    def tearDown(self) -> None:
+        TimeType.remove_clock(self)
 
     def test_init(self):
         dwf_ab = DummyWaveform(duration=1.1, defined_channels={'A', 'B'})
@@ -523,6 +539,11 @@ class ConstantWaveformTests(unittest.TestCase):
 
 
 class TableWaveformTests(unittest.TestCase):
+    def setUp(self) -> None:
+        TimeType.set_clock(self, 10)
+
+    def tearDown(self) -> None:
+        TimeType.remove_clock(self)
 
     def test_from_table(self):
         expected = ConstantWaveform(0.1, 0.2, 'A')
@@ -657,6 +678,12 @@ class TransformationDummy(TransformationStub):
 
 
 class TransformingWaveformTest(unittest.TestCase):
+    def setUp(self) -> None:
+        TimeType.set_clock(self, 10)
+
+    def tearDown(self) -> None:
+        TimeType.remove_clock(self)
+
     def test_from_transformation(self):
         const_output = {'c': 4.4, 'd': 5.5, 'e': 6.6}
         trafo = TransformationDummy(output_channels=const_output.keys(), constant_invariant=False)
@@ -773,6 +800,12 @@ class TransformingWaveformTest(unittest.TestCase):
 
 
 class SubsetWaveformTest(unittest.TestCase):
+    def setUp(self) -> None:
+        TimeType.set_clock(self, 10)
+
+    def tearDown(self) -> None:
+        TimeType.remove_clock(self)
+
     def test_simple_properties(self):
         inner_wf = DummyWaveform(duration=1.5, defined_channels={'a', 'b', 'c'})
 
@@ -813,6 +846,12 @@ class SubsetWaveformTest(unittest.TestCase):
 
 
 class ArithmeticWaveformTest(unittest.TestCase):
+    def setUp(self) -> None:
+        TimeType.set_clock(self, 10)
+
+    def tearDown(self) -> None:
+        TimeType.remove_clock(self)
+
     def test_from_operator(self):
         lhs = DummyWaveform(duration=1.5, defined_channels={'a', 'b', 'c'})
         rhs = DummyWaveform(duration=1.5, defined_channels={'a', 'b', 'd'})
@@ -913,6 +952,11 @@ class ArithmeticWaveformTest(unittest.TestCase):
 
 
 class FunctionWaveformTest(unittest.TestCase):
+    def setUp(self) -> None:
+        TimeType.set_clock(self, 10)
+
+    def tearDown(self) -> None:
+        TimeType.remove_clock(self)
 
     def test_equality(self) -> None:
         wf1a = FunctionWaveform(ExpressionScalar('2*t'), 3, channel='A')
@@ -984,6 +1028,12 @@ class FunctionWaveformTest(unittest.TestCase):
 
 
 class FunctorWaveformTests(unittest.TestCase):
+    def setUp(self) -> None:
+        TimeType.set_clock(self, 10)
+
+    def tearDown(self) -> None:
+        TimeType.remove_clock(self)
+
     def test_duration(self):
         dummy_wf = DummyWaveform(1.5, defined_channels={'A', 'B'})
         f_wf = FunctorWaveform.from_functor(dummy_wf, {'A': np.negative, 'B': np.positive})

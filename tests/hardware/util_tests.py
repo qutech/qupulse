@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from qupulse.utils.types import TimeType
+from qupulse.utils.types import TimeType, FrequencyType
 from qupulse.hardware.util import voltage_to_uint16, find_positions, get_sample_times
 from tests.pulses.sequencing_dummies import DummyWaveform
 
@@ -44,32 +44,40 @@ class FindPositionTest(unittest.TestCase):
 
 
 class SampleTimeCalculationTest(unittest.TestCase):
+    def setUp(self) -> None:
+        TimeType.set_clock((self, 0), 10**15)
+        TimeType.set_clock((self, 2), 12)
+
+    def tearDown(self) -> None:
+        for idx in range(3):
+            TimeType.remove_clock((self, idx))
+
     def test_get_sample_times(self):
-        sample_rate = TimeType.from_fraction(12, 10)
+        sample_rate = FrequencyType.from_fraction(12, 10)
         wf1 = DummyWaveform(duration=TimeType.from_fraction(20, 12))
         wf2 = DummyWaveform(duration=TimeType.from_fraction(400000000001, 120000000000))
         wf3 = DummyWaveform(duration=TimeType.from_fraction(1, 10**15))
 
         expected_times = np.arange(4) / 1.2
-        times, n_samples = get_sample_times([wf1, wf2], sample_rate_in_GHz=sample_rate)
+        times, n_samples = get_sample_times([wf1, wf2], sample_rate=sample_rate)
         np.testing.assert_equal(expected_times, times)
         np.testing.assert_equal(n_samples, np.asarray([2, 4]))
 
         with self.assertRaises(AssertionError):
-            get_sample_times([], sample_rate_in_GHz=sample_rate)
+            get_sample_times([], sample_rate=sample_rate)
 
         with self.assertRaisesRegex(ValueError, "non integer length"):
-            get_sample_times([wf1, wf2], sample_rate_in_GHz=sample_rate, tolerance=0.)
+            get_sample_times([wf1, wf2], sample_rate=sample_rate, tolerance=0.)
 
         with self.assertRaisesRegex(ValueError, "length <= zero"):
-            get_sample_times([wf1, wf3], sample_rate_in_GHz=sample_rate)
+            get_sample_times([wf1, wf3], sample_rate=sample_rate)
 
     def test_get_sample_times_single_wf(self):
-        sample_rate = TimeType.from_fraction(12, 10)
+        sample_rate = FrequencyType.from_fraction(12, 10)
         wf = DummyWaveform(duration=TimeType.from_fraction(40, 12))
 
         expected_times = np.arange(4) / 1.2
-        times, n_samples = get_sample_times(wf, sample_rate_in_GHz=sample_rate)
+        times, n_samples = get_sample_times(wf, sample_rate=sample_rate)
 
         np.testing.assert_equal(times, expected_times)
         np.testing.assert_equal(n_samples, np.asarray(4))

@@ -11,7 +11,7 @@ from qupulse._program.waveforms import Waveform, ConstantWaveform
 from qupulse._program.volatile import VolatileRepetitionCount, VolatileProperty
 
 from qupulse.utils import is_integer
-from qupulse.utils.types import TimeType, MeasurementWindow
+from qupulse.utils.types import TimeType, MeasurementWindow, FrequencyType
 from qupulse.utils.tree import Node, is_tree_circular
 from qupulse.utils.numeric import smallest_factor_ge
 
@@ -485,7 +485,7 @@ class _CompatibilityLevel(Enum):
         return self in (self.incompatible_fraction, self.incompatible_quantum, self.incompatible_too_short)
 
 
-def _is_compatible(program: Loop, min_len: int, quantum: int, sample_rate: TimeType) -> _CompatibilityLevel:
+def _is_compatible(program: Loop, min_len: int, quantum: int, sample_rate: FrequencyType) -> _CompatibilityLevel:
     """ check whether program loop is compatible with awg requirements
         possible reasons for incompatibility:
             program shorter than minimum length
@@ -522,7 +522,9 @@ def _is_compatible(program: Loop, min_len: int, quantum: int, sample_rate: TimeT
             return _CompatibilityLevel.action_required
 
 
-def _make_compatible(program: Loop, min_len: int, quantum: int, sample_rate: TimeType) -> None:
+def _make_compatible(program: Loop, min_len: int, quantum: int, sample_rate: FrequencyType) -> None:
+    assert type(sample_rate) is FrequencyType
+
     if program.is_leaf():
         program.waveform = to_waveform(program.copy_tree_structure())
         program.repetition_count = 1
@@ -580,7 +582,7 @@ def make_compatible(program: Loop, minimal_waveform_length: int, waveform_quantu
         assert comp_level == _CompatibilityLevel.compatible
 
 
-def roll_constant_waveforms(program: Loop, minimal_waveform_quanta: int, waveform_quantum: int, sample_rate: TimeType):
+def roll_constant_waveforms(program: Loop, minimal_waveform_quanta: int, waveform_quantum: int, sample_rate: FrequencyType):
     """This function finds waveforms in program that can be replaced with repetitions of shorter waveforms and replaces
     them. Complexity O(N_waveforms)
 
@@ -594,6 +596,7 @@ def roll_constant_waveforms(program: Loop, minimal_waveform_quanta: int, wavefor
         waveform_quantum:
         sample_rate:
     """
+    assert type(sample_rate) is FrequencyType
     waveform = program.waveform
 
     if waveform is None:

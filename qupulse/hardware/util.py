@@ -11,7 +11,7 @@ except ImportError:
         return obj
 
 from qupulse._program.waveforms import Waveform
-from qupulse.utils.types import TimeType
+from qupulse.utils.types import TimeType, FrequencyType
 from qupulse.utils import pairwise
 
 
@@ -56,8 +56,8 @@ def find_positions(data: Sequence, to_find: Sequence) -> np.ndarray:
 
     return positions
 
-def get_waveform_length(waveform: Waveform,
-                     sample_rate_in_GHz: TimeType, tolerance: float = 1e-10) -> int:
+
+def get_waveform_length(waveform: Waveform, sample_rate: FrequencyType, tolerance: float = 1e-10) -> int:
     """Calculates the number of samples in a waveform
 
     If only one waveform is given, the number of samples has shape ()
@@ -66,13 +66,15 @@ def get_waveform_length(waveform: Waveform,
 
     Args:
         waveform: A waveform
-        sample_rate_in_GHz: The sample rate in GHz
+        sample_rate: The sample rate in GHz
         tolerance: Allowed deviation from an integer sample count
 
     Returns:
         Number of samples for the waveform
     """
-    segment_length = waveform.duration * sample_rate_in_GHz
+    assert type(sample_rate) is FrequencyType
+
+    segment_length = waveform.duration * sample_rate
 
     # __round__ is implemented for Fraction and gmpy2.mpq
     rounded_segment_length = round(segment_length)
@@ -83,18 +85,19 @@ def get_waveform_length(waveform: Waveform,
                          "{segment_length} at the given sample rate of {sample_rate}GHz. This is a deviation of "
                          "{deviation} from the nearest integer {rounded_segment_length}."
                          "".format(segment_length=segment_length,
-                                   sample_rate=sample_rate_in_GHz,
+                                   sample_rate=sample_rate,
                                    deviation=deviation,
                                    rounded_segment_length=rounded_segment_length))
     if rounded_segment_length <= 0:
         raise ValueError("Error while sampling waveform. Waveform has a length <= zero at the given sample "
-                         "rate of %rGHz" % sample_rate_in_GHz)
+                         "rate of %rGHz" % sample_rate)
     segment_length = np.uint64(rounded_segment_length)
 
     return segment_length
 
+
 def get_sample_times(waveforms: Union[Collection[Waveform], Waveform],
-                     sample_rate_in_GHz: TimeType, tolerance: float = 1e-10) -> Tuple[np.array, np.array]:
+                     sample_rate: FrequencyType, tolerance: float = 1e-10) -> Tuple[np.array, np.array]:
     """Calculates the sample times required for the longest waveform in waveforms and returns it together with an array
     of the lengths.
 
@@ -104,25 +107,27 @@ def get_sample_times(waveforms: Union[Collection[Waveform], Waveform],
 
     Args:
         waveforms: A waveform or a sequence of waveforms
-        sample_rate_in_GHz: The sample rate in GHz
+        sample_rate: The sample rate in GHz
         tolerance: Allowed deviation from an integer sample count
 
     Returns:
         Array of sample times sufficient for the longest waveform
         Number of samples of each waveform
     """
+    assert type(sample_rate) is FrequencyType
+
     if not isinstance(waveforms, Collection):
-        sample_times, n_samples = get_sample_times([waveforms], sample_rate_in_GHz)
+        sample_times, n_samples = get_sample_times([waveforms], sample_rate)
         return sample_times, n_samples.squeeze()
 
     assert len(waveforms) > 0, "An empty waveform list is not allowed"
 
     segment_lengths = []
     for waveform in waveforms:
-        rounded_segment_length = get_waveform_length(waveform, sample_rate_in_GHz=sample_rate_in_GHz, tolerance=tolerance)
+        rounded_segment_length = get_waveform_length(waveform, sample_rate=sample_rate, tolerance=tolerance)
         segment_lengths.append(rounded_segment_length)
 
     segment_lengths = np.asarray(segment_lengths, dtype=np.uint64)
-    time_array = np.arange(np.max(segment_lengths), dtype=float) / float(sample_rate_in_GHz)
+    time_array = np.arange(np.max(segment_lengths), dtype=float) / float(sample_rate)
 
     return time_array, segment_lengths

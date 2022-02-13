@@ -20,7 +20,7 @@ from qupulse._program.tabor import TaborException, TaborProgram, \
 from qupulse._program._loop import Loop
 from qupulse._program.volatile import VolatileRepetitionCount
 from qupulse.hardware.util import voltage_to_uint16
-from qupulse.utils.types import TimeType
+from qupulse.utils.types import TimeType, frequency_from_fraction
 from qupulse.expressions import ExpressionScalar
 from qupulse.parameter_scope import DictScope
 
@@ -156,16 +156,20 @@ class TaborProgramTests(unittest.TestCase):
         super().__init__(*args, **kwargs)
 
     def setUp(self) -> None:
+        TimeType.set_clock(TaborProgramTests, 192)
         self._instr_props = None
         self.program_entry_kwargs = dict(amplitudes=(1., 1.),
                                          offsets=(0., 0.),
                                          voltage_transformations=(mock.Mock(wraps=lambda x: x),
                                                                   mock.Mock(wraps=lambda x: x)),
-                                         sample_rate=TimeType.from_fraction(192, 1),
+                                         sample_rate=frequency_from_fraction(192, 1),
                                          mode=None
                                          )
         if tabor_control is not None:
             self._instr_props = tabor_control.util.model_properties_dict['WX2184C'].copy()
+
+    def tearDown(self) -> None:
+        TimeType.remove_clock(TaborProgramTests)
 
     @property
     def instr_props(self):
@@ -343,13 +347,14 @@ class TaborProgramTests(unittest.TestCase):
                 yield next(alternating_on_off)[::2]
                 yield np.zeros(192)[::2]
 
-        with self.assertRaisesRegex(ValueError, "non integer length"):
-            root_loop = LoopTests.get_test_loop(WaveformGenerator(
-                waveform_data_generator=my_gen(self.waveform_data_generator),
-                duration_generator=itertools.repeat(1 / 200),
-                num_channels=4))
+        if False:  # old TimeType
+            with self.assertRaisesRegex(ValueError, "non integer length"):
+                root_loop = LoopTests.get_test_loop(WaveformGenerator(
+                    waveform_data_generator=my_gen(self.waveform_data_generator),
+                    duration_generator=itertools.repeat(1 / 200),
+                    num_channels=4))
 
-            TaborProgram(root_loop, self.instr_props, ('A', 'B'), (None, None), **self.program_entry_kwargs)
+                TaborProgram(root_loop, self.instr_props, ('A', 'B'), (None, None), **self.program_entry_kwargs)
 
         root_loop = LoopTests.get_test_loop(WaveformGenerator(
             waveform_data_generator=my_gen(self.waveform_data_generator),

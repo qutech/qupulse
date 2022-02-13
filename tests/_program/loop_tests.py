@@ -10,7 +10,7 @@ from string import ascii_uppercase
 from qupulse.expressions import ExpressionScalar
 from qupulse.parameter_scope import DictScope
 
-from qupulse.utils.types import TimeType, time_from_float
+from qupulse.utils.types import TimeType, time_from_float, frequency_from_float, frequency_from_fraction
 from qupulse._program.volatile import VolatileRepetitionCount
 from qupulse._program._loop import Loop, _make_compatible, _is_compatible, _CompatibilityLevel,\
     RepetitionWaveform, SequenceWaveform, make_compatible, MakeCompatibleWarning, DroppedMeasurementWarning,\
@@ -327,6 +327,12 @@ LOOP 1 times:
 
 
 class ProgramWaveformCompatibilityTest(unittest.TestCase):
+    def setUp(self) -> None:
+        TimeType.set_clock(ProgramWaveformCompatibilityTest, 10)
+
+    def tearDown(self) -> None:
+        TimeType.remove_clock(ProgramWaveformCompatibilityTest)
+
     def test_is_compatible_warnings(self):
         wf = DummyWaveform(duration=1)
         volatile_repetition_count = VolatileRepetitionCount(ExpressionScalar('x'),
@@ -335,42 +341,45 @@ class ProgramWaveformCompatibilityTest(unittest.TestCase):
         volatile_leaf = Loop(waveform=wf, repetition_count=volatile_repetition_count)
         with self.assertWarns(VolatileModificationWarning):
             self.assertEqual(_CompatibilityLevel.action_required, _is_compatible(volatile_leaf, min_len=3, quantum=1,
-                                                                                 sample_rate=time_from_float(1.)))
+                                                                                 sample_rate=frequency_from_float(1.)))
 
         volatile_node = Loop(children=[Loop(waveform=wf)], repetition_count=volatile_repetition_count)
         with self.assertWarns(VolatileModificationWarning):
             self.assertEqual(_CompatibilityLevel.action_required, _is_compatible(volatile_node, min_len=3, quantum=1,
-                                                                                 sample_rate=time_from_float(1.)))
+                                                                                 sample_rate=frequency_from_float(1.)))
 
     def test_is_compatible_incompatible(self):
         wf = DummyWaveform(duration=1.1)
 
-        self.assertEqual(_is_compatible(Loop(waveform=wf), min_len=1, quantum=1, sample_rate=time_from_float(1.)),
+        self.assertEqual(_is_compatible(Loop(waveform=wf), min_len=1, quantum=1, sample_rate=frequency_from_float(1.)),
                          _CompatibilityLevel.incompatible_fraction)
 
-        self.assertEqual(_is_compatible(Loop(waveform=wf, repetition_count=10), min_len=20, quantum=1, sample_rate=time_from_float(1.)),
+        self.assertEqual(_is_compatible(Loop(waveform=wf, repetition_count=10), min_len=20, quantum=1,
+                                        sample_rate=frequency_from_float(1.)),
                          _CompatibilityLevel.incompatible_too_short)
 
-        self.assertEqual(_is_compatible(Loop(waveform=wf, repetition_count=10), min_len=10, quantum=3, sample_rate=time_from_float(1.)),
+        self.assertEqual(_is_compatible(Loop(waveform=wf, repetition_count=10), min_len=10, quantum=3,
+                                        sample_rate=frequency_from_float(1.)),
                          _CompatibilityLevel.incompatible_quantum)
 
     def test_is_compatible_leaf(self):
-        self.assertEqual(_is_compatible(Loop(waveform=DummyWaveform(duration=1.1), repetition_count=10),
-                                        min_len=11, quantum=1, sample_rate=TimeType.from_float(1.)),
-                         _CompatibilityLevel.action_required)
+        with TimeType.with_clocks(10):
+            self.assertEqual(_is_compatible(Loop(waveform=DummyWaveform(duration=1.1), repetition_count=10),
+                                            min_len=11, quantum=1, sample_rate=frequency_from_float(1.)),
+                             _CompatibilityLevel.action_required)
 
-        self.assertEqual(_is_compatible(Loop(waveform=DummyWaveform(duration=1.1), repetition_count=10),
-                                        min_len=11, quantum=1, sample_rate=TimeType.from_float(10.)),
-                         _CompatibilityLevel.compatible)
+            self.assertEqual(_is_compatible(Loop(waveform=DummyWaveform(duration=1.1), repetition_count=10),
+                                            min_len=11, quantum=1, sample_rate=frequency_from_float(10.)),
+                             _CompatibilityLevel.compatible)
 
     def test_is_compatible_node(self):
         program = Loop(children=[Loop(waveform=DummyWaveform(duration=1.5), repetition_count=2),
                                  Loop(waveform=DummyWaveform(duration=2.0))])
 
-        self.assertEqual(_is_compatible(program, min_len=1, quantum=1, sample_rate=TimeType.from_float(2.)),
+        self.assertEqual(_is_compatible(program, min_len=1, quantum=1, sample_rate=frequency_from_float(2.)),
                          _CompatibilityLevel.compatible)
 
-        self.assertEqual(_is_compatible(program, min_len=1, quantum=1, sample_rate=TimeType.from_float(1.)),
+        self.assertEqual(_is_compatible(program, min_len=1, quantum=1, sample_rate=frequency_from_float(1.)),
                          _CompatibilityLevel.action_required)
 
     def test_make_compatible_repetition_count(self):
@@ -380,7 +389,7 @@ class ProgramWaveformCompatibilityTest(unittest.TestCase):
         program = Loop(children=[Loop(waveform=wf1, repetition_count=2),
                                  Loop(waveform=wf2)])
         duration = program.duration
-        _make_compatible(program, min_len=1, quantum=1, sample_rate=time_from_float(1.))
+        _make_compatible(program, min_len=1, quantum=1, sample_rate=frequency_from_float(1.))
         self.assertEqual(program.duration, duration)
 
         wf2 = DummyWaveform(duration=2.5)
@@ -388,13 +397,13 @@ class ProgramWaveformCompatibilityTest(unittest.TestCase):
                                  Loop(waveform=wf2)])
         duration = program.duration
         with self.assertWarns(MakeCompatibleWarning):
-            make_compatible(program, minimal_waveform_length=1, waveform_quantum=1, sample_rate=time_from_float(1.))
+            make_compatible(program, minimal_waveform_length=1, waveform_quantum=1, sample_rate=frequency_from_float(1.))
         self.assertEqual(program.duration, duration)
 
         program = Loop(children=[Loop(waveform=wf1, repetition_count=3),
                                  Loop(waveform=wf2)], repetition_count=3)
         duration = program.duration
-        _make_compatible(program, min_len=1, quantum=3, sample_rate=time_from_float(1.))
+        _make_compatible(program, min_len=1, quantum=3, sample_rate=frequency_from_float(1.))
         self.assertEqual(program.duration, duration)
 
     def test_make_compatible_partial_unroll(self):
@@ -404,7 +413,7 @@ class ProgramWaveformCompatibilityTest(unittest.TestCase):
         program = Loop(children=[Loop(waveform=wf1, repetition_count=2),
                                  Loop(waveform=wf2)])
 
-        _make_compatible(program, min_len=1, quantum=1, sample_rate=TimeType.from_float(1.))
+        _make_compatible(program, min_len=1, quantum=1, sample_rate=frequency_from_float(1.))
 
         self.assertIsNone(program.waveform)
         self.assertEqual(len(program), 2)
@@ -415,7 +424,7 @@ class ProgramWaveformCompatibilityTest(unittest.TestCase):
 
         program = Loop(children=[Loop(waveform=wf1, repetition_count=2),
                                  Loop(waveform=wf2)], repetition_count=2)
-        _make_compatible(program, min_len=5, quantum=1, sample_rate=TimeType.from_float(1.))
+        _make_compatible(program, min_len=5, quantum=1, sample_rate=frequency_from_float(1.))
 
         self.assertIsInstance(program.waveform, SequenceWaveform)
         self.assertEqual(list(program.children), [])
@@ -434,7 +443,7 @@ class ProgramWaveformCompatibilityTest(unittest.TestCase):
         program = Loop(children=[Loop(waveform=wf1, repetition_count=2),
                                  Loop(waveform=wf2, repetition_count=1)], repetition_count=2)
 
-        _make_compatible(program, min_len=5, quantum=10, sample_rate=TimeType.from_float(1.))
+        _make_compatible(program, min_len=5, quantum=10, sample_rate=frequency_from_float(1.))
 
         self.assertIsInstance(program.waveform, RepetitionWaveform)
         self.assertEqual(list(program.children), [])
@@ -486,27 +495,27 @@ class ProgramWaveformCompatibilityTest(unittest.TestCase):
     def test_roll_constant_waveforms(self):
         root = Loop(waveform=ConstantWaveform.from_mapping(16, {'A': 1., 'B': 0.5}), repetition_count=4)
         expected = copy.deepcopy(root)
-        roll_constant_waveforms(root, 1, 16, TimeType.from_fraction(1, 1))
+        roll_constant_waveforms(root, 1, 16, frequency_from_fraction(1, 1))
         self.assertEqual(root, expected)
 
         root = Loop(waveform=ConstantWaveform.from_mapping(32, {'A': 1., 'B': 0.5}), repetition_count=4)
         expected = Loop(waveform=ConstantWaveform.from_mapping(16, {'A': 1., 'B': 0.5}), repetition_count=8)
-        roll_constant_waveforms(root, 1, 16, TimeType.from_fraction(1, 1))
+        roll_constant_waveforms(root, 1, 16, frequency_from_fraction(1, 1))
         self.assertEqual(root, expected)
 
         root = Loop(waveform=ConstantWaveform.from_mapping(16*3, {'A': 1., 'B': 0.5}), repetition_count=4)
         expected = Loop(waveform=ConstantWaveform.from_mapping(16, {'A': 1., 'B': 0.5}), repetition_count=12)
-        roll_constant_waveforms(root, 1, 16, TimeType.from_fraction(1, 1))
+        roll_constant_waveforms(root, 1, 16, frequency_from_fraction(1, 1))
         self.assertEqual(root, expected)
 
         root = Loop(waveform=ConstantWaveform.from_mapping(16*3, {'A': 1., 'B': 0.5}), repetition_count=4)
         expected = copy.deepcopy(root)
-        roll_constant_waveforms(root, 2, 16, TimeType.from_fraction(1, 1))
+        roll_constant_waveforms(root, 2, 16, frequency_from_fraction(1, 1))
         self.assertEqual(root, expected)
 
         root = Loop(waveform=ConstantWaveform.from_mapping(16*5, {'A': 1., 'B': 0.5}), repetition_count=4)
         expected = copy.deepcopy(root)
-        roll_constant_waveforms(root, 2, 16, TimeType.from_fraction(1, 1))
+        roll_constant_waveforms(root, 2, 16, frequency_from_fraction(1, 1))
         self.assertEqual(root, expected)
 
         root = Loop(children=[
@@ -519,7 +528,7 @@ class ProgramWaveformCompatibilityTest(unittest.TestCase):
             Loop(waveform=ConstantWaveform.from_mapping(16, {'A': 1., 'B': 0.3}), repetition_count=4),
             Loop(waveform=ConstantWaveform.from_mapping(16, {'A': .1, 'B': 0.5}), repetition_count=2*128//16)
         ])
-        roll_constant_waveforms(root, 1, 16, TimeType.from_fraction(1, 1))
+        roll_constant_waveforms(root, 1, 16, frequency_from_fraction(1, 1))
         self.assertEqual(root, expected)
 
         not_constant_wf = DummyWaveform(sample_output=np.array([.1, .2, .3]),
@@ -528,7 +537,7 @@ class ProgramWaveformCompatibilityTest(unittest.TestCase):
 
         root = Loop(waveform=not_constant_wf, repetition_count=4)
         expected = copy.deepcopy(root)
-        roll_constant_waveforms(root, 1, 16, TimeType.from_fraction(1, 1))
+        roll_constant_waveforms(root, 1, 16, frequency_from_fraction(1, 1))
         self.assertEqual(root, expected)
 
         scope = DictScope.from_mapping({'a': 4, 'b': 3}, volatile={'a'})
@@ -536,5 +545,5 @@ class ProgramWaveformCompatibilityTest(unittest.TestCase):
         root = Loop(waveform=ConstantWaveform.from_mapping(32, {'A': 1., 'B': 0.5}), repetition_count=rep_count)
         expected = Loop(waveform=ConstantWaveform.from_mapping(16, {'A': 1., 'B': 0.5}), repetition_count=rep_count * 2)
         self.assertNotEqual(root.repetition_count, expected.repetition_count)
-        roll_constant_waveforms(root, 1, 16, TimeType.from_fraction(1, 1))
+        roll_constant_waveforms(root, 1, 16, frequency_from_fraction(1, 1))
         self.assertEqual(root, expected)

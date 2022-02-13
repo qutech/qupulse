@@ -14,7 +14,7 @@ import qupulse.hardware.awgs.tektronix as tektronix
 from qupulse.hardware.awgs.tektronix import TektronixAWG, TektronixProgram, parse_program, _make_binary_waveform,\
     voltage_to_uint16, WaveformEntry, WaveformStorage
 from qupulse._program._loop import Loop
-from qupulse.utils.types import TimeType
+from qupulse.utils.types import TimeType, frequency_from_fraction
 from tests.pulses.sequencing_dummies import DummyWaveform
 from qupulse._program.waveforms import MultiChannelWaveform
 
@@ -135,7 +135,7 @@ class TektronixProgramTests(unittest.TestCase):
                      np.array([0., -.1, -.2, 0.]),
                      np.array([0., 0, 0, 1.])]
 
-        sample_rate_in_GHz = TimeType.from_fraction(1, 2)
+        sample_rate_in_GHz = frequency_from_fraction(1, 2)
 
         # channel A is the same in wfs_6[1] and wfs_6[2]
         wfs_6 = [DummyWaveform(duration=12, sample_output={'A':  sampled_6[0],
@@ -226,7 +226,7 @@ class TektronixProgramTests(unittest.TestCase):
             program=loop_program,
             channels=channels,
             markers=markers,
-            sample_rate=sample_rate_in_GHz * 10**9,
+            sample_rate=sample_rate_in_GHz,
             amplitudes=amplitudes,
             voltage_transformations=voltage_transformations,
             offsets=offsets

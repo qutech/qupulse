@@ -5,6 +5,7 @@ import numpy as np
 
 from qupulse.hardware.setup import HardwareSetup, PlaybackChannel, MarkerChannel, MeasurementMask
 from qupulse._program._loop import Loop
+from qupulse.utils.types import TimeType
 
 from tests.pulses.sequencing_dummies import DummyWaveform
 
@@ -64,8 +65,11 @@ class SingleChannelTests(unittest.TestCase):
 
 
 class HardwareSetupTests(unittest.TestCase):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def setUp(self) -> None:
+        TimeType.set_clock(self, 10)
+
+    def tearDown(self) -> None:
+        TimeType.remove_clock(self)
 
     def get_test_loops(self):
         wf_1 = DummyWaveform(duration=1.1, defined_channels={'A', 'B'})

@@ -18,7 +18,7 @@ from qupulse.hardware.awgs.base import AWG, AWGAmplitudeOffsetHandling, ProgramO
 from qupulse import ChannelID
 from qupulse._program._loop import Loop, make_compatible
 from qupulse._program.waveforms import Waveform as QuPulseWaveform
-from qupulse.utils.types import TimeType
+from qupulse.utils.types import TimeType, FrequencyType
 from qupulse.hardware.util import voltage_to_uint16, get_sample_times, traced
 from qupulse.utils import pairwise
 
@@ -102,7 +102,7 @@ def _make_binary_waveform(waveform: QuPulseWaveform,
 def parse_program(program: Loop,
                   channels: Tuple[Optional[ChannelID], ...],
                   markers: Tuple[Tuple[Optional[ChannelID], Optional[ChannelID]], ...],
-                  sample_rate: TimeType,
+                  sample_rate: FrequencyType,
                   amplitudes: Tuple[float, ...],
                   voltage_transformations: Tuple[Callable, ...],
                   offsets: Tuple[float, ...] = None) -> Tuple[Sequence[tek_awg.SequenceEntry],
@@ -125,10 +125,8 @@ def parse_program(program: Loop,
     ch_waveforms = {}
     bin_waveforms = {}
 
-    sample_rate_in_GHz = sample_rate / 10**9
-
     time_array, n_samples = get_sample_times([loop.waveform for loop in program],
-                                             sample_rate_in_GHz=sample_rate_in_GHz)
+                                             sample_rate_in_GHz=sample_rate)
 
     channel_wise_kwargs = [dict(voltage_to_uint16_kwargs=dict(output_amplitude=amplitude,
                                                               output_offset=offset,

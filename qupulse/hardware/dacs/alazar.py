@@ -1,3 +1,4 @@
+import numbers
 from typing import Dict, Any, Optional, Tuple, List, Iterable, Callable, Sequence
 from collections import defaultdict
 import copy
@@ -6,6 +7,11 @@ import math
 import functools
 import abc
 import logging
+
+try:
+    from gmpy2 import mpq as make_fraction
+except ImportError:
+    from fractions import Fraction as make_fraction
 
 import numpy as np
 
@@ -65,10 +71,10 @@ class AlazarProgram:
         self._masks.clear()
 
     @property
-    def sample_factor(self) -> Optional[TimeType]:
+    def sample_factor(self) -> Optional[numbers.Rational]:
         return self._sample_factor
 
-    def set_measurement_mask(self, mask_name: str, sample_factor: TimeType,
+    def set_measurement_mask(self, mask_name: str, sample_factor: numbers.Rational,
                              begins: np.ndarray, lengths: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """Raise error if sample factor has changed"""
         if self._sample_factor is None:
@@ -274,7 +280,7 @@ class AlazarCard(DAC):
             raise TypeError('Buffer strategy must be of type BufferStrategy or None')
         self._buffer_strategy = strategy
 
-    def _make_mask(self, mask_id: str, begins, lengths) -> Mask:
+    def _make_mask(self, mask_id: str, begins: np.ndarray, lengths: np.ndarray) -> Mask:
         if mask_id not in self._mask_prototypes:
             raise KeyError('Measurement window {} can not be converted as it is not registered.'.format(mask_id))
 
@@ -294,15 +300,15 @@ class AlazarCard(DAC):
         return mask
 
     def set_measurement_mask(self, program_name, mask_name, begins, lengths) -> Tuple[np.ndarray, np.ndarray]:
-        sample_factor = TimeType.from_fraction(int(self.default_config.captureClockConfiguration.numeric_sample_rate(self.card.model)), 10**9)
+        sample_factor = make_fraction(int(self.default_config.captureClockConfiguration.numeric_sample_rate(self.card.model)), 10**9)
         return self._registered_programs[program_name].set_measurement_mask(mask_name, sample_factor, begins, lengths)
 
     def register_measurement_windows(self,
                                      program_name: str,
                                      windows: Dict[str, Tuple[np.ndarray, np.ndarray]]) -> None:
         program = self._registered_programs[program_name]
-        sample_factor = TimeType.from_fraction(int(self.default_config.captureClockConfiguration.numeric_sample_rate(self.card.model)),
-                                               10 ** 9)
+        sample_factor = make_fraction(int(self.default_config.captureClockConfiguration.numeric_sample_rate(self.card.model)),
+                                      10 ** 9)
         program.clear_masks()
 
         for mask_name, (begins, lengths) in windows.items():
@@ -326,7 +332,7 @@ class AlazarCard(DAC):
             sample_rate = config.captureClockConfiguration.numeric_sample_rate(self.card.model)
 
             # sample rate in GHz
-            sample_factor = TimeType.from_fraction(sample_rate, 10 ** 9)
+            sample_factor = make_fraction(sample_rate, 10 ** 9)
 
             if not config.operations:
                 raise RuntimeError("No operations: Arming program without operations is an error as there will "

@@ -1,3 +1,5 @@
+import itertools
+import math
 import typing
 import abc
 import inspect
@@ -7,6 +9,7 @@ import functools
 import warnings
 import collections
 import operator
+import contextlib
 
 import numpy
 import sympy
@@ -52,31 +55,118 @@ def _with_other_as_time_type(fn):
     return wrapper
 
 
+def _make_compare_op(op):
+    def cmp(self, other: typing.Union[int, float, numbers.Rational]):
+        if isinstance(other, int):
+            return op(self._numerator, self._denominator * other)
+        elif isinstance(other, float):
+            return op(float(self), other)
+        else:
+            if self._denominator == other.denominator:
+                return op(self._numerator, other.numerator)
+            else:
+                return op(self._numerator * other.denominator, self._denominator * other.numerator)
+    return cmp
+
+
 class TimeType:
     """This type represents a rational number with arbitrary precision.
 
     Internally it uses :func:`gmpy2.mpq` (if available) or :class:`fractions.Fraction`
     """
-    __slots__ = ('_value',)
+    __slots__ = ('_numerator', '_denominator')
 
     _InternalType = fractions.Fraction if gmpy2 is None else type(gmpy2.mpq())
     _to_internal = fractions.Fraction if gmpy2 is None else gmpy2.mpq
 
-    def __init__(self, value: typing.Union[numbers.Rational, int] = 0., denominator: typing.Optional[int] = None):
+    ERROR_THRESHOLD = 1e-3
+    WARNING_THRESHOLD = 1e-10
+
+    _WITH_CLOCK_IDX = itertools.count()
+
+    SHARED_CLOCKS = {'default': 1}
+    CURRENT_CLOCK_FREQUENCY = 1
+
+    @classmethod
+    def _update_current_fruency(cls):
+        cls.CURRENT_CLOCK_FREQUENCY = functools.reduce(qupulse_numeric.lcm, cls.SHARED_CLOCKS.values())
+
+    @classmethod
+    def set_clock(cls, key, value: int):
+        cls.SHARED_CLOCKS[key] = value
+        cls._update_current_fruency()
+
+    @classmethod
+    def remove_clock(cls, key):
+        if cls.SHARED_CLOCKS.pop(key, None) is not None:
+            cls._update_current_fruency()
+
+    @classmethod
+    @contextlib.contextmanager
+    def with_clocks(cls, *args, **kwargs):
+        for arg in args:
+            kwargs[(TimeType, next(cls._WITH_CLOCK_IDX))] = arg
+        previous = {key: cls.SHARED_CLOCKS.pop(key) for key in (kwargs.keys() & cls.SHARED_CLOCKS.keys())}
+        cls.SHARED_CLOCKS.update(kwargs)
+        cls._update_current_fruency()
+        try:
+            yield
+        finally:
+            for key in kwargs:
+                cls.SHARED_CLOCKS.pop(key, None)
+            cls.SHARED_CLOCKS.update(previous)
+            cls._update_current_fruency()
+
+    def __init__(self, value: typing.Union[numbers.Rational, float, int] = 0, denominator: typing.Optional[int] = None):
         """
         Args:
             value: interpreted as Rational if denominator is None. interpreted as numerator otherwise
             denominator: Denominator of the Fraction if not None
         """
-        if denominator is not None:
-            self._value = self._to_internal(value, denominator)
-        elif type(getattr(value, '_value', None)) is self._InternalType:
-            self._value = value._value
+        current_clock_frequency = self.CURRENT_CLOCK_FREQUENCY
+        if denominator == current_clock_frequency:
+            # fast path
+            numerator = value
+        elif denominator is not None:
+            factor, remainder = divmod(current_clock_frequency, denominator)
+            if remainder == 0:
+                numerator = value * factor
+            else:
+                numerator = value * self._to_internal(current_clock_frequency, denominator)
+        elif getattr(value, 'denominator', None) == current_clock_frequency:
+            numerator = value.numerator
         else:
-            try:
-                self._value = self._to_internal(value)
-            except TypeError as err:
-                raise TypeError(f'Could not create TimeType from {value} of type {type(value)}') from err
+            numerator = value * current_clock_frequency
+
+        # at this point numerator should have the correct value for denominator == current_clock_frequency
+        self._denominator = current_clock_frequency
+
+        if isinstance(numerator, int):
+            self._numerator = numerator
+        elif isinstance(numerator, float):
+            int_numerator = int(round(numerator))
+            error = abs(int_numerator - numerator)
+            if error > self.WARNING_THRESHOLD:
+                if error > self.ERROR_THRESHOLD:
+                    raise ValueError(f"Numeric timing accuracy in clock cycles is larger "
+                                     f"than the configured warning threshold: {error}")
+                warnings.warn(f"Numeric timing accuracy in clock cycles is larger "
+                              f"than the configured warning threshold: {error}")
+            self._numerator = int_numerator
+        else:
+            # treat as rational
+            if value.denominator == 1:
+                self._numerator = value.numerator
+            else:
+                int_numerator = int(round(numerator))
+                error = abs(int_numerator - numerator)
+                if error > self.WARNING_THRESHOLD:
+                    if error > self.ERROR_THRESHOLD:
+                        raise ValueError(f"Numeric timing accuracy in clock cycles is larger "
+                                         f"than the configured warning threshold: {error}")
+                    warnings.warn(f"Numeric timing accuracy in clock cycles is larger "
+                                  f"than the configured warning threshold: {error}")
+                self._numerator = int_numerator
 
     @classmethod
     def _try_from_any(cls, any: typing.Any):
@@ -126,124 +216,111 @@ class TimeType:
         return cls(any)
 
     @property
-    def numerator(self):
-        return self._value.numerator
+    def numerator(self) -> int:
+        return self._numerator
 
     @property
     def denominator(self):
-        return self._value.denominator
+        return self._denominator
 
     def _sympy_(self):
-        import sympy
-        return sympy.Rational(self.numerator, self.denominator)
+        return sympy.Rational(self._numerator, self._denominator)
 
     def __round__(self, *args, **kwargs):
-        return self._value.__round__(*args, **kwargs)
+        return round(self._numerator / self._denominator)
 
     def __abs__(self):
-        return TimeType(self._value.__abs__())
+        return TimeType(abs(self._numerator), self._denominator)
 
     def __hash__(self):
-        return self._value.__hash__()
+        return hash((self._numerator, self._denominator))
 
     def __ceil__(self):
-        return int(self._value.__ceil__())
+        return (self._numerator + self._denominator - 1) // self._denominator
 
     def __floor__(self):
-        return int(self._value.__floor__())
+        return self._numerator // self._denominator
 
     def __int__(self):
-        return int(self._value)
+        return self.__trunc__()
 
-    @_with_other_as_time_type
-    def __mod__(self, other: 'TimeType'):
-        return self._value.__mod__(other._value)
-
-    @_with_other_as_time_type
-    def __rmod__(self, other: 'TimeType'):
-        return self._value.__rmod__(other._value)
+    def __trunc__(self):
+        if self._numerator < 0:
+            return self.__ceil__()
+        else:
+            return self.__floor__()
 
     def __neg__(self):
-        return TimeType(self._value.__neg__())
+        return TimeType(-self._numerator, self._denominator)
 
     def __pos__(self):
         return self
 
-    @_with_other_as_time_type
-    def __pow__(self, other: 'TimeType'):
-        return self._value.__pow__(other._value)
+    def __mod__(self, other: 'TimeType'):
+        # slow
+        return TimeType(self._InternalType(self._numerator, self._denominator).__mod__(other))
 
-    @_with_other_as_time_type
-    def __rpow__(self, other: 'TimeType'):
-        return self._value.__rpow__(other._value)
+    def __rmod__(self, other: 'TimeType'):
+        return TimeType(self._InternalType(self._numerator, self._denominator).__rmod__(other))
 
-    def __trunc__(self):
-        return int(self._value.__trunc__())
-
-    @_with_other_as_time_type
-    def __mul__(self, other: 'TimeType'):
-        return self._value.__mul__(other._value)
-
-    @_with_other_as_time_type
-    def __rmul__(self, other: 'TimeType'):
-        return self._value.__mul__(other._value)
-
-    @_with_other_as_time_type
-    def __add__(self, other: 'TimeType'):
-        return self._value.__add__(other._value)
-
-    @_with_other_as_time_type
-    def __radd__(self, other: 'TimeType'):
-        return self._value.__radd__(other._value)
-
-    @_with_other_as_time_type
-    def __sub__(self, other: 'TimeType'):
-        return self._value.__sub__(other._value)
-
-    @_with_other_as_time_type
-    def __rsub__(self, other: 'TimeType'):
-        return self._value.__rsub__(other._value)
-
-    @_with_other_as_time_type
-    def __truediv__(self, other: 'TimeType'):
-        return self._value.__truediv__(other._value)
-
-    @_with_other_as_time_type
-    def __rtruediv__(self, other: 'TimeType'):
-        return self._value.__rtruediv__(other._value)
-
-    @_with_other_as_time_type
-    def __floordiv__(self, other: 'TimeType'):
-        return self._value.__floordiv__(other._value)
-
-    @_with_other_as_time_type
-    def __rfloordiv__(self, other: 'TimeType'):
-        return self._value.__rfloordiv__(other._value)
-
-    def __le__(self, other):
-        return self._value <= self.as_comparable(other)
-
-    def __ge__(self, other):
-        return self._value >= self.as_comparable(other)
-
-    def __lt__(self, other):
-        return self._value < self.as_comparable(other)
-
-    def __gt__(self, other):
-        return self._value > self.as_comparable(other)
-
-    def __eq__(self, other):
-        if type(other) == type(self):
-            return self._value.__eq__(other._value)
+    def __mul__(self, other: typing.Union[int, float, numbers.Rational, 'FrequencyType']):
+        if isinstance(other, FrequencyType):
+            return self._to_internal(self._numerator * other.numerator, self._denominator * other.denominator)
         else:
-            return self._value == other
+            return TimeType(self._numerator * other, self._denominator)
 
-    @classmethod
-    def as_comparable(cls, other: typing.Union['TimeType', typing.Any]):
-        if type(other) == cls:
-            return other._value
+    def __rmul__(self, other: typing.Union[int, float, numbers.Rational]):
+        if isinstance(other, FrequencyType):
+            return self._to_internal(self._numerator * other.numerator, self._denominator * other.denominator)
         else:
-            return other
+            return TimeType(self._numerator * other, self._denominator)
+
+    def __add__(self, other: typing.Union[int, float, numbers.Rational]):
+        if getattr(other, 'denominator', None) == self._denominator:
+            return TimeType(self._numerator + other.numerator, self._denominator)
+        elif isinstance(other, int):
+            return TimeType(self._numerator + other * self._denominator, self._denominator)
+        elif isinstance(other, float):
+            return self + TimeType.from_float(other)
+        else:
+            return TimeType(self._numerator * other.denominator + other.numerator * self._denominator,
+                            self._denominator * other.denominator)
+
+    def __radd__(self, other: typing.Union[int, float, numbers.Rational]):
+        return self + other
+
+    def __sub__(self, other: typing.Union[int, float, numbers.Rational]):
+        return self + (-other)
+
+    def __rsub__(self, other: typing.Union[int, float, numbers.Rational]):
+        return (-self) + other
+
+    def __invert__(self):
+        return FrequencyType(inverse_time=self)
+
+    def __truediv__(self, other: typing.Union[int, float, numbers.Rational, 'TimeType']):
+        if isinstance(other, TimeType):
+            return (self._numerator * other._denominator) / (self._denominator * other._numerator)
+        else:
+            return TimeType(self._numerator / other, self._denominator)
+
+    def __rtruediv__(self, other: typing.Union[int, float, numbers.Rational]):
+        return FrequencyType(inverse_time=TimeType(self._numerator / other, self._denominator))
+
+    def __floordiv__(self, other: typing.Union[int, float, numbers.Rational, 'TimeType']):
+        if isinstance(other, TimeType):
+            return (self._numerator * other._denominator) // (self._denominator * other._numerator)
+        else:
+            return TimeType(self._numerator // (self._denominator * other), 1)
+
+    def __rfloordiv__(self, other: typing.Union[int, float, numbers.Rational]):
+        return FrequencyType(inverse_time=TimeType(self._numerator // (self._denominator * other), 1))
+
+    __le__ = _make_compare_op(operator.le)
+    __ge__ = _make_compare_op(operator.ge)
+    __lt__ = _make_compare_op(operator.lt)
+    __gt__ = _make_compare_op(operator.gt)
+    __eq__ = _make_compare_op(operator.eq)
 
     @classmethod
     def from_float(cls, value: float, absolute_error: typing.Optional[float] = None) -> 'TimeType':
@@ -265,6 +342,8 @@ class TimeType:
         Raises:
             ValueError: If `absolute_error` is not None and not 0 <= `absolute_error` <=  1
         """
+        return cls(value)
+
         # gmpy2 is at least an order of magnitude faster than fractions.Fraction
         if absolute_error is None:
             # this method utilizes the 'print as many digits as necessary to distinguish between all floats'
@@ -301,17 +380,115 @@ class TimeType:
         return cls(numerator, denominator)
 
     def __repr__(self):
-        return f'TimeType({self._value.numerator}, {self._value.denominator})'
+        return f'TimeType({self._numerator}, {self._denominator})'
 
     def __str__(self):
-        return '%d/%d' % (self._value.numerator, self._value.denominator)
+        return '%d/%d' % (self._numerator, self._denominator)
 
     def __float__(self):
-        return int(self._value.numerator) / int(self._value.denominator)
+        return int(self._numerator) / int(self._denominator)
+
+
+class FrequencyType:
+    __slots__ = ('_time_type',)
+
+    def __init__(self, *, inverse_time: TimeType):
+        self._time_type = inverse_time
+
+    @classmethod
+    def from_fraction(cls, numerator: int, denominator: int):
+        return cls(inverse_time=TimeType(numerator, denominator))
+
+    @property
+    def numerator(self):
+        return self._time_type.denominator
+
+    @property
+    def denominator(self):
+        return self._time_type.numerator
+
+    def __float__(self):
+        return self._time_type.denominator / self._time_type.numerator
+
+    def _sympy_(self):
+        return sympy.Rational(self.numerator, self.denominator)
+
+    def __round__(self, *args, **kwargs):
+        return round(self.numerator / self.denominator)
+
+    def __abs__(self):
+        return FrequencyType(inverse_time=abs(self._time_type))
+
+    def __hash__(self):
+        return hash(self._time_type) + 1
+
+    def __ceil__(self):
+        return (self.numerator + self.denominator - 1) // self.denominator
+
+    def __floor__(self):
+        return self.numerator // self.denominator
+
+    def __int__(self):
+        return self.__trunc__()
+
+    def __trunc__(self):
+        if self.numerator < 0:
+            return self.__ceil__()
+        else:
+            return self.__floor__()
+
+    def __neg__(self):
+        return FrequencyType(inverse_time=-self._time_type)
+
+    def __pos__(self):
+        return self
+
+    def __mul__(self, other: typing.Union[int, float, numbers.Rational, 'TimeType']):
+        if isinstance(other, TimeType):
+            return TimeType._to_internal(self.numerator * other.numerator, self.denominator * other.denominator)
+        else:
+            return FrequencyType(inverse_time=self._time_type / other)
+
+    def __rmul__(self, other: typing.Union[int, float, numbers.Rational]):
+        return FrequencyType(inverse_time=self._time_type / other)
+
+    def __invert__(self):
+        return self._time_type
+
+    def __truediv__(self, other: typing.Union[int, float, numbers.Rational, 'FrequencyType']):
+        if isinstance(other, FrequencyType):
+            return other._time_type / self._time_type
+        else:
+            return FrequencyType(inverse_time=self._time_type * other)
+
+    def __rtruediv__(self, other: typing.Union[int, float, numbers.Rational]):
+        return self._time_type * other
+
+    def __floordiv__(self, other: typing.Union[int, float, numbers.Rational, 'FrequencyType']):
+        if isinstance(other, FrequencyType):
+            return other._time_type // self._time_type
+        else:
+            # f // other == 1 / t // other =? floor(1 / t*other)
+            raise NotImplementedError("double check this")
+            return FrequencyType(inverse_time=TimeType((self._time_type * other).__floor__()))
+
+    def __rfloordiv__(self, other: typing.Union[int, float, numbers.Rational]):
+        # other // f == other // (1 / t) == other * t
+        return self._time_type * other
+
+    __le__ = _make_compare_op(operator.le)
+    __ge__ = _make_compare_op(operator.ge)
+    __lt__ = _make_compare_op(operator.lt)
+    __gt__ = _make_compare_op(operator.gt)
+    __eq__ = _make_compare_op(operator.eq)
+
+    def __repr__(self):
+        return f"{type(self)}(inverse_time={self._time_type!r})"
 
 
 # this asserts isinstance(TimeType, Rational) is True
 numbers.Rational.register(TimeType)
+numbers.Rational.register(FrequencyType)
 
 
 _converter = {
@@ -328,9 +505,17 @@ def time_from_float(value: float, absolute_error: typing.Optional[float] = None)
     return TimeType.from_float(value, absolute_error)
 
 
+def frequency_from_float(value: float) -> FrequencyType:
+    return FrequencyType(inverse_time=TimeType(1/value))
+
+
 def time_from_fraction(numerator: int, denominator: int) -> TimeType:
     """See :func:`TimeType.from_float`."""
     return TimeType.from_fraction(numerator, denominator)
+
+
+def frequency_from_fraction(numerator: int, denominator: int) -> FrequencyType:
+    return FrequencyType(inverse_time=TimeType(denominator, numerator))
 
 
 class DocStringABCMeta(abc.ABCMeta):

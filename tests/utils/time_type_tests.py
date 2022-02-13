@@ -227,33 +227,34 @@ class TestTimeType(unittest.TestCase):
         self.assert_try_from_any_works(self.fallback_qutypes.TimeType)
 
     def assert_comparisons_work(self, time_type):
-        tt = time_type.from_float(1.1)
+        with time_type.with_clocks(10):
+            tt = time_type.from_float(1.1)
 
-        self.assertLess(tt, 4)
-        self.assertLess(tt, 4.)
-        self.assertLess(tt, time_type.from_float(4.))
-        self.assertLess(tt, float('inf'))
+            self.assertLess(tt, 4)
+            self.assertLess(tt, 4.)
+            self.assertLess(tt, time_type.from_float(4.))
+            self.assertLess(tt, float('inf'))
 
-        self.assertLessEqual(tt, 4)
-        self.assertLessEqual(tt, 4.)
-        self.assertLessEqual(tt, time_type.from_float(4.))
-        self.assertLessEqual(tt, float('inf'))
+            self.assertLessEqual(tt, 4)
+            self.assertLessEqual(tt, 4.)
+            self.assertLessEqual(tt, time_type.from_float(4.))
+            self.assertLessEqual(tt, float('inf'))
 
-        self.assertGreater(tt, 1)
-        self.assertGreater(tt, 1.)
-        self.assertGreater(tt, time_type.from_float(1.))
-        self.assertGreater(tt, float('-inf'))
+            self.assertGreater(tt, 1)
+            self.assertGreater(tt, 1.)
+            self.assertGreater(tt, time_type.from_float(1.))
+            self.assertGreater(tt, float('-inf'))
 
-        self.assertGreaterEqual(tt, 1)
-        self.assertGreaterEqual(tt, 1.)
-        self.assertGreaterEqual(tt, time_type.from_float(1.))
-        self.assertGreaterEqual(tt, float('-inf'))
+            self.assertGreaterEqual(tt, 1)
+            self.assertGreaterEqual(tt, 1.)
+            self.assertGreaterEqual(tt, time_type.from_float(1.))
+            self.assertGreaterEqual(tt, float('-inf'))
 
-        self.assertFalse(tt == float('nan'))
-        self.assertFalse(tt <= float('nan'))
-        self.assertFalse(tt >= float('nan'))
-        self.assertFalse(tt < float('nan'))
-        self.assertFalse(tt > float('nan'))
+            self.assertFalse(tt == float('nan'))
+            self.assertFalse(tt <= float('nan'))
+            self.assertFalse(tt >= float('nan'))
+            self.assertFalse(tt < float('nan'))
+            self.assertFalse(tt > float('nan'))
 
     def test_comparisons_work(self):
         self.assert_comparisons_work(qutypes.TimeType)
