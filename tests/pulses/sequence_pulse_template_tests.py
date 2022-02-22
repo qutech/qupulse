@@ -270,12 +270,14 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
                                      parent_loop=loop)
         self.assertEqual(1, loop.repetition_count)
         self.assertIsNone(loop.waveform)
-        self.assertEqual([Loop(repetition_count=1, waveform=sub1.waveform),
+        inner_loop, = loop.children
+
+        self.assertEqual([Loop(repetition_count=1, waveform=sub1.waveform, measurements=[('b', 1, 2)]),
                           Loop(repetition_count=1, waveform=sub2.waveform)],
-                         list(loop.children))
+                         list(inner_loop.children))
         self.assert_measurement_windows_equal({'a': ([0], [1]), 'b': ([1], [2])}, loop.get_measurement_windows())
 
-        ### test again with inverted sequence
+        # test again with inverted sequence
         seq = SequencePulseTemplate(sub2, sub1, measurements=[('a', 0, 1)])
         loop = Loop()
         seq._internal_create_program(scope=scope,
@@ -286,9 +288,11 @@ class SequencePulseTemplateSequencingTests(MeasurementWindowTestCase):
                                      parent_loop=loop)
         self.assertEqual(1, loop.repetition_count)
         self.assertIsNone(loop.waveform)
+        inner_loop, = loop.children
+
         self.assertEqual([Loop(repetition_count=1, waveform=sub2.waveform),
-                          Loop(repetition_count=1, waveform=sub1.waveform)],
-                         list(loop.children))
+                          Loop(repetition_count=1, waveform=sub1.waveform, measurements=[('b', 1, 2)])],
+                         list(inner_loop.children))
         self.assert_measurement_windows_equal({'a': ([0], [1]), 'b': ([3], [2])}, loop.get_measurement_windows())
 
     def test_internal_create_program_no_measurement_mapping(self) -> None:

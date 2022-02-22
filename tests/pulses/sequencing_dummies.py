@@ -99,6 +99,12 @@ class DummyWaveform(Waveform):
         else:
             return id(self)
 
+    def __repr__(self):
+        if self.sample_output is not None:
+            return f"{type(self).__name__}(sample_output={self.sample_output})"
+        else:
+            return f"{type(self).__name__}(id={id(self)})"
+
     @property
     def measurement_windows(self):
         return []
