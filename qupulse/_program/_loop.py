@@ -101,6 +101,9 @@ class Loop(Node):
         Args:
             measurements: Measurements to add
         """
+        warnings.warn("Loop.add_measurements is deprecated since qupulse 0.7 and will be removed in a future version.",
+                      DeprecationWarning,
+                      stacklevel=2)
         body_duration = float(self.body_duration)
         if body_duration == 0:
             measurements = measurements

@@ -136,18 +136,16 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                                  parent_loop: Loop) -> None:
         self.validate_scope(scope)
 
-        if self.duration.evaluate_in_scope(scope) > 0:
-            measurements = self.get_measurement_windows(scope, measurement_mapping)
-            if measurements:
-                parent_loop.add_measurements(measurements)
-
-            for subtemplate in self.subtemplates:
-                subtemplate._create_program(scope=scope,
-                                            measurement_mapping=measurement_mapping,
-                                            channel_mapping=channel_mapping,
-                                            global_transformation=global_transformation,
-                                            to_single_waveform=to_single_waveform,
-                                            parent_loop=parent_loop)
+        self_loop = Loop(measurements=self.get_measurement_windows(scope, measurement_mapping) or None)
+        for subtemplate in self.subtemplates:
+            subtemplate._create_program(scope=scope,
+                                        measurement_mapping=measurement_mapping,
+                                        channel_mapping=channel_mapping,
+                                        global_transformation=global_transformation,
+                                        to_single_waveform=to_single_waveform,
+                                        parent_loop=parent_loop)
+        if self_loop.duration > 0:
+            parent_loop.append_child(self_loop)
 
     def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
         data = super().get_serialization_data(serializer)
