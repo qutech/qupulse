@@ -235,11 +235,10 @@ class DummyPulseTemplate(AtomicPulseTemplate):
         measurements = self.get_measurement_windows(scope, measurement_mapping)
         self.create_program_calls.append((scope, measurement_mapping, channel_mapping, parent_loop))
         if self._program:
-            parent_loop.add_measurements(measurements)
-            parent_loop.append_child(waveform=self._program.waveform, children=self._program.children)
+            parent_loop.append_child(waveform=self._program.waveform, children=self._program.children,
+                                     measurements=measurements)
         elif self.waveform:
-            parent_loop.add_measurements(measurements)
-            parent_loop.append_child(waveform=self.waveform)
+            parent_loop.append_child(waveform=self.waveform, measurements=measurements)
 
     def build_waveform(self,
                        parameters: Dict[str, Parameter],

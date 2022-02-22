@@ -128,10 +128,8 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
                                       parent_loop=repj_loop)
             if repj_loop.waveform is not None or len(repj_loop.children) > 0:
                 measurements = self.get_measurement_windows(scope, measurement_mapping)
-                if measurements:
-                    parent_loop.add_measurements(measurements)
 
-                parent_loop.append_child(loop=repj_loop)
+                parent_loop.append_child(loop=repj_loop, measurements=measurements)
 
     def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
         data = super().get_serialization_data(serializer)

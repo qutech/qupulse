@@ -104,15 +104,13 @@ class ConstantPulseTemplate(AtomicPulseTemplate):  # type: ignore
         waveform = self.build_waveform(parameters=parameters,
                                        channel_mapping=channel_mapping)
         if waveform:
-            measurements: List[Any] = []
             measurements = self.get_measurement_windows(parameters=parameters,
                                                         measurement_mapping=measurement_mapping)
 
             if global_transformation:
                 waveform = TransformingWaveform(waveform, global_transformation)
 
-            parent_loop.add_measurements(measurements=measurements)
-            parent_loop.append_child(waveform=waveform)
+            parent_loop.append_child(waveform=waveform, measurements=measurements)
 
     def build_waveform(self,
                        parameters: Dict[str, numbers.Real],

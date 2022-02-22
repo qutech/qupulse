@@ -223,8 +223,7 @@ class PulseTemplate(Serializable):
             for measurement_name, (begins, lengths) in measurements.items():
                 measurement_window_list.extend(zip(itertools.repeat(measurement_name), begins, lengths))
 
-            parent_loop.add_measurements(measurement_window_list)
-            parent_loop.append_child(waveform=waveform)
+            parent_loop.append_child(waveform=waveform, measurements=measurement_window_list)
 
         else:
             self._internal_create_program(scope=scope,
@@ -328,8 +327,7 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
             if global_transformation:
                 waveform = TransformingWaveform(waveform, global_transformation)
 
-            parent_loop.add_measurements(measurements=measurements)
-            parent_loop.append_child(waveform=waveform)
+            parent_loop.append_child(waveform=waveform, measurements=measurements)
 
     @abstractmethod
     def build_waveform(self,

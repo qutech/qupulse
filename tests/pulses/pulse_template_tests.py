@@ -87,9 +87,7 @@ def get_appending_internal_create_program(waveform=DummyWaveform(),
                                           measurements: list=None):
     def internal_create_program(*, scope, parent_loop: Loop, **_):
         if always_append or 'append_a_child' in scope:
-            if measurements is not None:
-                parent_loop.add_measurements(measurements=measurements)
-            parent_loop.append_child(waveform=waveform)
+            parent_loop.append_child(waveform=waveform, measurements=measurements)
 
     return internal_create_program
 
