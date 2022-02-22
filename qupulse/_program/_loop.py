@@ -33,7 +33,7 @@ class Loop(Node):
                  parent: Union['Loop', None] = None,
                  children: Iterable['Loop'] = (),
                  waveform: Optional[Waveform] = None,
-                 measurements: Optional[List[MeasurementWindow]] = None,
+                 measurements: Optional[Union[List[MeasurementWindow], Dict[int, List[MeasurementWindow]]]] = None,
                  repetition_count: Union[int, VolatileRepetitionCount] = 1):
         """Initialize a new loop
 
@@ -47,9 +47,14 @@ class Loop(Node):
         super().__init__(parent=parent, children=children)
 
         self._waveform = waveform
-        self._measurements = measurements
         self._repetition_definition = repetition_count
         self._cached_body_duration = None
+        self._measurements: Optional[Dict[int, List[MeasurementWindow]]] = None
+        if isinstance(measurements, dict):
+            self._measurements = measurements
+        if measurements:
+            self._measurements = {0: measurements}
+
         assert isinstance(repetition_count, VolatileRepetitionCount) or is_integer(repetition_count)
         assert isinstance(waveform, (type(None), Waveform))
 
@@ -101,16 +106,15 @@ class Loop(Node):
         Args:
             measurements: Measurements to add
         """
-        body_duration = float(self.body_duration)
-        if body_duration == 0:
-            measurements = measurements
-        else:
-            measurements = ((mw_name, begin+body_duration, length) for mw_name, begin, length in measurements)
-
         if self._measurements is None:
-            self._measurements = list(measurements)
+            measurements = list(measurements)
+            if measurements:
+                self._measurements = {len(self): measurements}
         else:
-            self._measurements.extend(measurements)
+            existing_measurements = self._measurements.setdefault(len(self), [])
+            existing_measurements.extend(measurements)
+            if not existing_measurements:
+                del self._measurements[len(self)]
 
     @property
     def waveform(self) -> Waveform:
@@ -377,7 +381,9 @@ class Loop(Node):
         measurements = child._measurements
         if self._measurements:
             if measurements:
-                measurements.extend(self._measurements)
+                (key, self_meas), = self._measurements.items()
+                assert key == 0
+                measurements.setdefault(0, []).extend(self_meas)
             else:
                 measurements = self._measurements
 
