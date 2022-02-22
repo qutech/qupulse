@@ -143,7 +143,7 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                                         channel_mapping=channel_mapping,
                                         global_transformation=global_transformation,
                                         to_single_waveform=to_single_waveform,
-                                        parent_loop=parent_loop)
+                                        parent_loop=self_loop)
         if self_loop.duration > 0:
             parent_loop.append_child(self_loop)
 
