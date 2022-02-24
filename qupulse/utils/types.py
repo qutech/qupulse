@@ -18,6 +18,11 @@ except ImportError:
                   "will be removed in a future release.", category=DeprecationWarning)
     frozendict = None
 
+try:
+    from qupulse_rs.qupulse_rs import TimeType as RsTimeType
+except ImportError:
+    RsTimeType = None
+
 import qupulse.utils.numeric as qupulse_numeric
 
 __all__ = ["MeasurementWindow", "ChannelID", "HashableNumpyArray", "TimeType", "time_from_float", "DocStringABCMeta",
@@ -310,16 +315,22 @@ class TimeType:
         return int(self._value.numerator) / int(self._value.denominator)
 
 
+PyTimeType = TimeType
+
+if RsTimeType:
+    TimeType = RsTimeType
+
+
 # this asserts isinstance(TimeType, Rational) is True
 numbers.Rational.register(TimeType)
 
 
 _converter = {
-    float: TimeType.from_float,
-    TimeType._InternalType: TimeType,
-    fractions.Fraction: TimeType,
-    sympy.Rational: lambda q: TimeType.from_fraction(q.p, q.q),
-    TimeType: lambda x: x
+    float: PyTimeType.from_float,
+    PyTimeType._InternalType: PyTimeType,
+    fractions.Fraction: PyTimeType,
+    sympy.Rational: lambda q: PyTimeType.from_fraction(q.p, q.q),
+    PyTimeType: lambda x: x
 }
 
 

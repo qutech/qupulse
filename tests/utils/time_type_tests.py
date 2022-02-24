@@ -68,6 +68,8 @@ class TestTimeType(unittest.TestCase):
             qutypes.TimeType.from_float(float('nan'))
 
     def test_fraction_fallback(self):
+        if self.fallback_qutypes.TimeType is qutypes.RsTimeType:
+            self.skipTest("No fallback since rust implementation is used.")
         self.assertIs(fractions.Fraction, self.fallback_qutypes.TimeType._InternalType)
 
     def assert_from_fraction_works(self, time_type):

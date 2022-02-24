@@ -26,6 +26,12 @@ from qupulse.utils.types import TimeType, time_from_float, FrozenDict
 from qupulse._program.transformation import Transformation
 from qupulse.utils import pairwise
 
+try:
+    import qupulse_rs.qupulse_rs
+    rs_replacements = qupulse_rs.qupulse_rs.replacements
+except (ImportError, AttributeError):
+    rs_replacements = None
+
 
 __all__ = ["Waveform", "TableWaveform", "TableWaveformEntry", "FunctionWaveform", "SequenceWaveform",
            "MultiChannelWaveform", "RepetitionWaveform", "TransformingWaveform", "ArithmeticWaveform"]
@@ -1170,3 +1176,12 @@ class FunctorWaveform(Waveform):
     @property
     def compare_key(self) -> Tuple[Waveform, FrozenSet]:
         return self._inner_waveform, frozenset(self._functor.items())
+
+
+TableWaveform = rs_replacements.waveforms.TableWaveform
+ConstantWaveform = rs_replacements.waveforms.ConstantWaveform
+MultiChannelWaveform = rs_replacements.waveforms.MultiChannelWaveform
+Waveform.register(TableWaveform)
+Waveform.register(ConstantWaveform)
+Waveform.register(MultiChannelWaveform)
+
