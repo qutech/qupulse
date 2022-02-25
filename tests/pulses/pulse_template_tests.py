@@ -81,6 +81,9 @@ class PulseTemplateStub(PulseTemplate):
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
         raise NotImplementedError()
 
+    def __repr__(self):
+        return f"PulseTemplateStub(id={id(self)})"
+
 
 def get_appending_internal_create_program(waveform=DummyWaveform(),
                                           always_append=False,
@@ -228,7 +231,7 @@ class PulseTemplateTest(unittest.TestCase):
                 single_waveform = DummyWaveform()
                 measurements = [('m', 0, 1), ('n', 0.1, .9)]
 
-                expected_inner_program = Loop(children=[Loop(waveform=wf)], measurements=measurements)
+                expected_inner_program = Loop(children=[Loop(waveform=wf, measurements=measurements)])
 
                 appending_create_program = get_appending_internal_create_program(wf,
                                                                                  measurements=measurements,
@@ -239,8 +242,7 @@ class PulseTemplateTest(unittest.TestCase):
                 else:
                     final_waveform = single_waveform
 
-                expected_program = Loop(children=[Loop(waveform=final_waveform)],
-                                        measurements=measurements)
+                expected_program = Loop(children=[Loop(waveform=final_waveform, measurements=measurements)])
 
                 with mock.patch.object(template, '_internal_create_program',
                                        wraps=appending_create_program) as _internal_create_program:
@@ -261,9 +263,6 @@ class PulseTemplateTest(unittest.TestCase):
                                                                          parent_loop=expected_inner_program)
 
                         to_waveform.assert_called_once_with(expected_inner_program)
-
-                        expected_program._measurements = set(expected_program._measurements)
-                        parent_loop._measurements = set(parent_loop._measurements)
 
                         self.assertEqual(expected_program, parent_loop)
 
@@ -365,8 +364,7 @@ class AtomicPulseTemplateTests(unittest.TestCase):
         channel_mapping = {'B': 'A'}
         program = Loop()
 
-        expected_program = Loop(children=[Loop(waveform=wf)],
-                                measurements=[('N', 0, 5)])
+        expected_program = Loop(children=[Loop(waveform=wf, measurements=[('N', 0, 5)])])
 
         with mock.patch.object(template, 'build_waveform', return_value=wf) as build_waveform:
             template._internal_create_program(scope=scope,

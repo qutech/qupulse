@@ -207,7 +207,7 @@ class MultiChannelPulseTemplateSequencingTests(unittest.TestCase):
 
         pt = AtomicMultiChannelPulseTemplate(*sts, parameter_constraints=['a < b'])
 
-        parameters = dict(a=2.2, b = 1.1, c=3.3)
+        parameters = dict(a=2.2, b = 1.1, c=3.3, t1=1.1)
         channel_mapping = dict()
         with self.assertRaises(ParameterConstraintViolation):
             pt.build_waveform(parameters, channel_mapping=dict())
@@ -231,7 +231,7 @@ class MultiChannelPulseTemplateSequencingTests(unittest.TestCase):
 
         pt = AtomicMultiChannelPulseTemplate(*sts, parameter_constraints=['a < b'])
 
-        parameters = dict(a=2.2, b=1.1, c=3.3)
+        parameters = dict(a=2.2, b=1.1, c=3.3, t1=1.1)
         channel_mapping = dict(A=6)
         with self.assertRaises(ParameterConstraintViolation):
             # parameter constraints are checked before channel mapping is applied
@@ -432,7 +432,7 @@ class ParallelConstantChannelPulseTemplateTests(unittest.TestCase):
         channel_mapping = {'X': 'X', 'Y': 'K', 'Z': 'Z'}
         pccpt = ParallelConstantChannelPulseTemplate(template, overwritten_channels)
 
-        parameters = {'c': 1.2, 'a': 3.4}
+        parameters = {'c': 1.2, 'a': 3.4, 't1': template.waveform.duration}
         expected_overwritten_channels = {'K': 1.2, 'Z': 3.4}
         expected_transformation = ParallelConstantChannelTransformation(expected_overwritten_channels)
         expected_waveform = TransformingWaveform(template.waveform, expected_transformation)
