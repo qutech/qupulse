@@ -1,3 +1,4 @@
+import contextlib
 from typing import Union, Dict, Iterable, Tuple, cast, List, Optional, Generator, Mapping
 from collections import defaultdict
 from enum import Enum
@@ -201,23 +202,47 @@ class Loop(Node):
         self._measurements = None
         self.assert_tree_integrity()
 
-    def _get_repr(self, first_prefix, other_prefixes) -> Generator[str, None, None]:
+    def __repr__(self):
+        kwargs = []
+
+        repetition_count = self._repetition_definition
+        if repetition_count != 1:
+            kwargs.append(f"repetition_count={repetition_count!r}")
+
+        waveform = self._waveform
+        if waveform:
+            kwargs.append(f"waveform={waveform!r}")
+
+        children = self.children
+        if children:
+            try:
+                kwargs.append(f"children={self._children_repr()}")
+            except RecursionError:
+                kwargs.append("children=[...]")
+
+        measurements = self._measurements
+        if measurements:
+            kwargs.append(f"measurements={measurements!r}")
+
+        return f"Loop({','.join(kwargs)})"
+
+    def _get_str(self, first_prefix, other_prefixes) -> Generator[str, None, None]:
         if self.is_leaf():
             yield '%sEXEC %r %d times' % (first_prefix, self._waveform, self.repetition_count)
         else:
             yield '%sLOOP %d times:' % (first_prefix, self.repetition_count)
 
             for elem in self:
-                yield from cast(Loop, elem)._get_repr(other_prefixes + '  ->', other_prefixes + '    ')
+                yield from cast(Loop, elem)._get_str(other_prefixes + '  ->', other_prefixes + '    ')
 
-    def __repr__(self) -> str:
+    def __str__(self) -> str:
         is_circular = is_tree_circular(self)
         if is_circular:
             return '{}: Circ {}'.format(id(self), is_circular)
 
         str_len = 0
         repr_list = []
-        for sub_repr in self._get_repr('', ''):
+        for sub_repr in self._get_str('', ''):
             str_len += len(sub_repr)
 
             if self.MAX_REPR_SIZE and str_len > self.MAX_REPR_SIZE:
@@ -420,6 +445,7 @@ class Loop(Node):
         yield inner_child
         if inner_child.waveform or len(inner_child):
             self.append_child(child)
+
     def cleanup(self, actions=('remove_empty_loops', 'merge_single_child')):
         """Apply the specified actions to cleanup the Loop.
 
