@@ -1,5 +1,5 @@
 import contextlib
-from typing import Union, Dict, Iterable, Tuple, cast, List, Optional, Generator, Mapping
+from typing import Union, Dict, Iterable, Tuple, cast, List, Optional, Generator, Mapping, ContextManager, Sequence
 from collections import defaultdict
 from enum import Enum
 import warnings
@@ -16,6 +16,7 @@ from qupulse.utils.types import TimeType, MeasurementWindow
 from qupulse.utils.tree import Node, is_tree_circular
 from qupulse.utils.numeric import smallest_factor_ge
 
+from qupulse._program import ProgramBuilder, Program
 from qupulse._program.waveforms import SequenceWaveform, RepetitionWaveform
 
 __all__ = ['Loop', 'make_compatible', 'MakeCompatibleWarning']
@@ -434,7 +435,7 @@ class Loop(Node):
     @contextlib.contextmanager
     def potential_child(self,
                         measurements: Optional[List[MeasurementWindow]],
-                        repetition_count: Union[VolatileRepetitionCount, int] = 1):
+                        repetition_count: Union[VolatileRepetitionCount, int] = 1) -> ContextManager['Loop']:
         if repetition_count != 1 and measurements:
             # current design requires an extra level of nesting here because the measurements are NOT to be repeated
             # with the repetition count
@@ -492,6 +493,18 @@ class Loop(Node):
             return self.repetition_count, self.waveform.duration
         else:
             return self.repetition_count, tuple(child.get_duration_structure() for child in self)
+
+    def to_single_waveform(self) -> Waveform:
+        return to_waveform(self)
+
+    def append_leaf(self, waveform: Waveform,
+                    measurements: Optional[Sequence[MeasurementWindow]] = None,
+                    repetition_count: int = 1):
+        self.append_child(waveform=waveform, measurements=measurements, repetition_count=repetition_count)
+
+    def to_program(self) -> Optional['Loop']:
+        if self.waveform or self.children:
+            return self
 
 
 class ChannelSplit(Exception):

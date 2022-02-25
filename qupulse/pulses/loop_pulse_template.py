@@ -13,7 +13,7 @@ from qupulse.serialization import Serializer, PulseRegistryType
 from qupulse.parameter_scope import Scope, MappedScope, DictScope
 from qupulse.utils.types import FrozenDict, FrozenMapping
 
-from qupulse._program._loop import Loop
+from qupulse._program import ProgramBuilder
 
 from qupulse.expressions import ExpressionScalar, ExpressionVariableMissingException, Expression
 from qupulse.utils import checked_int_cast, cached_property
@@ -214,7 +214,7 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional['Transformation'],
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
-                                 parent_loop: Loop) -> None:
+                                 parent_loop: ProgramBuilder) -> None:
         self.validate_scope(scope=scope)
 
         with parent_loop.potential_child(measurements=self.get_measurement_windows(scope, measurement_mapping)) as for_loop:

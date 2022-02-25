@@ -3,7 +3,6 @@ import math
 from unittest import mock
 
 from typing import Optional, Dict, Set, Any, Union
-import sympy
 
 from qupulse.parameter_scope import Scope, DictScope
 from qupulse.utils.types import ChannelID
@@ -12,6 +11,7 @@ from qupulse.pulses.pulse_template import AtomicPulseTemplate, PulseTemplate
 from qupulse.pulses.parameters import Parameter, ConstantParameter, ParameterNotProvidedException
 from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
 from qupulse._program._loop import Loop
+from qupulse._program import ProgramBuilder
 
 from qupulse._program.transformation import Transformation
 from qupulse._program.waveforms import TransformingWaveform
@@ -70,7 +70,7 @@ class PulseTemplateStub(PulseTemplate):
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional[Transformation],
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
-                                 parent_loop: Loop):
+                                 parent_loop: ProgramBuilder):
         raise NotImplementedError()
 
     @property
@@ -88,9 +88,9 @@ class PulseTemplateStub(PulseTemplate):
 def get_appending_internal_create_program(waveform=DummyWaveform(),
                                           always_append=False,
                                           measurements: list=None):
-    def internal_create_program(*, scope, parent_loop: Loop, **_):
+    def internal_create_program(*, scope, parent_loop: ProgramBuilder, **_):
         if always_append or 'append_a_child' in scope:
-            parent_loop.append_child(waveform=waveform, measurements=measurements)
+            parent_loop.append_leaf(waveform=waveform, measurements=measurements)
 
     return internal_create_program
 
@@ -246,7 +246,7 @@ class PulseTemplateTest(unittest.TestCase):
 
                 with mock.patch.object(template, '_internal_create_program',
                                        wraps=appending_create_program) as _internal_create_program:
-                    with mock.patch('qupulse.pulses.pulse_template.to_waveform',
+                    with mock.patch('qupulse._program._loop.to_waveform',
                                     return_value=single_waveform) as to_waveform:
                         template._create_program(scope=scope,
                                                  measurement_mapping=measurement_mapping,
@@ -261,7 +261,6 @@ class PulseTemplateTest(unittest.TestCase):
                                                                          global_transformation=None,
                                                                          to_single_waveform=to_single_waveform,
                                                                          parent_loop=expected_inner_program)
-
                         to_waveform.assert_called_once_with(expected_inner_program)
 
                         self.assertEqual(expected_program, parent_loop)

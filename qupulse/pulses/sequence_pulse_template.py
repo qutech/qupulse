@@ -8,7 +8,7 @@ import functools
 import warnings
 
 from qupulse.serialization import Serializer, PulseRegistryType
-from qupulse._program._loop import Loop
+from qupulse._program import ProgramBuilder
 from qupulse.parameter_scope import Scope
 from qupulse.utils import cached_property
 from qupulse.utils.types import MeasurementWindow, ChannelID, TimeType
@@ -133,7 +133,7 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional['Transformation'],
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
-                                 parent_loop: Loop) -> None:
+                                 parent_loop: ProgramBuilder) -> None:
         self.validate_scope(scope)
 
         with parent_loop.potential_child(measurements=self.get_measurement_windows(scope, measurement_mapping)) as seq_loop:

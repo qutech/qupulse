@@ -10,6 +10,7 @@ import logging
 import numbers
 from typing import Any, Dict, List, Optional, Set, Union
 
+from qupulse._program import ProgramBuilder
 from qupulse._program.waveforms import ConstantWaveform
 from qupulse.expressions import ExpressionScalar
 from qupulse.parameter_scope import Scope
@@ -86,31 +87,6 @@ class ConstantPulseTemplate(AtomicPulseTemplate):  # type: ignore
 
     def requires_stop(self) -> bool:  # from SequencingElement
         return False
-
-    def _internal_create_program(self, *,
-                                 scope: Scope,
-                                 measurement_mapping: Dict[str, Optional[str]],
-                                 channel_mapping: Dict[ChannelID, Optional[ChannelID]],
-                                 global_transformation: Optional[Transformation],
-                                 to_single_waveform: Set[Union[str, PulseTemplate]],
-                                 parent_loop: Loop) -> None:
-        """ removed from qupulse docstring """
-        try:
-            parameters = {parameter_name: scope[parameter_name].get_value()
-                          for parameter_name in self.parameter_names}
-        except KeyError as e:
-            raise ParameterNotProvidedException(str(e)) from e
-
-        waveform = self.build_waveform(parameters=parameters,
-                                       channel_mapping=channel_mapping)
-        if waveform:
-            measurements = self.get_measurement_windows(parameters=parameters,
-                                                        measurement_mapping=measurement_mapping)
-
-            if global_transformation:
-                waveform = TransformingWaveform(waveform, global_transformation)
-
-            parent_loop.append_child(waveform=waveform, measurements=measurements)
 
     def build_waveform(self,
                        parameters: Dict[str, numbers.Real],
