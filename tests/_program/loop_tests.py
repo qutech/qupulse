@@ -121,6 +121,10 @@ LOOP 1 times:
         self.assertEqual(tree1, tree5)
 
     def test_repr(self):
+        tree = self.get_test_loop()
+        self.assertEqual(tree, eval(repr(tree)))
+
+    def test_str(self):
         wf_gen = WaveformGenerator(num_channels=1)
         wfs = [wf_gen() for _ in range(11)]
 
@@ -132,10 +136,10 @@ LOOP 1 times:
                 loop.waveform = wfs.pop(0)
         self.assertEqual(len(wfs), 0)
 
-        self.assertEqual(repr(tree), expected)
+        self.assertEqual(str(tree), expected)
 
         with mock.patch.object(Loop, 'MAX_REPR_SIZE', 1):
-            self.assertEqual(repr(tree), '...')
+            self.assertEqual(str(tree), '...')
 
     def test_is_leaf(self):
         root_loop = self.get_test_loop(waveform_generator=WaveformGenerator(1))
@@ -199,7 +203,7 @@ LOOP 1 times:
       ->LOOP 9 times:
           ->EXEC {J} 10 times
           ->EXEC {K} 11 times""".format(**wf_reprs)
-        self.assertEqual(repr(before), before_repr)
+        self.assertEqual(str(before), before_repr)
 
         expected_after_repr = """\
 LOOP 1 times:
@@ -241,7 +245,7 @@ LOOP 1 times:
       ->EXEC {J} 10 times
       ->EXEC {K} 11 times""".format(**wf_reprs)
 
-        self.assertEqual(expected_after_repr, repr(after))
+        self.assertEqual(expected_after_repr, str(after))
 
     def test_flatten_and_balance_comparison_based(self):
         wfs = [DummyWaveform(duration=i) for i in range(2)]

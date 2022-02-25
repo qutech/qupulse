@@ -270,12 +270,12 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
                                          global_transformation=None)
 
     def test_create_program_missing_params(self) -> None:
-        dt = DummyPulseTemplate(parameter_names={'i'}, waveform=DummyWaveform(duration=4.0), duration='t', measurements=[('b', 2, 1)])
+        dt = DummyPulseTemplate(parameter_names={'i'}, waveform=DummyWaveform(duration=4.0), duration='t', measurements=[('M', 2, 1)])
         flt = ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=('a', 'b', 'c'),
                                    measurements=[('A', 'alph', 1)], parameter_constraints=['c > 1'])
 
         scope = DictScope.from_kwargs(a=1, b=4)
-        measurement_mapping = dict(A='B')
+        measurement_mapping = dict(A='B', M='M')
         channel_mapping = dict(C='D')
 
         children = [Loop(waveform=DummyWaveform(duration=2.0))]
@@ -353,21 +353,25 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
         global_transformation = TransformationStub()
 
         program = Loop()
+        self_loop = Loop(waveform=DummyWaveform(duration=1), measurements=[('B', .1, 1)])
 
-        # inner _create_program does nothing
-        expected_program = Loop(measurements=[('B', .1, 1)])
+        expected_program = Loop(children=[Loop(
+            children=[
+                Loop(waveform=dt.waveform, measurements=[('b', .2, .3)]),
+                Loop(waveform=dt.waveform, measurements=[('b', .2, .3)]),
+            ],
+            measurements=[('B', scope['meas_param'], 1)])])
 
         expected_create_program_kwargs = dict(measurement_mapping=measurement_mapping,
                                               channel_mapping=channel_mapping,
                                               global_transformation=global_transformation,
-                                              to_single_waveform=to_single_waveform,
-                                              parent_loop=program)
+                                              to_single_waveform=to_single_waveform)
         expected_create_program_calls = [mock.call(**expected_create_program_kwargs,
                                                    scope=_get_for_loop_scope(scope, 'i', i))
                                          for i in (1, 3)]
 
         with mock.patch.object(flt, 'validate_scope') as validate_scope:
-            with mock.patch.object(dt, '_create_program') as body_create_program:
+            with mock.patch.object(dt, '_create_program', wraps=dt._create_program) as body_create_program:
                 with mock.patch.object(flt, 'get_measurement_windows',
                                        wraps=flt.get_measurement_windows) as get_measurement_windows:
                     flt._internal_create_program(scope=scope,
@@ -379,6 +383,11 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
 
                     validate_scope.assert_called_once_with(scope=scope)
                     get_measurement_windows.assert_called_once_with(scope, measurement_mapping)
+
+                    inner_loop = program[0]
+                    for call in expected_create_program_calls:
+                        call.kwargs['parent_loop'] = inner_loop
+
                     self.assertEqual(body_create_program.call_args_list, expected_create_program_calls)
 
         self.assertEqual(expected_program, program)
@@ -402,17 +411,15 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
                                      to_single_waveform=set(),
                                      global_transformation=None)
 
-        self.assertEqual(3, len(program.children))
-        self.assertIs(children[0], program.children[0])
-        self.assertEqual(dt.waveform, program.children[1].waveform)
-        self.assertEqual(dt.waveform, program.children[2].waveform)
-        self.assertEqual(1, program.children[1].repetition_count)
-        self.assertEqual(1, program.children[2].repetition_count)
-        self.assertEqual(1, program.repetition_count)
-        self.assert_measurement_windows_equal({'b': ([4, 8], [1, 1]), 'B': ([2], [1])}, program.get_measurement_windows())
+        expected_program = Loop(children=children + [
+            Loop(children=[
+                Loop(waveform=dt.waveform, measurements=[('b', 2, 1)]),
+                Loop(waveform=dt.waveform, measurements=[('b', 2, 1)])],
+                measurements=[('B', 0, 1)]
+            )])
 
-        # not ensure same result as from Sequencer here - we're testing appending to an already existing parent loop
-        # which is a use case that does not immediately arise from using Sequencer
+        self.assertEqual(expected_program, program)
+        self.assert_measurement_windows_equal({'b': ([4, 8], [1, 1]), 'B': ([2], [1])}, program.get_measurement_windows())
 
 
 class ForLoopPulseTemplateSerializationTests(SerializableTests, unittest.TestCase):

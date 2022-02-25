@@ -17,6 +17,7 @@ import sympy
 from qupulse.utils.types import ChannelID, DocStringABCMeta, FrozenDict
 from qupulse.serialization import Serializable
 from qupulse.expressions import ExpressionScalar, Expression, ExpressionLike
+from qupulse._program import ProgramBuilder, default_program_builder
 from qupulse._program._loop import Loop, to_waveform
 from qupulse._program.transformation import Transformation, IdentityTransformation, ChainedTransformation, chain_transformations
 
@@ -153,7 +154,7 @@ class PulseTemplate(Serializable):
 
             scope = DictScope(values=FrozenDict(parameters), volatile=volatile)
 
-        root_loop = Loop()
+        root_loop = default_program_builder()
 
         # call subclass specific implementation
         self._create_program(scope=scope,
@@ -163,9 +164,7 @@ class PulseTemplate(Serializable):
                              to_single_waveform=to_single_waveform,
                              parent_loop=root_loop)
 
-        if root_loop.waveform is None and len(root_loop.children) == 0:
-            return None  # return None if no program
-        return root_loop
+        return root_loop.to_program()
 
     @abstractmethod
     def _internal_create_program(self, *,
@@ -174,7 +173,7 @@ class PulseTemplate(Serializable):
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional[Transformation],
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
-                                 parent_loop: Loop) -> None:
+                                 parent_loop: ProgramBuilder) -> None:
         """The subclass specific implementation of create_program().
 
         Receives a Loop instance parent_loop to which it should append measurements and its own Loops as children.
@@ -195,35 +194,36 @@ class PulseTemplate(Serializable):
                         channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                         global_transformation: Optional[Transformation],
                         to_single_waveform: Set[Union[str, 'PulseTemplate']],
-                        parent_loop: Loop):
+                        parent_loop: ProgramBuilder):
         """Generic part of create program. This method handles to_single_waveform and the configuration of the
         transformer."""
         if self.identifier in to_single_waveform or self in to_single_waveform:
-            root = Loop()
-
             if not scope.get_volatile_parameters().keys().isdisjoint(self.parameter_names):
                 raise NotImplementedError('A pulse template that has volatile parameters cannot be transformed into a '
                                           'single waveform yet.')
 
+            builder = default_program_builder()
             self._internal_create_program(scope=scope,
                                           measurement_mapping=measurement_mapping,
                                           channel_mapping=channel_mapping,
                                           global_transformation=None,
                                           to_single_waveform=to_single_waveform,
-                                          parent_loop=root)
+                                          parent_loop=builder)
 
-            waveform = to_waveform(root)
+            program = builder.to_program()
+            if program is not None:
+                waveform = program.to_single_waveform()
 
-            if global_transformation:
-                waveform = TransformingWaveform(waveform, global_transformation)
+                if global_transformation:
+                    waveform = TransformingWaveform(waveform, global_transformation)
 
-            # convert the nicely formatted measurement windows back into the old format again :(
-            measurements = root.get_measurement_windows()
-            measurement_window_list = []
-            for measurement_name, (begins, lengths) in measurements.items():
-                measurement_window_list.extend(zip(itertools.repeat(measurement_name), begins, lengths))
+                # convert the nicely formatted measurement windows back into the old format again :(
+                measurements = program.get_measurement_windows()
+                measurement_window_list = []
+                for measurement_name, (begins, lengths) in measurements.items():
+                    measurement_window_list.extend(zip(itertools.repeat(measurement_name), begins, lengths))
 
-            parent_loop.append_child(waveform=waveform, measurements=measurement_window_list)
+                parent_loop.append_leaf(waveform=waveform, measurements=measurement_window_list)
 
         else:
             self._internal_create_program(scope=scope,
@@ -311,7 +311,7 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional[Transformation],
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
-                                 parent_loop: Loop) -> None:
+                                 parent_loop: ProgramBuilder) -> None:
         """Parameter constraints are validated in build_waveform because build_waveform is guaranteed to be called
         during sequencing"""
         ### current behavior (same as previously): only adds EXEC Loop and measurements if a waveform exists.
@@ -327,7 +327,7 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
             if global_transformation:
                 waveform = TransformingWaveform(waveform, global_transformation)
 
-            parent_loop.append_child(waveform=waveform, measurements=measurements)
+            parent_loop.append_leaf(waveform=waveform, measurements=measurements)
 
     @abstractmethod
     def build_waveform(self,

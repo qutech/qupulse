@@ -8,7 +8,7 @@ import functools
 import warnings
 
 from qupulse.serialization import Serializer, PulseRegistryType
-from qupulse._program._loop import Loop
+from qupulse._program import ProgramBuilder
 from qupulse.parameter_scope import Scope
 from qupulse.utils import cached_property
 from qupulse.utils.types import MeasurementWindow, ChannelID, TimeType
@@ -133,19 +133,17 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional['Transformation'],
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
-                                 parent_loop: Loop) -> None:
+                                 parent_loop: ProgramBuilder) -> None:
         self.validate_scope(scope)
 
-        self_loop = Loop(measurements=self.get_measurement_windows(scope, measurement_mapping) or None)
-        for subtemplate in self.subtemplates:
-            subtemplate._create_program(scope=scope,
-                                        measurement_mapping=measurement_mapping,
-                                        channel_mapping=channel_mapping,
-                                        global_transformation=global_transformation,
-                                        to_single_waveform=to_single_waveform,
-                                        parent_loop=self_loop)
-        if self_loop.duration > 0:
-            parent_loop.append_child(self_loop)
+        with parent_loop.potential_child(measurements=self.get_measurement_windows(scope, measurement_mapping)) as seq_loop:
+            for subtemplate in self.subtemplates:
+                subtemplate._create_program(scope=scope,
+                                            measurement_mapping=measurement_mapping,
+                                            channel_mapping=channel_mapping,
+                                            global_transformation=global_transformation,
+                                            to_single_waveform=to_single_waveform,
+                                            parent_loop=seq_loop)
 
     def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
         data = super().get_serialization_data(serializer)

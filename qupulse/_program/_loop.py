@@ -1,4 +1,5 @@
-from typing import Union, Dict, Iterable, Tuple, cast, List, Optional, Generator, Mapping
+import contextlib
+from typing import Union, Dict, Iterable, Tuple, cast, List, Optional, Generator, Mapping, ContextManager, Sequence
 from collections import defaultdict
 from enum import Enum
 import warnings
@@ -15,6 +16,7 @@ from qupulse.utils.types import TimeType, MeasurementWindow
 from qupulse.utils.tree import Node, is_tree_circular
 from qupulse.utils.numeric import smallest_factor_ge
 
+from qupulse._program import ProgramBuilder, Program
 from qupulse._program.waveforms import SequenceWaveform, RepetitionWaveform
 
 __all__ = ['Loop', 'make_compatible', 'MakeCompatibleWarning']
@@ -201,23 +203,47 @@ class Loop(Node):
         self._measurements = None
         self.assert_tree_integrity()
 
-    def _get_repr(self, first_prefix, other_prefixes) -> Generator[str, None, None]:
+    def __repr__(self):
+        kwargs = []
+
+        repetition_count = self._repetition_definition
+        if repetition_count != 1:
+            kwargs.append(f"repetition_count={repetition_count!r}")
+
+        waveform = self._waveform
+        if waveform:
+            kwargs.append(f"waveform={waveform!r}")
+
+        children = self.children
+        if children:
+            try:
+                kwargs.append(f"children={self._children_repr()}")
+            except RecursionError:
+                kwargs.append("children=[...]")
+
+        measurements = self._measurements
+        if measurements:
+            kwargs.append(f"measurements={measurements!r}")
+
+        return f"Loop({','.join(kwargs)})"
+
+    def _get_str(self, first_prefix, other_prefixes) -> Generator[str, None, None]:
         if self.is_leaf():
             yield '%sEXEC %r %d times' % (first_prefix, self._waveform, self.repetition_count)
         else:
             yield '%sLOOP %d times:' % (first_prefix, self.repetition_count)
 
             for elem in self:
-                yield from cast(Loop, elem)._get_repr(other_prefixes + '  ->', other_prefixes + '    ')
+                yield from cast(Loop, elem)._get_str(other_prefixes + '  ->', other_prefixes + '    ')
 
-    def __repr__(self) -> str:
+    def __str__(self) -> str:
         is_circular = is_tree_circular(self)
         if is_circular:
             return '{}: Circ {}'.format(id(self), is_circular)
 
         str_len = 0
         repr_list = []
-        for sub_repr in self._get_repr('', ''):
+        for sub_repr in self._get_str('', ''):
             str_len += len(sub_repr)
 
             if self.MAX_REPR_SIZE and str_len > self.MAX_REPR_SIZE:
@@ -406,6 +432,21 @@ class Loop(Node):
         self._invalidate_duration()
         return True
 
+    @contextlib.contextmanager
+    def potential_child(self,
+                        measurements: Optional[List[MeasurementWindow]],
+                        repetition_count: Union[VolatileRepetitionCount, int] = 1) -> ContextManager['Loop']:
+        if repetition_count != 1 and measurements:
+            # current design requires an extra level of nesting here because the measurements are NOT to be repeated
+            # with the repetition count
+            inner_child = Loop(repetition_count=repetition_count)
+            child = Loop(measurements=measurements, children=[inner_child])
+        else:
+            inner_child = child = Loop(measurements=measurements, repetition_count=repetition_count)
+        yield inner_child
+        if inner_child.waveform or len(inner_child):
+            self.append_child(child)
+
     def cleanup(self, actions=('remove_empty_loops', 'merge_single_child')):
         """Apply the specified actions to cleanup the Loop.
 
@@ -452,6 +493,18 @@ class Loop(Node):
             return self.repetition_count, self.waveform.duration
         else:
             return self.repetition_count, tuple(child.get_duration_structure() for child in self)
+
+    def to_single_waveform(self) -> Waveform:
+        return to_waveform(self)
+
+    def append_leaf(self, waveform: Waveform,
+                    measurements: Optional[Sequence[MeasurementWindow]] = None,
+                    repetition_count: int = 1):
+        self.append_child(waveform=waveform, measurements=measurements, repetition_count=repetition_count)
+
+    def to_program(self) -> Optional['Loop']:
+        if self.waveform or self.children:
+            return self
 
 
 class ChannelSplit(Exception):

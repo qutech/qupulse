@@ -152,6 +152,9 @@ class Node:
         else:
             return self
 
+    def _children_repr(self):
+        return repr(self.__children)
+
 
 def is_tree_circular(root: Node) -> Union[None, Tuple[List[Node], int]]:
     NodeStack = namedtuple('NodeStack', ['node', 'stack'])

@@ -7,6 +7,7 @@ import unittest
 
 """LOCAL IMPORTS"""
 from qupulse.parameter_scope import Scope
+from qupulse._program import ProgramBuilder
 from qupulse._program._loop import Loop
 from qupulse.utils.types import MeasurementWindow, ChannelID, TimeType, time_from_float
 from qupulse.serialization import Serializer
@@ -237,22 +238,24 @@ class DummyPulseTemplate(AtomicPulseTemplate):
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional['Transformation'],
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
-                                 parent_loop: Loop) -> None:
+                                 parent_loop: ProgramBuilder) -> None:
         measurements = self.get_measurement_windows(scope, measurement_mapping)
         self.create_program_calls.append((scope, measurement_mapping, channel_mapping, parent_loop))
         if self._program:
-            parent_loop.append_child(waveform=self._program.waveform, children=self._program.children,
-                                     measurements=measurements)
+            parent_loop.append_leaf(waveform=self._program.waveform, children=self._program.children,
+                                    measurements=measurements)
         elif self.waveform:
-            parent_loop.append_child(waveform=self.waveform, measurements=measurements)
+            parent_loop.append_leaf(waveform=self.build_waveform(parameters=scope, channel_mapping=channel_mapping),
+                                    measurements=measurements)
 
     def build_waveform(self,
                        parameters: Dict[str, Parameter],
                        channel_mapping: Dict[ChannelID, ChannelID]):
         self.build_waveform_calls.append((parameters, channel_mapping))
+        duration = self.duration.evaluate_in_scope(parameters)
         if self.waveform or self.waveform is None:
             return self.waveform
-        return DummyWaveform(duration=self.duration.evaluate_numeric(**parameters), defined_channels=self.defined_channels)
+        return DummyWaveform(duration=duration, defined_channels=self.defined_channels)
 
     def get_serialization_data(self, serializer: Optional['Serializer']=None) -> Dict[str, Any]:
         data = super().get_serialization_data(serializer=serializer)
