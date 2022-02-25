@@ -406,6 +406,20 @@ class Loop(Node):
         self._invalidate_duration()
         return True
 
+    @contextlib.contextmanager
+    def potential_child(self,
+                        measurements: Optional[List[MeasurementWindow]],
+                        repetition_count: Union[VolatileRepetitionCount, int] = 1):
+        if repetition_count != 1 and measurements:
+            # current design requires an extra level of nesting here because the measurements are NOT to be repeated
+            # with the repetition count
+            inner_child = Loop(repetition_count=repetition_count)
+            child = Loop(measurements=measurements, children=[inner_child])
+        else:
+            inner_child = child = Loop(measurements=measurements, repetition_count=repetition_count)
+        yield inner_child
+        if inner_child.waveform or len(inner_child):
+            self.append_child(child)
     def cleanup(self, actions=('remove_empty_loops', 'merge_single_child')):
         """Apply the specified actions to cleanup the Loop.
 

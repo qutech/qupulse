@@ -217,16 +217,14 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
                                  parent_loop: Loop) -> None:
         self.validate_scope(scope=scope)
 
-        self_loop = Loop(measurements=self.get_measurement_windows(scope, measurement_mapping) or None)
-        for local_scope in self._body_scope_generator(scope, forward=True):
-            self.body._create_program(scope=local_scope,
-                                      measurement_mapping=measurement_mapping,
-                                      channel_mapping=channel_mapping,
-                                      global_transformation=global_transformation,
-                                      to_single_waveform=to_single_waveform,
-                                      parent_loop=self_loop)
-        if self_loop.duration > 0:
-            parent_loop.append_child(self_loop)
+        with parent_loop.potential_child(measurements=self.get_measurement_windows(scope, measurement_mapping)) as for_loop:
+            for local_scope in self._body_scope_generator(scope, forward=True):
+                self.body._create_program(scope=local_scope,
+                                          measurement_mapping=measurement_mapping,
+                                          channel_mapping=channel_mapping,
+                                          global_transformation=global_transformation,
+                                          to_single_waveform=to_single_waveform,
+                                          parent_loop=for_loop)
 
     def build_waveform(self, parameter_scope: Scope) -> ForLoopWaveform:
         return ForLoopWaveform([self.body.build_waveform(local_scope)
