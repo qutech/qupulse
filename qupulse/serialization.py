@@ -264,7 +264,7 @@ class ZipFileBackend(StorageBackend):
         tmpfd, tmpname = tempfile.mkstemp(dir=os.path.dirname(self._root))
         os.close(tmpfd)
 
-        # create a temp copy of the archive without filename            
+        # create a temp copy of the archive without filename
         with zipfile.ZipFile(self._root, 'r') as zin:
             with zipfile.ZipFile(tmpname, 'w') as zout:
                 zout.comment = zin.comment # preserve the comment
@@ -357,7 +357,7 @@ class DictBackend(StorageBackend):
 
     def exists(self, identifier: str) -> bool:
         return identifier in self._cache
-    
+
     @property
     def storage(self) -> Dict[str, str]:
         return self._cache
@@ -476,6 +476,13 @@ class Serializable(metaclass=SerializableMeta):
         if identifier == '':
             raise ValueError("Identifier must not be empty.")
         self.__identifier = identifier
+
+    def __eq__(self, other: Any) -> bool:
+        """Implements the equality operator between Serializables (such as PulseTemplates)."""
+        try:
+            return self.get_serialization_data() == other.get_serialization_data()
+        except AttributeError:
+            return False
 
     def _register(self, registry: Optional[PulseRegistryType]=None) -> None:
         """Registers the Serializable in the global registry.
@@ -1062,7 +1069,7 @@ class JSONSerializableEncoder(json.JSONEncoder):
 
         elif type(o) is set:
             return list(o)
-        
+
         elif type(o) in (dict, tuple, list):
             return super().default(o)
 

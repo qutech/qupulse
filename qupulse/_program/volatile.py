@@ -5,12 +5,12 @@ import numbers
 
 from qupulse.parameter_scope import Scope, MappedScope, JointScope
 from qupulse.expressions import Expression, ExpressionScalar
-from qupulse.utils.types import FrozenDict
+from qupulse.utils.types import FrozenDict, FrozenMapping
 from qupulse.utils import is_integer
 
 
 VolatileProperty = NamedTuple('VolatileProperty', [('expression', Expression),
-                                                   ('dependencies', FrozenDict[str, Expression])])
+                                                   ('dependencies', FrozenMapping[str, Expression])])
 VolatileProperty.__doc__ = """Hashable representation of a volatile program property. It does not contain the concrete
 value. Using the dependencies attribute to calculate the value might yield unexpected results."""
 

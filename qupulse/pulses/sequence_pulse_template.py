@@ -7,11 +7,10 @@ from numbers import Real
 import functools
 import warnings
 
-from cached_property import cached_property
-
 from qupulse.serialization import Serializer, PulseRegistryType
 from qupulse._program._loop import Loop
 from qupulse.parameter_scope import Scope
+from qupulse.utils import cached_property
 from qupulse.utils.types import MeasurementWindow, ChannelID, TimeType
 from qupulse.pulses.pulse_template import PulseTemplate, AtomicPulseTemplate
 from qupulse.pulses.parameters import Parameter, ParameterConstrainer, ParameterNotProvidedException

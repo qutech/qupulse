@@ -1,22 +1,22 @@
 """This module defines LoopPulseTemplate, a higher-order hierarchical pulse template that loops
 another PulseTemplate based on a condition."""
-
-
+import functools
+import itertools
+from abc import ABC
 from typing import Dict, Set, Optional, Any, Union, Tuple, Iterator, Sequence, cast, Mapping
 import warnings
 from numbers import Number
 
 import sympy
-from cached_property import cached_property
 
 from qupulse.serialization import Serializer, PulseRegistryType
 from qupulse.parameter_scope import Scope, MappedScope, DictScope
-from qupulse.utils.types import FrozenDict
+from qupulse.utils.types import FrozenDict, FrozenMapping
 
 from qupulse._program._loop import Loop
 
-from qupulse.expressions import ExpressionScalar, ExpressionVariableMissingException
-from qupulse.utils import checked_int_cast
+from qupulse.expressions import ExpressionScalar, ExpressionVariableMissingException, Expression
+from qupulse.utils import checked_int_cast, cached_property
 from qupulse.pulses.parameters import InvalidParameterNameException, ParameterConstrainer, ParameterNotProvidedException
 from qupulse.pulses.pulse_template import PulseTemplate, ChannelID, AtomicPulseTemplate
 from qupulse._program.waveforms import SequenceWaveform as ForLoopWaveform
@@ -198,8 +198,15 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
         loop_range = loop_range if forward else reversed(loop_range)
         loop_index_name = self._loop_index
 
+        get_for_loop_scope = _get_for_loop_scope
+
         for loop_index_value in loop_range:
-            yield scope.overwrite({loop_index_name: loop_index_value})
+            try:
+                yield get_for_loop_scope(scope, loop_index_name, loop_index_value)
+            except TypeError:
+                # we cannot hash the scope so we will not try anymore
+                get_for_loop_scope = _ForLoopScope
+                yield get_for_loop_scope(scope, loop_index_name, loop_index_value)
 
     def _internal_create_program(self, *,
                                  scope: Scope,
@@ -292,3 +299,80 @@ class LoopIndexNotUsedException(Exception):
     def __str__(self) -> str:
         return "The parameter {} is missing in the body's parameter names: {}".format(self.loop_index,
                                                                                       self.body_parameter_names)
+
+
+class _ForLoopScope(Scope):
+    __slots__ = ('_index_name', '_index_value', '_inner')
+
+    def __init__(self, inner: Scope, index_name: str, index_value: int):
+        super().__init__()
+        self._inner = inner
+        self._index_name = index_name
+        self._index_value = index_value
+
+    def get_volatile_parameters(self) -> FrozenMapping[str, Expression]:
+        inner_volatile = self._inner.get_volatile_parameters()
+
+        if self._index_name in inner_volatile:
+            # TODO: use delete method of frozendict
+            index_name = self._index_name
+            return FrozenDict((name, value) for name, value in inner_volatile.items() if name != index_name)
+        else:
+            return inner_volatile
+
+    def __hash__(self):
+        return hash((self._inner, self._index_name, self._index_value))
+
+    def __eq__(self, other: '_ForLoopScope'):
+        try:
+            return (self._index_name == other._index_name
+                    and self._index_value == other._index_value
+                    and self._inner == other._inner)
+        except AttributeError:
+            return False
+
+    def __contains__(self, item):
+        return item == self._index_name or item in self._inner
+
+    def get_parameter(self, parameter_name: str) -> Number:
+        if parameter_name == self._index_name:
+            return self._index_value
+        else:
+            return self._inner.get_parameter(parameter_name)
+
+    __getitem__ = get_parameter
+
+    def change_constants(self, new_constants: Mapping[str, Number]) -> 'Scope':
+        return _get_for_loop_scope(self._inner.change_constants(new_constants), self._index_name, self._index_value)
+
+    def __len__(self) -> int:
+        return len(self._inner) + int(self._index_name not in self._inner)
+
+    def __iter__(self) -> Iterator:
+        if self._index_name in self._inner:
+            return iter(self._inner)
+        else:
+            return itertools.chain(self._inner, (self._index_name,))
+
+    def as_dict(self) -> FrozenMapping[str, Number]:
+        if self._as_dict is None:
+            self._as_dict = FrozenDict({**self._inner.as_dict(), self._index_name: self._index_value})
+        return self._as_dict
+
+    def keys(self):
+        return self.as_dict().keys()
+
+    def items(self):
+        return self.as_dict().items()
+
+    def values(self):
+        return self.as_dict().values()
+
+    def __repr__(self):
+        return f'{type(self)}(inner={self._inner!r}, index_name={self._index_name!r}, ' \
+               f'index_value={self._index_value!r})'
+
+
+@functools.lru_cache(maxsize=10**6)
+def _get_for_loop_scope(inner: Scope, index_name: str, index_value: int) -> Scope:
+    return _ForLoopScope(inner, index_name, index_value)
