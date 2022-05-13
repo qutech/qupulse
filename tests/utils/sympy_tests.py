@@ -153,7 +153,7 @@ class SympifyTests(TestCase):
             result = self.sympify(s)
             self.assertEqual(result, expected)
 
-    def test_len_sympify(self, expected_exception=AssertionError, msg="sympy.sympify does not know len"):
+    def test_len_sympify(self, expected_exception=AssertionError if Version(sympy.__version__) < Version("1.10") else TypeError, msg="sympy.sympify does not know len"):
         with self.assertRaises(expected_exception=expected_exception, msg=msg):
             for s, expected in len_sympify:
                 result = self.sympify(s)
