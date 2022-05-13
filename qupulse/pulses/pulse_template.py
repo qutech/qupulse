@@ -52,6 +52,7 @@ class PulseTemplate(Serializable):
     def __init__(self, *,
                  identifier: Optional[str]) -> None:
         super().__init__(identifier=identifier)
+        self.__cached_hash_value = None
 
     @property
     @abstractmethod
@@ -287,7 +288,9 @@ class PulseTemplate(Serializable):
         return try_operation(self, '/', other)
 
     def __hash__(self):
-        return forced_hash(self.get_serialization_data())
+        if self.__cached_hash_value is None:
+            self.__cached_hash_value = forced_hash(self.get_serialization_data())
+        return self.__cached_hash_value
 
 
 class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
