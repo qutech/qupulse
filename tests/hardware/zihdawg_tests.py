@@ -5,9 +5,17 @@ from collections import OrderedDict
 import numpy as np
 
 try:
-    import zhinst
-except ImportError as err:
-    raise unittest.SkipTest("zhinst not present") from err
+    import pytest
+except ImportError:
+    pytest = None
+
+if pytest:
+    zhinst = pytest.importorskip("zhinst")
+else:
+    try:
+        import zhinst.ziPython
+    except ImportError as err:
+        raise unittest.SkipTest("zhinst not present") from err
 
 from qupulse.utils.types import TimeType
 from qupulse._program._loop import Loop
