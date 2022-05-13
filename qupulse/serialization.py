@@ -482,7 +482,7 @@ class Serializable(metaclass=SerializableMeta):
         try:
             return self.get_serialization_data() == other.get_serialization_data()
         except AttributeError:
-            return False
+            return NotImplemented
 
     def _register(self, registry: Optional[PulseRegistryType]=None) -> None:
         """Registers the Serializable in the global registry.
