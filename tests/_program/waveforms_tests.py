@@ -589,7 +589,7 @@ class TableWaveformTests(unittest.TestCase):
         entries = (TableWaveformEntry(0, 0, interp),
                    TableWaveformEntry(2.1, -33.2, interp),
                    TableWaveformEntry(5.7, 123.4, interp))
-        waveform = TableWaveform('A', entries)
+        waveform = TableWaveform.from_table('A', entries)
         self.assertIs(waveform.unsafe_get_subset_for_channels({'A'}), waveform)
 
     def test_unsafe_sample(self) -> None:
@@ -597,7 +597,7 @@ class TableWaveformTests(unittest.TestCase):
         entries = (TableWaveformEntry(0, 0, interp),
                    TableWaveformEntry(2.1, -33.2, interp),
                    TableWaveformEntry(5.7, 123.4, interp))
-        waveform = TableWaveform('A', entries)
+        waveform = TableWaveform.from_table('A', entries)
         sample_times = numpy.linspace(.5, 5.5, num=11)
 
         expected_interp_arguments = [((0, 0), (2.1, -33.2), [0.5, 1.0, 1.5, 2.0]),

@@ -18,14 +18,18 @@ RepetitionCount = Union[int, VolatileRepetitionCount]
 
 
 class Program(Protocol):
+    """This protocol is used to inspect and or manipulate programs"""
+
     def to_single_waveform(self) -> Waveform:
         pass
 
-    def get_measurement_windows(self) ->  Mapping[str, np.ndarray]:
+    def get_measurement_windows(self) -> Mapping[str, np.ndarray]:
         pass
 
 
 class ProgramBuilder(Protocol):
+    """This protocol is used by PulseTemplate to build the program."""
+
     def append_leaf(self, waveform: Waveform,
                     measurements: Optional[Sequence[MeasurementWindow]] = None,
                     repetition_count: int = 1):
