@@ -2,6 +2,7 @@
 This module defines the class Expression to represent mathematical expression as well as
 corresponding exception classes.
 """
+import operator
 from typing import Any, Dict, Union, Sequence, Callable, TypeVar, Type, Mapping
 from numbers import Number
 import warnings
@@ -157,27 +158,14 @@ class ExpressionVector(Expression):
         super().__init__()
         if isinstance(expression_vector, sympy.NDimArray):
             expression_vector = to_numpy(expression_vector)
-        self._expression_vector = self.sympify_vector(expression_vector)
-        variables = set(itertools.chain.from_iterable(map(get_variables, self._expression_vector.flat)))
-        self._variables = tuple(variables)
+        expression_vector = self.sympify_vector(expression_vector)
+        self._expression_items = tuple(expression_vector.flat)
+        self._expression_shape = expression_vector.shape
 
-    @property
-    def expression_lambda(self) -> Callable:
-        if self._expression_lambda is None:
-            expression_lambda = sympy.lambdify(self.variables, self.underlying_expression,
-                                                     [{'ceiling': ceiling}, 'numpy'])
+        self._lambdified_items = [None] * len(self._expression_items)
 
-            @functools.wraps(expression_lambda)
-            def expression_wrapper(*args, **kwargs):
-                result = expression_lambda(*args, **kwargs)
-                if isinstance(result, sympy.NDimArray):
-                    return numpy.array(result.tolist())
-                elif isinstance(result, list):
-                    return numpy.array(result).reshape(self.underlying_expression.shape)
-                else:
-                    return result.reshape(self.underlying_expression.shape)
-            self._expression_lambda = expression_wrapper
-        return self._expression_lambda
+        variables = set(itertools.chain.from_iterable(map(get_variables, self._expression_items)))
+        self._variables = tuple(sorted(variables))
 
     @property
     def variables(self) -> Sequence[str]:
@@ -186,13 +174,12 @@ class ExpressionVector(Expression):
     def evaluate_numeric(self, **kwargs) -> Union[numpy.ndarray, Number]:
         parsed_kwargs = self._parse_evaluate_numeric_arguments(kwargs)
 
-        result, self._expression_lambda = evaluate_lambdified(self.underlying_expression, self.variables,
-                                                              parsed_kwargs, lambdified=self._expression_lambda)
-
-        if isinstance(result, (list, tuple)):
-            result = numpy.array(result)
-
-        return self._parse_evaluate_numeric_result(numpy.array(result), kwargs)
+        flat_result = []
+        for idx, expr in enumerate(self._expression_items):
+            result, self._lambdified_items[idx] = evaluate_lambdified(expr, self.variables, parsed_kwargs,
+                                                                      lambdified=self._lambdified_items[idx])
+            flat_result.append(result)
+        return self._parse_evaluate_numeric_result(numpy.array(flat_result).reshape(self._expression_shape), kwargs)
 
     def get_serialization_data(self) -> Sequence[str]:
         def nested_get_most_simple_representation(list_or_expression):
@@ -210,7 +197,7 @@ class ExpressionVector(Expression):
         return 'ExpressionVector({})'.format(repr(self.get_serialization_data()))
 
     def _sympy_(self):
-        return sympy.NDimArray(self._expression_vector)
+        return sympy.NDimArray(numpy.array(self._expression_items).reshape(self._expression_shape))
 
     def __eq__(self, other):
         if not isinstance(other, Expression):
@@ -222,11 +209,19 @@ class ExpressionVector(Expression):
         return numpy.all(self._expression_vector == other.underlying_expression)
 
     def __getitem__(self, item) -> Expression:
-        return self._expression_vector[item]
+        if len(self._expression_shape) == 0:
+            assert item == ()
+            expr, = self._expression_items
+            return ExpressionScalar(expr)
+        if len(self._expression_shape) == 1:
+            return ExpressionScalar(self._expression_items[item])
+        else:
+            result = numpy.array(self._expression_items).reshape(self._expression_shape)[item]
+            return ExpressionVector(result)
 
     @property
     def underlying_expression(self) -> numpy.ndarray:
-        return self._expression_vector
+        return numpy.array(self._expression_items).reshape(self._expression_shape)
 
 
 class ExpressionScalar(Expression):
