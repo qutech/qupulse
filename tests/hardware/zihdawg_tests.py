@@ -13,7 +13,7 @@ if pytest:
     zhinst = pytest.importorskip("zhinst")
 else:
     try:
-        import zhinst
+        import zhinst.ziPython
     except ImportError as err:
         raise unittest.SkipTest("zhinst not present") from err
 
