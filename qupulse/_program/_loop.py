@@ -457,6 +457,12 @@ class Loop(Node):
             self._reverse_children()
             for child in self:
                 child.reverse_inplace()
+        if self._measurements:
+            duration = self.duration
+            self._measurements = [
+                (name, duration - (begin + length), length)
+                for name, begin, length in self._measurements
+            ]
 
 
 class ChannelSplit(Exception):
