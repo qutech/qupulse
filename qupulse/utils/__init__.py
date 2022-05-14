@@ -1,10 +1,11 @@
 """This package contains utility functions and classes as well as custom sympy extensions(hacks)."""
 
-from typing import Union, Iterable, Any, Tuple, Mapping, Iterator, cast, TypeVar
+from typing import Union, Iterable, Any, Tuple, Mapping, Iterator, TypeVar, Sequence, AbstractSet
 import itertools
 import re
 import numbers
 from collections import OrderedDict
+from frozendict import frozendict
 
 import numpy
 
@@ -23,7 +24,8 @@ except ImportError:
 _T = TypeVar('_T')
 
 
-__all__ = ["checked_int_cast", "is_integer", "isclose", "pairwise", "replace_multiple", "cached_property"]
+__all__ = ["checked_int_cast", "is_integer", "isclose", "pairwise", "replace_multiple", "cached_property",
+           "forced_hash"]
 
 
 def checked_int_cast(x: Union[float, int, numpy.ndarray], epsilon: float=1e-6) -> int:
@@ -90,3 +92,33 @@ def replace_multiple(s: str, replacements: Mapping[str, str]) -> str:
     rep = OrderedDict((re.escape(k), v) for k, v in replacements.items())
     pattern = re.compile("|".join(rep.keys()))
     return pattern.sub(lambda m: rep[re.escape(m.group(0))], s)
+
+
+def forced_hash(obj) -> int:
+    """Try to produce a hash from obj by nested conversions to hashable types.
+
+    Mapping -> frozendict
+    AbstractSet -> frozenset
+    ndarray -> bytes or nested tuples
+    Sequence -> tuple
+    """
+    try:
+        return hash(obj)
+    except TypeError:
+        if isinstance(obj, Mapping):
+            return hash(frozendict((key, forced_hash(value))
+                                   for key, value in obj.items()))
+        if isinstance(obj, AbstractSet):
+            return hash(frozenset(map(forced_hash, obj)))
+
+        if isinstance(obj, numpy.ndarray):
+            # case where dtype maybe has a custom hash that is not binary content dependent
+            if obj.dtype == numpy.dtype('O') or not obj.dtype.isbuiltin != 1:
+                return forced_hash(obj.tolist())
+            else:
+                return hash((obj.tobytes(), obj.shape, obj.dtype))
+
+        if isinstance(obj, Sequence):
+            return hash(tuple(map(forced_hash, obj)))
+
+        raise
