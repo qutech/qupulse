@@ -11,7 +11,7 @@ from abc import ABCMeta, abstractmethod
 from numbers import Real
 from typing import (
     AbstractSet, Any, FrozenSet, Iterable, Mapping, NamedTuple, Sequence, Set,
-    Tuple, Union, cast, Optional, List)
+    Tuple, Union, cast, Optional, List, Hashable)
 from weakref import WeakValueDictionary, ref
 
 import numpy as np
@@ -202,6 +202,10 @@ class Waveform(Comparable, metaclass=ABCMeta):
     def _sort_key_for_channels(self) -> Sequence[Tuple[str, int]]:
         """Makes reproducible sorting by defined channels possible"""
         return sorted((ch, 0) if isinstance(ch, str) else ('', ch) for ch in self.defined_channels)
+
+    def reversed(self) -> 'Waveform':
+        """Returns a reversed version of this waveform."""
+        return ReversedWaveform(self)
 
 
 class TableWaveformEntry(NamedTuple('TableWaveformEntry', [('t', Real),
@@ -439,6 +443,9 @@ class ConstantWaveform(Waveform):
     def __repr__(self):
         return f"{type(self).__name__}(duration={self.duration!r}, "\
                f"amplitude={self._amplitude!r}, channel={self._channel!r})"
+
+    def reversed(self) -> 'Waveform':
+        return self
 
 
 class FunctionWaveform(Waveform):
@@ -1170,3 +1177,40 @@ class FunctorWaveform(Waveform):
     @property
     def compare_key(self) -> Tuple[Waveform, FrozenSet]:
         return self._inner_waveform, frozenset(self._functor.items())
+
+
+class ReversedWaveform(Waveform):
+    """Reverses the inner waveform in time."""
+
+    __slots__ = ('_inner',)
+
+    def __init__(self, inner: Waveform):
+        super().__init__(duration=inner.duration)
+        self._inner = inner
+
+    def unsafe_sample(self, channel: ChannelID, sample_times: np.ndarray,
+                      output_array: Union[np.ndarray, None] = None) -> np.ndarray:
+        inner_sample_times = (float(self.duration) - sample_times)[::-1]
+        if output_array is None:
+            return self._inner.unsafe_sample(channel, inner_sample_times, None)[::-1]
+        else:
+            inner_output_array = output_array[::-1]
+            inner_output_array = self._inner.unsafe_sample(channel, inner_sample_times, output_array=inner_output_array)
+            if inner_output_array.base not in (output_array, output_array.base):
+                # TODO: is there a guarantee by numpy we never end up here?
+                output_array[:] = inner_output_array[::-1]
+            return output_array
+
+    @property
+    def defined_channels(self) -> AbstractSet[ChannelID]:
+        return self._inner.defined_channels
+
+    def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> 'Waveform':
+        return ReversedWaveform(self._inner.unsafe_get_subset_for_channels(channels))
+
+    @property
+    def compare_key(self) -> Hashable:
+        return self._inner.compare_key
+
+    def reversed(self) -> 'Waveform':
+        return self._inner
