@@ -204,6 +204,7 @@ class Waveform(Comparable, metaclass=ABCMeta):
         return sorted((ch, 0) if isinstance(ch, str) else ('', ch) for ch in self.defined_channels)
 
     def reversed(self) -> 'Waveform':
+        """Returns a reversed version of this waveform."""
         return ReversedWaveform(self)
 
 
@@ -1179,6 +1180,8 @@ class FunctorWaveform(Waveform):
 
 
 class ReversedWaveform(Waveform):
+    """Reverses the inner waveform in time."""
+
     __slots__ = ('_inner',)
 
     def __init__(self, inner: Waveform):

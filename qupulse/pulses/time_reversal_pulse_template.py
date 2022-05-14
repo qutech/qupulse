@@ -5,12 +5,13 @@ from qupulse._program._loop import Loop
 from qupulse._program.waveforms import Waveform
 from qupulse.serialization import PulseRegistryType
 from qupulse.expressions import ExpressionScalar
-from qupulse.parameter_scope import Scope
 
 from qupulse.pulses.pulse_template import PulseTemplate
 
 
 class TimeReversalPulseTemplate(PulseTemplate):
+    """This pulse template reverses the inner pulse template in time."""
+
     def __init__(self, inner: PulseTemplate,
                  identifier: Optional[str] = None,
                  registry: PulseRegistryType = None):
