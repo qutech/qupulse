@@ -224,7 +224,7 @@ class SerializableTests(metaclass=ABCMeta):
             serializer = Serializer(source_backend)
             try:
                 serializer.serialize(instance)
-            except NotImplementedError as err:
+            except (NotImplementedError, AssertionError) as err:
                 raise unittest.SkipTest(err.args[0]) from err
             del serializer
 
