@@ -11,6 +11,7 @@ All examples are provided as static text in this documentation and, additionally
     02FunctionPulse
     03PointPulse
     03xComposedPulses
+    03ConstantPulseTemplate
     04PulseStorage
     05MappingTemplate
     06CreatePrograms
