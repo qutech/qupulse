@@ -1,3 +1,5 @@
+"""A Quantum compUting PULse parametrization and SEquencing framework."""
+
 from qupulse.utils.types import MeasurementWindow, ChannelID
 from . import pulses
 

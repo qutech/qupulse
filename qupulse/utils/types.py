@@ -258,9 +258,9 @@ class TimeType:
             absolute_error:
                 - :obj:`None`: Use `str(value)` as a proxy to get consistent precision
                 - 0: Return the exact value of the float i.e. float(0.8) == 3602879701896397 / 4503599627370496
-                - 0 < `absolute_error` <= 1: Return the best approximation to `value` within `(value - absolute_error,
-                value + absolute_error)`. The best approximation is defined as the fraction with the smallest
-                denominator.
+                - 0 < `absolute_error` <= 1: Return the best approximation to `value` within
+                  `(value - absolute_error, value + absolute_error)`.
+                  The best approximation is defined as the fraction with the smallest denominator.
 
         Raises:
             ValueError: If `absolute_error` is not None and not 0 <= `absolute_error` <=  1
