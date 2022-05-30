@@ -322,13 +322,12 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
         if not instantiated:
             return None
 
-        if self.duration.evaluate_numeric(**parameters) == 0:
-            return None
-
         waveforms = [TableWaveform.from_table(*ch_instantiated)
                      for ch_instantiated in instantiated]
 
-        return MultiChannelWaveform.from_parallel(waveforms)
+        mc_waveform = MultiChannelWaveform.from_parallel(waveforms)
+        if mc_waveform.duration != 0:
+            return mc_waveform
 
     @staticmethod
     def from_array(times: np.ndarray, voltages: np.ndarray, channels: List[ChannelID]) -> 'TablePulseTemplate':

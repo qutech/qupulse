@@ -1,4 +1,4 @@
-from typing import Optional, Set, Dict, Union, List, Any, Tuple
+from typing import Optional, Set, Dict, Union, List, Any, Tuple, Mapping
 import itertools
 import numbers
 import collections
@@ -113,7 +113,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
             template = template.template
 
         self.__template = template
-        self.__parameter_mapping = FrozenDict(parameter_mapping)
+        self.__parameter_mapping: Mapping[str, Expression] = FrozenDict(parameter_mapping)
         self.__external_parameters = set(itertools.chain(*(expr.variables for expr in self.__parameter_mapping.values())))
         self.__external_parameters |= self.constrained_parameters
         self.__measurement_mapping = measurement_mapping
@@ -257,7 +257,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
             A new dictionary with mapped numeric values.
         """
         self._validate_parameters(parameters=parameters, volatile=volatile)
-        return {parameter: mapping_function.evaluate_numeric(**parameters)
+        return {parameter: mapping_function.evaluate_in_scope(parameters)
                 for parameter, mapping_function in self.__parameter_mapping.items()}
 
     def map_parameter_objects(self, parameters: Dict[str, Parameter],
