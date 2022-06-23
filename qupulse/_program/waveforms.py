@@ -103,7 +103,7 @@ class Waveform(Comparable, metaclass=ABCMeta):
             else:
                 raise ValueError('Output array length and sample time length are different')
 
-        if np.any(np.diff(sample_times) < 0):
+        if (np.diff(sample_times) < 0).any():
             raise ValueError('The sample times are not monotonously increasing')
         if sample_times[0] < 0 or sample_times[-1] > float(self.duration):
             raise ValueError(f'The sample times [{sample_times[0]}, ..., {sample_times[-1]}] are not in the range'
