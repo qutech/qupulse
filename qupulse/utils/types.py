@@ -392,7 +392,7 @@ class HashableNumpyArray(numpy.ndarray):
         return hash(self.tobytes())
 
 
-@functools.lru_cache
+@functools.lru_cache(maxsize=128)
 def _public_type_attributes(type_obj):
     return {attr for attr in dir(type_obj) if not attr.startswith('_')}
 
