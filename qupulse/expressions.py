@@ -350,28 +350,28 @@ class ExpressionScalar(Expression):
         return hash(self._sympified_expression)
 
     def __add__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> 'ExpressionScalar':
-        return self.make(self._sympified_expression.__add__(self._sympify(other)))
+        return self.make(self._sympified_expression.__add__(self._extract_sympified(other)))
 
     def __radd__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> 'ExpressionScalar':
         return self.make(self._sympify(other).__radd__(self._sympified_expression))
 
     def __sub__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> 'ExpressionScalar':
-        return self.make(self._sympified_expression.__sub__(self._sympify(other)))
+        return self.make(self._sympified_expression.__sub__(self._extract_sympified(other)))
 
     def __rsub__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> 'ExpressionScalar':
-        return self.make(self._sympified_expression.__rsub__(self._sympify(other)))
+        return self.make(self._sympified_expression.__rsub__(self._extract_sympified(other)))
 
     def __mul__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> 'ExpressionScalar':
-        return self.make(self._sympified_expression.__mul__(self._sympify(other)))
+        return self.make(self._sympified_expression.__mul__(self._extract_sympified(other)))
 
     def __rmul__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> 'ExpressionScalar':
-        return self.make(self._sympified_expression.__rmul__(self._sympify(other)))
+        return self.make(self._sympified_expression.__rmul__(self._extract_sympified(other)))
 
     def __truediv__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> 'ExpressionScalar':
-        return self.make(self._sympified_expression.__truediv__(self._sympify(other)))
+        return self.make(self._sympified_expression.__truediv__(self._extract_sympified(other)))
 
     def __rtruediv__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> 'ExpressionScalar':
-        return self.make(self._sympified_expression.__rtruediv__(self._sympify(other)))
+        return self.make(self._sympified_expression.__rtruediv__(self._extract_sympified(other)))
 
     def __neg__(self) -> 'ExpressionScalar':
         return self.make(self._sympified_expression.__neg__())
