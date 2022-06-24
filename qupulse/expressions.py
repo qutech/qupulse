@@ -320,27 +320,31 @@ class ExpressionScalar(Expression):
     def _sympify(cls, other: Union['ExpressionScalar', Number, sympy.Expr]) -> sympy.Expr:
         return other._sympified_expression if isinstance(other, cls) else sympify(other)
 
+    @classmethod
+    def _extract_sympified(cls, other: Union['ExpressionScalar', Number, sympy.Expr]) -> sympy.Expr:
+        return other._sympified_expression if isinstance(other, cls) else other
+
     def __lt__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> Union[bool, None]:
-        result = self._sympified_expression < self._sympify(other)
+        result = self._sympified_expression < self._extract_sympified(other)
         return None if isinstance(result, sympy.Rel) else bool(result)
 
     def __gt__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> Union[bool, None]:
-        result = self._sympified_expression > self._sympify(other)
+        result = self._sympified_expression > self._extract_sympified(other)
         return None if isinstance(result, sympy.Rel) else bool(result)
 
     def __ge__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> Union[bool, None]:
-        result = self._sympified_expression >= self._sympify(other)
+        result = self._sympified_expression >= self._extract_sympified(other)
         return None if isinstance(result, sympy.Rel) else bool(result)
 
     def __le__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> Union[bool, None]:
-        result = self._sympified_expression <= self._sympify(other)
+        result = self._sympified_expression <= self._extract_sympified(other)
         return None if isinstance(result, sympy.Rel) else bool(result)
 
     def __eq__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> bool:
         """Enable comparisons with Numbers"""
         # sympy's __eq__ checks for structural equality to be consistent regarding __hash__ so we do that too
         # see https://github.com/sympy/sympy/issues/18054#issuecomment-566198899
-        return self._sympified_expression == self._sympify(other)
+        return self._sympified_expression == self._extract_sympified(other)
 
     def __hash__(self) -> int:
         return hash(self._sympified_expression)
