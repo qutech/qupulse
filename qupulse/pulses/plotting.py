@@ -85,7 +85,7 @@ def render(program: Union[Loop],
         warnings.warn(f"Sample count {sample_count} is not an integer. Will be rounded (this changes the sample rate).",
                       stacklevel=2)
 
-    times = np.linspace(float(start_time), float(end_time), num=int(sample_count), dtype=float)
+    times = np.linspace(float(start_time), float(end_time), num=int(sample_count))
     times[-1] = np.nextafter(times[-1], times[-2])
 
     voltages = {ch: waveforms._ALLOCATION_FUNCTION(times, **waveforms._ALLOCATION_FUNCTION_KWARGS)
