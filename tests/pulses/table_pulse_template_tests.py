@@ -700,7 +700,7 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
                                   (5.1, 0, LinearInterpolationStrategy()))),
         ]
 
-        self.assertEqual(waveform._sub_waveforms, tuple(expected_waveforms))
+        self.assertEqual(waveform.compare_key, tuple(expected_waveforms))
 
     def test_build_waveform_none(self) -> None:
         table = TablePulseTemplate({0: [(0, 0),

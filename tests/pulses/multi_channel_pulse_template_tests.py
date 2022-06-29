@@ -92,7 +92,7 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
             amcpt = AtomicMultiChannelPulseTemplate(*subtemplates, duration=True)
         self.assertIs(amcpt.duration, subtemplates[0].duration)
 
-        with self.assertRaisesRegex(ValueError, 'duration'):
+        with self.assertRaisesRegex(ValueError, '[dD]uration'):
             amcpt.build_waveform(parameters=dict(t_1=3, t_2=3, t_3=3),
                                  channel_mapping={ch: ch for ch in 'c1 c2 c3'.split()})
 

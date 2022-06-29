@@ -154,8 +154,8 @@ class PointPulseTemplateSequencingTests(unittest.TestCase):
                                      (1., 0., HoldInterpolationStrategy()),
                                      (1.1, 21., LinearInterpolationStrategy())])
         self.assertEqual(wf.defined_channels, {1, 'A'})
-        self.assertEqual(wf._sub_waveforms[0], expected_1)
-        self.assertEqual(wf._sub_waveforms[1], expected_A)
+        self.assertEqual(wf.compare_key[0], expected_1)
+        self.assertEqual(wf.compare_key[1], expected_A)
 
     def test_build_waveform_multi_channel_vectorized(self):
         ppt = PointPulseTemplate([('t1', 'A'),
@@ -173,8 +173,8 @@ class PointPulseTemplateSequencingTests(unittest.TestCase):
                                      (1., 0., HoldInterpolationStrategy()),
                                      (1.1, 20., LinearInterpolationStrategy())])
         self.assertEqual(wf.defined_channels, {1, 'A'})
-        self.assertEqual(wf._sub_waveforms[0], expected_1)
-        self.assertEqual(wf._sub_waveforms[1], expected_A)
+        self.assertEqual(wf.compare_key[0], expected_1)
+        self.assertEqual(wf.compare_key[1], expected_A)
 
     def test_build_waveform_none_channel(self):
         ppt = PointPulseTemplate([('t1', 'A'),
