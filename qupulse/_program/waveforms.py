@@ -1222,10 +1222,10 @@ class ReversedWaveform(Waveform):
         return self._inner
 
 
-TableWaveform = rs_replacements.waveforms.TableWaveform
-ConstantWaveform = rs_replacements.waveforms.ConstantWaveform
-MultiChannelWaveform = rs_replacements.waveforms.MultiChannelWaveform
-Waveform.register(TableWaveform)
-Waveform.register(ConstantWaveform)
-Waveform.register(MultiChannelWaveform)
-
+if rs_replacements is not None:
+    TableWaveform = rs_replacements.waveforms.TableWaveform
+    ConstantWaveform = rs_replacements.waveforms.ConstantWaveform
+    MultiChannelWaveform = rs_replacements.waveforms.MultiChannelWaveform
+    Waveform.register(TableWaveform)
+    Waveform.register(ConstantWaveform)
+    Waveform.register(MultiChannelWaveform)
