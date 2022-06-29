@@ -848,8 +848,8 @@ class RepetitionWaveform(Waveform):
         return output_array
 
     @property
-    def compare_key(self) -> Tuple[Any, int]:
-        return self._body.compare_key, self._repetition_count
+    def compare_key(self) -> Tuple[int, Any]:
+        return self._repetition_count, self._body
 
     def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> 'RepetitionWaveform':
         return RepetitionWaveform(body=self._body.unsafe_get_subset_for_channels(channels),
@@ -1223,9 +1223,14 @@ class ReversedWaveform(Waveform):
 
 
 if rs_replacements is not None:
+    PyTableWaveform = TableWaveform
+    PyConstantWaveform = ConstantWaveform
+    PyMultiChannelWaveform = MultiChannelWaveform
+
     TableWaveform = rs_replacements.waveforms.TableWaveform
     ConstantWaveform = rs_replacements.waveforms.ConstantWaveform
     MultiChannelWaveform = rs_replacements.waveforms.MultiChannelWaveform
+
     Waveform.register(TableWaveform)
     Waveform.register(ConstantWaveform)
     Waveform.register(MultiChannelWaveform)

@@ -52,5 +52,9 @@ class ProgramBuilder(Protocol):
 
 
 def default_program_builder() -> ProgramBuilder:
-    from qupulse._program._loop import Loop
-    return Loop()
+    try:
+        import qupulse_rs.qupulse_rs
+        return qupulse_rs.qupulse_rs.replacements.ProgramBuilder()
+    except (AttributeError, ImportError):
+        from qupulse._program._loop import Loop
+        return Loop()

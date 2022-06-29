@@ -9,7 +9,7 @@ from qupulse.pulses.interpolation import HoldInterpolationStrategy, LinearInterp
     JumpInterpolationStrategy
 from qupulse._program.waveforms import MultiChannelWaveform, RepetitionWaveform, SequenceWaveform,\
     TableWaveformEntry, TableWaveform, TransformingWaveform, SubsetWaveform, ArithmeticWaveform, ConstantWaveform,\
-    Waveform, FunctorWaveform, FunctionWaveform, ReversedWaveform
+    Waveform, FunctorWaveform, FunctionWaveform, ReversedWaveform, rs_replacements
 from qupulse._program.transformation import LinearTransformation
 from qupulse.expressions import ExpressionScalar, Expression
 
@@ -150,9 +150,9 @@ class WaveformTest(unittest.TestCase):
 
 class MultiChannelWaveformTest(unittest.TestCase):
     def test_init_no_args(self) -> None:
-        with self.assertRaises(ValueError):
+        with self.assertRaises((TypeError, ValueError)):
             MultiChannelWaveform(dict())
-        with self.assertRaises(ValueError):
+        with self.assertRaises((TypeError, ValueError)):
             MultiChannelWaveform(None)
 
     def test_from_parallel(self):
@@ -239,7 +239,9 @@ class MultiChannelWaveformTest(unittest.TestCase):
         result_a = waveform.unsafe_sample('A', sample_times, reuse_output)
         self.assertEqual(len(dwf_a.sample_calls), 2)
         self.assertIs(result_a, reuse_output)
-        self.assertIs(result_a, dwf_a.sample_calls[1][2])
+        if rs_replacements is None:
+            # rust extension cannot forward the numpy array back to python without performance degradation
+            self.assertIs(result_a, dwf_a.sample_calls[1][2])
         numpy.testing.assert_equal(result_b, samples_b)
 
     def test_equality(self) -> None:
@@ -333,7 +335,7 @@ class RepetitionWaveformTest(unittest.TestCase):
     def test_compare_key(self):
         body_wf = DummyWaveform(defined_channels={'a'})
         wf = RepetitionWaveform(body_wf, 2)
-        self.assertEqual(wf.compare_key, (body_wf.compare_key, 2))
+        self.assertEqual(wf.compare_key, (2, body_wf))
 
     def test_unsafe_get_subset_for_channels(self):
         body_wf = DummyWaveform(defined_channels={'a', 'b'})
@@ -606,7 +608,8 @@ class TableWaveformTests(unittest.TestCase):
 
         result = waveform.unsafe_sample('A', sample_times)
 
-        self.assertEqual(expected_interp_arguments, interp.call_arguments)
+        if rs_replacements is None:
+            self.assertEqual(expected_interp_arguments, interp.call_arguments)
         numpy.testing.assert_equal(expected_result, result)
 
         output_expected = numpy.empty_like(expected_result)
