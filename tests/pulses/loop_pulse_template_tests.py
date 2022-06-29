@@ -1,3 +1,4 @@
+import sys
 import unittest
 from unittest import mock
 
@@ -337,6 +338,7 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
         self.assertEqual(1, program.repetition_count)
         self.assertEqual([], list(program.children))
 
+    @unittest.skipIf(sys.version_info.minor < 8, "Python 3.7 does not support changing mock call args")
     def test_create_program(self) -> None:
         dt = DummyPulseTemplate(parameter_names={'i'},
                                 waveform=DummyWaveform(duration=4.0, defined_channels={'A'}),
