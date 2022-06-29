@@ -15,6 +15,7 @@ from numbers import Real, Number
 import sympy
 
 from qupulse.utils.types import ChannelID, DocStringABCMeta, FrozenDict
+from qupulse.utils import forced_hash
 from qupulse.serialization import Serializable
 from qupulse.expressions import ExpressionScalar, Expression, ExpressionLike
 from qupulse._program import ProgramBuilder, default_program_builder
@@ -52,6 +53,7 @@ class PulseTemplate(Serializable):
     def __init__(self, *,
                  identifier: Optional[str]) -> None:
         super().__init__(identifier=identifier)
+        self.__cached_hash_value = None
 
     @property
     @abstractmethod
@@ -283,6 +285,11 @@ class PulseTemplate(Serializable):
     def __truediv__(self, other):
         from qupulse.pulses.arithmetic_pulse_template import try_operation
         return try_operation(self, '/', other)
+
+    def __hash__(self):
+        if self.__cached_hash_value is None:
+            self.__cached_hash_value = forced_hash(self.get_serialization_data())
+        return self.__cached_hash_value
 
 
 class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):

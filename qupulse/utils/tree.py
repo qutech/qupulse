@@ -155,6 +155,10 @@ class Node:
     def _children_repr(self):
         return repr(self.__children)
 
+    def _reverse_children(self):
+        """Reverse children in-place"""
+        self.__children.reverse()
+
 
 def is_tree_circular(root: Node) -> Union[None, Tuple[List[Node], int]]:
     NodeStack = namedtuple('NodeStack', ['node', 'stack'])

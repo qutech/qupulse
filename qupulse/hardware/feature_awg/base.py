@@ -10,19 +10,19 @@ __all__ = ["AWGDevice", "AWGChannelTuple", "AWGChannel", "AWGMarkerChannel", "AW
 
 
 class AWGDeviceFeature(Feature):
-    """Base class for features that are used for `AWGDevice`s"""
+    """Base class for features that are used for :class:`.AWGDevice`"""
     def __init__(self):
         super().__init__(AWGDevice)
 
 
 class AWGChannelFeature(Feature):
-    """Base class for features that are used for `AWGChannel`s"""
+    """Base class for features that are used for :class:`.AWGChannel`"""
     def __init__(self):
         super().__init__(_BaseAWGChannel)
 
 
 class AWGChannelTupleFeature(Feature):
-    """Base class for features that are used for `AWGChannelTuple`s"""
+    """Base class for features that are used for :class:`.AWGChannelTuple`"""
     def __init__(self, channel_tuple: 'AWGChannelTuple'):
         super().__init__(AWGChannelTuple)
         self._channel_tuple = weakref.proxy(channel_tuple)

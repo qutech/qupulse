@@ -9,13 +9,22 @@ Welcome to qupulse's documentation!
 Contents:
 
 .. toctree::
-   :maxdepth: 3
+   :maxdepth: 4
    :numbered:
 
    concepts/concepts
    examples/examples
-   qupulse
+   _autosummary/qupulse
 
+qupulse API Documentation
+=========================
+
+.. autosummary::
+   :recursive:
+   :toctree: _autosummary
+   :template: autosummary/package.rst
+
+    qupulse
 
 .. qupulse API Documentation <qupulse>
 

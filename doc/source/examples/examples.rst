@@ -11,6 +11,7 @@ All examples are provided as static text in this documentation and, additionally
     02FunctionPulse
     03PointPulse
     03xComposedPulses
+    03ConstantPulseTemplate
     04PulseStorage
     05MappingTemplate
     06CreatePrograms
@@ -23,6 +24,7 @@ All examples are provided as static text in this documentation and, additionally
     13RetrospectiveConstantChannelAddition
     14ArithmeticWithPulseTemplates
     15DynamicNuclearPolarisation
+    16TimeReversal
 
 The `/doc/source/examples` directory also contains some outdated examples for features and functionality that has been changed. These examples start with the number nine and are currently left only for reference purposes.
 If you are just learning how to get around in qupulse please ignore them.

@@ -74,6 +74,8 @@ class IndexedBasedFinder(dict):
         'Integer', 'Float', etc. We have to take care of returning correct types for symbols (-> SubscriptionChecker)
         and the base types (-> Integer, Float, etc).
         """
+        if not k:
+            raise KeyError(k)
         if hasattr(sympy, k): # if k is a sympy base type identifier, return the base type
             return getattr(sympy, k)
 
@@ -98,7 +100,7 @@ class IndexedBasedFinder(dict):
         raise NotImplementedError("Not a full dict")
 
     def __contains__(self, k) -> bool:
-        return True
+        return bool(k)
 
 
 class Broadcast(sympy.Function):

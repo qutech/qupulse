@@ -7,7 +7,7 @@ __all__ = ["Feature", "FeatureAble"]
 
 class Feature:
     """
-    Base class for features of `FeatureAble`s.
+    Base class for features of :class:`.FeatureAble`.
     """
     def __init__(self, target_type: Type["FeatureAble"]):
         self._target_type = target_type
@@ -24,7 +24,7 @@ GetItemFeatureType = TypeVar("GetItemFeatureType", bound=Feature)
 class FeatureAble(Generic[FeatureType]):
     """
     Base class for all types that are able to handle features. The features are saved in a dictionary and the methods
-    can be called with the __getitem__-operator.
+    can be called with the `__getitem__`-operator.
     """
 
     def __init__(self):
