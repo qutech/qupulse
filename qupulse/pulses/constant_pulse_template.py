@@ -10,8 +10,7 @@ import logging
 import numbers
 from typing import Any, Dict, List, Optional, Set, Union
 
-import cached_property
-
+from qupulse.utils import cached_property
 from qupulse._program import ProgramBuilder
 from qupulse._program.waveforms import ConstantWaveform
 from qupulse.expressions import ExpressionScalar
@@ -71,7 +70,7 @@ class ConstantPulseTemplate(AtomicPulseTemplate):  # type: ignore
         """Returns an expression giving the integral over the pulse."""
         return {c: self.duration * self._amplitude_dict[c] for c in self._amplitude_dict}
 
-    @cached_property.cached_property
+    @cached_property
     def parameter_names(self) -> Set[str]:
         """The set of names of parameters required to instantiate this PulseTemplate."""
         parameter_names = set(getattr(self._duration, 'variables', ()))
