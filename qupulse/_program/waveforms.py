@@ -11,7 +11,7 @@ from abc import ABCMeta, abstractmethod
 from numbers import Real
 from typing import (
     AbstractSet, Any, FrozenSet, Iterable, Mapping, NamedTuple, Sequence, Set,
-    Tuple, Union, cast, Optional, List, Hashable)
+    Tuple, Union, cast, Optional, List, Hashable, Callable)
 from weakref import WeakValueDictionary, ref
 
 import numpy as np
@@ -1228,3 +1228,51 @@ class ReversedWaveform(Waveform):
 
     def reversed(self) -> 'Waveform':
         return self._inner
+
+
+
+class MethodWaveform(Waveform):
+    """Waveform obtained from instantiating a FunctionPulseTemplate."""
+
+    def __init__(self, pulse_method: Callable,
+                 duration: float,
+                 channel: ChannelID) -> None:
+        """Creates a new FunctionWaveform instance.
+
+        Args:
+            pulse_method: The method used to define this waveform.
+            duration: The duration of the waveform
+            measurement_windows: A list of measurement windows
+            channel: The channel this waveform is played on
+        """
+        super().__init__(duration=TimeType.from_float(duration, absolute_error=PULSE_TO_WAVEFORM_ERROR))
+
+        self._pulse_method = pulse_method
+        self._channel_id = channel
+
+    @property
+    def defined_channels(self) -> Set[ChannelID]:
+        return {self._channel_id}
+
+    @property
+    def compare_key(self) -> Any:
+        return self._channel_id, self._expression, self._duration
+
+    @property
+    def duration(self) -> TimeType:
+        return self._duration
+
+    def unsafe_sample(self,
+                      channel: ChannelID,
+                      sample_times: np.ndarray,
+                      output_array: Union[np.ndarray, None] = None) -> np.ndarray:
+        if channel != self._channel_id:
+            raise IndexError(f'channel {channel} cannot be sampled from {self}')
+
+        if output_array is None:
+            output_array = np.empty(len(sample_times))
+        output_array[:] = self._pulse_method(sample_times)
+        return output_array
+
+    def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> Waveform:
+        return self
