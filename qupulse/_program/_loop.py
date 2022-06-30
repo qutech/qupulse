@@ -495,7 +495,21 @@ class Loop(Node):
             return self.repetition_count, tuple(child.get_duration_structure() for child in self)
 
     def to_single_waveform(self) -> Waveform:
-        return to_waveform(self)
+        if self.is_leaf():
+            if self.repetition_count == 1:
+                return self.waveform
+            else:
+                return RepetitionWaveform(self.waveform, self.repetition_count)
+        else:
+            if len(self) == 1:
+                sequenced_waveform = to_waveform(cast(Loop, self[0]))
+            else:
+                sequenced_waveform = SequenceWaveform([to_waveform(cast(Loop, sub_program))
+                                                       for sub_program in self])
+            if self.repetition_count > 1:
+                return RepetitionWaveform(sequenced_waveform, self.repetition_count)
+            else:
+                return sequenced_waveform
 
     def append_leaf(self, waveform: Waveform,
                     measurements: Optional[Sequence[MeasurementWindow]] = None,
@@ -527,21 +541,7 @@ class ChannelSplit(Exception):
 
 
 def to_waveform(program: Loop) -> Waveform:
-    if program.is_leaf():
-        if program.repetition_count == 1:
-            return program.waveform
-        else:
-            return RepetitionWaveform(program.waveform, program.repetition_count)
-    else:
-        if len(program) == 1:
-            sequenced_waveform = to_waveform(cast(Loop, program[0]))
-        else:
-            sequenced_waveform = SequenceWaveform([to_waveform(cast(Loop, sub_program))
-                                                   for sub_program in program])
-        if program.repetition_count > 1:
-            return RepetitionWaveform(sequenced_waveform, program.repetition_count)
-        else:
-            return sequenced_waveform
+    return program.to_single_waveform()
 
 
 class _CompatibilityLevel(Enum):
