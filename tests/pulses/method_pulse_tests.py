@@ -24,6 +24,11 @@ class MethodPulsePropertyTest(MethodPulseTest):
         self.assertEqual(self.fpt.duration, 100)
 
     def test_integral(self) -> None:
+        try:
+            import scipy.integrate
+        except ImportError:
+            return
+
         pulse = MethodPulseTemplate(pulse_method=lambda t: 0*t, duration=30)
         self.assertDictEqual(pulse.integral, {'default': 0})
         pulse = MethodPulseTemplate(pulse_method=lambda t: 1+0*t, duration=30)

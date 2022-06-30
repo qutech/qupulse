@@ -2,7 +2,6 @@ import numbers
 from typing import (Any, Callable, Dict, List, Optional, Set, Union)
 
 import numpy as np
-import scipy.integrate
 from qupulse._program.waveforms import MethodWaveform
 from qupulse.expressions import ExpressionScalar
 from qupulse.pulses.measurement import MeasurementDeclaration
@@ -117,6 +116,11 @@ class MethodPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
 
     @property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
+        try:
+            import scipy.integrate
+        except ImportError:
+            raise ValueError(f'scipy package is required to perform integral calculations for {self.__class__}')
+                
         return {self.__channel: ExpressionScalar(scipy.integrate.quad(self._pulse_method, 0, float(self.duration))[0]
                                                  )}
 
