@@ -11,7 +11,7 @@ from qupulse.serialization import PulseRegistryType, Serializer
 
 
 import functools
-@functools.lru_cache
+@functools.lru_cache(maxsize=1024)
 def ExpressionScalarCache(value):
     return ExpressionScalar(value)
         
