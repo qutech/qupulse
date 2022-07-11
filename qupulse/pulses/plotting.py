@@ -116,7 +116,7 @@ def _render_loop(loop: Loop,
 
 def plot(pulse: PulseTemplate,
          parameters: Dict[str, Parameter]=None,
-         sample_rate: Real=10,
+         sample_rate: Optional[Real]=10,
          axes: Any=None,
          show: bool=True,
          plot_channels: Optional[Set[ChannelID]]=None,
@@ -136,7 +136,7 @@ def plot(pulse: PulseTemplate,
         parameters: An optional mapping of parameter names to Parameter
             objects.
         sample_rate: The rate with which the waveforms are sampled for the plot in
-            samples per time unit. (default = 10)
+            samples per time unit. If None, then automatically determine the sample rate (default = 10)
         axes: matplotlib Axes object the pulse will be drawn into if provided
         show: If true, the figure will be shown
         plot_channels: If specified only channels from this set will be plotted. If omitted all channels will be.
@@ -159,6 +159,17 @@ def plot(pulse: PulseTemplate,
     if parameters is None:
         parameters = dict()
 
+    if sample_rate is None:
+        if time_slice is None:
+            duration = pulse.duration
+        else:
+            duration = time_slice[1]-time_slice[0]
+        if duration == 0:
+            sample_rate = 1
+        else:
+            duration_per_sample = float(duration) / 1000
+            sample_rate = 1 / duration_per_sample
+            
     program = pulse.create_program(parameters=parameters,
                                    channel_mapping={ch: ch for ch in channels},
                                    measurement_mapping={w: w for w in pulse.measurement_names})
