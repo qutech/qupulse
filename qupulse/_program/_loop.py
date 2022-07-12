@@ -208,10 +208,6 @@ class Loop(Node):
                 yield from cast(Loop, elem)._get_repr(other_prefixes + '  ->', other_prefixes + '    ')
 
     def __repr__(self) -> str:
-        is_circular = is_tree_circular(self)
-        if is_circular:
-            return '{}: Circ {}'.format(id(self), is_circular)
-
         str_len = 0
         repr_list = []
         for sub_repr in self._get_repr('', ''):
