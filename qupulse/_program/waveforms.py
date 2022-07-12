@@ -984,9 +984,14 @@ class SubsetWaveform(Waveform):
         return self.inner_waveform.unsafe_sample(channel, sample_times, output_array)
 
     def constant_value_dict(self) -> Optional[Mapping[ChannelID, float]]:
-        d = self._inner_waveform.constant_value_dict()
-        if d is not None:
-            return {ch: d[ch] for ch in self._channel_subset}
+        constant_values = {}
+        for ch in self.defined_channels:
+            value = self._inner_waveform.constant_value(ch)
+            if value is None:
+                return
+            else:
+                constant_values[ch] = value
+        return constant_values
 
     def constant_value(self, channel: ChannelID) -> Optional[float]:
         if channel not in self._channel_subset:
