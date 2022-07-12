@@ -11,7 +11,7 @@ from qupulse.pulses.pulse_template import AtomicPulseTemplate, PulseTemplate
 from qupulse.pulses.parameters import Parameter, ConstantParameter, ParameterNotProvidedException
 from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
 from qupulse._program._loop import Loop
-from qupulse._program import ProgramBuilder
+from qupulse._program import ProgramBuilder, default_program_builder
 
 from qupulse._program.transformation import Transformation
 from qupulse._program.waveforms import TransformingWaveform
@@ -226,13 +226,15 @@ class PulseTemplateTest(unittest.TestCase):
                 scope = DictScope.from_kwargs(a=1., b=2., volatile={'a'})
                 measurement_mapping = {'M': 'N'}
                 channel_mapping = {'B': 'A'}
-                parent_loop = Loop()
+
+                program_builder = default_program_builder()
+                inner_program_builder = default_program_builder()
 
                 wf = DummyWaveform()
                 single_waveform = DummyWaveform()
                 measurements = [('m', 0, 1), ('n', 0.1, .9)]
 
-                expected_inner_program = Loop(children=[Loop(waveform=wf, measurements=measurements)])
+                expected_inner_program = Loop(waveform=wf, measurements=measurements)
 
                 appending_create_program = get_appending_internal_create_program(wf,
                                                                                  measurements=measurements,
@@ -249,22 +251,24 @@ class PulseTemplateTest(unittest.TestCase):
                                        wraps=appending_create_program) as _internal_create_program:
                     with mock.patch('qupulse._program._loop.to_waveform',
                                     return_value=single_waveform) as to_waveform:
-                        template._create_program(scope=scope,
-                                                 measurement_mapping=measurement_mapping,
-                                                 channel_mapping=channel_mapping,
-                                                 global_transformation=global_transformation,
-                                                 to_single_waveform=to_single_waveform,
-                                                 parent_loop=parent_loop)
+                        with mock.patch('qupulse.pulses.pulse_template.default_program_builder',
+                                        return_value=inner_program_builder):
+                            template._create_program(scope=scope,
+                                                     measurement_mapping=measurement_mapping,
+                                                     channel_mapping=channel_mapping,
+                                                     global_transformation=global_transformation,
+                                                     to_single_waveform=to_single_waveform,
+                                                     parent_loop=program_builder)
 
                         _internal_create_program.assert_called_once_with(scope=scope,
                                                                          measurement_mapping=measurement_mapping,
                                                                          channel_mapping=channel_mapping,
                                                                          global_transformation=None,
                                                                          to_single_waveform=to_single_waveform,
-                                                                         parent_loop=expected_inner_program)
+                                                                         parent_loop=inner_program_builder)
                         to_waveform.assert_called_once_with(expected_inner_program)
 
-                        self.assertEqual(expected_program, parent_loop)
+                        self.assertEqual(expected_program, program_builder.to_program())
 
     def test_create_program_defaults(self) -> None:
         template = PulseTemplateStub(defined_channels={'A', 'B'}, parameter_names={'foo'}, measurement_names={'hugo', 'foo'})

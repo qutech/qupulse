@@ -76,7 +76,7 @@ class SequencePulseTemplateTest(unittest.TestCase):
             self.assertIs(pt.build_waveform_calls[0][0], parameters)
 
         self.assertIsInstance(wf, SequenceWaveform)
-        for wfa, wfb in zip(wf.compare_key, wfs):
+        for wfa, wfb in zip(wf.sequenced_waveforms, wfs):
             self.assertIs(wfa, wfb)
 
     def test_identifier(self) -> None:

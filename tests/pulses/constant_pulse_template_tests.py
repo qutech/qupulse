@@ -45,7 +45,7 @@ class TestConstantPulseTemplate(unittest.TestCase):
             for duration_in_samples in [64, 936320, 24615392]:
                 p = ConstantPulseTemplate(duration_in_samples / 2.4, {'a': 0})
                 number_of_samples = p.create_program().duration * 2.4
-                make_compatible(p.create_program(), 8, 8, 2.4)
+                make_compatible(p.create_program(), 8, 8, qupulse.utils.types.TimeType.from_float(2.4))
                 self.assertEqual(number_of_samples.denominator, 1)
 
                 p2 = ConstantPulseTemplate((duration_in_samples + 1) / 2.4, {'a': 0})
