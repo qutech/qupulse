@@ -807,6 +807,7 @@ class SimpleELFManager(ELFManager):
                 raise HDAWGCompilationException(msg)
             elif status == 2:
                 logger.warning("Compiler warings: %s", msg)
+                break
             else:
                 raise RuntimeError("Unexpected status", status, msg)
 
