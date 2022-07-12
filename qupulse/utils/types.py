@@ -11,6 +11,13 @@ import operator
 import numpy
 import sympy
 
+try:
+    from frozendict import frozendict
+except ImportError:
+    warnings.warn("The frozendict package is not installed. We currently also ship a fallback frozendict which "
+                  "will be removed in a future release.", category=DeprecationWarning)
+    frozendict = None
+
 import qupulse.utils.numeric as qupulse_numeric
 
 __all__ = ["MeasurementWindow", "ChannelID", "HashableNumpyArray", "TimeType", "time_from_float", "DocStringABCMeta",
@@ -251,9 +258,9 @@ class TimeType:
             absolute_error:
                 - :obj:`None`: Use `str(value)` as a proxy to get consistent precision
                 - 0: Return the exact value of the float i.e. float(0.8) == 3602879701896397 / 4503599627370496
-                - 0 < `absolute_error` <= 1: Return the best approximation to `value` within `(value - absolute_error,
-                value + absolute_error)`. The best approximation is defined as the fraction with the smallest
-                denominator.
+                - 0 < `absolute_error` <= 1: Return the best approximation to `value` within
+                  `(value - absolute_error, value + absolute_error)`.
+                  The best approximation is defined as the fraction with the smallest denominator.
 
         Raises:
             ValueError: If `absolute_error` is not None and not 0 <= `absolute_error` <=  1
@@ -385,9 +392,13 @@ class HashableNumpyArray(numpy.ndarray):
         return hash(self.tobytes())
 
 
+@functools.lru_cache(maxsize=128)
+def _public_type_attributes(type_obj):
+    return {attr for attr in dir(type_obj) if not attr.startswith('_')}
+
 def has_type_interface(obj: typing.Any, type_obj: typing.Type) -> bool:
-    """Return true if all public attributes of the class are attribues of the object"""
-    return set(dir(obj)) >= {attr for attr in dir(type_obj) if not attr.startswith('_')}
+    """Return true if all public attributes of the class are attributes of the object"""
+    return set(dir(obj)) >= _public_type_attributes(type_obj)
 
 
 _KT_hash = typing.TypeVar('_KT_hash', bound=typing.Hashable)  # Key type.
@@ -492,7 +503,7 @@ class _FrozenDictByWrapping(FrozenMapping):
         # use the local variable h to minimize getattr calls to minimum and reduce caching overhead
         h = self._hash
         if h is None:
-            self._hash = h = functools.reduce(operator.xor, map(hash, self.items()))
+            self._hash = h = functools.reduce(operator.xor, map(hash, self.items()), 0xABCD0)
         return h
 
     def __eq__(self, other: typing.Mapping):
@@ -505,7 +516,10 @@ class _FrozenDictByWrapping(FrozenMapping):
         return self._dict.copy()
 
 
-FrozenDict = _FrozenDictByWrapping
+if frozendict is None:
+    FrozenDict = _FrozenDictByWrapping
+else:
+    FrozenDict = frozendict
 
 
 class SequenceProxy(collections.abc.Sequence):

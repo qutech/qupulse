@@ -114,10 +114,6 @@ eval_sum = [
     (Sum(a_[i], (i, 0, Len(a) - 1)), {'a': np.array([1, 2, 3])}, 6),
 ]
 
-eval_array_expression = [
-    (np.array([a*c, b*c]), {'a': 2, 'b': 3, 'c': 4}, np.array([8, 12]))
-]
-
 eval_exact_rational = [
     (a * Rational('1/3'), {'a': 2}, TimeType.from_fraction(2, 3)),
     (a * Rational('1/3'), {'a': Rational(1, 5)}, TimeType.from_fraction(1, 15)),
@@ -153,7 +149,7 @@ class SympifyTests(TestCase):
             result = self.sympify(s)
             self.assertEqual(result, expected)
 
-    def test_len_sympify(self, expected_exception=AssertionError, msg="sympy.sympify does not know len"):
+    def test_len_sympify(self, expected_exception=AssertionError if Version(sympy.__version__) < Version("1.10") else TypeError, msg="sympy.sympify does not know len"):
         with self.assertRaises(expected_exception=expected_exception, msg=msg):
             for s, expected in len_sympify:
                 result = self.sympify(s)
@@ -300,11 +296,6 @@ class EvaluationTestsBase:
         for expr, parameters, expected in eval_sum:
             result = self.evaluate(expr, parameters)
             self.assertEqual(result, expected)
-
-    def test_eval_array_expression(self):
-        for expr, parameters, expected in eval_array_expression:
-            result = self.evaluate(expr, parameters)
-            np.testing.assert_equal(result, expected)
 
     def test_eval_exact_rational(self):
         for expr, parameters, expected in eval_exact_rational:

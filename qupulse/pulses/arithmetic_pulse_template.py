@@ -4,12 +4,12 @@ from numbers import Real
 import warnings
 
 import sympy
-import cached_property
 
 from qupulse.expressions import ExpressionScalar, ExpressionLike
 from qupulse.serialization import Serializer, PulseRegistryType
 from qupulse.parameter_scope import Scope
 
+from qupulse.utils import cached_property
 from qupulse.utils.types import ChannelID
 from qupulse.pulses.measurement import MeasurementWindow
 from qupulse.pulses.pulse_template import AtomicPulseTemplate, PulseTemplate
@@ -431,7 +431,7 @@ class ArithmeticPulseTemplate(PulseTemplate):
     def measurement_names(self) -> Set[str]:
         return self._pulse_template.measurement_names
 
-    @cached_property.cached_property
+    @cached_property
     def _scalar_operand_parameters(self) -> FrozenSet[str]:
         if isinstance(self._scalar, dict):
             return frozenset(*(value.variables for value in self._scalar.values()))

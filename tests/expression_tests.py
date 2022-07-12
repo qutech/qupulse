@@ -103,6 +103,14 @@ class ExpressionVectorTests(unittest.TestCase):
         self.assertNotEqual(e6, 1)
         self.assertEqual(e7, ExpressionScalar('a'))
 
+    def test_hash(self):
+        e1 = ExpressionVector([1, 2])
+        e2 = ExpressionVector(['1', '2'])
+        e7 = ExpressionVector(['a'])
+
+        s = ExpressionScalar('a')
+        self.assertEqual({e1, e7}, {e1, e2, e7, s})
+
 
 class ExpressionScalarTests(unittest.TestCase):
     def test_format(self):
