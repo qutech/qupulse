@@ -14,7 +14,7 @@ import warnings
 import operator
 import itertools
 
-from qupulse._program import waveforms
+from qupulse._program import waveforms, Program
 from qupulse.utils.types import ChannelID, MeasurementWindow, has_type_interface
 from qupulse.pulses.pulse_template import PulseTemplate
 from qupulse.pulses.parameters import Parameter
@@ -52,6 +52,12 @@ def render(program: Union[Loop],
         """
     if has_type_interface(program, Loop):
         waveform, measurements = _render_loop(program, render_measurements=render_measurements)
+    elif isinstance(program, Program):
+        waveform = program.to_single_waveform()
+        measurements = program.get_measurement_windows()
+        measurements = [(name, begin, length)
+                        for name, (begins, lengths) in measurements.items()
+                        for begin, length in zip(begins, lengths)]
     else:
         raise ValueError('Cannot render an object of type %r' % type(program), program)
 

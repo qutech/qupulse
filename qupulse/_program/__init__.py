@@ -5,18 +5,22 @@ from typing import Optional, Union, Sequence, ContextManager, Mapping
 import numpy as np
 
 from qupulse._program.waveforms import Waveform
-from qupulse.utils.types import MeasurementWindow
+from qupulse.utils.types import MeasurementWindow, TimeType
 from qupulse._program.volatile import VolatileRepetitionCount
 
 try:
-    from typing import Protocol
+    from typing import Protocol, runtime_checkable
 except ImportError:
     Protocol = object
+
+    def runtime_checkable(cls):
+        return cls
 
 
 RepetitionCount = Union[int, VolatileRepetitionCount]
 
 
+@runtime_checkable
 class Program(Protocol):
     """This protocol is used to inspect and or manipulate programs"""
 
@@ -26,6 +30,9 @@ class Program(Protocol):
     def get_measurement_windows(self) -> Mapping[str, np.ndarray]:
         pass
 
+    @property
+    def duration(self) -> TimeType:
+        raise NotImplementedError()
 
 class ProgramBuilder(Protocol):
     """This protocol is used by PulseTemplate to build the program."""
