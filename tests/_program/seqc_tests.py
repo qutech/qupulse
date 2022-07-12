@@ -1050,3 +1050,133 @@ while (true) {
   }
 }"""
         self.assertEqual(expected_program, seqc_program)
+
+    def test_shuttle_pulse(self):
+        from qupulse.pulses import PointPT, RepetitionPT, SequencePT, MappingPT, ForLoopPT
+        import sympy
+
+        sample_rate, n_segments, t_hold = sympy.sympify('sample_rate, n_segments, t_hold')
+        t_segment = n_segments / sample_rate
+
+        # segment = PointPT([(0,         'v_hold'),
+        #                     (t_segment, 'v_hold')],
+        #                   channel_names=('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'),
+        #                   )
+
+        # hold = RepetitionPT(segment, t_hold // t_segment,
+        #                   measurements=[('M', 3*t_segment, t_hold - 2*t_segment)])
+
+        segment = PointPT([(0, 'v_hold'),
+                           (t_segment, 'v_hold')],
+                          channel_names=('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'),
+                          measurements=[('M', t_segment / 3, t_segment / 3 * 2)]
+                          )
+
+        hold = RepetitionPT(segment, t_hold // t_segment)
+
+        shuttle_segment = PointPT([(0, 'v_hold'),
+                                   (t_segment, 'v_hold')],
+                                  channel_names=('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H')
+                                  )
+
+        shuttle_hold = RepetitionPT(shuttle_segment, t_hold // t_segment,
+                                    measurements=[('M', 't_hold/3', 't_hold/3')]
+                                    )
+
+        # instantiate square pulse for loading:
+
+        load_full = SequencePT(
+            (hold, {'v_hold': 'V_load_0', 't_hold': 't_load_0'}),
+            (hold, {'v_hold': 'V_load_1', 't_hold': 't_load_1'}),
+            (hold, {'v_hold': 'V_load_2', 't_hold': 't_load_2'}),
+        )
+
+        # generalize sine waves for shuttling:
+
+        f_shuttle, t_shuttle, amp_shuttle, res_shuttle = sympy.simplify(
+            'f_shuttle, t_shuttle, amp_shuttle, res_shuttle')
+
+        shuttle_body = MappingPT(shuttle_hold, parameter_mapping={
+            't_hold': res_shuttle, 'v_hold': 'amp_shuttle*cos(2*pi*i*res_shuttle*f_shuttle + phase)+offset'}
+                                 )
+
+        # instantiate pulse for shuttling in and out:
+
+        shuttle_in = ForLoopPT(shuttle_body, 'i', 't_shuttle // res_shuttle')
+        shuttle_out = ForLoopPT(shuttle_body, 'i', ('t_shuttle // res_shuttle', 0, -1))
+
+        # read
+
+        read_pls = SequencePT(
+            (hold, {'v_hold': 'V_read_0', 't_hold': 't_read_0'}),
+            (hold, {'v_hold': 'V_read_1', 't_hold': 't_read_1'}),
+            (hold, {'v_hold': 'V_read_2', 't_hold': 't_read_2'}),
+        )
+
+        # wait
+        wait_pls = MappingPT(
+            hold, parameter_mapping={'v_hold': 'V_wait', 't_hold': 't_wait'},
+        )
+
+        only_shuttle = shuttle_in @ shuttle_out
+
+        shuttle_amp = 150e-3
+        shuttle_offset = -60e-3
+        shuttle_amp_mask = np.array([1, 0.5, 1, 0.5, 0, 0, 0, 0])
+        shuttle_offset_mask = np.array([1, 0, 1, 0, 1, 1, 0, 0])
+
+        shuttle_init_L2 = 440e-3
+        shuttle_init_T = 0
+        # shuttle_init_phase = -0.5*np.pi*np.append(np.array([3., 2., 1., 0., 2., 3.])-4*shuttle_init_T, np.ones(2))
+        # shuttle_init_awg = shuttle_amp*np.multiply(shuttle_amp_mask,np.cos(shuttle_init_phase))+shuttle_offset*shuttle_offset_mask
+        shuttle_init_phase = -0.5 * np.pi * np.append(np.array([3., 2., 1., 0.]) - 4 * shuttle_init_T, np.ones(4))
+        shuttle_init_awg = shuttle_amp * np.multiply(shuttle_amp_mask, np.cos(
+            shuttle_init_phase)) + shuttle_offset * shuttle_offset_mask + np.array(
+            [0., 0., 0., 0., -shuttle_offset - shuttle_amp * 0.75, 0., 0., 0.])
+
+        # %%
+        cmpst_fac_TRB1 = 1.7879
+
+        default_parameters = {
+            't_load_0': 5e6,
+            't_load_1': 25e6,
+            't_load_2': 5e6,
+            'V_load_0': shuttle_init_awg + np.append(np.zeros(4), [0.00, 0., 0.02 * cmpst_fac_TRB1, -0.02]),
+            'V_load_1': shuttle_init_awg + np.append(np.zeros(4), [0.00, 0., -0.10 * cmpst_fac_TRB1, 0.01]),
+            'V_load_2': shuttle_init_awg + np.append(np.zeros(4), [0.00, 0., 0.02 * cmpst_fac_TRB1, -0.02]),
+            't_shuttle': 6 / 1e-7,
+            'f_shuttle': 1e-7,
+            'res_shuttle': 19200 * 5,
+            'amp_shuttle': np.multiply(shuttle_amp_mask, shuttle_amp),
+            'phase': shuttle_init_phase,
+            'offset': np.multiply(shuttle_init_awg, shuttle_offset_mask) + np.append(np.zeros(4),
+                                                                                     [0.00, 0., 0.02 * cmpst_fac_TRB1,
+                                                                                      -0.02]),
+            't_wait': 25e6,
+            'V_wait': np.multiply(np.multiply(shuttle_amp_mask, shuttle_amp), np.cos(
+                2 * np.pi * (1e8 // (19200 * 5)) * 19200 * 5 * 1e-8 + shuttle_init_phase)) + np.multiply(
+                shuttle_init_awg, shuttle_offset_mask) + np.append(np.zeros(4),
+                                                                   [0.00, 0., 0.02 * cmpst_fac_TRB1, -0.02]),
+            't_read_0': 5e6,
+            't_read_1': 25e6,
+            't_read_2': 5e6,
+            'V_read_0': shuttle_init_awg + np.append(np.zeros(4), [0.00, 0., 0.02 * cmpst_fac_TRB1, -0.020]),
+            'V_read_1': shuttle_init_awg + np.append(np.zeros(4), [0.00, 0., -0.15 * cmpst_fac_TRB1, 0.015]),
+            'V_read_2': shuttle_init_awg + np.append(np.zeros(4), [0.00, 0., 0.02 * cmpst_fac_TRB1, -0.020]),
+            'sample_rate': 0.0125,
+            'n_segments': 192,
+        }
+
+        program = only_shuttle.create_program(parameters=default_parameters)
+
+        manager = HDAWGProgramManager()
+
+        manager.add_program('test', program,
+                            ('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'),
+                            (None,) * 16, (4.,)*8, (0.,)*8, (None,)*8,
+                            default_parameters['sample_rate'])
+
+
+
+
+
