@@ -1231,11 +1231,24 @@ if rs_replacements is not None:
     PyTableWaveform = TableWaveform
     PyConstantWaveform = ConstantWaveform
     PyMultiChannelWaveform = MultiChannelWaveform
+    PyRepetitionWaveform = RepetitionWaveform
+    PySequenceWaveform = SequenceWaveform
+    PyArithmeticWaveform = ArithmeticWaveform
+    PySubsetWaveform = SubsetWaveform
 
     TableWaveform = rs_replacements.waveforms.TableWaveform
     ConstantWaveform = rs_replacements.waveforms.ConstantWaveform
     MultiChannelWaveform = rs_replacements.waveforms.MultiChannelWaveform
+    RepetitionWaveform = rs_replacements.waveforms.RepetitionWaveform
+    SequenceWaveform = rs_replacements.waveforms.SequenceWaveform
+    ArithmeticWaveform = rs_replacements.waveforms.ArithmeticWaveform
+    SubsetWaveform = rs_replacements.waveforms.SubsetWaveform
 
     Waveform.register(TableWaveform)
     Waveform.register(ConstantWaveform)
     Waveform.register(MultiChannelWaveform)
+    Waveform.register(TableWaveform)
+    Waveform.register(RepetitionWaveform)
+    Waveform.register(SequenceWaveform)
+    Waveform.register(ArithmeticWaveform)
+    Waveform.register(SubsetWaveform)
