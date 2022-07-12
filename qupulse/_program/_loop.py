@@ -495,7 +495,21 @@ class Loop(Node):
             return self.repetition_count, tuple(child.get_duration_structure() for child in self)
 
     def to_single_waveform(self) -> Waveform:
-        return to_waveform(self)
+        if self.is_leaf():
+            if self.repetition_count == 1:
+                return self.waveform
+            else:
+                return RepetitionWaveform(self.waveform, self.repetition_count)
+        else:
+            if len(self) == 1:
+                sequenced_waveform = to_waveform(cast(Loop, self[0]))
+            else:
+                sequenced_waveform = SequenceWaveform([to_waveform(cast(Loop, sub_program))
+                                                       for sub_program in self])
+            if self.repetition_count > 1:
+                return RepetitionWaveform(sequenced_waveform, self.repetition_count)
+            else:
+                return sequenced_waveform
 
     def append_leaf(self, waveform: Waveform,
                     measurements: Optional[Sequence[MeasurementWindow]] = None,
@@ -520,6 +534,37 @@ class Loop(Node):
                 for name, begin, length in self._measurements
             ]
 
+    def make_compatible_inplace(self, minimal_waveform_length: int, waveform_quantum: int, sample_rate: TimeType):
+        program = self
+        comp_level = _is_compatible(program,
+                                    min_len=minimal_waveform_length,
+                                    quantum=waveform_quantum,
+                                    sample_rate=sample_rate)
+        if comp_level == _CompatibilityLevel.incompatible_fraction:
+            raise ValueError(
+                'The program duration in samples {} is not an integer'.format(program.duration * sample_rate))
+        if comp_level == _CompatibilityLevel.incompatible_too_short:
+            raise ValueError('The program is too short to be a valid waveform. \n'
+                             ' program duration in samples: {} \n'
+                             ' minimal length: {}'.format(program.duration * sample_rate, minimal_waveform_length))
+        if comp_level == _CompatibilityLevel.incompatible_quantum:
+            raise ValueError('The program duration in samples {} '
+                             'is not a multiple of quantum {}'.format(program.duration * sample_rate, waveform_quantum))
+
+        elif comp_level == _CompatibilityLevel.action_required:
+            warnings.warn(
+                "qupulse will now concatenate waveforms to make the pulse/program compatible with the chosen AWG."
+                " This might take some time. If you need this pulse more often it makes sense to write it in a "
+                "way which is more AWG friendly.", MakeCompatibleWarning)
+
+            _make_compatible(program,
+                             min_len=minimal_waveform_length,
+                             quantum=waveform_quantum,
+                             sample_rate=sample_rate)
+
+        else:
+            assert comp_level == _CompatibilityLevel.compatible
+
 
 class ChannelSplit(Exception):
     def __init__(self, channel_sets):
@@ -527,21 +572,7 @@ class ChannelSplit(Exception):
 
 
 def to_waveform(program: Loop) -> Waveform:
-    if program.is_leaf():
-        if program.repetition_count == 1:
-            return program.waveform
-        else:
-            return RepetitionWaveform(program.waveform, program.repetition_count)
-    else:
-        if len(program) == 1:
-            sequenced_waveform = to_waveform(cast(Loop, program[0]))
-        else:
-            sequenced_waveform = SequenceWaveform([to_waveform(cast(Loop, sub_program))
-                                                   for sub_program in program])
-        if program.repetition_count > 1:
-            return RepetitionWaveform(sequenced_waveform, program.repetition_count)
-        else:
-            return sequenced_waveform
+    return program.to_single_waveform()
 
 
 class _CompatibilityLevel(Enum):
@@ -622,32 +653,7 @@ def _make_compatible(program: Loop, min_len: int, quantum: int, sample_rate: Tim
 
 def make_compatible(program: Loop, minimal_waveform_length: int, waveform_quantum: int, sample_rate: TimeType):
     """ check program for compatibility to AWG requirements, make it compatible if necessary and  possible"""
-    comp_level = _is_compatible(program,
-                                min_len=minimal_waveform_length,
-                                quantum=waveform_quantum,
-                                sample_rate=sample_rate)
-    if comp_level == _CompatibilityLevel.incompatible_fraction:
-        raise ValueError('The program duration in samples {} is not an integer'.format(program.duration * sample_rate))
-    if comp_level == _CompatibilityLevel.incompatible_too_short:
-        raise ValueError('The program is too short to be a valid waveform. \n'
-                         ' program duration in samples: {} \n'
-                         ' minimal length: {}'.format(program.duration * sample_rate, minimal_waveform_length))
-    if comp_level == _CompatibilityLevel.incompatible_quantum:
-        raise ValueError('The program duration in samples {} '
-                         'is not a multiple of quantum {}'.format(program.duration * sample_rate, waveform_quantum))
-
-    elif comp_level == _CompatibilityLevel.action_required:
-        warnings.warn("qupulse will now concatenate waveforms to make the pulse/program compatible with the chosen AWG."
-                      " This might take some time. If you need this pulse more often it makes sense to write it in a "
-                      "way which is more AWG friendly.", MakeCompatibleWarning)
-
-        _make_compatible(program,
-                         min_len=minimal_waveform_length,
-                         quantum=waveform_quantum,
-                         sample_rate=sample_rate)
-
-    else:
-        assert comp_level == _CompatibilityLevel.compatible
+    program.make_compatible_inplace(minimal_waveform_length, waveform_quantum, sample_rate)
 
 
 def roll_constant_waveforms(program: Loop, minimal_waveform_quanta: int, waveform_quantum: int, sample_rate: TimeType):

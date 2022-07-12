@@ -34,6 +34,11 @@ class Program(Protocol):
     def duration(self) -> TimeType:
         raise NotImplementedError()
 
+    def make_compatible_inplace(self):
+        # TODO: rename?
+        pass
+
+
 class ProgramBuilder(Protocol):
     """This protocol is used by PulseTemplate to build the program."""
 
