@@ -170,13 +170,14 @@ class PulseTemplateTest(unittest.TestCase):
         with mock.patch.object(template,
                                '_create_program',
                                wraps=get_appending_internal_create_program(dummy_waveform)) as _create_program:
-            program = template.create_program(parameters=parameters,
-                                              measurement_mapping=measurement_mapping,
-                                              channel_mapping=channel_mapping,
-                                              to_single_waveform=to_single_waveform,
-                                              global_transformation=global_transformation,
-                                              volatile=volatile)
-            _create_program.assert_called_once_with(**expected_internal_kwargs, parent_loop=program)
+            with mock.patch('qupulse.pulses.pulse_template.default_program_builder', return_value=default_program_builder()) as _default_program_builder:
+                program = template.create_program(parameters=parameters,
+                                                  measurement_mapping=measurement_mapping,
+                                                  channel_mapping=channel_mapping,
+                                                  to_single_waveform=to_single_waveform,
+                                                  global_transformation=global_transformation,
+                                                  volatile=volatile)
+            _create_program.assert_called_once_with(**expected_internal_kwargs, parent_loop=_default_program_builder.return_value)
         self.assertEqual(expected_program, program)
         self.assertEqual(previos_measurement_mapping, measurement_mapping)
         self.assertEqual(previous_channel_mapping, channel_mapping)
@@ -285,8 +286,9 @@ class PulseTemplateTest(unittest.TestCase):
         with mock.patch.object(template,
                                '_internal_create_program',
                                wraps=get_appending_internal_create_program(dummy_waveform, True)) as _internal_create_program:
-            program = template.create_program()
-            _internal_create_program.assert_called_once_with(**expected_internal_kwargs, parent_loop=program)
+            with mock.patch('qupulse.pulses.pulse_template.default_program_builder', return_value=default_program_builder()) as _default_program_builder:
+                program = template.create_program()
+                _internal_create_program.assert_called_once_with(**expected_internal_kwargs, parent_loop=_default_program_builder.return_value)
         self.assertEqual(expected_program, program)
 
     def test_create_program_channel_mapping(self):
@@ -299,9 +301,9 @@ class PulseTemplateTest(unittest.TestCase):
                                         to_single_waveform=set())
 
         with mock.patch.object(template, '_internal_create_program') as _internal_create_program:
-            template.create_program(channel_mapping={'A': 'C'})
-
-            _internal_create_program.assert_called_once_with(**expected_internal_kwargs, parent_loop=Loop())
+            with mock.patch('qupulse.pulses.pulse_template.default_program_builder', return_value=default_program_builder()) as _default_program_builder:
+                template.create_program(channel_mapping={'A': 'C'})
+                _internal_create_program.assert_called_once_with(**expected_internal_kwargs, parent_loop=_default_program_builder.return_value)
 
     def test_create_program_none(self) -> None:
         template = PulseTemplateStub(defined_channels={'A'}, parameter_names={'foo'})
@@ -322,11 +324,12 @@ class PulseTemplateTest(unittest.TestCase):
 
         with mock.patch.object(template,
                                '_internal_create_program') as _internal_create_program:
-            program = template.create_program(parameters=parameters,
-                                              measurement_mapping=measurement_mapping,
-                                              channel_mapping=channel_mapping,
-                                              volatile=volatile)
-            _internal_create_program.assert_called_once_with(**expected_internal_kwargs, parent_loop=Loop())
+            with mock.patch('qupulse.pulses.pulse_template.default_program_builder', return_value=default_program_builder()) as _default_program_builder:
+                program = template.create_program(parameters=parameters,
+                                                  measurement_mapping=measurement_mapping,
+                                                  channel_mapping=channel_mapping,
+                                                  volatile=volatile)
+                _internal_create_program.assert_called_once_with(**expected_internal_kwargs, parent_loop=_default_program_builder.return_value)
         self.assertIsNone(program)
 
     def test_matmul(self):
