@@ -1214,3 +1214,38 @@ class ReversedWaveform(Waveform):
 
     def reversed(self) -> 'Waveform':
         return self._inner
+
+
+class ArrayWaveform(Waveform):
+    __slots__ = ('_array', '_channel', '_dt_float')
+
+    def __init__(self, channel: ChannelID, array: Sequence[float], dt: TimeType):
+        assert len(array)
+        super().__init__(dt * len(array))
+        self._array = np.asarray(array)
+        self._channel = channel
+        self._dt_float = float(dt)
+
+    def unsafe_sample(self, channel: ChannelID, sample_times: np.ndarray,
+                      output_array: Union[np.ndarray, None] = None) -> np.ndarray:
+        idx = (sample_times / self._dt_float).astype(np.int64)
+        np.clip(idx, 0, len(self._array) - 1)
+
+        if output_array is None:
+            output_array = self._array[idx]
+        else:
+            output_array[:] = self._array[idx]
+        return output_array
+
+    @property
+    def defined_channels(self) -> AbstractSet[ChannelID]:
+        return {self._channel}
+
+    def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> 'Waveform':
+        return self
+
+    def compare_key(self) -> Hashable:
+        return self._channel, self._array.tobytes()
+
+    def reversed(self) -> 'Waveform':
+        return ArrayWaveform(self._channel, self._array[::-1], self.duration / len(self._array))
