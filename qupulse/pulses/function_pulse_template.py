@@ -99,11 +99,15 @@ class FunctionPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
         if channel is None:
             return None
 
+        duration = self.__duration_expression.evaluate_with_exact_rationals(parameters)
+        if duration == 0:
+            return None
+
         if 't' in parameters:
             parameters = {k: v for k, v in parameters.items() if k != 't'}
 
         expression = self.__expression.evaluate_symbolic(substitutions=parameters)
-        duration = self.__duration_expression.evaluate_with_exact_rationals(parameters)
+
 
         return FunctionWaveform(expression=expression,
                                 duration=duration,

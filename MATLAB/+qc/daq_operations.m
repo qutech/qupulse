@@ -20,6 +20,8 @@ function [output, bool, msg] = daq_operations(ctrl, varargin)
 	% --- add ---------------------------------------------------------------
 	if strcmp(ctrl, 'add') % output is operations		 
 		% Call before qc.awg_program('arm')!
+        
+        
 
 		smdata.inst(instIndex).data.virtual_channel = struct( ...
 			'operations', {a.operations} ...
@@ -57,10 +59,10 @@ function [output, bool, msg] = daq_operations(ctrl, varargin)
 	elseif strcmp(ctrl, 'get length') % output is length
 		% Operations need to have been added beforehand
         mask_maker = py.getattr(daq, '_make_mask');
-		masks = util.py.py2mat(py.getattr(daq, '_registered_programs'));
-		masks = util.py.py2mat(masks.(a.program_name));
-		operations = masks.operations;		
-		masks = util.py.py2mat(masks.masks(mask_maker));
+		programs = util.py.py2mat(py.getattr(daq, '_registered_programs'));
+		program = util.py.py2mat(programs.(a.program_name));
+		operations = program.operations;
+		masks = util.py.py2mat(program.masks(mask_maker));
         
 		
 		maskIdsFromOperations = cellfun(@(x)(char(x.maskID)), util.py.py2mat(operations), 'UniformOutput', false);
@@ -81,6 +83,13 @@ function [output, bool, msg] = daq_operations(ctrl, varargin)
 					error('daq_operations assumes that all masks should have the same length if using ComputeRepAverageDefinition.');
 				end				
 				output(k) = n(1);
+            elseif isa(operations{k}, 'py.atsaverage._atsaverage_release.ComputeChunkedAverageDefinition')
+                chunk_size = operations{k}.chunkSize;
+                window_lengths = double(py.numpy.max(py.numpy.asarray(masks{maskIndex}.length, py.numpy.dtype('u8'))));
+                max_chunks_per_window = ceil(window_lengths / chunk_size);
+                n_windows = size(masks{maskIndex}.length);
+                
+                output(k) = max_chunks_per_window * n_windows;
 			else
 				error('Operation ''%s'' not yet implemented', class(operations{k}));
 			end

@@ -180,7 +180,8 @@ class ArithmeticPulseTemplate(PulseTemplate):
                  arithmetic_operator: str,
                  rhs: Union[PulseTemplate, ExpressionLike, Mapping[ChannelID, ExpressionLike]],
                  *,
-                 identifier: Optional[str] = None):
+                 identifier: Optional[str] = None,
+                 registry: Optional[PulseRegistryType] = None):
         """
 
         Args:
@@ -222,6 +223,7 @@ class ArithmeticPulseTemplate(PulseTemplate):
         self._scalar = scalar
 
         self._arithmetic_operator = arithmetic_operator
+        self._register(registry=registry)
 
     @staticmethod
     def _parse_operand(operand: Union[ExpressionLike, Mapping[ChannelID, ExpressionLike]],
