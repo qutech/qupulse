@@ -21,6 +21,10 @@ function pyOperations = operations_to_python(operations)
 				pyOp = py.atsaverage.operations.RepAverage(args{:});
 			case 'RepeatedDownsample'
 				pyOp = py.atsaverage.operations.RepeatedDownsample(args{:});
+            case 'ChunkedAverage'
+                assert(numel(args) == 3);
+                args{3} = py.int(args{3});
+                pyOp = py.atsaverage.operations.ChunkedAverage(args{:});
 			otherwise
 			  error('Operation %s not recognized', operations{k}{1});
 		end		

@@ -20,6 +20,8 @@ function [output, bool, msg] = daq_operations(ctrl, varargin)
 	% --- add ---------------------------------------------------------------
 	if strcmp(ctrl, 'add') % output is operations		 
 		% Call before qc.awg_program('arm')!
+        
+        
 
 		smdata.inst(instIndex).data.virtual_channel = struct( ...
 			'operations', {a.operations} ...
@@ -81,6 +83,13 @@ function [output, bool, msg] = daq_operations(ctrl, varargin)
 					error('daq_operations assumes that all masks should have the same length if using ComputeRepAverageDefinition.');
 				end				
 				output(k) = n(1);
+            elseif isa(operations{k}, 'py.atsaverage._atsaverage_release.ComputeChunkedAverageDefinition')
+                chunk_size = operations{k}.chunkSize;
+                window_lengths = double(py.numpy.max(py.numpy.asarray(masks{maskIndex}.length, py.numpy.dtype('u8'))));
+                max_chunks_per_window = ceil(window_lengths / chunk_size);
+                n_windows = size(masks{maskIndex}.length);
+                
+                output(k) = max_chunks_per_window * n_windows;
 			else
 				error('Operation ''%s'' not yet implemented', class(operations{k}));
 			end
