@@ -227,11 +227,14 @@ class OneBufferPerWindow(BufferStrategy):
                                          buffer_length_divisor: int) -> Tuple[int, int]:
         gcd = None
         for mask in masks:
+            if mask.begin.size < 2:
+                continue
             c_gcd = gcd_set(np.unique(np.diff(mask.begin.as_ndarray())))
             if gcd is None:
                 gcd = c_gcd
             else:
                 gcd = math.gcd(gcd, c_gcd)
+        gcd = gcd or 1
 
         buffer_size = max((gcd // buffer_length_divisor) *  buffer_length_divisor, buffer_length_divisor)
         mtl = self.minimum_total_length(masks)
