@@ -63,7 +63,7 @@ class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
         if isinstance(result, tuple):
             result = numpy.array(result)
         if isinstance(result, numpy.ndarray):
-            if result.shape is ():
+            if result.shape == ():
                 return self._parse_evaluate_numeric_result(result[()], call_arguments)
             if issubclass(result.dtype.type, allowed_types):
                 return result
