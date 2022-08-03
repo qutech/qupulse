@@ -1116,6 +1116,10 @@ class SEQCNode(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
+    def same_playback(self, other: 'SEQCNode') -> bool:
+        pass
+
+    @abc.abstractmethod
     def iter_waveform_playbacks(self) -> Iterator['WaveformPlayback']:
         pass
 
@@ -1186,6 +1190,11 @@ class Scope(SEQCNode):
                 len(self.nodes) == len(other.nodes) and
                 all(n1.same_stepping(n2) for n1, n2 in zip(self.nodes, other.nodes)))
 
+    def same_playback(self, other: 'SEQCNode') -> bool:
+        return (type(other) is Scope and
+                len(self.nodes) == len(other.nodes) and
+                all(n1.same_playback(n2) for n1, n2 in zip(self.nodes, other.nodes)))
+
     def _visit_nodes(self, waveform_manager: ProgramWaveformManager):
         for node in self.nodes:
             node._visit_nodes(waveform_manager)
@@ -1240,6 +1249,11 @@ class Repeat(SEQCNode):
         return (type(self) == type(other) and
                 self.repetition_count == other.repetition_count and
                 self.scope.same_stepping(other.scope))
+
+    def same_playback(self, other: 'Repeat'):
+        return (type(self) == type(other) and
+                self.repetition_count == other.repetition_count and
+                self.scope.same_playback(other.scope))
 
     def stepping_hash(self) -> int:
         return hash((type(self), self.repetition_count, self.scope.stepping_hash()))
@@ -1351,6 +1365,11 @@ class SteppingRepeat(SEQCNode):
                 len(self.node_cluster) == len(other.node_cluster) and
                 self.node_cluster[0].same_stepping(other.node_cluster[0]))
 
+    def same_playback(self, other: 'SEQCNode') -> bool:
+        return (type(other) is SteppingRepeat and
+                len(self.node_cluster) == len(other.node_cluster) and
+                all(n1.same_playback(n2) for n1, n2 in zip(self.node_cluster, other.node_cluster)))
+
     def _visit_nodes(self, waveform_manager: ProgramWaveformManager):
         for node in self.node_cluster:
             node._visit_nodes(waveform_manager)
@@ -1421,6 +1440,10 @@ class WaveformPlayback(SEQCNode):
         else:
             return same_type and self.samples() == other.samples()
 
+    def same_playback(self, other: 'SEQCNode') -> bool:
+        return (type(other) is WaveformPlayback
+                and self.waveform == other.waveform)
+
     def iter_waveform_playbacks(self) -> Iterator['WaveformPlayback']:
         yield self
 
@@ -1446,3 +1469,48 @@ class WaveformPlayback(SEQCNode):
             else:
                 advance_cmd = self.ADVANCE_DISABLED_COMMENT
             yield play_cmd + advance_cmd
+
+
+class HackWF:
+    def __init__(self):
+        self.memory = 0
+
+    def request_concatenated(self, wf: Tuple[BinaryWaveform, ...]):
+        self.memory += wf[0].data.size
+
+
+def detect_subroutines(program: SEQCNode, min_wf_memory: int):
+    candidates: List[List[SEQCNode]] = []
+    stack: List[SEQCNode] = [program]
+    while stack:
+        current = stack.pop()
+        m = HackWF()
+        current._visit_nodes(m)
+        if m.memory < min_wf_memory:
+            continue
+
+        for cs in candidates:
+            if cs[0].same_playback(current):
+                cs.append(current)
+            else:
+                cs.append([current])
+                if isinstance(current, Scope):
+                    stack.extend(current.nodes)
+                elif isinstance(current, Repeat):
+                    stack.append(current.scope)
+                elif isinstance(current, SteppingRepeat):
+                    stack.extend(current.node_cluster)
+                else:
+                    assert isinstance(stack, WaveformPlayback)
+
+    candidates = [cs
+                  for cs in candidates
+                  if len(cs) > 1]
+
+    
+
+
+
+
+
+
