@@ -21,6 +21,7 @@ from qupulse._program.transformation import Transformation
 from qupulse.comparable import Comparable
 from qupulse.expressions import ExpressionScalar
 from qupulse.pulses.interpolation import InterpolationStrategy
+from qupulse.pulses.function_pulse_template import ConstantFunctionPulseTemplateWarning
 from qupulse.utils import checked_int_cast, isclose
 from qupulse.utils.types import TimeType, time_from_float, FrozenDict
 from qupulse._program.transformation import Transformation
@@ -470,7 +471,7 @@ class FunctionWaveform(Waveform):
             raise ValueError('FunctionWaveforms may not depend on anything but "t"')
         elif not expression.variables:
             warnings.warn("Constant FunctionWaveform is not recommended as the constant propagation will be suboptimal",
-                          category=UserWarning)
+                          category=ConstantFunctionPulseTemplateWarning)
         super().__init__(duration=_to_time_type(duration))
         self._expression = expression
         self._channel_id = channel

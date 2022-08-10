@@ -22,6 +22,9 @@ from qupulse._program.waveforms import FunctionWaveform
 
 __all__ = ["FunctionPulseTemplate"]
 
+class ConstantFunctionPulseTemplateWarning(UserWarning):
+    """  This warning indicates a constant waveform is constructed from a FunctionPulseTemplate """
+    pass
 
 class FunctionPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
     """Defines a pulse via a time-domain expression.
