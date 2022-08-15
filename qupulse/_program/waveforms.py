@@ -26,9 +26,13 @@ from qupulse.utils.types import TimeType, time_from_float, FrozenDict
 from qupulse._program.transformation import Transformation
 from qupulse.utils import pairwise
 
+class ConstantFunctionPulseTemplateWarning(UserWarning):
+    """  This warning indicates a constant waveform is constructed from a FunctionPulseTemplate """
+    pass
 
 __all__ = ["Waveform", "TableWaveform", "TableWaveformEntry", "FunctionWaveform", "SequenceWaveform",
-           "MultiChannelWaveform", "RepetitionWaveform", "TransformingWaveform", "ArithmeticWaveform"]
+           "MultiChannelWaveform", "RepetitionWaveform", "TransformingWaveform", "ArithmeticWaveform",
+           "ConstantFunctionPulseTemplateWarning"]
 
 PULSE_TO_WAVEFORM_ERROR = None  # error margin in pulse template to waveform conversion
 
@@ -470,7 +474,7 @@ class FunctionWaveform(Waveform):
             raise ValueError('FunctionWaveforms may not depend on anything but "t"')
         elif not expression.variables:
             warnings.warn("Constant FunctionWaveform is not recommended as the constant propagation will be suboptimal",
-                          category=UserWarning)
+                          category=ConstantFunctionPulseTemplateWarning)
         super().__init__(duration=_to_time_type(duration))
         self._expression = expression
         self._channel_id = channel
