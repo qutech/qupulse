@@ -637,9 +637,9 @@ class SequenceWaveform(Waveform):
         return self._duration
 
     def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> 'Waveform':
-        return SequenceWaveform(
+        return SequenceWaveform.from_sequence([
             sub_waveform.unsafe_get_subset_for_channels(channels & sub_waveform.defined_channels)
-            for sub_waveform in self._sequenced_waveforms if sub_waveform.defined_channels & channels)
+            for sub_waveform in self._sequenced_waveforms if sub_waveform.defined_channels & channels])
 
     @property
     def sequenced_waveforms(self) -> Sequence[Waveform]:
