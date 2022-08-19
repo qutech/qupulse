@@ -65,7 +65,7 @@ class ArithmeticAtomicPulseTemplateTest(unittest.TestCase):
 
         # channel a in both
         with mock.patch.object(a, 'build_waveform', return_value=wf_a) as build_a, mock.patch.object(b, 'build_waveform', return_value=wf_b) as build_b:
-            with mock.patch('qupulse.pulses.arithmetic_pulse_template.ArithmeticWaveform', return_value=wf_arith) as wf_init:
+            with mock.patch('qupulse.pulses.arithmetic_pulse_template.ArithmeticWaveform.from_operator', return_value=wf_arith) as wf_init:
                 wf_init.rhs_only_map.__getitem__.return_value.return_value = wf_rhs_only
                 self.assertIs(wf_arith, arith.build_waveform(parameters=parameters, channel_mapping=channel_mapping))
                 wf_init.assert_called_once_with(wf_a, '-', wf_b)
