@@ -126,7 +126,7 @@ class ArithmeticAtomicPulseTemplate(AtomicPulseTemplate):
         if lhs is None:
             return ArithmeticWaveform.rhs_only_map[self.arithmetic_operator](rhs)
         else:
-            return ArithmeticWaveform(lhs, self.arithmetic_operator, rhs)
+            return ArithmeticWaveform.from_operator(lhs, self.arithmetic_operator, rhs)
 
     def get_measurement_windows(self,
                                 parameters: Dict[str, Real],

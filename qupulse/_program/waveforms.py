@@ -198,7 +198,7 @@ class Waveform(Comparable, metaclass=ABCMeta):
         return None
 
     def __neg__(self):
-        return FunctorWaveform(self, {ch: np.negative for ch in self.defined_channels})
+        return FunctorWaveform.from_functor(self, {ch: np.negative for ch in self.defined_channels})
 
     def __pos__(self):
         return self
@@ -209,6 +209,7 @@ class Waveform(Comparable, metaclass=ABCMeta):
 
     def reversed(self) -> 'Waveform':
         """Returns a reversed version of this waveform."""
+        # We don't check for constness here because const waveforms are supposed to override this method
         return ReversedWaveform(self)
 
 
@@ -849,9 +850,10 @@ class RepetitionWaveform(Waveform):
     def compare_key(self) -> Tuple[Any, int]:
         return self._body.compare_key, self._repetition_count
 
-    def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> 'RepetitionWaveform':
-        return RepetitionWaveform(body=self._body.unsafe_get_subset_for_channels(channels),
-                                  repetition_count=self._repetition_count)
+    def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> Waveform:
+        return RepetitionWaveform.from_repetition_count(
+            body=self._body.unsafe_get_subset_for_channels(channels),
+            repetition_count=self._repetition_count)
 
     def is_constant(self) -> bool:
         return self._body.is_constant()
@@ -1175,8 +1177,9 @@ class FunctorWaveform(Waveform):
         return self._functor[channel](inner_output, out=inner_output)
 
     def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> Waveform:
-        return FunctorWaveform(self._inner_waveform.unsafe_get_subset_for_channels(channels),
-                               {ch: self._functor[ch] for ch in channels})
+        return FunctorWaveform.from_functor(
+            self._inner_waveform.unsafe_get_subset_for_channels(channels),
+            {ch: self._functor[ch] for ch in channels})
 
     @property
     def compare_key(self) -> Tuple[Waveform, FrozenSet]:
@@ -1191,6 +1194,13 @@ class ReversedWaveform(Waveform):
     def __init__(self, inner: Waveform):
         super().__init__(duration=inner.duration)
         self._inner = inner
+
+    @classmethod
+    def from_to_reverse(cls, inner: Waveform) -> Waveform:
+        if inner.constant_value_dict():
+            return inner
+        else:
+            return cls(inner)
 
     def unsafe_sample(self, channel: ChannelID, sample_times: np.ndarray,
                       output_array: Union[np.ndarray, None] = None) -> np.ndarray:
@@ -1210,7 +1220,7 @@ class ReversedWaveform(Waveform):
         return self._inner.defined_channels
 
     def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> 'Waveform':
-        return ReversedWaveform(self._inner.unsafe_get_subset_for_channels(channels))
+        return ReversedWaveform.from_to_reverse(self._inner.unsafe_get_subset_for_channels(channels))
 
     @property
     def compare_key(self) -> Hashable:
