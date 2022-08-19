@@ -134,7 +134,7 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
         if len(sub_waveforms) == 1:
             waveform = sub_waveforms[0]
         else:
-            waveform = MultiChannelWaveform(sub_waveforms)
+            waveform = MultiChannelWaveform.from_parallel(sub_waveforms)
 
         if self._duration:
             expected_duration = self._duration.evaluate_numeric(**parameters)
