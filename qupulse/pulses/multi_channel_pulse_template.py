@@ -249,7 +249,7 @@ class ParallelConstantChannelPulseTemplate(PulseTemplate):
             overwritten_channels = self._get_overwritten_channels_values(parameters=parameters,
                                                                          channel_mapping=channel_mapping)
             transformation = ParallelConstantChannelTransformation(overwritten_channels)
-            return TransformingWaveform(inner_waveform, transformation)
+            return TransformingWaveform.from_transformation(inner_waveform, transformation)
 
     @property
     def defined_channels(self) -> Set[ChannelID]:

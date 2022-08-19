@@ -502,12 +502,12 @@ class ArithmeticPulseTemplateTest(unittest.TestCase):
         self.assertIs(NotImplemented, try_operation(npt, '//', 6))
 
     def test_build_waveform(self):
-        pt = DummyPulseTemplate(defined_channels={'a'})
+        pt = DummyPulseTemplate(defined_channels={'a'}, duration=6)
 
         parameters = dict(x=5., y=5.7)
         channel_mapping = dict(a='u', b='v')
 
-        inner_wf = mock.Mock(spec=DummyWaveform)
+        inner_wf = DummyWaveform(duration=6, defined_channels={'a'})
         trafo = mock.Mock(spec=IdentityTransformation())
 
         arith = ArithmeticPulseTemplate(pt, '-', 6)
