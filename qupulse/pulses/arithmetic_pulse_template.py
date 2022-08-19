@@ -357,7 +357,7 @@ class ArithmeticPulseTemplate(PulseTemplate):
         transformation = self._get_transformation(parameters=parameters,
                                                   channel_mapping=channel_mapping)
 
-        return TransformingWaveform(inner_waveform, transformation=transformation)
+        return TransformingWaveform.from_transformation(inner_waveform, transformation=transformation)
 
     def __repr__(self):
         if any(v for k, v in super().get_serialization_data().items() if k != '#type'):
