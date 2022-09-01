@@ -47,7 +47,7 @@ if strcmp(ctrl, 'add')
             ... Resolve mappings from abstracted to hardware-known
             qc.resolve_mappings(a.channel_mapping, plsdata.awg.defaultChannelMapping), ...
             qc.resolve_mappings(a.window_mapping, plsdata.awg.defaultWindowMapping), ...
-            map_transformation_channels(a.global_transformation, plsdata.awg.defaultChannelMapping));
+            map_transformation_channels(a.global_transformation, plsdata.awg.globalTransformation));
         
         plsdata.awg.registeredPrograms.(a.program_name) = program;
         
@@ -79,6 +79,10 @@ if strcmp(ctrl, 'add')
             'window_mapping', program.window_mapping, ...
             'global_transformation', program.global_transformation ...
             );
+        
+        if instantiated_pulse == py.None
+            error("The created pulse has zero duration.");
+        end
         
         if a.verbosity > 9
             fprintf('took %.0fs\n', toc);
@@ -347,9 +351,11 @@ if ~isempty(add_marker)
     
     pulse_template = py.qupulse.pulses.ParallelConstantChannelPT(pulse_template, marker_values);
     
-    marker_pulse = py.qctoolkit.pulses.PointPT({{0, 1},...
-        {py.getattr(pulse_template, 'duration'), 1}}, add_marker);
-    pulse_template = py.qctoolkit.pulses.AtomicMultiChannelPT(pulse_template, marker_pulse);
+    % This is the old evil code
+    % remove at some point S.H.
+%     marker_pulse = py.qctoolkit.pulses.PointPT({{0, 1},...
+%         {py.getattr(pulse_template, 'duration'), 1}}, add_marker);
+%     pulse_template = py.qctoolkit.pulses.AtomicMultiChannelPT(pulse_template, marker_pulse);
     
     for ii = 1:numel(add_marker)
         channel_mapping.(add_marker{ii}) = add_marker{ii};

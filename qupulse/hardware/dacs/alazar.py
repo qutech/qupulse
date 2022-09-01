@@ -227,7 +227,7 @@ class OneBufferPerWindow(BufferStrategy):
                                          buffer_length_divisor: int) -> Tuple[int, int]:
         gcd = None
         for mask in masks:
-            if mask.begin.size < 2:
+            if len(mask.begin) < 2:
                 continue
             c_gcd = gcd_set(np.unique(np.diff(mask.begin.as_ndarray())))
             if gcd is None:
@@ -327,8 +327,11 @@ class AlazarCard(DAC):
         if mask_type not in ('auto', 'cross_buffer', None):
             warnings.warn("Currently only CrossBufferMask is implemented.")
 
-        if np.any(begins[:-1]+lengths[:-1] > begins[1:]):
-            raise ValueError('Found overlapping windows in begins')
+        if np.any(begins[:-1] + lengths[:-1] > begins[1:]):
+            warnings.warn("Found overlapping measurement windows. Ignore warning to enable automatic shrinking.",
+                          category=WindowOverlapWarning)
+            begins, lengths = _shrink_overlapping_windows(begins, lengths)
+
 
         mask = CrossBufferMask()
         mask.identifier = mask_id
@@ -476,3 +479,23 @@ class AlazarCard(DAC):
             data[op_name] = scanline_data.operationResults[op_name].getAsVoltage(input_range)
 
         return data
+
+
+class WindowOverlapWarning(RuntimeWarning):
+    pass
+
+
+def _shrink_overlapping_windows(begins, lengths):
+    ends = begins + lengths
+
+    overlaps = np.zeros_like(ends)
+    np.maximum(ends[:-1] - begins[1:], 0, out=overlaps[1:])
+
+    if np.any(overlaps >= lengths):
+        raise ValueError("Overlap is bigger than measurement window")
+
+    begins = begins + overlaps
+    lengths = lengths - overlaps
+
+    assert not np.any((begins+lengths)[:-1] > begins[1:])
+    return begins, lengths

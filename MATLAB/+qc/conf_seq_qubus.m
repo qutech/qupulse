@@ -34,6 +34,7 @@ defaultArgs = struct(...
     'parameters_and_dicts',  {plsdata.awg.defaultParametersAndDicts}, ...
     'channel_mapping',       plsdata.awg.defaultChannelMapping, ...
     'window_mapping',        plsdata.awg.defaultWindowMapping, ...
+    'global_transformation', plsdata.awg.globalTransformation, ...
     'add_marker',            {plsdata.awg.defaultAddMarker}, ...
     'force_update',          false, ...
     ...
@@ -113,14 +114,12 @@ scan.data.conf_seq_args = aOriginal;
 % Hack to mix DAC sweep with AWG scan.
 if ~isempty(a.dac_scan)
     scan.loops(1).getchan = {'ATSV', 'time'};
-    scan.loops(1).setchan = {a.dac_scan.channel};% {'count'};
+    scan.loops(1).setchan = a.dac_scan.channel;% {'count'};
     scan.loops(1).ramptime = [];
     scan.loops(1).npoints = a.dac_scan.npoints; %a.nrep;
     scan.loops(1).rng = a.dac_scan.range;%[]
     if ~isempty(a.dac_scan.trafo)
-        scan.loops(1).setchan = {a.dac_scan.channel a.dac_scan.trafo.channel};
-        scan.loops(1).trafofn(2).fn = a.dac_scan.compst;   
-        scan.loops(1).trafofn(2).args = a.dac_scan.trafo.args;
+        scan.loops(1).trafofn = a.dac_scan.trafo;
     end
 else
     scan.loops(1).getchan = {'ATSV', 'time'};
@@ -314,7 +313,9 @@ for opInd = 1:numel(a.procfn_ops) % count through operations
         'inchan',  inchan, ...
         'outchan', nProcFn + opInd ...
         );
-    scan.loops(1).procfn(end).dim = a.procfn_ops{opInd}{3};
+    if ~isempty(a.procfn_ops{opInd}{3})
+        scan.loops(1).procfn(end).dim = a.procfn_ops{opInd}{3};
+    end
     if numel(a.procfn_ops{opInd}) >= 5
         scan.loops(1).procfn(end).identifier = a.procfn_ops{opInd}{5};
     end

@@ -1,0 +1,36 @@
+diff --cc qupulse/hardware/dacs/alazar.py
+index abba0a3,9f4f984..0000000
+--- a/qupulse/hardware/dacs/alazar.py
++++ b/qupulse/hardware/dacs/alazar.py
+@@@ -1,9 -1,5 +1,9 @@@
+- from typing import Dict, Any, Optional, Tuple, Sequence
+ -from typing import Dict, Any, Optional, Tuple, List, Iterable, Callable
+++from typing import Dict, Any, Optional, Tuple, List, Iterable, Callable, Sequence
+  from collections import defaultdict
+ +import logging
+ +import math
+ +import functools
+ +import abc
+  
+  import numpy as np
+  
+@@@ -222,12 -157,16 +278,11 @@@ class AlazarCard(DAC)
+              elif config.totalRecordSize < total_record_size:
+                  raise ValueError('specified total record size is smaller than needed {} < {}'.format(config.totalRecordSize,
+                                                                                                       total_record_size))
+ -            
+              old_aimed_buffer_size = config.aimedBufferSize
+ -            
+ -            # work around for measurments not working with one buffer
+ -            if config.totalRecordSize < 5*config.aimedBufferSize:
+ -                config.aimedBufferSize = config.totalRecordSize // 5
+  
+-             config.aimedBufferSize, config.totalRecordSize = self.buffer_strategy.calculate_acquisition_properties(config.masks, self.__card.minimum_record_size)
+-             config.apply(self.__card, True)
++             self.__card.applyConfiguration(config, True)
+  
+ -            # "Hide" work around from the user
+ +            # Keep user value
+              config.aimedBufferSize = old_aimed_buffer_size
+  
+              self.update_settings = False

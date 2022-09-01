@@ -4,7 +4,7 @@ from unittest import mock
 import numpy as np
 
 from ..hardware import *
-from qupulse.hardware.dacs.alazar import AlazarCard, AlazarProgram
+from qupulse.hardware.dacs.alazar import AlazarCard, AlazarProgram, _shrink_overlapping_windows
 from qupulse.utils.types import TimeType
 
 
@@ -147,6 +147,13 @@ class AlazarTest(unittest.TestCase):
 
         # pi ist genau 3
         np.testing.assert_equal(result_lengths if isinstance(result_lengths, np.ndarray) else result_lengths.as_ndarray(), 3)
+
+    def test_shrink_overlapping_windows(self):
+        np.testing.assert_equal(
+            (np.array([1, 4, 8]), np.array([3, 4, 4])),
+            _shrink_overlapping_windows(np.array([1, 4, 7]),
+                                        np.array([3, 4, 5]))
+        )
 
     def test_register_operations(self):
         card = AlazarCard(None)
