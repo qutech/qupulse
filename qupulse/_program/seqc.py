@@ -20,6 +20,7 @@ import itertools
 import inspect
 import logging
 import hashlib
+from weakref import WeakValueDictionary
 from collections import OrderedDict
 import re
 import collections
@@ -225,6 +226,7 @@ class ConcatenatedWaveform:
 
 class WaveformFileSystem:
     logger = logging.getLogger('qupulse.hdawg.waveforms')
+    _by_path = WeakValueDictionary()
 
     def __init__(self, path: Path):
         """This class coordinates multiple AWGs (channel pairs) using the same file system to store the waveforms.
@@ -234,6 +236,11 @@ class WaveformFileSystem:
         """
         self._required = {}
         self._path = path
+    
+    @classmethod
+    def get_waveform_file_system(cls, path: Path) -> 'WaveformFileSystem':
+        """Get the instance for the given path. Multiple instances that access the same path lead to inconsistencies."""
+        return cls._by_path.setdefault(path, cls(path))
 
     def sync(self, client: 'WaveformMemory', waveforms: Mapping[str, BinaryWaveform], **kwargs):
         """Write the required waveforms to the filesystem."""
