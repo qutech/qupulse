@@ -491,6 +491,7 @@ class HDAWGChannelGroup(AWG):
         self._start_compile_and_upload()
 
     def _start_compile_and_upload(self):
+        self._uploaded_seqc_source = None
         self._upload_generator = self._elf_manager.compile_and_upload(self._required_seqc_source)
 
     def _wait_for_compile_and_upload(self):
@@ -981,7 +982,10 @@ class ELFManager:
             assert elf_upload == 0
 
     def _upload(self, elf_file) -> Generator[str, str, None]:
-        self._start_elf_upload(elf_file)
+        if self.awg_module.compiler_upload:
+            pass
+        else:
+            self._start_elf_upload(elf_file)
 
         while True:
             self._update_upload_job_status()
