@@ -1,3 +1,4 @@
+import abc
 from pathlib import Path
 import functools
 from typing import Tuple, Set, Callable, Optional, Mapping, Generator, Union, List, Dict
@@ -334,7 +335,7 @@ class HDAWGChannelGroup(AWG):
         self.awg_module.set('awgModule/device', self.device.serial)
         self.awg_module.set('awgModule/index', self.awg_group_index)
         self.awg_module.execute()
-        self._elf_manager = ELFManager(self.awg_module)
+        self._elf_manager = SimpleELFManager(self.awg_module)
 
     def disconnect_group(self):
         """Disconnect this group from device so groups of another size can be used"""
@@ -637,83 +638,172 @@ class HDAWGChannelGroup(AWG):
         return tuple(map(self.device.offset, self._channels()))
 
 
-class ELFManager:
-    class AWGModule:
-        def __init__(self, awg_module: zhinst.ziPython.AwgModule):
-            """Provide an easily mockable interface to the zhinst AwgModule object"""
-            self._module = awg_module
-
-        @property
-        def src_dir(self) -> pathlib.Path:
-            return pathlib.Path(self._module.getString('directory'), 'awg', 'src')
-
-        @property
-        def elf_dir(self) -> pathlib.Path:
-            return pathlib.Path(self._module.getString('directory'), 'awg', 'elf')
-
-        @property
-        def compiler_start(self) -> bool:
-            """True if the compiler is running"""
-            return self._module.getInt('compiler/start') == 1
-
-        @compiler_start.setter
-        def compiler_start(self, value: bool):
-            """Set true to start the compiler"""
-            self._module.set('compiler/start', value)
-
-        @property
-        def compiler_status(self) -> Tuple[int, str]:
-            return self._module.getInt('compiler/status'), self._module.getString('compiler/statusstring')
-
-        @property
-        def compiler_source_file(self) -> str:
-            return self._module.getString('compiler/sourcefile')
-
-        @compiler_source_file.setter
-        def compiler_source_file(self, source_file: str):
-            self._module.set('compiler/sourcefile', source_file)
-
-        @property
-        def compiler_upload(self) -> bool:
-            """auto upload after compiling"""
-            return self._module.getInt('compiler/upload') == 1
-
-        @compiler_upload.setter
-        def compiler_upload(self, value: bool):
-            self._module.set('compiler/upload', value)
-
-        @property
-        def elf_file(self) -> str:
-            return self._module.getString('elf/file')
-
-        @elf_file.setter
-        def elf_file(self, elf_file: str):
-            self._module.set('elf/file', elf_file)
-
-        @property
-        def elf_upload(self) -> bool:
-            return bool(self._module.getInt('elf/upload'))
-
-        @elf_upload.setter
-        def elf_upload(self, value: bool):
-            self._module.set('elf/upload', value)
-
-        @property
-        def elf_status(self) -> Tuple[int, float]:
-            return self._module.getInt('elf/status'), self._module.getDouble('progress')
-
-        @property
-        def index(self) -> int:
-            return self._module.getInt('index')
-
+class AWGModule:
     def __init__(self, awg_module: zhinst.ziPython.AwgModule):
-        """This class organizes compiling and uploading of compiled programs. The source code file is named based on the
+        """Provide an easily mockable interface to the zhinst AwgModule object"""
+        self._module = awg_module
+
+    @property
+    def src_dir(self) -> pathlib.Path:
+        return pathlib.Path(self._module.getString('directory'), 'awg', 'src')
+
+    @property
+    def elf_dir(self) -> pathlib.Path:
+        return pathlib.Path(self._module.getString('directory'), 'awg', 'elf')
+
+    @property
+    def compiler_start(self) -> bool:
+        """True if the compiler is running. Set true to start the compiler."""
+        return self._module.getInt('compiler/start') == 1
+
+    @property
+    def compiler_status(self) -> Tuple[int, str]:
+        return self._module.getInt('compiler/status'), self._module.getString('compiler/statusstring')
+
+    @property
+    def compiler_source_file(self) -> str:
+        return self._module.getString('compiler/sourcefile')
+
+    @compiler_source_file.setter
+    def compiler_source_file(self, source_file: str):
+        self._module.set('compiler/sourcefile', source_file)
+
+    @property
+    def compiler_source_string(self) -> str:
+        return self._module.getString('compiler/sourcestring')
+
+    @compiler_source_string.setter
+    def compiler_source_string(self, source_string: str):
+        self._module.set('compiler/sourcestring', source_string)
+
+    @property
+    def compiler_upload(self) -> bool:
+        """Auto upload after compiling"""
+        return self._module.getInt('compiler/upload') == 1
+
+    @compiler_upload.setter
+    def compiler_upload(self, value: bool):
+        self._module.set('compiler/upload', value)
+
+    @property
+    def elf_file(self) -> str:
+        return self._module.getString('elf/file')
+
+    @elf_file.setter
+    def elf_file(self, elf_file: str):
+        self._module.set('elf/file', elf_file)
+
+    @property
+    def elf_upload(self) -> bool:
+        return bool(self._module.getInt('elf/upload'))
+
+    @elf_upload.setter
+    def elf_upload(self, value: bool):
+        self._module.set('elf/upload', value)
+
+    @property
+    def elf_status(self) -> Tuple[int, float]:
+        return self._module.getInt('elf/status'), self._module.getDouble('progress')
+
+    @property
+    def index(self) -> int:
+        return self._module.getInt('index')
+
+    @property
+    def mds_enable(self) -> bool:
+        return bool(self._module.getInt('mds/enable'))
+
+    @mds_enable.setter
+    def mds_enable(self, value: bool):
+        self._module.set('mds/enable', value)
+
+
+class ELFManager(abc.ABC):
+    def __init__(self, awg_module: AWGModule):
+        self.awg_module = awg_module
+
+    def clear(self):
+        """Clear all cached data."""
+        pass
+
+    def handle_compiler_status(self, status: Optional[Tuple[int, str]] = None) -> int:
+        status_int, msg = self.awg_module.compiler_status if status is None else status
+        assert status_int in (-1, 0, 1, 2)
+        if status_int in (-1, 0):
+            pass
+        elif status_int == 1:
+            HDAWGRuntimeError(f"AWG {self.awg_module.index}: Compilation failed", msg)
+        elif status_int == 2:
+            logger.warning("AWG %d: Compilation finished with warning: %s", self.awg_module.index, msg)
+        return status_int
+
+    def handle_elf_status(self, status: Optional[Tuple[int, float]]) -> float:
+        status_int, progress = self.awg_module.elf_status if status is None else status
+        if status_int == 0:
+            pass
+        elif status_int == 1:
+            raise HDAWGRuntimeError("ELF upload failed")
+        elif status_int == 2:
+            pass
+        return progress
+
+    @abc.abstractmethod
+    def compile_and_upload(self, source_string: str) -> Generator[str, str, None]:
+        """The source code is saved to a file determined by the source hash, compiled and uploaded to the instrument.
+        The function returns a generator that yields the current state of the progress. The generator is empty iff the
+        upload is complete. An exception is raised if there is an error.
+
+        To abort send 'abort' to the generator.
+
+        Example:
+            >>> my_source = 'playWave("my_wave");'
+            >>> for state in elf_manager.compile_and_upload(my_source):
+            ...     print('Current state:', state)
+            ...     time.sleep(1)
+
+        Args:
+            source_string: Source code to compile
+
+        Returns:
+            Generator object that needs to be consumed
+        """
+
+
+class SimpleELFManager(ELFManager):
+    def __init__(self, awg_module: AWGModule):
+        super(SimpleELFManager, self).__init__(awg_module)
+        self._last_set_source = None
+        self._last_uploaded_source = None
+
+        # automatically upload ELF after compilation
+        self.awg_module.compiler_upload = True
+
+    def compile_and_upload(self, source_string: str) -> Generator[str, str, None]:
+        self._last_set_source = source_string
+        self.awg_module.compiler_source_string = source_string
+        while self.handle_compiler_status(self.awg_module.compiler_status) == -1:
+            cmd = yield 'compiling'
+            if cmd == 'abort':
+                NotImplementedError("Abort not implemented yet")
+        # an error would raise an exception in handle_compiler_status
+
+        progress = self.handle_elf_status(self.awg_module.elf_status)
+        while progress < 1.:
+            cmd = yield 'uploading @ %d%%' % (100*progress)
+            if cmd == 'abort':
+                NotImplementedError("Abort not implemented yet")
+        self._last_uploaded_source = source_string
+
+
+class OptimizedELFManager(ELFManager):
+    def __init__(self, awg_module: zhinst.ziPython.AwgModule):
+        """ This class organizes compiling and uploading of compiled programs. The source code file is named based on the
         code hash to cache compilation results. This requires that the waveform names are unique.
 
         The compilation and upload itself are done asynchronously by zhinst.ziPython. To avoid spawning a useless
         thread for updating the status the method :py:meth:`~ELFManager.compile_and_upload` returns a generator which
         talks to the undelying library when needed."""
-        self.awg_module = self.AWGModule(awg_module)
+        super().__init__(AWGModule(awg_module) if type(awg_module).__module__.startswith('zhinst.') else awg_module)
 
         # automatically upload after successful compilation
         self.awg_module.compiler_upload = True
