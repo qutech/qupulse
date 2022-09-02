@@ -812,7 +812,7 @@ class HDAWGProgramManager:
         assert self._programs[name].name == name
         return self._programs[name].selection_index
 
-    def to_seqc_program(self) -> str:
+    def to_seqc_program(self, single_program: Optional[str]=None) -> str:
         lines = []
         for const_name, const_val in self.Constants.as_dict().items():
             if isinstance(const_val, (int, str)):
@@ -829,44 +829,56 @@ class HDAWGProgramManager:
         replacements = self._waveform_memory.waveform_name_replacements()
 
         lines.append('\n// program definitions')
-        for program_name, program in self.programs.items():
-            program_function_name = self.get_program_function_name(program_name)
+        if single_program:
+            program = self.programs[single_program]
+            program_function_name = self.get_program_function_name(single_program)
             lines.append('void {program_function_name}() {{'.format(program_function_name=program_function_name))
             lines.append(replace_multiple(program.seqc_source, replacements))
             lines.append('}\n')
 
+        else:
+            for program_name, program in self.programs.items():
+                program_function_name = self.get_program_function_name(program_name)
+                lines.append('void {program_function_name}() {{'.format(program_function_name=program_function_name))
+                lines.append(replace_multiple(program.seqc_source, replacements))
+                lines.append('}\n')
+
         lines.append(self.GlobalVariables.get_init_block())
 
         lines.append('\n// runtime block')
-        lines.append('while (true) {')
-        lines.append('  // read program selection value')
-        lines.append('  prog_sel = getUserReg(PROG_SEL_REGISTER);')
-        lines.append('  ')
-        lines.append('  // calculate value to write back to PROG_SEL_REGISTER')
-        lines.append('  new_prog_sel = prog_sel | playback_finished;')
-        lines.append('  if (!(prog_sel & NO_RESET_MASK)) new_prog_sel &= INVERTED_PROG_SEL_MASK;')
-        lines.append('  setUserReg(PROG_SEL_REGISTER, new_prog_sel);')
-        lines.append('  ')
-        lines.append('  // reset playback flag')
-        lines.append('  playback_finished = 0;')
-        lines.append('  ')
-        lines.append('  // only use part of prog sel that does not mean other things to select the program.')
-        lines.append('  prog_sel &= PROG_SEL_MASK;')
-        lines.append('  ')
-        lines.append('  switch (prog_sel) {')
+        if single_program:
+            lines.append(f"{program_function_name}();")
+        
+        else:
+            lines.append('while (true) {')
+            lines.append('  // read program selection value')
+            lines.append('  prog_sel = getUserReg(PROG_SEL_REGISTER);')
+            lines.append('  ')
+            lines.append('  // calculate value to write back to PROG_SEL_REGISTER')
+            lines.append('  new_prog_sel = prog_sel | playback_finished;')
+            lines.append('  if (!(prog_sel & NO_RESET_MASK)) new_prog_sel &= INVERTED_PROG_SEL_MASK;')
+            lines.append('  setUserReg(PROG_SEL_REGISTER, new_prog_sel);')
+            lines.append('  ')
+            lines.append('  // reset playback flag')
+            lines.append('  playback_finished = 0;')
+            lines.append('  ')
+            lines.append('  // only use part of prog sel that does not mean other things to select the program.')
+            lines.append('  prog_sel &= PROG_SEL_MASK;')
+            lines.append('  ')
 
-        for program_name, program_entry in self.programs.items():
-            program_function_name = self.get_program_function_name(program_name)
-            lines.append('    case {selection_index}:'.format(selection_index=program_entry.selection_index))
-            lines.append('      {program_function_name}();'.format(program_function_name=program_function_name))
-            lines.append('      waitWave();')
-            lines.append('      playback_finished = PLAYBACK_FINISHED_MASK;')
+            lines.append('  switch (prog_sel) {')
+            for program_name, program_entry in self.programs.items():
+                program_function_name = self.get_program_function_name(program_name)
+                lines.append('    case {selection_index}:'.format(selection_index=program_entry.selection_index))
+                lines.append('      {program_function_name}();'.format(program_function_name=program_function_name))
+                lines.append('      waitWave();')
+                lines.append('      playback_finished = PLAYBACK_FINISHED_MASK;')
 
-        lines.append('    default:')
-        lines.append('      wait(IDLE_WAIT_CYCLES);')
-        lines.append('  }')
-        lines.append('}')
-
+            lines.append('    default:')
+            lines.append('      wait(IDLE_WAIT_CYCLES);')
+            lines.append('  }')
+            lines.append('}')
+        
         return '\n'.join(lines)
 
 
