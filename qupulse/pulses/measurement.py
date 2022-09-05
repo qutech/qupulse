@@ -2,22 +2,39 @@ from typing import Optional, List, Tuple, Union, Dict, Set, Mapping
 from numbers import Real
 import itertools
 
-from qupulse.expressions import Expression
+from qupulse.expressions import ExpressionScalar, ExpressionLike
 from qupulse.utils.types import MeasurementWindow
 from qupulse.parameter_scope import Scope
+from qupulse.pulses.range import ParametrizedRange, RangeLike, RangeScope
 
-MeasurementDeclaration = Tuple[str, Union[Expression, str, Real], Union[Expression, str, Real]]
+MeasurementRangeDeclaration = Tuple[str, ExpressionLike, ExpressionLike, Tuple[str, RangeLike]]
+
+MeasurementDeclaration = Union[
+    Tuple[str, ExpressionLike, ExpressionLike],
+    MeasurementRangeDeclaration
+]
 
 
 class MeasurementDefiner:
     def __init__(self, measurements: Optional[List[MeasurementDeclaration]]):
-        if measurements is None:
-            self._measurement_windows = []
-        else:
-            self._measurement_windows = [(name,
-                                          begin if isinstance(begin, Expression) else Expression(begin),
-                                          length if isinstance(length, Expression) else Expression(length))
-                                         for name, begin, length in measurements]
+        self._measurement_windows: Tuple[Tuple[str, ExpressionScalar, ExpressionScalar], ...] = ()
+        self._measurement_ranges: Tuple[Tuple[str, ExpressionScalar, ExpressionScalar, Tuple[str, RangeLike]], ...] = ()
+
+        if measurements is not None:
+            measurement_windows = []
+            measurement_ranges = []
+
+            for declaration in measurements:
+                if len(declaration) == 3:
+                    name, begin, length = declaration
+                    measurement_windows.append((name, ExpressionScalar(begin), ExpressionScalar(length)))
+                else:
+                    name, begin, length, (idx_name, param_range) = declaration
+                    measurement_ranges.append((name, ExpressionScalar(begin), ExpressionScalar(length),
+                                               (idx_name, ParametrizedRange.from_range_like(param_range))))
+
+            self._measurement_windows = tuple(measurement_windows)
+            self._measurement_ranges = tuple(measurement_ranges)
         for _, _, length in self._measurement_windows:
             if (length < 0) is True:
                 raise ValueError('Measurement window length may not be negative')
@@ -59,6 +76,24 @@ class MeasurementDefiner:
                  begin_val,
                  length_val)
             )
+
+        for name, begin, length, (idx_name, idx_range) in self._measurement_ranges:
+            name = measurement_mapping[name]
+            if name is None:
+                continue
+
+            for idx_val in idx_range.to_range(parameters):
+                scope = RangeScope(parameters, idx_name, idx_val)
+
+                begin_val = begin.evaluate_in_scope(scope)
+                length_val = length.evaluate_in_scope(scope)
+
+                resulting_windows.append(
+                    (name,
+                     begin_val,
+                     length_val)
+                )
+
         return resulting_windows
 
     @property
@@ -72,13 +107,25 @@ class MeasurementDefiner:
     @property
     def measurement_declarations(self) -> List[MeasurementDeclaration]:
         """Return the measurements that are directly declared on `self`. Does _not_ visit eventual child objects."""
-        return [(name,
-                 begin.original_expression,
-                 length.original_expression)
-                for name, begin, length in self._measurement_windows]
+        measurements = []
+        measurements.extend((name,
+                             begin.original_expression,
+                             length.original_expression)
+                            for name, begin, length in self._measurement_windows)
+        measurements.extend((name, begin.original_expression, length.original_expression,
+                             (idx_name, idx_range.to_tuple()))
+                            for name, begin, length, (idx_name, idx_range) in self._measurement_ranges)
+        return measurements
 
     @property
     def measurement_names(self) -> Set[str]:
         """Return the names of measurements that are directly declared on `self`.
         Does _not_ visit eventual child objects."""
-        return {name for name, *_ in self._measurement_windows}
+        return {name for name, *_ in itertools.chain(self._measurement_windows, self._measurement_ranges)}
+
+    def __hash__(self):
+        return hash((self._measurement_windows, self._measurement_ranges))
+
+    def __eq__(self, other):
+        return (self._measurement_windows == getattr(other, '_measurement_windows', None) and
+                self._measurement_ranges == getattr(other, '_measurement_ranges', None))
