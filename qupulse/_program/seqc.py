@@ -38,6 +38,7 @@ from qupulse._program.volatile import VolatileRepetitionCount, VolatileProperty
 from qupulse.hardware.awgs.base import ProgramEntry
 
 try:
+    # zhinst fires a DeprecationWarning from its own code in some versions...
     with warnings.catch_warnings():
         warnings.simplefilter('ignore', DeprecationWarning)
         import zhinst.utils
