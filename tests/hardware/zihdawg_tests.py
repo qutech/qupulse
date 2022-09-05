@@ -11,12 +11,17 @@ except ImportError:
 
 if pytest:
     zhinst = pytest.importorskip("zhinst")
+
+    try:
+        import zhinst.core as zhinst_core
+    except ImportError:
+        import zhinst.ziPython as zhinst_core
 else:
     try:
         try:
-            import zhinst.core
+            import zhinst.core as zhinst_core
         except ImportError:
-            import zhinst.ziPython
+            import zhinst.ziPython as zhinst_core
     except ImportError as err:
         raise unittest.SkipTest("zhinst not present") from err
 
@@ -39,7 +44,7 @@ class HDAWGRepresentationTests(unittest.TestCase):
 
         with \
                 mock.patch('zhinst.utils.api_server_version_check') as mock_version_check,\
-                mock.patch('zhinst.ziPython.ziDAQServer') as mock_daq_server, \
+                mock.patch.object(zhinst_core, 'ziDAQServer') as mock_daq_server, \
                 mock.patch('qupulse.hardware.awgs.zihdawg.HDAWGRepresentation._initialize') as mock_init, \
                 mock.patch('qupulse.hardware.awgs.zihdawg.HDAWGRepresentation.channel_grouping', new_callable=mock.PropertyMock) as mock_grouping, \
                 mock.patch('qupulse.hardware.awgs.zihdawg.HDAWGChannelGroup') as mock_channel_pair,\
