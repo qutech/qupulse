@@ -11,7 +11,7 @@ Furthermore:
 - `WaveformMemory`: Functionality to sync waveforms to the device (via the LabOne user folder)
 - `ProgramWaveformManager` and `HDAWGProgramEntry`: Program wise handling of waveforms and seqc-code
 classes that convert `Loop` objects"""
-
+import warnings
 from typing import Optional, Union, Sequence, Dict, Iterator, Tuple, Callable, NamedTuple, MutableMapping, Mapping,\
     Iterable, Any, List, Deque
 from types import MappingProxyType
@@ -38,7 +38,9 @@ from qupulse._program.volatile import VolatileRepetitionCount, VolatileProperty
 from qupulse.hardware.awgs.base import ProgramEntry
 
 try:
-    import zhinst.utils
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', DeprecationWarning)
+        import zhinst.utils
 except ImportError:
     zhinst = None
 
