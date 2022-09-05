@@ -11,7 +11,9 @@ import argparse
 import re
 
 try:
-    import zhinst.utils
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', DeprecationWarning)
+        import zhinst.utils
 except ImportError:
     warnings.warn('Zurich Instruments LabOne python API is distributed via the Python Package Index. Install with pip.')
     raise
