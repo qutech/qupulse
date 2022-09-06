@@ -9,6 +9,11 @@ import itertools
 from qupulse.expressions import Expression, ExpressionVariableMissingException
 from qupulse.utils.types import FrozenMapping, FrozenDict
 
+try:
+    import qupulse_rs.replacements.parameter_scopes
+except ImportError:
+    qupulse_rs = None
+
 
 class Scope(Mapping[str, Number]):
     """Abstract parameter lookup. Scopes are immutable. Internally it holds all dependencies of parameters and keeps
@@ -319,3 +324,13 @@ class ParameterNotProvidedException(KeyError):
 
 class NonVolatileChange(RuntimeWarning):
     """Raised if a non volatile parameter is updated"""
+
+
+if qupulse_rs:
+    PyDictScope = DictScope
+    PyMappedScope = MappedScope
+    PyJointScope = JointScope
+
+    DictScope = qupulse_rs.replacements.parameter_scopes.DictScope
+    MappedScope = qupulse_rs.replacements.parameter_scopes.MappedScope
+    JointScope = qupulse_rs.replacements.parameter_scopes.JointScope

@@ -5,8 +5,14 @@ import numpy as np
 import sympy.abc
 from sympy import sympify, Eq
 
-from qupulse.expressions import Expression, ExpressionVariableMissingException, NonNumericEvaluation, ExpressionScalar, ExpressionVector
+from qupulse.expressions import Expression, ExpressionVariableMissingException, NonNumericEvaluation, ExpressionScalar,\
+    ExpressionVector, qupulse_rs
 from qupulse.utils.types import TimeType
+
+try:
+    from qupulse.expressions import PyExpressionScalar
+except ImportError:
+    PyExpressionScalar = ExpressionScalar
 
 class ExpressionTests(unittest.TestCase):
     def test_make(self):
@@ -16,7 +22,10 @@ class ExpressionTests(unittest.TestCase):
 
         self.assertIsInstance(Expression.make([1, 'a']), ExpressionVector)
 
-        self.assertIsInstance(ExpressionScalar.make('a'), ExpressionScalar)
+        if qupulse_rs:
+            self.assertEqual(type(ExpressionScalar.make('a')).__name__, 'ExpressionScalar')
+        else:
+            self.assertIsInstance(ExpressionScalar.make('a'), ExpressionScalar)
         self.assertIsInstance(ExpressionVector.make(['a']), ExpressionVector)
 
 
@@ -146,7 +155,7 @@ class ExpressionScalarTests(unittest.TestCase):
         }
         self.assertEqual(2 * 1.5 - 7, e.evaluate_numeric(**params))
 
-        with self.assertRaises(NonNumericEvaluation):
+        with self.assertRaises((NonNumericEvaluation, TypeError)):
             params['a'] = sympify('h')
             e.evaluate_numeric(**params)
 
@@ -230,7 +239,7 @@ class ExpressionScalarTests(unittest.TestCase):
             'b': sympify('k'),
             'c': -7
         }
-        with self.assertRaises(NonNumericEvaluation):
+        with self.assertRaises(TypeError):
             e.evaluate_numeric(**params)
 
     def test_evaluate_symbolic(self):
@@ -240,7 +249,7 @@ class ExpressionScalarTests(unittest.TestCase):
             'c': -7
         }
         result = e.evaluate_symbolic(params)
-        expected = ExpressionScalar('d*b-7')
+        expected = PyExpressionScalar('d*b-7')
         self.assertEqual(result, expected)
 
     def test_variables(self) -> None:
@@ -287,7 +296,10 @@ class ExpressionScalarTests(unittest.TestCase):
     def test_str(self):
         s = 'a    *    b'
         e = ExpressionScalar(s)
-        self.assertEqual('a*b', str(e))
+        if qupulse_rs is None:
+            self.assertEqual('a*b', str(e))
+        else:
+            self.assertEqual(s, str(e))
 
     def test_original_expression(self):
         s = 'a    *    b'

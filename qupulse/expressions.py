@@ -6,7 +6,7 @@ import operator
 from typing import Any, Dict, Union, Sequence, Callable, TypeVar, Type, Mapping
 from numbers import Number
 import warnings
-import functools
+import inspect
 import array
 import itertools
 
@@ -17,6 +17,11 @@ from qupulse.serialization import AnonymousSerializable
 from qupulse.utils.sympy import sympify, to_numpy, recursive_substitution, evaluate_lambdified,\
     get_most_simple_representation, get_variables, evaluate_lamdified_exact_rational
 from qupulse.utils.types import TimeType
+
+try:
+    import qupulse_rs.replacements
+except ImportError:
+    qupulse_rs = None
 
 __all__ = ["Expression", "ExpressionVariableMissingException", "ExpressionScalar", "ExpressionVector", "ExpressionLike"]
 
@@ -219,7 +224,7 @@ class ExpressionVector(Expression):
                 other = Expression.make(other)
             except (ValueError, TypeError):
                 return NotImplemented
-        if isinstance(other, ExpressionScalar):
+        if type(other).__name__ == 'ExpressionScalar':
             return self._expression_shape in ((), (1,)) and self._expression_items[0] == other.sympified_expression
         else:
             return self._expression_shape == other._expression_shape and \
@@ -435,7 +440,7 @@ class ExpressionVariableMissingException(Exception):
             str(self.expression), self.variable)
 
 
-class NonNumericEvaluation(Exception):
+class NonNumericEvaluation(TypeError):
     """An exception that is raised if the result of evaluate_numeric is not a number.
 
     See also:
@@ -462,3 +467,18 @@ class NonNumericEvaluation(Exception):
 
 
 ExpressionLike = TypeVar('ExpressionLike', str, Number, sympy.Expr, ExpressionScalar)
+
+
+if qupulse_rs:
+    RsExpressionScalar = qupulse_rs.replacements.ExpressionScalar
+    PyExpressionScalar = ExpressionScalar
+
+    class ExpressionScalar(PyExpressionScalar):
+        def __new__(cls, *args, **kwargs):
+            if qupulse_rs and cls.__name__ == 'ExpressionScalar':
+                try:
+                    return RsExpressionScalar(*args, **kwargs)
+                except (ValueError, TypeError, RuntimeError):
+                    pass
+            return PyExpressionScalar.__new__(cls)
+
