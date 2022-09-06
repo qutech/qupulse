@@ -20,6 +20,7 @@ except ImportError:
 
 try:
     from qupulse_rs.qupulse_rs import TimeType as RsTimeType
+    numbers.Rational.register(RsTimeType)
 except ImportError:
     RsTimeType = None
 
@@ -239,7 +240,7 @@ class TimeType:
 
     def __eq__(self, other):
         if type(other) == type(self):
-            return self._value.__eq__(other._value)
+            return self._value == other._value
         else:
             return self._value == other
 
