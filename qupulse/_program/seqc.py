@@ -1005,7 +1005,7 @@ def to_node_clusters(loop: Union[Sequence[Loop], Loop], loop_to_seqc_kwargs: dic
                 current_period.append(current_node)
 
                 if len(current_period) == len(current_template):
-                    if idx == 0:
+                    if idx == 1:
                         node = current_period.pop()
                     else:
                         node = Scope(current_period)
