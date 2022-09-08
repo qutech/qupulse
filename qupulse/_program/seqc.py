@@ -1022,6 +1022,8 @@ def to_node_clusters(loop: Union[Sequence[Loop], Loop], loop_to_seqc_kwargs: dic
                 last_nodes.extend(current_period)
                 last_hashes.extend(current_template_hashes[:len(current_period)])
 
+                current_period.clear()
+
                 last_nodes.append(current_node)
                 last_hashes.append(current_hash)
 
@@ -1030,6 +1032,7 @@ def to_node_clusters(loop: Union[Sequence[Loop], Loop], loop_to_seqc_kwargs: dic
                  current_cluster) = _find_repetition(last_nodes, last_hashes,
                                                      node_clusters)
         else:
+            assert not current_period
             if len(last_nodes) == last_nodes.maxlen:
                 # lookup deque is full
                 node_clusters.append([last_nodes.popleft()])
