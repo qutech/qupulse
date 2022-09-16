@@ -6,7 +6,15 @@ import numpy as np
 
 from qupulse import ChannelID
 from qupulse.comparable import Comparable
-from qupulse.utils.types import SingletonABCMeta
+from qupulse.utils.types import SingletonABCMeta, use_rs_replacements
+
+try:
+    import qupulse_rs
+except ImportError:
+    qupulse_rs = None
+    transformation_rs = None
+else:
+    from qupulse_rs.replacements import transformation as transformation_rs
 
 
 class Transformation(Comparable):
@@ -322,3 +330,12 @@ def chain_transformations(*transformations: Transformation) -> Transformation:
         return parsed_transformations[0]
     else:
         return ChainedTransformation(*parsed_transformations)
+
+
+
+if transformation_rs:
+    use_rs_replacements(globals(), transformation_rs, Transformation)
+
+    py_chain_transformations = chain_transformations
+    rs_chain_transformations = transformation_rs.chain_transformations
+    chain_transformations = rs_chain_transformations

@@ -1092,7 +1092,7 @@ class ExtendedJSONEncoder(json.JSONEncoder):
         super().__init__(*args, **kwargs)
 
     def default(self, o: Any) -> Any:
-        if isinstance(o, AnonymousSerializable):
+        if hasattr(o, 'get_serialization_data'):
             return o.get_serialization_data()
         elif type(o) is set:
             return list(o)

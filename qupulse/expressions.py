@@ -19,9 +19,12 @@ from qupulse.utils.sympy import sympify, to_numpy, recursive_substitution, evalu
 from qupulse.utils.types import TimeType
 
 try:
-    import qupulse_rs.replacements
+    import qupulse_rs
 except ImportError:
     qupulse_rs = None
+    RsExpressionScalar = None
+else:
+    from qupulse_rs.replacements import ExpressionScalar as RsExpressionScalar
 
 __all__ = ["Expression", "ExpressionVariableMissingException", "ExpressionScalar", "ExpressionVector", "ExpressionLike"]
 
@@ -469,8 +472,7 @@ class NonNumericEvaluation(TypeError):
 ExpressionLike = TypeVar('ExpressionLike', str, Number, sympy.Expr, ExpressionScalar)
 
 
-if qupulse_rs:
-    RsExpressionScalar = qupulse_rs.replacements.ExpressionScalar
+if RsExpressionScalar:
     PyExpressionScalar = ExpressionScalar
 
     class ExpressionScalar(PyExpressionScalar):

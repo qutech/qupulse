@@ -9,7 +9,7 @@ from qupulse.pulses.interpolation import HoldInterpolationStrategy, LinearInterp
     JumpInterpolationStrategy
 from qupulse._program.waveforms import MultiChannelWaveform, RepetitionWaveform, SequenceWaveform,\
     TableWaveformEntry, TableWaveform, TransformingWaveform, SubsetWaveform, ArithmeticWaveform, ConstantWaveform,\
-    Waveform, FunctorWaveform, FunctionWaveform, ReversedWaveform, rs_replacements
+    Waveform, FunctorWaveform, FunctionWaveform, ReversedWaveform, waveforms_rs
 from qupulse._program.transformation import LinearTransformation
 from qupulse.expressions import ExpressionScalar, Expression
 
@@ -239,7 +239,7 @@ class MultiChannelWaveformTest(unittest.TestCase):
         result_a = waveform.unsafe_sample('A', sample_times, reuse_output)
         self.assertEqual(len(dwf_a.sample_calls), 2)
         self.assertIs(result_a, reuse_output)
-        if rs_replacements is None:
+        if waveforms_rs is None:
             # rust extension cannot forward the numpy array back to python without performance degradation
             self.assertIs(result_a, dwf_a.sample_calls[1][2])
         numpy.testing.assert_equal(result_b, samples_b)
@@ -434,7 +434,7 @@ class SequenceWaveformTest(unittest.TestCase):
         self.assertIsNone(swf3.constant_value('A'))
         assert_constant_consistent(self, swf3)
 
-    @unittest.skipIf(rs_replacements is not None, "sentinel based test do not work with rust extension")
+    @unittest.skipIf(waveforms_rs is not None, "sentinel based test do not work with rust extension")
     def test_sample_times_type(self) -> None:
         with mock.patch.object(DummyWaveform, 'unsafe_sample') as unsafe_sample_patch:
             dwfs = (DummyWaveform(duration=1.),
@@ -607,7 +607,7 @@ class TableWaveformTests(unittest.TestCase):
 
         result = waveform.unsafe_sample('A', sample_times)
 
-        if rs_replacements is None:
+        if waveforms_rs is None:
             self.assertEqual(expected_interp_arguments, interp.call_arguments)
         numpy.testing.assert_equal(expected_result, result)
 
@@ -797,7 +797,7 @@ class SubsetWaveformTest(unittest.TestCase):
             get_subset_for_channels.assert_called_once_with({'a'})
             self.assertIs(subsetted, actual_subsetted)
 
-    @unittest.skipIf(rs_replacements is not None, "Test requires pure python.")
+    @unittest.skipIf(waveforms_rs is not None, "Test requires pure python.")
     def test_unsafe_sample_pure(self):
         """Test perfect forwarding"""
         time = {'time'}

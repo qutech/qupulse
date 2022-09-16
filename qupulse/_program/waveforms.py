@@ -22,15 +22,17 @@ from qupulse.comparable import Comparable
 from qupulse.expressions import ExpressionScalar
 from qupulse.pulses.interpolation import InterpolationStrategy
 from qupulse.utils import checked_int_cast, isclose
-from qupulse.utils.types import TimeType, time_from_float, FrozenDict
+from qupulse.utils.types import TimeType, time_from_float, FrozenDict, use_rs_replacements
 from qupulse._program.transformation import Transformation
 from qupulse.utils import pairwise
 
 try:
-    import qupulse_rs.qupulse_rs
-    rs_replacements = qupulse_rs.qupulse_rs.replacements
-except (ImportError, AttributeError):
-    rs_replacements = None
+    import qupulse_rs
+except ImportError:
+    qupulse_rs = None
+    waveforms_rs = None
+else:
+    from qupulse_rs.replacements import waveforms as waveforms_rs
 
 
 __all__ = ["Waveform", "TableWaveform", "TableWaveformEntry", "FunctionWaveform", "SequenceWaveform",
@@ -1227,28 +1229,7 @@ class ReversedWaveform(Waveform):
         return self._inner
 
 
-if rs_replacements is not None:
-    PyTableWaveform = TableWaveform
-    PyConstantWaveform = ConstantWaveform
-    PyMultiChannelWaveform = MultiChannelWaveform
-    PyRepetitionWaveform = RepetitionWaveform
-    PySequenceWaveform = SequenceWaveform
-    PyArithmeticWaveform = ArithmeticWaveform
-    PySubsetWaveform = SubsetWaveform
 
-    TableWaveform = rs_replacements.waveforms.TableWaveform
-    ConstantWaveform = rs_replacements.waveforms.ConstantWaveform
-    MultiChannelWaveform = rs_replacements.waveforms.MultiChannelWaveform
-    RepetitionWaveform = rs_replacements.waveforms.RepetitionWaveform
-    SequenceWaveform = rs_replacements.waveforms.SequenceWaveform
-    ArithmeticWaveform = rs_replacements.waveforms.ArithmeticWaveform
-    SubsetWaveform = rs_replacements.waveforms.SubsetWaveform
 
-    Waveform.register(TableWaveform)
-    Waveform.register(ConstantWaveform)
-    Waveform.register(MultiChannelWaveform)
-    Waveform.register(TableWaveform)
-    Waveform.register(RepetitionWaveform)
-    Waveform.register(SequenceWaveform)
-    Waveform.register(ArithmeticWaveform)
-    Waveform.register(SubsetWaveform)
+if waveforms_rs:
+    use_rs_replacements(globals(), waveforms_rs, Waveform)

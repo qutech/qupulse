@@ -566,3 +566,20 @@ class SequenceProxy(collections.abc.Sequence):
             return NotImplemented
 
 
+def use_rs_replacements(glbls, rs_replacement, base_class: type):
+    name_suffix = base_class.__name__
+    for name, rs_obj in vars(rs_replacement).items():
+        if not name.endswith(name_suffix):
+            continue
+
+        py_name = f'Py{name}'
+        rs_name = f'Rs{name}'
+        glbls[name] = rs_obj
+        try:
+            py_obj = glbls[name]
+        except KeyError:
+            pass
+        else:
+            glbls.setdefault(py_name, py_obj)
+        glbls.setdefault(rs_name, rs_obj)
+        base_class.register(rs_obj)
