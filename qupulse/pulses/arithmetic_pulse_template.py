@@ -1,4 +1,3 @@
-
 from typing import Any, Dict, List, Set, Optional, Union, Mapping, FrozenSet, cast, Callable
 from numbers import Real
 import warnings
@@ -387,18 +386,18 @@ class ArithmeticPulseTemplate(PulseTemplate):
 
     @property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
-        integral = {channel: value.sympified_expression for channel, value in self._pulse_template.integral.items()}
+        integral = {channel: value for channel, value in self._pulse_template.integral.items()}
 
         if isinstance(self._scalar, ExpressionScalar):
-            scalar = {channel: self._scalar.sympified_expression
+            scalar = {channel: self._scalar
                       for channel in self.defined_channels}
         else:
-            scalar = {channel: value.sympified_expression
+            scalar = {channel: value
                       for channel, value in self._scalar.items()}
 
         if self._arithmetic_operator == '+':
             for channel, value in scalar.items():
-                integral[channel] = integral[channel] + (value * self.duration.sympified_expression)
+                integral[channel] = integral[channel] + (value * self.duration)
 
         elif self._arithmetic_operator == '*':
             for channel, value in scalar.items():
@@ -415,13 +414,13 @@ class ArithmeticPulseTemplate(PulseTemplate):
                 # we need to negate all existing values
                 for channel, inner_value in integral.items():
                     if channel in scalar:
-                        integral[channel] = scalar[channel] * self.duration.sympified_expression - inner_value
+                        integral[channel] = scalar[channel] * self.duration - inner_value
                     else:
                         integral[channel] = -inner_value
 
             else:
                 for channel, value in scalar.items():
-                    integral[channel] = integral[channel] - value * self.duration.sympified_expression
+                    integral[channel] = integral[channel] - value * self.duration
 
         for channel, value in integral.items():
             integral[channel] = ExpressionScalar(value)
