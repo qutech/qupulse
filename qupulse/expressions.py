@@ -326,7 +326,7 @@ class ExpressionScalar(Expression):
 
     @classmethod
     def _sympify(cls, other: Union['ExpressionScalar', Number, sympy.Expr]) -> sympy.Expr:
-        return other._sympified_expression if isinstance(other, cls) else sympify(other)
+        return sympify(other)
 
     def __lt__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> Union[bool, None]:
         result = self._sympified_expression < self._sympify(other)

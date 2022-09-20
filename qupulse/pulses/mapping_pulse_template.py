@@ -202,7 +202,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
     @property
     def duration(self) -> Expression:
         return self.__template.duration.evaluate_symbolic(
-            {parameter_name: expression.underlying_expression
+            {parameter_name: expression
              for parameter_name, expression in self.__parameter_mapping.items()}
         )
 
