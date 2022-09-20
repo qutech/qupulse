@@ -9,6 +9,14 @@ from qupulse.utils.types import MeasurementWindow, TimeType
 from qupulse._program.volatile import VolatileRepetitionCount
 
 try:
+    import qupulse_rs
+except ImportError:
+    qupulse_rs = None
+    RsProgramBuilder = None
+else:
+    from qupulse_rs.replacements import ProgramBuilder as RsProgramBuilder
+
+try:
     from typing import Protocol, runtime_checkable
 except ImportError:
     Protocol = object
@@ -64,9 +72,8 @@ class ProgramBuilder(Protocol):
 
 
 def default_program_builder() -> ProgramBuilder:
-    try:
-        import qupulse_rs.qupulse_rs
-        return qupulse_rs.qupulse_rs.replacements.ProgramBuilder()
-    except (AttributeError, ImportError):
+    if RsProgramBuilder is None:
         from qupulse._program._loop import Loop
         return Loop()
+    else:
+        return RsProgramBuilder()

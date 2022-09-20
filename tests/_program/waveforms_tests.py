@@ -249,10 +249,13 @@ class MultiChannelWaveformTest(unittest.TestCase):
         dwf_b = DummyWaveform(duration=246.2, defined_channels={'B'})
         dwf_c = DummyWaveform(duration=246.2, defined_channels={'C'})
         waveform_a1 = MultiChannelWaveform([dwf_a, dwf_b])
-        waveform_a2 = MultiChannelWaveform([dwf_a, dwf_b])
+        waveform_a2 = MultiChannelWaveform([dwf_b, dwf_a])
         waveform_a3 = MultiChannelWaveform([dwf_a, dwf_c])
+        waveform_a4 = MultiChannelWaveform([dwf_a, dwf_b, dwf_c])
         self.assertEqual(waveform_a1, waveform_a1)
         self.assertEqual(waveform_a1, waveform_a2)
+        self.assertEqual(waveform_a4.get_subset_for_channels({'A', 'B'}), waveform_a4.get_subset_for_channels({'B', 'A'}))
+        self.assertEqual({waveform_a1}, {waveform_a1, waveform_a2})
         self.assertNotEqual(waveform_a1, waveform_a3)
 
     def test_unsafe_get_subset_for_channels(self):

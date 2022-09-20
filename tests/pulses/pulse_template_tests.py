@@ -235,7 +235,7 @@ class PulseTemplateTest(unittest.TestCase):
                 single_waveform = DummyWaveform()
                 measurements = [('m', 0, 1), ('n', 0.1, .9)]
 
-                expected_inner_program = Loop(waveform=wf, measurements=measurements)
+                expected_inner_program = Loop(children=[Loop(waveform=wf, measurements=measurements)])
 
                 appending_create_program = get_appending_internal_create_program(wf,
                                                                                  measurements=measurements,
@@ -250,7 +250,7 @@ class PulseTemplateTest(unittest.TestCase):
 
                 with mock.patch.object(template, '_internal_create_program',
                                        wraps=appending_create_program) as _internal_create_program:
-                    with mock.patch('qupulse._program._loop.to_waveform',
+                    with mock.patch('qupulse.pulses.pulse_template.to_waveform',
                                     return_value=single_waveform) as to_waveform:
                         with mock.patch('qupulse.pulses.pulse_template.default_program_builder',
                                         return_value=inner_program_builder):

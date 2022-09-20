@@ -214,7 +214,8 @@ class PulseTemplate(Serializable):
 
             program = builder.to_program()
             if program is not None:
-                waveform = program.to_single_waveform()
+                # we use the free function here for better testability
+                waveform = to_waveform(program)
 
                 if global_transformation:
                     waveform = TransformingWaveform(waveform, global_transformation)
