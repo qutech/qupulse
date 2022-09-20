@@ -48,6 +48,15 @@ class _ExpressionMeta(type):
         else:
             return type.__call__(cls, *args, **kwargs)
 
+    if RsExpressionScalar is not None:
+        def __subclasscheck__(cls, subclass):
+            return cls.__name__ == subclass.__name__ or super().__subclasscheck__(subclass)
+
+        def __instancecheck__(cls, instance):
+            if cls is ExpressionScalar or cls is Expression:
+                return isinstance(instance, RsExpressionScalar) or super().__instancecheck__(instance)
+            super().__instancecheck__(instance)
+
 
 class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
     """Base class for expressions."""
@@ -484,3 +493,7 @@ if RsExpressionScalar:
                     pass
             return PyExpressionScalar.__new__(cls)
 
+assert isinstance(ExpressionScalar('a'), ExpressionScalar)
+assert isinstance(ExpressionScalar('a'), Expression)
+if RsExpressionScalar:
+    assert issubclass(RsExpressionScalar, ExpressionScalar)
