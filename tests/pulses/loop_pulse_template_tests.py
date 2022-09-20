@@ -2,6 +2,8 @@ import sys
 import unittest
 from unittest import mock
 
+import sympy
+
 from qupulse.parameter_scope import DictScope
 from qupulse.utils.types import FrozenDict
 
@@ -175,8 +177,14 @@ class ForLoopPulseTemplateTest(unittest.TestCase):
         pulse = ForLoopPulseTemplate(dummy, 'i', (1, 8, 2))
 
         expected = {'A': ExpressionScalar('Sum(t1-3.1*(1+2*i), (i, 0, 3))'),
-                    'B': ExpressionScalar('Sum((1+2*i), (i, 0, 3))') }
-        self.assertEqual(expected, pulse.integral)
+                    'B': ExpressionScalar('Sum((1+2*i), (i, 0, 3))')}
+        expected_simplified = {ch: ExpressionScalar(sympy.simplify(expr.sympified_expression))
+                               for ch, expr in expected.items()}
+        actual = pulse.integral
+        actual_simplified = {ch: ExpressionScalar(sympy.simplify(expr.sympified_expression))
+                               for ch, expr in actual.items()}
+
+        self.assertEqual(expected_simplified, actual_simplified)
 
 
 class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):

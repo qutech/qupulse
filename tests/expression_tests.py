@@ -426,6 +426,36 @@ class ExpressionScalarTests(unittest.TestCase):
 
         np.testing.assert_allclose(expected, result)
 
+    def test_rounding_equality(self):
+        seconds2ns = 1e9
+        pulse_duration = 1.0765001496284785e-07
+        float_product = pulse_duration * seconds2ns
+
+        expr_1 = ExpressionScalar(pulse_duration)
+        expr_2 = ExpressionScalar(seconds2ns)
+
+        self.assertEqual(expr_1, pulse_duration)
+        self.assertEqual(expr_2, seconds2ns)
+
+        self.assertEqual(expr_1.sympified_expression, pulse_duration)
+        self.assertEqual(expr_2.sympified_expression, seconds2ns)
+
+        expr_a = ExpressionScalar(float_product)
+        expr_b = expr_1 * seconds2ns
+        expr_c = expr_2 * pulse_duration
+
+        #self.assertEqual(float_product, float(expr_a))
+        #self.assertEqual(float_product, float(expr_b))
+        #self.assertEqual(float_product, float(expr_c))
+
+        self.assertEqual(float_product, expr_a)
+        self.assertEqual(float_product, expr_b)
+        self.assertEqual(float_product, expr_c)
+
+        expr_symb = ExpressionScalar('duration')
+        expr_d = expr_symb.evaluate_symbolic(substitutions={'duration': float_product})
+        self.assertEqual(float_product, expr_d)
+
     def test_evaluate_with_exact_rationals(self):
         expr = ExpressionScalar('1 / 3')
         self.assertEqual(TimeType.from_fraction(1, 3), expr.evaluate_with_exact_rationals({}))

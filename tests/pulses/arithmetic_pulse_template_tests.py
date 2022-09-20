@@ -469,7 +469,8 @@ class ArithmeticPulseTemplateTest(unittest.TestCase):
         expected = dict(u=ExpressionScalar('ui / (x + y)'),
                         v=ExpressionScalar('vi / 2.2'),
                         w=ExpressionScalar('wi'))
-        self.assertEqual(expected, ArithmeticPulseTemplate(pt, '/', mapping).integral)
+        actual = ArithmeticPulseTemplate(pt, '/', mapping).integral
+        self.assertEqual(expected, actual)
 
     def test_simple_attributes(self):
         lhs = DummyPulseTemplate(defined_channels={'a', 'b'}, duration=ExpressionScalar('t_dur'),

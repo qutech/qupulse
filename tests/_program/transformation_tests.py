@@ -253,7 +253,6 @@ class ChainedTransformationTests(unittest.TestCase):
             get_input_channels_2.assert_called_once_with({2})
 
     def test_call(self):
-        from qupulse._program.transformation import PyChainedTransformation
         trafos = TransformationStub(), TransformationStub(), TransformationStub()
         chained = ChainedTransformation(*trafos)
 
