@@ -1210,6 +1210,9 @@ class Scope(SEQCNode):
         else:
             return NotImplemented
 
+    def __repr__(self):
+        return f"Scope(nodes={self.nodes!r})"
+
 
 class Repeat(SEQCNode):
     """"""
@@ -1392,6 +1395,9 @@ class WaveformPlayback(SEQCNode):
         self.waveform = waveform
         self.shared = shared
         self.rate = rate
+
+    def __repr__(self):
+        return f"WaveformPlayback(<{id(self)}>)"
 
     def samples(self) -> int:
         """Samples consumed in the big concatenated waveform"""
