@@ -71,12 +71,17 @@ class ParametrizedRange:
     def from_range_like(cls, range_like: RangeLike):
         if isinstance(range_like, cls):
             return range_like
-        elif isinstance(range_like, tuple):
+        elif isinstance(range_like, (tuple, list)):
             return cls(*range_like)
         elif isinstance(range_like, range):
             return cls(range_like.start, range_like.stop, range_like.step)
+        elif isinstance(range_like, slice):
+            raise TypeError("Cannot construct a range from a slice")
         else:
             return cls(range_like)
+
+    def get_serialization_data(self):
+        return self.to_tuple()
 
 
 class RangeScope(Scope):
