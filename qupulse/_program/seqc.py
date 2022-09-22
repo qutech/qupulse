@@ -976,8 +976,6 @@ def to_node_clusters(loop: Union[Sequence[Loop], Loop], loop_to_seqc_kwargs: dic
 
     node_clusters: List[List[SEQCNode]] = []
 
-
-    last_period = []
     # this is the period that we currently are collecting
     current_period: List[SEQCNode] = []
 
@@ -1022,6 +1020,8 @@ def to_node_clusters(loop: Union[Sequence[Loop], Loop], loop_to_seqc_kwargs: dic
                 last_nodes.extend(current_period)
                 last_hashes.extend(current_template_hashes[:len(current_period)])
 
+                current_period.clear()
+
                 last_nodes.append(current_node)
                 last_hashes.append(current_hash)
 
@@ -1030,6 +1030,7 @@ def to_node_clusters(loop: Union[Sequence[Loop], Loop], loop_to_seqc_kwargs: dic
                  current_cluster) = _find_repetition(last_nodes, last_hashes,
                                                      node_clusters)
         else:
+            assert not current_period
             if len(last_nodes) == last_nodes.maxlen:
                 # lookup deque is full
                 node_clusters.append([last_nodes.popleft()])
@@ -1044,7 +1045,8 @@ def to_node_clusters(loop: Union[Sequence[Loop], Loop], loop_to_seqc_kwargs: dic
                                                  node_clusters)
 
     assert not (current_cluster and last_nodes)
-    node_clusters.append(current_cluster)
+    if current_cluster:
+        node_clusters.append(current_cluster)
     node_clusters.extend([node] for node in current_period)
     node_clusters.extend([node] for node in last_nodes)
 
@@ -1208,6 +1210,9 @@ class Scope(SEQCNode):
             return self.nodes == other.nodes
         else:
             return NotImplemented
+
+    def __repr__(self):
+        return f"Scope(nodes={self.nodes!r})"
 
 
 class Repeat(SEQCNode):
@@ -1391,6 +1396,9 @@ class WaveformPlayback(SEQCNode):
         self.waveform = waveform
         self.shared = shared
         self.rate = rate
+
+    def __repr__(self):
+        return f"WaveformPlayback(<{id(self)}>)"
 
     def samples(self) -> int:
         """Samples consumed in the big concatenated waveform"""

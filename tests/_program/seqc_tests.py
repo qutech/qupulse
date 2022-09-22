@@ -33,6 +33,10 @@ def take(n, iterable):
     return list(islice(iterable, n))
 
 
+def dummy_loop_to_seqc(loop, **kwargs):
+    return loop
+
+
 class BinaryWaveformTest(unittest.TestCase):
     MAX_RATE = 14
 
@@ -434,9 +438,6 @@ class LoopToSEQCTranslationTests(TestCase):
 
         loop_to_seqc_kwargs = {'my': 'kwargs'}
 
-        def dummy_loop_to_seqc(loop, **kwargs):
-            return loop
-
         loops = [wf1, wf2, wf1, wf1, wf3, wf1, wf1, wf1, wf3, wf1, wf3, wf1, wf3]
         expected_calls = [mock.call(loop, **loop_to_seqc_kwargs) for loop in loops]
         expected_result = [[wf1, wf2, wf1, wf1], [wf3], [wf1, wf1, wf1], [Scope([wf3, wf1]), Scope([wf3, wf1])], [wf3]]
@@ -444,6 +445,20 @@ class LoopToSEQCTranslationTests(TestCase):
         with mock.patch('qupulse._program.seqc.loop_to_seqc', wraps=dummy_loop_to_seqc) as mock_loop_to_seqc:
             result = to_node_clusters(loops, loop_to_seqc_kwargs)
             self.assertEqual(mock_loop_to_seqc.mock_calls, expected_calls)
+        self.assertEqual(expected_result, result)
+
+    def test_to_node_clusters_crash(self):
+        wf1 = WaveformPlayback(make_binary_waveform(*get_unique_wfs(1, 32)))
+        wf2 = WaveformPlayback(make_binary_waveform(*get_unique_wfs(1, 64)))
+        wf3 = WaveformPlayback(make_binary_waveform(*get_unique_wfs(1, 128)))
+        wf4 = WaveformPlayback(make_binary_waveform(*get_unique_wfs(1, 256)))
+
+        loop_to_seqc_kwargs = {'my': 'kwargs'}
+
+        loops = [wf1, wf2, wf3] * 3 + [wf1] + [wf2, wf4] * 3 + [wf1]
+        with mock.patch('qupulse._program.seqc.loop_to_seqc', wraps=dummy_loop_to_seqc) as mock_loop_to_seqc:
+            result = to_node_clusters(loops, loop_to_seqc_kwargs)
+        expected_result = [[Scope([wf1, wf2, wf3])]*3, [wf1], [Scope([wf2, wf4])]*3, [wf1]]
         self.assertEqual(expected_result, result)
 
     def test_find_sharable_waveforms(self):
