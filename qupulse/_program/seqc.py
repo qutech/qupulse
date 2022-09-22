@@ -20,6 +20,7 @@ import itertools
 import inspect
 import logging
 import hashlib
+from weakref import WeakValueDictionary
 from collections import OrderedDict
 import re
 import collections
@@ -228,6 +229,7 @@ class ConcatenatedWaveform:
 
 class WaveformFileSystem:
     logger = logging.getLogger('qupulse.hdawg.waveforms')
+    _by_path = WeakValueDictionary()
 
     def __init__(self, path: Path):
         """This class coordinates multiple AWGs (channel pairs) using the same file system to store the waveforms.
@@ -237,6 +239,11 @@ class WaveformFileSystem:
         """
         self._required = {}
         self._path = path
+    
+    @classmethod
+    def get_waveform_file_system(cls, path: Path) -> 'WaveformFileSystem':
+        """Get the instance for the given path. Multiple instances that access the same path lead to inconsistencies."""
+        return cls._by_path.setdefault(path, cls(path))
 
     def sync(self, client: 'WaveformMemory', waveforms: Mapping[str, BinaryWaveform], **kwargs):
         """Write the required waveforms to the filesystem."""
@@ -815,7 +822,34 @@ class HDAWGProgramManager:
         assert self._programs[name].name == name
         return self._programs[name].selection_index
 
-    def to_seqc_program(self) -> str:
+    def _get_sub_program_source_code(self, program_name: str) -> str:
+        program = self.programs[program_name]
+        program_function_name = self.get_program_function_name(program_name)
+        return "\n".join(
+            [
+                f"void {program_function_name}() {{",
+                program.seqc_source,
+                "}\n"
+            ]
+        )
+
+    def _get_program_selection_code(self) -> str:
+        return _make_program_selection_block((program.selection_index, self.get_program_function_name(program_name))
+                                             for program_name, program in self.programs.items())
+
+    def to_seqc_program(self, single_program: Optional[str] = None) -> str:
+        """Generate sequencing c source code that is either capable of playing pack all uploaded programs where the
+        program is selected at runtime without re-compile or always will play the same program if `single_program`
+        is specified.
+
+         The program selection is based on a user register in the first case.
+
+        Args:
+            single_program: The seqc source only contains this program if not None
+
+        Returns:
+            SEQC source code.
+        """
         lines = []
         for const_name, const_val in self.Constants.as_dict().items():
             if isinstance(const_val, (int, str)):
@@ -832,44 +866,23 @@ class HDAWGProgramManager:
         replacements = self._waveform_memory.waveform_name_replacements()
 
         lines.append('\n// program definitions')
-        for program_name, program in self.programs.items():
-            program_function_name = self.get_program_function_name(program_name)
-            lines.append('void {program_function_name}() {{'.format(program_function_name=program_function_name))
-            lines.append(replace_multiple(program.seqc_source, replacements))
-            lines.append('}\n')
+        if single_program:
+            lines.append(
+                replace_multiple(self._get_sub_program_source_code(single_program), replacements)
+            )
+
+        else:
+            for program_name, program in self.programs.items():
+                lines.append(replace_multiple(self._get_sub_program_source_code(program_name), replacements))
 
         lines.append(self.GlobalVariables.get_init_block())
 
         lines.append('\n// runtime block')
-        lines.append('while (true) {')
-        lines.append('  // read program selection value')
-        lines.append('  prog_sel = getUserReg(PROG_SEL_REGISTER);')
-        lines.append('  ')
-        lines.append('  // calculate value to write back to PROG_SEL_REGISTER')
-        lines.append('  new_prog_sel = prog_sel | playback_finished;')
-        lines.append('  if (!(prog_sel & NO_RESET_MASK)) new_prog_sel &= INVERTED_PROG_SEL_MASK;')
-        lines.append('  setUserReg(PROG_SEL_REGISTER, new_prog_sel);')
-        lines.append('  ')
-        lines.append('  // reset playback flag')
-        lines.append('  playback_finished = 0;')
-        lines.append('  ')
-        lines.append('  // only use part of prog sel that does not mean other things to select the program.')
-        lines.append('  prog_sel &= PROG_SEL_MASK;')
-        lines.append('  ')
-        lines.append('  switch (prog_sel) {')
-
-        for program_name, program_entry in self.programs.items():
-            program_function_name = self.get_program_function_name(program_name)
-            lines.append('    case {selection_index}:'.format(selection_index=program_entry.selection_index))
-            lines.append('      {program_function_name}();'.format(program_function_name=program_function_name))
-            lines.append('      waitWave();')
-            lines.append('      playback_finished = PLAYBACK_FINISHED_MASK;')
-
-        lines.append('    default:')
-        lines.append('      wait(IDLE_WAIT_CYCLES);')
-        lines.append('  }')
-        lines.append('}')
-
+        if single_program:
+            lines.append(f"{self.get_program_function_name(single_program)}();")
+        else:
+            lines.append(self._get_program_selection_code())
+        
         return '\n'.join(lines)
 
 
@@ -1457,3 +1470,41 @@ class WaveformPlayback(SEQCNode):
             else:
                 advance_cmd = self.ADVANCE_DISABLED_COMMENT
             yield play_cmd + advance_cmd
+
+
+_PROGRAM_SELECTION_BLOCK = """\
+while (true) {{
+  // read program selection value
+  prog_sel = getUserReg(PROG_SEL_REGISTER);
+  
+  // calculate value to write back to PROG_SEL_REGISTER
+  new_prog_sel = prog_sel | playback_finished;
+  if (!(prog_sel & NO_RESET_MASK)) new_prog_sel &= INVERTED_PROG_SEL_MASK;
+  setUserReg(PROG_SEL_REGISTER, new_prog_sel);
+  
+  // reset playback flag
+  playback_finished = 0;
+  
+  // only use part of prog sel that does not mean other things to select the program.
+  prog_sel &= PROG_SEL_MASK;
+  
+  switch (prog_sel) {{
+{program_cases}
+    default:
+      wait(IDLE_WAIT_CYCLES);
+  }}
+}}"""
+
+_PROGRAM_SELECTION_CASE = """\
+    case {selection_index}:
+      {program_function_name}();
+      waitWave();
+      playback_finished = PLAYBACK_FINISHED_MASK;"""
+
+
+def _make_program_selection_block(programs: Iterable[Tuple[int, str]]):
+    program_cases = []
+    for selection_index, program_function_name in programs:
+        program_cases.append(_PROGRAM_SELECTION_CASE.format(selection_index=selection_index,
+                                                            program_function_name=program_function_name))
+    return _PROGRAM_SELECTION_BLOCK.format(program_cases="\n".join(program_cases))
