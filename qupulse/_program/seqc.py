@@ -976,8 +976,6 @@ def to_node_clusters(loop: Union[Sequence[Loop], Loop], loop_to_seqc_kwargs: dic
 
     node_clusters: List[List[SEQCNode]] = []
 
-
-    last_period = []
     # this is the period that we currently are collecting
     current_period: List[SEQCNode] = []
 
