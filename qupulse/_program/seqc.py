@@ -1045,7 +1045,8 @@ def to_node_clusters(loop: Union[Sequence[Loop], Loop], loop_to_seqc_kwargs: dic
                                                  node_clusters)
 
     assert not (current_cluster and last_nodes)
-    node_clusters.append(current_cluster)
+    if current_cluster:
+        node_clusters.append(current_cluster)
     node_clusters.extend([node] for node in current_period)
     node_clusters.extend([node] for node in last_nodes)
 
