@@ -63,16 +63,18 @@ class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
         if isinstance(result, tuple):
             result = numpy.array(result)
         if isinstance(result, numpy.ndarray):
-            if issubclass(result.dtype.type, allowed_types):
-                return result
-            else:
+            if not issubclass(result.dtype.type, allowed_types):
                 obj_types = set(map(type, result.flat))
                 if all(issubclass(obj_type, sympy.Integer) for obj_type in obj_types):
-                    return result.astype(numpy.int64)
-                if all(issubclass(obj_type, (sympy.Integer, sympy.Float)) for obj_type in obj_types):
-                    return result.astype(float)
+                    result = result.astype(numpy.int64)
+                elif all(issubclass(obj_type, (sympy.Integer, sympy.Float)) for obj_type in obj_types):
+                    result = result.astype(float)
                 else:
                     raise NonNumericEvaluation(self, result, call_arguments)
+            if result.shape==():
+                # a scalar numpy array. cast to a pure scalar
+                result = result[()]
+            return result
         elif isinstance(result, allowed_types):
             return result
         elif isinstance(result, sympy.Float):
