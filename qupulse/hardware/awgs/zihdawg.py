@@ -12,11 +12,19 @@ import re
 from abc import abstractmethod
 
 try:
-    import zhinst.ziPython
-    import zhinst.utils
+    # zhinst fires a DeprecationWarning from its own code in some versions...
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', DeprecationWarning)
+        import zhinst.utils
 except ImportError:
     warnings.warn('Zurich Instruments LabOne python API is distributed via the Python Package Index. Install with pip.')
     raise
+
+try:
+    from zhinst import core as zhinst_core
+except ImportError:
+    # backward compability
+    from zhinst import ziPython as zhinst_core
 
 import time
 
@@ -96,7 +104,7 @@ class HDAWGRepresentation:
         :param reset:             Reset device before initialization
         :param timeout:           Timeout in seconds for uploading
         """
-        self._api_session = zhinst.ziPython.ziDAQServer(data_server_addr, data_server_port, api_level_number)
+        self._api_session = zhinst_core.ziDAQServer(data_server_addr, data_server_port, api_level_number)
         assert zhinst.utils.api_server_version_check(self.api_session)  # Check equal data server and api version.
         self.api_session.connectDevice(device_serial, device_interface)
         self.default_timeout = timeout
@@ -160,7 +168,7 @@ class HDAWGRepresentation:
         return self._channel_groups[HDAWGChannelGrouping.CHAN_GROUP_4x2][3]
 
     @property
-    def api_session(self) -> zhinst.ziPython.ziDAQServer:
+    def api_session(self) -> zhinst_core.ziDAQServer:
         return self._api_session
 
     @property
@@ -269,7 +277,7 @@ class HDAWGRepresentation:
                 self.channel_pair_CD.awg_module.get('awgModule/*'),
                 self.channel_pair_EF.awg_module.get('awgModule/*'),
                 self.channel_pair_GH.awg_module.get('awgModule/*'))
-    
+
     def _get_mds_group_idx(self) -> Optional[int]:
         idx = 0
         while True:
@@ -397,12 +405,12 @@ class HDAWGChannelGroup(AWG):
         return self._master_device
 
     @property
-    def awg_module(self) -> zhinst.ziPython.AwgModule:
+    def awg_module(self) -> zhinst_core.AwgModule:
         """Each AWG channel group has its own awg module to manage program compilation and upload."""
         if self._awg_module is None:
             raise HDAWGValueError('Channel group is not connected and was never initialized')
         return self._awg_module
-    
+
     @property
     @abstractmethod
     def awg_group_index(self) -> int:
@@ -659,30 +667,30 @@ class MDSChannelGroup(HDAWGChannelGroup):
                  identifier: str,
                  timeout: float) -> None:
         super().__init__(identifier, timeout)
-        
+
         self._master_device = None
         self._mds_devices = None
-    
+
     @property
     def num_channels(self) -> int:
         """Number of channels"""
         return len(self._mds_devices) * 8
-    
+
     @property
     def awg_group_index(self):
         return 0
-    
+
     def disconnect_group(self):
         super().disconnect_group()
         self._mds_devices = None
-    
+
     def connect_group(self, hdawg_device: HDAWGRepresentation):
         mds_group = hdawg_device._get_mds_group_idx()
         if mds_group is None:
             raise HDAWGException("AWG not in any MDS group", hdawg_device)
         mds_devices = hdawg_device.api_session.getString(f'/ZI/MDS/GROUPS/{mds_group}/DEVICES').split(',')
         if hdawg_device.serial != mds_devices[0]:
-            raise HDAWGException("Only the master device can connect to the HDAWG MDS channel group.")       
+            raise HDAWGException("Only the master device can connect to the HDAWG MDS channel group.")
         super().connect_group(hdawg_device)
         self._mds_devices = mds_devices
 
@@ -796,7 +804,7 @@ class SingleDeviceChannelGroup(HDAWGChannelGroup):
 
 class ELFManager:
     class AWGModule:
-        def __init__(self, awg_module: zhinst.ziPython.AwgModule):
+        def __init__(self, awg_module: zhinst_core.AwgModule):
             """Provide an easily mockable interface to the zhinst AwgModule object"""
             self._module = awg_module
 
@@ -863,11 +871,11 @@ class ELFManager:
         def index(self) -> int:
             return self._module.getInt('index')
 
-    def __init__(self, awg_module: zhinst.ziPython.AwgModule):
+    def __init__(self, awg_module: zhinst_core.AwgModule):
         """This class organizes compiling and uploading of compiled programs. The source code file is named based on the
         code hash to cache compilation results. This requires that the waveform names are unique.
 
-        The compilation and upload itself are done asynchronously by zhinst.ziPython. To avoid spawning a useless
+        The compilation and upload itself are done asynchronously by zhinst.core. To avoid spawning a useless
         thread for updating the status the method :py:meth:`~ELFManager.compile_and_upload` returns a generator which
         talks to the undelying library when needed."""
         self.awg_module = self.AWGModule(awg_module)
