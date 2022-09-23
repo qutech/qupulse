@@ -26,9 +26,13 @@ from qupulse.utils.types import TimeType, time_from_float, FrozenDict
 from qupulse._program.transformation import Transformation
 from qupulse.utils import pairwise
 
+class ConstantFunctionPulseTemplateWarning(UserWarning):
+    """  This warning indicates a constant waveform is constructed from a FunctionPulseTemplate """
+    pass
 
 __all__ = ["Waveform", "TableWaveform", "TableWaveformEntry", "FunctionWaveform", "SequenceWaveform",
-           "MultiChannelWaveform", "RepetitionWaveform", "TransformingWaveform", "ArithmeticWaveform"]
+           "MultiChannelWaveform", "RepetitionWaveform", "TransformingWaveform", "ArithmeticWaveform",
+           "ConstantFunctionPulseTemplateWarning"]
 
 PULSE_TO_WAVEFORM_ERROR = None  # error margin in pulse template to waveform conversion
 
@@ -103,7 +107,7 @@ class Waveform(Comparable, metaclass=ABCMeta):
             else:
                 raise ValueError('Output array length and sample time length are different')
 
-        if (np.diff(sample_times) < 0).any():
+        if np.any(sample_times[1:] < sample_times[:-1]):
             raise ValueError('The sample times are not monotonously increasing')
         if sample_times[0] < 0 or sample_times[-1] > float(self.duration):
             raise ValueError(f'The sample times [{sample_times[0]}, ..., {sample_times[-1]}] are not in the range'
@@ -194,7 +198,7 @@ class Waveform(Comparable, metaclass=ABCMeta):
         return None
 
     def __neg__(self):
-        return FunctorWaveform(self, {ch: np.negative for ch in self.defined_channels})
+        return FunctorWaveform.from_functor(self, {ch: np.negative for ch in self.defined_channels})
 
     def __pos__(self):
         return self
@@ -205,6 +209,7 @@ class Waveform(Comparable, metaclass=ABCMeta):
 
     def reversed(self) -> 'Waveform':
         """Returns a reversed version of this waveform."""
+        # We don't check for constness here because const waveforms are supposed to override this method
         return ReversedWaveform(self)
 
 
@@ -470,7 +475,7 @@ class FunctionWaveform(Waveform):
             raise ValueError('FunctionWaveforms may not depend on anything but "t"')
         elif not expression.variables:
             warnings.warn("Constant FunctionWaveform is not recommended as the constant propagation will be suboptimal",
-                          category=UserWarning)
+                          category=ConstantFunctionPulseTemplateWarning)
         super().__init__(duration=_to_time_type(duration))
         self._expression = expression
         self._channel_id = channel
@@ -633,9 +638,9 @@ class SequenceWaveform(Waveform):
         return self._duration
 
     def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> 'Waveform':
-        return SequenceWaveform(
+        return SequenceWaveform.from_sequence([
             sub_waveform.unsafe_get_subset_for_channels(channels & sub_waveform.defined_channels)
-            for sub_waveform in self._sequenced_waveforms if sub_waveform.defined_channels & channels)
+            for sub_waveform in self._sequenced_waveforms if sub_waveform.defined_channels & channels])
 
     @property
     def sequenced_waveforms(self) -> Sequence[Waveform]:
@@ -845,9 +850,10 @@ class RepetitionWaveform(Waveform):
     def compare_key(self) -> Tuple[Any, int]:
         return self._body.compare_key, self._repetition_count
 
-    def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> 'RepetitionWaveform':
-        return RepetitionWaveform(body=self._body.unsafe_get_subset_for_channels(channels),
-                                  repetition_count=self._repetition_count)
+    def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> Waveform:
+        return RepetitionWaveform.from_repetition_count(
+            body=self._body.unsafe_get_subset_for_channels(channels),
+            repetition_count=self._repetition_count)
 
     def is_constant(self) -> bool:
         return self._body.is_constant()
@@ -882,7 +888,7 @@ class TransformingWaveform(Waveform):
         if constant_values is None or not transformation.is_constant_invariant():
             return cls(inner_waveform, transformation)
 
-        transformed_constant_values = transformation(0., constant_values)
+        transformed_constant_values = {key: float(value) for key, value in transformation(0., constant_values).items()}
         return ConstantWaveform.from_mapping(inner_waveform.duration, transformed_constant_values)
 
     def is_constant(self) -> bool:
@@ -1171,8 +1177,9 @@ class FunctorWaveform(Waveform):
         return self._functor[channel](inner_output, out=inner_output)
 
     def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> Waveform:
-        return FunctorWaveform(self._inner_waveform.unsafe_get_subset_for_channels(channels),
-                               {ch: self._functor[ch] for ch in channels})
+        return FunctorWaveform.from_functor(
+            self._inner_waveform.unsafe_get_subset_for_channels(channels),
+            {ch: self._functor[ch] for ch in channels})
 
     @property
     def compare_key(self) -> Tuple[Waveform, FrozenSet]:
@@ -1187,6 +1194,13 @@ class ReversedWaveform(Waveform):
     def __init__(self, inner: Waveform):
         super().__init__(duration=inner.duration)
         self._inner = inner
+
+    @classmethod
+    def from_to_reverse(cls, inner: Waveform) -> Waveform:
+        if inner.constant_value_dict():
+            return inner
+        else:
+            return cls(inner)
 
     def unsafe_sample(self, channel: ChannelID, sample_times: np.ndarray,
                       output_array: Union[np.ndarray, None] = None) -> np.ndarray:
@@ -1206,7 +1220,7 @@ class ReversedWaveform(Waveform):
         return self._inner.defined_channels
 
     def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> 'Waveform':
-        return ReversedWaveform(self._inner.unsafe_get_subset_for_channels(channels))
+        return ReversedWaveform.from_to_reverse(self._inner.unsafe_get_subset_for_channels(channels))
 
     @property
     def compare_key(self) -> Hashable:

@@ -109,7 +109,7 @@ class FunctionPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
         expression = self.__expression.evaluate_symbolic(substitutions=parameters)
 
 
-        return FunctionWaveform(expression=expression,
+        return FunctionWaveform.from_expression(expression=expression,
                                 duration=duration,
                                 channel=channel_mapping[self.__channel])
 

@@ -126,7 +126,7 @@ class ArithmeticAtomicPulseTemplate(AtomicPulseTemplate):
         if lhs is None:
             return ArithmeticWaveform.rhs_only_map[self.arithmetic_operator](rhs)
         else:
-            return ArithmeticWaveform(lhs, self.arithmetic_operator, rhs)
+            return ArithmeticWaveform.from_operator(lhs, self.arithmetic_operator, rhs)
 
     def get_measurement_windows(self,
                                 parameters: Dict[str, Real],
@@ -359,7 +359,7 @@ class ArithmeticPulseTemplate(PulseTemplate):
         transformation = self._get_transformation(parameters=parameters,
                                                   channel_mapping=channel_mapping)
 
-        return TransformingWaveform(inner_waveform, transformation=transformation)
+        return TransformingWaveform.from_transformation(inner_waveform, transformation=transformation)
 
     def __repr__(self):
         if any(v for k, v in super().get_serialization_data().items() if k != '#type'):

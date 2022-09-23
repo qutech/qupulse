@@ -471,15 +471,16 @@ def to_waveform(program: Loop) -> Waveform:
         if program.repetition_count == 1:
             return program.waveform
         else:
-            return RepetitionWaveform(program.waveform, program.repetition_count)
+            return RepetitionWaveform.from_repetition_count(program.waveform, program.repetition_count)
     else:
         if len(program) == 1:
             sequenced_waveform = to_waveform(cast(Loop, program[0]))
         else:
-            sequenced_waveform = SequenceWaveform([to_waveform(cast(Loop, sub_program))
-                                                   for sub_program in program])
+            sequenced_waveform = SequenceWaveform.from_sequence(
+                [to_waveform(cast(Loop, sub_program))
+                 for sub_program in program])
         if program.repetition_count > 1:
-            return RepetitionWaveform(sequenced_waveform, program.repetition_count)
+            return RepetitionWaveform.from_repetition_count(sequenced_waveform, program.repetition_count)
         else:
             return sequenced_waveform
 

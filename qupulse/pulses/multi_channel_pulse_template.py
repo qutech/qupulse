@@ -134,7 +134,7 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
         if len(sub_waveforms) == 1:
             waveform = sub_waveforms[0]
         else:
-            waveform = MultiChannelWaveform(sub_waveforms)
+            waveform = MultiChannelWaveform.from_parallel(sub_waveforms)
 
         if self._duration:
             expected_duration = self._duration.evaluate_numeric(**parameters)
@@ -249,7 +249,7 @@ class ParallelConstantChannelPulseTemplate(PulseTemplate):
             overwritten_channels = self._get_overwritten_channels_values(parameters=parameters,
                                                                          channel_mapping=channel_mapping)
             transformation = ParallelConstantChannelTransformation(overwritten_channels)
-            return TransformingWaveform(inner_waveform, transformation)
+            return TransformingWaveform.from_transformation(inner_waveform, transformation)
 
     @property
     def defined_channels(self) -> Set[ChannelID]:

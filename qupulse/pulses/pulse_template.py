@@ -217,7 +217,7 @@ class PulseTemplate(Serializable):
             waveform = to_waveform(root)
 
             if global_transformation:
-                waveform = TransformingWaveform(waveform, global_transformation)
+                waveform = TransformingWaveform.from_transformation(waveform, global_transformation)
 
             # convert the nicely formatted measurement windows back into the old format again :(
             measurements = root.get_measurement_windows()
@@ -333,7 +333,7 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
                                                         measurement_mapping=measurement_mapping)
 
             if global_transformation:
-                waveform = TransformingWaveform(waveform, global_transformation)
+                waveform = TransformingWaveform.from_transformation(waveform, global_transformation)
 
             parent_loop.add_measurements(measurements=measurements)
             parent_loop.append_child(waveform=waveform)
