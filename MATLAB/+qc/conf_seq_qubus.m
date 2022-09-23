@@ -1,4 +1,4 @@
-function scan = conf_seq(varargin)
+function scan = conf_seq_qubus(varargin)
 % CONF_SEQ Create special-measure scans with inline qctoolkit pulses
 %
 % Only supports inline scans at the moment (could in principle arm a
