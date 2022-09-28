@@ -8,7 +8,8 @@ daq = plsdata.daq.inst;
 
 %TODO: de-hardcode: handle different awgs
 awg = 'hdawg';
-nAwgChan = 8;
+nAwg = numel(plsdata.awg.inst);
+nAwgChan = 8 * nAwg;
 
 program = struct();
 msg = '';
@@ -59,8 +60,11 @@ if strcmp(ctrl, 'add')
         end
         
         %TODO: de-hardcode
-        if strcmp(awg, 'hdawg')
+        if strcmp(awg, 'hdawg') && nAwg == 1
             plsdata.awg.registeredPrograms.(a.program_name).amplitudes_at_upload = cell2mat(cell(plsdata.awg.inst.channel_tuples{1}.amplitudes));
+        elseif iscell(plsdata.awg.inst)
+            amps = arrayfun(@(awg_ii) cell2mat(cell(plsdata.awg.inst{awg_ii}.channel_tuples{1}.amplitudes)), [1:nAwg], 'UniformOutput', false);
+            plsdata.awg.registeredPrograms.(a.program_name).amplitudes_at_upload = cell2mat(amps);
         else
             for ii = int64(1:nAwgChan)
                 % query actual amplitude from qupulse

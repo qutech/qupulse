@@ -560,7 +560,7 @@ class HDAWGChannelGroup(AWG):
             # This is required in MDS mode because program select does not work properly yet so we use single program
             # mode
             if name is None:
-                self._required_seqc_source = ""
+                self._required_seqc_source = "sync();"
             else:
                 self._required_seqc_source = self._program_manager.to_seqc_program(name)
             self._start_compile_and_upload()
