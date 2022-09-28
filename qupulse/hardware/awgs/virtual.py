@@ -1,6 +1,7 @@
 """This module contains the tools to setup a virtual AWG i.e. an AWG that forwards the program into a given callback.
 This is handy to setup a simulation to test qupulse pulses."""
-from typing import Tuple, Optional, Callable, Set
+from numbers import Real
+from typing import Set, Tuple, Callable, Optional, Mapping, Sequence, List
 
 import numpy as np
 
@@ -93,6 +94,9 @@ class VirtualAWG(AWG):
         """When run current program is called the given callback is called with the first positional argument being the
         duration and following arguments being sampling callbacks as defined above."""
         self._function_handle_callback = callback
+
+    def set_volatile_parameters(self, program_name: str, parameters: Mapping[str, Real]):
+        raise NotImplementedError()
 
     def run_current_program(self):
         (program, channels, voltage_transformations) = self._programs[self._current_program]
