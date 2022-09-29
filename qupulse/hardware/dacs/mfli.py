@@ -38,6 +38,7 @@ import numpy as np
 [X] make TriggerMode class an Enum
 [X] setup minimal connection without changing settings other than buffer lengths
 [X] extract window things
+[ ] rethink handling different sample rates!
 [ ] cut obtained data to fit into requested windows
 [ ] provide interface for changing trigger settings
 [ ] print information about how long the measurement is expected to run
@@ -110,6 +111,8 @@ class MFLIDAQ(DAC):
 		self.daq.set('triggernode', '/dev3442/demods/0/sample.AuxIn0')
 		self.daq.set('endless', 0)
 
+		self.assumed_minimal_sample_rate = None
+
 		self.daq_read_return = {}
 
 		if reset:
@@ -140,7 +143,7 @@ class MFLIDAQ(DAC):
 
 		if not isinstance(channel_path, list):
 			channel_path = [channel_path]
-		self.programs.setdefault(program_name, {}).setdefault("channel_mapping", {}).setdefault(window_name, []).extend(channel_path)
+		self.programs.setdefault(program_name, {}).setdefault("channel_mapping", {}).setdefault(window_name, set()).update(channel_path)
 
 	def register_measurement_windows(self, program_name: str, windows: Dict[str, Tuple[np.ndarray,
 																					   np.ndarray]]) -> None:
@@ -203,24 +206,36 @@ class MFLIDAQ(DAC):
 			warnings.warn(f"There are no channels defined that should be measured in mask '{mask_name}'.")
 
 		# get the sample rates for the requested channels. If no sample rate is found, None will be used. This code is not very nice.
-		currently_set_sample_rates: List[Union[TimeType, None]] = []
+		raw_currently_set_sample_rates: List[Union[TimeType, None]] = []
 
 		for c in channels_to_measure:
-			currently_set_sample_rates.append(self._get_sample_rates(c))
+			raw_currently_set_sample_rates.append(self._get_sample_rates(c))
 
+		# CAUTION
+		# The MFLI lock-ins up-sample slower channels to fit the fastest sample rate.
+		# This is the cased for the Lab One Data Server 21.08.20515 and the MFLi Firmware 67629.
+		foo = [x for x in raw_currently_set_sample_rates if x is not None]
+		if len(foo) == 0 and self.assumed_minimal_sample_rate is None:
+			raise ValueError(f"No information about the sample rate is given, thus we can not calculate the window sizes.")
+		if self.assumed_minimal_sample_rate is not None:
+			foo.append(TimeType().from_float(value=self.assumed_minimal_sample_rate, absolute_error=0))
+		max_sample_rate = max(foo)
+		currently_set_sample_rates = [max_sample_rate]*len(raw_currently_set_sample_rates)
 
 		mask_info = np.full((3, len(begins), len(currently_set_sample_rates)), np.nan)
 
-		for i, sr in enumerate(currently_set_sample_rates):
-			if sr is not None:
+		for i, _sr in enumerate(currently_set_sample_rates):
+			if _sr is not None:
+				sr = _sr*1e-9 # converting the sample rate, which is given in Sa/s, into Sa/ns
 				# this code was taken from the already implemented alazar driver. 
 				mask_info[0, :, i] = np.rint(begins * float(sr)).astype(dtype=np.uint64) # the begin
 				mask_info[1, :, i] = np.floor_divide(lengths * float(sr.numerator), float(sr.denominator)).astype(dtype=np.uint64) # the length
 				mask_info[2, :, i] = (mask_info[0, :, i] + mask_info[1, :, i]).astype(dtype=np.uint64) # the end
 
-		self.programs.setdefault(program_name, {}).setdefault("masks", {})[mask_name] = {"mask": mask_info, "channels": channels_to_measure, "sample_rates": currently_set_sample_rates}
+		self.programs.setdefault(program_name, {}).setdefault("masks", {})[mask_name] = {"mask": mask_info, "channels": channels_to_measure, "sample_rates": raw_currently_set_sample_rates}
 		self.programs.setdefault(program_name, {}).setdefault("all_channels", set()).update(channels_to_measure)
 		self.programs.setdefault(program_name, {}).setdefault("window_hull", [np.nan, np.nan])
+		# self.programs.setdefault(program_name, {}).setdefault("largest_sample_rate", -1*np.inf) # This will be used to set the window_hull only based on the fastest channel queried. 
 
 		# as the lock-in can measure multiple channels with different sample rates, the return value of this function is not defined correctly.
 		# this could be fixed by only measuring on one channel, or by returning some "summary" value. As of now, there does not to be a use of the return values.
@@ -235,12 +250,16 @@ class MFLIDAQ(DAC):
 			# we also only use the max sample value later. The smallest staring point is somewhat ill-defined
 			if np.sum(np.isnan(mask_info)) == len(mask_info.reshape((-1))):
 				pass
+				print(f"will not use mask {mask_name}")
 			else:
+				# TODO need to do something about the different sample rates!!!!
+				# maybe have it not this flexible???
+
 				_start = np.nanmin(mask_info[0])
 				_end = np.nanmax(mask_info[2])
 				if np.isnan(self.programs[program_name]["window_hull"][0]) or self.programs[program_name]["window_hull"][0] > _start:
 					self.programs[program_name]["window_hull"][0] = _start
-				if np.isnan(self.programs[program_name]["window_hull"][1]) or self.programs[program_name]["window_hull"][1] > _end:
+				if np.isnan(self.programs[program_name]["window_hull"][1]) or self.programs[program_name]["window_hull"][1] < _end:
 					self.programs[program_name]["window_hull"][1] = _end
 
 			return (np.min(mask_info[0], axis=-1), np.max(mask_info[2], axis=-1))
@@ -357,6 +376,77 @@ class MFLIDAQ(DAC):
 
 		self.unarm_program(program_name=None)
 
+	def _parse_data(self, recorded_data, program_name):
+		""" This function parses the recorded data and extracts the measurement masks and applies optional operations
+		"""
+
+		# the first dimension of channel_data is expected to be the history of multiple not read data points. This will be handled as multiple entries in a list. This will then not make too much sense, if not every channel as this many entries. If this is the case, they will be stacked, such that for the last elements it fits.
+		# TODO do this based on the timestamps and not the indices. That might be more sound than just assuming that.
+
+
+		# applying measurement windows and optional operations
+		# TODO implement operations
+
+		# targeted structure:
+		# results[<mask_name>][<channel>] -> [data]
+
+		masked_data = {}
+
+		index = 0
+
+		for mask_name in self.programs[program_name]["masks"]:
+			data_by_channel = {}
+			_mask = self.programs[program_name]["masks"][mask_name]["mask"]
+			for ci, _cn in enumerate(self.programs[program_name]["masks"][mask_name]['channels']):
+				cn = f"/{self.serial}/{_cn}".lower()
+				print(cn)
+				if len(recorded_data[cn]) <= index:
+					# then we do not have data for this index, which is intended to cover multiple not yet collected measurements. And thus will not have anything to save.
+					warnings.warn(f"for channel '{cn}' only {len(recorded_data[cn])} shots are given. This does not allow for taking element [-1-{index}]")
+					continue
+				applicable_data = recorded_data[cn][-1-index]
+
+				if np.sum(np.isnan(_mask[1, :, ci])) > 0:
+					raise ValueError(f"There is something wrong with the data for channel {cn}. The later code assumes that the lock-in is linearly interpolating up to the highest sample rate used.")
+				# building the mask to apply to the data now:
+				applicable_mask = np.full((_mask.shape[1], np.nanmax(_mask[1, :, ci]).astype(int)+1), np.nan)
+				# the following code could probably be optimized with some numpy magic
+				for wi, w in enumerate(_mask[:, :, ci].T):
+					applicable_mask[wi, :int(w[2]-w[0]+1)] = np.arange(w[0], w[2]+1)
+
+				print(applicable_data.shape)
+				print(applicable_mask)
+				print(applicable_mask.shape)
+
+				# TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
+				
+				temp_mask = applicable_mask.reshape((-1))
+				temp_mask = temp_mask.copy()
+				temp_mask[np.isnan(temp_mask)] = 0
+
+				masked_data = np.take(applicable_data.reshape((-1)), temp_mask)
+
+				np.put_along_axis(masked_data, np.where(np.isnan(applicable_mask.reshape((-1)))))
+
+				# TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
+
+				# foo = xr.DataArray(
+				# 	data=d["value"],
+				# 	coords={'timestamp': (['col', 'row'], d['timestamp'])},
+				# 	dims=['col', 'row'],
+				# 	name=cn,
+				# 	attrs=d['header']
+				# 	)
+				# data_by_channel.update({cn: foo})
+			# masked_data[mask_name] = data_by_channel
+
+		# result = xr.Dataset(
+		# 	{}
+		# 	)
+		# self.programs.setdefault(program_name, {}).setdefault("masks", {})[mask_name] = {"mask": mask_info, "channels": channels_to_measure, "sample_rates": currently_set_sample_rates}
+
+		pass
+
 	def measure_program(self, channels: Iterable[str], wait=True) -> Dict[str, np.ndarray]:
 		"""Get the last measurement's results of the specified operations/channels"""
 
@@ -380,39 +470,23 @@ class MFLIDAQ(DAC):
 				for input_name, input_data in device_data.items():
 					for signal_name, signal_data in input_data.items():
 						for final_level_name, final_level_data in signal_data.items():
-							channel_name = f"/{device_name}/{input_name}/{signal_name}/{final_level_name}"
+							channel_name = f"/{device_name}/{input_name}/{signal_name}/{final_level_name}".lower()
 							channel_data = [xr.DataArray(
 										data=d["value"],
 										coords={'timestamp': (['col', 'row'], d['timestamp'])},
 										dims=['col', 'row'],
 										name=channel_name,
-										attrs=d['header']) 
-								for i, d in enumerate(final_level_data)]
+										attrs=d['header']) for i, d in enumerate(final_level_data)]
 							recorded_data[channel_name] = channel_data
 
+		# check if the shapes of the received measurements are the same. 
+		# this is needed as the assumption, that the lock-in/data server up-samples slower channels to match the one with the highest rate.
 
-		return recorded_data
-
-
-		# the first dimension of channel_data is expected to be the history of multiple not read data points. This will be handled as multiple entries in a list. This will then not make too much sense, if not every channel as this many entries. If this is the case, they will be stacked, such that for the last elements it fits.
-		# TODO do this based on the timestamps and not the indices. That might be more sound than just assuming that.
-
-
-		# applying measurement windows and optional operations
-		# TODO implement operations
-
-		# targeted structure:
-		# results[<mask_name>][<channel>] -> [data]
-
-		masked_data = {}
-
-		for mask_name in self.programs.[self.currently_set_program]["masks"]:
-			pass
-
-		result = xr.Dataset(
-			{}
-			)
-		# self.programs.setdefault(program_name, {}).setdefault("masks", {})[mask_name] = {"mask": mask_info, "channels": channels_to_measure, "sample_rates": currently_set_sample_rates}
+		recorded_shapes = {k:set([e.shape for e in v]) for k, v in recorded_data.items()}
+		if any([len(v)>1 for v in recorded_shapes.items()]) or len(set([e for a in recorded_data.items() for e in a]))>1:
+			warnings.warn(f"For at least one received channel entries with different dimensions are present. This might lead to undesired masking! (The code will not raise an exception.) ({recorded_shapes})")
 
 		
 		print(data)
+
+		return recorded_data
