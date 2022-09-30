@@ -2,7 +2,7 @@ import numpy as np
 
 try:
     import numba
-    njit = numba.njit
+    njit = numba.njit(cache=True)
 except ImportError:
     numba = None
     njit = lambda x: x
