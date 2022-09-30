@@ -12,7 +12,7 @@ from numbers import Real
 from typing import Set, Tuple, Callable, Optional, Mapping, Sequence, List
 from collections import OrderedDict
 
-from qupulse.hardware.util import get_sample_times
+from qupulse.hardware.util import get_sample_times, not_none_indices
 from qupulse.utils.types import ChannelID
 from qupulse._program._loop import Loop
 from qupulse._program.waveforms import Waveform
@@ -219,30 +219,64 @@ class ProgramEntry:
         sampled_waveforms = []
 
         time_array, segment_lengths = get_sample_times(waveforms, self._sample_rate)
+        sample_memory = numpy.zeros_like(time_array, dtype=float)
+
+        n_samples = numpy.sum(segment_lengths)
+        ch_to_mem, n_ch = not_none_indices(self._channels)
+        mk_to_mem, c_mk = not_none_indices(self._markers)
+
+        ch_memory = numpy.zeros((n_ch, n_samples), dtype=float)
+        marker_memory = numpy.zeros((c_mk, n_samples), dtype=bool)
+        segment_begin = 0
+
         for waveform, segment_length in zip(waveforms, segment_lengths):
+            segment_length = int(segment_length)
+            segment_end = segment_begin + segment_length
+
             wf_time = time_array[:segment_length]
+            wf_sample_memory = sample_memory[:segment_length]
 
             sampled_channels = []
-            for channel, trafo, amplitude, offset in zip(self._channels, self._voltage_transformations,
-                                                         self._amplitudes, self._offsets):
+            for channel, ch_mem_pos, trafo, amplitude, offset in zip(self._channels, ch_to_mem,
+                                                                     self._voltage_transformations,
+                                                                     self._amplitudes, self._offsets):
+                final_memory = ch_memory[ch_mem_pos, segment_begin:segment_end]
+
                 if channel is None:
                     sampled_channels.append(self._sample_empty_channel(wf_time))
                 else:
-                    sampled = waveform.get_sampled(channel, wf_time)
-                    if trafo is not None:
-                        sampled = trafo(sampled)
-                    sampled = sampled - offset
+                    if trafo is None:
+                        # sample directly into the final memory
+                        sampled = waveform.get_sampled(channel, wf_time, output_array=final_memory)
+                    else:
+                        # sample into temporary memory and write the trafo result in the final memory
+                        # unfortunately trafo will always allocate :(
+                        sampled = waveform.get_sampled(channel, wf_time, output_array=wf_sample_memory)
+                        assert sampled is wf_sample_memory
+                        final_memory[:] = trafo(sampled)
+                        sampled = final_memory
+                    assert sampled is final_memory
+                    sampled -= offset
                     sampled /= amplitude
                     sampled_channels.append(sampled)
 
             sampled_markers = []
-            for marker in self._markers:
+            for marker, mk_mem_pos in zip(self._markers, mk_to_mem):
+                final_memory = marker_memory[mk_mem_pos, segment_begin:segment_end]
+
                 if marker is None:
                     sampled_markers.append(self._sample_empty_marker(wf_time))
                 else:
-                    sampled_markers.append(waveform.get_sampled(marker, wf_time) != 0)
+                    sampled = waveform.get_sampled(marker, wf_time, output_array=wf_sample_memory)
+                    sampled = numpy.not_equal(sampled, 0., out=final_memory)
+                    assert sampled is final_memory
+
+                    sampled_markers.append(sampled)
 
             sampled_waveforms.append((tuple(sampled_channels), tuple(sampled_markers)))
+
+            segment_begin = segment_end
+        assert segment_begin == n_samples
         return sampled_waveforms
 
 

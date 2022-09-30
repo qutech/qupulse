@@ -113,6 +113,8 @@ class DummyWaveform(Waveform):
         if self.sample_output is not None:
             if isinstance(self.sample_output, dict):
                 output_array[:] = self.sample_output[channel]
+            elif callable(self.sample_output):
+                output_array[:] = self.sample_output(sample_times)
             else:
                 output_array[:] = self.sample_output
         else:
@@ -171,7 +173,7 @@ class DummyInterpolationStrategy(InterpolationStrategy):
     def evaluate_integral(self, t0, v0, t1, v1):
         """ Evaluate integral using arguments v0, t0, v1, t1 """
         raise
-        
+
 class DummyPulseTemplate(AtomicPulseTemplate):
 
     def __init__(self,
