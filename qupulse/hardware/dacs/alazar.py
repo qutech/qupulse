@@ -16,25 +16,14 @@ from atsaverage.masks import CrossBufferMask, Mask
 from qupulse.utils.types import TimeType
 from qupulse.hardware.dacs.dac_base import DAC
 from qupulse.hardware.util import traced
-
+from qupulse.utils.performance import time_windows_to_samples
 
 logger = logging.getLogger(__name__)
 
 
 def _windows_to_samples(begins: np.ndarray, lengths: np.ndarray,
                         sample_rate: TimeType) -> Tuple[np.ndarray, np.ndarray]:
-    # TODO: numba
-    begins = np.rint(begins * float(sample_rate)).astype(dtype=np.uint64)
-    lengths = np.floor_divide(lengths * float(sample_rate.numerator), float(sample_rate.denominator)).astype(
-        dtype=np.uint64)
-
-    sorting_indices = np.argsort(begins)
-    begins = begins[sorting_indices]
-    lengths = lengths[sorting_indices]
-
-    begins.flags.writeable = False
-    lengths.flags.writeable = False
-    return begins, lengths
+    return time_windows_to_samples(begins, lengths, float(sample_rate))
 
 
 @dataclasses.dataclass
@@ -52,11 +41,11 @@ class AcquisitionProgram:
         if self._sample_rate is None:
             self._sample_rate = sample_rate
         elif sample_rate != self.sample_rate:
-            raise RuntimeError('class AcquisitionProgram has already masks with differing sample duration.')
+            raise RuntimeError('class AcquisitionProgram has already masks with differing sample rate.')
 
         assert begins.dtype == float and lengths.dtype == float
 
-        self._masks[mask_name] = _windows_to_samples(begins, lengths, sample_rate)
+        begins, lengths = self._masks[mask_name] = _windows_to_samples(begins, lengths, sample_rate)
 
         return begins, lengths
 
