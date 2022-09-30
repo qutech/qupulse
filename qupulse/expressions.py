@@ -14,7 +14,7 @@ import numpy
 
 from qupulse.serialization import AnonymousSerializable
 from qupulse.utils.sympy import sympify, to_numpy, recursive_substitution, evaluate_lambdified,\
-    get_most_simple_representation, get_variables
+    get_most_simple_representation, get_variables, evaluate_lamdified_exact_rational
 from qupulse.utils.types import TimeType
 
 __all__ = ["Expression", "ExpressionVariableMissingException", "ExpressionScalar", "ExpressionVector", "ExpressionLike"]
@@ -103,8 +103,10 @@ class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
         else:
             e = self.evaluate_numeric()
             return float(e)
-    
+
     def evaluate_symbolic(self, substitutions: Mapping[Any, Any]) -> 'Expression':
+        if len(substitutions)==0:
+            return self
         return Expression.make(recursive_substitution(sympify(self.underlying_expression), substitutions))
 
     @property
@@ -207,6 +209,9 @@ class ExpressionVector(Expression):
     def __repr__(self):
         return 'ExpressionVector({})'.format(repr(self.get_serialization_data()))
 
+    def _sympy_(self):
+        return sympy.NDimArray(self._expression_vector)
+
     def __eq__(self, other):
         if not isinstance(other, Expression):
             other = Expression.make(other)
@@ -243,13 +248,14 @@ class ExpressionScalar(Expression):
         super().__init__()
 
         if isinstance(ex, sympy.Expr):
-            self._original_expression = str(ex)
+            self._original_expression = None
             self._sympified_expression = ex
         else:
             self._original_expression = ex
             self._sympified_expression = sympify(ex)
 
         self._variables = get_variables(self._sympified_expression)
+        self._exact_rational_lambdified = None
 
     @property
     def underlying_expression(self) -> sympy.Expr:
@@ -329,9 +335,15 @@ class ExpressionScalar(Expression):
     def __pos__(self):
         return self.make(self._sympified_expression.__pos__())
 
+    def _sympy_(self):
+        return self._sympified_expression
+
     @property
     def original_expression(self) -> Union[str, Number]:
-        return self._original_expression
+        if self._original_expression is None:
+            return str(self._sympified_expression)
+        else:
+            return self._original_expression
 
     @property
     def sympified_expression(self) -> sympy.Expr:
@@ -346,6 +358,24 @@ class ExpressionScalar(Expression):
 
     def is_nan(self) -> bool:
         return sympy.sympify('nan') == self._sympified_expression
+
+    def _parse_evaluate_numeric_result(self,
+                                       result: Union[Number, numpy.ndarray],
+                                       call_arguments: Any) -> Number:
+        """Overwrite super class method because we do not want to return a scalar numpy.ndarray"""
+        parsed = super()._parse_evaluate_numeric_result(result, call_arguments)
+        if isinstance(parsed, numpy.ndarray):
+            return parsed[()]
+        else:
+            return parsed
+
+    def evaluate_with_exact_rationals(self, scope: Mapping) -> Number:
+        parsed_kwargs = self._parse_evaluate_numeric_arguments(scope)
+        result, self._exact_rational_lambdified = evaluate_lamdified_exact_rational(self.sympified_expression,
+                                                                                    self.variables,
+                                                                                    parsed_kwargs,
+                                                                                    self._exact_rational_lambdified)
+        return self._parse_evaluate_numeric_result(result, scope)
 
 
 class ExpressionVariableMissingException(Exception):

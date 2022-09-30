@@ -5,25 +5,38 @@ Classes:
 """
 
 import itertools
-from abc import ABCMeta, abstractmethod
-from weakref import WeakValueDictionary, ref
-from typing import Union, Set, Sequence, NamedTuple, Tuple, Any, Iterable, FrozenSet, Optional, Mapping, AbstractSet
 import operator
+from abc import ABCMeta, abstractmethod
+from numbers import Real
+from typing import (
+    AbstractSet, Any, FrozenSet, Iterable, Mapping, NamedTuple, Sequence, Set,
+    Tuple, Union, cast)
+from weakref import WeakValueDictionary, ref
 
 import numpy as np
 
 from qupulse import ChannelID
+from qupulse._program.transformation import Transformation
 from qupulse.utils import checked_int_cast, isclose
 from qupulse.utils.types import TimeType, time_from_float
 from qupulse.utils.performance import is_monotonic
 from qupulse.comparable import Comparable
 from qupulse.expressions import ExpressionScalar
 from qupulse.pulses.interpolation import InterpolationStrategy
+from qupulse.utils import checked_int_cast, isclose
+from qupulse.utils.types import TimeType, time_from_float
 from qupulse._program.transformation import Transformation
+from qupulse.utils import pairwise
 
 
 __all__ = ["Waveform", "TableWaveform", "TableWaveformEntry", "FunctionWaveform", "SequenceWaveform",
            "MultiChannelWaveform", "RepetitionWaveform", "TransformingWaveform", "ArithmeticWaveform"]
+
+PULSE_TO_WAVEFORM_ERROR = None  # error margin in pulse template to waveform conversion
+
+#  these are private because there probably will be changes here
+_ALLOCATION_FUNCTION = np.full_like  # pre_allocated = ALLOCATION_FUNCTION(sample_times, **ALLOCATION_FUNCTION_KWARGS)
+_ALLOCATION_FUNCTION_KWARGS = dict(fill_value=np.nan, dtype=float)
 
 
 class Waveform(Comparable, metaclass=ABCMeta):
@@ -41,7 +54,7 @@ class Waveform(Comparable, metaclass=ABCMeta):
     def unsafe_sample(self,
                       channel: ChannelID,
                       sample_times: np.ndarray,
-                      output_array: Union[np.ndarray, None]=None) -> np.ndarray:
+                      output_array: Union[np.ndarray, None] = None) -> np.ndarray:
         """Sample the waveform at given sample times.
 
         The unsafe means that there are no sanity checks performed. The provided sample times are assumed to be
@@ -59,7 +72,7 @@ class Waveform(Comparable, metaclass=ABCMeta):
     def get_sampled(self,
                     channel: ChannelID,
                     sample_times: np.ndarray,
-                    output_array: Union[np.ndarray, None]=None) -> np.ndarray:
+                    output_array: Union[np.ndarray, None] = None) -> np.ndarray:
         """A wrapper to the unsafe_sample method which caches the result. This method enforces the constrains
         unsafe_sample expects and caches the result to save memory.
 
@@ -82,8 +95,9 @@ class Waveform(Comparable, metaclass=ABCMeta):
 
         if not is_monotonic(sample_times):
             raise ValueError('The sample times are not monotonously increasing')
-        if sample_times[0] < 0 or sample_times[-1] > self.duration:
-            raise ValueError('The sample times are not in the range [0, duration]')
+        if sample_times[0] < 0 or sample_times[-1] > float(self.duration):
+            raise ValueError(f'The sample times [{sample_times[0]}, ..., {sample_times[-1]}] are not in the range'
+                             f' [0, duration={float(self.duration)}]')
         if channel not in self.defined_channels:
             raise KeyError('Channel not defined in this waveform: {}'.format(channel))
 
@@ -138,18 +152,22 @@ class Waveform(Comparable, metaclass=ABCMeta):
         return self
 
 
-class TableWaveformEntry(NamedTuple('TableWaveformEntry', [('t', float),
+class TableWaveformEntry(NamedTuple('TableWaveformEntry', [('t', Real),
                                                            ('v', float),
                                                            ('interp', InterpolationStrategy)])):
     def __init__(self, t: float, v: float, interp: InterpolationStrategy):
         if not callable(interp):
             raise TypeError('{} is neither callable nor of type InterpolationStrategy'.format(interp))
 
+    def __repr__(self):
+        return f'{type(self).__name__}(t={self.t}, v={self.v}, interp="{self.interp}")'
+
 
 class TableWaveform(Waveform):
     EntryInInit = Union[TableWaveformEntry, Tuple[float, float, InterpolationStrategy]]
 
     """Waveform obtained from instantiating a TablePulseTemplate."""
+
     def __init__(self,
                  channel: ChannelID,
                  waveform_table: Sequence[EntryInInit]) -> None:
@@ -209,20 +227,29 @@ class TableWaveform(Waveform):
 
     @property
     def duration(self) -> TimeType:
-        return TimeType.from_float(self._table[-1].t)
+        return TimeType.from_float(self._table[-1].t, absolute_error=PULSE_TO_WAVEFORM_ERROR)
 
     def unsafe_sample(self,
                       channel: ChannelID,
                       sample_times: np.ndarray,
-                      output_array: Union[np.ndarray, None]=None) -> np.ndarray:
+                      output_array: Union[np.ndarray, None] = None) -> np.ndarray:
         if output_array is None:
-            output_array = np.empty_like(sample_times)
+            output_array = _ALLOCATION_FUNCTION(sample_times, **_ALLOCATION_FUNCTION_KWARGS)
 
-        for entry1, entry2 in zip(self._table[:-1], self._table[1:]):
+        if PULSE_TO_WAVEFORM_ERROR:
+            # we need to replace the last entry's t with self.duration
+            *entries, last = self._table
+            entries.append(TableWaveformEntry(float(self.duration), last.v, last.interp))
+        else:
+            entries = self._table
+
+        for entry1, entry2 in pairwise(entries):
             indices = slice(np.searchsorted(sample_times, entry1.t, 'left'),
                             np.searchsorted(sample_times, entry2.t, 'right'))
             output_array[indices] = \
-                entry2.interp((entry1.t, entry1.v), (entry2.t, entry2.v), sample_times[indices])
+                entry2.interp((float(entry1.t), entry1.v),
+                              (float(entry2.t), entry2.v),
+                              sample_times[indices])
         return output_array
 
     @property
@@ -230,6 +257,50 @@ class TableWaveform(Waveform):
         return {self._channel_id}
 
     def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> 'Waveform':
+        return self
+
+    def __repr__(self):
+        return f'{type(self).__name__}(channel={self._channel_id}, waveform_table={self._table})'
+
+
+class ConstantWaveform(Waveform):
+
+    _is_constant_waveform = True
+
+    def __init__(self, duration: float, amplitude: Any, channel: ChannelID):
+        """ Create a qupulse waveform corresponding to a ConstantPulseTemplate """
+        self._duration = duration
+        self._amplitude = amplitude
+        self._channel = channel
+
+
+    @property
+    def duration(self) -> TimeType:
+        return time_from_float(float(self._duration), absolute_error=PULSE_TO_WAVEFORM_ERROR)
+
+    @property
+    def defined_channels(self) -> Set[ChannelID]:
+        """The channels this waveform should played on. Use
+            :func:`~qupulse.pulses.instructions.get_measurement_windows` to get a waveform for a subset of these."""
+
+        return {self._channel}
+
+    @property
+    def compare_key(self) -> Tuple[Any]:
+        return self._duration, self._amplitude, self._channel
+
+    def unsafe_sample(self,
+                      channel: ChannelID,
+                      sample_times: np.ndarray,
+                      output_array: Union[np.ndarray, None] = None) -> np.ndarray:
+        if output_array is None:
+            return np.full_like(sample_times, fill_value=self._amplitude, dtype=float)
+        else:
+            output_array[:] = self._amplitude
+            return output_array
+
+    def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> Waveform:
+        """Unsafe version of :func:`~qupulse.pulses.instructions.get_measurement_windows`."""
         return self
 
 
@@ -253,7 +324,7 @@ class FunctionWaveform(Waveform):
             raise ValueError('FunctionWaveforms may not depend on anything but "t"')
 
         self._expression = expression
-        self._duration = TimeType.from_float(duration)
+        self._duration = TimeType.from_float(duration, absolute_error=PULSE_TO_WAVEFORM_ERROR)
         self._channel_id = channel
 
     @property
@@ -272,10 +343,12 @@ class FunctionWaveform(Waveform):
                       channel: ChannelID,
                       sample_times: np.ndarray,
                       output_array: Union[np.ndarray, None] = None) -> np.ndarray:
+        evaluated = self._expression.evaluate_numeric(t=sample_times)
         if output_array is None:
-            output_array = np.empty(len(sample_times))
-        output_array[:] = self._expression.evaluate_numeric(t=sample_times)
-        return output_array
+            return evaluated.astype(float)
+        else:
+            output_array[:] = evaluated
+            return output_array
 
     def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> Waveform:
         return self
@@ -315,9 +388,9 @@ class SequenceWaveform(Waveform):
     def unsafe_sample(self,
                       channel: ChannelID,
                       sample_times: np.ndarray,
-                      output_array: Union[np.ndarray, None]=None) -> np.ndarray:
+                      output_array: Union[np.ndarray, None] = None) -> np.ndarray:
         if output_array is None:
-            output_array = np.empty_like(sample_times)
+            output_array = _ALLOCATION_FUNCTION(sample_times, **_ALLOCATION_FUNCTION_KWARGS)
         time = 0
         for subwaveform in self._sequenced_waveforms:
             # before you change anything here, make sure to understand the difference between basic and advanced
@@ -449,7 +522,7 @@ class MultiChannelWaveform(Waveform):
     def unsafe_sample(self,
                       channel: ChannelID,
                       sample_times: np.ndarray,
-                      output_array: Union[np.ndarray, None]=None) -> np.ndarray:
+                      output_array: Union[np.ndarray, None] = None) -> np.ndarray:
         return self[channel].unsafe_sample(channel, sample_times, output_array)
 
     def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> 'Waveform':
@@ -466,6 +539,7 @@ class MultiChannelWaveform(Waveform):
 
 class RepetitionWaveform(Waveform):
     """This class allows putting multiple PulseTemplate together in one waveform on the hardware."""
+
     def __init__(self, body: Waveform, repetition_count: int):
         self._body = body
         self._repetition_count = checked_int_cast(repetition_count)
@@ -479,9 +553,9 @@ class RepetitionWaveform(Waveform):
     def unsafe_sample(self,
                       channel: ChannelID,
                       sample_times: np.ndarray,
-                      output_array: Union[np.ndarray, None]=None) -> np.ndarray:
+                      output_array: Union[np.ndarray, None] = None) -> np.ndarray:
         if output_array is None:
-            output_array = np.empty_like(sample_times)
+            output_array = _ALLOCATION_FUNCTION(sample_times, **_ALLOCATION_FUNCTION_KWARGS)
         body_duration = self._body.duration
         time = 0
         for _ in range(self._repetition_count):
@@ -592,7 +666,7 @@ class SubsetWaveform(Waveform):
     def unsafe_sample(self,
                       channel: ChannelID,
                       sample_times: np.ndarray,
-                      output_array: Union[np.ndarray, None]=None) -> np.ndarray:
+                      output_array: Union[np.ndarray, None] = None) -> np.ndarray:
         return self.inner_waveform.unsafe_sample(channel, sample_times, output_array)
 
 
@@ -680,6 +754,7 @@ class ArithmeticWaveform(Waveform):
 
 class FunctorWaveform(Waveform):
     """Apply a channel wise functor that works inplace to all results"""
+
     def __init__(self, inner_waveform: Waveform, functor: Mapping[ChannelID, 'Callable']):
         self._inner_waveform = inner_waveform
         self._functor = dict(functor.items())

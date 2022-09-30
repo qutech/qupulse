@@ -9,4 +9,8 @@ dist/*
 doc/source/examples/.ipynb_checkpoints/*
 **.asv
 *.orig
+MATLAB/+qc/personalPaths.mat
 /doc/source/_autosummary/*
+.idea/
+.mypy_cache/*
+tests/hardware/WX2184C.exe

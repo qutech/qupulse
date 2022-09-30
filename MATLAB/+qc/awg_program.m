@@ -39,6 +39,18 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 			program = qc.program_to_struct(a.program_name, a.pulse_template, a.parameters_and_dicts, a.channel_mapping, a.window_mapping, a.global_transformation);
 			plsdata.awg.registeredPrograms.(a.program_name) = program;
 			
+			% Save AWG amplitude at instantiation and upload time so that the
+			% amplitude at the sample can be reconstructed at a later time
+			if ~isfield(plsdata.awg.registeredPrograms.(a.program_name), 'amplitudes_at_upload')
+				% program not online yet
+				plsdata.awg.registeredPrograms.(a.program_name).amplitudes_at_upload = zeros(1, 4);
+			end
+			
+			for ii = int64(1:4)
+				% query actual amplitude from qupulse
+				plsdata.awg.registeredPrograms.(a.program_name).amplitudes_at_upload(ii) = plsdata.awg.inst.amplitude(ii);
+			end
+			
 			if a.verbosity > 9
 				fprintf('Program ''%s'' is now being instantiated...', a.program_name);
 				tic;
@@ -109,7 +121,66 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 			warning('Not using global program since plsdata.awg.armGlobalProgram must contain a char or a cell.');
 		end		
 		
+		% Set scan axis labels here if the global program armament is called by
+		% a prefn in smrun. Only for charge scans
+		if startsWith(globalProgram, 'charge_4chan')
+			f = figure(a.fig_id);
+
+			% always query the rf channels being swept so that they can be logged
+			% by a metafn.
+			if startsWith(globalProgram, 'charge_4chan_d12')
+				idx = [1 2];
+				chans = {'A' 'B'};
+			elseif startsWith(globalProgram, 'charge_4chan_d23')
+				idx = [2 3];
+				chans = {'B' 'C'};
+			elseif startsWith(globalProgram, 'charge_4chan_d34')
+				idx = [4 3];
+				chans = {'D' 'C'};
+			elseif startsWith(globalProgram, 'charge_4chan_d14')
+				idx = [1 4];
+				chans = {'A' 'D'};
+			end
+			plsdata.awg.currentChannels = chans;
+			
+			% compare current AWG channel amplitudes to those at instantiation
+			% time
+			currentAmplitudes = plsdata.awg.currentAmplitudesHV;
+			uploadAmplitudes = plsdata.awg.registeredPrograms.(globalProgram).amplitudes_at_upload;
+
+			updateRFchans = ~strcmp(globalProgram, a.program_name);
+			updateRFamps = ~all(currentAmplitudes == uploadAmplitudes);
+			
+			if updateRFchans || updateRFamps
+				
+				if updateRFamps
+					% Calculate amplitude at sample from the current amplitude, the
+					% amplitude at pulse instantiation time, and the pulse parameters
+					rng = [(plsdata.awg.registeredPrograms.(globalProgram).parameters_and_dicts{2}.charge_4chan___stop_x - ...
+									plsdata.awg.registeredPrograms.(globalProgram).parameters_and_dicts{2}.charge_4chan___start_x) ...
+								 (plsdata.awg.registeredPrograms.(globalProgram).parameters_and_dicts{2}.charge_4chan___stop_y - ...
+									plsdata.awg.registeredPrograms.(globalProgram).parameters_and_dicts{2}.charge_4chan___start_y)];
+					amps = currentAmplitudes(idx)./uploadAmplitudes(idx).*rng*1e3;
+				end
+				for ax = f.Children(2:2:end)'
+					% Don't use xlabel(), ylabel() to stop matlab from updating the rest of the figure
+					if updateRFchans
+						ax.XLabel.String(3) = chans{1};
+						ax.YLabel.String(3) = chans{2};
+					end
+					if updateRFamps
+						ax.XLabel.String(6:9) = sprintf('%.1f', amps(1));
+						ax.YLabel.String(6:9) = sprintf('%.1f', amps(2));
+						ax.XTick = 0:10:100;
+						ax.YTick = 0:10:100;
+						ax.XTickLabel = sprintfc('%.1f', linspace(-amps(1)/2, amps(1)/2, 11));
+						ax.YTickLabel = sprintfc('%.1f', linspace(-amps(2)/2, amps(2)/2, 11));
+					end
+				end
+			end
+		end
 % 		This code outputs the wrong pulses and isn't even faster
+%		- Then why is it still here? - TH   
 % 		registered_programs = util.py.py2mat(py.getattr(hws,'_registered_programs'));
 % 		program = registered_programs.(globalProgram);
 % 		awgs_to_upload_to = program{4};
@@ -192,23 +263,9 @@ function [program, bool, msg] = awg_program(ctrl, varargin)
 			
 			newProgram = qc.program_to_struct(a.program_name, a.pulse_template, a.parameters_and_dicts, a.channel_mapping, a.window_mapping, a.global_transformation);
 			newProgram = qc.get_minimal_program(newProgram);
-			% pulse_duration is just a helper field, can recognize whether
-			% program has changed without it. Removing it for the equality check
-			% below allows for changing the program duration dynamically on the
-			% AWG, e.g. for DNP.
-			if isfield(newProgram , 'added_to_pulse_duration')
-				newProgram  = rmfield(newProgram , 'added_to_pulse_duration');
-			end
 			
 			awgProgram = plsdata.awg.registeredPrograms.(a.program_name);
-			awgProgram = qc.get_minimal_program(awgProgram);	
-			% pulse_duration is just a helper field, can recognize whether
-			% program has changed without it. Removing it for the equality check
-			% below allows for changing the program duration dynamically on the
-			% AWG, e.g. for DNP.
-			if isfield(awgProgram, 'added_to_pulse_duration')
-				awgProgram = rmfield(awgProgram, 'added_to_pulse_duration');
-			end
+			awgProgram = qc.get_minimal_program(awgProgram);
 			
 			bool = isequal(newProgram, awgProgram);
 			

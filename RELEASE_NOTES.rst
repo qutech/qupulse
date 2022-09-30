@@ -1,17 +1,20 @@
-## pending/current ##
+.. towncrier release notes start
 
- - General:
-    - Unify `TimeType.from_float` between fractions and gmpy2 backend behaviour.
+0.5.1
+=====
 
-## 0.5 ##
+- General:
+   - Unify `TimeType.from_float` between fractions and gmpy2 backend behaviour (fixes issue 529).
 
- - General:
+0.5
+=====
+
+- General:
    - Improve `TimeType` consistency by leveraging str(float) for rounding by default.
    - Add support for sympy==1.5
-   - Add volatile parameters. Repetition counts can now be changed at runtime in some cases (useful for DNP). See
-     `volatile` kwarg of `create_program`
+   - Add volatile parameters. Repetition counts can now be changed at runtime in some cases (useful for DNP). See `volatile` kwarg of `create_program`
 
- - Hardware:
+- Hardware:
    - Add a `measure_program` method to the DAC interface. This method is used by the QCoDeS integration.
    - Add a `set_measurement_mask` to DAC interface. This method is used by the QCoDeS integration.
    - Add a `get_sample_times` util method to share code for exact and fast sample time calculation
@@ -43,7 +46,8 @@
       - InstructionBlock: Old representation of programs. Replaced by Loop
       - MultiChannelProgram: Was required in the instruction block framework
 
-## 0.4 ##
+0.4
+=====
 
 - General:
     - Add utility function `qupulse.utils.types.has_type_interface` and use it to circumvent autoreload triggered isinstance fails
@@ -55,7 +59,8 @@
     - Plotting:
         - Make `plotting.render` behaviour and return value consistent between calls with `InstructionBlock` and `Loop`. Render now always returns 3 arguments.
 
-## 0.3 ##
+0.3
+=====
 
 - General:
     - Introduce qupulse.utils.isclose (an alias for math.isclose if available)
@@ -80,19 +85,16 @@
 - Parameters:
     - `ConstantParameter` now accepts a `Expression` without free variables as value (given as `Expression` or string)
 
-## 0.2 ##
+0.2
+=====
 
 - General:
-
-    - officially removed support for Python 3.3 (qupulse and dependencies are not compatible anymore)
+   - officially removed support for Python 3.3 (qupulse and dependencies are not compatible anymore)
 
 - Serialization / Storage:
-
-    - Added functionality to easily access available content/identifiers in `PulseStorage` and `StorageBackend`.
-    - DEPRECATED `list_contents()` of `StorageBackend` (use `contents property` instead).
-    - DEPRECATED: `CachingBackend` because its functionality is a subset of `PulseStorage`.
+   - Added functionality to easily access available content/identifiers in `PulseStorage` and `StorageBackend`.
+   - DEPRECATED `list_contents()` of `StorageBackend` (use `contents property` instead).
+   - DEPRECATED: `CachingBackend` because its functionality is a subset of `PulseStorage`.
 
 - Expressions:
-    - Fixed bug in `Expression.evaluate_numeric` if result is array of numeric sympy objects
-
-## 0.1.2 ##
+   - Fixed bug in `Expression.evaluate_numeric` if result is array of numeric sympy objects

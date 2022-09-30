@@ -9,6 +9,7 @@ import collections
 import operator
 
 import numpy
+import sympy
 
 import qupulse.utils.numeric as qupulse_numeric
 
@@ -33,7 +34,7 @@ def _with_other_as_time_type(fn):
     """This is decorator to convert the other argument and the result into a :class:`TimeType`"""
     @functools.wraps(fn)
     def wrapper(self, other) -> 'TimeType':
-        converted = _converter.get(type(other), TimeType)(other)
+        converted = _converter.get(type(other), TimeType._try_from_any)(other)
         result = fn(self, converted)
         if result is NotImplemented:
             return result
@@ -55,10 +56,60 @@ class TimeType:
     _to_internal = fractions.Fraction if gmpy2 is None else gmpy2.mpq
 
     def __init__(self, value: numbers.Rational = 0.):
-        if type(value) == type(self):
+        if type(getattr(value, '_value', None)) is self._InternalType:
             self._value = value._value
         else:
-            self._value = self._to_internal(value)
+            try:
+                self._value = self._to_internal(value)
+            except TypeError as err:
+                raise TypeError(f'Could not create TimeType from {value} of type {type(value)}') from err
+
+    @classmethod
+    def _try_from_any(cls, any: typing.Any):
+        try:
+            cls(any)
+        except TypeError:
+            pass
+
+        # duck type rational
+        if hasattr(any, 'numerator') and hasattr(any, 'denominator'):
+            # sympy.Rational has callables...
+            numerator = any.numerator() if callable(any.numerator) else any.numerator
+            denominator = any.denominator() if callable(any.denominator) else any.denominator
+            return cls.from_fraction(int(numerator), int(denominator))
+
+        # test if objects subclass number
+        if isinstance(any, numbers.Integral):
+            return cls.from_fraction(int(any), 1)
+        if isinstance(any, numbers.Real):
+            return cls.from_float(float(any))
+
+        # test for array
+        if isinstance(any, numpy.ndarray):
+            return numpy.vectorize(cls._try_from_any)(any)
+
+        # try conversion to int and float. gmpy2's answer to isinstance is version dependent
+        try:
+            as_int = int(any)
+        except (TypeError, ValueError, RuntimeError):
+            as_int = None
+        try:
+            as_float = float(any)
+        except (TypeError, ValueError, RuntimeError):
+            as_float = None
+
+        if as_int is None and as_float is not None:
+            return cls.from_float(as_float)
+        elif as_int is not None and as_float is None:
+            return cls.from_fraction(as_int, 1)
+        elif as_int is not None and as_float is not None:
+            if as_float.is_integer():
+                return cls.from_fraction(as_int, 1)
+            elif int(as_float) == as_int:
+                return cls.from_float(as_float)
+
+        # for error message
+        return cls(any)
 
     @property
     def numerator(self):
@@ -67,6 +118,10 @@ class TimeType:
     @property
     def denominator(self):
         return self._value.denominator
+
+    def _sympy_(self):
+        import sympy
+        return sympy.Rational(self.numerator, self.denominator)
 
     def __round__(self, *args, **kwargs):
         return self._value.__round__(*args, **kwargs)
@@ -152,34 +207,29 @@ class TimeType:
         return self._value.__rfloordiv__(other._value)
 
     def __le__(self, other):
-        if type(other) is TimeType:
-            return self._value.__le__(other._value)
-        else:
-            return self._value.__le__(other)
+        return self._value <= self.as_comparable(other)
 
     def __ge__(self, other):
-        if type(other) is TimeType:
-            return self._value.__ge__(other._value)
-        else:
-            return self._value.__ge__(other)
+        return self._value >= self.as_comparable(other)
 
     def __lt__(self, other):
-        if type(other) is TimeType:
-            return self._value.__lt__(other._value)
-        else:
-            return self._value.__lt__(other)
+        return self._value < self.as_comparable(other)
 
     def __gt__(self, other):
-        if type(other) is TimeType:
-            return self._value.__gt__(other._value)
-        else:
-            return self._value.__gt__(other)
+        return self._value > self.as_comparable(other)
 
     def __eq__(self, other):
         if type(other) == type(self):
             return self._value.__eq__(other._value)
         else:
             return self._value == other
+
+    @classmethod
+    def as_comparable(cls, other: typing.Union['TimeType', typing.Any]):
+        if type(other) is cls:
+            return other._value
+        else:
+            return other
 
     @classmethod
     def from_float(cls, value: float, absolute_error: typing.Optional[float] = None) -> 'TimeType':
@@ -208,8 +258,14 @@ class TimeType:
             if type(value) in (cls, cls._InternalType, fractions.Fraction):
                 return cls(value)
             else:
-                # .upper() is a bit faster than replace('e', 'E') which gmpy2.mpq needs
-                return cls(cls._to_internal(str(value).upper()))
+                try:
+                    # .upper() is a bit faster than replace('e', 'E') which gmpy2.mpq needs
+                    return cls(cls._to_internal(str(value).upper()))
+                except ValueError:
+                    if isinstance(value, numbers.Number) and not numpy.isfinite(value):
+                        raise ValueError('Cannot represent "{}" as TimeType'.format(value), value)
+                    else:
+                        raise
 
         elif absolute_error == 0:
             return cls(cls._to_internal(value))
@@ -218,7 +274,7 @@ class TimeType:
         elif absolute_error > 1:
             raise ValueError('absolute_error needs to be <= 1')
         else:
-            return cls(qupulse_numeric.approximate_double(value, absolute_error, fraction_type=cls._InternalType))
+            return cls(qupulse_numeric.approximate_double(value, absolute_error, fraction_type=cls._to_internal))
 
     @classmethod
     def from_fraction(cls, numerator: int, denominator: int) -> 'TimeType':
@@ -246,6 +302,9 @@ numbers.Rational.register(TimeType)
 
 _converter = {
     float: TimeType.from_float,
+    TimeType._InternalType: TimeType,
+    fractions.Fraction: TimeType,
+    sympy.Rational: lambda q: TimeType.from_fraction(q.p, q.q),
     TimeType: lambda x: x
 }
 
@@ -316,38 +375,6 @@ class HashableNumpyArray(numpy.ndarray):
 def has_type_interface(obj: typing.Any, type_obj: typing.Type) -> bool:
     """Return true if all public attributes of the class are attribues of the object"""
     return set(dir(obj)) >= {attr for attr in dir(type_obj) if not attr.startswith('_')}
-
-
-if hasattr(typing, 'Collection'):
-    Collection = typing.Collection
-else:
-    def _check_methods(C, *methods):
-        """copied from https://github.com/python/cpython/blob/3.8/Lib/_collections_abc.py"""
-        mro = C.__mro__
-        for method in methods:
-            for B in mro:
-                if method in B.__dict__:
-                    if B.__dict__[method] is None:
-                        return NotImplemented
-                    break
-            else:
-                return NotImplemented
-        return True
-
-    class _ABCCollection(collections.abc.Sized, collections.abc.Iterable, collections.abc.Container):
-        """copied from https://github.com/python/cpython/blob/3.8/Lib/_collections_abc.py"""
-        __slots__ = ()
-
-        @classmethod
-        def __subclasshook__(cls, C):
-            # removed "if cls is _ABCCollection" guard because reloading this module damages the test
-            return _check_methods(C, "__len__", "__iter__", "__contains__")
-
-    class Collection(typing.Sized, typing.Iterable[typing.T_co], typing.Container[typing.T_co],
-                     extra=_ABCCollection):
-        """Fallback for typing.Collection if python 3.5
-        copied from https://github.com/python/cpython/blob/3.5/Lib/typing.py"""
-        __slots__ = ()
 
 
 _KT_hash = typing.TypeVar('_KT_hash', bound=typing.Hashable)  # Key type.

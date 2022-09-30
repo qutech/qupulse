@@ -1,5 +1,5 @@
 """STANDARD LIBRARY IMPORTS"""
-from typing import Tuple, List, Dict, Optional, Set, Any, Union
+from typing import Tuple, List, Dict, Optional, Set, Any, Union, Mapping
 import copy
 
 import numpy
@@ -75,9 +75,9 @@ class DummyNoValueParameter(Parameter):
 
 class DummyWaveform(Waveform):
 
-    def __init__(self, duration: float=0, sample_output: Union[numpy.ndarray, dict]=None, defined_channels=None) -> None:
+    def __init__(self, duration: Union[float, TimeType]=0, sample_output: Union[numpy.ndarray, dict, callable]=None, defined_channels=None) -> None:
         super().__init__()
-        self.duration_ = TimeType.from_float(duration)
+        self.duration_ = duration if isinstance(duration, TimeType) else TimeType.from_float(duration)
         self.sample_output = sample_output
         if defined_channels is None:
             if isinstance(sample_output, dict):
@@ -118,6 +118,8 @@ class DummyWaveform(Waveform):
         if self.sample_output is not None:
             if isinstance(self.sample_output, dict):
                 output_array[:] = self.sample_output[channel]
+            elif callable(self.sample_output):
+                output_array[:] = self.sample_output(sample_times)
             else:
                 output_array[:] = self.sample_output
         else:
@@ -141,6 +143,15 @@ class DummyWaveform(Waveform):
     @property
     def defined_channels(self):
         return self.defined_channels_
+
+    def last_value(self, channel) -> float:
+        if self.sample_output is None:
+            return 0.
+        elif isinstance(self.sample_output, dict):
+            sample_output = self.sample_output[channel]
+        else:
+            sample_output = self.sample_output
+        return sample_output[-1]
 
 
 class DummyInterpolationStrategy(InterpolationStrategy):
@@ -168,19 +179,24 @@ class DummyPulseTemplate(AtomicPulseTemplate):
 
     def __init__(self,
                  requires_stop: bool=False,
-                 parameter_names: Set[str]={},
-                 defined_channels: Set[ChannelID]={'default'},
+                 parameter_names: Set[str]=set(),
+                 defined_channels: Set[ChannelID]=None,
                  duration: Any=0,
                  waveform: Waveform=tuple(),
                  measurement_names: Set[str] = set(),
                  measurements: list=list(),
-                 integrals: Dict[ChannelID, ExpressionScalar]={'default': ExpressionScalar(0)},
+                 integrals: Dict[ChannelID, ExpressionScalar]=None,
                  program: Optional[Loop]=None,
                  identifier=None,
                  registry=None) -> None:
         super().__init__(identifier=identifier, measurements=measurements)
         self.requires_stop_ = requires_stop
         self.requires_stop_arguments = []
+
+        if defined_channels is None:
+            defined_channels = {'default'}
+        if integrals is None:
+            integrals = {ch: ExpressionScalar(0) for ch in defined_channels}
 
         self.parameter_names_ = parameter_names
         self.defined_channels_ = defined_channels
@@ -192,6 +208,9 @@ class DummyPulseTemplate(AtomicPulseTemplate):
         self.create_program_calls = []
         self._program = program
         self._register(registry=registry)
+
+        if integrals is not None:
+            assert isinstance(integrals, Mapping)
 
     @property
     def duration(self):
@@ -252,3 +271,10 @@ class DummyPulseTemplate(AtomicPulseTemplate):
     def compare_key(self) -> Tuple[Any, ...]:
         return (self.requires_stop_, self.parameter_names,
                 self.defined_channels, self.duration, self.waveform, self.measurement_names, self.integral)
+
+    def _as_expression(self) -> Dict[ChannelID, ExpressionScalar]:
+        assert self.duration != 0
+        t = self._AS_EXPRESSION_TIME
+        duration = self.duration.underlying_expression
+        return {ch: ExpressionScalar(integral.underlying_expression*t/duration)
+                for ch, integral in self.integral.items()}

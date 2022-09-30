@@ -39,8 +39,9 @@ function [W, X, Y, Z] = compensate_channels(t, W, X, Y, Z, interpolation, comp_p
 		comp_param_name = 'globals___comp';
 	end
 	
-	
-	[W, X, Y, Z] = comp_channels(W, X, Y, Z, comp_param_name);	
+	if ~strcmp(comp_param_name, 'compensation_off')
+		[W, X, Y, Z] = comp_channels(W, X, Y, Z, comp_param_name);
+	end
 	[W, X, Y, Z] = format_channels(t, interpolation, W, X, Y, Z);
 
 end

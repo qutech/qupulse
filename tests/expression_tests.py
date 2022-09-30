@@ -5,7 +5,7 @@ import numpy as np
 from sympy import sympify, Eq
 
 from qupulse.expressions import Expression, ExpressionVariableMissingException, NonNumericEvaluation, ExpressionScalar, ExpressionVector
-
+from qupulse.utils.types import TimeType
 
 class ExpressionTests(unittest.TestCase):
     def test_make(self):
@@ -149,6 +149,14 @@ class ExpressionScalarTests(unittest.TestCase):
             'c': -7*np.ones(4)
         }
         np.testing.assert_equal((2 * 1.5 - 7) * np.ones(4), e.evaluate_numeric(**params))
+
+        e = ExpressionScalar('a * b + c')
+        params = {
+            'a': np.array(2),
+            'b': np.array(1.5),
+            'c': np.array(-7)
+        }
+        np.testing.assert_equal((2 * 1.5 - 7), e.evaluate_numeric(**params))
 
     def test_indexing(self):
         e = ExpressionScalar('a[i] * c')
@@ -338,7 +346,7 @@ class ExpressionScalarTests(unittest.TestCase):
         self.assertIs(3 >= valued, True)
 
     def assertExpressionEqual(self, lhs: Expression, rhs: Expression):
-        self.assertTrue(bool(Eq(lhs.sympified_expression, rhs.sympified_expression)), '{} and {} are not equal'.format(lhs, rhs))
+        self.assertTrue(bool(Eq(lhs, rhs)), '{} and {} are not equal'.format(lhs, rhs))
 
     def test_number_math(self):
         a = ExpressionScalar('a')
@@ -380,6 +388,17 @@ class ExpressionScalarTests(unittest.TestCase):
         result = expr.evaluate_numeric(t=data)
 
         np.testing.assert_allclose(expected, result)
+
+    def test_evaluate_with_exact_rationals(self):
+        expr = ExpressionScalar('1 / 3')
+        self.assertEqual(TimeType.from_fraction(1, 3), expr.evaluate_with_exact_rationals({}))
+
+        expr = ExpressionScalar('a * (1 / 3)')
+        self.assertEqual(TimeType.from_fraction(2, 3), expr.evaluate_with_exact_rationals({'a': 2}))
+
+        expr = ExpressionScalar('dot(a, b) * (1 / 3)')
+        self.assertEqual(TimeType.from_fraction(10, 3),
+                         expr.evaluate_with_exact_rationals({'a': [2, 2], 'b': [1, 4]}))
 
 
 class ExpressionExceptionTests(unittest.TestCase):

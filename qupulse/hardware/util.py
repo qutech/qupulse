@@ -1,10 +1,11 @@
-from typing import List, Sequence, Tuple, Union, Optional
+from typing import Collection, Sequence, Tuple, Union, Optional
 import itertools
+from unittest import mock
 
 import numpy as np
 
 from qupulse._program.waveforms import Waveform
-from qupulse.utils.types import TimeType, Collection
+from qupulse.utils.types import TimeType
 from qupulse.utils import pairwise
 
 try:
@@ -16,7 +17,7 @@ except ImportError:
 
 try:
     import zhinst
-except ImportError:
+except ImportError:  # pragma: no cover
     zhinst = None
 
 __all__ = ['voltage_to_uint16', 'get_sample_times', 'zhinst_voltage_to_uint16']
@@ -105,6 +106,44 @@ def find_positions(data: Sequence, to_find: Sequence) -> np.ndarray:
     return positions
 
 
+def get_waveform_length(waveform: Waveform,
+                        sample_rate_in_GHz: TimeType, tolerance: float = 1e-10) -> int:
+    """Calculates the number of samples in a waveform
+
+    If only one waveform is given, the number of samples has shape ()
+
+    Raises a ValueError if the waveform has a length that is zero or not a multiple of the inverse sample rate.
+
+    Args:
+        waveform: A waveform
+        sample_rate_in_GHz: The sample rate in GHz
+        tolerance: Allowed deviation from an integer sample count
+
+    Returns:
+        Number of samples for the waveform
+    """
+    segment_length = waveform.duration * sample_rate_in_GHz
+
+    # __round__ is implemented for Fraction and gmpy2.mpq
+    rounded_segment_length = round(segment_length)
+
+    if abs(segment_length - rounded_segment_length) > tolerance:
+        deviation = abs(segment_length - rounded_segment_length)
+        raise ValueError("Error while sampling waveforms. One waveform has a non integer length in samples of "
+                         "{segment_length} at the given sample rate of {sample_rate}GHz. This is a deviation of "
+                         "{deviation} from the nearest integer {rounded_segment_length}."
+                         "".format(segment_length=segment_length,
+                                   sample_rate=sample_rate_in_GHz,
+                                   deviation=deviation,
+                                   rounded_segment_length=rounded_segment_length))
+    if rounded_segment_length <= 0:
+        raise ValueError("Error while sampling waveform. Waveform has a length <= zero at the given sample "
+                         "rate of %rGHz" % sample_rate_in_GHz)
+    segment_length = np.uint64(rounded_segment_length)
+
+    return segment_length
+
+
 def get_sample_times(waveforms: Union[Collection[Waveform], Waveform],
                      sample_rate_in_GHz: TimeType, tolerance: float = 1e-10) -> Tuple[np.array, np.array]:
     """Calculates the sample times required for the longest waveform in waveforms and returns it together with an array
@@ -131,27 +170,11 @@ def get_sample_times(waveforms: Union[Collection[Waveform], Waveform],
 
     segment_lengths = []
     for waveform in waveforms:
-        segment_length = waveform.duration * sample_rate_in_GHz
-
-        # __round__ is implemented for Fraction and gmpy2.mpq
-        rounded_segment_length = round(segment_length)
-
-        if abs(segment_length - rounded_segment_length) > tolerance:
-            deviation = abs(segment_length - rounded_segment_length)
-            raise ValueError("Error while sampling waveforms. One waveform has a non integer length in samples of "
-                             "{segment_length} at the given sample rate of {sample_rate}GHz. This is a deviation of "
-                             "{deviation} from the nearest integer {rounded_segment_length}."
-                             "".format(segment_length=segment_length,
-                                       sample_rate=sample_rate_in_GHz,
-                                       deviation=deviation,
-                                       rounded_segment_length=rounded_segment_length))
-        if rounded_segment_length <= 0:
-            raise ValueError("Error while sampling waveforms. One waveform has a length <= zero at the given sample "
-                             "rate of %rGHz" % sample_rate_in_GHz)
+        rounded_segment_length = get_waveform_length(waveform, sample_rate_in_GHz=sample_rate_in_GHz, tolerance=tolerance)
         segment_lengths.append(rounded_segment_length)
 
     segment_lengths = np.asarray(segment_lengths, dtype=np.uint64)
-    time_array = np.arange(np.max(segment_lengths)) / float(sample_rate_in_GHz)
+    time_array = np.arange(np.max(segment_lengths), dtype=float) / float(sample_rate_in_GHz)
 
     return time_array, segment_lengths
 
@@ -165,10 +188,22 @@ def _zhinst_voltage_to_uint16_numba(size: int, ch1: Optional[np.ndarray], ch2: O
 
     scale = float(2**15 - 1)
 
+    invalid_value = None
+
+    def has_invalid_size(arr):
+        return arr is not None and len(arr) != size
+
+    if has_invalid_size(ch1) or has_invalid_size(ch2) or has_invalid_size(m1_front) or has_invalid_size(m1_back) or has_invalid_size(m2_front) or has_invalid_size(m2_back):
+        raise ValueError("One of the inputs does not have the given size.")
+
     for i in range(size):
         if ch1 is not None:
+            if not abs(ch1[i]) <= 1:
+                invalid_value = ch1[i]
             data[i, 0] = ch1[i] * scale
         if ch2 is not None:
+            if not abs(ch2[i]) <= 1:
+                invalid_value = ch2[i]
             data[i, 1] = ch2[i] * scale
         if m1_front is not None:
             data[i, 2] |= (m1_front[i] != 0)
@@ -178,6 +213,11 @@ def _zhinst_voltage_to_uint16_numba(size: int, ch1: Optional[np.ndarray], ch2: O
             data[i, 2] |= (m2_front[i] != 0) << 2
         if m2_back is not None:
             data[i, 2] |= (m2_back[i] != 0) << 3
+
+    if invalid_value is not None:
+        # we can only use compile time constants here
+        raise ValueError('Encountered an invalid value in channel data (not in [-1, 1])')
+
     return data.ravel()
 
 
@@ -187,10 +227,20 @@ def _zhinst_voltage_to_uint16_numpy(size: int, ch1: Optional[np.ndarray], ch2: O
     """Fallback implementation if numba is not available"""
     markers = (m1_front, m1_back, m2_front, m2_back)
 
+    def check_invalid_values(ch_data):
+        # like this to catch NaN
+        invalid = ~(np.abs(ch_data) <= 1)
+        if np.any(invalid):
+            raise ValueError('Encountered an invalid value in channel data (not in [-1, 1])', ch_data[invalid][-1])
+
     if ch1 is None:
         ch1 = np.zeros(size)
+    else:
+        check_invalid_values(ch1)
     if ch2 is None:
         ch2 = np.zeros(size)
+    else:
+        check_invalid_values(ch1)
     marker_data = np.zeros(size, dtype=np.uint16)
     for idx, marker in enumerate(markers):
         if marker is not None:
@@ -213,15 +263,34 @@ def zhinst_voltage_to_uint16(ch1: Optional[np.ndarray], ch2: Optional[np.ndarray
         as i16.
     """
     all_input = (ch1, ch2, *markers)
-    assert any(x is not None for x in all_input)
     size = {x.size for x in all_input if x is not None}
-    assert len(size) == 1, "Inputs have incompatible dimension"
+    if not size:
+        raise ValueError("No input arrays")
+    elif len(size) != 1:
+        raise ValueError("Inputs have incompatible dimension")
     size, = size
     size = int(size)
 
-    raise NotImplementedError('Check voltage range')
+    if numba is not None:
+        try:
+            return _zhinst_voltage_to_uint16_numba(size, *all_input)
+        except ValueError:
+            # use the exception from numpy version
+            pass
+    return _zhinst_voltage_to_uint16_numpy(size, *all_input)
 
-    if numba:
-        return _zhinst_voltage_to_uint16_numba(size, *all_input)
-    else:
-        return _zhinst_voltage_to_uint16_numpy(size, *all_input)
+
+def not_none_indices(seq: Sequence) -> Tuple[Sequence[Optional[int]], int]:
+    """Calculate lookup table from sparse to non sparse indices and the total number of not None elements
+
+    assert ([None, 0, 1, None, None, 2], 3) == not_none_indices([None, 'a', 'b', None, None, 'c'])
+    """
+    indices = []
+    idx = 0
+    for elem in seq:
+        if elem is None:
+            indices.append(elem)
+        else:
+            indices.append(idx)
+            idx += 1
+    return indices, idx
