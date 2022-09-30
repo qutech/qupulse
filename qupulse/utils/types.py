@@ -240,7 +240,7 @@ class TimeType:
 
     @classmethod
     def as_comparable(cls, other: typing.Union['TimeType', typing.Any]):
-        if type(other) == cls:
+        if type(other) is cls:
             return other._value
         else:
             return other
