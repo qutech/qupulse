@@ -1,4 +1,4 @@
-from typing import Mapping, Set, Tuple, Sequence
+from typing import Any, Mapping, Set, Tuple, Sequence, AbstractSet, Union, TYPE_CHECKING
 from abc import abstractmethod
 from numbers import Real
 
@@ -15,7 +15,8 @@ class Transformation(Comparable):
      of input and output channels might differ."""
 
     @abstractmethod
-    def __call__(self, time: np.ndarray, data: Mapping[ChannelID, np.ndarray]) -> Mapping[ChannelID, np.ndarray]:
+    def __call__(self, time: Union[np.ndarray, float],
+                 data: Mapping[ChannelID, Union[np.ndarray, float]]) -> Mapping[ChannelID, Union[np.ndarray, float]]:
         """Apply transformation to data
         Args:
             time:
@@ -26,11 +27,11 @@ class Transformation(Comparable):
         """
 
     @abstractmethod
-    def get_output_channels(self, input_channels: Set[ChannelID]) -> Set[ChannelID]:
+    def get_output_channels(self, input_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
         """Return the channel identifiers"""
 
     @abstractmethod
-    def get_input_channels(self, output_channels: Set[ChannelID]) -> Set[ChannelID]:
+    def get_input_channels(self, output_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
         """Channels that are required for getting data for the requested output channel"""
 
     def chain(self, next_transformation: 'Transformation') -> 'Transformation':
@@ -39,19 +40,24 @@ class Transformation(Comparable):
         else:
             return chain_transformations(self, next_transformation)
 
+    def is_constant_invariant(self):
+        """Signals if the transformation always maps constants to constants."""
+        return False
+
 
 class IdentityTransformation(Transformation, metaclass=SingletonABCMeta):
-    def __call__(self, time: np.ndarray, data: Mapping[ChannelID, np.ndarray]) -> Mapping[ChannelID, np.ndarray]:
+    def __call__(self, time: Union[np.ndarray, float],
+                 data: Mapping[ChannelID, Union[np.ndarray, float]]) -> Mapping[ChannelID, Union[np.ndarray, float]]:
         return data
 
-    def get_output_channels(self, input_channels: Set[ChannelID]) -> Set[ChannelID]:
+    def get_output_channels(self, input_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
         return input_channels
 
     @property
     def compare_key(self) -> None:
         return None
 
-    def get_input_channels(self, output_channels: Set[ChannelID]) -> Set[ChannelID]:
+    def get_input_channels(self, output_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
         return output_channels
 
     def chain(self, next_transformation: Transformation) -> Transformation:
@@ -59,6 +65,10 @@ class IdentityTransformation(Transformation, metaclass=SingletonABCMeta):
 
     def __repr__(self):
         return 'IdentityTransformation()'
+
+    def is_constant_invariant(self):
+        """Signals if the transformation always maps constants to constants."""
+        return True
 
 
 class ChainedTransformation(Transformation):
@@ -69,17 +79,18 @@ class ChainedTransformation(Transformation):
     def transformations(self) -> Tuple[Transformation, ...]:
         return self._transformations
 
-    def get_output_channels(self, input_channels: Set[ChannelID]) -> Set[ChannelID]:
+    def get_output_channels(self, input_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
         for transformation in self._transformations:
             input_channels = transformation.get_output_channels(input_channels)
         return input_channels
 
-    def get_input_channels(self, output_channels: Set[ChannelID]) -> Set[ChannelID]:
+    def get_input_channels(self, output_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
         for transformation in reversed(self._transformations):
             output_channels = transformation.get_input_channels(output_channels)
         return output_channels
 
-    def __call__(self, time: np.ndarray, data: Mapping[ChannelID, np.ndarray]) -> Mapping[ChannelID, np.ndarray]:
+    def __call__(self, time: Union[np.ndarray, float],
+                 data: Mapping[ChannelID, Union[np.ndarray, float]]) -> Mapping[ChannelID, Union[np.ndarray, float]]:
         for transformation in self._transformations:
             data = transformation(time, data)
         return data
@@ -88,11 +99,15 @@ class ChainedTransformation(Transformation):
     def compare_key(self) -> Tuple[Transformation, ...]:
         return self._transformations
 
-    def chain(self, next_transformation) -> 'ChainedTransformation':
+    def chain(self, next_transformation) -> Transformation:
         return chain_transformations(*self.transformations, next_transformation)
 
     def __repr__(self):
         return 'ChainedTransformation%r' % (self._transformations,)
+
+    def is_constant_invariant(self):
+        """Signals if the transformation always maps constants to constants."""
+        return all(trafo.is_constant_invariant() for trafo in self._transformations)
 
 
 class LinearTransformation(Transformation):
@@ -121,8 +136,11 @@ class LinearTransformation(Transformation):
         self._matrix = transformation_matrix
         self._input_channels = tuple(sorted(input_channels))
         self._output_channels = tuple(sorted(output_channels))
+        self._input_channels_set = frozenset(self._input_channels)
+        self._output_channels_set = frozenset(self._output_channels)
 
-    def __call__(self, time: np.ndarray, data: Mapping[ChannelID, np.ndarray]) -> Mapping[ChannelID, np.ndarray]:
+    def __call__(self, time: Union[np.ndarray, float],
+                 data: Mapping[ChannelID, Union[np.ndarray, float]]) -> Mapping[ChannelID, Union[np.ndarray, float]]:
         data_out = {forwarded_channel: data[forwarded_channel]
                     for forwarded_channel in set(data.keys()).difference(self._input_channels)}
 
@@ -131,31 +149,32 @@ class LinearTransformation(Transformation):
             return data_out
 
         try:
-            data_in = np.stack(data[in_channel] for in_channel in self._input_channels)
+            data_in = np.stack([data[in_channel] for in_channel in self._input_channels])
         except KeyError as error:
             raise KeyError('Invalid input channels', set(data.keys()), set(self._input_channels)) from error
 
         transformed_data = self._matrix @ data_in
 
         for idx, out_channel in enumerate(self._output_channels):
-            data_out[out_channel] = transformed_data[idx, :]
+            data_out[out_channel] = transformed_data[idx, ...]
 
         return data_out
 
-    def get_output_channels(self, input_channels: Set[ChannelID]) -> Set[ChannelID]:
-        if not input_channels.issuperset(self._input_channels):
-            raise KeyError('Invalid input channels', input_channels, set(self._input_channels))
+    def get_output_channels(self, input_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
+        if not input_channels >= self._input_channels_set:
+            # input_channels is not a superset of the required input channels
+            raise KeyError('Invalid input channels', input_channels, self._input_channels_set)
 
-        return input_channels.difference(self._input_channels).union(self._output_channels)
+        return (input_channels - self._input_channels_set) | self._output_channels_set
 
-    def get_input_channels(self, output_channels: Set[ChannelID]) -> Set[ChannelID]:
-        forwarded = output_channels.difference(self._output_channels)
+    def get_input_channels(self, output_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
+        forwarded = output_channels - self._output_channels_set
         if not forwarded.isdisjoint(self._input_channels):
-            raise KeyError('Is input channel', forwarded.intersection(self._input_channels))
+            raise KeyError('Is input channel', forwarded & self._input_channels_set)
         elif output_channels.isdisjoint(self._output_channels):
             return output_channels
         else:
-            return forwarded.union(self._input_channels)
+            return forwarded | self._input_channels_set
 
     @property
     def compare_key(self) -> Tuple[Tuple[ChannelID], Tuple[ChannelID], bytes]:
@@ -169,6 +188,10 @@ class LinearTransformation(Transformation):
                                                              input_channels=self._input_channels,
                                                              output_channels=self._output_channels)
 
+    def is_constant_invariant(self):
+        """Signals if the transformation always maps constants to constants."""
+        return True
+
 
 class OffsetTransformation(Transformation):
     def __init__(self, offsets: Mapping[ChannelID, Real]):
@@ -181,14 +204,15 @@ class OffsetTransformation(Transformation):
         """
         self._offsets = dict(offsets.items())
 
-    def __call__(self, time: np.ndarray, data: Mapping[ChannelID, np.ndarray]) -> Mapping[ChannelID, np.ndarray]:
+    def __call__(self, time: Union[np.ndarray, float],
+                 data: Mapping[ChannelID, Union[np.ndarray, float]]) -> Mapping[ChannelID, Union[np.ndarray, float]]:
         return {channel: channel_values + self._offsets[channel] if channel in self._offsets else channel_values
                 for channel, channel_values in data.items()}
 
-    def get_input_channels(self, output_channels: Set[ChannelID]):
+    def get_input_channels(self, output_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
         return output_channels
 
-    def get_output_channels(self, input_channels: Set[ChannelID]):
+    def get_output_channels(self, input_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
         return input_channels
 
     @property
@@ -198,19 +222,24 @@ class OffsetTransformation(Transformation):
     def __repr__(self):
         return 'OffsetTransformation(%r)' % self._offsets
 
+    def is_constant_invariant(self):
+        """Signals if the transformation always maps constants to constants."""
+        return True
+
 
 class ScalingTransformation(Transformation):
     def __init__(self, factors: Mapping[ChannelID, Real]):
         self._factors = dict(factors.items())
 
-    def __call__(self, time: np.ndarray, data: Mapping[ChannelID, np.ndarray]) -> Mapping[ChannelID, np.ndarray]:
+    def __call__(self, time: Union[np.ndarray, float],
+                 data: Mapping[ChannelID, Union[np.ndarray, float]]) -> Mapping[ChannelID, Union[np.ndarray, float]]:
         return {channel: channel_values * self._factors[channel] if channel in self._factors else channel_values
                 for channel, channel_values in data.items()}
 
-    def get_input_channels(self, output_channels: Set[ChannelID]):
+    def get_input_channels(self, output_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
         return output_channels
 
-    def get_output_channels(self, input_channels: Set[ChannelID]):
+    def get_output_channels(self, input_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
         return input_channels
 
     @property
@@ -220,11 +249,19 @@ class ScalingTransformation(Transformation):
     def __repr__(self):
         return 'ScalingTransformation(%r)' % self._factors
 
+    def is_constant_invariant(self):
+        """Signals if the transformation always maps constants to constants."""
+        return True
+
 
 try:
-    import pandas
+    if TYPE_CHECKING:
+        import pandas
+        PandasDataFrameType = pandas.DataFrame
+    else:
+        PandasDataFrameType = Any
 
-    def linear_transformation_from_pandas(transformation: pandas.DataFrame) -> LinearTransformation:
+    def linear_transformation_from_pandas(transformation: PandasDataFrameType) -> LinearTransformation:
         """ Creates a LinearTransformation object out of a pandas data frame.
 
         Args:
@@ -250,7 +287,8 @@ class ParallelConstantChannelTransformation(Transformation):
         self._channels = {channel: float(value)
                           for channel, value in channels.items()}
 
-    def __call__(self, time: np.ndarray, data: Mapping[ChannelID, np.ndarray]) -> Mapping[ChannelID, np.ndarray]:
+    def __call__(self, time: Union[np.ndarray, float],
+                 data: Mapping[ChannelID, Union[np.ndarray, float]]) -> Mapping[ChannelID, Union[np.ndarray, float]]:
         overwritten = {channel: np.full_like(time, fill_value=value, dtype=float)
                        for channel, value in self._channels.items()}
         return {**data, **overwritten}
@@ -259,14 +297,18 @@ class ParallelConstantChannelTransformation(Transformation):
     def compare_key(self) -> Tuple[Tuple[ChannelID, float], ...]:
         return tuple(sorted(self._channels.items()))
 
-    def get_input_channels(self, output_channels: Set[ChannelID]) -> Set[ChannelID]:
+    def get_input_channels(self, output_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
         return output_channels - self._channels.keys()
 
-    def get_output_channels(self, input_channels: Set[ChannelID]) -> Set[ChannelID]:
+    def get_output_channels(self, input_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
         return input_channels | self._channels.keys()
 
     def __repr__(self):
         return 'ParallelConstantChannelTransformation(%r)' % self._channels
+
+    def is_constant_invariant(self):
+        """Signals if the transformation always maps constants to constants."""
+        return True
 
 
 def chain_transformations(*transformations: Transformation) -> Transformation:

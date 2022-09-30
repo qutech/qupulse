@@ -1,8 +1,14 @@
 from typing import Collection, Sequence, Tuple, Union, Optional
 import itertools
-from unittest import mock
 
 import numpy as np
+
+try:
+    from autologging import traced
+except ImportError:
+    def traced(obj):
+        """Noop traced that is used if autologging package is not available"""
+        return obj
 
 from qupulse._program.waveforms import Waveform
 from qupulse.utils.types import TimeType
@@ -20,7 +26,7 @@ try:
 except ImportError:  # pragma: no cover
     zhinst = None
 
-__all__ = ['voltage_to_uint16', 'get_sample_times', 'zhinst_voltage_to_uint16']
+__all__ = ['voltage_to_uint16', 'get_sample_times', 'traced', 'zhinst_voltage_to_uint16']
 
 
 @njit

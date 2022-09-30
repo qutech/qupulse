@@ -1,11 +1,10 @@
 language: python
 python:
-  - 3.6
   - 3.7
   - 3.8
 env:
-  - INSTALL_EXTRAS=[plotting,zurich-instruments,tektronix]
-  - INSTALL_EXTRAS=[plotting,zurich-instruments,tektronix,Faster-fractions,faster-sampling]
+  - INSTALL_EXTRAS=[plotting,zurich-instruments,tektronix,tabor-instruments]
+  - INSTALL_EXTRAS=[plotting,zurich-instruments,tektronix,tabor-instruments,Faster-fractions,faster-sampling]
 
 #use container based infrastructure
 sudo: false

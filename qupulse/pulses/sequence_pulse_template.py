@@ -7,11 +7,10 @@ from numbers import Real
 import functools
 import warnings
 
-from cached_property import cached_property
-
 from qupulse.serialization import Serializer, PulseRegistryType
 from qupulse._program._loop import Loop
 from qupulse.parameter_scope import Scope
+from qupulse.utils import cached_property
 from qupulse.utils.types import MeasurementWindow, ChannelID, TimeType
 from qupulse.pulses.pulse_template import PulseTemplate, AtomicPulseTemplate
 from qupulse.pulses.parameters import Parameter, ParameterConstrainer, ParameterNotProvidedException
@@ -38,7 +37,6 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
 
     def __init__(self,
                  *subtemplates: Union[PulseTemplate, MappingTuple],
-                 external_parameters: Optional[Union[Iterable[str], Set[str]]]=None,
                  identifier: Optional[str]=None,
                  parameter_constraints: Optional[List[Union[str, Expression]]]=None,
                  measurements: Optional[List[MeasurementDeclaration]]=None,
@@ -60,8 +58,6 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
         Args:
             subtemplates (List(Subtemplate)): The list of subtemplates of this
                 SequencePulseTemplate as tuples of the form (PulseTemplate, Dict(str -> str)).
-            external_parameters (List(str)): A set of names for external parameters of this
-                SequencePulseTemplate. Deprecated.
             identifier (str): A unique identifier for use in serialization. (optional)
         """
         PulseTemplate.__init__(self, identifier=identifier)
@@ -77,10 +73,6 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
             if subtemplate.defined_channels != defined_channels:
                 raise ValueError('The subtemplates are defined for different channels:'
                                  + f' defined {defined_channels} vs. subtemplate {subtemplate.defined_channels}')
-
-        if external_parameters:
-            warnings.warn("external_parameters is an obsolete argument and will be removed in the future.",
-                          category=DeprecationWarning)
 
         self._register(registry=registry)
 
@@ -131,9 +123,9 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                        parameters: Dict[str, Real],
                        channel_mapping: Dict[ChannelID, ChannelID]) -> SequenceWaveform:
         self.validate_parameter_constraints(parameters=parameters, volatile=set())
-        return SequenceWaveform([sub_template.build_waveform(parameters,
-                                                             channel_mapping=channel_mapping)
-                                 for sub_template in self.__subtemplates])
+        return SequenceWaveform.from_sequence(
+            [sub_template.build_waveform(parameters, channel_mapping=channel_mapping)
+             for sub_template in self.__subtemplates])
 
     def _internal_create_program(self, *,
                                  scope: Scope,

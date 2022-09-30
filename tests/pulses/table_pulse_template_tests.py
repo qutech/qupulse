@@ -692,11 +692,11 @@ class TablePulseTemplateSequencingTests(unittest.TestCase):
         self.assertIsInstance(waveform, MultiChannelWaveform)
 
         expected_waveforms = [
-            TableWaveform('ch', ((0, 0, HoldInterpolationStrategy()),
+            TableWaveform.from_table('ch', ((0, 0, HoldInterpolationStrategy()),
                                   (1.1, 2.3, LinearInterpolationStrategy()),
                                   (4, 0, JumpInterpolationStrategy()),
                                   (5.1, 0, HoldInterpolationStrategy()))),
-            TableWaveform('oh', ((0, 1, HoldInterpolationStrategy()),
+            TableWaveform.from_table('oh', ((0, 1, HoldInterpolationStrategy()),
                                   (5.1, 0, LinearInterpolationStrategy()))),
         ]
 

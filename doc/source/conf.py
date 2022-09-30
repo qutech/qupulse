@@ -42,9 +42,7 @@ with open(os.path.join('..', '..', 'qupulse', '__init__.py')) as qupulse_init:
 extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.autosummary',
-    'sphinx_autopackagesummary',
     'sphinx.ext.napoleon',
-    'sphinx_autodoc_typehints',
     'sphinx.ext.intersphinx',
     'sphinx.ext.todo',
     'sphinx.ext.coverage',
@@ -60,7 +58,8 @@ autodoc_default_options = {
     'show-inheritance': None
 }
 
-autosummary_mock_imports = autodoc_mock_imports = ['atsaverage', 'zhinst', 'teawg', 'tek_awg', 'matplotlib']
+autosummary_mock_imports = autodoc_mock_imports = ['atsaverage', 'zhinst', 'teawg', 'tek_awg', 'matplotlib',
+                                                   'tabor_control', 'pyvisa', 'scipy']
 
 autoclass_content = 'both'
 autosummary_generate = True
@@ -82,7 +81,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = 'qupulse'
-copyright = '2015-2018, Quantum Technology Group, RWTH Aachen University'
+copyright = '2015-2022, Quantum Technology Group, RWTH Aachen University'
 author = 'Quantum Technology Group and Chair of Software Engineering, RWTH Aachen University'
 
 # The version info for the project you're documenting, acts as replacement for
@@ -143,7 +142,6 @@ todo_include_todos = True
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
-#html_theme = 'alabaster'
 html_theme = 'classic'
 
 # Theme options are theme-specific and customize the look and feel of a theme
@@ -325,6 +323,11 @@ intersphinx_mapping = {
     'python': ('https://docs.python.org/', None),
     'numpy': ('http://docs.scipy.org/doc/numpy/', None)
 }
+
+nbsphinx_execute_arguments = [
+    "--InlineBackend.figure_formats={'svg'}",
+    "--InlineBackend.rc=figure.dpi=96",
+]
 
 
 def skip(app, what, name, obj, skip, options):

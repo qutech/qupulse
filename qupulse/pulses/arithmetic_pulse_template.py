@@ -4,12 +4,12 @@ from numbers import Real
 import warnings
 
 import sympy
-import cached_property
 
 from qupulse.expressions import ExpressionScalar, ExpressionLike
 from qupulse.serialization import Serializer, PulseRegistryType
 from qupulse.parameter_scope import Scope
 
+from qupulse.utils import cached_property
 from qupulse.utils.types import ChannelID
 from qupulse.pulses.measurement import MeasurementWindow
 from qupulse.pulses.pulse_template import AtomicPulseTemplate, PulseTemplate
@@ -126,7 +126,7 @@ class ArithmeticAtomicPulseTemplate(AtomicPulseTemplate):
         if lhs is None:
             return ArithmeticWaveform.rhs_only_map[self.arithmetic_operator](rhs)
         else:
-            return ArithmeticWaveform(lhs, self.arithmetic_operator, rhs)
+            return ArithmeticWaveform.from_operator(lhs, self.arithmetic_operator, rhs)
 
     def get_measurement_windows(self,
                                 parameters: Dict[str, Real],
@@ -357,7 +357,7 @@ class ArithmeticPulseTemplate(PulseTemplate):
         transformation = self._get_transformation(parameters=parameters,
                                                   channel_mapping=channel_mapping)
 
-        return TransformingWaveform(inner_waveform, transformation=transformation)
+        return TransformingWaveform.from_transformation(inner_waveform, transformation=transformation)
 
     def __repr__(self):
         if any(v for k, v in super().get_serialization_data().items() if k != '#type'):
@@ -431,7 +431,7 @@ class ArithmeticPulseTemplate(PulseTemplate):
     def measurement_names(self) -> Set[str]:
         return self._pulse_template.measurement_names
 
-    @cached_property.cached_property
+    @cached_property
     def _scalar_operand_parameters(self) -> FrozenSet[str]:
         if isinstance(self._scalar, dict):
             return frozenset(*(value.variables for value in self._scalar.values()))

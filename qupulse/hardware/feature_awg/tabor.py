@@ -3,10 +3,13 @@ import logging
 import numbers
 import sys
 import weakref
+import warnings
 from typing import List, Tuple, Set, Callable, Optional, Any, cast, Union, Dict, Mapping, NamedTuple, Iterable,\
-    Collection
+    Collection, Sequence
 from collections import OrderedDict
+
 import numpy as np
+
 from qupulse import ChannelID
 from qupulse._program._loop import Loop, make_compatible
 
@@ -18,16 +21,12 @@ from qupulse.hardware.util import voltage_to_uint16, find_positions
 
 from qupulse.utils.types import TimeType
 from qupulse.hardware.feature_awg.base import AWGChannelTuple, AWGChannel, AWGDevice, AWGMarkerChannel
-from typing import Sequence
 from qupulse._program.tabor import TaborSegment, TaborException, TaborProgram, PlottableProgram, TaborSequencing, \
     make_combined_wave
-import pyvisa
-import warnings
 
-# Provided by Tabor electronics for python 2.7
-# a python 3 version is in a private repository on https://git.rwth-aachen.de/qutech
-# Beware of the string encoding change!
-import teawg
+import tabor_control.device
+import pyvisa
+
 
 assert (sys.byteorder == "little")
 
@@ -237,16 +236,17 @@ class TaborDevice(AWGDevice):
 
         Args:
             device_name (str):       Name of the device
-            instr_addr:              Instrument address that is forwarded to teawag
-            paranoia_level (int):    Paranoia level that is forwarded to teawg
+            instr_addr:              Instrument address that is forwarded to tabor_control
+            paranoia_level (int):    Paranoia level that is forwarded to tabor_control
             external_trigger (bool): Not supported yet
             reset (bool):
             mirror_addresses:        list of devices on which the same things as on the main device are done.
                                      For example you can a simulator and a real Device at once
         """
         super().__init__(device_name)
-        self._instr = teawg.TEWXAwg(instr_addr, paranoia_level)
-        self._mirrors = tuple(teawg.TEWXAwg(address, paranoia_level) for address in mirror_addresses)
+        self._instr = tabor_control.device.TEWXAwg(tabor_control.open_session(instr_addr), paranoia_level)
+        self._mirrors = tuple(tabor_control.device.TEWXAwg(tabor_control.open_session(address), paranoia_level)
+                              for address in mirror_addresses)
         self._coupled = None
         self._clock_marker = [0, 0, 0, 0]
 
@@ -326,19 +326,19 @@ class TaborDevice(AWGDevice):
         return self._channel_tuples
 
     @property
-    def main_instrument(self) -> teawg.TEWXAwg:
+    def main_instrument(self) -> tabor_control.device.TEWXAwg:
         return self._instr
 
     @property
-    def mirrored_instruments(self) -> Sequence[teawg.TEWXAwg]:
+    def mirrored_instruments(self) -> Sequence[tabor_control.device.TEWXAwg]:
         return self._mirrors
 
     @property
-    def all_devices(self) -> Sequence[teawg.TEWXAwg]:
+    def all_devices(self) -> Sequence[tabor_control.device.TEWXAwg]:
         return (self._instr,) + self._mirrors
 
     @property
-    def _paranoia_level(self) -> int:
+    def _paranoia_level(self) -> tabor_control.ParanoiaLevel:
         return self._instr.paranoia_level
 
     @_paranoia_level.setter
@@ -348,25 +348,23 @@ class TaborDevice(AWGDevice):
 
     @property
     def dev_properties(self) -> dict:
-        return self._instr.dev_properties
+        return self._instr.dev_properties.as_dict()
 
-    def _send_binary_data(self, pref, bin_dat, paranoia_level=None):
+    def _send_binary_data(self, bin_dat, paranoia_level=None):
         for instr in self.all_devices:
-            instr.send_binary_data(pref, bin_dat=bin_dat, paranoia_level=paranoia_level)
+            instr.write_segment_data(bin_dat, paranoia_level=paranoia_level)
 
-    def _download_segment_lengths(self, seg_len_list, pref=":SEGM:DATA", paranoia_level=None):
+    def _download_segment_lengths(self, seg_len_list, paranoia_level=None):
         for instr in self.all_devices:
-            instr.download_segment_lengths(seg_len_list, pref=pref, paranoia_level=paranoia_level)
+            instr.write_segment_lengths(seg_len_list, paranoia_level=paranoia_level)
 
-    def _download_sequencer_table(self, seq_table, pref=":SEQ:DATA", paranoia_level=None):
+    def _download_sequencer_table(self, seq_table, paranoia_level=None):
         for instr in self.all_devices:
-            instr.download_sequencer_table(seq_table, pref=pref, paranoia_level=paranoia_level)
+            instr.write_sequencer_table(seq_table, paranoia_level=paranoia_level)
 
-    def _download_adv_seq_table(self, seq_table, pref=":ASEQ:DATA", paranoia_level=None):
+    def _download_adv_seq_table(self, seq_table, paranoia_level=None):
         for instr in self.all_devices:
-            instr.download_adv_seq_table(seq_table, pref=pref, paranoia_level=paranoia_level)
-
-    make_combined_wave = staticmethod(teawg.TEWXAwg.make_combined_wave)
+            instr.write_advanced_sequencer_table(seq_table, paranoia_level=paranoia_level)
 
     def _initialize(self) -> None:
         # 1. Select channel
@@ -386,7 +384,7 @@ class TaborDevice(AWGDevice):
         self[SCPI].send_cmd(":INST:SEL 3")
         self[SCPI].send_cmd(setup_command)
 
-    def _get_readable_device(self, simulator=True) -> teawg.TEWXAwg:
+    def _get_readable_device(self, simulator=True) -> tabor_control.device.TEWXAwg:
         """
         A method to get the first readable device out of all devices.
         A readable device is a device which you can read data from like a simulator.
@@ -398,7 +396,7 @@ class TaborDevice(AWGDevice):
             TaborException: this exception is thrown if there is no readable device in the list of all devices
         """
         for device in self.all_devices:
-            if device.fw_ver >= 3.0:
+            if device.supports_basic_reading():
                 if simulator:
                     if device.is_simulator:
                         return device
@@ -549,7 +547,7 @@ class TaborProgramManagement(ProgramManagement):
         Throws:
             ValueError: this Exception is thrown when an invalid repetition mode is given
         """
-        if repetition_mode is "infinite" or repetition_mode is "once":
+        if repetition_mode in ("infinite", "once"):
             self._channel_tuple._known_programs[program_name].program._repetition_mode = repetition_mode
         else:
             raise ValueError("{} is no vaild repetition mode".format(repetition_mode))
@@ -676,7 +674,7 @@ class TaborProgramManagement(ProgramManagement):
         self._channel_tuple.device[SCPI].send_cmd(":TRAC:DEF 1, 192")
         self._channel_tuple.device[SCPI].send_cmd(":TRAC:SEL 1")
         self._channel_tuple.device[SCPI].send_cmd(":TRAC:MODE COMB")
-        self._channel_tuple.device._send_binary_data(pref=":TRAC:DATA", bin_dat=self._channel_tuple._idle_segment.get_as_binary())
+        self._channel_tuple.device._send_binary_data(bin_dat=self._channel_tuple._idle_segment.get_as_binary())
 
         self._channel_tuple._segment_lengths = 192 * np.ones(1, dtype=np.uint32)
         self._channel_tuple._segment_capacity = 192 * np.ones(1, dtype=np.uint32)
@@ -721,7 +719,7 @@ class TaborProgramManagement(ProgramManagement):
                 if self._channel_tuple._current_program:
                     repetition_mode = self._channel_tuple._known_programs[
                         self._channel_tuple._current_program].program._repetition_mode
-                    if repetition_mode is "infinite":
+                    if repetition_mode == "infinite":
                         self._cont_repetition_mode()
                         self._channel_tuple.device[SCPI].send_cmd(':TRIG',
                                                                     paranoia_level=self._channel_tuple.internal_paranoia_level)
@@ -737,7 +735,7 @@ class TaborProgramManagement(ProgramManagement):
             if self._channel_tuple._current_program:
                 repetition_mode = self._channel_tuple._known_programs[
                     self._channel_tuple._current_program].program._repetition_mode
-                if repetition_mode is "infinite":
+                if repetition_mode == "infinite":
                     self._cont_repetition_mode()
                     self._channel_tuple.device[SCPI].send_cmd(':TRIG', paranoia_level=self._channel_tuple.internal_paranoia_level)
                 else:
@@ -1015,7 +1013,7 @@ class TaborChannelTuple(AWGChannelTuple):
 
         for segment in uploaded_waveform_indices:
             device.send_cmd(":TRAC:SEL {}".format(segment), paranoia_level=self.internal_paranoia_level)
-            waveforms.append(device.read_act_seg_dat())
+            waveforms.append(device.read_segment_data())
         device.send_cmd(":TRAC:SEL {}".format(old_segment), paranoia_level=self.internal_paranoia_level)
         return waveforms
 
@@ -1028,13 +1026,15 @@ class TaborChannelTuple(AWGChannelTuple):
         uploaded_sequence_indices = np.arange(len(self._sequencer_tables)) + 1
         for sequence in uploaded_sequence_indices:
             device.send_cmd(":SEQ:SEL {}".format(sequence), paranoia_level=self.internal_paranoia_level)
-            sequences.append(device.read_sequencer_table())
+            table = device.read_sequencer_table()
+            sequences.append((table['repeats'], table['segment_no'], table['jump_flag']))
         device.send_cmd(":SEQ:SEL {}".format(old_sequence), paranoia_level=self.internal_paranoia_level)
         return sequences
 
     @with_select
     def read_advanced_sequencer_table(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        return self.device._get_readable_device(simulator=True).read_adv_seq_table()
+        table = self.device._get_readable_device(simulator=True).read_advanced_sequencer_table()
+        return table['repeats'], table['segment_no'], table['jump_flag']
 
     def read_complete_program(self) -> PlottableProgram:
         return PlottableProgram.from_read_data(self.read_waveforms(),
@@ -1153,7 +1153,7 @@ class TaborChannelTuple(AWGChannelTuple):
                                         paranoia_level=self.internal_paranoia_level)
         wf_data = segment.get_as_binary()
 
-        self.device._send_binary_data(pref=":TRAC:DATA", bin_dat=wf_data)
+        self.device._send_binary_data(bin_dat=wf_data)
         self._segment_references[segment_index] = 1
         self._segment_hashes[segment_index] = hash(segment)
 
@@ -1174,7 +1174,7 @@ class TaborChannelTuple(AWGChannelTuple):
                                         paranoia_level=self.internal_paranoia_level)
         self.device[TaborSCPI].send_cmd(":TRAC:MODE COMB",
                                         paranoia_level=self.internal_paranoia_level)
-        self.device._send_binary_data(pref=":TRAC:DATA", bin_dat=wf_data)
+        self.device._send_binary_data(bin_dat=wf_data)
 
         old_to_update = np.count_nonzero(self._segment_capacity != self._segment_lengths)
         segment_capacity = np.concatenate((self._segment_capacity, new_lengths))

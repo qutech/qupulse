@@ -82,9 +82,10 @@ def render(program: Union[Loop],
         raise PlottingNotPossibleException(pulse=None,
                                            description='cannot render sequence with less than 2 data points')
     if not round(float(sample_count), 10).is_integer():
-        warnings.warn("Sample count {sample_count} is not an integer. Will be rounded (this changes the sample rate).".format(sample_count=sample_count))
+        warnings.warn(f"Sample count {sample_count} is not an integer. Will be rounded (this changes the sample rate).",
+                      stacklevel=2)
 
-    times = np.linspace(float(start_time), float(end_time), num=int(sample_count), dtype=float)
+    times = np.linspace(float(start_time), float(end_time), num=int(sample_count))
     times[-1] = np.nextafter(times[-1], times[-2])
 
     voltages = {ch: waveforms._ALLOCATION_FUNCTION(times, **waveforms._ALLOCATION_FUNCTION_KWARGS)
@@ -115,7 +116,7 @@ def _render_loop(loop: Loop,
 
 def plot(pulse: PulseTemplate,
          parameters: Dict[str, Parameter]=None,
-         sample_rate: Real=10,
+         sample_rate: Optional[Real]=10,
          axes: Any=None,
          show: bool=True,
          plot_channels: Optional[Set[ChannelID]]=None,
@@ -135,7 +136,7 @@ def plot(pulse: PulseTemplate,
         parameters: An optional mapping of parameter names to Parameter
             objects.
         sample_rate: The rate with which the waveforms are sampled for the plot in
-            samples per time unit. (default = 10)
+            samples per time unit. If None, then automatically determine the sample rate (default = 10)
         axes: matplotlib Axes object the pulse will be drawn into if provided
         show: If true, the figure will be shown
         plot_channels: If specified only channels from this set will be plotted. If omitted all channels will be.
@@ -158,6 +159,17 @@ def plot(pulse: PulseTemplate,
     if parameters is None:
         parameters = dict()
 
+    if sample_rate is None:
+        if time_slice is None:
+            duration = pulse.duration
+        else:
+            duration = time_slice[1]-time_slice[0]
+        if duration == 0:
+            sample_rate = 1
+        else:
+            duration_per_sample = float(duration) / 1000
+            sample_rate = 1 / duration_per_sample
+            
     program = pulse.create_program(parameters=parameters,
                                    channel_mapping={ch: ch for ch in channels},
                                    measurement_mapping={w: w for w in pulse.measurement_names})
@@ -175,8 +187,8 @@ def plot(pulse: PulseTemplate,
         warnings.warn("Pulse to be plotted is empty!")
     elif times.size > maximum_points:
         # todo [2018-05-30]: since it results in an empty return value this should arguably be an exception, not just a warning
-        warnings.warn("Sampled pulse of size {wf_len} is lager than {max_points}".format(wf_len=times.size,
-                                                                                         max_points=maximum_points))
+        warnings.warn(f"Sampled pulse of size {times.size} is lager than {maximum_points}",
+                      stacklevel=2)
         return None
     else:
         duration = times[-1]
@@ -234,7 +246,10 @@ def plot(pulse: PulseTemplate,
         axes.set_title(pulse.identifier)
 
     if show:
-        axes.get_figure().show()
+        with warnings.catch_warnings():
+            # do not show warnings in jupyter notebook with matplotlib inline backend
+            warnings.filterwarnings(action="ignore",message=".*which is a non-GUI backend, so cannot show the figure.*")
+            axes.get_figure().show()
     return axes.get_figure()
 
 

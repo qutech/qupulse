@@ -2,6 +2,7 @@ import unittest
 import sys
 
 import numpy as np
+import sympy.abc
 from sympy import sympify, Eq
 
 from qupulse.expressions import Expression, ExpressionVariableMissingException, NonNumericEvaluation, ExpressionScalar, ExpressionVector
@@ -101,6 +102,14 @@ class ExpressionVectorTests(unittest.TestCase):
         self.assertEqual(e1, [1, 2])
         self.assertNotEqual(e6, 1)
         self.assertEqual(e7, ExpressionScalar('a'))
+
+    def test_hash(self):
+        e1 = ExpressionVector([1, 2])
+        e2 = ExpressionVector(['1', '2'])
+        e7 = ExpressionVector(['a'])
+
+        s = ExpressionScalar('a')
+        self.assertEqual({e1, e7}, {e1, e2, e7, s})
 
 
 class ExpressionScalarTests(unittest.TestCase):
@@ -257,7 +266,23 @@ class ExpressionScalarTests(unittest.TestCase):
     def test_repr(self):
         s = 'a    *    b'
         e = ExpressionScalar(s)
-        self.assertEqual("Expression('a    *    b')", repr(e))
+        self.assertEqual("ExpressionScalar('a    *    b')", repr(e))
+
+    def test_repr_original_expression_is_sympy(self):
+        # in this case we test that we get the original expression back if we do
+        # eval(repr(e))
+
+        org = sympy.sympify(3.1415)
+        e = ExpressionScalar(org)
+        self.assertEqual(e, eval(repr(e)))
+
+        org = sympy.abc.a * sympy.abc.b
+        e = ExpressionScalar(org)
+        self.assertEqual(e, eval(repr(e)))
+
+        org = sympy.sympify('3/17')
+        e = ExpressionScalar(org)
+        self.assertEqual(e, eval(repr(e)))
 
     def test_str(self):
         s = 'a    *    b'

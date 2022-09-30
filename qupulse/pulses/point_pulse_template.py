@@ -30,7 +30,7 @@ class PointPulseEntry(TableEntry):
         vs = self.v.evaluate_numeric(**parameters)
 
         if isinstance(vs, numbers.Number):
-            vs = np.full(num_channels, vs, dtype=type(vs))
+            vs = (vs,) * num_channels
         elif len(vs) != num_channels:
             raise InvalidPointDimension(expected=num_channels, received=len(vs))
 
@@ -92,13 +92,10 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
                            if ch is not None]
         mapped_channels, waveform_entries = zip(*channel_entries)
 
-        waveforms = [PointWaveform(mapped_channel, ch_entries)
+        waveforms = [PointWaveform.from_table(mapped_channel, ch_entries)
                      for mapped_channel, ch_entries in zip(mapped_channels, waveform_entries)]
 
-        if len(waveforms) == 1:
-            return waveforms.pop()
-        else:
-            return MultiChannelWaveform(waveforms)
+        return MultiChannelWaveform.from_parallel(waveforms)
 
     @property
     def point_pulse_entries(self) -> Sequence[PointPulseEntry]:

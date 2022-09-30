@@ -6,6 +6,11 @@ import importlib.util
 import sys
 import warnings
 
+try:
+    import tabor_control
+except ImportError as err:
+    raise unittest.SkipTest("tabor_control not present") from err
+
 from tests.hardware.tabor_simulator_based_tests import TaborSimulatorManager
 from tests.hardware.dummy_devices import DummyDAC
 from tests.backward_compatibility.hardware_test_helper import LoadingAndSequencingHelper
@@ -13,8 +18,13 @@ from tests.backward_compatibility.hardware_test_helper import LoadingAndSequenci
 from qupulse.serialization import Serializer, FilesystemBackend, PulseStorage
 from qupulse.pulses.pulse_template import PulseTemplate
 from qupulse.hardware.setup import HardwareSetup, PlaybackChannel, MarkerChannel, MeasurementMask
-from qupulse.hardware.awgs.tabor import PlottableProgram
+try:
+    import tabor_control
+except ImportError:
+    tabor_control = None
 
+if tabor_control is not None:
+    from qupulse.hardware.awgs.tabor import PlottableProgram, TaborAWGRepresentation
 
 def do_not_skip(test_class):
     if hasattr(test_class, '__unittest_skip__'):
@@ -34,6 +44,7 @@ class DummyTest(unittest.TestCase):
         self.assertTrue(True)
 
 
+@unittest.skipIf(tabor_control is None, "tabor_control not available")
 class TaborLoadingAndSequencingHelper(LoadingAndSequencingHelper):
     def __init__(self, data_folder, pulse_name):
         super().__init__(data_folder=data_folder, pulse_name=pulse_name)
@@ -54,7 +65,8 @@ class TaborLoadingAndSequencingHelper(LoadingAndSequencingHelper):
         self.program_CD = None
 
     def initialize_hardware_setup(self):
-        self.simulator_manager = TaborSimulatorManager()
+        self.simulator_manager = TaborSimulatorManager(TaborAWGRepresentation, 'instr_addr',
+                                                       dict(paranoia_level=2, reset=True))
 
         try:
             self.simulator_manager.start_simulator()

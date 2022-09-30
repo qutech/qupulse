@@ -15,6 +15,7 @@ from numbers import Real, Number
 import sympy
 
 from qupulse.utils.types import ChannelID, DocStringABCMeta, FrozenDict
+from qupulse.utils import forced_hash
 from qupulse.serialization import Serializable
 from qupulse.expressions import ExpressionScalar, Expression, ExpressionLike
 from qupulse._program._loop import Loop, to_waveform
@@ -51,6 +52,7 @@ class PulseTemplate(Serializable):
     def __init__(self, *,
                  identifier: Optional[str]) -> None:
         super().__init__(identifier=identifier)
+        self.__cached_hash_value = None
 
     @property
     @abstractmethod
@@ -215,7 +217,7 @@ class PulseTemplate(Serializable):
             waveform = to_waveform(root)
 
             if global_transformation:
-                waveform = TransformingWaveform(waveform, global_transformation)
+                waveform = TransformingWaveform.from_transformation(waveform, global_transformation)
 
             # convert the nicely formatted measurement windows back into the old format again :(
             measurements = root.get_measurement_windows()
@@ -285,6 +287,11 @@ class PulseTemplate(Serializable):
         from qupulse.pulses.arithmetic_pulse_template import try_operation
         return try_operation(self, '/', other)
 
+    def __hash__(self):
+        if self.__cached_hash_value is None:
+            self.__cached_hash_value = forced_hash(self.get_serialization_data())
+        return self.__cached_hash_value
+
 
 class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
     """A PulseTemplate that does not imply any control flow disruptions and can be directly
@@ -326,7 +333,7 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
                                                         measurement_mapping=measurement_mapping)
 
             if global_transformation:
-                waveform = TransformingWaveform(waveform, global_transformation)
+                waveform = TransformingWaveform.from_transformation(waveform, global_transformation)
 
             parent_loop.add_measurements(measurements=measurements)
             parent_loop.append_child(waveform=waveform)

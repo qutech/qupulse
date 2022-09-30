@@ -7,9 +7,11 @@ from qupulse.pulses import TablePT, FunctionPT, AtomicMultiChannelPT, MappingPT
 from qupulse.pulses.plotting import plot
 from qupulse.pulses.sequence_pulse_template import SequencePulseTemplate
 from qupulse._program._loop import make_compatible
+from qupulse._program.waveforms import ConstantWaveform
 
-from qupulse.pulses.constant_pulse_template import ConstantPulseTemplate
+from qupulse.pulses.constant_pulse_template import ConstantPulseTemplate, ExpressionScalar, TimeType
 
+from tests.serialization_tests import SerializableTests
 
 class TestConstantPulseTemplate(unittest.TestCase):
 
@@ -85,3 +87,71 @@ class TestConstantPulseTemplate(unittest.TestCase):
         p = MappingPT(qupulse_template, channel_mapping=channel_mapping)
         plot(p)
         self.assertEqual(p.defined_channels, {'C2'})
+
+    def test_expressions(self):
+        cpt = ConstantPulseTemplate('duration', {'A': 5.4, 'B': 'amplitude_b'})
+        self.assertEqual({'duration', 'amplitude_b'}, cpt.parameter_names)
+        self.assertEqual(ExpressionScalar('duration'), cpt.duration)
+
+        self.assertIsNone(cpt.build_waveform({'duration': 0., 'amplitude_b': 1.}, {'A': 'A', 'B': 'B'}))
+        self.assertIsNone(cpt.build_waveform({'duration': 1., 'amplitude_b': 1.}, {'A': None, 'B': None}))
+
+        wf1 = ConstantWaveform(duration=TimeType.from_float(1.4), channel='C', amplitude=1.6)
+        wf2 = ConstantWaveform(duration=TimeType.from_float(1.5), channel='A', amplitude=5.4)
+        self.assertEqual(wf1, cpt.build_waveform({'duration': 1.4, 'amplitude_b': 1.6}, {'A': None, 'B': 'C'}))
+        self.assertEqual(wf2, cpt.build_waveform({'duration': 1.5, 'amplitude_b': None}, {'A': 'A', 'B': None}))
+
+        wf3 = ConstantWaveform.from_mapping(duration=TimeType.from_float(1.6), constant_values={'C': 5.4, 'B': -.3})
+        self.assertEqual(wf3, cpt.build_waveform({'duration': 1.6, 'amplitude_b': -.3}, {'A': 'C', 'B': 'B'}))
+
+
+    def test_build_waveform(self):
+        tpt = ConstantPulseTemplate(200, {'C1': 2, 'C2': 3})
+
+        wf_id = tpt.build_waveform({}, {'C1': 'C1', 'C2': 'C2'})
+        self.assertEqual(
+            ConstantWaveform.from_mapping(200, {'C1': 2, 'C2': 3}),
+            wf_id
+        )
+
+        wf_1 = tpt.build_waveform({}, {'C1': 'C1', 'C2': None})
+        self.assertEqual(
+            ConstantWaveform.from_mapping(200, {'C1': 2}),
+            wf_1
+        )
+
+        wf_2 = tpt.build_waveform({}, {'C1': None, 'C2': 'A'})
+        self.assertEqual(
+            ConstantWaveform.from_mapping(200, {'A': 3}),
+            wf_2
+        )
+
+        wf_all = tpt.build_waveform({}, {'C1': 'B', 'C2': 'A'})
+        self.assertEqual(
+            ConstantWaveform.from_mapping(200, {'A': 3, 'B': 2}),
+            wf_all
+        )
+
+        self.assertIsNone(tpt.build_waveform({}, {'C1': None, 'C2': None}))
+
+
+class ConstantPulseTemplateSerializationTests(SerializableTests, unittest.TestCase):
+    @property
+    def class_to_test(self):
+        return ConstantPulseTemplate
+
+    def make_kwargs(self):
+        return {
+            'name': 'yoho',
+            'duration': 'dur',
+            'amplitude_dict': {'int': 1, 'float': -3.4, 'expr': 'x + y'},
+            'measurements': [('m', 1, 1), ('foo', 'z', 'o')],
+        }
+
+    def assert_equal_instance_except_id(self, lhs: ConstantPulseTemplate, rhs: ConstantPulseTemplate):
+        self.assertIsInstance(lhs, ConstantPulseTemplate)
+        self.assertIsInstance(rhs, ConstantPulseTemplate)
+        self.assertEqual(lhs._name, rhs._name)
+        self.assertEqual(lhs.measurement_declarations, rhs.measurement_declarations)
+        self.assertEqual(lhs._amplitude_dict, rhs._amplitude_dict)
+        self.assertEqual(lhs.duration, rhs.duration)

@@ -48,12 +48,6 @@ class SequencePulseTemplateTest(unittest.TestCase):
                                                                    parameter_mapping=self.mapping1,
                                                                    measurement_mapping=self.window_name_mapping))
 
-    def test_external_parameters_warning(self):
-        dummy = DummyPulseTemplate()
-        with self.assertWarnsRegex(DeprecationWarning, "external_parameters",
-                                   msg="SequencePT did not issue a warning for argument external_parameters"):
-            SequencePulseTemplate(dummy, external_parameters={'a'})
-
     def test_duration(self):
         pt = SequencePulseTemplate(DummyPulseTemplate(duration='a'),
                                    DummyPulseTemplate(duration='a'),

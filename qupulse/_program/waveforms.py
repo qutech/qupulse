@@ -6,11 +6,12 @@ Classes:
 
 import itertools
 import operator
+import warnings
 from abc import ABCMeta, abstractmethod
 from numbers import Real
 from typing import (
     AbstractSet, Any, FrozenSet, Iterable, Mapping, NamedTuple, Sequence, Set,
-    Tuple, Union, cast)
+    Tuple, Union, cast, Optional, List, Hashable)
 from weakref import WeakValueDictionary, ref
 
 import numpy as np
@@ -24,13 +25,17 @@ from qupulse.comparable import Comparable
 from qupulse.expressions import ExpressionScalar
 from qupulse.pulses.interpolation import InterpolationStrategy
 from qupulse.utils import checked_int_cast, isclose
-from qupulse.utils.types import TimeType, time_from_float
+from qupulse.utils.types import TimeType, time_from_float, FrozenDict
 from qupulse._program.transformation import Transformation
 from qupulse.utils import pairwise
 
+class ConstantFunctionPulseTemplateWarning(UserWarning):
+    """  This warning indicates a constant waveform is constructed from a FunctionPulseTemplate """
+    pass
 
 __all__ = ["Waveform", "TableWaveform", "TableWaveformEntry", "FunctionWaveform", "SequenceWaveform",
-           "MultiChannelWaveform", "RepetitionWaveform", "TransformingWaveform", "ArithmeticWaveform"]
+           "MultiChannelWaveform", "RepetitionWaveform", "TransformingWaveform", "ArithmeticWaveform",
+           "ConstantFunctionPulseTemplateWarning"]
 
 PULSE_TO_WAVEFORM_ERROR = None  # error margin in pulse template to waveform conversion
 
@@ -39,16 +44,28 @@ _ALLOCATION_FUNCTION = np.full_like  # pre_allocated = ALLOCATION_FUNCTION(sampl
 _ALLOCATION_FUNCTION_KWARGS = dict(fill_value=np.nan, dtype=float)
 
 
+def _to_time_type(duration: Real) -> TimeType:
+    if isinstance(duration, TimeType):
+        return duration
+    else:
+        return time_from_float(float(duration), absolute_error=PULSE_TO_WAVEFORM_ERROR)
+
+
 class Waveform(Comparable, metaclass=ABCMeta):
     """Represents an instantiated PulseTemplate which can be sampled to retrieve arrays of voltage
     values for the hardware."""
 
     __sampled_cache = WeakValueDictionary()
 
+    __slots__ = ('_duration',)
+
+    def __init__(self, duration: TimeType):
+        self._duration = duration
+
     @property
-    @abstractmethod
     def duration(self) -> TimeType:
         """The duration of the waveform in time units."""
+        return self._duration
 
     @abstractmethod
     def unsafe_sample(self,
@@ -101,25 +118,33 @@ class Waveform(Comparable, metaclass=ABCMeta):
         if channel not in self.defined_channels:
             raise KeyError('Channel not defined in this waveform: {}'.format(channel))
 
-        if output_array is None:
-            # cache the result to save memory
-            result = self.unsafe_sample(channel, sample_times)
-            result.flags.writeable = False
-            key = hash(bytes(result))
-            if key not in self.__sampled_cache:
-                self.__sampled_cache[key] = result
-            return self.__sampled_cache[key]
+        constant_value = self.constant_value(channel)
+        if constant_value is None:
+            if output_array is None:
+                # cache the result to save memory
+                result = self.unsafe_sample(channel, sample_times)
+                result.flags.writeable = False
+                key = hash(bytes(result))
+                if key not in self.__sampled_cache:
+                    self.__sampled_cache[key] = result
+                return self.__sampled_cache[key]
+            else:
+                if len(output_array) != len(sample_times):
+                    raise ValueError('Output array length and sample time length are different')
+                # use the user provided memory
+                return self.unsafe_sample(channel=channel,
+                                          sample_times=sample_times,
+                                          output_array=output_array)
         else:
-            if len(output_array) != len(sample_times):
-                raise ValueError('Output array length and sample time length are different')
-            # use the user provided memory
-            return self.unsafe_sample(channel=channel,
-                                      sample_times=sample_times,
-                                      output_array=output_array)
+            if output_array is None:
+                output_array = np.full_like(sample_times, fill_value=constant_value, dtype=float)
+            else:
+                output_array[:] = constant_value
+            return output_array
 
     @property
     @abstractmethod
-    def defined_channels(self) -> Set[ChannelID]:
+    def defined_channels(self) -> AbstractSet[ChannelID]:
         """The channels this waveform should played on. Use
             :func:`~qupulse.pulses.instructions.get_measurement_windows` to get a waveform for a subset of these."""
 
@@ -145,11 +170,50 @@ class Waveform(Comparable, metaclass=ABCMeta):
             return self
         return self.unsafe_get_subset_for_channels(channels=channels)
 
+    def is_constant(self) -> bool:
+        """Convenience function to check if all channels are constant. The result is equal to
+        `all(waveform.constant_value(ch) is not None for ch in waveform.defined_channels)` but might be more performant.
+
+        Returns:
+            True if all channels have constant values.
+        """
+        return self.constant_value_dict() is not None
+
+    def constant_value_dict(self) -> Optional[Mapping[ChannelID, float]]:
+        result = {ch: self.constant_value(ch) for ch in self.defined_channels}
+        if None in result.values():
+            return None
+        else:
+            return result
+
+    def constant_value(self, channel: ChannelID) -> Optional[float]:
+        """Checks if the requested channel has a constant value and returns it if so.
+
+        Guarantee that this assertion passes for every t in waveform duration:
+        >>> assert waveform.constant_value(channel) is None or waveform.constant_value(t) = waveform.get_sampled(channel, t)
+
+        Args:
+            channel: The channel to check
+
+        Returns:
+            None if there is no guarantee that the channel is constant. The value otherwise.
+        """
+        return None
+
     def __neg__(self):
-        return FunctorWaveform(self, {ch: np.negative for ch in self.defined_channels})
+        return FunctorWaveform.from_functor(self, {ch: np.negative for ch in self.defined_channels})
 
     def __pos__(self):
         return self
+
+    def _sort_key_for_channels(self) -> Sequence[Tuple[str, int]]:
+        """Makes reproducible sorting by defined channels possible"""
+        return sorted((ch, 0) if isinstance(ch, str) else ('', ch) for ch in self.defined_channels)
+
+    def reversed(self) -> 'Waveform':
+        """Returns a reversed version of this waveform."""
+        # We don't check for constness here because const waveforms are supposed to override this method
+        return ReversedWaveform(self)
 
 
 class TableWaveformEntry(NamedTuple('TableWaveformEntry', [('t', Real),
@@ -160,7 +224,7 @@ class TableWaveformEntry(NamedTuple('TableWaveformEntry', [('t', Real),
             raise TypeError('{} is neither callable nor of type InterpolationStrategy'.format(interp))
 
     def __repr__(self):
-        return f'{type(self).__name__}(t={self.t}, v={self.v}, interp="{self.interp}")'
+        return f'{type(self).__name__}(t={self.t!r}, v={self.v!r}, interp={self.interp!r})'
 
 
 class TableWaveform(Waveform):
@@ -168,66 +232,126 @@ class TableWaveform(Waveform):
 
     """Waveform obtained from instantiating a TablePulseTemplate."""
 
+    __slots__ = ('_table', '_channel_id')
+
     def __init__(self,
                  channel: ChannelID,
-                 waveform_table: Sequence[EntryInInit]) -> None:
+                 waveform_table: Tuple[TableWaveformEntry, ...]) -> None:
         """Create a new TableWaveform instance.
 
         Args:
-            waveform_table (ImmutableList(WaveformTableEntry)): A list of instantiated table
-                entries of the form (time as float, voltage as float, interpolation strategy).
+            waveform_table: A tuple of instantiated and validated table entries
         """
-        super().__init__()
+        if not isinstance(waveform_table, tuple):
+            warnings.warn("Please use a tuple of TableWaveformEntry to construct TableWaveform directly",
+                          category=DeprecationWarning)
+            waveform_table = self._validate_input(waveform_table)
 
-        self._table = self._validate_input(waveform_table)
+        super().__init__(duration=_to_time_type(waveform_table[-1].t))
+
+        self._table = waveform_table
         self._channel_id = channel
 
     @staticmethod
-    def _validate_input(input_waveform_table: Sequence[EntryInInit]) -> Tuple[TableWaveformEntry, ...]:
+    def _validate_input(input_waveform_table: Sequence[EntryInInit]) -> Union[Tuple[Real, Real],
+                                                                              List[TableWaveformEntry]]:
         """ Checks that:
          - the time is increasing,
          - there are at least two entries
-        and removes subsequent entries with same time or voltage values.
 
-        :param input_waveform_table:
-        :return:
+        Optimizations:
+          - removes subsequent entries with same time or voltage values.
+          - checks if the complete waveform is constant. Returns a (duration, value) tuple if this is the case
+
+        Raises:
+            ValueError:
+              - there are less than two entries
+              - the entries are not ordered in time
+              - Any time is negative
+              - The total length is zero
+
+        Returns:
+            A list of de-duplicated table entries
+            OR
+            A (duration, value) tuple if the waveform is constant
         """
-        if len(input_waveform_table) < 2:
-            raise ValueError("Waveform table has less than two entries.")
+        # we use an iterator here to avoid duplicate work and be maximally efficient for short tables
+        # We never use StopIteration to abort iteration. It always signifies an error.
+        input_iter = iter(input_waveform_table)
+        try:
+            first_t, first_v, first_interp = next(input_iter)
+        except StopIteration:
+            raise ValueError("Waveform table mut not be empty")
 
-        if input_waveform_table[0][0] != 0:
+        if first_t != 0.0:
             raise ValueError('First time entry is not zero.')
 
-        if input_waveform_table[-1][0] == 0:
-            raise ValueError('Last time entry is zero.')
+        previous_t = 0.0
+        previous_v = first_v
+        output_waveform_table = [TableWaveformEntry(0.0, first_v, first_interp)]
 
-        output_waveform_table = []
+        try:
+            t, v, interp = next(input_iter)
+        except StopIteration:
+            raise ValueError("Waveform table has less than two entries.")
+        if t < 0:
+            raise ValueError('Negative time values are not allowed.')
 
-        previous_t = 0
-        previous_v = None
-        for (t, v, interp), (next_t, next_v, _) in itertools.zip_longest(input_waveform_table,
-                                                                         input_waveform_table[1:],
-                                                                         fillvalue=(float('inf'), None, None)):
+        # constant_v is None <=> the waveform is constant until up to the current entry
+        constant_v = first_interp.constant_value((previous_t, previous_v), (t, v))
+
+        for next_t, next_v, next_interp in input_iter:
             if next_t < t:
                 if next_t < 0:
                     raise ValueError('Negative time values are not allowed.')
                 else:
                     raise ValueError('Times are not increasing.')
 
+            if constant_v is not None and interp.constant_value((t, v), (next_t, next_v)) != constant_v:
+                constant_v = None
+
             if (previous_t != t or t != next_t) and (previous_v != v or v != next_v):
+                # the time and the value differ both either from the next or the previous
+                # otherwise we skip the entry
                 previous_t = t
                 previous_v = v
                 output_waveform_table.append(TableWaveformEntry(t, v, interp))
 
-        return tuple(output_waveform_table)
+            t, v, interp = next_t, next_v, next_interp
+
+        # Until now, we only checked that the time does not decrease. We require an increase because duration == 0
+        # waveforms are ill-formed. t is now the time of the last entry.
+        if t == 0:
+            raise ValueError('Last time entry is zero.')
+
+        if constant_v is not None:
+            # the waveform is constant
+            return t, constant_v
+        else:
+            # we must still add the last entry to the table
+            output_waveform_table.append(TableWaveformEntry(t, v, interp))
+            return output_waveform_table
+
+    def is_constant(self) -> bool:
+        # only correct if `from_table` is used
+        return False
+
+    def constant_value_dict(self) -> Optional[Mapping[ChannelID, float]]:
+        # only correct if `from_table` is used
+        return None
+
+    @classmethod
+    def from_table(cls, channel: ChannelID, table: Sequence[EntryInInit]) -> Union['TableWaveform', 'ConstantWaveform']:
+        table = cls._validate_input(table)
+        if isinstance(table, tuple):
+            duration, amplitude = table
+            return ConstantWaveform(duration=duration, amplitude=amplitude, channel=channel)
+        else:
+            return TableWaveform(channel, tuple(table))
 
     @property
     def compare_key(self) -> Any:
         return self._channel_id, self._table
-
-    @property
-    def duration(self) -> TimeType:
-        return TimeType.from_float(self._table[-1].t, absolute_error=PULSE_TO_WAVEFORM_ERROR)
 
     def unsafe_sample(self,
                       channel: ChannelID,
@@ -253,40 +377,61 @@ class TableWaveform(Waveform):
         return output_array
 
     @property
-    def defined_channels(self) -> Set[ChannelID]:
+    def defined_channels(self) -> AbstractSet[ChannelID]:
         return {self._channel_id}
 
     def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> 'Waveform':
         return self
 
     def __repr__(self):
-        return f'{type(self).__name__}(channel={self._channel_id}, waveform_table={self._table})'
+        return f'{type(self).__name__}(channel={self._channel_id!r}, waveform_table={self._table!r})'
 
 
 class ConstantWaveform(Waveform):
 
+    # TODO: remove
     _is_constant_waveform = True
 
-    def __init__(self, duration: float, amplitude: Any, channel: ChannelID):
+    __slots__ = ('_amplitude', '_channel')
+
+    def __init__(self, duration: Real, amplitude: Any, channel: ChannelID):
         """ Create a qupulse waveform corresponding to a ConstantPulseTemplate """
-        self._duration = duration
+        super().__init__(duration=_to_time_type(duration))
         self._amplitude = amplitude
         self._channel = channel
 
+    @classmethod
+    def from_mapping(cls, duration: Real, constant_values: Mapping[ChannelID, float]) -> Union['ConstantWaveform',
+                                                                                               'MultiChannelWaveform']:
+        """Construct a ConstantWaveform or a MultiChannelWaveform of ConstantWaveforms with given duration and values"""
+        assert constant_values
+        duration = _to_time_type(duration)
+        if len(constant_values) == 1:
+            (channel, amplitude), = constant_values.items()
+            return cls(duration, amplitude=amplitude, channel=channel)
+        else:
+            return MultiChannelWaveform([cls(duration, amplitude=amplitude, channel=channel)
+                                         for channel, amplitude in constant_values.items()])
+
+    def is_constant(self) -> bool:
+        return True
+
+    def constant_value(self, channel: ChannelID) -> Optional[float]:
+        assert channel == self._channel
+        return self._amplitude
+
+    def constant_value_dict(self) -> Optional[Mapping[ChannelID, float]]:
+        return {self._channel: self._amplitude}
 
     @property
-    def duration(self) -> TimeType:
-        return time_from_float(float(self._duration), absolute_error=PULSE_TO_WAVEFORM_ERROR)
-
-    @property
-    def defined_channels(self) -> Set[ChannelID]:
+    def defined_channels(self) -> AbstractSet[ChannelID]:
         """The channels this waveform should played on. Use
             :func:`~qupulse.pulses.instructions.get_measurement_windows` to get a waveform for a subset of these."""
 
         return {self._channel}
 
     @property
-    def compare_key(self) -> Tuple[Any]:
+    def compare_key(self) -> Tuple[Any, ...]:
         return self._duration, self._amplitude, self._channel
 
     def unsafe_sample(self,
@@ -303,9 +448,18 @@ class ConstantWaveform(Waveform):
         """Unsafe version of :func:`~qupulse.pulses.instructions.get_measurement_windows`."""
         return self
 
+    def __repr__(self):
+        return f"{type(self).__name__}(duration={self.duration!r}, "\
+               f"amplitude={self._amplitude!r}, channel={self._channel!r})"
+
+    def reversed(self) -> 'Waveform':
+        return self
+
 
 class FunctionWaveform(Waveform):
     """Waveform obtained from instantiating a FunctionPulseTemplate."""
+
+    __slots__ = ('_expression', '_channel_id')
 
     def __init__(self, expression: ExpressionScalar,
                  duration: float,
@@ -319,16 +473,33 @@ class FunctionWaveform(Waveform):
             measurement_windows: A list of measurement windows
             channel: The channel this waveform is played on
         """
-        super().__init__()
+
         if set(expression.variables) - set('t'):
             raise ValueError('FunctionWaveforms may not depend on anything but "t"')
-
+        elif not expression.variables:
+            warnings.warn("Constant FunctionWaveform is not recommended as the constant propagation will be suboptimal",
+                          category=ConstantFunctionPulseTemplateWarning)
+        super().__init__(duration=_to_time_type(duration))
         self._expression = expression
-        self._duration = TimeType.from_float(duration, absolute_error=PULSE_TO_WAVEFORM_ERROR)
         self._channel_id = channel
 
+    @classmethod
+    def from_expression(cls, expression: ExpressionScalar, duration: float, channel: ChannelID) -> Union['FunctionWaveform', ConstantWaveform]:
+        if expression.variables:
+            return cls(expression, duration, channel)
+        else:
+            return ConstantWaveform(amplitude=expression.evaluate_numeric(), duration=duration, channel=channel)
+
+    def is_constant(self) -> bool:
+        # only correct if `from_expression` is used
+        return False
+
+    def constant_value_dict(self) -> Optional[Mapping[ChannelID, float]]:
+        # only correct if `from_expression` is used
+        return None
+
     @property
-    def defined_channels(self) -> Set[ChannelID]:
+    def defined_channels(self) -> AbstractSet[ChannelID]:
         return {self._channel_id}
 
     @property
@@ -345,7 +516,10 @@ class FunctionWaveform(Waveform):
                       output_array: Union[np.ndarray, None] = None) -> np.ndarray:
         evaluated = self._expression.evaluate_numeric(t=sample_times)
         if output_array is None:
-            return evaluated.astype(float)
+            if self._expression.variables:
+                return evaluated.astype(float)
+            else:
+                return np.full_like(sample_times, fill_value=float(evaluated), dtype=float)
         else:
             output_array[:] = evaluated
             return output_array
@@ -353,11 +527,18 @@ class FunctionWaveform(Waveform):
     def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> Waveform:
         return self
 
+    def __repr__(self):
+        return f"{type(self).__name__}(duration={self.duration!r}, "\
+               f"expression={self._expression!r}, channel={self._channel_id!r})"
+
 
 class SequenceWaveform(Waveform):
     """This class allows putting multiple PulseTemplate together in one waveform on the hardware."""
+
+    __slots__ = ('_sequenced_waveforms', )
+
     def __init__(self, sub_waveforms: Iterable[Waveform]):
-        """
+        """Use Waveform.from_sequence for optimal construction
 
         :param subwaveforms: All waveforms must have the same defined channels
         """
@@ -366,23 +547,70 @@ class SequenceWaveform(Waveform):
                 "SequenceWaveform cannot be constructed without channel waveforms."
             )
 
-        def flattened_sub_waveforms() -> Iterable[Waveform]:
-            for sub_waveform in sub_waveforms:
-                if isinstance(sub_waveform, SequenceWaveform):
-                    yield from sub_waveform._sequenced_waveforms
-                else:
-                    yield sub_waveform
+        # do not fail on iterators although we do not allow them as an argument
+        sequenced_waveforms = tuple(sub_waveforms)
 
-        self._sequenced_waveforms = tuple(flattened_sub_waveforms())
-        self._duration = sum(waveform.duration for waveform in self._sequenced_waveforms)
-        if not all(waveform.defined_channels == self.defined_channels for waveform in self._sequenced_waveforms[1:]):
+        super().__init__(duration=sum(waveform.duration for waveform in sequenced_waveforms))
+        self._sequenced_waveforms = sequenced_waveforms
+
+        defined_channels = self._sequenced_waveforms[0].defined_channels
+        if not all(waveform.defined_channels == defined_channels
+                   for waveform in itertools.islice(self._sequenced_waveforms, 1, None)):
+            for waveform in self._sequenced_waveforms[1:]:
+                 if not waveform.defined_channels == self.defined_channels:
+                     print(f"SequenceWaveform: defined channels {self.defined_channels} do not match {waveform.defined_channels} ")
             raise ValueError(
                 "SequenceWaveform cannot be constructed from waveforms of different"
                 "defined channels."
             )
 
+    @classmethod
+    def from_sequence(cls, waveforms: Sequence['Waveform']) -> 'Waveform':
+        """Returns a waveform the represents the given sequence of waveforms. Applies some optimizations."""
+        assert waveforms, "Sequence must not be empty"
+        if len(waveforms) == 1:
+            return waveforms[0]
+
+        flattened = []
+        constant_values = waveforms[0].constant_value_dict()
+        for wf in waveforms:
+            if constant_values and constant_values != wf.constant_value_dict():
+                constant_values = None
+            if isinstance(wf, cls):
+                flattened.extend(wf.sequenced_waveforms)
+            else:
+                flattened.append(wf)
+        if constant_values is None:
+            return cls(sub_waveforms=flattened)
+        else:
+            duration = sum(wf.duration for wf in flattened)
+            return ConstantWaveform.from_mapping(duration, constant_values)
+
+    def is_constant(self) -> bool:
+        # only correct if from_sequence is used for construction
+        return False
+
+    def constant_value_dict(self) -> Optional[Mapping[ChannelID, float]]:
+        # only correct if from_sequence is used for construction
+        return None
+
+    def constant_value(self, channel: ChannelID) -> Optional[float]:
+        v = None
+        for wf in self._sequenced_waveforms:
+            wf_cv = wf.constant_value(channel)
+            if wf_cv is None:
+                return None
+            elif wf_cv == v:
+                continue
+            elif v is None:
+                v = wf_cv
+            else:
+                assert v != wf_cv
+                return None
+        return v
+
     @property
-    def defined_channels(self) -> Set[ChannelID]:
+    def defined_channels(self) -> AbstractSet[ChannelID]:
         return self._sequenced_waveforms[0].defined_channels
 
     def unsafe_sample(self,
@@ -413,9 +641,16 @@ class SequenceWaveform(Waveform):
         return self._duration
 
     def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> 'Waveform':
-        return SequenceWaveform(
+        return SequenceWaveform.from_sequence([
             sub_waveform.unsafe_get_subset_for_channels(channels & sub_waveform.defined_channels)
-            for sub_waveform in self._sequenced_waveforms if sub_waveform.defined_channels & channels)
+            for sub_waveform in self._sequenced_waveforms if sub_waveform.defined_channels & channels])
+
+    @property
+    def sequenced_waveforms(self) -> Sequence[Waveform]:
+        return self._sequenced_waveforms
+
+    def __repr__(self):
+        return f"{type(self).__name__}({self._sequenced_waveforms})"
 
 
 class MultiChannelWaveform(Waveform):
@@ -437,16 +672,19 @@ class MultiChannelWaveform(Waveform):
         assigned more than one channel of any Waveform object it consists of
     """
 
-    def __init__(self, sub_waveforms: Iterable[Waveform]) -> None:
+    __slots__ = ('_sub_waveforms', '_defined_channels')
+
+    def __init__(self, sub_waveforms: List[Waveform]) -> None:
         """Create a new MultiChannelWaveform instance.
+        Use `MultiChannelWaveform.from_parallel` for optimal construction.
 
         Requires a list of subwaveforms in the form (Waveform, List(int)) where the list defines
         the channel mapping, i.e., a value y at index x in the list means that channel x of the
         subwaveform will be mapped to channel y of this MultiChannelWaveform object.
 
         Args:
-            sub_waveforms (Iterable( Waveform )): The list of sub waveforms of this
-                MultiChannelWaveform
+            sub_waveforms: The list of sub waveforms of this
+                MultiChannelWaveform. List might get sorted!
         Raises:
             ValueError, if a channel mapping is out of bounds of the channels defined by this
                 MultiChannelWaveform
@@ -454,36 +692,29 @@ class MultiChannelWaveform(Waveform):
                 MultiChannelWaveform
             ValueError, if subwaveforms have inconsistent durations
         """
-        super().__init__()
+
         if not sub_waveforms:
             raise ValueError(
                 "MultiChannelWaveform cannot be constructed without channel waveforms."
             )
 
-        # avoid unnecessary multi channel nesting
-        def flatten_sub_waveforms(to_flatten):
-            for sub_waveform in to_flatten:
-                if isinstance(sub_waveform, MultiChannelWaveform):
-                    yield from sub_waveform._sub_waveforms
-                else:
-                    yield sub_waveform
-
         # sort the waveforms with their defined channels to make compare key reproducible
-        def get_sub_waveform_sort_key(waveform):
-            return tuple(sorted(tuple('{}_stringified_numeric_channel'.format(ch) if isinstance(ch, int) else ch
-                                      for ch in waveform.defined_channels)))
+        if not isinstance(sub_waveforms, list):
+            sub_waveforms = list(sub_waveforms)
+        sub_waveforms.sort(key=lambda wf: wf._sort_key_for_channels())
 
-        self._sub_waveforms = tuple(sorted(flatten_sub_waveforms(sub_waveforms),
-                                           key=get_sub_waveform_sort_key))
+        super().__init__(duration=sub_waveforms[0].duration)
+        self._sub_waveforms = tuple(sub_waveforms)
 
-        self.__defined_channels = set()
+        defined_channels = set()
         for waveform in self._sub_waveforms:
-            if waveform.defined_channels & self.__defined_channels:
+            if waveform.defined_channels & defined_channels:
                 raise ValueError('Channel may not be defined in multiple waveforms',
-                                 waveform.defined_channels & self.__defined_channels)
-            self.__defined_channels |= waveform.defined_channels
+                                 waveform.defined_channels & defined_channels)
+            defined_channels |= waveform.defined_channels
+        self._defined_channels = frozenset(defined_channels)
 
-        if not all(isclose(waveform.duration, self._sub_waveforms[0].duration) for waveform in self._sub_waveforms[1:]):
+        if not all(isclose(waveform.duration, self.duration) for waveform in self._sub_waveforms[1:]):
             # meaningful error message:
             durations = {}
 
@@ -500,6 +731,41 @@ class MultiChannelWaveform(Waveform):
                 durations
             )
 
+    @staticmethod
+    def from_parallel(waveforms: Sequence[Waveform]) -> Waveform:
+        assert waveforms, "ARgument must not be empty"
+        if len(waveforms) == 1:
+            return waveforms[0]
+
+        # we do not look at constant values here because there is no benefit. We would need to construct a new
+        # MultiChannelWaveform anyways
+
+        # avoid unnecessary multi channel nesting
+        flattened = []
+        for waveform in waveforms:
+            if isinstance(waveform, MultiChannelWaveform):
+                flattened.extend(waveform._sub_waveforms)
+            else:
+                flattened.append(waveform)
+
+        return MultiChannelWaveform(flattened)
+
+    def is_constant(self) -> bool:
+        return all(wf.is_constant() for wf in self._sub_waveforms)
+
+    def constant_value(self, channel: ChannelID) -> Optional[float]:
+        return self[channel].constant_value(channel)
+
+    def constant_value_dict(self) -> Optional[Mapping[ChannelID, float]]:
+        d = {}
+        for wf in self._sub_waveforms:
+            wf_d = wf.constant_value_dict()
+            if wf_d is None:
+                return None
+            else:
+                d.update(wf_d)
+        return d
+
     @property
     def duration(self) -> TimeType:
         return self._sub_waveforms[0].duration
@@ -511,8 +777,8 @@ class MultiChannelWaveform(Waveform):
         raise KeyError('Unknown channel ID: {}'.format(key), key)
 
     @property
-    def defined_channels(self) -> Set[ChannelID]:
-        return self.__defined_channels
+    def defined_channels(self) -> AbstractSet[ChannelID]:
+        return self._defined_channels
 
     @property
     def compare_key(self) -> Any:
@@ -526,28 +792,44 @@ class MultiChannelWaveform(Waveform):
         return self[channel].unsafe_sample(channel, sample_times, output_array)
 
     def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> 'Waveform':
-        relevant_sub_waveforms = tuple(swf for swf in self._sub_waveforms if swf.defined_channels & channels)
+        relevant_sub_waveforms = [swf for swf in self._sub_waveforms if swf.defined_channels & channels]
         if len(relevant_sub_waveforms) == 1:
             return relevant_sub_waveforms[0].get_subset_for_channels(channels)
         elif len(relevant_sub_waveforms) > 1:
-            return MultiChannelWaveform(
-                sub_waveform.get_subset_for_channels(channels & sub_waveform.defined_channels)
-                for sub_waveform in relevant_sub_waveforms)
+            return MultiChannelWaveform.from_parallel(
+                [sub_waveform.get_subset_for_channels(channels & sub_waveform.defined_channels)
+                 for sub_waveform in relevant_sub_waveforms])
         else:
             raise KeyError('Unknown channels: {}'.format(channels))
+
+    def __repr__(self):
+        return f"{type(self).__name__}({self._sub_waveforms!r})"
 
 
 class RepetitionWaveform(Waveform):
     """This class allows putting multiple PulseTemplate together in one waveform on the hardware."""
 
+    __slots__ = ('_body', '_repetition_count')
+
     def __init__(self, body: Waveform, repetition_count: int):
-        self._body = body
-        self._repetition_count = checked_int_cast(repetition_count)
+        repetition_count = checked_int_cast(repetition_count)
         if repetition_count < 1 or not isinstance(repetition_count, int):
             raise ValueError('Repetition count must be an integer >0')
 
+        super().__init__(duration=body.duration * repetition_count)
+        self._body = body
+        self._repetition_count = repetition_count
+
+    @classmethod
+    def from_repetition_count(cls, body: Waveform, repetition_count: int) -> Waveform:
+        constant_values = body.constant_value_dict()
+        if constant_values is None:
+            return RepetitionWaveform(body, repetition_count)
+        else:
+            return ConstantWaveform.from_mapping(body.duration * repetition_count, constant_values)
+
     @property
-    def defined_channels(self) -> Set[ChannelID]:
+    def defined_channels(self) -> AbstractSet[ChannelID]:
         return self._body.defined_channels
 
     def unsafe_sample(self,
@@ -562,7 +844,7 @@ class RepetitionWaveform(Waveform):
             end = time + body_duration
             indices = slice(*np.searchsorted(sample_times, (float(time), float(end)), 'left'))
             self._body.unsafe_sample(channel=channel,
-                                     sample_times=sample_times[indices] - time,
+                                     sample_times=sample_times[indices] - float(time),
                                      output_array=output_array[indices])
             time = end
         return output_array
@@ -571,24 +853,64 @@ class RepetitionWaveform(Waveform):
     def compare_key(self) -> Tuple[Any, int]:
         return self._body.compare_key, self._repetition_count
 
-    @property
-    def duration(self) -> TimeType:
-        return self._body.duration * self._repetition_count
+    def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> Waveform:
+        return RepetitionWaveform.from_repetition_count(
+            body=self._body.unsafe_get_subset_for_channels(channels),
+            repetition_count=self._repetition_count)
 
-    def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> 'RepetitionWaveform':
-        return RepetitionWaveform(body=self._body.unsafe_get_subset_for_channels(channels),
-                                  repetition_count=self._repetition_count)
+    def is_constant(self) -> bool:
+        return self._body.is_constant()
+
+    def constant_value(self, channel: ChannelID) -> Optional[float]:
+        return self._body.constant_value(channel)
+
+    def constant_value_dict(self) -> Optional[Mapping[ChannelID, float]]:
+        return self._body.constant_value_dict()
+
+    def __repr__(self):
+        return f"{type(self).__name__}(body={self._body!r}, repetition_count={self._repetition_count!r})"
 
 
 class TransformingWaveform(Waveform):
+    __slots__ = ('_inner_waveform', '_transformation', '_cached_data', '_cached_times')
+
     def __init__(self, inner_waveform: Waveform, transformation: Transformation):
         """"""
+        super(TransformingWaveform, self).__init__(duration=inner_waveform.duration)
         self._inner_waveform = inner_waveform
         self._transformation = transformation
 
         # cache data of inner channels based identified and invalidated by the sample times
         self._cached_data = None
         self._cached_times = lambda: None
+
+    @classmethod
+    def from_transformation(cls, inner_waveform: Waveform, transformation: Transformation) -> Waveform:
+        constant_values = inner_waveform.constant_value_dict()
+
+        if constant_values is None or not transformation.is_constant_invariant():
+            return cls(inner_waveform, transformation)
+
+        transformed_constant_values = {key: float(value) for key, value in transformation(0., constant_values).items()}
+        return ConstantWaveform.from_mapping(inner_waveform.duration, transformed_constant_values)
+
+    def is_constant(self) -> bool:
+        # only true if `from_transformation` was used
+        return False
+
+    def constant_value_dict(self) -> Optional[Mapping[ChannelID, float]]:
+        # only true if `from_transformation` was used
+        return None
+
+    def constant_value(self, channel: ChannelID) -> Optional[float]:
+        if not self._transformation.is_constant_invariant():
+            return None
+        in_channels = self._transformation.get_input_channels({channel})
+        in_values = {ch: self._inner_waveform.constant_value(ch) for ch in in_channels}
+        if any(val is None for val in in_values.values()):
+            return None
+        else:
+            return self._transformation(0., in_values)[channel]
 
     @property
     def inner_waveform(self) -> Waveform:
@@ -599,16 +921,12 @@ class TransformingWaveform(Waveform):
         return self._transformation
 
     @property
-    def defined_channels(self) -> Set[ChannelID]:
+    def defined_channels(self) -> AbstractSet[ChannelID]:
         return self.transformation.get_output_channels(self.inner_waveform.defined_channels)
 
     @property
     def compare_key(self) -> Tuple[Waveform, Transformation]:
         return self.inner_waveform, self.transformation
-
-    @property
-    def duration(self) -> TimeType:
-        return self.inner_waveform.duration
 
     def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> 'SubsetWaveform':
         return SubsetWaveform(self, channel_subset=channels)
@@ -640,7 +958,10 @@ class TransformingWaveform(Waveform):
 
 
 class SubsetWaveform(Waveform):
+    __slots__ = ('_inner_waveform', '_channel_subset')
+
     def __init__(self, inner_waveform: Waveform, channel_subset: Set[ChannelID]):
+        super().__init__(duration=inner_waveform.duration)
         self._inner_waveform = inner_waveform
         self._channel_subset = frozenset(channel_subset)
 
@@ -651,10 +972,6 @@ class SubsetWaveform(Waveform):
     @property
     def defined_channels(self) -> FrozenSet[ChannelID]:
         return self._channel_subset
-
-    @property
-    def duration(self) -> TimeType:
-        return self.inner_waveform.duration
 
     @property
     def compare_key(self) -> Tuple[frozenset, Waveform]:
@@ -668,6 +985,16 @@ class SubsetWaveform(Waveform):
                       sample_times: np.ndarray,
                       output_array: Union[np.ndarray, None] = None) -> np.ndarray:
         return self.inner_waveform.unsafe_sample(channel, sample_times, output_array)
+
+    def constant_value_dict(self) -> Optional[Mapping[ChannelID, float]]:
+        d = self._inner_waveform.constant_value_dict()
+        if d is not None:
+            return {ch: d[ch] for ch in self._channel_subset}
+
+    def constant_value(self, channel: ChannelID) -> Optional[float]:
+        if channel not in self._channel_subset:
+            raise KeyError(channel)
+        return self._inner_waveform.constant_value(channel)
 
 
 class ArithmeticWaveform(Waveform):
@@ -683,17 +1010,67 @@ class ArithmeticWaveform(Waveform):
     numpy_rhs_only_map = {'+': np.positive,
                           '-': np.negative}
 
+    __slots__ = ('_lhs', '_rhs', '_arithmetic_operator')
+
     def __init__(self,
                  lhs: Waveform,
                  arithmetic_operator: str,
                  rhs: Waveform):
-        super().__init__()
+        super().__init__(duration=lhs.duration)
         self._lhs = lhs
         self._rhs = rhs
         self._arithmetic_operator = arithmetic_operator
 
         assert np.isclose(float(self._lhs.duration), float(self._rhs.duration))
         assert arithmetic_operator in self.operator_map
+
+    @classmethod
+    def from_operator(cls, lhs: Waveform, arithmetic_operator: str, rhs: Waveform):
+        # one could optimize rhs_cv to being only created if lhs_cv is not None but this makes the code harder to read
+        lhs_cv = lhs.constant_value_dict()
+        rhs_cv = rhs.constant_value_dict()
+        if lhs_cv is None or rhs_cv is None:
+            return cls(lhs, arithmetic_operator, rhs)
+
+        else:
+            constant_values = dict(lhs_cv)
+            op = cls.operator_map[arithmetic_operator]
+            rhs_op = cls.rhs_only_map[arithmetic_operator]
+
+            for ch, rhs_val in rhs_cv.items():
+                if ch in constant_values:
+                    constant_values[ch] = op(constant_values[ch], rhs_val)
+                else:
+                    constant_values[ch] = rhs_op(rhs_val)
+
+            duration = lhs.duration
+            assert isclose(duration, rhs.duration)
+
+            return ConstantWaveform.from_mapping(duration, constant_values)
+
+    def constant_value(self, channel: ChannelID) -> Optional[float]:
+        if channel not in self._rhs.defined_channels:
+            return self._lhs.constant_value(channel)
+        rhs = self._rhs.constant_value(channel)
+        if rhs is None:
+            return None
+
+        if channel in self._lhs.defined_channels:
+            lhs = self._lhs.constant_value(channel)
+            if lhs is None:
+                return None
+
+            return self.operator_map[self._arithmetic_operator](lhs, rhs)
+        else:
+            return self.rhs_only_map[self._arithmetic_operator](rhs)
+
+    def is_constant(self) -> bool:
+        # only correct if from_operator is used
+        return False
+
+    def constant_value_dict(self) -> Optional[Mapping[ChannelID, float]]:
+        # only correct if from_operator is used
+        return None
 
     @property
     def lhs(self) -> Waveform:
@@ -712,8 +1089,8 @@ class ArithmeticWaveform(Waveform):
         return self._lhs.duration
 
     @property
-    def defined_channels(self) -> Set[ChannelID]:
-        return set.union(self._lhs.defined_channels, self._rhs.defined_channels)
+    def defined_channels(self) -> AbstractSet[ChannelID]:
+        return self._lhs.defined_channels | self._rhs.defined_channels
 
     def unsafe_sample(self,
                       channel: ChannelID,
@@ -753,32 +1130,104 @@ class ArithmeticWaveform(Waveform):
 
 
 class FunctorWaveform(Waveform):
-    """Apply a channel wise functor that works inplace to all results"""
+    # TODO: Use Protocol to enforce that it accepts second argument has the keyword out
+    Functor = callable
 
-    def __init__(self, inner_waveform: Waveform, functor: Mapping[ChannelID, 'Callable']):
+    __slots__ = ('_inner_waveform', '_functor')
+
+    """Apply a channel wise functor that works inplace to all results. The functor must accept two arguments"""
+    def __init__(self, inner_waveform: Waveform, functor: Mapping[ChannelID, Functor]):
+        super(FunctorWaveform, self).__init__(duration=inner_waveform.duration)
         self._inner_waveform = inner_waveform
         self._functor = dict(functor.items())
 
         assert set(functor.keys()) == inner_waveform.defined_channels, ("There is no default identity mapping (yet)."
                                                                         "File an issue on github if you need it.")
 
-    @property
-    def duration(self) -> TimeType:
-        return self._inner_waveform.duration
+    @classmethod
+    def from_functor(cls, inner_waveform: Waveform, functor: Mapping[ChannelID, Functor]):
+        constant_values = inner_waveform.constant_value_dict()
+        if constant_values is None:
+            return FunctorWaveform(inner_waveform, functor)
+
+        funced_constant_values = {ch: functor[ch](val) for ch, val in constant_values.items()}
+        return ConstantWaveform.from_mapping(inner_waveform.duration, funced_constant_values)
+
+    def is_constant(self) -> bool:
+        # only correct if `from_functor` was used
+        return False
+
+    def constant_value_dict(self) -> Optional[Mapping[ChannelID, float]]:
+        # only correct if `from_functor` was used
+        return None
+
+    def constant_value(self, channel: ChannelID) -> Optional[float]:
+        inner = self._inner_waveform.constant_value(channel)
+        if inner is None:
+            return None
+        else:
+            return self._functor[channel](inner)
 
     @property
-    def defined_channels(self) -> Set[ChannelID]:
+    def defined_channels(self) -> AbstractSet[ChannelID]:
         return self._inner_waveform.defined_channels
 
     def unsafe_sample(self,
                       channel: ChannelID,
                       sample_times: np.ndarray,
                       output_array: Union[np.ndarray, None] = None) -> np.ndarray:
-        return self._functor[channel](self._inner_waveform.unsafe_sample(channel, sample_times, output_array))
+        inner_output = self._inner_waveform.unsafe_sample(channel, sample_times, output_array)
+        return self._functor[channel](inner_output, out=inner_output)
 
     def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> Waveform:
-        return SubsetWaveform(self, channels)
+        return FunctorWaveform.from_functor(
+            self._inner_waveform.unsafe_get_subset_for_channels(channels),
+            {ch: self._functor[ch] for ch in channels})
 
     @property
     def compare_key(self) -> Tuple[Waveform, FrozenSet]:
         return self._inner_waveform, frozenset(self._functor.items())
+
+
+class ReversedWaveform(Waveform):
+    """Reverses the inner waveform in time."""
+
+    __slots__ = ('_inner',)
+
+    def __init__(self, inner: Waveform):
+        super().__init__(duration=inner.duration)
+        self._inner = inner
+
+    @classmethod
+    def from_to_reverse(cls, inner: Waveform) -> Waveform:
+        if inner.constant_value_dict():
+            return inner
+        else:
+            return cls(inner)
+
+    def unsafe_sample(self, channel: ChannelID, sample_times: np.ndarray,
+                      output_array: Union[np.ndarray, None] = None) -> np.ndarray:
+        inner_sample_times = (float(self.duration) - sample_times)[::-1]
+        if output_array is None:
+            return self._inner.unsafe_sample(channel, inner_sample_times, None)[::-1]
+        else:
+            inner_output_array = output_array[::-1]
+            inner_output_array = self._inner.unsafe_sample(channel, inner_sample_times, output_array=inner_output_array)
+            if inner_output_array.base not in (output_array, output_array.base):
+                # TODO: is there a guarantee by numpy we never end up here?
+                output_array[:] = inner_output_array[::-1]
+            return output_array
+
+    @property
+    def defined_channels(self) -> AbstractSet[ChannelID]:
+        return self._inner.defined_channels
+
+    def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> 'Waveform':
+        return ReversedWaveform.from_to_reverse(self._inner.unsafe_get_subset_for_channels(channels))
+
+    @property
+    def compare_key(self) -> Hashable:
+        return self._inner.compare_key
+
+    def reversed(self) -> 'Waveform':
+        return self._inner

@@ -85,10 +85,11 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
                                            duration='t_3',
                                            waveform=DummyWaveform(duration=4, defined_channels={'c3'}))]
 
-        with self.assertRaisesRegex(ValueError, 'duration equality'):
-            AtomicMultiChannelPulseTemplate(*subtemplates)
+        # with self.assertRaisesRegex(ValueError, 'duration equality'):
+        #     AtomicMultiChannelPulseTemplate(*subtemplates)
 
-        amcpt = AtomicMultiChannelPulseTemplate(*subtemplates, duration=True)
+        with self.assertWarns(DeprecationWarning):
+            amcpt = AtomicMultiChannelPulseTemplate(*subtemplates, duration=True)
         self.assertIs(amcpt.duration, subtemplates[0].duration)
 
         with self.assertRaisesRegex(ValueError, 'duration'):
@@ -111,22 +112,11 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
         amcpt.build_waveform(parameters=dict(t_1=3+1e-11, t_2=3, t_3=3, t_0=3),
                              channel_mapping={ch: ch for ch in 'c1 c2 c3'.split()})
 
-    def test_external_parameters_warning(self):
-        with self.assertWarnsRegex(DeprecationWarning, "external_parameters",
-                                   msg="AtomicMultiChannelPulseTemplate did not issue a warning for argument external_parameters"):
-            AtomicMultiChannelPulseTemplate(DummyPulseTemplate(), external_parameters={'a'})
-
     def test_duration(self):
         sts = [DummyPulseTemplate(duration='t1', defined_channels={'A'}),
                DummyPulseTemplate(duration='t1', defined_channels={'B'}),
                DummyPulseTemplate(duration='t2', defined_channels={'C'})]
-        with self.assertRaises(ValueError):
-            AtomicMultiChannelPulseTemplate(*sts)
-
-        with self.assertRaises(ValueError):
-            AtomicMultiChannelPulseTemplate(sts[0], sts[2])
         template = AtomicMultiChannelPulseTemplate(*sts[:1])
-
         self.assertEqual(template.duration, 't1')
 
     def test_mapping_template_pure_conversion(self):

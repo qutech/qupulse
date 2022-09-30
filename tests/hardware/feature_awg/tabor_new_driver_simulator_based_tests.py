@@ -5,7 +5,10 @@ import platform
 import os
 from typing import List, Tuple, Optional, Any
 
-import pytabor
+try:
+    import tabor_control
+except ImportError as err:
+    raise unittest.SkipTest("tabor_control not present") from err
 import numpy as np
 
 from qupulse._program.tabor import TableDescription, TableEntry
@@ -13,69 +16,7 @@ from qupulse.hardware.feature_awg.features import DeviceControl, VoltageRange, P
 from qupulse.hardware.feature_awg.tabor import TaborDevice, TaborSegment
 from qupulse.utils.types import TimeType
 
-
-class TaborSimulatorManager:
-    def __init__(self,
-                 simulator_executable='WX2184C.exe',
-                 simulator_path=os.path.realpath(os.path.dirname(__file__))):
-        self.simulator_executable = simulator_executable
-        self.simulator_path = simulator_path
-
-        self.started_simulator = False
-
-        self.simulator_process = None
-        self.instrument: TaborDevice = None
-
-    def kill_running_simulators(self):
-        command = 'Taskkill', '/IM {simulator_executable}'.format(simulator_executable=self.simulator_executable)
-        try:
-            subprocess.run([command],
-                           stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        except FileNotFoundError:
-            pass
-
-    @property
-    def simulator_full_path(self):
-        return os.path.join(self.simulator_path, self.simulator_executable)
-
-    def start_simulator(self, try_connecting_to_existing_simulator=True, max_wait_time=30):
-        if try_connecting_to_existing_simulator:
-            if pytabor.open_session('127.0.0.1') is not None:
-                return
-
-        if not os.path.isfile(self.simulator_full_path):
-            raise RuntimeError('Cannot locate simulator executable.')
-
-        self.kill_running_simulators()
-
-        self.simulator_process = subprocess.Popen([self.simulator_full_path, '/switch-on', '/gui-in-tray'])
-
-        start = time.time()
-        while pytabor.open_session('127.0.0.1') is None:
-            if self.simulator_process.returncode:
-                raise RuntimeError('Simulator exited with return code {}'.format(self.simulator_process.returncode))
-            if time.time() - start > max_wait_time:
-                raise RuntimeError('Could not connect to simulator')
-            time.sleep(0.1)
-
-    def connect(self) -> TaborDevice:
-        self.instrument = TaborDevice("testDevice",
-                                      "127.0.0.1",
-                                      reset=True,
-                                      paranoia_level=2)
-
-        if self.instrument.main_instrument.visa_inst is None:
-            raise RuntimeError('Could not connect to simulator')
-        return self.instrument
-
-    def disconnect(self):
-        for device in self.instrument.all_devices:
-            device.close()
-        self.instrument = None
-
-    def __del__(self):
-        if self.started_simulator and self.simulator_process:
-            self.simulator_process.kill()
+from tests.hardware.tabor_simulator_based_tests import TaborSimulatorManager
 
 
 @unittest.skipIf(platform.system() != 'Windows', "Simulator currently only available on Windows :(")
@@ -87,7 +28,9 @@ class TaborSimulatorBasedTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.simulator_manager = TaborSimulatorManager('WX2184C.exe', os.path.dirname(__file__))
+        cls.simulator_manager = TaborSimulatorManager(TaborDevice, 'instr_addr',
+                                                      dict(device_name='testDevice', reset=True, paranoia_level=2),
+                                                      'WX2184C.exe', os.path.dirname(__file__))
         try:
             cls.simulator_manager.start_simulator()
         except RuntimeError as err:
