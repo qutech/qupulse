@@ -3,7 +3,7 @@
 May lines of code have been adapted from the zihdawg driver.
 
 """
-from typing import Dict, Tuple, Iterable, Union, List
+from typing import Dict, Tuple, Iterable, Union, List, Set
 from enum import Enum
 import warnings
 import time
@@ -38,8 +38,8 @@ import numpy as np
 [X] make TriggerMode class an Enum
 [X] setup minimal connection without changing settings other than buffer lengths
 [X] extract window things
-[ ] rethink handling different sample rates!
-[ ] cut obtained data to fit into requested windows
+[X] rethink handling different sample rates!
+[X] cut obtained data to fit into requested windows
 [ ] provide interface for changing trigger settings
 [ ] print information about how long the measurement is expected to run
 [ ] implement multiple triggers (using rows) (and check how this actually behaves)
@@ -51,6 +51,26 @@ import numpy as np
 [ ] implement optional operations (averaging, binning, up/down sampling, ...)
 [ ] implement scope interface for higher sample rates (if i understood the documentation correctly)
 [ ] implement low level interface (subscribe())
+
+
+Tests to implement:
+[ ] connecting to a MFLI Device by querying
+	[ ] available nodes of the api_session
+	[ ] creating and reading a DAQ Module
+[ ] registering channels
+	[ ] Demod 0 and 1
+	[ ] AUXIN
+[ ] defining measurement windows
+	[ ] consecutive ones
+	[ ] overlapping
+	[ ] some windows with names but no begin and length information
+[ ] relating channels to windows
+	[ ] adding one channel to one window
+	[ ] adding multiple channels to one windows
+	[ ] adding one channel to multiple windows
+[ ] measuring only one AUXIN (some channel without the rate argument)
+
+
 
 """
 
@@ -158,9 +178,14 @@ class MFLIDAQ(DAC):
 		"""
 
 		self.programs.setdefault(program_name, {}).setdefault("windows", {}).update(windows)
+		self.programs.setdefault(program_name, {}).setdefault("windows_from_start_max", {}).update({k:np.max(v[0]+v[1]) for k, v in windows.items()})
 
-		for k, v in windows.items():
-			self.set_measurement_mask(program_name=program_name, mask_name=k, begins=v[0], lengths=v[1])
+		# the channels we want to measure with:
+		channels_to_measure: Set[str] = self._get_channels_for_window(program_name, list(windows.keys()))
+		self.programs.setdefault(program_name, {})["all_channels"] = channels_to_measure
+
+		# for k, v in windows.items():
+		# 	self.set_measurement_mask(program_name=program_name, mask_name=k, begins=v[0], lengths=v[1])
 
 	def _get_sample_rates(self, channel:str):
 		try:
@@ -187,20 +212,15 @@ class MFLIDAQ(DAC):
 			Measurement windows in DAC samples (begins, lengths)
 		"""
 
+		raise NotImplementedError(f"This function has been abandoned as the MFLI returns timestamps.")
+
 		assert begins.shape == lengths.shape
 
 		if program_name not in self.programs:
 			raise ValueError(f"Program '{program_name}' not known")
 
 		# the channels we want to measure with:
-		channels_to_measure: List[str] = []
-		try:
-			channels_to_measure = self.programs[program_name]["channel_mapping"][mask_name]
-		except KeyError:
-			try:
-				channels_to_measure = self.programs[None]["channel_mapping"][mask_name]
-			except KeyError:
-				channels_to_measure = []
+		channels_to_measure: List[str] = self._get_channels_for_window(program_name, mask_name)
 
 		if len(channels_to_measure) == 0:
 			warnings.warn(f"There are no channels defined that should be measured in mask '{mask_name}'.")
@@ -273,6 +293,29 @@ class MFLIDAQ(DAC):
 		"""
 
 		self.programs.setdefault(program_name, {}).setdefault("operations", []).append(operations)
+
+	def _get_channels_for_window(self, program_name, window_name=None):
+		""" Returns the channels to be measured for a given window
+		"""
+		if window_name is None:
+			window_name = list(self.programs[program_name].keys())
+		if not isinstance(window_name, list):
+			window_name = [window_name]
+
+		channels: Set[str] = set()
+
+		for wn in window_name:
+			try:
+				channels.update(self.programs[program_name]["channel_mapping"][wn])
+			except KeyError:
+				try:
+					channels.update(self.programs[None]["channel_mapping"][wn])
+				except KeyError:
+					pass
+
+		channels = set([e.lower() for e in channels])
+		return channels
+
 	
 	def _get_demod(self, channel:str):
 		""" This function gets the demodulator corresponding to a channel
@@ -295,7 +338,7 @@ class MFLIDAQ(DAC):
 				demod = self._get_demod(c)
 				try:
 					self.api_session.setInt(f'/{self.serial}/{demod}/enable', 1)
-				except RuntimeError  as e:
+				except RuntimeError as e:
 					if "ZIAPINotFoundException" in e.args[0] or f"Path /{self.serial}/{demod}/enable not found." in e.args[0]:
 						# ok, the channel can not be enabled. Then the user should be caring about that.
 						warnings.warn(f"The channel {c} does not have an interface for enabling it. If needed, this can be done using the web interface.")
@@ -306,28 +349,56 @@ class MFLIDAQ(DAC):
 				# select the value to measure
 				self.daq.subscribe(f'/{self.serial}/{c}')
 
-			# check if sample rates are the same as when register_measurement_windows() was called
-			for k, v in self.programs[program_name]['masks'].items():
-				if len(v["channels"]) != len(v["sample_rates"]):
-					raise ValueError(f"There is a mismatch between number the channels to be used and the known sample rates.")
-				for c, r in zip(v["channels"], v["sample_rates"]):
-					if self._get_sample_rates(c) != r:
-						raise ValueError(f"The sample rate for channel '{c}' has changed. Please call register_measurement_windows() again.")
+			# # check if sample rates are the same as when register_measurement_windows() was called
+			# for k, v in self.programs[program_name]['masks'].items():
+			# 	if len(v["channels"]) != len(v["sample_rates"]):
+			# 		raise ValueError(f"There is a mismatch between number the channels to be used and the known sample rates.")
+			# 	for c, r in zip(v["channels"], v["sample_rates"]):
+			# 		if self._get_sample_rates(c) != r:
+			# 			raise ValueError(f"The sample rate for channel '{c}' has changed. Please call register_measurement_windows() again.")
+
+			# set the buffer size based on the largest sample rate
+			# if no sample rate is readable, as for example when only AUXIN channels are used, the first demodulator is activated and the corresponding rate is used
+
+			raw_currently_set_sample_rates: List[Union[TimeType, None]] = []
+			for c in self.programs[program_name]["all_channels"]:
+				raw_currently_set_sample_rates.append(self._get_sample_rates(c))
+
+			# CAUTION
+			# The MFLI lock-ins up-sample slower channels to fit the fastest sample rate.
+			# This is the cased for the Lab One Data Server 21.08.20515 and the MFLi Firmware 67629.
+			foo = [x for x in raw_currently_set_sample_rates if x is not None]
+			if len(foo) == 0 and self.assumed_minimal_sample_rate is None:
+				# Ok, we activate the first demodulator
+				self.api_session.setInt(f'/{self.serial}/demods/0/enable', 1)
+				foo.append(self._get_sample_rates(f'/{self.serial}/demods/0/sample.R'))
+			if self.assumed_minimal_sample_rate is not None:
+				foo.append(TimeType().from_float(value=self.assumed_minimal_sample_rate, absolute_error=0))
+			max_sample_rate = max(foo)
+			currently_set_sample_rates = [max_sample_rate]*len(raw_currently_set_sample_rates)
+
 
 			# set daq module settings to standard things
 			# TODO one might want to extend the driver to support more methods
 			self.daq.set('grid/mode', 4) # this corresponds to Mode: Exact(on-grid)
-			self.daq.set('grid/rows', 1) # this corresponds to measuring only for one trigger
 			# the following two lines set the row repetitions to 1 and off
 			self.daq.set('grid/repetitions', 1)
 			self.daq.set('grid/rowrepetition', 0)
-			# TODO these should be a
+			rows = 1
+
 
 			# set the buffer size according to the largest measurement window
 			# TODO one might be able to implement this a bit more cleverly
-			self.daq.set('grid/cols', int(self.programs[program_name]["window_hull"][1]))
+			measurement_duration = np.max(list(self.programs[program_name]["windows_from_start_max"].values()))
+			larges_number_of_samples = 1e-9*max_sample_rate*measurement_duration
+			larges_number_of_samples = np.ceil(larges_number_of_samples)
+			self.daq.set('grid/cols', larges_number_of_samples)
+			self.daq.set('grid/rows', rows) # this corresponds to measuring only for one trigger
 
 			self.currently_set_program = program_name
+
+			print(f"Will record {larges_number_of_samples} samples in {measurement_duration*1e-9}s!") # TODO this will have to change if proper multi triggers with over multiple rows is going to be used.
+			print(f"MFLI returns a total record time of {self.daq.get('duration')}s")
 
 		# execute daq
 		self.daq.execute()
@@ -392,74 +463,55 @@ class MFLIDAQ(DAC):
 
 		masked_data = {}
 
-		index = 0
+		shot_index = 0
 
-		for mask_name in self.programs[program_name]["masks"]:
+		for window_name in self.programs[program_name]["windows"]:
 			data_by_channel = {}
-			_mask = self.programs[program_name]["masks"][mask_name]["mask"]
-			for ci, _cn in enumerate(self.programs[program_name]["masks"][mask_name]['channels']):
+			_wind = self.programs[program_name]["windows"][window_name]
+			for ci, _cn in enumerate(self._get_channels_for_window(program_name, window_name)):
 				cn = f"/{self.serial}/{_cn}".lower()
 				print(cn)
-				if len(recorded_data[cn]) <= index:
-					# then we do not have data for this index, which is intended to cover multiple not yet collected measurements. And thus will not have anything to save.
-					warnings.warn(f"for channel '{cn}' only {len(recorded_data[cn])} shots are given. This does not allow for taking element [-1-{index}]")
+				if len(recorded_data[cn]) <= shot_index:
+					# then we do not have data for this shot_index, which is intended to cover multiple not yet collected measurements. And thus will not have anything to save.
+					warnings.warn(f"for channel '{cn}' only {len(recorded_data[cn])} shots are given. This does not allow for taking element [-1-{shot_index}]")
 					continue
-				applicable_data = recorded_data[cn][-1-index]
+				applicable_data = recorded_data[cn][-1-shot_index]
 
-				if np.sum(np.isnan(_mask[1, :, ci])) > 0:
-					raise ValueError(f"There is something wrong with the data for channel {cn}. The later code assumes that the lock-in is linearly interpolating up to the highest sample rate used.")
-				# building the mask to apply to the data now:
-				applicable_mask = np.full((_mask.shape[1], np.nanmax(_mask[1, :, ci]).astype(int)+1), np.nan)
-				# the following code could probably be optimized with some numpy magic
-				for wi, w in enumerate(_mask[:, :, ci].T):
-					applicable_mask[wi, :int(w[2]-w[0]+1)] = np.arange(w[0], w[2]+1)
+				extracted_data = []
+				for b, l in zip(*_wind):
+					_time_of_first_not_nan_value = applicable_data.where(~np.isnan(applicable_data), drop=True)["time"][:, 0].values
 
-				print(applicable_data.shape)
-				print(applicable_mask)
-				print(applicable_mask.shape)
+					time_of_trigger = applicable_data.attrs["gridcoloffset"][0]*1e9+_time_of_first_not_nan_value
 
-				# TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
-				
-				temp_mask = applicable_mask.reshape((-1))
-				temp_mask = temp_mask.copy()
-				temp_mask[np.isnan(temp_mask)] = 0
+					print(f"time_of_trigger={time_of_trigger}")
+					foo = applicable_data.where((applicable_data["time"]>=time_of_trigger+b) & (applicable_data["time"]<=time_of_trigger+b+l), drop=True)
+					foo["time"] -= time_of_trigger
+					extracted_data.append(foo)
 
-				masked_data = np.take(applicable_data.reshape((-1)), temp_mask)
+				print(f"extracted_data={extracted_data}")
 
-				np.put_along_axis(masked_data, np.where(np.isnan(applicable_mask.reshape((-1)))))
+				data_by_channel.update({cn: extracted_data})
+			masked_data[window_name] = data_by_channel
 
-				# TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
+		return masked_data
 
-				# foo = xr.DataArray(
-				# 	data=d["value"],
-				# 	coords={'timestamp': (['col', 'row'], d['timestamp'])},
-				# 	dims=['col', 'row'],
-				# 	name=cn,
-				# 	attrs=d['header']
-				# 	)
-				# data_by_channel.update({cn: foo})
-			# masked_data[mask_name] = data_by_channel
-
-		# result = xr.Dataset(
-		# 	{}
-		# 	)
-		# self.programs.setdefault(program_name, {}).setdefault("masks", {})[mask_name] = {"mask": mask_info, "channels": channels_to_measure, "sample_rates": currently_set_sample_rates}
-
-		pass
-
-	def measure_program(self, channels: Iterable[str], wait=True) -> Dict[str, np.ndarray]:
+	def measure_program(self, channels: Iterable[str], wait=True, return_raw=False) -> Dict[str, np.ndarray]:
 		"""Get the last measurement's results of the specified operations/channels"""
 
 		# wait until the data acquisition has finished
+		# TODO implement timeout
 		while not self.daq.finished() and wait:
 			time.sleep(1)
-			print(f"waiting for device {self.serial} to finish the acquisition.")
+			print(f"Waiting for device {self.serial} to finish the acquisition.") #Progress: {self.daq.progress()[0]}
 
 		if not self.daq.finished():
+			self.daq.finish()
 			raise ValueError(f"Device {self.serial} did not finish the acquisition in time.")
 
 		data = self.daq.read()
 		self.daq_read_return.update(data)
+
+		self.clock_base = self.api_session.getDouble(f'/{self.serial}/clockbase')
 
 		# go through the returned object and extract the data of interest
 
@@ -473,8 +525,8 @@ class MFLIDAQ(DAC):
 							channel_name = f"/{device_name}/{input_name}/{signal_name}/{final_level_name}".lower()
 							channel_data = [xr.DataArray(
 										data=d["value"],
-										coords={'timestamp': (['col', 'row'], d['timestamp'])},
-										dims=['col', 'row'],
+										coords={'time': (['row', 'col'], d["timestamp"]/self.clock_base*1e9)},
+										dims=['row', 'col'],
 										name=channel_name,
 										attrs=d['header']) for i, d in enumerate(final_level_data)]
 							recorded_data[channel_name] = channel_data
@@ -483,10 +535,11 @@ class MFLIDAQ(DAC):
 		# this is needed as the assumption, that the lock-in/data server up-samples slower channels to match the one with the highest rate.
 
 		recorded_shapes = {k:set([e.shape for e in v]) for k, v in recorded_data.items()}
-		if any([len(v)>1 for v in recorded_shapes.items()]) or len(set([e for a in recorded_data.items() for e in a]))>1:
+		if any([len(v)>1 for v in recorded_shapes.values()]) or len(set([e for a in recorded_shapes.values() for e in a]))>1:
 			warnings.warn(f"For at least one received channel entries with different dimensions are present. This might lead to undesired masking! (The code will not raise an exception.) ({recorded_shapes})")
 
-		
-		print(data)
 
-		return recorded_data
+		if return_raw:
+			return recorded_data
+		else:
+			return self._parse_data(recorded_data, self.currently_set_program)
