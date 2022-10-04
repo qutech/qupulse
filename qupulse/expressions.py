@@ -24,6 +24,50 @@ __all__ = ["Expression", "ExpressionVariableMissingException", "ExpressionScalar
 _ExpressionType = TypeVar('_ExpressionType', bound='Expression')
 
 
+ALLOWED_NUMERIC_SCALAR_TYPES = (float, numpy.number, int, complex, bool, numpy.bool_, TimeType)
+
+
+def _parse_evaluate_numeric(result) -> Union[Number, numpy.ndarray]:
+    """Tries to parse the result as a scalar if possible. Falls back to an array otherwise.
+    Raises:
+        ValueError if scalar result is not parsable
+    """
+    allowed_scalar = ALLOWED_NUMERIC_SCALAR_TYPES
+
+    if isinstance(result, allowed_scalar):
+        # fast path for regular evaluations
+        return result
+    if isinstance(result, tuple):
+        result, = result
+    elif isinstance(result, numpy.ndarray):
+        result = result[()]
+
+    if isinstance(result, allowed_scalar):
+        return result
+    if isinstance(result, sympy.Float):
+        return float(result)
+    elif isinstance(result, sympy.Integer):
+        return int(result)
+
+    if isinstance(result, numpy.ndarray):
+        # allow numeric vector values
+        return _parse_evaluate_numeric_vector(result)
+    raise ValueError("Non numeric result", result)
+
+
+def _parse_evaluate_numeric_vector(vector_result: numpy.ndarray) -> numpy.ndarray:
+    allowed_scalar = ALLOWED_NUMERIC_SCALAR_TYPES
+    if not issubclass(vector_result.dtype.type, allowed_scalar):
+        obj_types = set(map(type, vector_result.flat))
+        if all(issubclass(obj_type, sympy.Integer) for obj_type in obj_types):
+            result = vector_result.astype(numpy.int64)
+        elif all(issubclass(obj_type, (sympy.Integer, sympy.Float)) for obj_type in obj_types):
+            result = vector_result.astype(float)
+        else:
+            raise ValueError("Could not parse vector result", vector_result)
+    return vector_result
+
+
 def _flat_iter(arr):
     if len(arr.shape) > 1:
         for sub_arr in arr:
@@ -56,34 +100,6 @@ class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
             else:
                 raise ExpressionVariableMissingException(key_error.args[0], self) from key_error
 
-    def _parse_evaluate_numeric_result(self,
-                                       result: Union[Number, numpy.ndarray],
-                                       call_arguments: Any) -> Union[Number, numpy.ndarray]:
-        allowed_types = (float, numpy.number, int, complex, bool, numpy.bool_, TimeType)
-        if isinstance(result, tuple):
-            result = numpy.array(result)
-        if isinstance(result, numpy.ndarray):
-            if not issubclass(result.dtype.type, allowed_types):
-                obj_types = set(map(type, result.flat))
-                if all(issubclass(obj_type, sympy.Integer) for obj_type in obj_types):
-                    result = result.astype(numpy.int64)
-                elif all(issubclass(obj_type, (sympy.Integer, sympy.Float)) for obj_type in obj_types):
-                    result = result.astype(float)
-                else:
-                    raise NonNumericEvaluation(self, result, call_arguments)
-            if result.shape==():
-                # a scalar numpy array. cast to a pure scalar
-                result = result[()]
-            return result
-        elif isinstance(result, allowed_types):
-            return result
-        elif isinstance(result, sympy.Float):
-            return float(result)
-        elif isinstance(result, sympy.Integer):
-            return int(result)
-        else:
-            raise NonNumericEvaluation(self, result, call_arguments)
-
     def evaluate_in_scope(self, scope: Mapping) -> Union[Number, numpy.ndarray]:
         """Evaluate the expression by taking the variables from the given scope (typically of type Scope but it can be
         any mapping.)
@@ -93,20 +109,10 @@ class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
         Returns:
 
         """
-        parsed_kwargs = self._parse_evaluate_numeric_arguments(scope)
-
-        result, self._expression_lambda = evaluate_lambdified(self.underlying_expression, self.variables,
-                                                              parsed_kwargs, lambdified=self._expression_lambda)
-
-        return self._parse_evaluate_numeric_result(result, scope)
+        raise NotImplementedError("")
 
     def evaluate_numeric(self, **kwargs) -> Union[Number, numpy.ndarray]:
-        parsed_kwargs = self._parse_evaluate_numeric_arguments(kwargs)
-
-        result, self._expression_lambda = evaluate_lambdified(self.underlying_expression, self.variables,
-                                                              parsed_kwargs, lambdified=self._expression_lambda)
-
-        return self._parse_evaluate_numeric_result(result, kwargs)
+        return self.evaluate_in_scope(kwargs)
 
     def __float__(self):
         if self.variables:
@@ -187,15 +193,18 @@ class ExpressionVector(Expression):
     def variables(self) -> Sequence[str]:
         return self._variables
 
-    def evaluate_numeric(self, **kwargs) -> Union[numpy.ndarray, Number]:
-        parsed_kwargs = self._parse_evaluate_numeric_arguments(kwargs)
-
+    def evaluate_in_scope(self, scope: Mapping) -> numpy.ndarray:
+        parsed_kwargs = self._parse_evaluate_numeric_arguments(scope)
         flat_result = []
         for idx, expr in enumerate(self._expression_items):
             result, self._lambdified_items[idx] = evaluate_lambdified(expr, self.variables, parsed_kwargs,
                                                                       lambdified=self._lambdified_items[idx])
             flat_result.append(result)
-        return self._parse_evaluate_numeric_result(numpy.array(flat_result).reshape(self._expression_shape), kwargs)
+        result = numpy.array(flat_result).reshape(self._expression_shape)
+        try:
+            return _parse_evaluate_numeric_vector(result)
+        except ValueError as err:
+            raise NonNumericEvaluation(self, result, scope) from err
 
     def get_serialization_data(self) -> Sequence[str]:
         serialized_items = list(map(get_most_simple_representation, self._expression_items))
@@ -204,7 +213,7 @@ class ExpressionVector(Expression):
         elif len(self._expression_shape) == 1:
             return serialized_items
         else:
-            return np.array(serialized_items).reshape(self._expression_shape).tolist()
+            return numpy.array(serialized_items).reshape(self._expression_shape).tolist()
 
     def __str__(self):
         return str(self.get_serialization_data())
@@ -406,13 +415,25 @@ class ExpressionScalar(Expression):
     def is_nan(self) -> bool:
         return sympy.sympify('nan') == self._sympified_expression
 
-    def evaluate_with_exact_rationals(self, scope: Mapping) -> Number:
+    def evaluate_with_exact_rationals(self, scope: Mapping) -> Union[Number, numpy.ndarray]:
         parsed_kwargs = self._parse_evaluate_numeric_arguments(scope)
         result, self._exact_rational_lambdified = evaluate_lamdified_exact_rational(self.sympified_expression,
                                                                                     self.variables,
                                                                                     parsed_kwargs,
                                                                                     self._exact_rational_lambdified)
-        return self._parse_evaluate_numeric_result(result, scope)
+        try:
+            return _parse_evaluate_numeric(result)
+        except ValueError as err:
+            raise NonNumericEvaluation(self, result, scope) from err
+
+    def evaluate_in_scope(self, scope: Mapping) -> Union[Number, numpy.ndarray]:
+        parsed_kwargs = self._parse_evaluate_numeric_arguments(scope)
+        result, self._expression_lambda = evaluate_lambdified(self.underlying_expression, self.variables,
+                                                              parsed_kwargs, lambdified=self._expression_lambda)
+        try:
+            return _parse_evaluate_numeric(result)
+        except ValueError as err:
+            raise NonNumericEvaluation(self, result, scope) from err
 
 
 class ExpressionVariableMissingException(Exception):
@@ -439,7 +460,7 @@ class NonNumericEvaluation(Exception):
         qupulse.expressions.Expression.evaluate_numeric
     """
 
-    def __init__(self, expression: Expression, non_numeric_result: Any, call_arguments: Dict):
+    def __init__(self, expression: Expression, non_numeric_result: Any, call_arguments: Mapping):
         self.expression = expression
         self.non_numeric_result = non_numeric_result
         self.call_arguments = call_arguments
