@@ -453,13 +453,3 @@ class AtomicPulseTemplateTests(unittest.TestCase):
                                               to_single_waveform=set(),
                                               global_transformation=None)
         self.assertEqual(Loop(), program)
-
-    def test_integral(self):
-        raise NotImplementedError()
-
-    def test_initial_values(self):
-        raise NotImplementedError()
-
-    def test_final_values(self):
-        raise NotImplementedError()
-

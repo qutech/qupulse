@@ -178,10 +178,17 @@ class ForLoopPulseTemplateTest(unittest.TestCase):
         self.assertEqual(expected, pulse.integral)
 
     def test_initial_values(self):
-        raise NotImplementedError()
+        dpt = DummyPulseTemplate(initial_values={'A': 'a + 3 + i', 'B': 7}, parameter_names={'i', 'a'})
+        fpt = ForLoopPulseTemplate(dpt, 'i', (1, 'n', 2))
+        self.assertEqual({'A': 'a+4', 'B': 7}, fpt.initial_values)
 
     def test_final_values(self):
-        raise NotImplementedError()
+        dpt = DummyPulseTemplate(final_values={'A': 'a + 3 + i', 'B': 7}, parameter_names={'i', 'a'})
+        fpt = ForLoopPulseTemplate(dpt, 'i', 'n')
+        self.assertEqual({'A': 'a+3+Max(0, floor(n) - 1)', 'B': 7}, fpt.final_values)
+
+        fpt_fin = ForLoopPulseTemplate(dpt, 'i', (1, 'n', 2)).final_values
+        self.assertEqual('a + 10', fpt_fin['A'].evaluate_symbolic({'n': 8}))
 
 
 class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):

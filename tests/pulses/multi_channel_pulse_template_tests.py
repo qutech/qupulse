@@ -377,10 +377,14 @@ class ParallelConstantChannelPulseTemplateTests(unittest.TestCase):
         self.assertEqual(expected_integral, pccpt.integral)
 
     def test_initial_values(self):
-        raise NotImplementedError()
+        dpt = DummyPulseTemplate(initial_values={'A': 'a', 'B': 'b'})
+        par = ParallelConstantChannelPulseTemplate(dpt, {'B': 'b2', 'C': 'c'})
+        self.assertEqual({'A': 'a', 'B': 'b2', 'C': 'c'}, par.initial_values)
 
     def test_final_values(self):
-        raise NotImplementedError()
+        dpt = DummyPulseTemplate(final_values={'A': 'a', 'B': 'b'})
+        par = ParallelConstantChannelPulseTemplate(dpt, {'B': 'b2', 'C': 'c'})
+        self.assertEqual({'A': 'a', 'B': 'b2', 'C': 'c'}, par.final_values)
 
     def test_get_overwritten_channels_values(self):
         template = DummyPulseTemplate(duration='t1', defined_channels={'X', 'Y'}, parameter_names={'a', 'b'},

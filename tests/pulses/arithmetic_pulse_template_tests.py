@@ -484,10 +484,14 @@ class ArithmeticPulseTemplateTest(unittest.TestCase):
         self.assertEqual(expected, ArithmeticPulseTemplate(pt, '/', mapping).integral)
 
     def test_initial_values(self):
-        raise NotImplementedError()
+        lhs = DummyPulseTemplate(initial_values={'A': .3, 'B': 'b'}, defined_channels={'A', 'B'})
+        apt = lhs + 'a'
+        self.assertEqual({'A': 'a + 0.3', 'B': 'b + a'}, apt.initial_values)
 
     def test_final_values(self):
-        raise NotImplementedError()
+        lhs = DummyPulseTemplate(final_values={'A': .3, 'B': 'b'}, defined_channels={'A', 'B'})
+        apt = lhs - 'a'
+        self.assertEqual({'A': '-a + .3', 'B': 'b - a'}, apt.final_values)
 
     def test_simple_attributes(self):
         lhs = DummyPulseTemplate(defined_channels={'a', 'b'}, duration=ExpressionScalar('t_dur'),
