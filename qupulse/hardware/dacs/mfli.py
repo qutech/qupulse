@@ -41,12 +41,15 @@ import numpy as np
 [X] rethink handling different sample rates!
 [X] cut obtained data to fit into requested windows
 [ ] provide interface for changing trigger settings
-[ ] print information about how long the measurement is expected to run
+[X] print information about how long the measurement is expected to run
 [ ] implement multiple triggers (using rows) (and check how this actually behaves)
-	[ ] count
+	[X] count
 	[ ] endless
+		[ ] check how that would behave. Does that overwrite or shift things?
 	[ ] change in trigger input port
 [X] implement setting recording channel (could that be already something inside qupulse?)
+[ ] see why for high sample rates (e.g. 857.1k) things crash or don't behave as expected
+[ ] Implement yield for not picked up data (read() was not called)
 => this should be sufficient for operation
 [ ] implement optional operations (averaging, binning, up/down sampling, ...)
 [ ] implement scope interface for higher sample rates (if i understood the documentation correctly)
@@ -69,6 +72,10 @@ Tests to implement:
 	[ ] adding multiple channels to one windows
 	[ ] adding one channel to multiple windows
 [ ] measuring only one AUXIN (some channel without the rate argument)
+[ ] finishing the acquisition before all rows are recorded (data processing (throwing out nans) might not work as intended)
+[ ] what happens when the lock-in is not returning what it should?
+	[ ] missing channels
+	[ ] channels separated over multiple read() calls
 
 
 
@@ -124,12 +131,12 @@ class MFLIDAQ(DAC):
 		self.default_timeout = timeout
 		self.serial = device_serial
 
-		self.daq = self.api_session.dataAcquisitionModule()
-		self.daq.set('device', device_serial)
+		self.daq = None
+		self._init_daq_module()
 
-		self.daq.set('type', 1)
-		self.daq.set('triggernode', '/dev3442/demods/0/sample.AuxIn0')
-		self.daq.set('endless', 0)
+		# self.daq.set('type', 1)
+		# self.daq.set('triggernode', '/dev3442/demods/0/sample.AuxIn0')
+		# self.daq.set('endless', 0)
 
 		self.assumed_minimal_sample_rate = None
 
@@ -142,14 +149,19 @@ class MFLIDAQ(DAC):
 		self.programs = {}
 		self.currently_set_program = None
 
+	def _init_daq_module(self):
+		self.daq = self.api_session.dataAcquisitionModule()
+		self.daq.set('device', self.serial)
 	
 	def reset_device(self):
 		""" This function resets the device to a known default configuration.
 		"""
-
-		raise NotImplementedError()
-
+		zhinst.utils.disable_everything(self.api_session, self.serial)
 		self.clear()
+
+		self.daq.close()
+		self._init_daq_module()
+		
 
 	def register_measurement_channel(self, program_name:str=None, channel_path:Union[str, List[str]]=[], window_name:str=None):
 		""" This function saves the channel one wants to record with a certain program
@@ -186,6 +198,31 @@ class MFLIDAQ(DAC):
 
 		# for k, v in windows.items():
 		# 	self.set_measurement_mask(program_name=program_name, mask_name=k, begins=v[0], lengths=v[1])
+
+	def register_trigger_settings(self, program_name:str, trigger_input:Union[str, None]=None, edge:str='rising', number_of_triggers_to_buffer:int=1, level:float=0.1, delay:float=-1e-3, post_delay:float=1e-3, other_settings:Dict[str, Union[str, int, float]]={}):
+		"""
+		Parameters
+		----------
+		program_name
+		trigger_input
+			This needs to be the path to input to the lock-in that the lock-in is able to use as a trigger (without the device serial). (see https://docs.zhinst.com/pdf/LabOneProgrammingManual.pdf for more information)
+		edge
+		number_of_triggers_to_buffer
+		other_settings
+		"""
+
+		if edge not in ["rising", "falling", "both"]:
+			raise ValueError(f"edge={edge} is not in ['rising', 'falling']")
+
+		self.programs.setdefault(program_name, {})["trigger_settings"] = {
+			"trigger_input": f"/{self.serial}/{trigger_input}",
+			"edge": edge,
+			"number_of_triggers_to_buffer": number_of_triggers_to_buffer,
+			"level": level,
+			"delay": delay,
+			"post_delay": post_delay,
+			"other_settings": other_settings,
+		}
 
 	def _get_sample_rates(self, channel:str):
 		try:
@@ -315,7 +352,6 @@ class MFLIDAQ(DAC):
 
 		channels = set([e.lower() for e in channels])
 		return channels
-
 	
 	def _get_demod(self, channel:str):
 		""" This function gets the demodulator corresponding to a channel
@@ -331,6 +367,9 @@ class MFLIDAQ(DAC):
 
 		# check if program_name specified program is selected and important parameter set to the lock-in
 		if self.currently_set_program is None or self.currently_set_program != program_name or force:
+
+			self.daq.finish()
+			self.daq.unsubscribe('*')
 
 			for c in self.programs[program_name]["all_channels"]:
 
@@ -364,9 +403,12 @@ class MFLIDAQ(DAC):
 			for c in self.programs[program_name]["all_channels"]:
 				raw_currently_set_sample_rates.append(self._get_sample_rates(c))
 
+			print(f"sample rates: {[(float(e) if e is not None else None) for e in raw_currently_set_sample_rates]}")
+
 			# CAUTION
 			# The MFLI lock-ins up-sample slower channels to fit the fastest sample rate.
 			# This is the cased for the Lab One Data Server 21.08.20515 and the MFLi Firmware 67629.
+			# TODO it needs to be verified, that this code here is actually necessary. One could also query the AUXIN using one of the demods. 
 			foo = [x for x in raw_currently_set_sample_rates if x is not None]
 			if len(foo) == 0 and self.assumed_minimal_sample_rate is None:
 				# Ok, we activate the first demodulator
@@ -384,32 +426,82 @@ class MFLIDAQ(DAC):
 			# the following two lines set the row repetitions to 1 and off
 			self.daq.set('grid/repetitions', 1)
 			self.daq.set('grid/rowrepetition', 0)
+
+			# setting trigger settings
+			ts = {}
+			try:
+				ts.update(self.programs[None]["trigger_settings"])
+			except KeyError:
+				pass
+			try:
+				ts.update(self.programs[program_name]["trigger_settings"])
+			except KeyError:
+				pass
+
 			rows = 1
+			if len(ts) != 0:
+				rows = ts["number_of_triggers_to_buffer"]
+				# selecting the trigger channel
+				if ts["trigger_input"] is not None:
+
+					self.daq.set('endless', 1)
+					self.daq.set('count', rows) # defines how many triggers are to be recorded in single mode i.e. endless==0
+
+					if "trig" in ts["trigger_input"].lower():
+						print(f"SETTING TRIGMODE 6")
+						self.daq.set("type", 6)
+					else:
+						print(f"SETTING TRIGMODE 1")
+						self.daq.set("type", 1)
+
+					self.daq.set("triggernode", ts["trigger_input"])
+					self.daq.subscribe(ts["trigger_input"])
+					print(f"SETTING TRIGGERNODE: {('triggernode', ts['trigger_input'])}")
+
+					edge_key = ["rising", "falling", "both"].index(ts["edge"])
+					print(f"using trigger edge: {edge_key}")
+					self.daq.set("edge", edge_key)
+					
+					self.daq.set("level", ts["level"])
+
+
+					self.daq.set("delay", ts["delay"])
+					self.daq.set('bandwidth', 0)
+
+				else:
+					self.daq.set("type", 0)
+
+				self.daq.set('count', rows)
+
+				for k, v in ts["other_settings"].items():
+					self.daq.set(k, v)
+
 
 
 			# set the buffer size according to the largest measurement window
 			# TODO one might be able to implement this a bit more cleverly
 			measurement_duration = np.max(list(self.programs[program_name]["windows_from_start_max"].values()))
+			measurement_duration += ts["post_delay"]
 			larges_number_of_samples = 1e-9*max_sample_rate*measurement_duration
 			larges_number_of_samples = np.ceil(larges_number_of_samples)
 			self.daq.set('grid/cols', larges_number_of_samples)
 			self.daq.set('grid/rows', rows) # this corresponds to measuring only for one trigger
 
+			# self.daq.set("buffersize", 2*measurement_duration) # that the buffer size is set to be larger than the duration is something that the SM script did. 
+			# # --> in the current version and/or configuration, this path is read-only.
+
 			self.currently_set_program = program_name
 
-			print(f"Will record {larges_number_of_samples} samples in {measurement_duration*1e-9}s!") # TODO this will have to change if proper multi triggers with over multiple rows is going to be used.
-			print(f"MFLI returns a total record time of {self.daq.get('duration')}s")
+			print(f"Will record {larges_number_of_samples} per row samples for {measurement_duration*1e-9}s!") # TODO this will have to change if proper multi triggers with over multiple rows is going to be used.
+			print(f"{rows} row(s) will be recorded.")
+			print(f"the following trigger settings will be used: {ts}")
+			print(f"MFLI returns a total record time of {self.daq.get('duration')['duration'][0]}s")
 
 		# execute daq
 		self.daq.execute()
 
 		# wait until changes have taken place
 		self.api_session.sync()
-
-		# # TODO this should be redundant with self.currently_set_program
-		# if program_name != None:
-		# 	self.programs.setdefault(program_name, {}).setdefault('armed', False)
-		# 	self.programs[program_name]['armed'] = True
 
 	def unarm_program(self, program_name:str):
 		""" unarms the lock-in. This should be program independent.
@@ -420,17 +512,15 @@ class MFLIDAQ(DAC):
 		self.api_session.sync()
 
 		self.currently_set_program = None
-		
-		# # TODO this should be redundant with self.currently_set_program
-		# if program_name != None:
-		# 	self.programs.setdefault(program_name, {}).setdefault('armed', False)
-		# 	self.programs[program_name]['armed'] = False
 
 	def force_trigger(self, program_name:str):
 		""" forces a trigger
 		"""
 
 		self.daq.set('forcetrigger', 1)
+
+	def stop_acquisition(self):
+		self.daq.finish()
 
 	def delete_program(self, program_name: str) -> None:
 		"""Delete program from internal memory."""
@@ -447,7 +537,7 @@ class MFLIDAQ(DAC):
 
 		self.unarm_program(program_name=None)
 
-	def _parse_data(self, recorded_data, program_name):
+	def _parse_data(self, recorded_data, program_name:str):
 		""" This function parses the recorded data and extracts the measurement masks and applies optional operations
 		"""
 
@@ -463,55 +553,79 @@ class MFLIDAQ(DAC):
 
 		masked_data = {}
 
-		shot_index = 0
+		# the MFLI returns a list of measurements. We only proceed with the last ones from this list. One might want to iterate over that and process all of them. 
+		# This feature might be useful if after some measurements no read() operation is called. Then with the later read, the data is returned.
+		# TODO this might be more elegantly implemented or handled using yields!
+		shot_index = 0 # TODO make this more flexible to not lose things
 
 		for window_name in self.programs[program_name]["windows"]:
 			data_by_channel = {}
 			_wind = self.programs[program_name]["windows"][window_name]
 			for ci, _cn in enumerate(self._get_channels_for_window(program_name, window_name)):
 				cn = f"/{self.serial}/{_cn}".lower()
-				print(cn)
+				# print(cn)
 				if len(recorded_data[cn]) <= shot_index:
 					# then we do not have data for this shot_index, which is intended to cover multiple not yet collected measurements. And thus will not have anything to save.
 					warnings.warn(f"for channel '{cn}' only {len(recorded_data[cn])} shots are given. This does not allow for taking element [-1-{shot_index}]")
 					continue
 				applicable_data = recorded_data[cn][-1-shot_index]
+				applicable_data = applicable_data.where(~np.isnan(applicable_data), drop=True)
 
 				extracted_data = []
 				for b, l in zip(*_wind):
-					_time_of_first_not_nan_value = applicable_data.where(~np.isnan(applicable_data), drop=True)["time"][:, 0].values
+					# _time_of_first_not_nan_value = applicable_data.where(~np.isnan(applicable_data), drop=True)["time"][:, 0].values
+					_time_of_first_not_nan_value = applicable_data["time"][:, 0].values
 
 					time_of_trigger = applicable_data.attrs["gridcoloffset"][0]*1e9+_time_of_first_not_nan_value
 
-					print(f"time_of_trigger={time_of_trigger}")
-					foo = applicable_data.where((applicable_data["time"]>=time_of_trigger+b) & (applicable_data["time"]<=time_of_trigger+b+l), drop=True)
-					foo["time"] -= time_of_trigger
-					extracted_data.append(foo)
+					# print(f"time_of_trigger={time_of_trigger}")
+					foo = applicable_data.where((applicable_data["time"]>=(time_of_trigger+b)[:, None]) & (applicable_data["time"]<=(time_of_trigger+b+l)[:, None]), drop=False).copy()
+					foo2 = foo.where(~np.isnan(foo), drop=True)
+					rows_with_data = np.sum(~np.isnan(foo), axis=-1)>0
+					foo2["time"] -= time_of_trigger[rows_with_data, None]
+					extracted_data.append(foo2)
 
-				print(f"extracted_data={extracted_data}")
+				# print(f"extracted_data={extracted_data}")
 
 				data_by_channel.update({cn: extracted_data})
 			masked_data[window_name] = data_by_channel
 
 		return masked_data
 
-	def measure_program(self, channels: Iterable[str], wait=True, return_raw=False) -> Dict[str, np.ndarray]:
-		"""Get the last measurement's results of the specified operations/channels"""
+	def measure_program(self, channels: Iterable[str] = [], wait:bool=True, timeout:float=np.inf, return_raw:bool=False, fail_if_incomplete:bool=False) -> Union[Dict[str, List[xr.DataArray]], Dict[str, Dict[str, List[xr.DataArray]]]]:
+		"""Get the last measurement's results of the specified operations/channels
+		
+		Parameters
+		----------
+		channels: Iterable[str], optional
+			Has no function here. (default: [])
+		wait: bool, optional
+			Should the code wait until the acquisition has finished? Else incomplete data might be returned. (default: True)
+		timeout: float, optional
+			The time to wait until the measurement is stopped in units of seconds. (default: np.inf)
+		return_raw: bool, optional
+			If True, the function will return the raw data without selecting the measurement windows. This will then be in the shape of data[channel_name][shot_index]: xr.DataArray.
+			If False, the return value will have the structure data[window_name][channel_name][mask_index]: xr.DataArray.
+			Also, if False, the time axis will be shifted, such that the trigger occurred at data[window_name][channel_name][mask_index]["time"]==0 #ns.
+		fail_if_incomplete: bool, optional
+			if True and the timeout has been reached and the acquisition has not finished, an error will be raised.
+
+		"""
 
 		# wait until the data acquisition has finished
 		# TODO implement timeout
-		while not self.daq.finished() and wait:
+		start_waiting = time.time()
+		while not self.daq.finished() and wait and not (time.time()-start_waiting>timeout):
 			time.sleep(1)
-			print(f"Waiting for device {self.serial} to finish the acquisition.") #Progress: {self.daq.progress()[0]}
+			print(f"Waiting for device {self.serial} to finish the acquisition...") # Progress: {self.daq.progress()[0]}
 
-		if not self.daq.finished():
-			self.daq.finish()
+		if fail_if_incomplete and not self.daq.finished():
 			raise ValueError(f"Device {self.serial} did not finish the acquisition in time.")
 
 		data = self.daq.read()
 		self.daq_read_return.update(data)
 
-		self.clock_base = self.api_session.getDouble(f'/{self.serial}/clockbase')
+		self.clockbase = self.api_session.getDouble(f'/{self.serial}/clockbase')
 
 		# go through the returned object and extract the data of interest
 
@@ -525,7 +639,7 @@ class MFLIDAQ(DAC):
 							channel_name = f"/{device_name}/{input_name}/{signal_name}/{final_level_name}".lower()
 							channel_data = [xr.DataArray(
 										data=d["value"],
-										coords={'time': (['row', 'col'], d["timestamp"]/self.clock_base*1e9)},
+										coords={'time': (['row', 'col'], d["timestamp"]/self.clockbase*1e9)},
 										dims=['row', 'col'],
 										name=channel_name,
 										attrs=d['header']) for i, d in enumerate(final_level_data)]
@@ -538,8 +652,12 @@ class MFLIDAQ(DAC):
 		if any([len(v)>1 for v in recorded_shapes.values()]) or len(set([e for a in recorded_shapes.values() for e in a]))>1:
 			warnings.warn(f"For at least one received channel entries with different dimensions are present. This might lead to undesired masking! (The code will not raise an exception.) ({recorded_shapes})")
 
+		if len(recorded_data) == 0:
+			warnings.warn(f"No data has been recorded!")
 
 		if return_raw:
 			return recorded_data
 		else:
+			if len(recorded_data) == 0:
+				return None
 			return self._parse_data(recorded_data, self.currently_set_program)
