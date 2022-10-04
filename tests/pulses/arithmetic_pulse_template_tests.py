@@ -118,11 +118,17 @@ class ArithmeticAtomicPulseTemplateTest(unittest.TestCase):
         self.assertEqual(expected_plus, (lhs + rhs).integral)
         self.assertEqual(expected_minus, (lhs - rhs).integral)
 
-    def test_initial_values(self):
-        raise NotImplementedError()
+    def test_initial_final_values(self):
+        lhs = DummyPulseTemplate(initial_values={'A': .1, 'B': 'b*2'}, final_values={'A': .2, 'B': 'b / 2'})
+        rhs = DummyPulseTemplate(initial_values={'A': -4, 'B': 'b*2 + 1'}, final_values={'A': .2, 'B': '-b / 2 + c'})
 
-    def test_final_values(self):
-        raise NotImplementedError()
+        minus = lhs - rhs
+        plus = lhs + rhs
+        self.assertEqual({'A': 4.1, 'B': -1}, minus.initial_values)
+        self.assertEqual({'A': 0, 'B': 'b - c'}, minus.final_values)
+
+        self.assertEqual({'A': -3.9, 'B': 'b*4 + 1'}, plus.initial_values)
+        self.assertEqual({'A': .4, 'B': 'c'}, plus.final_values)
 
     def test_as_expression(self):
         integrals_lhs = dict(a=ExpressionScalar('a_lhs'), b=ExpressionScalar('b'))

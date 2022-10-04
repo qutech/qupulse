@@ -25,6 +25,9 @@ class TestConstantPulseTemplate(unittest.TestCase):
         self.assertIn('ConstantPulseTemplate', str(pt))
         self.assertIn('ConstantPulseTemplate', repr(pt))
 
+        self.assertEqual({'P1': .5, 'P2': .25}, pt.initial_values)
+        self.assertEqual({'P1': .5, 'P2': .25}, pt.final_values)
+
     def test_zero_duration(self):
         p1 = ConstantPulseTemplate(10, {'P1': 1.})
         p2 = ConstantPulseTemplate(0, {'P1': 1.})
