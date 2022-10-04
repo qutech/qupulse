@@ -7,7 +7,9 @@ from typing import Dict, Tuple, Iterable, Union, List, Set
 from enum import Enum
 import warnings
 import time
+import traceback
 import xarray as xr
+import numpy as np
 
 from qupulse.utils.types import TimeType
 from qupulse.hardware.dacs.dac_base import DAC
@@ -27,8 +29,6 @@ except ImportError:
 	# backward compability
 	from zhinst import ziPython as zhinst_core
 
-# from zhinst.toolkit import Session
-import numpy as np
 
 
 """
@@ -205,7 +205,7 @@ class MFLIDAQ(DAC):
 		# for k, v in windows.items():
 		# 	self.set_measurement_mask(program_name=program_name, mask_name=k, begins=v[0], lengths=v[1])
 
-	def register_trigger_settings(self, program_name:str, trigger_input:Union[str, None]=None, edge:str='rising', number_of_triggers_to_buffer:int=1, level:float=0.1, delay:float=-1e-3, post_delay:float=1e-3, count:bool=np.inf, other_settings:Dict[str, Union[str, int, float]]={}):
+	def register_trigger_settings(self, program_name:str, trigger_input:Union[str, None]=None, edge:str='rising', trigger_count:int=1, level:float=0.1, delay:float=-1e-3, post_delay:float=1e-3, count:bool=np.inf, other_settings:Dict[str, Union[str, int, float]]={}):
 		"""
 		Parameters
 		----------
@@ -213,7 +213,7 @@ class MFLIDAQ(DAC):
 		trigger_input
 			This needs to be the path to input to the lock-in that the lock-in is able to use as a trigger (without the device serial). (see https://docs.zhinst.com/pdf/LabOneProgrammingManual.pdf for more information)
 		edge
-		number_of_triggers_to_buffer
+		trigger_count
 		other_settings
 		"""
 
@@ -223,7 +223,7 @@ class MFLIDAQ(DAC):
 		self.programs.setdefault(program_name, {})["trigger_settings"] = {
 			"trigger_input": f"/{self.serial}/{trigger_input}",
 			"edge": edge,
-			"number_of_triggers_to_buffer": number_of_triggers_to_buffer,
+			"trigger_count": trigger_count,
 			"level": level,
 			"delay": delay,
 			"post_delay": post_delay,
@@ -456,7 +456,7 @@ class MFLIDAQ(DAC):
 
 			rows = 1
 			if len(ts) != 0:
-				rows = ts["number_of_triggers_to_buffer"]
+				rows = ts["trigger_count"]
 				# selecting the trigger channel
 				if ts["trigger_input"] is not None:
 
@@ -472,7 +472,6 @@ class MFLIDAQ(DAC):
 						self.daq.set("type", 1)
 
 					self.daq.set("triggernode", ts["trigger_input"])
-					self.daq.subscribe(ts["trigger_input"])
 
 					edge_key = ["rising", "falling", "both"].index(ts["edge"])
 					self.daq.set("edge", edge_key)
@@ -510,7 +509,7 @@ class MFLIDAQ(DAC):
 			print(f"Will record {larges_number_of_samples} per row samples for {measurement_duration*1e-9}s!") # TODO this will have to change if proper multi triggers with over multiple rows is going to be used.
 			print(f"{rows} row(s) will be recorded.")
 			print(f"the following trigger settings will be used: {ts}")
-			print(f"MFLI returns a total record time of {self.daq.get('duration')['duration'][0]}s")
+			print(f"MFLI returns a duration of {self.daq.get('duration')['duration'][0]}s")
 
 		# execute daq
 		self.daq.execute()
@@ -537,6 +536,9 @@ class MFLIDAQ(DAC):
 	def stop_acquisition(self):
 		self.daq.finish()
 
+	def clear_memory(self):
+		self.read_memory = {}
+
 	def delete_program(self, program_name: str) -> None:
 		"""Delete program from internal memory."""
 
@@ -553,7 +555,7 @@ class MFLIDAQ(DAC):
 		self.unarm_program(program_name=None)
 		self.read_memory = {}
 
-	def _parse_data(self, recorded_data, program_name:str):
+	def _parse_data(self, recorded_data, program_name:str, fail_on_empty:bool=True):
 		""" This function parses the recorded data and extracts the measurement masks and applies optional operations
 		"""
 
@@ -587,9 +589,17 @@ class MFLIDAQ(DAC):
 				applicable_data = recorded_data[cn][-1-shot_index]
 				applicable_data = applicable_data.where(~np.isnan(applicable_data), drop=True)
 
+				if len(applicable_data)==0 or np.product([*applicable_data.shape])==0:
+					if fail_on_empty:
+						raise ValueError(f"The received data for channel {_cn} is empty.")
+					else:
+						warnings.warn(f"The received data for channel {_cn} is empty.")
+						continue
+
 				extracted_data = []
 				for b, l in zip(*_wind):
 					# _time_of_first_not_nan_value = applicable_data.where(~np.isnan(applicable_data), drop=True)["time"][:, 0].values
+
 					_time_of_first_not_nan_value = applicable_data["time"][:, 0].values
 
 					time_of_trigger = applicable_data.attrs["gridcoloffset"][0]*1e9+_time_of_first_not_nan_value
@@ -608,7 +618,7 @@ class MFLIDAQ(DAC):
 
 		return masked_data
 
-	def measure_program(self, channels: Iterable[str] = [], wait:bool=True, timeout:float=np.inf, return_raw:bool=False, fail_if_incomplete:bool=False) -> Union[Dict[str, List[xr.DataArray]], Dict[str, Dict[str, List[xr.DataArray]]]]:
+	def measure_program(self, channels: Iterable[str] = [], wait:bool=True, timeout:float=np.inf, return_raw:bool=False, fail_if_incomplete:bool=False, fail_on_empty:bool=False) -> Union[Dict[str, List[xr.DataArray]], Dict[str, Dict[str, List[xr.DataArray]]]]:
 		"""Get the last measurement's results of the specified operations/channels
 		
 		Parameters
@@ -625,15 +635,18 @@ class MFLIDAQ(DAC):
 			Also, if False, the time axis will be shifted, such that the trigger occurred at data[window_name][channel_name][mask_index]["time"]==0 #ns.
 		fail_if_incomplete: bool, optional
 			if True and the timeout has been reached and the acquisition has not finished, an error will be raised.
+		fail_on_empty:bool, optional
+			if one of the channels is empty, which occurred in the development process for large sample rates, an error is raised in the parsing function and this these incomplete measurements will sit in this classes memory, never to be returned. If False, the empty channels are ignored and it will be returned, what every is there.
 
 		"""
 
 		# wait until the data acquisition has finished
 		# TODO implement timeout
 		start_waiting = time.time()
-		while not self.daq.finished() and wait and not (time.time()-start_waiting>timeout):
+		while not self.daq.finished() and wait and not (time.time()-start_waiting>timeout) and not self.programs[self.currently_set_program]["trigger_settings"]["count"]==np.inf:
 			time.sleep(1)
-			print(f"Waiting for device {self.serial} to finish the acquisition...") # Progress: {self.daq.progress()[0]}
+			print(f"Waiting for device {self.serial} to finish the acquisition...") 
+			print(f"Progress: {self.daq.progress()[0]}")
 
 		if fail_if_incomplete and not self.daq.finished():
 			raise ValueError(f"Device {self.serial} did not finish the acquisition in time.")
@@ -732,12 +745,18 @@ class MFLIDAQ(DAC):
 					that_shot[c] = [self.read_memory[c][i]] # Here the inner list could be removed if one would remove the old functionality from the _parse_data function.
 
 				try:
-					that_shot_parsed = self._parse_data(that_shot, self.currently_set_program)
-				# except KeyError:
-				# 	print(f"Error")
-				# 	warnings.warn(f"Parsing some data did not work. This might fix itself later, when the missing data is retrieved from the device. If not, clearing the memory, resetting the daq_module (i.e. self.reset_daq_module()), or setting the field to the selected program (i.e., self.currently_set_program=None) to None and then rearming the original program might work. For debugging purposes, one might want to call the measure function with the return_raw=True parameter.")
-				except:
-					raise
+					that_shot_parsed = self._parse_data(that_shot, self.currently_set_program, fail_on_empty=fail_on_empty)
+				except IndexError as e:
+					traceback.print_exc()
+					warnings.warn(f"Parsing some data did not work. This might fix itself later, when the missing data is retrieved from the device. If not, clearing the memory (i.e. self.clear_memory()), resetting the daq_module (i.e. self.reset_daq_module()), or setting the field to the selected program (i.e., self.currently_set_program=None) to None and then rearming the original program might work. For debugging purposes, one might want to call the measure function with the return_raw=True parameter.")
+				except KeyError as e:
+					traceback.print_exc()
+					warnings.warn(f"Parsing some data did not work. This might fix itself later, when the missing data is retrieved from the device. If not, clearing the memory (i.e. self.clear_memory()), resetting the daq_module (i.e. self.reset_daq_module()), or setting the field to the selected program (i.e., self.currently_set_program=None) to None and then rearming the original program might work. For debugging purposes, one might want to call the measure function with the return_raw=True parameter.")
+				except ValueError as e:
+					if "The received data for channel" in str(e):
+						pass
+					else:
+						raise
 				else:
 					# the parsing worked, we can now remove the data from the memory
 					results.append(that_shot_parsed)
