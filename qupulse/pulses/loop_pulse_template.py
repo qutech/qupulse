@@ -300,7 +300,7 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
 
     @property
     def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
-        values = self.body.initial_values
+        values = self.body.final_values
         start, step, stop = self._loop_range.start.sympified_expression, self._loop_range.step.sympified_expression, self._loop_range.stop.sympified_expression
         n = (stop - start) // step
         final_idx = start + sympy.Max(n - 1, 0) * step

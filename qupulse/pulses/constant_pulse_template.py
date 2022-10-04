@@ -120,3 +120,11 @@ class ConstantPulseTemplate(AtomicPulseTemplate):  # type: ignore
             if constant_values:
                 return ConstantWaveform.from_mapping(duration, constant_values)
         return None
+
+    @property
+    def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        return {ch: ExpressionScalar(val) for ch, val in self._amplitude_dict.items()}
+
+    @property
+    def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        return {ch: ExpressionScalar(val) for ch, val in self._amplitude_dict.items()}

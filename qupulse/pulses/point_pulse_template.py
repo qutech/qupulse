@@ -172,7 +172,7 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
     def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
         shape = (len(self._channels),)
         return {
-            ch: IndexedBroadcast(self._entries[0].v, shape, ch_idx)
+            ch: ExpressionScalar(IndexedBroadcast(self._entries[0].v, shape, ch_idx))
             for ch_idx, ch in enumerate(self._channels)
         }
 
@@ -180,7 +180,7 @@ class PointPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
     def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
         shape = (len(self._channels),)
         return {
-            ch: IndexedBroadcast(self._entries[-1].v, shape, ch_idx)
+            ch: ExpressionScalar(IndexedBroadcast(self._entries[-1].v, shape, ch_idx))
             for ch_idx, ch in enumerate(self._channels)
         }
 
