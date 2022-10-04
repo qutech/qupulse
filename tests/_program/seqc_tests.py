@@ -1,11 +1,12 @@
 import unittest
 from unittest import TestCase, mock
 import time
-from more_itertools import take
-from itertools import zip_longest
+from itertools import zip_longest, islice
 import sys
 import tempfile
 import pathlib
+import hashlib
+import random
 
 import numpy as np
 
@@ -13,6 +14,7 @@ from qupulse.expressions import ExpressionScalar
 from qupulse.parameter_scope import DictScope
 
 from qupulse._program._loop import Loop
+from qupulse._program.waveforms import ConstantWaveform
 from qupulse._program.seqc import BinaryWaveform, loop_to_seqc, WaveformPlayback, Repeat, SteppingRepeat, Scope,\
     to_node_clusters, find_sharable_waveforms, mark_sharable_waveforms, UserRegisterManager, HDAWGProgramManager,\
     UserRegister, WaveformFileSystem
@@ -26,28 +28,75 @@ except ImportError:
     zhinst = None
 
 
+def take(n, iterable):
+    "Return first n items of the iterable as a list"
+    return list(islice(iterable, n))
+
+
+def dummy_loop_to_seqc(loop, **kwargs):
+    return loop
+
+
+class BinaryWaveformTest(unittest.TestCase):
+    MAX_RATE = 14
+
+    def test_dynamic_rate_reduction(self):
+
+        ones = np.ones(2**(self.MAX_RATE + 2) * 3, np.uint16)
+
+        for n in (2, 3, 5):
+            self.assertEqual(BinaryWaveform(ones[:n * 16 * 3]).dynamic_rate(), 0, f"Reducing {n}")
+        for n in (4, 6):
+            self.assertEqual(BinaryWaveform(ones[:16 * n * 3]).dynamic_rate(), 1)
+
+        irreducibles = [
+            np.array([0, 0, 1, 1, 0, 1] * 16, dtype=np.uint16),
+            np.array([0, 0, 0] * 16 + [0, 1, 0] + [0, 0, 0] * 15, dtype=np.uint16),
+            np.array([0, 0, 0] * 16 + [1, 0, 0] + [0, 0, 0] * 15, dtype=np.uint16),
+        ]
+        for max_rate in range(self.MAX_RATE):
+            for n in range(self.MAX_RATE):
+                for irreducible in irreducibles:
+                    data = np.tile(np.tile(irreducible.reshape(-1, 1, 3), (1, 2**n, 1)).ravel(), (16,))
+
+                    dyn_n = BinaryWaveform(data).dynamic_rate(max_rate=max_rate)
+
+                    self.assertEqual(min(max_rate, n), dyn_n)
+
+
 def make_binary_waveform(waveform):
+    if zhinst is None:
+        # TODO: mock used function
+        raise unittest.SkipTest("zhinst not present")
+
     if waveform.duration == 0:
         data = np.asarray(3 * [1, 2, 3, 4, 5], dtype=np.uint16)
-        return BinaryWaveform(data)
+        return (BinaryWaveform(data),)
     else:
         chs = sorted(waveform.defined_channels)
-        t = np.arange(0., waveform.duration, 1.)
+        t = np.arange(0., float(waveform.duration), 1.)
 
         sampled = [None if ch is None else waveform.get_sampled(ch, t)
                    for _, ch in zip_longest(range(6), take(6, chs), fillvalue=None)]
         ch1, ch2, *markers = sampled
-        return BinaryWaveform.from_sampled(ch1, ch2, markers)
+        return (BinaryWaveform.from_sampled(ch1, ch2, markers),)
+
+
+def _key_to_int(n: int, duration: int, defined_channels: frozenset):
+    key_bytes = str((n, duration, sorted(defined_channels))).encode('ascii')
+    key_int64 = int(hashlib.sha256(key_bytes).hexdigest()[:2*8], base=16) // 2
+    return key_int64
 
 
 def get_unique_wfs(n=10000, duration=32, defined_channels=frozenset(['A'])):
     if not hasattr(get_unique_wfs, 'cache'):
         get_unique_wfs.cache = {}
 
-    key = (n, duration)
+    key = (n, duration, defined_channels)
 
     if key not in get_unique_wfs.cache:
-        h = hash(key)
+        # positive deterministic int64
+        h = _key_to_int(n, duration, defined_channels)
         base = np.bitwise_xor(np.linspace(-h, h, num=duration + n, dtype=np.int64), h)
         base = base / np.max(np.abs(base))
 
@@ -55,6 +104,27 @@ def get_unique_wfs(n=10000, duration=32, defined_channels=frozenset(['A'])):
             DummyWaveform(duration=duration, sample_output=base[idx:idx+duration],
                           defined_channels=defined_channels)
             for idx in range(n)
+        ]
+    return get_unique_wfs.cache[key]
+
+
+def get_constant_unique_wfs(n=10000, duration=192, defined_channels=frozenset(['A'])):
+    if not hasattr(get_unique_wfs, 'cache'):
+        get_unique_wfs.cache = {}
+
+    key = (n, duration, defined_channels)
+
+    if key not in get_unique_wfs.cache:
+        bit_gen = np.random.PCG64(_key_to_int(n, duration, defined_channels))
+        rng = np.random.Generator(bit_gen)
+
+        random_values = rng.random(size=(n, len(defined_channels)))
+
+        sorted_channels = sorted(defined_channels)
+        get_unique_wfs.cache[key] = [
+            ConstantWaveform.from_mapping(duration, {ch: ch_value
+                                                     for ch, ch_value in zip(sorted_channels, wf_values)})
+            for wf_values in random_values
         ]
     return get_unique_wfs.cache[key]
 
@@ -315,7 +385,7 @@ class LoopToSEQCTranslationTests(TestCase):
         # we use None because it is not used in this test
         user_registers = None
 
-        wf = DummyWaveform(duration=32)
+        wf = DummyWaveform(duration=32, sample_output=lambda x: np.sin(x))
         loop = Loop(waveform=wf)
 
         # with wrapping repetition
@@ -368,16 +438,27 @@ class LoopToSEQCTranslationTests(TestCase):
 
         loop_to_seqc_kwargs = {'my': 'kwargs'}
 
-        def dummy_loop_to_seqc(loop, **kwargs):
-            return loop
-
-        loops = [wf1, wf2, wf1, wf1, wf3, wf1, wf1, wf1]
+        loops = [wf1, wf2, wf1, wf1, wf3, wf1, wf1, wf1, wf3, wf1, wf3, wf1, wf3]
         expected_calls = [mock.call(loop, **loop_to_seqc_kwargs) for loop in loops]
-        expected_result = [[wf1, wf2, wf1, wf1], [wf3], [wf1, wf1, wf1]]
+        expected_result = [[wf1, wf2, wf1, wf1], [wf3], [wf1, wf1, wf1], [Scope([wf3, wf1]), Scope([wf3, wf1])], [wf3]]
 
         with mock.patch('qupulse._program.seqc.loop_to_seqc', wraps=dummy_loop_to_seqc) as mock_loop_to_seqc:
             result = to_node_clusters(loops, loop_to_seqc_kwargs)
             self.assertEqual(mock_loop_to_seqc.mock_calls, expected_calls)
+        self.assertEqual(expected_result, result)
+
+    def test_to_node_clusters_crash(self):
+        wf1 = WaveformPlayback(make_binary_waveform(*get_unique_wfs(1, 32)))
+        wf2 = WaveformPlayback(make_binary_waveform(*get_unique_wfs(1, 64)))
+        wf3 = WaveformPlayback(make_binary_waveform(*get_unique_wfs(1, 128)))
+        wf4 = WaveformPlayback(make_binary_waveform(*get_unique_wfs(1, 256)))
+
+        loop_to_seqc_kwargs = {'my': 'kwargs'}
+
+        loops = [wf1, wf2, wf3] * 3 + [wf1] + [wf2, wf4] * 3 + [wf1]
+        with mock.patch('qupulse._program.seqc.loop_to_seqc', wraps=dummy_loop_to_seqc) as mock_loop_to_seqc:
+            result = to_node_clusters(loops, loop_to_seqc_kwargs)
+        expected_result = [[Scope([wf1, wf2, wf3])]*3, [wf1], [Scope([wf2, wf4])]*3, [wf1]]
         self.assertEqual(expected_result, result)
 
     def test_find_sharable_waveforms(self):
@@ -751,19 +832,23 @@ class HDAWGProgramManagerTest(unittest.TestCase):
 
         manager.add_program('test', root, channels, markers, amplitudes, offsets, volatage_transformations, sample_rate)
 
+        # 0: Program selection
+        # 1: Trigger
         self.assertEqual({UserRegister(zero_based_value=2): 7}, manager.get_register_values('test'))
         seqc_program = manager.to_seqc_program()
         expected_program = """const PROG_SEL_REGISTER = 0;
 const TRIGGER_REGISTER = 1;
-const TRIGGER_RESET_MASK = 0b1000000000000000;
+const TRIGGER_RESET_MASK = 0b10000000000000000000000000000000;
 const PROG_SEL_NONE = 0;
-const NO_RESET_MASK = 0b1000000000000000;
-const PROG_SEL_MASK = 0b111111111111111;
+const NO_RESET_MASK = 0b10000000000000000000000000000000;
+const PLAYBACK_FINISHED_MASK = 0b1000000000000000000000000000000;
+const PROG_SEL_MASK = 0b111111111111111111111111111111;
+const INVERTED_PROG_SEL_MASK = 0b11000000000000000000000000000000;
 const IDLE_WAIT_CYCLES = 300;
-wave test_concatenated_waveform = "3e0090e8ffd002d1134ce38827c6a35fede89cf23d126a44057ef43f466ae4cd";
+wave test_concatenated_waveform_0 = "c45d955d9dc472d46bf74f7eb9ae2ed4d159adea7d6fe9ce3f48c95423535333";
 wave test_shared_waveform_121f5c6e8822793b3836fb3098fa4591b91d4c205cc2d8afd01ee1bf6956e518 = "121f5c6e8822793b3836fb3098fa4591b91d4c205cc2d8afd01ee1bf6956e518";
 
-//function used by manually triggered programs
+// function used by manually triggered programs
 void waitForSoftwareTrigger() {
   while (true) {
     var trigger_register = getUserReg(TRIGGER_REGISTER);
@@ -784,7 +869,7 @@ void test_function() {
     repeat(1000) { // stepping repeat
       repeat(10) {
         repeat(42) {
-          playWaveIndexed(test_concatenated_waveform, pos, 32); // advance disabled do to parent repetition
+          playWaveIndexed(test_concatenated_waveform_0, pos, 32); // advance disabled do to parent repetition
         }
         repeat(98) {
           playWave(test_shared_waveform_121f5c6e8822793b3836fb3098fa4591b91d4c205cc2d8afd01ee1bf6956e518);
@@ -793,38 +878,190 @@ void test_function() {
       pos = pos + 32;
     }
     repeat(21) {
-      playWaveIndexed(test_concatenated_waveform, pos, 32); // advance disabled do to parent repetition
+      playWaveIndexed(test_concatenated_waveform_0, pos, 32); // advance disabled do to parent repetition
     }
     pos = pos + 32;
     repeat(23) {
-      playWaveIndexed(test_concatenated_waveform, pos, 48); // advance disabled do to parent repetition
+      playWaveIndexed(test_concatenated_waveform_0, pos, 48); // advance disabled do to parent repetition
     }
     pos = pos + 48;
     var idx_2;
     for(idx_2 = 0; idx_2 < user_reg_2; idx_2 = idx_2 + 1) {
-      playWaveIndexed(test_concatenated_waveform, pos, 48); // advance disabled do to parent repetition
+      playWaveIndexed(test_concatenated_waveform_0, pos, 48); // advance disabled do to parent repetition
     }
     pos = pos + 48;
   }
 }
 
-// INIT program switch.
+// Declare and initialize global variables
+// Selected program index (0 -> None)
 var prog_sel = 0;
 
-//runtime block
+// Value that gets written back to program selection register.
+// Used to signal that at least one program was played completely.
+var new_prog_sel = 0;
+
+// Is OR'ed to new_prog_sel.
+// Set to PLAYBACK_FINISHED_MASK if a program was played completely.
+var playback_finished = 0;
+
+
+// runtime block
 while (true) {
   // read program selection value
   prog_sel = getUserReg(PROG_SEL_REGISTER);
-  if (!(prog_sel & NO_RESET_MASK))  setUserReg(PROG_SEL_REGISTER, 0);
-  prog_sel = prog_sel & PROG_SEL_MASK;
+  
+  // calculate value to write back to PROG_SEL_REGISTER
+  new_prog_sel = prog_sel | playback_finished;
+  if (!(prog_sel & NO_RESET_MASK)) new_prog_sel &= INVERTED_PROG_SEL_MASK;
+  setUserReg(PROG_SEL_REGISTER, new_prog_sel);
+  
+  // reset playback flag
+  playback_finished = 0;
+  
+  // only use part of prog sel that does not mean other things to select the program.
+  prog_sel &= PROG_SEL_MASK;
   
   switch (prog_sel) {
     case 1:
       test_function();
       waitWave();
+      playback_finished = PLAYBACK_FINISHED_MASK;
     default:
       wait(IDLE_WAIT_CYCLES);
   }
 }"""
         self.assertEqual(expected_program, seqc_program)
 
+    @unittest.skipIf(sys.version_info.minor < 6, "This test requires dict to be ordered.")
+    def test_full_run_with_dynamic_rate_reduction(self):
+        defined_channels = frozenset(['A', 'B', 'C'])
+
+        unique_n = 1000
+        unique_duration = 192
+
+        unique_wfs = get_constant_unique_wfs(n=unique_n, duration=unique_duration,
+                                             defined_channels=defined_channels)
+        same_wf = DummyWaveform(duration=48, sample_output=np.ones(48), defined_channels=defined_channels)
+
+        channels = ('A', 'B')
+        markers = ('C', None, 'A', None)
+        amplitudes = (1., 1.)
+        offsets = (0., 0.)
+        volatage_transformations = (lambda x: x, lambda x: x)
+        sample_rate = 1
+
+        old_value, WaveformPlayback.ENABLE_DYNAMIC_RATE_REDUCTION = WaveformPlayback.ENABLE_DYNAMIC_RATE_REDUCTION, True
+        try:
+            root = complex_program_as_loop(unique_wfs, wf_same=same_wf)
+            seqc_nodes = complex_program_as_seqc(unique_wfs, wf_same=same_wf)
+
+            manager = HDAWGProgramManager()
+
+            manager.add_program('test', root, channels, markers, amplitudes, offsets, volatage_transformations,
+                                sample_rate)
+        finally:
+            WaveformPlayback.ENABLE_DYNAMIC_RATE_REDUCTION = old_value
+
+
+
+        # 0: Program selection
+        # 1: Trigger
+        self.assertEqual({UserRegister(zero_based_value=2): 7}, manager.get_register_values('test'))
+        seqc_program = manager.to_seqc_program()
+        expected_program = """const PROG_SEL_REGISTER = 0;
+const TRIGGER_REGISTER = 1;
+const TRIGGER_RESET_MASK = 0b10000000000000000000000000000000;
+const PROG_SEL_NONE = 0;
+const NO_RESET_MASK = 0b10000000000000000000000000000000;
+const PLAYBACK_FINISHED_MASK = 0b1000000000000000000000000000000;
+const PROG_SEL_MASK = 0b111111111111111111111111111111;
+const INVERTED_PROG_SEL_MASK = 0b11000000000000000000000000000000;
+const IDLE_WAIT_CYCLES = 300;
+wave test_concatenated_waveform_0 = "7fd412eb866ad371f717857ea33b309ec458c6c3469c7e51dcffcdce9a8c2679";
+wave test_shared_waveform_121f5c6e8822793b3836fb3098fa4591b91d4c205cc2d8afd01ee1bf6956e518 = "121f5c6e8822793b3836fb3098fa4591b91d4c205cc2d8afd01ee1bf6956e518";
+
+// function used by manually triggered programs
+void waitForSoftwareTrigger() {
+  while (true) {
+    var trigger_register = getUserReg(TRIGGER_REGISTER);
+    if (trigger_register & TRIGGER_RESET_MASK) setUserReg(TRIGGER_REGISTER, 0);
+    if (trigger_register) return;
+  }
+}
+
+
+// program definitions
+void test_function() {
+  var pos = 0;
+  var user_reg_2 = getUserReg(2);
+  waitForSoftwareTrigger();
+  var init_pos_1 = pos;
+  repeat(12) {
+    pos = init_pos_1;
+    repeat(1000) { // stepping repeat
+      repeat(10) {
+        repeat(42) {
+          playWaveIndexed(test_concatenated_waveform_0, pos, 48, 2); // advance disabled do to parent repetition
+        }
+        repeat(98) {
+          playWave(test_shared_waveform_121f5c6e8822793b3836fb3098fa4591b91d4c205cc2d8afd01ee1bf6956e518, 0);
+        }
+      }
+      pos = pos + 48;
+    }
+    repeat(21) {
+      playWaveIndexed(test_concatenated_waveform_0, pos, 48, 2); // advance disabled do to parent repetition
+    }
+    pos = pos + 48;
+    repeat(23) {
+      playWaveIndexed(test_concatenated_waveform_0, pos, 48, 0); // advance disabled do to parent repetition
+    }
+    pos = pos + 48;
+    var idx_2;
+    for(idx_2 = 0; idx_2 < user_reg_2; idx_2 = idx_2 + 1) {
+      playWaveIndexed(test_concatenated_waveform_0, pos, 48, 0); // advance disabled do to parent repetition
+    }
+    pos = pos + 48;
+  }
+}
+
+// Declare and initialize global variables
+// Selected program index (0 -> None)
+var prog_sel = 0;
+
+// Value that gets written back to program selection register.
+// Used to signal that at least one program was played completely.
+var new_prog_sel = 0;
+
+// Is OR'ed to new_prog_sel.
+// Set to PLAYBACK_FINISHED_MASK if a program was played completely.
+var playback_finished = 0;
+
+
+// runtime block
+while (true) {
+  // read program selection value
+  prog_sel = getUserReg(PROG_SEL_REGISTER);
+  
+  // calculate value to write back to PROG_SEL_REGISTER
+  new_prog_sel = prog_sel | playback_finished;
+  if (!(prog_sel & NO_RESET_MASK)) new_prog_sel &= INVERTED_PROG_SEL_MASK;
+  setUserReg(PROG_SEL_REGISTER, new_prog_sel);
+  
+  // reset playback flag
+  playback_finished = 0;
+  
+  // only use part of prog sel that does not mean other things to select the program.
+  prog_sel &= PROG_SEL_MASK;
+  
+  switch (prog_sel) {
+    case 1:
+      test_function();
+      waitWave();
+      playback_finished = PLAYBACK_FINISHED_MASK;
+    default:
+      wait(IDLE_WAIT_CYCLES);
+  }
+}"""
+        self.assertEqual(expected_program, seqc_program)

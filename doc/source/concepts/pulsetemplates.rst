@@ -66,6 +66,7 @@ Examples demonstrating the construction of pulse templates and parameters from v
 * :ref:`/examples/02FunctionPulse.ipynb`
 * :ref:`/examples/03PointPulse.ipynb`
 * :ref:`/examples/03xComposedPulses.ipynb`
+* :ref:`/examples/03ConstantPulseTemplate.ipynb`
 * :ref:`/examples/05MappingTemplate.ipynb`
 * :ref:`/examples/07MultiChannelTemplates.ipynb`
 * :ref:`/examples/14ArithmeticWithPulseTemplates.ipynb`

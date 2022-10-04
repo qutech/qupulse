@@ -151,6 +151,8 @@ class AbstractPulseTemplate(PulseTemplate):
     final_values = property(partial(_get_property, property_name='final_values'),
                             doc=_PROPERTY_DOC.format(name='final_values'))
 
+    __hash__ = None
+
 
 class NotSpecifiedError(RuntimeError):
     pass

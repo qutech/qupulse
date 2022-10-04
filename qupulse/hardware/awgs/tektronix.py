@@ -19,7 +19,7 @@ from qupulse import ChannelID
 from qupulse._program._loop import Loop, make_compatible
 from qupulse._program.waveforms import Waveform as QuPulseWaveform
 from qupulse.utils.types import TimeType
-from qupulse.hardware.util import voltage_to_uint16, get_sample_times
+from qupulse.hardware.util import voltage_to_uint16, get_sample_times, traced
 from qupulse.utils import pairwise
 
 
@@ -238,6 +238,7 @@ class TektronixProgram:
         return self._amplitudes
 
 
+@traced
 class TektronixAWG(AWG):
     """Driver for Tektronix AWG object (5000/7000 series).
 
@@ -609,7 +610,7 @@ class TektronixAWG(AWG):
         if previous_errors:
             self.logger.warning("Error queue not empty before sequence upload: %r", previous_errors)
 
-        positions_with_next = pairwise(positions, fillvalue=last_jump_to)
+        positions_with_next = pairwise(positions, zip_function=itertools.zip_longest, fillvalue=last_jump_to)
 
         self._synchronized = False
         for idx, ((element_index, next_element), sequencing_element) in enumerate(zip(positions_with_next, sequencing_elements)):

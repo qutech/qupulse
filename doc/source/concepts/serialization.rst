@@ -62,12 +62,13 @@ arguments to the classes ``__init__`` method, which is sufficient in most cases.
 An example for this is :class:`.SequencePulseTemplate`.
 
 The following code snippet may serve as an example for a simple implementation of a serializable class:
-::
+
+.. code-block:: python
+
     from qupulse.serialization import Serializable, PulseRegistryType
     from typing import Any, Dict, Optional
 
     class Foo(Serializable):
-
         def __init__(self,
                      template: Serializable,
                      mapping: Dict[str, int],

@@ -124,7 +124,7 @@ class PointPulseTemplateSequencingTests(unittest.TestCase):
         parameters = {'t1': 0.1, 't2': 1., 'A': 1., 'B': 2., 'C': 19.}
 
         wf = ppt.build_waveform(parameters=parameters, channel_mapping={0: 1})
-        expected = PointWaveform(1, [(0, 1., HoldInterpolationStrategy()),
+        expected = PointWaveform.from_table(1, [(0, 1., HoldInterpolationStrategy()),
                                      (0.1, 1., HoldInterpolationStrategy()),
                                      (1., 0., HoldInterpolationStrategy()),
                                      (1.1, 21., LinearInterpolationStrategy())])
@@ -138,7 +138,7 @@ class PointPulseTemplateSequencingTests(unittest.TestCase):
 
         parameters = {'t1': 0.1, 't2': 1., 'A': 1., 'B': 2., 'C': 19., 'n': 0.2}
         wf = ppt.build_waveform(parameters=parameters, channel_mapping={0: 1})
-        expected = PointWaveform(1, [(0, 1., HoldInterpolationStrategy()),
+        expected = PointWaveform.from_table(1, [(0, 1., HoldInterpolationStrategy()),
                                      (0.1, 1., HoldInterpolationStrategy()),
                                      (1., 0., HoldInterpolationStrategy()),
                                      (1.1, 21., LinearInterpolationStrategy())])
@@ -151,11 +151,11 @@ class PointPulseTemplateSequencingTests(unittest.TestCase):
 
         parameters = {'t1': 0.1, 't2': 1., 'A': 1., 'B': 2., 'C': 19., 'n': 0.2}
         wf = ppt.build_waveform(parameters=parameters, channel_mapping={0: 1, 'A': 'A'})
-        expected_1 = PointWaveform(1, [(0, 1., HoldInterpolationStrategy()),
+        expected_1 = PointWaveform.from_table(1, ((0, 1., HoldInterpolationStrategy()),
                                      (0.1, 1., HoldInterpolationStrategy()),
                                      (1., 0., HoldInterpolationStrategy()),
-                                     (1.1, 21., LinearInterpolationStrategy())])
-        expected_A = PointWaveform('A', [(0, 1., HoldInterpolationStrategy()),
+                                     (1.1, 21., LinearInterpolationStrategy())))
+        expected_A = PointWaveform.from_table('A', [(0, 1., HoldInterpolationStrategy()),
                                      (0.1, 1., HoldInterpolationStrategy()),
                                      (1., 0., HoldInterpolationStrategy()),
                                      (1.1, 21., LinearInterpolationStrategy())])
@@ -170,11 +170,11 @@ class PointPulseTemplateSequencingTests(unittest.TestCase):
 
         parameters = {'t1': 0.1, 't2': 1., 'A': np.ones(2), 'B': np.arange(2), 'C': 19., 'n': 0.2}
         wf = ppt.build_waveform(parameters=parameters, channel_mapping={0: 1, 'A': 'A'})
-        expected_1 = PointWaveform(1, [(0, 1., HoldInterpolationStrategy()),
+        expected_1 = PointWaveform.from_table(1, [(0, 1., HoldInterpolationStrategy()),
                                        (0.1, 1., HoldInterpolationStrategy()),
                                        (1., 0., HoldInterpolationStrategy()),
                                        (1.1, 19., LinearInterpolationStrategy())])
-        expected_A = PointWaveform('A', [(0, 1., HoldInterpolationStrategy()),
+        expected_A = PointWaveform.from_table('A', [(0, 1., HoldInterpolationStrategy()),
                                      (0.1, 1., HoldInterpolationStrategy()),
                                      (1., 0., HoldInterpolationStrategy()),
                                      (1.1, 20., LinearInterpolationStrategy())])

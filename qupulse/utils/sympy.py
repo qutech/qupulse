@@ -9,8 +9,13 @@ import math
 
 import sympy
 import numpy
-from sympy.printing.pycode import NumPyPrinter
 
+try:
+    from sympy.printing.numpy import NumPyPrinter
+except ImportError:
+    # sympy moved NumPyPrinter in release 1.8
+    from sympy.printing.pycode import NumPyPrinter
+    warnings.warn("Please update sympy.", DeprecationWarning)
 
 try:
     import scipy.special as _special_functions
@@ -26,8 +31,12 @@ __all__ = ["sympify", "substitute_with_eval", "to_numpy", "get_variables", "get_
            "evaluate_lambdified", "get_most_simple_representation"]
 
 
+_lru_cache = functools.lru_cache(maxsize=2048, typed=True)
+
+
 Sympifyable = Union[str, Number, sympy.Expr, numpy.str_]
 
+SYMPY_DURATION_ERROR_MARGIN = 1e-15 # error margin when checking sympy expression durations
 
 class IndexedBasedFinder(dict):
     """Acts as a symbol lookup and determines which symbols in an expression a subscripted."""
@@ -54,7 +63,7 @@ class IndexedBasedFinder(dict):
             raise NotImplementedError("Not a full dict")
 
         for m in vars(dict).keys():
-            if not m.startswith('_'):
+            if not m.startswith('_') and (m not in ('pop',)):
                 setattr(self, m, unimplementded)
 
     def __getitem__(self, k) -> sympy.Expr:
@@ -65,12 +74,24 @@ class IndexedBasedFinder(dict):
         'Integer', 'Float', etc. We have to take care of returning correct types for symbols (-> SubscriptionChecker)
         and the base types (-> Integer, Float, etc).
         """
+        if not k:
+            raise KeyError(k)
         if hasattr(sympy, k): # if k is a sympy base type identifier, return the base type
             return getattr(sympy, k)
 
         # otherwise track the symbol name and return a SubscriptionChecker instance
         self.symbols.add(k)
         return self.SubscriptionChecker(k)
+
+    def pop(self, key, *args, **kwargs):
+        # this is a workaround for some sympy 1.9 code
+        if args:
+            default, = args
+        elif kwargs:
+            default, = kwargs.values()
+        else:
+            raise KeyError(key)
+        return default
 
     def __setitem__(self, key, value):
         raise NotImplementedError("Not a full dict")
@@ -79,7 +100,7 @@ class IndexedBasedFinder(dict):
         raise NotImplementedError("Not a full dict")
 
     def __contains__(self, k) -> bool:
-        return True
+        return bool(k)
 
 
 class Broadcast(sympy.Function):
@@ -199,11 +220,28 @@ _NUMPY_COMPATIBLE = {
 }
 
 
+def _float_arr_to_int_arr(float_arr):
+    """Try to cast array to int64. Return original array if data is not representable."""
+    int_arr = float_arr.astype(numpy.int64)
+    if numpy.any(int_arr != float_arr):
+        # we either have a float that is too large or NaN
+        return float_arr
+    else:
+        return int_arr
+
+
 def numpy_compatible_ceiling(input_value: Any) -> Any:
     if isinstance(input_value, numpy.ndarray):
-        return numpy.ceil(input_value).astype(numpy.int64)
+        return _float_arr_to_int_arr(numpy.ceil(input_value))
     else:
         return sympy.ceiling(input_value)
+
+
+def _floor_to_int(input_value: Any) -> Any:
+    if isinstance(input_value, numpy.ndarray):
+        return _float_arr_to_int_arr(numpy.floor(input_value))
+    else:
+        return sympy.floor(input_value)
 
 
 def to_numpy(sympy_array: sympy.NDimArray) -> numpy.ndarray:
@@ -285,6 +323,9 @@ def substitute_with_eval(expression: sympy.Expr,
                                                         'Add': numpy_compatible_add})
 
 
+get_free_symbols_cache = _lru_cache(get_free_symbols)
+
+
 def _recursive_substitution(expression: sympy.Expr,
                            substitutions: Dict[sympy.Symbol, sympy.Expr]) -> sympy.Expr:
     if not expression.free_symbols:
@@ -293,13 +334,29 @@ def _recursive_substitution(expression: sympy.Expr,
         return substitutions.get(expression, expression)
 
     func = _NUMPY_COMPATIBLE.get(expression.func, expression.func)
-    substitutions = {s: substitutions.get(s, s) for s in get_free_symbols(expression)}
-    return func(*(_recursive_substitution(arg, substitutions) for arg in expression.args))
+    substitutions = {s: substitutions.get(s, s) for s in get_free_symbols_cache(expression)}
+    operands = (_recursive_substitution(arg, substitutions) for arg in expression.args)
+    return func(*operands)
+
+
+
+_cached_sympify = _lru_cache(sympify)
+
+
+def sympify_cache(value):
+    """Cache sympify result for all hashable types"""
+    if getattr(value, '__hash__', None) is not None:
+        try:
+            return _cached_sympify(value)
+        except TypeError:
+            pass
+    # type is either not hashable or the sympification failed for another reason
+    return sympify(value)
 
 
 def recursive_substitution(expression: sympy.Expr,
                            substitutions: Dict[str, Union[sympy.Expr, numpy.ndarray, str]]) -> sympy.Expr:
-    substitutions = {k if isinstance(k, (sympy.Symbol, sympy.Dummy)) else sympy.Symbol(k): sympify(v)
+    substitutions = {k if isinstance(k, (sympy.Symbol, sympy.Dummy)) else sympy.Symbol(k): sympify_cache(v)
                      for k, v in substitutions.items()}
     for s in get_free_symbols(expression):
         substitutions.setdefault(s, s)
@@ -311,7 +368,8 @@ _math_environment = {**_base_environment, **math.__dict__}
 _numpy_environment = {**_base_environment, **numpy.__dict__}
 _sympy_environment = {**_base_environment, **sympy.__dict__}
 
-_lambdify_modules = [{'ceiling': numpy_compatible_ceiling, 'Broadcast': numpy.broadcast_to}, 'numpy', _special_functions]
+_lambdify_modules = [{'ceiling': numpy_compatible_ceiling, 'floor': _floor_to_int,
+                      'Broadcast': numpy.broadcast_to}, 'numpy', _special_functions]
 
 
 def evaluate_compiled(expression: sympy.Expr,
@@ -375,9 +433,11 @@ def evaluate_lamdified_exact_rational(expression: sympy.Expr,
     return lambdified(**parameters), lambdified
 
 
-def almost_equal(lhs: sympy.Expr, rhs: sympy.Expr, epsilon: float=1e-15) -> Optional[bool]:
+def almost_equal(lhs: sympy.Expr, rhs: sympy.Expr, epsilon: Optional[float]=None) -> Optional[bool]:
     """Returns True (or False) if the two expressions are almost equal (or not). Returns None if this cannot be
     determined."""
+    if epsilon is None:
+        epsilon = SYMPY_DURATION_ERROR_MARGIN
     relation = sympy.simplify(sympy.Abs(lhs - rhs) <= epsilon)
 
     if relation is sympy.true:
@@ -398,7 +458,9 @@ def _parse_broadcast_shape(shape: Tuple[int], user: type) -> Optional[Tuple[int]
     except TypeError as err:
         warnings.warn(f"The shape passed to {user.__module__}.{user.__name__} is not convertible to a tuple of integers: {err}\n"
                       "Be aware that using a symbolic shape can lead to unexpected behaviour.",
-                      category=UnsupportedBroadcastArgumentWarning)
+                      category=UnsupportedBroadcastArgumentWarning,
+                      # probably sympy version dependent what is most useful here...
+                      stacklevel=7)
     return None
 
 
@@ -408,5 +470,7 @@ def _parse_broadcast_index(idx: int, user: type) -> Optional[int]:
     except TypeError as err:
         warnings.warn(f"The index passed to {user.__module__}.{user.__name__} is not convertible to an integer: {err}\n"
                       "Be aware that using a symbolic index can lead to unexpected behaviour.",
-                      category=UnsupportedBroadcastArgumentWarning)
+                      category=UnsupportedBroadcastArgumentWarning,
+                      # probably sympy version dependent what is most useful here...
+                      stacklevel=7)
     return None

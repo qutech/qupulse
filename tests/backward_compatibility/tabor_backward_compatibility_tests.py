@@ -4,16 +4,27 @@ import json
 import typing
 import importlib.util
 import sys
+import warnings
+
+try:
+    import tabor_control
+except ImportError as err:
+    raise unittest.SkipTest("tabor_control not present") from err
 
 from tests.hardware.tabor_simulator_based_tests import TaborSimulatorManager
 from tests.hardware.dummy_devices import DummyDAC
+from tests.backward_compatibility.hardware_test_helper import LoadingAndSequencingHelper
 
 from qupulse.serialization import Serializer, FilesystemBackend, PulseStorage
 from qupulse.pulses.pulse_template import PulseTemplate
 from qupulse.hardware.setup import HardwareSetup, PlaybackChannel, MarkerChannel, MeasurementMask
-from qupulse.hardware.awgs.tabor import PlottableProgram
+try:
+    import tabor_control
+except ImportError:
+    tabor_control = None
 
-
+if tabor_control is not None:
+    from qupulse.hardware.awgs.tabor import PlottableProgram, TaborAWGRepresentation
 
 def do_not_skip(test_class):
     if hasattr(test_class, '__unittest_skip__'):
@@ -33,15 +44,12 @@ class DummyTest(unittest.TestCase):
         self.assertTrue(True)
 
 
-class PulseLoadingAndSequencingHelper:
+@unittest.skipIf(tabor_control is None, "tabor_control not available")
+class TaborLoadingAndSequencingHelper(LoadingAndSequencingHelper):
     def __init__(self, data_folder, pulse_name):
-        self.data_folder = data_folder
-        self.pulse_name = pulse_name
+        super().__init__(data_folder=data_folder, pulse_name=pulse_name)
 
-        self.parameters = self.load_json('parameters.json')
-        self.window_mapping = self.load_json('measurement_mapping.json')
-        self.channel_mapping = self.load_json('channel_mapping.json')
-        self.preparation_commands = self.load_json('preparation_commands.json')
+        self.preparation_commands = self.load_json('tabor_preparation_commands.json')
 
         expected_binary_programs = self.load_json('binary_programs.json')
         if expected_binary_programs:
@@ -53,59 +61,12 @@ class PulseLoadingAndSequencingHelper:
         self.validate_programs = self.load_function_from_file('binary_program_validation.py', 'validate_programs')
         self.validation_data = self.load_json('binary_program_validation.json')
 
-        self.pulse = None
-        self.program = None
-
-        self.simulator_manager = None
-
-        self.hardware_setup = None  # type: HardwareSetup
-        self.dac = None  # type: DummyDAC
-        self.awg = None  # type: TaborAWGRepresentation
-
         self.program_AB = None
         self.program_CD = None
 
-    def load_json(self, file_name):
-        complete_file_name = os.path.join(self.data_folder, file_name)
-        if os.path.exists(complete_file_name):
-            with open(complete_file_name, 'r') as file_handle:
-                return json.load(file_handle)
-        else:
-            return None
-
-    def load_function_from_file(self, file_name, function_name):
-        full_file_name = os.path.join(self.data_folder, file_name)
-        if not os.path.exists(full_file_name):
-            return None
-        module_name = os.path.normpath(os.path.splitext(full_file_name)[0]).replace(os.sep, '.')
-
-        if module_name in sys.modules:
-            module = sys.modules[module_name]
-        else:
-            try:
-                spec = importlib.util.spec_from_file_location(module_name, full_file_name)
-                module = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(module)
-            except ImportError:
-                return None
-        return getattr(module, function_name, None)
-
-    def deserialize_pulse(self):
-        serializer = Serializer(FilesystemBackend(os.path.join(self.data_folder, 'pulse_storage')))
-        self.pulse = typing.cast(PulseTemplate, serializer.deserialize(self.pulse_name))
-
-    def deserialize_pulse_2018(self) -> None:
-        pulse_storage = PulseStorage(FilesystemBackend(os.path.join(self.data_folder, 'pulse_storage_converted_2018')))
-        self.pulse = typing.cast(PulseTemplate, pulse_storage[self.pulse_name])
-
-    def sequence_pulse(self):
-        self.program = self.pulse.create_program(
-            parameters=self.parameters,
-            measurement_mapping=self.window_mapping,
-            channel_mapping=self.channel_mapping)
-
     def initialize_hardware_setup(self):
-        self.simulator_manager = TaborSimulatorManager()
+        self.simulator_manager = TaborSimulatorManager(TaborAWGRepresentation, 'instr_addr',
+                                                       dict(paranoia_level=2, reset=True))
 
         try:
             self.simulator_manager.start_simulator()
@@ -135,12 +96,6 @@ class PulseLoadingAndSequencingHelper:
         self.hardware_setup.set_measurement("MEAS_C", MeasurementMask(self.dac, "MASK_C"))
         self.hardware_setup.set_measurement("MEAS_D", MeasurementMask(self.dac, "MASK_D"))
 
-    def register_program(self):
-        self.hardware_setup.register_program(self.pulse_name, self.program)
-
-    def arm_program(self):
-        self.hardware_setup.arm_program(self.pulse_name)
-
     def read_program(self):
         self.program_AB = self.awg.channel_pair_AB.read_complete_program()
         self.program_CD = self.awg.channel_pair_CD.read_complete_program()
@@ -155,10 +110,11 @@ class CompleteIntegrationTestHelper(unittest.TestCase):
     def setUpClass(cls):
         if cls.data_folder is None:
             raise unittest.SkipTest("Base class")
-        cls.test_state = PulseLoadingAndSequencingHelper(cls.data_folder, cls.pulse_name)
+        cls.test_state = TaborLoadingAndSequencingHelper(cls.data_folder, cls.pulse_name)
 
     def test_1_1_deserialization(self):
-        self.test_state.deserialize_pulse()
+        with self.assertWarns(DeprecationWarning):
+            self.test_state.deserialize_pulse()
 
     def test_1_2_deserialization_2018(self) -> None:
         self.test_state.deserialize_pulse_2018()

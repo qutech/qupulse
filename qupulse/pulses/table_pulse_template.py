@@ -15,8 +15,8 @@ import warnings
 import numpy as np
 import sympy
 from sympy.logic.boolalg import BooleanAtom
-import more_itertools
 
+from qupulse.utils import pairwise
 from qupulse.utils.types import ChannelID
 from qupulse.serialization import Serializer, PulseRegistryType
 from qupulse.pulses.parameters import Parameter, \
@@ -75,12 +75,11 @@ class TableEntry(NamedTuple('TableEntry', [('t', ExpressionScalar),
             Scalar expression for the integral.
         """
         expr = 0
-        for first_entry, second_entry in more_itertools.pairwise(entry_sequence):
-            substitutions = {'t0': first_entry.t.sympified_expression,
-                             'v0': expression_extractor(first_entry.v),
-                             't1': second_entry.t.sympified_expression,
-                             'v1': expression_extractor(second_entry.v)}
-            expr += second_entry.interp.integral.sympified_expression.subs(substitutions, simultaneous=True)
+        time_value_pairs = [(entry.t.sympified_expression,expression_extractor(entry.v)) for entry in entry_sequence]
+        for idx, (first, second) in enumerate(pairwise(time_value_pairs)):
+            parameters = first[0], first[1], second[0], second[1]
+            second_entry = entry_sequence[idx+1]
+            expr += second_entry.interp.evaluate_integral(*parameters)
         return ExpressionScalar(expr)
 
     @classmethod
@@ -113,7 +112,7 @@ class TableEntry(NamedTuple('TableEntry', [('t', ExpressionScalar),
         if post_value is not None:
             piecewise_args.append((post_value, t >= entry_sequence[-1].t.sympified_expression))
 
-        for first_entry, second_entry in more_itertools.pairwise(entry_sequence):
+        for first_entry, second_entry in pairwise(entry_sequence):
             t0, t1 = first_entry.t.sympified_expression, second_entry.t.sympified_expression
             substitutions = {'t0': t0,
                              'v0': expression_extractor(first_entry.v),
@@ -316,24 +315,20 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
                                                                                                 MultiChannelWaveform]]:
         self.validate_parameter_constraints(parameters, volatile=set())
 
-        if all(channel_mapping[channel] is None
-               for channel in self.defined_channels):
-            return None
-
         instantiated = [(channel_mapping[channel], instantiated_channel)
                         for channel, instantiated_channel in self.get_entries_instantiated(parameters).items()
                         if channel_mapping[channel] is not None]
 
+        if not instantiated:
+            return None
+
         if self.duration.evaluate_numeric(**parameters) == 0:
             return None
 
-        waveforms = [TableWaveform(*ch_instantiated)
+        waveforms = [TableWaveform.from_table(*ch_instantiated)
                      for ch_instantiated in instantiated]
 
-        if len(waveforms) == 1:
-            return waveforms.pop()
-        else:
-            return MultiChannelWaveform(waveforms)
+        return MultiChannelWaveform.from_parallel(waveforms)
 
     @staticmethod
     def from_array(times: np.ndarray, voltages: np.ndarray, channels: List[ChannelID]) -> 'TablePulseTemplate':

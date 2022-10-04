@@ -1,8 +1,14 @@
 {{ fullname | escape | underline }}
 
-.. automodule:: {{ fullname }}
-   :members:
+{% block modules %}
+{% if modules %}
+.. rubric:: Modules
 
-   .. autopackagesummary:: {{ fullname }}
-      :toctree: .
-      :template: autosummary/package.rst
+.. autosummary::
+   :toctree:
+   :recursive:
+{% for item in modules %}
+   {{ item }}
+{%- endfor %}
+{% endif %}
+{% endblock %}

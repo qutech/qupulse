@@ -11,6 +11,7 @@ from abc import ABCMeta, abstractmethod
 from tempfile import TemporaryDirectory, NamedTemporaryFile, TemporaryFile
 from typing import Optional, Any, Tuple
 
+import qupulse.utils
 from qupulse.serialization import FilesystemBackend, CachingBackend, Serializable, JSONSerializableEncoder,\
     ZipFileBackend, AnonymousSerializable, DictBackend, PulseStorage, JSONSerializableDecoder, Serializer,\
     get_default_pulse_registry, set_default_pulse_registry, new_default_pulse_registry, SerializableMeta, \
@@ -46,6 +47,9 @@ class DummySerializable(Serializable):
     def __eq__(self, other) -> bool:
         if not isinstance(other, DummySerializable): return False
         return self.__dict__ == other.__dict__
+
+    def __hash__(self):
+        return qupulse.utils.forced_hash(self.__dict__)
 
 
 class SerializableTests(metaclass=ABCMeta):
@@ -220,7 +224,7 @@ class SerializableTests(metaclass=ABCMeta):
             serializer = Serializer(source_backend)
             try:
                 serializer.serialize(instance)
-            except NotImplementedError as err:
+            except (NotImplementedError, AssertionError) as err:
                 raise unittest.SkipTest(err.args[0]) from err
             del serializer
 
@@ -229,6 +233,13 @@ class SerializableTests(metaclass=ABCMeta):
             pulse_storage = PulseStorage(dest_backend)
             converted = pulse_storage['foo']
             self.assert_equal_instance(instance, converted)
+
+    def test_hash(self):
+        template_1 = self.make_instance(None, registry=None)
+        template_2 = self.make_instance(None, registry=None)
+        template_3 = self.make_instance('tmp', registry=None)
+        self.assertEqual({template_1}, {template_1, template_2})
+        self.assertEqual({template_1, template_3}, {template_1, template_2, template_3})
 
 
 class DummySerializableTests(SerializableTests, unittest.TestCase):
@@ -418,7 +429,8 @@ class FileSystemBackendTest(unittest.TestCase):
         for name in expected:
             self.backend.put(name, self.test_data)
 
-        self.assertEqual(expected, self.backend.list_contents(), msg="list_contents() faulty")
+        with self.assertWarns(DeprecationWarning):
+            self.assertEqual(expected, self.backend.list_contents(), msg="list_contents() faulty")
         self.assertEqual(expected, set(iter(self.backend)), msg="__iter__() faulty")
         self.assertEqual(3, len(self.backend), msg="__len__() faulty")
 
@@ -527,7 +539,8 @@ class ZipFileBackendTests(unittest.TestCase):
         for name in expected:
             self.backend.put(name, "asdfasdfas")
 
-        self.assertEqual(expected, self.backend.list_contents(), msg="list_contents() faulty")
+        with self.assertWarns(DeprecationWarning):
+            self.assertEqual(expected, self.backend.list_contents(), msg="list_contents() faulty")
         self.assertEqual(expected, set(iter(self.backend)), msg="__iter__() faulty")
         self.assertEqual(3, len(self.backend), msg="__len__() faulty")
 
@@ -629,7 +642,8 @@ class CachingBackendTests(unittest.TestCase):
         for name in expected:
             self.dummy_backend.put(name, "asdfasdfas")
 
-        self.assertEqual(expected, self.caching_backend.list_contents(), msg="list_contents() faulty")
+        with self.assertWarns(DeprecationWarning):
+            self.assertEqual(expected, self.caching_backend.list_contents(), msg="list_contents() faulty")
         self.assertEqual(expected, set(iter(self.caching_backend)), msg="__iter__() faulty")
         self.assertEqual(3, len(self.caching_backend), msg="__len__() faulty")
 
@@ -678,7 +692,8 @@ class DictBackendTests(unittest.TestCase):
         for name in expected:
             self.backend.put(name, "asdfasdfas")
 
-        self.assertEqual(expected, self.backend.list_contents(), msg="list_contents() faulty")
+        with self.assertWarns(DeprecationWarning):
+            self.assertEqual(expected, self.backend.list_contents(), msg="list_contents() faulty")
         self.assertEqual(expected, set(iter(self.backend)), msg="__iter__() faulty")
         self.assertEqual(3, len(self.backend), msg="__len__() faulty")
 

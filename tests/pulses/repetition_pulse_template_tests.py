@@ -6,7 +6,7 @@ from qupulse.parameter_scope import Scope, DictScope
 from qupulse.utils.types import FrozenDict
 
 from qupulse._program._loop import Loop
-from qupulse.expressions import Expression
+from qupulse.expressions import Expression, ExpressionScalar
 from qupulse.pulses.repetition_pulse_template import RepetitionPulseTemplate,ParameterNotIntegerException
 from qupulse.pulses.parameters import ParameterNotProvidedException, ParameterConstraintViolation, ConstantParameter, \
     ParameterConstraint
@@ -77,15 +77,15 @@ class RepetitionPulseTemplateTest(unittest.TestCase):
         self.assertEqual(t.duration, Expression('foo*bar'))
 
     def test_integral(self) -> None:
-        dummy = DummyPulseTemplate(integrals=['foo+2', 'k*3+x**2'])
+        dummy = DummyPulseTemplate(integrals={'A': ExpressionScalar('foo+2'), 'B': ExpressionScalar('k*3+x**2')})
         template = RepetitionPulseTemplate(dummy, 7)
-        self.assertEqual([Expression('7*(foo+2)'), Expression('7*(k*3+x**2)')], template.integral)
+        self.assertEqual({'A': Expression('7*(foo+2)'), 'B': Expression('7*(k*3+x**2)')}, template.integral)
 
         template = RepetitionPulseTemplate(dummy, '2+m')
-        self.assertEqual([Expression('(2+m)*(foo+2)'), Expression('(2+m)*(k*3+x**2)')], template.integral)
+        self.assertEqual({'A': Expression('(2+m)*(foo+2)'), 'B': Expression('(2+m)*(k*3+x**2)')}, template.integral)
 
         template = RepetitionPulseTemplate(dummy, Expression('2+m'))
-        self.assertEqual([Expression('(2+m)*(foo+2)'), Expression('(2+m)*(k*3+x**2)')], template.integral)
+        self.assertEqual({'A': Expression('(2+m)*(foo+2)'), 'B': Expression('(2+m)*(k*3+x**2)')}, template.integral)
 
     def test_initial_values(self):
         raise NotImplementedError()
@@ -308,7 +308,6 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
                                    global_transformation=None,
                                        parent_loop=program)
 
-        parameters = {'foo': ConstantParameter(7)}
         with self.assertRaises(ParameterNotProvidedException):
             t._internal_create_program(scope=scope,
                                        measurement_mapping=measurement_mapping,

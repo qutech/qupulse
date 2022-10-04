@@ -1,0 +1,10 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+
+[tool.towncrier]
+directory = "changes.d"
+package = "qupulse"
+package_dir = "./qupulse"
+filename = "RELEASE_NOTES.rst"
+name = "qupulse"
+issue_format = "`#{issue} <https://github.com/qutech/qupulse/issues/{issue}>`_"

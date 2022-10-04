@@ -23,6 +23,15 @@ class TransformationStub(Transformation):
         return id(self)
 
 
+def assert_scalar_trafo_works(test_case: unittest.TestCase, trafo: Transformation, scalar_in: dict):
+    non_scalar = {ch: np.array([val]) for ch, val in scalar_in.items()}
+
+    out_non_scalar = trafo(np.zeros((1,)), non_scalar)
+    out_scalar = trafo(0., scalar_in)
+    for ch in out_scalar:
+        test_case.assertEqual(out_non_scalar[ch][0], out_scalar[ch])
+
+
 class TransformationTests(unittest.TestCase):
     def test_chain(self):
         trafo = TransformationStub()
@@ -143,6 +152,21 @@ class LinearTransformationTests(unittest.TestCase):
         trafo = LinearTransformation(matrix, in_chs, out_chs)
         self.assertEqual(trafo, eval(repr(trafo)))
 
+    def test_scalar_trafo_works(self):
+        in_chs = ('a', 'b', 'c')
+        out_chs = ('transformed_a', 'transformed_b')
+        matrix = np.array([[1, -1, 0], [1, 1, 1]])
+        trafo = LinearTransformation(matrix, in_chs, out_chs)
+
+        assert_scalar_trafo_works(self, trafo, {'a': 0., 'b': 0.3, 'c': 0.6})
+
+    def test_constant_propagation(self):
+        in_chs = ('a', 'b', 'c')
+        out_chs = ('transformed_a', 'transformed_b')
+        matrix = np.array([[1, -1, 0], [1, 1, 1]])
+        trafo = LinearTransformation(matrix, in_chs, out_chs)
+        self.assertTrue(trafo.is_constant_invariant())
+
 
 class IdentityTransformationTests(unittest.TestCase):
     def test_compare_key(self):
@@ -171,6 +195,12 @@ class IdentityTransformationTests(unittest.TestCase):
     def test_repr(self):
         trafo = IdentityTransformation()
         self.assertEqual(trafo, eval(repr(trafo)))
+
+    def test_scalar_trafo_works(self):
+        assert_scalar_trafo_works(self, IdentityTransformation(), {'a': 0., 'b': 0.3, 'c': 0.6})
+
+    def test_constant_propagation(self):
+        self.assertTrue(IdentityTransformation().is_constant_invariant())
 
 
 class ChainedTransformationTests(unittest.TestCase):
@@ -249,6 +279,12 @@ class ChainedTransformationTests(unittest.TestCase):
         trafo = ChainedTransformation(ScalingTransformation({'a': 1.1}), OffsetTransformation({'b': 6.6}))
         self.assertEqual(trafo, eval(repr(trafo)))
 
+    def test_constant_propagation(self):
+        trafo = ChainedTransformation(ScalingTransformation({'a': 1.1}), OffsetTransformation({'b': 6.6}))
+        self.assertTrue(trafo.is_constant_invariant())
+        trafo = ChainedTransformation(ScalingTransformation({'a': 1.1}), TransformationStub())
+        self.assertFalse(trafo.is_constant_invariant())
+
 
 class ParallelConstantChannelTransformationTests(unittest.TestCase):
     def test_init(self):
@@ -296,6 +332,17 @@ class ParallelConstantChannelTransformationTests(unittest.TestCase):
         channels = {'X': 2, 'Y': 4.4}
         trafo = ParallelConstantChannelTransformation(channels)
         self.assertEqual(trafo, eval(repr(trafo)))
+
+    def test_scalar_trafo_works(self):
+        channels = {'X': 2, 'Y': 4.4}
+        trafo = ParallelConstantChannelTransformation(channels)
+
+        assert_scalar_trafo_works(self, trafo, {'a': 0., 'b': 0.3, 'c': 0.6})
+
+    def test_constant_propagation(self):
+        channels = {'X': 2, 'Y': 4.4}
+        trafo = ParallelConstantChannelTransformation(channels)
+        self.assertTrue(trafo.is_constant_invariant())
 
 
 class TestChaining(unittest.TestCase):
@@ -369,6 +416,14 @@ class TestOffsetTransformation(unittest.TestCase):
         trafo = OffsetTransformation(self.offsets)
         self.assertEqual(trafo, eval(repr(trafo)))
 
+    def test_scalar_trafo_works(self):
+        trafo = OffsetTransformation(self.offsets)
+        assert_scalar_trafo_works(self, trafo, {'A': 0., 'B': 0.3, 'c': 0.6})
+
+    def test_constant_propagation(self):
+        trafo = OffsetTransformation(self.offsets)
+        self.assertTrue(trafo.is_constant_invariant())
+
 
 class TestScalingTransformation(unittest.TestCase):
     def setUp(self) -> None:
@@ -406,3 +461,11 @@ class TestScalingTransformation(unittest.TestCase):
     def test_repr(self):
         trafo = OffsetTransformation(self.scales)
         self.assertEqual(trafo, eval(repr(trafo)))
+
+    def test_scalar_trafo_works(self):
+        trafo = ScalingTransformation(self.scales)
+        assert_scalar_trafo_works(self, trafo, {'A': 0., 'B': 0.3, 'c': 0.6})
+
+    def test_constant_propagation(self):
+        trafo = ScalingTransformation(self.scales)
+        self.assertTrue(trafo.is_constant_invariant())

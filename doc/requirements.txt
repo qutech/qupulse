@@ -1,6 +1,3 @@
-sphinx>=2.4
-nbsphinx
-ipykernel
-sphinx_autodoc_typehints
-# includes a fix for mock behaviour
-git+git://github.com/terrorfisch/sphinx-autopackagesummary@correct_mock#egg=sphinx-autopackagesummary
+sphinx==4.4.0
+nbsphinx==0.8.8
+ipykernel==6.9.1

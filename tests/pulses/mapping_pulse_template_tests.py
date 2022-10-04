@@ -162,10 +162,10 @@ class MappingTemplateTests(unittest.TestCase):
         template = DummyPulseTemplate(parameter_names={'foo', 'bar'})
         st = MappingPulseTemplate(template, parameter_mapping={'foo': 't*k', 'bar': 't*l'})
 
-        parameters = {'t': ConstantParameter(3), 'k': ConstantParameter(2), 'l': ConstantParameter(7)}
+        parameters = {'t': 3, 'k': 2, 'l': 7}
         values = {'foo': 6, 'bar': 21}
         for k, v in st.map_parameters(parameters).items():
-            self.assertEqual(v.get_value(), values[k])
+            self.assertEqual(v, values[k])
         parameters.popitem()
         with self.assertRaises(ParameterNotProvidedException):
             st.map_parameters(parameters)
@@ -178,7 +178,9 @@ class MappingTemplateTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "type of return value"):
             st.map_parameters({})
 
-        parameters = dict(t=3, k=2, l=ConstantParameter(7))
+        with self.assertWarns(DeprecationWarning):
+            # remove if ConstantParameter is removed
+            parameters = dict(t=3, k=2, l=ConstantParameter(7))
         with self.assertRaisesRegex(TypeError, "neither all Parameter nor Real"):
             st.map_parameters(parameters)
 

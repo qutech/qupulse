@@ -2,7 +2,14 @@ import unittest
 from unittest import mock
 from collections import OrderedDict
 
-from qupulse.utils import checked_int_cast, replace_multiple
+from qupulse.utils import checked_int_cast, replace_multiple, _fallback_pairwise
+
+
+class PairWiseTest(unittest.TestCase):
+    def test_fallback(self):
+        self.assertEqual([(0, 1), (1, 2), (2, 3), (3, 4)], list(_fallback_pairwise(range(5))))
+        self.assertEqual([], list(_fallback_pairwise(range(1))))
+        self.assertEqual([], list(_fallback_pairwise(range(0))))
 
 
 class CheckedIntCastTest(unittest.TestCase):

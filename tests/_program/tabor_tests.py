@@ -5,11 +5,15 @@ from qupulse.utils.types import FrozenDict
 from unittest import mock
 
 try:
+    import tabor_control.util
+except ImportError:
+    tabor_control = None
+
+try:
+    # only required for legacy compatibility tests
     import pytabor
 except ImportError:
     pytabor = None
-
-from teawg import model_properties_dict
 
 from qupulse._program.tabor import TaborException, TaborProgram, \
     TaborSegment, TaborSequencing, PlottableProgram, TableDescription, make_combined_wave, TableEntry
@@ -22,8 +26,6 @@ from qupulse.parameter_scope import DictScope
 
 from tests.pulses.sequencing_dummies import DummyWaveform
 from tests._program.loop_tests import LoopTests, WaveformGenerator
-
-from tests.hardware import dummy_modules
 
 
 class PlottableProgramTests(unittest.TestCase):
@@ -154,7 +156,7 @@ class TaborProgramTests(unittest.TestCase):
         super().__init__(*args, **kwargs)
 
     def setUp(self) -> None:
-        self.instr_props = model_properties_dict['WX2184C'].copy()
+        self._instr_props = None
         self.program_entry_kwargs = dict(amplitudes=(1., 1.),
                                          offsets=(0., 0.),
                                          voltage_transformations=(mock.Mock(wraps=lambda x: x),
@@ -162,6 +164,15 @@ class TaborProgramTests(unittest.TestCase):
                                          sample_rate=TimeType.from_fraction(192, 1),
                                          mode=None
                                          )
+        if tabor_control is not None:
+            self._instr_props = tabor_control.util.model_properties_dict['WX2184C'].copy()
+
+    @property
+    def instr_props(self):
+        if self._instr_props is None:
+            raise unittest.SkipTest("tabor_control not installed")
+        else:
+            return self._instr_props
 
     @property
     def waveform_data_generator(self):
@@ -667,7 +678,7 @@ class TaborMakeCombinedTest(unittest.TestCase):
         self.assertEqual(len(combined), 0)
 
 
-@unittest.skipIf(pytabor in (dummy_modules.dummy_pytabor, None), "Cannot compare to pytabor results")
+@unittest.skipIf(pytabor is None, "Cannot compare to pytabor results")
 class TaborMakeCombinedPyTaborCompareTest(TaborMakeCombinedTest):
     def exec_general(self, data_1, data_2, fill_value=None):
         tabor_segments = [TaborSegment.from_sampled(d1, d2, None, None) for d1, d2 in zip(data_1, data_2)]

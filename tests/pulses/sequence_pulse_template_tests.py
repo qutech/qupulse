@@ -6,7 +6,7 @@ from qupulse.expressions import Expression, ExpressionScalar
 from qupulse.pulses.table_pulse_template import TablePulseTemplate
 from qupulse.pulses.sequence_pulse_template import SequencePulseTemplate, SequenceWaveform
 from qupulse.pulses.mapping_pulse_template import MappingPulseTemplate
-from qupulse.pulses.parameters import ConstantParameter, ParameterConstraint, ParameterConstraintViolation, ParameterNotProvidedException
+from qupulse.pulses.parameters import ParameterConstraint, ParameterConstraintViolation, ParameterNotProvidedException
 from qupulse._program._loop import Loop
 
 from tests.pulses.sequencing_dummies import DummyPulseTemplate,\
@@ -39,20 +39,14 @@ class SequencePulseTemplateTest(unittest.TestCase):
         self.outer_parameters = {'uptime', 'length', 'pulse_length', 'voltage'}
 
         self.parameters = dict()
-        self.parameters['uptime'] = ConstantParameter(5)
-        self.parameters['length'] = ConstantParameter(10)
-        self.parameters['pulse_length'] = ConstantParameter(100)
-        self.parameters['voltage'] = ConstantParameter(10)
+        self.parameters['uptime'] = 5
+        self.parameters['length'] = 10
+        self.parameters['pulse_length'] = 100
+        self.parameters['voltage'] = 10
 
         self.sequence = SequencePulseTemplate(MappingPulseTemplate(self.square,
                                                                    parameter_mapping=self.mapping1,
                                                                    measurement_mapping=self.window_name_mapping))
-
-    def test_external_parameters_warning(self):
-        dummy = DummyPulseTemplate()
-        with self.assertWarnsRegex(DeprecationWarning, "external_parameters",
-                                   msg="SequencePT did not issue a warning for argument external_parameters"):
-            SequencePulseTemplate(dummy, external_parameters={'a'})
 
     def test_duration(self):
         pt = SequencePulseTemplate(DummyPulseTemplate(duration='a'),

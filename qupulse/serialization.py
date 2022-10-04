@@ -113,7 +113,8 @@ class StorageBackend(metaclass=ABCMeta):
         Returns:
             List of all available identifiers.
         """
-        warnings.warn("list_contents is deprecated. Use the property contents instead", DeprecationWarning)
+        warnings.warn("list_contents is deprecated. Use the property contents instead", DeprecationWarning,
+                      stacklevel=2)
         return self.contents
 
     @property
@@ -263,7 +264,7 @@ class ZipFileBackend(StorageBackend):
         tmpfd, tmpname = tempfile.mkstemp(dir=os.path.dirname(self._root))
         os.close(tmpfd)
 
-        # create a temp copy of the archive without filename            
+        # create a temp copy of the archive without filename
         with zipfile.ZipFile(self._root, 'r') as zin:
             with zipfile.ZipFile(tmpname, 'w') as zout:
                 zout.comment = zin.comment # preserve the comment
@@ -308,7 +309,7 @@ class CachingBackend(StorageBackend):
                 IO functionality.
         """
         warnings.warn("CachingBackend is obsolete due to PulseStorage already offering caching functionality.",
-                      DeprecationWarning)
+                      DeprecationWarning, stacklevel=2)
         self._backend = backend
         self._cache = {}
 
@@ -356,7 +357,7 @@ class DictBackend(StorageBackend):
 
     def exists(self, identifier: str) -> bool:
         return identifier in self._cache
-    
+
     @property
     def storage(self) -> Dict[str, str]:
         return self._cache
@@ -476,6 +477,13 @@ class Serializable(metaclass=SerializableMeta):
             raise ValueError("Identifier must not be empty.")
         self.__identifier = identifier
 
+    def __eq__(self, other: Any) -> bool:
+        """Implements the equality operator between Serializables (such as PulseTemplates)."""
+        try:
+            return self.get_serialization_data() == other.get_serialization_data()
+        except AttributeError:
+            return NotImplemented
+
     def _register(self, registry: Optional[PulseRegistryType]=None) -> None:
         """Registers the Serializable in the global registry.
 
@@ -529,7 +537,8 @@ class Serializable(metaclass=SerializableMeta):
                 storing and later reconstruction as a Python object.
         """
         if serializer:
-            warnings.warn("{c}.get_serialization_data(*) was called with a serializer argument, indicating deprecated behavior. Please switch to the new serialization routines.".format(c=self.__class__.__name__), DeprecationWarning)
+            warnings.warn("{c}.get_serialization_data(*) was called with a serializer argument, indicating deprecated behavior. Please switch to the new serialization routines.".format(c=self.__class__.__name__),
+                          DeprecationWarning, stacklevel=2)
 
         if self.identifier:
             return {self.type_identifier_name: self.get_type_identifier(), self.identifier_name: self.identifier}
@@ -567,7 +576,8 @@ class Serializable(metaclass=SerializableMeta):
                 to this method.
          """
         if serializer:
-            warnings.warn("{c}.deserialize(*) was called with a serializer argument, indicating deprecated behavior. Please switch to the new serialization routines.".format(c=cls.__name__), DeprecationWarning)
+            warnings.warn("{c}.deserialize(*) was called with a serializer argument, indicating deprecated behavior. Please switch to the new serialization routines.".format(c=cls.__name__),
+                          DeprecationWarning, stacklevel=2)
 
         return cls(**kwargs)
 
@@ -632,7 +642,8 @@ class Serializer(object):
         self.__subpulses = dict() # type: Dict[str, Serializer.__FileEntry]
         self.__storage_backend = storage_backend
 
-        warnings.warn("Serializer is deprecated. Please switch to the new serialization routines.", DeprecationWarning)
+        warnings.warn("Serializer is deprecated. Please switch to the new serialization routines.",
+                      DeprecationWarning, stacklevel=2)
 
     def dictify(self, serializable: Serializable) -> Union[str, Dict[str, Any]]:
         """Converts a Serializable into a dictionary representation.
@@ -721,7 +732,8 @@ class Serializer(object):
         Args:
             serializable (Serializable): The Serializable to serialize and store
         """
-        warnings.warn("Serializer is deprecated. Please switch to the new serialization routines.", DeprecationWarning)
+        warnings.warn("Serializer is deprecated. Please switch to the new serialization routines.",
+                      DeprecationWarning, stacklevel=2)
         repr_ = self.__collect_dictionaries(serializable)
         for identifier in repr_:
             storage_identifier = identifier
@@ -742,7 +754,8 @@ class Serializer(object):
         See also:
             Serializable.deserialize
         """
-        warnings.warn("Serializer is deprecated. Please switch to the new serialization routines.", DeprecationWarning)
+        warnings.warn("Serializer is deprecated. Please switch to the new serialization routines.", DeprecationWarning,
+                      stacklevel=2)
         if isinstance(representation, str):
             if representation in self.__subpulses:
                 return self.__subpulses[representation].serializable
@@ -1056,7 +1069,7 @@ class JSONSerializableEncoder(json.JSONEncoder):
 
         elif type(o) is set:
             return list(o)
-        
+
         elif type(o) in (dict, tuple, list):
             return super().default(o)
 

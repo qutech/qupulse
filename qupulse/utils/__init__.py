@@ -1,10 +1,11 @@
 """This package contains utility functions and classes as well as custom sympy extensions(hacks)."""
 
-from typing import Union, Iterable, Any, Tuple, Mapping
+from typing import Union, Iterable, Any, Tuple, Mapping, Iterator, TypeVar, Sequence, AbstractSet
 import itertools
 import re
 import numbers
 from collections import OrderedDict
+from frozendict import frozendict
 
 import numpy
 
@@ -14,7 +15,17 @@ except ImportError:
     # py version < 3.5
     isclose = None
 
-__all__ = ["checked_int_cast", "is_integer", "isclose", "pairwise", "replace_multiple"]
+try:
+    from functools import cached_property
+except ImportError:
+    # py version < 3.8
+    from cached_property import cached_property
+
+_T = TypeVar('_T')
+
+
+__all__ = ["checked_int_cast", "is_integer", "isclose", "pairwise", "replace_multiple", "cached_property",
+           "forced_hash"]
 
 
 def checked_int_cast(x: Union[float, int, numpy.ndarray], epsilon: float=1e-6) -> int:
@@ -43,21 +54,31 @@ if not isclose:
     isclose = _fallback_is_close
 
 
-def pairwise(iterable: Iterable[Any],
-             zip_function=itertools.zip_longest, **kwargs) -> Iterable[Tuple[Any, Any]]:
+def _fallback_pairwise(iterable: Iterable[_T]) -> Iterator[Tuple[_T, _T]]:
     """s -> (s0,s1), (s1,s2), (s2, s3), ...
 
     Args:
         iterable: Iterable to iterate over pairwise
-        zip_function: Either zip or itertools.zip_longest(default)
-        **kwargs: Gets passed to zip_function
 
     Returns:
-        An iterable that yield neighbouring elements
+        An iterable that yields neighbouring elements
     """
-    a, b = itertools.tee(iterable)
-    next(b, None)
-    return zip_function(a, b, **kwargs)
+    return zip(iterable, itertools.islice(iterable, 1, None))
+
+
+if hasattr(itertools, 'pairwise'):
+    pairwise = itertools.pairwise
+else:
+    # py version < 3.10
+    pairwise = _fallback_pairwise
+
+
+def grouper(iterable: Iterable[Any], n: int, fillvalue=None) -> Iterable[Tuple[Any, ...]]:
+    """Collect data into fixed-length chunks or blocks"""
+    # grouper('ABCDEFG', 3, 'x') --> ABC DEF Gxx"
+    # this is here instead of using more_itertools because there were problems with the old version's argument order
+    args = [iter(iterable)] * n
+    return itertools.zip_longest(fillvalue=fillvalue, *args)
 
 
 def replace_multiple(s: str, replacements: Mapping[str, str]) -> str:
@@ -71,3 +92,33 @@ def replace_multiple(s: str, replacements: Mapping[str, str]) -> str:
     rep = OrderedDict((re.escape(k), v) for k, v in replacements.items())
     pattern = re.compile("|".join(rep.keys()))
     return pattern.sub(lambda m: rep[re.escape(m.group(0))], s)
+
+
+def forced_hash(obj) -> int:
+    """Try to produce a hash from obj by nested conversions to hashable types.
+
+    Mapping -> frozendict
+    AbstractSet -> frozenset
+    ndarray -> bytes or nested tuples
+    Sequence -> tuple
+    """
+    try:
+        return hash(obj)
+    except TypeError:
+        if isinstance(obj, Mapping):
+            return hash(frozendict((key, forced_hash(value))
+                                   for key, value in obj.items()))
+        if isinstance(obj, AbstractSet):
+            return hash(frozenset(map(forced_hash, obj)))
+
+        if isinstance(obj, numpy.ndarray):
+            # case where dtype maybe has a custom hash that is not binary content dependent
+            if obj.dtype == numpy.dtype('O') or not obj.dtype.isbuiltin != 1:
+                return forced_hash(obj.tolist())
+            else:
+                return hash((obj.tobytes(), obj.shape, obj.dtype))
+
+        if isinstance(obj, Sequence):
+            return hash(tuple(map(forced_hash, obj)))
+
+        raise

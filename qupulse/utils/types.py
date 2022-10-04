@@ -11,6 +11,13 @@ import operator
 import numpy
 import sympy
 
+try:
+    from frozendict import frozendict
+except ImportError:
+    warnings.warn("The frozendict package is not installed. We currently also ship a fallback frozendict which "
+                  "will be removed in a future release.", category=DeprecationWarning)
+    frozendict = None
+
 import qupulse.utils.numeric as qupulse_numeric
 
 __all__ = ["MeasurementWindow", "ChannelID", "HashableNumpyArray", "TimeType", "time_from_float", "DocStringABCMeta",
@@ -55,8 +62,15 @@ class TimeType:
     _InternalType = fractions.Fraction if gmpy2 is None else type(gmpy2.mpq())
     _to_internal = fractions.Fraction if gmpy2 is None else gmpy2.mpq
 
-    def __init__(self, value: numbers.Rational = 0.):
-        if type(getattr(value, '_value', None)) is self._InternalType:
+    def __init__(self, value: typing.Union[numbers.Rational, int] = 0., denominator: typing.Optional[int] = None):
+        """
+        Args:
+            value: interpreted as Rational if denominator is None. interpreted as numerator otherwise
+            denominator: Denominator of the Fraction if not None
+        """
+        if denominator is not None:
+            self._value = self._to_internal(value, denominator)
+        elif type(getattr(value, '_value', None)) is self._InternalType:
             self._value = value._value
         else:
             try:
@@ -226,7 +240,7 @@ class TimeType:
 
     @classmethod
     def as_comparable(cls, other: typing.Union['TimeType', typing.Any]):
-        if type(other) == cls:
+        if type(other) is cls:
             return other._value
         else:
             return other
@@ -244,9 +258,9 @@ class TimeType:
             absolute_error:
                 - :obj:`None`: Use `str(value)` as a proxy to get consistent precision
                 - 0: Return the exact value of the float i.e. float(0.8) == 3602879701896397 / 4503599627370496
-                - 0 < `absolute_error` <= 1: Return the best approximation to `value` within `(value - absolute_error,
-                value + absolute_error)`. The best approximation is defined as the fraction with the smallest
-                denominator.
+                - 0 < `absolute_error` <= 1: Return the best approximation to `value` within
+                  `(value - absolute_error, value + absolute_error)`.
+                  The best approximation is defined as the fraction with the smallest denominator.
 
         Raises:
             ValueError: If `absolute_error` is not None and not 0 <= `absolute_error` <=  1
@@ -284,10 +298,10 @@ class TimeType:
             numerator: Numerator of the time fraction
             denominator: Denominator of the time fraction
         """
-        return cls(cls._to_internal(numerator, denominator))
+        return cls(numerator, denominator)
 
     def __repr__(self):
-        return 'TimeType(%s)' % self.__str__()
+        return f'TimeType({self._value.numerator}, {self._value.denominator})'
 
     def __str__(self):
         return '%d/%d' % (self._value.numerator, self._value.denominator)
@@ -364,49 +378,27 @@ class SingletonABCMeta(DocStringABCMeta):
 class HashableNumpyArray(numpy.ndarray):
     """Make numpy arrays hashable.
 
+    Deprecated since 0.6. This is a bad idea.
+
     Example usage:
     my_array = np.zeros([1, 2, 3, 4])
     hashable = my_array.view(HashableNumpyArray)
     """
+    def __array_finalize__(self, obj):
+        warnings.warn("HashableNumpyArray is deprecated since qupulse 0.6 and will be removed in the next release.",
+                      category=DeprecationWarning, stacklevel=2)
+
     def __hash__(self):
         return hash(self.tobytes())
 
 
+@functools.lru_cache(maxsize=128)
+def _public_type_attributes(type_obj):
+    return {attr for attr in dir(type_obj) if not attr.startswith('_')}
+
 def has_type_interface(obj: typing.Any, type_obj: typing.Type) -> bool:
-    """Return true if all public attributes of the class are attribues of the object"""
-    return set(dir(obj)) >= {attr for attr in dir(type_obj) if not attr.startswith('_')}
-
-
-if hasattr(typing, 'Collection'):
-    Collection = typing.Collection
-else:
-    def _check_methods(C, *methods):
-        """copied from https://github.com/python/cpython/blob/3.8/Lib/_collections_abc.py"""
-        mro = C.__mro__
-        for method in methods:
-            for B in mro:
-                if method in B.__dict__:
-                    if B.__dict__[method] is None:
-                        return NotImplemented
-                    break
-            else:
-                return NotImplemented
-        return True
-
-    class _ABCCollection(collections.abc.Sized, collections.abc.Iterable, collections.abc.Container):
-        """copied from https://github.com/python/cpython/blob/3.8/Lib/_collections_abc.py"""
-        __slots__ = ()
-
-        @classmethod
-        def __subclasshook__(cls, C):
-            # removed "if cls is _ABCCollection" guard because reloading this module damages the test
-            return _check_methods(C, "__len__", "__iter__", "__contains__")
-
-    class Collection(typing.Sized, typing.Iterable[typing.T_co], typing.Container[typing.T_co],
-                     extra=_ABCCollection):
-        """Fallback for typing.Collection if python 3.5
-        copied from https://github.com/python/cpython/blob/3.5/Lib/typing.py"""
-        __slots__ = ()
+    """Return true if all public attributes of the class are attributes of the object"""
+    return set(dir(obj)) >= _public_type_attributes(type_obj)
 
 
 _KT_hash = typing.TypeVar('_KT_hash', bound=typing.Hashable)  # Key type.
@@ -511,7 +503,7 @@ class _FrozenDictByWrapping(FrozenMapping):
         # use the local variable h to minimize getattr calls to minimum and reduce caching overhead
         h = self._hash
         if h is None:
-            self._hash = h = functools.reduce(operator.xor, map(hash, self.items()))
+            self._hash = h = functools.reduce(operator.xor, map(hash, self.items()), 0xABCD0)
         return h
 
     def __eq__(self, other: typing.Mapping):
@@ -524,7 +516,10 @@ class _FrozenDictByWrapping(FrozenMapping):
         return self._dict.copy()
 
 
-FrozenDict = _FrozenDictByWrapping
+if frozendict is None:
+    FrozenDict = _FrozenDictByWrapping
+else:
+    FrozenDict = frozendict
 
 
 class SequenceProxy(collections.abc.Sequence):

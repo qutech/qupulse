@@ -26,6 +26,9 @@ The current feature list is as follows:
 - High-level pulse to hardware configuration and waveform translation routines 
 - Hardware drivers for Tabor Electronics, Tektronix and Zurich Instruments AWGs and AlazarTech Digitizers
 - MATLAB interface to access qupulse functionality
+ 
+Pending changes are tracked in the `changes.d` subdirectory and published in [`RELEASE_NOTES.rst`](RELEASE_NOTES.rst) on
+release using the tool `towncrier`.
 
 ## Installation
 qupulse is available on [PyPi](https://pypi.org/project/qupulse/) and the latest release can be installed by executing:

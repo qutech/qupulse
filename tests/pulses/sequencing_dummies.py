@@ -1,5 +1,5 @@
 """STANDARD LIBRARY IMPORTS"""
-from typing import Tuple, List, Dict, Optional, Set, Any, Union
+from typing import Tuple, List, Dict, Optional, Set, Any, Union, Mapping
 import copy
 
 import numpy
@@ -76,8 +76,7 @@ class DummyNoValueParameter(Parameter):
 class DummyWaveform(Waveform):
 
     def __init__(self, duration: Union[float, TimeType]=0, sample_output: Union[numpy.ndarray, dict]=None, defined_channels=None) -> None:
-        super().__init__()
-        self.duration_ = duration if isinstance(duration, TimeType) else TimeType.from_float(duration)
+        super().__init__(duration=duration if isinstance(duration, TimeType) else TimeType.from_float(duration))
         self.sample_output = sample_output
         if defined_channels is None:
             if isinstance(sample_output, dict):
@@ -101,10 +100,6 @@ class DummyWaveform(Waveform):
             return id(self)
 
     @property
-    def duration(self) -> TimeType:
-        return self.duration_
-
-    @property
     def measurement_windows(self):
         return []
 
@@ -118,6 +113,8 @@ class DummyWaveform(Waveform):
         if self.sample_output is not None:
             if isinstance(self.sample_output, dict):
                 output_array[:] = self.sample_output[channel]
+            elif callable(self.sample_output):
+                output_array[:] = self.sample_output(sample_times)
             else:
                 output_array[:] = self.sample_output
         else:
@@ -154,15 +151,16 @@ class DummyWaveform(Waveform):
 
 class DummyInterpolationStrategy(InterpolationStrategy):
 
-    def __init__(self) -> None:
+    def __init__(self, id_ = None) -> None:
         self.call_arguments = []
+        self._id = id(self) if id_ is None else id_
 
     def __call__(self, start: Tuple[float, float], end: Tuple[float, float], times: numpy.ndarray) -> numpy.ndarray:
         self.call_arguments.append((start, end, list(times)))
         return times
 
     def __repr__(self) -> str:
-        return "DummyInterpolationStrategy {}".format(id(self))
+        return f"DummyInterpolationStrategy({id(self)})"
 
     @property
     def integral(self) -> ExpressionScalar:
@@ -172,6 +170,9 @@ class DummyInterpolationStrategy(InterpolationStrategy):
     def expression(self) -> ExpressionScalar:
         raise NotImplementedError()
 
+    def evaluate_integral(self, t0, v0, t1, v1):
+        """ Evaluate integral using arguments v0, t0, v1, t1 """
+        raise
 
 class DummyPulseTemplate(AtomicPulseTemplate):
 
@@ -206,6 +207,9 @@ class DummyPulseTemplate(AtomicPulseTemplate):
         self.create_program_calls = []
         self._program = program
         self._register(registry=registry)
+
+        if integrals is not None:
+            assert isinstance(integrals, Mapping)
 
     @property
     def duration(self):

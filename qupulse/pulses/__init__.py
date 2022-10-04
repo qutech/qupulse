@@ -12,9 +12,11 @@ from qupulse.pulses.mapping_pulse_template import MappingPulseTemplate as Mappin
 from qupulse.pulses.repetition_pulse_template import RepetitionPulseTemplate as RepetitionPT
 from qupulse.pulses.sequence_pulse_template import SequencePulseTemplate as SequencePT
 from qupulse.pulses.table_pulse_template import TablePulseTemplate as TablePT
+from qupulse.pulses.constant_pulse_template import ConstantPulseTemplate as ConstantPT
 from qupulse.pulses.point_pulse_template import PointPulseTemplate as PointPT
 from qupulse.pulses.arithmetic_pulse_template import ArithmeticPulseTemplate as ArithmeticPT,\
     ArithmeticAtomicPulseTemplate as ArithmeticAtomicPT
+from qupulse.pulses.time_reversal_pulse_template import TimeReversalPulseTemplate as TimeReversalPT
 
 import warnings
 with warnings.catch_warnings():
@@ -27,5 +29,6 @@ del warnings
 
 
 __all__ = ["FunctionPT", "ForLoopPT", "AtomicMultiChannelPT", "MappingPT", "RepetitionPT", "SequencePT", "TablePT",
-           "PointPT", "AbstractPT", "ParallelConstantChannelPT", "ArithmeticPT", "ArithmeticAtomicPT"]
+           "PointPT", "ConstantPT", "AbstractPT", "ParallelConstantChannelPT", "ArithmeticPT", "ArithmeticAtomicPT",
+           "TimeReversalPT"]
 

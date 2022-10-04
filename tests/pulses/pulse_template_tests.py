@@ -52,7 +52,8 @@ class PulseTemplateStub(PulseTemplate):
         return self._parameter_names
 
     def get_serialization_data(self, serializer: Optional['Serializer']=None) -> Dict[str, Any]:
-        raise NotImplementedError()
+        # required for hashability
+        return {'id_self': id(self)}
 
     @classmethod
     def deserialize(cls, serializer: Optional['Serializer']=None, **kwargs) -> 'AtomicPulseTemplateStub':
@@ -151,7 +152,7 @@ class PulseTemplateTest(unittest.TestCase):
 
     def test_create_program(self) -> None:
         template = PulseTemplateStub(defined_channels={'A'}, parameter_names={'foo'})
-        parameters = {'foo': ConstantParameter(2.126), 'bar': -26.2, 'hugo': 'exp(sin(pi/2))', 'append_a_child': '1'}
+        parameters = {'foo': 2.126, 'bar': -26.2, 'hugo': 'exp(sin(pi/2))', 'append_a_child': '1'}
         previous_parameters = parameters.copy()
         measurement_mapping = {'M': 'N'}
         previos_measurement_mapping = measurement_mapping.copy()
@@ -312,7 +313,10 @@ class PulseTemplateTest(unittest.TestCase):
 
     def test_create_program_none(self) -> None:
         template = PulseTemplateStub(defined_channels={'A'}, parameter_names={'foo'})
-        parameters = {'foo': ConstantParameter(2.126), 'bar': -26.2, 'hugo': 'exp(sin(pi/2))'}
+        with self.assertWarns(DeprecationWarning):
+            # just a test that old stuff wont break. remove in the future
+            constant_parameter = ConstantParameter(2.126)
+        parameters = {'foo': constant_parameter, 'bar': -26.2, 'hugo': 'exp(sin(pi/2))'}
         measurement_mapping = {'M': 'N'}
         channel_mapping = {'A': 'B'}
         volatile = {'hugo'}

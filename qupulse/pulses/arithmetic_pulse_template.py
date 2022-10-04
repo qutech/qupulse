@@ -5,12 +5,12 @@ import warnings
 import operator
 
 import sympy
-import cached_property
 
 from qupulse.expressions import ExpressionScalar, ExpressionLike
 from qupulse.serialization import Serializer, PulseRegistryType
 from qupulse.parameter_scope import Scope
 
+from qupulse.utils import cached_property
 from qupulse.utils.types import ChannelID
 from qupulse.pulses.measurement import MeasurementWindow
 from qupulse.pulses.pulse_template import AtomicPulseTemplate, PulseTemplate
@@ -145,11 +145,15 @@ class ArithmeticAtomicPulseTemplate(AtomicPulseTemplate):
         if lhs is None:
             return ArithmeticWaveform.rhs_only_map[self.arithmetic_operator](rhs)
         else:
-            return ArithmeticWaveform(lhs, self.arithmetic_operator, rhs)
+            return ArithmeticWaveform.from_operator(lhs, self.arithmetic_operator, rhs)
 
     def get_measurement_windows(self,
                                 parameters: Dict[str, Real],
                                 measurement_mapping: Dict[str, Optional[str]]) -> List[MeasurementWindow]:
+        import inspect
+        if not getattr(inspect.getmodule(inspect.stack()[1][0]), '__name__', '').startswith('qupulse'):
+            warnings.warn("This is only a hack until https://github.com/qutech/qupulse/issues/578 is resolved. "
+                          "Do not call this method directly", category=DeprecationWarning, stacklevel=2)
         measurements = super().get_measurement_windows(parameters=parameters,
                                                        measurement_mapping=measurement_mapping)
         measurements.extend(self.lhs.get_measurement_windows(parameters=parameters,
@@ -159,7 +163,7 @@ class ArithmeticAtomicPulseTemplate(AtomicPulseTemplate):
                                                              measurement_mapping=measurement_mapping))
         return measurements
 
-    def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
+    def get_serialization_data(self, serializer: Optional[Serializer] = None) -> Dict[str, Any]:
         data = super().get_serialization_data(serializer)
         data['rhs'] = self.rhs
         data['lhs'] = self.lhs
@@ -180,7 +184,7 @@ class ArithmeticAtomicPulseTemplate(AtomicPulseTemplate):
             return '(%r %r %r)' % (self.lhs, self.arithmetic_operator, self.rhs)
 
     @classmethod
-    def deserialize(cls, serializer: Optional[Serializer]=None, **kwargs) -> 'ArithmeticAtomicPulseTemplate':
+    def deserialize(cls, serializer: Optional[Serializer] = None, **kwargs) -> 'ArithmeticAtomicPulseTemplate':
         if serializer:
             raise NotImplementedError('Compatibility to old serialization routines not implemented for new type')
 
@@ -194,7 +198,7 @@ class ArithmeticPulseTemplate(PulseTemplate):
                  rhs: Union[PulseTemplate, ExpressionLike, Mapping[ChannelID, ExpressionLike]],
                  *,
                  identifier: Optional[str] = None):
-        """Allowed oeprations
+        """Allowed operations
 
         scalar + pulse_template
         scalar - pulse_template
@@ -305,7 +309,7 @@ class ArithmeticPulseTemplate(PulseTemplate):
     @property
     def rhs(self):
         return self._rhs
-    
+
     def _get_transformation(self,
                             parameters: Mapping[str, Real],
                             channel_mapping: Mapping[ChannelID, ChannelID]) -> Transformation:
@@ -378,7 +382,7 @@ class ArithmeticPulseTemplate(PulseTemplate):
         transformation = self._get_transformation(parameters=parameters,
                                                   channel_mapping=channel_mapping)
 
-        return TransformingWaveform(inner_waveform, transformation=transformation)
+        return TransformingWaveform.from_transformation(inner_waveform, transformation=transformation)
 
     def __repr__(self):
         if any(v for k, v in super().get_serialization_data().items() if k != '#type'):
@@ -472,7 +476,7 @@ class ArithmeticPulseTemplate(PulseTemplate):
     def measurement_names(self) -> Set[str]:
         return self._pulse_template.measurement_names
 
-    @cached_property.cached_property
+    @cached_property
     def _scalar_operand_parameters(self) -> FrozenSet[str]:
         if isinstance(self._scalar, dict):
             return frozenset(*(value.variables for value in self._scalar.values()))
@@ -482,6 +486,18 @@ class ArithmeticPulseTemplate(PulseTemplate):
     @property
     def parameter_names(self) -> Set[str]:
         return self._pulse_template.parameter_names.union(self._scalar_operand_parameters)
+
+    def get_measurement_windows(self,
+                                parameters: Dict[str, Real],
+                                measurement_mapping: Dict[str, Optional[str]]) -> List[MeasurementWindow]:
+        measurements = []
+        if isinstance(self.lhs, PulseTemplate):
+            measurements.extend(self.lhs.get_measurement_windows(parameters=parameters,
+                                                                 measurement_mapping=measurement_mapping))
+        if isinstance(self.rhs, PulseTemplate):
+            measurements.extend(self.rhs.get_measurement_windows(parameters=parameters,
+                                                                 measurement_mapping=measurement_mapping))
+        return measurements
 
 
 def try_operation(lhs: Union[PulseTemplate, ExpressionLike, Mapping[ChannelID, ExpressionLike]],
