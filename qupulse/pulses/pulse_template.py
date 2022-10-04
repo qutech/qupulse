@@ -97,14 +97,14 @@ class PulseTemplate(Serializable):
         """Returns an expression giving the integral over the pulse."""
 
     @property
-    @abstractmethod
     def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
         """Values of defined channels at t == 0"""
+        raise NotImplementedError(f"The pulse template of type {type(self)} does not implement `initial_values`")
 
     @property
-    @abstractmethod
     def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
         """Values of defined channels at t == self.duration"""
+        raise NotImplementedError(f"The pulse template of type {type(self)} does not implement `final_values`")
 
     def create_program(self, *,
                        parameters: Optional[Mapping[str, Union[Expression, str, Number, ConstantParameter]]]=None,
