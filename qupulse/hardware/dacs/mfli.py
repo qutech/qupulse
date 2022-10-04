@@ -164,9 +164,9 @@ class MFLIDAQ(DAC):
 
 		self.reset_daq_module()
 
-	def reset_daq_module():
+	def reset_daq_module(self):
 		self.daq.finish()
-		self.daq.close()
+		self.daq.clear()
 		self._init_daq_module()
 
 	def register_measurement_channel(self, program_name:str=None, channel_path:Union[str, List[str]]=[], window_name:str=None):
@@ -383,7 +383,7 @@ class MFLIDAQ(DAC):
 			# # if the program is changed, the not returned data is removed to not have conflicts with the data parsing operations. The cleaner way would be to keep track of the time the program is changed.
 			# if self.currently_set_program != program_name:
 			# 	self.read()
-			# 	self.daq.close()
+			# 	self.daq.clear()
 			# 	self._init_daq_module()
 			# TODO TODO TODO TODO TODO TODO TODO TODO
 
