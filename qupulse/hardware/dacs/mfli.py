@@ -40,13 +40,13 @@ import numpy as np
 [X] extract window things
 [X] rethink handling different sample rates!
 [X] cut obtained data to fit into requested windows
-[ ] provide interface for changing trigger settings
+[X] provide interface for changing trigger settings
 [X] print information about how long the measurement is expected to run
-[ ] implement multiple triggers (using rows) (and check how this actually behaves)
+[X] implement multiple triggers (using rows) (and check how this actually behaves)
 	[X] count
-	[ ] endless
-		[ ] check how that would behave. Does that overwrite or shift things?
-	[ ] change in trigger input port
+	[X] endless
+		[X] check how that would behave. Does that overwrite or shift things?
+	[X] change in trigger input port
 [X] implement setting recording channel (could that be already something inside qupulse?)
 [ ] see why for high sample rates (e.g. 857.1k) things crash or don't behave as expected
 [ ] Implement yield for not picked up data (read() was not called)
@@ -141,6 +141,7 @@ class MFLIDAQ(DAC):
 		self.assumed_minimal_sample_rate = None
 
 		self.daq_read_return = {}
+		self.read_memory={} # self.read_memory[<path/channel>]:List[xr.DataArray]
 
 		if reset:
 			# Create a base configuration: Disable all available outputs, awgs, demods, scopes,...
@@ -153,15 +154,20 @@ class MFLIDAQ(DAC):
 		self.daq = self.api_session.dataAcquisitionModule()
 		self.daq.set('device', self.serial)
 	
-	def reset_device(self):
+	def reset(self):
 		""" This function resets the device to a known default configuration.
 		"""
+		self.read_memory = {}
+
 		zhinst.utils.disable_everything(self.api_session, self.serial)
 		self.clear()
 
+		self.reset_daq_module()
+
+	def reset_daq_module():
+		self.daq.finish()
 		self.daq.close()
 		self._init_daq_module()
-		
 
 	def register_measurement_channel(self, program_name:str=None, channel_path:Union[str, List[str]]=[], window_name:str=None):
 		""" This function saves the channel one wants to record with a certain program
@@ -199,7 +205,7 @@ class MFLIDAQ(DAC):
 		# for k, v in windows.items():
 		# 	self.set_measurement_mask(program_name=program_name, mask_name=k, begins=v[0], lengths=v[1])
 
-	def register_trigger_settings(self, program_name:str, trigger_input:Union[str, None]=None, edge:str='rising', number_of_triggers_to_buffer:int=1, level:float=0.1, delay:float=-1e-3, post_delay:float=1e-3, other_settings:Dict[str, Union[str, int, float]]={}):
+	def register_trigger_settings(self, program_name:str, trigger_input:Union[str, None]=None, edge:str='rising', number_of_triggers_to_buffer:int=1, level:float=0.1, delay:float=-1e-3, post_delay:float=1e-3, count:bool=np.inf, other_settings:Dict[str, Union[str, int, float]]={}):
 		"""
 		Parameters
 		----------
@@ -221,6 +227,8 @@ class MFLIDAQ(DAC):
 			"level": level,
 			"delay": delay,
 			"post_delay": post_delay,
+			"endless": count==np.inf,
+			"count": 0 if count==np.inf else count,
 			"other_settings": other_settings,
 		}
 
@@ -335,7 +343,7 @@ class MFLIDAQ(DAC):
 		""" Returns the channels to be measured for a given window
 		"""
 		if window_name is None:
-			window_name = list(self.programs[program_name].keys())
+			window_name = list(self.programs[program_name]["windows"].keys())
 		if not isinstance(window_name, list):
 			window_name = [window_name]
 
@@ -370,6 +378,14 @@ class MFLIDAQ(DAC):
 
 			self.daq.finish()
 			self.daq.unsubscribe('*')
+
+			# TODO TODO TODO TODO TODO TODO TODO TODO
+			# # if the program is changed, the not returned data is removed to not have conflicts with the data parsing operations. The cleaner way would be to keep track of the time the program is changed.
+			# if self.currently_set_program != program_name:
+			# 	self.read()
+			# 	self.daq.close()
+			# 	self._init_daq_module()
+			# TODO TODO TODO TODO TODO TODO TODO TODO
 
 			for c in self.programs[program_name]["all_channels"]:
 
@@ -444,22 +460,21 @@ class MFLIDAQ(DAC):
 				# selecting the trigger channel
 				if ts["trigger_input"] is not None:
 
-					self.daq.set('endless', 1)
-					self.daq.set('count', rows) # defines how many triggers are to be recorded in single mode i.e. endless==0
+					if ts["endless"]:
+						self.daq.set('endless', 1)
+					else:
+						self.daq.set('endless', 0)
+						self.daq.set('count', ts["count"]) # defines how many triggers are to be recorded in single mode i.e. endless==0
 
 					if "trig" in ts["trigger_input"].lower():
-						print(f"SETTING TRIGMODE 6")
 						self.daq.set("type", 6)
 					else:
-						print(f"SETTING TRIGMODE 1")
 						self.daq.set("type", 1)
 
 					self.daq.set("triggernode", ts["trigger_input"])
 					self.daq.subscribe(ts["trigger_input"])
-					print(f"SETTING TRIGGERNODE: {('triggernode', ts['trigger_input'])}")
 
 					edge_key = ["rising", "falling", "both"].index(ts["edge"])
-					print(f"using trigger edge: {edge_key}")
 					self.daq.set("edge", edge_key)
 					
 					self.daq.set("level", ts["level"])
@@ -536,6 +551,7 @@ class MFLIDAQ(DAC):
 		"""Clears all registered programs."""
 
 		self.unarm_program(program_name=None)
+		self.read_memory = {}
 
 	def _parse_data(self, recorded_data, program_name:str):
 		""" This function parses the recorded data and extracts the measurement masks and applies optional operations
@@ -655,9 +671,91 @@ class MFLIDAQ(DAC):
 		if len(recorded_data) == 0:
 			warnings.warn(f"No data has been recorded!")
 
+		# update measurements in local memory
+		for k, v in recorded_data.items():
+			self.read_memory.setdefault(k, [])
+			# for all the measurement that we just read of the device:
+			for m in v:
+				# get the time stamp of when the measurement was created
+				crts = m.attrs["createdtimestamp"][0]
+				
+				# now look, if that measurement is measurement is already in the memory
+				for i, e in enumerate(self.read_memory[k]):
+					if e.attrs["createdtimestamp"][0] == crts:
+						# then we can overwrite that.
+						# TODO don't overwrite that. Only replace nan values
+						self.read_memory[k][i] = m
+						break
+				else:
+					# if we did not find that element in the list, we append it.
+					self.read_memory[k].append(m)
+
+			# sort the element by their createdtimestamp
+			order = np.argsort([e.attrs["createdtimestamp"][0] for e in self.read_memory[k]])
+			self.read_memory[k] = [self.read_memory[k][o] for o in order]
+			# CAUTION this only sorts the ones that have been updated. This might not be intended!!!
+
+
 		if return_raw:
 			return recorded_data
-		else:
-			if len(recorded_data) == 0:
+
+		# now we package everything in self.read_memory, such that the elements with one creation time stamp are processed at once.
+		# If for every self._get_channels_for_window(self.currently_set_program, None) some measurement is present: try parsing the data. If that was successful: remove these elements from the read_memeory and return (or yield) the results.
+
+		# TODO this might lead to leaving some measurements in the memory that will never be used, if they don't get related with measurements from the other channels of the program.
+
+		creation_ts = {k:[e.attrs["createdtimestamp"][0] for e in v] for k, v in self.read_memory.items()}
+		if len(creation_ts)==0:
+			# Then we have nothing to process
+			return None
+		all_ts = np.unique(np.concatenate(list(creation_ts.values())))
+		assert len(all_ts.shape) == 1
+		if len(all_ts)==0:
+			# Then we have nothing to process
+			return None
+
+		channels_to_measure = self._get_channels_for_window(self.currently_set_program, None)
+		channels_to_measure = [f"/{self.serial}/{c}" for c in channels_to_measure]
+
+		things_to_remove = {}
+
+		results = []
+
+		for ts in all_ts:
+			contained = [k for k, v in creation_ts.items() if ts in v]
+			if all([(c in contained) for c in channels_to_measure]):
+				# then we have all measurement for that shot
+				that_shot = {}
+				_indexs = [creation_ts[c].index(ts) for c in channels_to_measure]
+				
+				for c, i in zip(channels_to_measure, _indexs):
+					that_shot[c] = [self.read_memory[c][i]] # Here the inner list could be removed if one would remove the old functionality from the _parse_data function.
+
+				try:
+					that_shot_parsed = self._parse_data(that_shot, self.currently_set_program)
+				# except KeyError:
+				# 	print(f"Error")
+				# 	warnings.warn(f"Parsing some data did not work. This might fix itself later, when the missing data is retrieved from the device. If not, clearing the memory, resetting the daq_module (i.e. self.reset_daq_module()), or setting the field to the selected program (i.e., self.currently_set_program=None) to None and then rearming the original program might work. For debugging purposes, one might want to call the measure function with the return_raw=True parameter.")
+				except:
+					raise
+				else:
+					# the parsing worked, we can now remove the data from the memory
+					results.append(that_shot_parsed)
+					for c, i in zip(channels_to_measure, _indexs):
+						things_to_remove.setdefault(c, []).append(i)
+
+			else:
+				pass
+				# TODO do something here. Maybe raise a warning.
+
+		# then we can remove the element that worked:
+		for k, v in things_to_remove.items():
+			v.sort()
+			assert (len(v)==0) or (v[0] <= v[-1])
+			for i in reversed(v):
+				self.read_memory[k].pop(i)
+
+		if not return_raw:
+			if len(results) == 0:
 				return None
-			return self._parse_data(recorded_data, self.currently_set_program)
+			return results
