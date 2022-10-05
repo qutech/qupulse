@@ -82,6 +82,14 @@ class PulseTemplateStub(PulseTemplate):
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
         raise NotImplementedError()
 
+    @property
+    def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        raise NotImplementedError()
+
+    @property
+    def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        raise NotImplementedError()
+
 
 def get_appending_internal_create_program(waveform=DummyWaveform(),
                                           always_append=False,
@@ -445,4 +453,3 @@ class AtomicPulseTemplateTests(unittest.TestCase):
                                               to_single_waveform=set(),
                                               global_transformation=None)
         self.assertEqual(Loop(), program)
-

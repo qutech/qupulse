@@ -185,6 +185,8 @@ class DummyPulseTemplate(AtomicPulseTemplate):
                  measurement_names: Set[str] = set(),
                  measurements: list=list(),
                  integrals: Dict[ChannelID, ExpressionScalar]=None,
+                 initial_values: Dict[ChannelID, Any]=None,
+                 final_values: Dict[ChannelID, Any]=None,
                  program: Optional[Loop]=None,
                  identifier=None,
                  registry=None) -> None:
@@ -207,6 +209,16 @@ class DummyPulseTemplate(AtomicPulseTemplate):
         self.create_program_calls = []
         self._program = program
         self._register(registry=registry)
+
+        if initial_values is None:
+            self._initial_values = {ch: ExpressionScalar(0) for ch in self.defined_channels}
+        else:
+            self._initial_values = {ch: ExpressionScalar(val) for ch, val in initial_values.items()}
+
+        if final_values is None:
+            self._final_values = {ch: ExpressionScalar(0) for ch in self.defined_channels}
+        else:
+            self._final_values = {ch: ExpressionScalar(val) for ch, val in final_values.items()}
 
         if integrals is not None:
             assert isinstance(integrals, Mapping)
@@ -275,5 +287,13 @@ class DummyPulseTemplate(AtomicPulseTemplate):
         assert self.duration != 0
         t = self._AS_EXPRESSION_TIME
         duration = self.duration.underlying_expression
-        return {ch: ExpressionScalar(integral.underlying_expression*t/duration)
+        return {ch: ExpressionScalar(integral.underlying_expression*t/duration**2 * 2)
                 for ch, integral in self.integral.items()}
+
+    @property
+    def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        return self._initial_values
+
+    @property
+    def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        return self._final_values

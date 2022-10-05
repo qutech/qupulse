@@ -104,9 +104,9 @@ class ArithmeticAtomicPulseTemplateTest(unittest.TestCase):
         integrals_lhs = dict(a=ExpressionScalar('a_lhs'), b=ExpressionScalar('b'))
         integrals_rhs = dict(a=ExpressionScalar('a_rhs'), c=ExpressionScalar('c'))
 
-        lhs = DummyPulseTemplate(duration=4, defined_channels={'a', 'b'},
+        lhs = DummyPulseTemplate(duration='t_dur', defined_channels={'a', 'b'},
                                  parameter_names={'x', 'y'}, integrals=integrals_lhs)
-        rhs = DummyPulseTemplate(duration=4, defined_channels={'a', 'c'},
+        rhs = DummyPulseTemplate(duration='t_dur', defined_channels={'a', 'c'},
                                  parameter_names={'x', 'z'}, integrals=integrals_rhs)
 
         expected_plus = dict(a=ExpressionScalar('a_lhs + a_rhs'),
@@ -118,14 +118,26 @@ class ArithmeticAtomicPulseTemplateTest(unittest.TestCase):
         self.assertEqual(expected_plus, (lhs + rhs).integral)
         self.assertEqual(expected_minus, (lhs - rhs).integral)
 
+    def test_initial_final_values(self):
+        lhs = DummyPulseTemplate(initial_values={'A': .1, 'B': 'b*2'}, final_values={'A': .2, 'B': 'b / 2'})
+        rhs = DummyPulseTemplate(initial_values={'A': -4, 'B': 'b*2 + 1'}, final_values={'A': .2, 'B': '-b / 2 + c'})
+
+        minus = lhs - rhs
+        plus = lhs + rhs
+        self.assertEqual({'A': 4.1, 'B': -1}, minus.initial_values)
+        self.assertEqual({'A': 0, 'B': 'b - c'}, minus.final_values)
+
+        self.assertEqual({'A': -3.9, 'B': 'b*4 + 1'}, plus.initial_values)
+        self.assertEqual({'A': .4, 'B': 'c'}, plus.final_values)
+
     def test_as_expression(self):
         integrals_lhs = dict(a=ExpressionScalar('a_lhs'), b=ExpressionScalar('b'))
         integrals_rhs = dict(a=ExpressionScalar('a_rhs'), c=ExpressionScalar('c'))
 
         duration = 4
         t = DummyPulseTemplate._AS_EXPRESSION_TIME
-        expr_lhs = {ch: i * t / duration for ch, i in integrals_lhs.items()}
-        expr_rhs = {ch: i * t / duration for ch, i in integrals_rhs.items()}
+        expr_lhs = {ch: i * t / duration**2 * 2 for ch, i in integrals_lhs.items()}
+        expr_rhs = {ch: i * t / duration**2 * 2 for ch, i in integrals_rhs.items()}
 
         lhs = DummyPulseTemplate(duration=duration, defined_channels={'a', 'b'},
                                  parameter_names={'x', 'y'}, integrals=integrals_lhs)
@@ -470,6 +482,16 @@ class ArithmeticPulseTemplateTest(unittest.TestCase):
                         v=ExpressionScalar('vi / 2.2'),
                         w=ExpressionScalar('wi'))
         self.assertEqual(expected, ArithmeticPulseTemplate(pt, '/', mapping).integral)
+
+    def test_initial_values(self):
+        lhs = DummyPulseTemplate(initial_values={'A': .3, 'B': 'b'}, defined_channels={'A', 'B'})
+        apt = lhs + 'a'
+        self.assertEqual({'A': 'a + 0.3', 'B': 'b + a'}, apt.initial_values)
+
+    def test_final_values(self):
+        lhs = DummyPulseTemplate(final_values={'A': .3, 'B': 'b'}, defined_channels={'A', 'B'})
+        apt = lhs - 'a'
+        self.assertEqual({'A': '-a + .3', 'B': 'b - a'}, apt.final_values)
 
     def test_simple_attributes(self):
         lhs = DummyPulseTemplate(defined_channels={'a', 'b'}, duration=ExpressionScalar('t_dur'),

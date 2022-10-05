@@ -190,9 +190,9 @@ class AtomicMultiChannelPulseTemplateTest(unittest.TestCase):
                DummyPulseTemplate(duration='t1', defined_channels={'B', 'C'},
                                   integrals={'B': ExpressionScalar('t1-t0*3.1'), 'C': ExpressionScalar('l')})]
         pulse = AtomicMultiChannelPulseTemplate(*sts)
-        self.assertEqual({'A': ExpressionScalar(sympify('(2+k) / t1') * pulse._AS_EXPRESSION_TIME),
-                          'B': ExpressionScalar(sympify('(t1-t0*3.1)/t1') * pulse._AS_EXPRESSION_TIME),
-                          'C': ExpressionScalar(sympify('l/t1') * pulse._AS_EXPRESSION_TIME)},
+        self.assertEqual({'A': sts[0]._as_expression()['A'],
+                          'B': sts[1]._as_expression()['B'],
+                          'C': sts[1]._as_expression()['C']},
                          pulse._as_expression())
 
 
@@ -375,6 +375,16 @@ class ParallelConstantChannelPulseTemplateTests(unittest.TestCase):
                              'Y': ExpressionScalar('c*t1'),
                              'Z': ExpressionScalar('a*t1')}
         self.assertEqual(expected_integral, pccpt.integral)
+
+    def test_initial_values(self):
+        dpt = DummyPulseTemplate(initial_values={'A': 'a', 'B': 'b'})
+        par = ParallelConstantChannelPulseTemplate(dpt, {'B': 'b2', 'C': 'c'})
+        self.assertEqual({'A': 'a', 'B': 'b2', 'C': 'c'}, par.initial_values)
+
+    def test_final_values(self):
+        dpt = DummyPulseTemplate(final_values={'A': 'a', 'B': 'b'})
+        par = ParallelConstantChannelPulseTemplate(dpt, {'B': 'b2', 'C': 'c'})
+        self.assertEqual({'A': 'a', 'B': 'b2', 'C': 'c'}, par.final_values)
 
     def test_get_overwritten_channels_values(self):
         template = DummyPulseTemplate(duration='t1', defined_channels={'X', 'Y'}, parameter_names={'a', 'b'},

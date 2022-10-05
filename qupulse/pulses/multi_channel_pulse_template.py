@@ -194,6 +194,20 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
             expressions.update(subtemplate._as_expression())
         return expressions
 
+    @property
+    def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        values = {}
+        for subtemplate in self._subtemplates:
+            values.update(subtemplate.initial_values)
+        return values
+
+    @property
+    def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        values = {}
+        for subtemplate in self._subtemplates:
+            values.update(subtemplate.final_values)
+        return values
+
 
 class ParallelConstantChannelPulseTemplate(PulseTemplate):
     def __init__(self,
@@ -279,6 +293,18 @@ class ParallelConstantChannelPulseTemplate(PulseTemplate):
         for channel, value in self._overwritten_channels.items():
             integral[channel] = value * duration
         return integral
+
+    @property
+    def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        values = self._template.initial_values
+        values.update(self._overwritten_channels)
+        return values
+
+    @property
+    def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        values = self._template.final_values
+        values.update(self._overwritten_channels)
+        return values
 
     def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
         if serializer:
