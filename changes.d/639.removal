@@ -1,2 +1,0 @@
-Add frozendict dependency to replace handwritten solution. Not having it installed will break in a future release
-when the old implementation is removed.
