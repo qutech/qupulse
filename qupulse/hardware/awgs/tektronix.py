@@ -25,6 +25,8 @@ from qupulse.utils import pairwise
 
 __all__ = ['TektronixAWG']
 
+class TektronixException(Exception):
+    pass
 
 class WaveformEntry:
     def __init__(self, name: str, length: int, waveform: tek_awg.Waveform, timestamp):
@@ -811,3 +813,12 @@ class TektronixAWG(AWG):
             self.logger.info("Running program '%s'", program_name)
             self.device.jump_to_sequence_element(program_index)
             self.device.wait_until_commands_executed()
+            
+    def amplitude(self, channel) -> float:
+        if channel not in (1, 2, 3, 4):
+            raise TektronixException('Invalid channel: {}'.format(channel))
+       
+        return self._device.get_amplitude(channel)
+       
+            
+      
