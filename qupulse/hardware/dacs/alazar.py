@@ -1,3 +1,4 @@
+import dataclasses
 from typing import Dict, Any, Optional, Tuple, List, Iterable, Callable, Sequence
 from collections import defaultdict
 import copy
@@ -15,18 +16,50 @@ from atsaverage.masks import CrossBufferMask, Mask
 from qupulse.utils.types import TimeType
 from qupulse.hardware.dacs.dac_base import DAC
 from qupulse.hardware.util import traced
-
+from qupulse.utils.performance import time_windows_to_samples
 
 logger = logging.getLogger(__name__)
 
 
-class AlazarProgram:
-    def __init__(self):
-        self._sample_factor = None
-        self._masks = {}
-        self.operations = []
-        self._total_length = None
-        self._auto_rearm_count = 1
+def _windows_to_samples(begins: np.ndarray, lengths: np.ndarray,
+                        sample_rate: TimeType) -> Tuple[np.ndarray, np.ndarray]:
+    return time_windows_to_samples(begins, lengths, float(sample_rate))
+
+
+@dataclasses.dataclass
+class AcquisitionProgram:
+    _sample_rate: Optional[TimeType] = dataclasses.field(default=None)
+    _masks: dict = dataclasses.field(default_factory=dict)
+
+    @property
+    def sample_rate(self) -> Optional[TimeType]:
+        return self._sample_rate
+
+    def set_measurement_mask(self, mask_name: str, sample_rate: TimeType,
+                             begins: np.ndarray, lengths: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """Raise error if sample factor has changed"""
+        if self._sample_rate is None:
+            self._sample_rate = sample_rate
+        elif sample_rate != self.sample_rate:
+            raise RuntimeError('class AcquisitionProgram has already masks with differing sample rate.')
+
+        assert begins.dtype == float and lengths.dtype == float
+
+        begins, lengths = self._masks[mask_name] = _windows_to_samples(begins, lengths, sample_rate)
+
+        return begins, lengths
+
+    def clear_masks(self):
+        self._masks.clear()
+        self._sample_rate = None
+
+
+@dataclasses.dataclass
+class AlazarProgram(AcquisitionProgram):
+    operations: Sequence = dataclasses.field(default_factory=list)
+    _total_length: Optional[int] = dataclasses.field(default=None)
+    _auto_rearm_count: int = dataclasses.field(default=1)
+    buffer_strategy: Optional = dataclasses.field(default=None)
 
     def masks(self, mask_maker: Callable[[str, np.ndarray, np.ndarray], Mask]) -> List[Mask]:
         return [mask_maker(mask_name, *data) for mask_name, data in self._masks.items()]
@@ -60,39 +93,6 @@ class AlazarProgram:
         if not 0 < trigger_count < 2**64:
             raise ValueError("Trigger count has to be in the interval [0, 2**64-1]")
         self._auto_rearm_count = trigger_count
-
-    def clear_masks(self):
-        self._masks.clear()
-
-    @property
-    def sample_factor(self) -> Optional[TimeType]:
-        return self._sample_factor
-
-    def set_measurement_mask(self, mask_name: str, sample_factor: TimeType,
-                             begins: np.ndarray, lengths: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        """Raise error if sample factor has changed"""
-        if self._sample_factor is None:
-            self._sample_factor = sample_factor
-
-        elif sample_factor != self._sample_factor:
-            raise RuntimeError('class AlazarProgram has already masks with differing sample factor')
-
-        assert begins.dtype == float and lengths.dtype == float
-
-        # optimization potential here (hash input?)
-        begins = np.rint(begins * float(sample_factor)).astype(dtype=np.uint64)
-        lengths = np.floor_divide(lengths * float(sample_factor.numerator), float(sample_factor.denominator)).astype(dtype=np.uint64)
-
-        sorting_indices = np.argsort(begins)
-        begins = begins[sorting_indices]
-        lengths = lengths[sorting_indices]
-
-        begins.flags.writeable = False
-        lengths.flags.writeable = False
-
-        self._masks[mask_name] = begins, lengths
-
-        return begins, lengths
 
     def iter(self, mask_maker):
         yield self.masks(mask_maker)
@@ -294,19 +294,19 @@ class AlazarCard(DAC):
         return mask
 
     def set_measurement_mask(self, program_name, mask_name, begins, lengths) -> Tuple[np.ndarray, np.ndarray]:
-        sample_factor = TimeType.from_fraction(int(self.default_config.captureClockConfiguration.numeric_sample_rate(self.card.model)), 10**9)
-        return self._registered_programs[program_name].set_measurement_mask(mask_name, sample_factor, begins, lengths)
+        sample_rate = TimeType.from_fraction(int(self.default_config.captureClockConfiguration.numeric_sample_rate(self.card.model)), 10**9)
+        return self._registered_programs[program_name].set_measurement_mask(mask_name, sample_rate, begins, lengths)
 
     def register_measurement_windows(self,
                                      program_name: str,
                                      windows: Dict[str, Tuple[np.ndarray, np.ndarray]]) -> None:
         program = self._registered_programs[program_name]
-        sample_factor = TimeType.from_fraction(int(self.default_config.captureClockConfiguration.numeric_sample_rate(self.card.model)),
+        sample_rate = TimeType.from_fraction(int(self.default_config.captureClockConfiguration.numeric_sample_rate(self.card.model)),
                                                10 ** 9)
         program.clear_masks()
 
         for mask_name, (begins, lengths) in windows.items():
-            program.set_measurement_mask(mask_name, sample_factor, begins, lengths)
+            program.set_measurement_mask(mask_name, sample_rate, begins, lengths)
 
     def register_operations(self, program_name: str, operations) -> None:
         self._registered_programs[program_name].operations = operations
@@ -323,10 +323,10 @@ class AlazarCard(DAC):
             config.masks, config.operations, total_record_size = self._registered_programs[program_name].iter(
                 self._make_mask)
 
-            sample_rate = config.captureClockConfiguration.numeric_sample_rate(self.card.model)
+            sample_rate_in_hz = config.captureClockConfiguration.numeric_sample_rate(self.card.model)
 
             # sample rate in GHz
-            sample_factor = TimeType.from_fraction(sample_rate, 10 ** 9)
+            sample_rate = TimeType.from_fraction(sample_rate_in_hz, 10 ** 9)
 
             if not config.operations:
                 raise RuntimeError("No operations: Arming program without operations is an error as there will "
@@ -335,9 +335,9 @@ class AlazarCard(DAC):
             elif not config.masks:
                 raise RuntimeError("No masks although there are operations in program: %r" % program_name)
 
-            elif self._registered_programs[program_name].sample_factor != sample_factor:
+            elif self._registered_programs[program_name].sample_rate != sample_rate:
                 raise RuntimeError("Masks were registered with a different sample rate {}!={}".format(
-                    self._registered_programs[program_name].sample_factor, sample_factor))
+                    self._registered_programs[program_name].sample_rate, sample_rate))
 
             assert total_record_size > 0
 
