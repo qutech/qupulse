@@ -112,7 +112,7 @@ class RangeScope(Scope):
                     and self._index_value == other._index_value
                     and self._inner == other._inner)
         except AttributeError:
-            return False
+            return NotImplemented
 
     def __contains__(self, item):
         return item == self._index_name or item in self._inner
