@@ -2,6 +2,42 @@
 
 .. towncrier release notes start
 
+qupulse 0.7 (2022-10-05)
+========================
+
+Features
+--------
+
+- Add optional numba uses in some cases. (`#501 <https://github.com/qutech/qupulse/issues/501>`_)
+- Add `initial_values` and `final_values` attributes to `PulseTemplate`.
+
+  This allows pulse template construction that depends on features of arbitrary existing pulses i.e. like extension until
+  a certain length. (`#549 <https://github.com/qutech/qupulse/issues/549>`_)
+- Support sympy 1.9 (`#615 <https://github.com/qutech/qupulse/issues/615>`_)
+- Add option to automatically reduce the sample rate of HDAWG playback for piecewise constant pulses.
+  Use `qupulse._program.seqc.WaveformPlayback.ENABLE_DYNAMIC_RATE_REDUCTION` to enable it. (`#622 <https://github.com/qutech/qupulse/issues/622>`_)
+- Add a TimeReversalPT. (`#635 <https://github.com/qutech/qupulse/issues/635>`_)
+- Add specialied parameter Scope for ForLoopPT. This increases performance by roughly a factor of 3 for long ranges! (`#642 <https://github.com/qutech/qupulse/issues/642>`_)
+- Add sympy 1.10 support and make `ExpressionVector` hashable. (`#645 <https://github.com/qutech/qupulse/issues/645>`_)
+- `Serializable` is now comparable via it's `get_serialized_data`. `PulseTemplate` implements `Hashable` via the same. (`#653 <https://github.com/qutech/qupulse/issues/653>`_)
+- Add an interface that uses `atsaverage.config2`. (`#686 <https://github.com/qutech/qupulse/issues/686>`_)
+
+
+Bugfixes
+--------
+
+- `floor` will now return an integer in lambda expressions with numpy to allow usage in ForLoopPT range expression. (`#612 <https://github.com/qutech/qupulse/issues/612>`_)
+
+
+Deprecations and Removals
+-------------------------
+
+- Drop `cached_property` dependency for python>=3.8. (`#638 <https://github.com/qutech/qupulse/issues/638>`_)
+- Add frozendict dependency to replace handwritten solution. Not having it installed will break in a future release
+  when the old implementation is removed. (`#639 <https://github.com/qutech/qupulse/issues/639>`_)
+- Drop python 3.6 support. (`#656 <https://github.com/qutech/qupulse/issues/656>`_)
+
+
 qupulse 0.6 (2021-07-08)
 ==========================
 
