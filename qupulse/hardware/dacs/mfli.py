@@ -3,13 +3,14 @@
 May lines of code have been adapted from the zihdawg driver.
 
 """
-from typing import Dict, Tuple, Iterable, Union, List, Set
+from typing import Dict, Tuple, Iterable, Union, List, Set, Any
 from enum import Enum
 import warnings
 import time
 import traceback
 import xarray as xr
 import numpy as np
+import numpy.typing as npt
 
 from qupulse.utils.types import TimeType
 from qupulse.hardware.dacs.dac_base import DAC
@@ -134,14 +135,11 @@ class MFLIDAQ(DAC):
 		self.daq = None
 		self._init_daq_module()
 
-		# self.daq.set('type', 1)
-		# self.daq.set('triggernode', '/dev3442/demods/0/sample.AuxIn0')
-		# self.daq.set('endless', 0)
-
-		self.assumed_minimal_sample_rate = None
+		self.force_update_on_arm:bool = True
+		self.assumed_minimal_sample_rate:Union[float, None] = None # in units of Sa/s
 
 		self.daq_read_return = {}
-		self.read_memory={} # self.read_memory[<path/channel>]:List[xr.DataArray]
+		self.read_memory = {} # self.read_memory[<path/channel>]:List[xr.DataArray]
 
 		if reset:
 			# Create a base configuration: Disable all available outputs, awgs, demods, scopes,...
@@ -169,7 +167,7 @@ class MFLIDAQ(DAC):
 		self.daq.clear()
 		self._init_daq_module()
 
-	def register_measurement_channel(self, program_name:str=None, channel_path:Union[str, List[str]]=[], window_name:str=None):
+	def register_measurement_channel(self, program_name:Union[str, None]=None, channel_path:Union[str, List[str]]=[], window_name:str=None):
 		""" This function saves the channel one wants to record with a certain program
 
 		Args:
@@ -183,7 +181,7 @@ class MFLIDAQ(DAC):
 			channel_path = [channel_path]
 		self.programs.setdefault(program_name, {}).setdefault("channel_mapping", {}).setdefault(window_name, set()).update(channel_path)
 
-	def register_measurement_windows(self, program_name: str, windows: Dict[str, Tuple[np.ndarray,
+	def register_measurement_windows(self, program_name:str, windows: Dict[str, Tuple[np.ndarray,
 																					   np.ndarray]]) -> None:
 		"""Register measurement windows for a given program. Overwrites previously defined measurement windows for
 		this program.
@@ -205,16 +203,28 @@ class MFLIDAQ(DAC):
 		# for k, v in windows.items():
 		# 	self.set_measurement_mask(program_name=program_name, mask_name=k, begins=v[0], lengths=v[1])
 
-	def register_trigger_settings(self, program_name:str, trigger_input:Union[str, None]=None, edge:str='rising', trigger_count:int=1, level:float=0.1, delay:float=-1e-3, post_delay:float=1e-3, count:bool=np.inf, other_settings:Dict[str, Union[str, int, float]]={}):
+	def register_trigger_settings(self, program_name:str, trigger_input:Union[str, None]=None, trigger_count:int=1, edge:str='rising', level:float=0.1, delay:float=-1e-3, post_delay:float=1e-3, measurement_count:Union[int, float]=1, other_settings:Dict[str, Union[str, int, float, Any]]={}):
 		"""
 		Parameters
 		----------
 		program_name
+			The program name to set these trigger settings for.
 		trigger_input
 			This needs to be the path to input to the lock-in that the lock-in is able to use as a trigger (without the device serial). (see https://docs.zhinst.com/pdf/LabOneProgrammingManual.pdf for more information)
-		edge
 		trigger_count
+			The number of trigger events to count for one measurement. This will later set the number of rows in one measurement
+		edge
+			The edge to look out for
+		level
+			the trigger level to look out for
+		delay
+			the delay of the start of the measurement window in relation to the time of the trigger event. Negative values will result in data being recorded before the event occurred. (in seconds)
+		post_delay
+			The duration to record for after the last measurement window. (in seconds)
+		measurement_count
+			The number of measurement to perform for one arm call. This will result in self.daq.finished() not returning true until all measurements are recorded. This will equal to trigger_count*measurement_count trigger events. The self.daq.progress() field counts the number of trigger events. If the count is set to np.inf the acquisition is not stopped after any number of triggers are received, only by calling self.stop_acquisition() or self.daq.finish(). Data, potentially incomplete and thus filled with nan, can be retrieved also in the continuous mode with the right setting of the measurement function (i.e. wait=False and fail_if_incomplete=False).  
 		other_settings
+			Other settings to set after the standard trigger settings are send to the data server / device.
 		"""
 
 		if edge not in ["rising", "falling", "both"]:
@@ -227,8 +237,8 @@ class MFLIDAQ(DAC):
 			"level": level,
 			"delay": delay,
 			"post_delay": post_delay,
-			"endless": count==np.inf,
-			"count": 0 if count==np.inf else count,
+			"endless": measurement_count==np.inf,
+			"measurement_count": 0 if measurement_count==np.inf else measurement_count,
 			"other_settings": other_settings,
 		}
 
@@ -329,7 +339,7 @@ class MFLIDAQ(DAC):
 
 			return (np.min(mask_info[0], axis=-1), np.max(mask_info[2], axis=-1))
 
-	def register_operations(self, program_name: str, operations) -> None:
+	def register_operations(self, program_name:str, operations) -> None:
 		"""Register operations that are to be applied to the measurement results.
 
 		Args:
@@ -339,7 +349,7 @@ class MFLIDAQ(DAC):
 
 		self.programs.setdefault(program_name, {}).setdefault("operations", []).append(operations)
 
-	def _get_channels_for_window(self, program_name, window_name=None):
+	def _get_channels_for_window(self, program_name:Union[str, None], window_name:Union[str, List[str], None]=None):
 		""" Returns the channels to be measured for a given window
 		"""
 		if window_name is None:
@@ -354,9 +364,18 @@ class MFLIDAQ(DAC):
 				channels.update(self.programs[program_name]["channel_mapping"][wn])
 			except KeyError:
 				try:
-					channels.update(self.programs[None]["channel_mapping"][wn])
+					channels.update(self.programs[program_name]["channel_mapping"][None])
 				except KeyError:
-					pass
+					try:
+						channels.update(self.programs[None]["channel_mapping"][wn])
+					except KeyError:
+						try:
+							channels.update(self.programs[None]["channel_mapping"][None])
+						except KeyError:
+							pass
+
+		if len(channels) == 0:
+			warnings.warn(f"No channels registered to measure with program {program_name} and window {window_name}.")
 
 		channels = set([e.lower() for e in channels])
 		return channels
@@ -370,8 +389,10 @@ class MFLIDAQ(DAC):
 
 		return "/".join(elements[:-1])
 
-	def arm_program(self, program_name: str, force:bool=True) -> None:
+	def arm_program(self, program_name: str, force:Union[bool, None]=None) -> None:
 		"""Prepare the device for measuring the given program and wait for a trigger event."""
+
+		force = force if force is not None else self.force_update_on_arm
 
 		# check if program_name specified program is selected and important parameter set to the lock-in
 		if self.currently_set_program is None or self.currently_set_program != program_name or force:
@@ -464,7 +485,7 @@ class MFLIDAQ(DAC):
 						self.daq.set('endless', 1)
 					else:
 						self.daq.set('endless', 0)
-						self.daq.set('count', ts["count"]) # defines how many triggers are to be recorded in single mode i.e. endless==0
+						self.daq.set('count', ts["measurement_count"]) # defines how many triggers are to be recorded in single mode i.e. endless==0
 
 					if "trig" in ts["trigger_input"].lower():
 						self.daq.set("type", 6)
@@ -495,7 +516,7 @@ class MFLIDAQ(DAC):
 			# set the buffer size according to the largest measurement window
 			# TODO one might be able to implement this a bit more cleverly
 			measurement_duration = np.max(list(self.programs[program_name]["windows_from_start_max"].values()))
-			measurement_duration += ts["post_delay"]
+			measurement_duration += ts["post_delay"]*1e-9
 			larges_number_of_samples = 1e-9*max_sample_rate*measurement_duration
 			larges_number_of_samples = np.ceil(larges_number_of_samples)
 			self.daq.set('grid/cols', larges_number_of_samples)
@@ -527,10 +548,9 @@ class MFLIDAQ(DAC):
 
 		self.currently_set_program = None
 
-	def force_trigger(self, program_name:str):
-		""" forces a trigger
+	def force_trigger(self, *args, **kwargs):
+		""" forces a trigger event
 		"""
-
 		self.daq.set('forcetrigger', 1)
 
 	def stop_acquisition(self):
@@ -618,7 +638,7 @@ class MFLIDAQ(DAC):
 
 		return masked_data
 
-	def measure_program(self, channels: Iterable[str] = [], wait:bool=True, timeout:float=np.inf, return_raw:bool=False, fail_if_incomplete:bool=False, fail_on_empty:bool=False) -> Union[Dict[str, List[xr.DataArray]], Dict[str, Dict[str, List[xr.DataArray]]]]:
+	def measure_program(self, channels: Iterable[str] = [], wait:bool=True, timeout:float=np.inf, return_raw:bool=False, fail_if_incomplete:bool=False, fail_on_empty:bool=False, program_name:Union[str, None]=None) -> Union[Dict[str, List[xr.DataArray]], Dict[str, Dict[str, List[xr.DataArray]]]]:
 		"""Get the last measurement's results of the specified operations/channels
 		
 		Parameters
@@ -638,12 +658,19 @@ class MFLIDAQ(DAC):
 		fail_on_empty:bool, optional
 			if one of the channels is empty, which occurred in the development process for large sample rates, an error is raised in the parsing function and this these incomplete measurements will sit in this classes memory, never to be returned. If False, the empty channels are ignored and it will be returned, what every is there.
 
+		Note
+		----
+		- There is currently no mechanism implemented to keep track of the relation between received data and underlying program (i.e. measurement windows, ...). This has to be tracked by the user!
+		- When the parameter wait=False and fail_if_incomplete=False are given, then incomplete data is parsed and returned. This can lied to receiving the same measurement multiple times. The user has to keep track of that!
+
 		"""
+
+		program_name = program_name if program_name is not None else self.currently_set_program
 
 		# wait until the data acquisition has finished
 		# TODO implement timeout
 		start_waiting = time.time()
-		while not self.daq.finished() and wait and not (time.time()-start_waiting>timeout) and not self.programs[self.currently_set_program]["trigger_settings"]["count"]==np.inf:
+		while not self.daq.finished() and wait and not (time.time()-start_waiting>timeout) and not self.programs[program_name]["trigger_settings"]["endless"]:
 			time.sleep(1)
 			print(f"Waiting for device {self.serial} to finish the acquisition...") 
 			print(f"Progress: {self.daq.progress()[0]}")
@@ -666,12 +693,19 @@ class MFLIDAQ(DAC):
 					for signal_name, signal_data in input_data.items():
 						for final_level_name, final_level_data in signal_data.items():
 							channel_name = f"/{device_name}/{input_name}/{signal_name}/{final_level_name}".lower()
-							channel_data = [xr.DataArray(
-										data=d["value"],
-										coords={'time': (['row', 'col'], d["timestamp"]/self.clockbase*1e9)},
-										dims=['row', 'col'],
-										name=channel_name,
-										attrs=d['header']) for i, d in enumerate(final_level_data)]
+							channel_data = []
+							for i, d in enumerate(final_level_data):
+								converted_timestamps = {
+									"systemtime_converted": d["systemtime"]/self.clockbase*1e9,
+									"createdtimestamp_converted": d["createdtimestamp"]/self.clockbase*1e9,
+									"changedtimestamp_converted": d["changedtimestamp"]/self.clockbase*1e9,
+								}
+								channel_data.append(xr.DataArray(
+											data=d["value"],
+											coords={'time': (['row', 'col'], d["timestamp"]/self.clockbase*1e9)},
+											dims=['row', 'col'],
+											name=channel_name,
+											attrs={**d['header'], **converted_timestamps, "device_serial": self.serial, "channel_name": channel_name}))
 							recorded_data[channel_name] = channel_data
 
 		# check if the shapes of the received measurements are the same. 
@@ -744,14 +778,15 @@ class MFLIDAQ(DAC):
 				for c, i in zip(channels_to_measure, _indexs):
 					that_shot[c] = [self.read_memory[c][i]] # Here the inner list could be removed if one would remove the old functionality from the _parse_data function.
 
+				_the_warning_string = f"Parsing some data did not work. This might fix itself later, when the missing data is retrieved from the device. If not, clearing the memory (i.e. self.clear_memory()), resetting the daq_module (i.e. self.reset_daq_module()), or setting the field to the selected program (i.e., self.currently_set_program=None) to None and then rearming the original program might work. For debugging purposes, one might want to call the measure function with the return_raw=True parameter."
 				try:
 					that_shot_parsed = self._parse_data(that_shot, self.currently_set_program, fail_on_empty=fail_on_empty)
 				except IndexError as e:
 					traceback.print_exc()
-					warnings.warn(f"Parsing some data did not work. This might fix itself later, when the missing data is retrieved from the device. If not, clearing the memory (i.e. self.clear_memory()), resetting the daq_module (i.e. self.reset_daq_module()), or setting the field to the selected program (i.e., self.currently_set_program=None) to None and then rearming the original program might work. For debugging purposes, one might want to call the measure function with the return_raw=True parameter.")
+					warnings.warn(_the_warning_string)
 				except KeyError as e:
 					traceback.print_exc()
-					warnings.warn(f"Parsing some data did not work. This might fix itself later, when the missing data is retrieved from the device. If not, clearing the memory (i.e. self.clear_memory()), resetting the daq_module (i.e. self.reset_daq_module()), or setting the field to the selected program (i.e., self.currently_set_program=None) to None and then rearming the original program might work. For debugging purposes, one might want to call the measure function with the return_raw=True parameter.")
+					warnings.warn(_the_warning_string)
 				except ValueError as e:
 					if "The received data for channel" in str(e):
 						pass
