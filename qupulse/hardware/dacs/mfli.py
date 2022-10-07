@@ -167,13 +167,13 @@ class MFLIDAQ(DAC):
 		self.daq.clear()
 		self._init_daq_module()
 
-	def register_measurement_channel(self, program_name:Union[str, None]=None, channel_path:Union[str, List[str]]=[], window_name:str=None):
+	def register_measurement_channel(self, program_name:Union[str, None]=None, window_name:str=None, channel_path:Union[str, List[str]]=[]):
 		""" This function saves the channel one wants to record with a certain program
 
 		Args:
 			program_name: Name of the program
-			channel_path: the channel to record in the shape of "demods/0/sample.R.avg". Note that everything but the things behind the last "/" are considered to relate do the demodulator. If this is not given, you might want to check this driver and extend its functionality.
 			window_name: The windows for that channel.
+			channel_path: the channel to record in the shape of "demods/0/sample.R.avg". Note that everything but the things behind the last "/" are considered to relate do the demodulator. If this is not given, you might want to check this driver and extend its functionality.
 
 		"""
 
@@ -203,12 +203,12 @@ class MFLIDAQ(DAC):
 		# for k, v in windows.items():
 		# 	self.set_measurement_mask(program_name=program_name, mask_name=k, begins=v[0], lengths=v[1])
 
-	def register_trigger_settings(self, program_name:str, trigger_input:Union[str, None]=None, trigger_count:int=1, edge:str='rising', level:float=0.1, delay:float=-1e-3, post_delay:float=1e-3, measurement_count:Union[int, float]=1, other_settings:Dict[str, Union[str, int, float, Any]]={}):
+	def register_trigger_settings(self, program_name:Union[str, None], trigger_input:Union[str, None]=None, trigger_count:int=1, edge:str='rising', level:float=0.1, delay:float=-1e-3, post_delay:float=1e-3, measurement_count:Union[int, float]=1, other_settings:Dict[str, Union[str, int, float, Any]]={}):
 		"""
 		Parameters
 		----------
 		program_name
-			The program name to set these trigger settings for.
+			The program name to set these trigger settings for. If None is given, then these settings are used as default values.
 		trigger_input
 			This needs to be the path to input to the lock-in that the lock-in is able to use as a trigger (without the device serial). (see https://docs.zhinst.com/pdf/LabOneProgrammingManual.pdf for more information)
 		trigger_count
