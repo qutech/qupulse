@@ -4,6 +4,7 @@ import qupulse.pulses.plotting
 import qupulse._program.waveforms
 import qupulse.utils.sympy
 from qupulse.pulses import TablePT, FunctionPT, AtomicMultiChannelPT, MappingPT
+from qupulse.pulses.multi_channel_pulse_template import AtomicMultiChannelPulseTemplate
 from qupulse.pulses.plotting import plot
 from qupulse.pulses.sequence_pulse_template import SequencePulseTemplate
 from qupulse._program._loop import make_compatible
@@ -104,6 +105,11 @@ class TestConstantPulseTemplate(unittest.TestCase):
         wf3 = ConstantWaveform.from_mapping(duration=TimeType.from_float(1.6), constant_values={'C': 5.4, 'B': -.3})
         self.assertEqual(wf3, cpt.build_waveform({'duration': 1.6, 'amplitude_b': -.3}, {'A': 'C', 'B': 'B'}))
 
+    def test_regression_defined_channels(self):
+        p=ConstantPulseTemplate(100, {'a': 1.})
+        q=ConstantPulseTemplate(100, {'b': 1.})        
+        pt=AtomicMultiChannelPulseTemplate(p, q)
+        self.assertEqual(pt.defined_channels, {'a', 'b'})
 
     def test_build_waveform(self):
         tpt = ConstantPulseTemplate(200, {'C1': 2, 'C2': 3})
