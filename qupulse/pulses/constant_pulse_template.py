@@ -94,7 +94,7 @@ class ConstantPulseTemplate(AtomicPulseTemplate):  # type: ignore
     @property
     def defined_channels(self) -> AbstractSet['ChannelID']:
         """Returns the number of hardware output channels this PulseTemplate defines."""
-        return set(self._amplitude_dict))
+        return set(self._amplitude_dict)
 
     def build_waveform(self,
                        parameters: Dict[str, numbers.Real],

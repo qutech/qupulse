@@ -107,7 +107,7 @@ class TestConstantPulseTemplate(unittest.TestCase):
 
     def test_regression_defined_channels(self):
         p=ConstantPulseTemplate(100, {'a': 1.})
-        q=ConstantPulseTemplate(100, {'b': 1.})        
+        q=ConstantPulseTemplate(100, {'b': 1.})
         pt=AtomicMultiChannelPulseTemplate(p, q)
         self.assertEqual(pt.defined_channels, {'a', 'b'})
 
