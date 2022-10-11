@@ -49,6 +49,7 @@ except ImportError:
 		[X] check how that would behave. Does that overwrite or shift things?
 	[X] change in trigger input port
 [X] implement setting recording channel (could that be already something inside qupulse?)
+[ ] see if the bandwidth setting for the trigger input is correctly handled
 [ ] see why for high sample rates (e.g. 857.1k) things crash or don't behave as expected
 [ ] Implement yield for not picked up data (read() was not called)
 => this should be sufficient for operation
@@ -516,7 +517,7 @@ class MFLIDAQ(DAC):
 			# set the buffer size according to the largest measurement window
 			# TODO one might be able to implement this a bit more cleverly
 			measurement_duration = np.max(list(self.programs[program_name]["windows_from_start_max"].values()))
-			measurement_duration += ts["post_delay"]*1e-9
+			measurement_duration += (ts["post_delay"] + -1*ts["delay"])*1e9
 			larges_number_of_samples = 1e-9*max_sample_rate*measurement_duration
 			larges_number_of_samples = np.ceil(larges_number_of_samples)
 			self.daq.set('grid/cols', larges_number_of_samples)
@@ -527,7 +528,7 @@ class MFLIDAQ(DAC):
 
 			self.currently_set_program = program_name
 
-			print(f"Will record {larges_number_of_samples} per row samples for {measurement_duration*1e-9}s!") # TODO this will have to change if proper multi triggers with over multiple rows is going to be used.
+			print(f"Will record {larges_number_of_samples} samples per row for {measurement_duration*1e-9}s!") # TODO this will have to change if proper multi triggers with over multiple rows is going to be used.
 			print(f"{rows} row(s) will be recorded.")
 			print(f"the following trigger settings will be used: {ts}")
 			print(f"MFLI returns a duration of {self.daq.get('duration')['duration'][0]}s")
@@ -622,7 +623,7 @@ class MFLIDAQ(DAC):
 
 					_time_of_first_not_nan_value = applicable_data["time"][:, 0].values
 
-					time_of_trigger = applicable_data.attrs["gridcoloffset"][0]*1e9+_time_of_first_not_nan_value
+					time_of_trigger = -1*applicable_data.attrs["gridcoloffset"][0]*1e9+_time_of_first_not_nan_value
 
 					# print(f"time_of_trigger={time_of_trigger}")
 					foo = applicable_data.where((applicable_data["time"]>=(time_of_trigger+b)[:, None]) & (applicable_data["time"]<=(time_of_trigger+b+l)[:, None]), drop=False).copy()
@@ -696,9 +697,9 @@ class MFLIDAQ(DAC):
 							channel_data = []
 							for i, d in enumerate(final_level_data):
 								converted_timestamps = {
-									"systemtime_converted": d["systemtime"]/self.clockbase*1e9,
-									"createdtimestamp_converted": d["createdtimestamp"]/self.clockbase*1e9,
-									"changedtimestamp_converted": d["changedtimestamp"]/self.clockbase*1e9,
+									"systemtime_converted": d['header']["systemtime"]/self.clockbase*1e9,
+									"createdtimestamp_converted": d['header']["createdtimestamp"]/self.clockbase*1e9,
+									"changedtimestamp_converted": d['header']["changedtimestamp"]/self.clockbase*1e9,
 								}
 								channel_data.append(xr.DataArray(
 											data=d["value"],
