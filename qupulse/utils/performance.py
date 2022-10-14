@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, Union, BinaryIO
 import numpy as np
 
 try:
@@ -22,6 +22,12 @@ def _is_monotonic_numpy(arr: np.ndarray) -> bool:
     # A bit faster than np.all(np.diff(arr) > 0) for small arrays
     # No difference for big arrays
     return np.all(arr[1:] >= arr[:-1])
+
+
+if numba is None:
+    is_monotonic = _is_monotonic_numpy
+else:
+    is_monotonic = _is_monotonic_numba
 
 
 @njit
@@ -75,10 +81,66 @@ def time_windows_to_samples(begins: np.ndarray, lengths: np.ndarray,
     return begins, lengths
 
 
-if numba is None:
-    is_monotonic = _is_monotonic_numpy
-else:
-    is_monotonic = _is_monotonic_numba
+@njit
+def _fmt_uint_into(i, arr):
+    for j in range(len(arr)):
+        i, d = divmod(i, 10)
+        arr[j] = np.uint8(d) + 48  # 0
+        if i == 0:
+            break
+    else:
+        ValueError()
+
+    n = j + 1
+    arr[:n] = arr[:n][::-1]
+    return n
 
 
+@njit
+def _fmt_int_into(i, arr):
+    assert len(arr) > 0
+    if i < 0:
+        arr[0] = 45  # -
+        i = -i
+        num_start = 1
+    else:
+        num_start = 0
+    return _fmt_uint_into(i, arr[num_start:]) + num_start
 
+
+@njit
+def _fmt_int_table(arr, sep: np.uint8) -> np.ndarray:
+    assert arr.shape[1] == 2
+    out_arr = np.empty(16 * len(arr), np.uint8)
+    idx = 0
+    for a, b in arr:
+        idx += _fmt_int_into(a, out_arr[idx:])
+
+        out_arr[idx] = sep
+        idx += 1
+
+        idx += _fmt_int_into(b, out_arr[idx:])
+
+        out_arr[idx] = 10  # EOL
+        idx += 1
+    return out_arr[:idx]
+
+
+def write_int_table(target: Union[str, BinaryIO], array: np.ndarray, sep: str):
+    """Write a table of integers. Optimized for two columns"""
+    if isinstance(target, str):
+        target = open(target, 'wb')
+        close_target = True
+    else:
+        close_target = False
+
+    try:
+        if numba is not None and array.shape[1] == 2 and array.dtype == np.dtype('uint32'):
+            sep, = sep.encode('ascii')
+            binary = _fmt_int_table(array, np.uint8(sep))
+            target.write(binary.tobytes())
+        else:
+            np.savetxt(target, array, '%u', delimiter=sep)  # pragma: no cover
+    finally:
+        if close_target:
+            target.close()

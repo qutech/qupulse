@@ -38,7 +38,7 @@ from qupulse._program._loop import Loop
 from qupulse._program.volatile import VolatileRepetitionCount, VolatileProperty
 from qupulse.hardware.awgs.base import ProgramEntry
 from qupulse.hardware.util import zhinst_voltage_to_uint16
-from qupulse.pulses.parameters import MappedParameter, ConstantParameter
+from qupulse.utils.performance import write_int_table
 
 try:
     # zhinst fires a DeprecationWarning from its own code in some versions...
@@ -260,7 +260,7 @@ class WaveformFileSystem:
 
         for file_name, binary_waveform in to_save.items():
             table = binary_waveform.to_csv_compatible_table()
-            np.savetxt(file_name, table, '%u')
+            write_int_table(file_name, table, ' ')
             self.logger.debug('Wrote %r', file_name)
 
 
