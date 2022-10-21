@@ -8,6 +8,7 @@ from enum import Enum
 import warnings
 import time
 import traceback
+import logging
 import xarray as xr
 import numpy as np
 import numpy.typing as npt
@@ -31,6 +32,8 @@ except ImportError:
 	from zhinst import ziPython as zhinst_core
 
 
+
+logger = logging.getLogger(__name__)
 
 """
 
@@ -326,7 +329,7 @@ class MFLIDAQ(DAC):
 			# we also only use the max sample value later. The smallest staring point is somewhat ill-defined
 			if np.sum(np.isnan(mask_info)) == len(mask_info.reshape((-1))):
 				pass
-				print(f"will not use mask {mask_name}")
+				logging.info(f"will not use mask {mask_name}")
 			else:
 				# TODO need to do something about the different sample rates!!!!
 				# maybe have it not this flexible???
@@ -441,7 +444,7 @@ class MFLIDAQ(DAC):
 			for c in self.programs[program_name]["all_channels"]:
 				raw_currently_set_sample_rates.append(self._get_sample_rates(c))
 
-			print(f"sample rates: {[(float(e) if e is not None else None) for e in raw_currently_set_sample_rates]}")
+			logging.info(f"sample rates: {[(float(e) if e is not None else None) for e in raw_currently_set_sample_rates]}")
 
 			# CAUTION
 			# The MFLI lock-ins up-sample slower channels to fit the fastest sample rate.
@@ -498,7 +501,12 @@ class MFLIDAQ(DAC):
 					edge_key = ["rising", "falling", "both"].index(ts["edge"])
 					self.daq.set("edge", edge_key)
 					
-					self.daq.set("level", ts["level"])
+					if "trigin" in ts["trigger_input"].lower():
+						_trigger_id = int(ts["trigger_input"].split("TrigIn")[-1])
+						assert _trigger_id in [1, 2]
+						self.api_session.setDouble(f'/{self.serial}/triggers/in/{_trigger_id}/level', ts["level"]);
+					else:
+						self.daq.set("level", ts["level"])
 
 
 					self.daq.set("delay", ts["delay"])
@@ -528,10 +536,10 @@ class MFLIDAQ(DAC):
 
 			self.currently_set_program = program_name
 
-			print(f"Will record {larges_number_of_samples} samples per row for {measurement_duration*1e-9}s!") # TODO this will have to change if proper multi triggers with over multiple rows is going to be used.
-			print(f"{rows} row(s) will be recorded.")
-			print(f"the following trigger settings will be used: {ts}")
-			print(f"MFLI returns a duration of {self.daq.get('duration')['duration'][0]}s")
+			logging.info(f"Will record {larges_number_of_samples} samples per row for {measurement_duration*1e-9}s!") # TODO this will have to change if proper multi triggers with over multiple rows is going to be used.
+			logging.info(f"{rows} row(s) will be recorded.")
+			logging.info(f"the following trigger settings will be used: {ts}")
+			logging.info(f"MFLI returns a duration of {self.daq.get('duration')['duration'][0]}s")
 
 		# execute daq
 		self.daq.execute()
@@ -602,7 +610,7 @@ class MFLIDAQ(DAC):
 			_wind = self.programs[program_name]["windows"][window_name]
 			for ci, _cn in enumerate(self._get_channels_for_window(program_name, window_name)):
 				cn = f"/{self.serial}/{_cn}".lower()
-				# print(cn)
+
 				if len(recorded_data[cn]) <= shot_index:
 					# then we do not have data for this shot_index, which is intended to cover multiple not yet collected measurements. And thus will not have anything to save.
 					warnings.warn(f"for channel '{cn}' only {len(recorded_data[cn])} shots are given. This does not allow for taking element [-1-{shot_index}]")
@@ -625,14 +633,11 @@ class MFLIDAQ(DAC):
 
 					time_of_trigger = -1*applicable_data.attrs["gridcoloffset"][0]*1e9+_time_of_first_not_nan_value
 
-					# print(f"time_of_trigger={time_of_trigger}")
 					foo = applicable_data.where((applicable_data["time"]>=(time_of_trigger+b)[:, None]) & (applicable_data["time"]<=(time_of_trigger+b+l)[:, None]), drop=False).copy()
 					foo2 = foo.where(~np.isnan(foo), drop=True)
 					rows_with_data = np.sum(~np.isnan(foo), axis=-1)>0
 					foo2["time"] -= time_of_trigger[rows_with_data, None]
 					extracted_data.append(foo2)
-
-				# print(f"extracted_data={extracted_data}")
 
 				data_by_channel.update({cn: extracted_data})
 			masked_data[window_name] = data_by_channel
@@ -670,11 +675,12 @@ class MFLIDAQ(DAC):
 
 		# wait until the data acquisition has finished
 		# TODO implement timeout
+		_endless_flag_helper = (self.programs[program_name]["trigger_settings"]["endless"] if "trigger_settings" in self.programs[program_name] else (self.programs[None]["trigger_settings"]["endless"] if "trigger_settings" in self.programs[None] else False))
 		start_waiting = time.time()
-		while not self.daq.finished() and wait and not (time.time()-start_waiting>timeout) and not self.programs[program_name]["trigger_settings"]["endless"]:
+		while not self.daq.finished() and wait and not (time.time()-start_waiting>timeout) and not _endless_flag_helper:
 			time.sleep(1)
-			print(f"Waiting for device {self.serial} to finish the acquisition...") 
-			print(f"Progress: {self.daq.progress()[0]}")
+			logging.info(f"Waiting for device {self.serial} to finish the acquisition...") 
+			logging.info(f"Progress: {self.daq.progress()[0]}")
 
 		if fail_if_incomplete and not self.daq.finished():
 			raise ValueError(f"Device {self.serial} did not finish the acquisition in time.")
