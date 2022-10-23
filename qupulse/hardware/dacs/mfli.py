@@ -644,7 +644,7 @@ class MFLIDAQ(DAC):
 
 		return masked_data
 
-	def measure_program(self, channels: Iterable[str] = [], wait:bool=True, timeout:float=np.inf, return_raw:bool=False, fail_if_incomplete:bool=False, fail_on_empty:bool=False, program_name:Union[str, None]=None) -> Union[Dict[str, List[xr.DataArray]], Dict[str, Dict[str, List[xr.DataArray]]]]:
+	def measure_program(self, channels: Iterable[str] = [], wait:bool=True, timeout:float=np.inf, wait_time:float=1e-3, return_raw:bool=False, fail_if_incomplete:bool=False, fail_on_empty:bool=False, program_name:Union[str, None]=None) -> Union[Dict[str, List[xr.DataArray]], Dict[str, Dict[str, List[xr.DataArray]]]]:
 		"""Get the last measurement's results of the specified operations/channels
 		
 		Parameters
@@ -655,6 +655,8 @@ class MFLIDAQ(DAC):
 			Should the code wait until the acquisition has finished? Else incomplete data might be returned. (default: True)
 		timeout: float, optional
 			The time to wait until the measurement is stopped in units of seconds. (default: np.inf)
+		wait_time : float, optional
+			The time to pause in the until querying the data server for new data. (default = 1e-3 = 1ms)
 		return_raw: bool, optional
 			If True, the function will return the raw data without selecting the measurement windows. This will then be in the shape of data[channel_name][shot_index]: xr.DataArray.
 			If False, the return value will have the structure data[window_name][channel_name][mask_index]: xr.DataArray.
@@ -678,7 +680,7 @@ class MFLIDAQ(DAC):
 		_endless_flag_helper = (self.programs[program_name]["trigger_settings"]["endless"] if "trigger_settings" in self.programs[program_name] else (self.programs[None]["trigger_settings"]["endless"] if "trigger_settings" in self.programs[None] else False))
 		start_waiting = time.time()
 		while not self.daq.finished() and wait and not (time.time()-start_waiting>timeout) and not _endless_flag_helper:
-			time.sleep(1)
+			time.sleep(wait_time)
 			logging.info(f"Waiting for device {self.serial} to finish the acquisition...") 
 			logging.info(f"Progress: {self.daq.progress()[0]}")
 
