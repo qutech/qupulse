@@ -679,10 +679,11 @@ class MFLIDAQ(DAC):
 		# TODO implement timeout
 		_endless_flag_helper = (self.programs[program_name]["trigger_settings"]["endless"] if "trigger_settings" in self.programs[program_name] else (self.programs[None]["trigger_settings"]["endless"] if "trigger_settings" in self.programs[None] else False))
 		start_waiting = time.time()
-		while not self.daq.finished() and wait and not (time.time()-start_waiting>timeout) and not _endless_flag_helper:
-			time.sleep(wait_time)
+		if not self.daq.finished() and wait:
 			logging.info(f"Waiting for device {self.serial} to finish the acquisition...") 
 			logging.info(f"Progress: {self.daq.progress()[0]}")
+			while not self.daq.finished() and wait and not (time.time()-start_waiting>timeout) and not _endless_flag_helper:
+				time.sleep(wait_time)
 
 		if fail_if_incomplete and not self.daq.finished():
 			raise ValueError(f"Device {self.serial} did not finish the acquisition in time.")
