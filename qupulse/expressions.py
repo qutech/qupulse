@@ -215,8 +215,11 @@ class ExpressionVector(Expression):
         else:
             return numpy.array(serialized_items).reshape(self._expression_shape).tolist()
 
-    def __getnewargs__(self) -> tuple:
-        return self.get_serialization_data(),
+    def __getstate__(self):
+        return self.get_serialization_data()
+
+    def __setstate__(self, state):
+        self.__init__(state)
 
     def __str__(self):
         return str(self.get_serialization_data())
@@ -415,8 +418,11 @@ class ExpressionScalar(Expression):
         else:
             return serialized
 
-    def __getnewargs__(self) -> tuple:
-        return self.get_serialization_data(),
+    def __getstate__(self):
+        return self.get_serialization_data()
+
+    def __setstate__(self, state):
+        self.__init__(state)
 
     def is_nan(self) -> bool:
         return sympy.sympify('nan') == self._sympified_expression
