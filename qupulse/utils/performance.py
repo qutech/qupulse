@@ -1,3 +1,4 @@
+import os
 from typing import Tuple, Union, BinaryIO
 import numpy as np
 
@@ -126,9 +127,9 @@ def _fmt_int_table(arr, sep: np.uint8) -> np.ndarray:
     return out_arr[:idx]
 
 
-def write_int_table(target: Union[str, BinaryIO], array: np.ndarray, sep: str):
+def write_int_table(target: Union[str, BinaryIO, os.PathLike], array: np.ndarray, sep: str):
     """Write a table of integers. Optimized for two columns"""
-    if isinstance(target, str):
+    if not (hasattr(target, 'write') and hasattr(target, 'close')):
         target = open(target, 'wb')
         close_target = True
     else:
