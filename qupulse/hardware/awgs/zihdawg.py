@@ -1,6 +1,6 @@
 from pathlib import Path
 import functools
-from typing import Tuple, Set, Callable, Optional, Mapping, Generator, Union, List, Dict
+from typing import Tuple, Set, Callable, Optional, Mapping, Generator, Union, Sequence, Dict
 from enum import Enum
 import weakref
 import logging
@@ -9,6 +9,7 @@ import pathlib
 import hashlib
 import argparse
 import re
+from abc import abstractmethod
 
 try:
     # zhinst fires a DeprecationWarning from its own code in some versions...
@@ -52,6 +53,35 @@ def valid_channel(function_object):
     return valid_fn
 
 
+def _amplitude_scales(api_session, serial: str):
+    return tuple(
+        api_session.getDouble(f'/{serial}/awgs/{ch // 2:d}/outputs/{ch % 2:d}/amplitude')
+        for ch in range(8)
+    )
+
+def _sigout_double(api_session, prop: str, serial: str, channel: int, value: float = None) -> float:
+    """Query channel offset voltage and optionally set it."""
+    node_path = f'/{serial}/sigouts/{channel-1:d}/{prop}'
+    if value is not None:
+        api_session.setDouble(node_path, value)
+        api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
+    return api_session.getDouble(node_path)
+
+def _sigout_range(api_session, serial: str, channel: int, voltage: float = None) -> float:
+    return _sigout_double(api_session, 'range', serial, channel, voltage)
+
+def _sigout_offset(api_session, serial: str, channel: int, voltage: float = None) -> float:
+    return _sigout_double(api_session, 'offset', serial, channel, voltage)
+
+def _sigout_on(api_session, serial: str, channel: int, value: bool = None) -> bool:
+    """Query channel signal output status (enabled/disabled) and optionally set it. Corresponds to front LED."""
+    node_path = f'/{serial}/sigouts/{channel-1:d}/on'
+    if value is not None:
+        api_session.setInt(node_path, value)
+        api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
+    return bool(api_session.getInt(node_path))
+
+
 @traced
 class HDAWGRepresentation:
     """HDAWGRepresentation represents an HDAWG8 instruments and manages a LabOne data server api session. A data server
@@ -87,7 +117,7 @@ class HDAWGRepresentation:
         self._initialize()
 
         waveform_path = pathlib.Path(self.api_session.awgModule().getString('directory'), 'awg', 'waves')
-        self._waveform_file_system = WaveformFileSystem(waveform_path)
+        self._waveform_file_system = WaveformFileSystem.get_waveform_file_system(waveform_path)
         self._channel_groups: Dict[HDAWGChannelGrouping, Tuple[HDAWGChannelGroup, ...]] = {}
 
         # TODO: lookup method to find channel count
@@ -95,11 +125,17 @@ class HDAWGRepresentation:
 
         for grouping in HDAWGChannelGrouping:
             group_size = grouping.group_size()
-            groups = []
-            for group_idx in range(n_channels // group_size):
-                groups.append(HDAWGChannelGroup(group_idx, group_size,
-                                                identifier=self.group_name(group_idx, group_size),
-                                                timeout=self.default_timeout))
+            if group_size is None:
+                # MDS
+                groups = [
+                    MDSChannelGroup(self.group_name(0, None), self.default_timeout)
+                ]
+            else:
+                groups = []
+                for group_idx in range(n_channels // group_size):
+                    groups.append(SingleDeviceChannelGroup(group_idx, group_size,
+                                                           identifier=self.group_name(group_idx, group_size),
+                                                           timeout=self.default_timeout))
             self._channel_groups[grouping] = tuple(groups)
 
         if grouping is None:
@@ -113,7 +149,7 @@ class HDAWGRepresentation:
 
     @property
     def channel_tuples(self) -> Tuple['HDAWGChannelGroup', ...]:
-        return self._channel_groups[self.channel_grouping]
+        return self._get_groups(self.channel_grouping)
 
     @property
     def channel_pair_AB(self) -> 'HDAWGChannelGroup':
@@ -176,10 +212,20 @@ class HDAWGRepresentation:
         self.api_session.sync()
 
     def group_name(self, group_idx, group_size) -> str:
+        if group_size is None:
+            return f'{self.serial}_MDS'
         return str(self.serial) + '_' + 'ABCDEFGH'[group_idx*group_size:][:group_size]
 
     def _get_groups(self, grouping: 'HDAWGChannelGrouping') -> Tuple['HDAWGChannelGroup', ...]:
-        return self._channel_groups[grouping]
+        try:
+            return self._channel_groups[grouping]
+        except KeyError:
+            # python reload...
+            for grouping_key, group in self._channel_groups.items():
+                if grouping_key.value == grouping.value:
+                    return group
+            else:
+                raise
 
     @property
     def channel_grouping(self) -> 'HDAWGChannelGrouping':
@@ -200,6 +246,10 @@ class HDAWGRepresentation:
             for group in self._get_groups(old_channel_grouping):
                 group.disconnect_group()
 
+        if channel_grouping.value == HDAWGChannelGrouping.MDS.value and not self._is_mds_master():
+            # do not connect channel group
+            return
+
         for group in self._get_groups(channel_grouping):
             if not group.is_connected():
                 group.connect_group(self)
@@ -207,30 +257,18 @@ class HDAWGRepresentation:
     @valid_channel
     def offset(self, channel: int, voltage: float = None) -> float:
         """Query channel offset voltage and optionally set it."""
-        node_path = '/{}/sigouts/{:d}/offset'.format(self.serial, channel-1)
-        if voltage is not None:
-            self.api_session.setDouble(node_path, voltage)
-            self.api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
-        return self.api_session.getDouble(node_path)
+        return _sigout_offset(self.api_session, self.serial, channel, voltage)
 
     @valid_channel
     def range(self, channel: int, voltage: float = None) -> float:
         """Query channel voltage range and optionally set it. The instruments selects the next higher available range.
         This is the one-sided range Vp. Total range: -Vp...Vp"""
-        node_path = '/{}/sigouts/{:d}/range'.format(self.serial, channel-1)
-        if voltage is not None:
-            self.api_session.setDouble(node_path, voltage)
-            self.api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
-        return self.api_session.getDouble(node_path)
+        return _sigout_range(self.api_session, self.serial, channel, voltage)
 
     @valid_channel
     def output(self, channel: int, status: bool = None) -> bool:
         """Query channel signal output status (enabled/disabled) and optionally set it. Corresponds to front LED."""
-        node_path = '/{}/sigouts/{:d}/on'.format(self.serial, channel-1)
-        if status is not None:
-            self.api_session.setInt(node_path, int(status))
-            self.api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
-        return bool(self.api_session.getInt(node_path))
+        return _sigout_on(self.api_session, self.serial, channel, status)
 
     def get_status_table(self):
         """Return node tree of instrument with all important settings, as well as each channel group as tuple."""
@@ -239,6 +277,31 @@ class HDAWGRepresentation:
                 self.channel_pair_CD.awg_module.get('awgModule/*'),
                 self.channel_pair_EF.awg_module.get('awgModule/*'),
                 self.channel_pair_GH.awg_module.get('awgModule/*'))
+
+    def _get_mds_group_idx(self) -> Optional[int]:
+        idx = 0
+        while True:
+            try:
+                if self.serial in self.api_session.getString(f'/ZI/MDS/GROUPS/{idx}/DEVICES'):
+                    return idx
+            except RuntimeError:
+                break
+            idx += 1
+
+    def _is_mds_master(self) -> Optional[bool]:
+        idx = 0
+        while True:
+            try:
+                devices =  self.api_session.getString(f'/ZI/MDS/GROUPS/{idx}/DEVICES').split(',')
+            except RuntimeError:
+                break
+
+            if self.serial in devices:
+                return devices[0] == self.serial
+            idx += 1
+
+    def __repr__(self):
+        return f"{type(self).__name__}({self.serial}, ... {self.api_session})"
 
 
 class HDAWGTriggerOutSource(Enum):
@@ -265,6 +328,7 @@ class HDAWGTriggerOutSource(Enum):
 
 class HDAWGChannelGrouping(Enum):
     """How many independent sequencers should run on the AWG and how the outputs should be grouped by sequencer."""
+    MDS = -1            # All channels that are in the current multi device synchronized group
     CHAN_GROUP_4x2 = 0  # 4x2 with HDAWG8; 2x2 with HDAWG4.  /dev.../awgs/0..3/
     CHAN_GROUP_2x4 = 1  # 2x4 with HDAWG8; 1x4 with HDAWG4.  /dev.../awgs/0 & 2/
     CHAN_GROUP_1x8 = 2  # 1x8 with HDAWG8.                   /dev.../awgs/0/
@@ -273,7 +337,8 @@ class HDAWGChannelGrouping(Enum):
         return {
             HDAWGChannelGrouping.CHAN_GROUP_4x2: 2,
             HDAWGChannelGrouping.CHAN_GROUP_2x4: 4,
-            HDAWGChannelGrouping.CHAN_GROUP_1x8: 8
+            HDAWGChannelGrouping.CHAN_GROUP_1x8: 8,
+            HDAWGChannelGrouping.MDS: None
         }[self]
 
 
@@ -302,28 +367,13 @@ class HDAWGModulationMode(Enum):
 
 @traced
 class HDAWGChannelGroup(AWG):
-    """Represents a channel pair of the Zurich Instruments HDAWG as an independent AWG entity.
-    It represents a set of channels that have to have(hardware enforced) the same control flow and sample rate.
-
-    It keeps track of the AWG state and manages waveforms and programs on the hardware.
-    """
-
     MIN_WAVEFORM_LEN = 192
     WAVEFORM_LEN_QUANTUM = 16
 
     def __init__(self,
-                 group_idx: int,
-                 group_size: int,
                  identifier: str,
                  timeout: float) -> None:
         super().__init__(identifier)
-        self._device = None
-
-        assert group_idx in range(4)
-        assert group_size in (2, 4, 8)
-
-        self._group_idx = group_idx
-        self._group_size = group_size
         self.timeout = timeout
 
         self._awg_module = None
@@ -334,43 +384,37 @@ class HDAWGChannelGroup(AWG):
         self._current_program = None  # Currently armed program.
         self._upload_generator = ()
 
+        self._master_device = None
+
     def _initialize_awg_module(self):
         """Only run once"""
         if self._awg_module:
             self._awg_module.clear()
-        self._awg_module = self.device.api_session.awgModule()
-        self.awg_module.set('awgModule/device', self.device.serial)
-        self.awg_module.set('awgModule/index', self.awg_group_index)
-        self.awg_module.execute()
-        self._elf_manager = ELFManager(self.awg_module)
-
-    def disconnect_group(self):
-        """Disconnect this group from device so groups of another size can be used"""
-        if self._awg_module:
-            self.awg_module.clear()
-        self._device = None
-
-    def connect_group(self, hdawg_device: HDAWGRepresentation):
-        """"""
-        self.disconnect_group()
-        self._device = weakref.proxy(hdawg_device)
-        assert self.device.channel_grouping.group_size() == self._group_size, f"{self.device.channel_grouping} != {self._group_size}"
-        self._initialize_awg_module()
-        # Seems creating AWG module sets SINGLE (single execution mode of sequence) to 0 per default.
-        self.device.api_session.setInt('/{}/awgs/{:d}/single'.format(self.device.serial, self.awg_group_index), 1)
-
-    def is_connected(self) -> bool:
-        return self._device is not None
+        self._awg_module = self.master_device.api_session.awgModule()
+        self._awg_module.set('awgModule/device', self.master_device.serial)
+        self._awg_module.set('awgModule/index', self.awg_group_index)
+        self._awg_module.execute()
+        self._elf_manager = ELFManager(self._awg_module)
+        self._upload_generator = ()
 
     @property
-    def num_channels(self) -> int:
-        """Number of channels"""
-        return self._group_size
+    def master_device(self) -> HDAWGRepresentation:
+        """Reference to HDAWG representation."""
+        if self._master_device is None:
+            raise HDAWGValueError('Channel group is currently not connected')
+        return self._master_device
 
-    def _channels(self, index_start=1) -> Tuple[int, ...]:
-        """1 indexed channel"""
-        offset = index_start + self._group_size * self._group_idx
-        return tuple(ch + offset for ch in range(self._group_size))
+    @property
+    def awg_module(self) -> zhinst_core.AwgModule:
+        """Each AWG channel group has its own awg module to manage program compilation and upload."""
+        if self._awg_module is None:
+            raise HDAWGValueError('Channel group is not connected and was never initialized')
+        return self._awg_module
+
+    @property
+    @abstractmethod
+    def awg_group_index(self) -> int:
+        raise NotImplementedError()
 
     @property
     def num_markers(self) -> int:
@@ -449,12 +493,13 @@ class HDAWGChannelGroup(AWG):
                                           offsets=voltage_offsets)
 
         self._required_seqc_source = self._program_manager.to_seqc_program()
-        self._program_manager.waveform_memory.sync_to_file_system(self.device.waveform_file_system)
+        self._program_manager.waveform_memory.sync_to_file_system(self.master_device.waveform_file_system)
 
         # start compiling the source (non-blocking)
         self._start_compile_and_upload()
 
     def _start_compile_and_upload(self):
+        self._uploaded_seqc_source = None
         self._upload_generator = self._elf_manager.compile_and_upload(self._required_seqc_source)
 
     def _wait_for_compile_and_upload(self):
@@ -506,6 +551,13 @@ class HDAWGChannelGroup(AWG):
         Currently hardware triggering is not implemented. The HDAWGProgramManager needs to emit code that calls
         `waitDigTrigger` to do that.
         """
+        if self.num_channels > 8:
+            if name is None:
+                self._required_seqc_source = ""
+            else:
+                self._required_seqc_source = self._program_manager.to_seqc_program(name)
+            self._start_compile_and_upload()
+
         if self._required_seqc_source != self._uploaded_seqc_source:
             self._wait_for_compile_and_upload()
 
@@ -529,9 +581,9 @@ class HDAWGChannelGroup(AWG):
             self.user_register(self._program_manager.Constants.PROG_SEL_REGISTER,
                                self._program_manager.name_to_index(name) | int(self._program_manager.Constants.NO_RESET_MASK, 2))
 
-        # this is a workaround for problems in the past and should be re-thought in case of a re-write
-        for ch_pair in self.device.channel_tuples:
-            ch_pair._wait_for_compile_and_upload()
+        # this was a workaround for problems in the past and I totally forgot why it was here
+        # for ch_pair in self.master.channel_tuples:
+        #    ch_pair._wait_for_compile_and_upload()
         self.enable(True)
 
     def run_current_program(self) -> None:
@@ -554,49 +606,33 @@ class HDAWGChannelGroup(AWG):
     @property
     def sample_rate(self) -> TimeType:
         """The default sample rate of the AWG channel group."""
-        node_path = '/{}/awgs/{}/time'.format(self.device.serial, self.awg_group_index)
-        sample_rate_num = self.device.api_session.getInt(node_path)
-        node_path = '/{}/system/clocks/sampleclock/freq'.format(self.device.serial)
-        sample_clock = self.device.api_session.getDouble(node_path)
+        node_path = '/{}/awgs/{}/time'.format(self.master_device.serial, self.awg_group_index)
+        sample_rate_num = self.master_device.api_session.getInt(node_path)
+        node_path = '/{}/system/clocks/sampleclock/freq'.format(self.master_device.serial)
+        sample_clock = self.master_device.api_session.getDouble(node_path)
 
         """Calculate exact rational number based on (sample_clock Sa/s) / 2^sample_rate_num. Otherwise numerical
         imprecision will give rise to errors for very long pulses. fractions.Fraction does not accept floating point
         numerator, which sample_clock could potentially be."""
         return time_from_float(sample_clock) / 2 ** sample_rate_num
 
-    @property
-    def awg_group_index(self) -> int:
-        """AWG node group index assuming 4x2 channel grouping. Then 0...3 will give appropriate index of group."""
-        return self._group_idx
+    def connect_group(self, hdawg_device: HDAWGRepresentation):
+        self.disconnect_group()
+        self._master_device = weakref.proxy(hdawg_device)
+        self._initialize_awg_module()
+        # Seems creating AWG module sets SINGLE (single execution mode of sequence) to 0 per default.
+        self.master_device.api_session.setInt(f'/{self.master_device.serial}/awgs/0/single', 1)
 
-    @property
-    def device(self) -> HDAWGRepresentation:
-        """Reference to HDAWG representation."""
-        if self._device is None:
-            raise HDAWGValueError('Channel group is currently not connected')
-        return self._device
+    def disconnect_group(self):
+        """Disconnect this group from device so groups of another size can be used"""
+        if self._awg_module:
+            self.awg_module.clear()
+        self._master_device = None
+        self._elf_manager = None
+        self._upload_generator = ()
 
-    @property
-    def awg_module(self) -> zhinst_core.AwgModule:
-        """Each AWG channel group has its own awg module to manage program compilation and upload."""
-        if self._awg_module is None:
-            raise HDAWGValueError('Channel group is not connected and was never initialized')
-        return self._awg_module
-
-    @property
-    def user_directory(self) -> str:
-        """LabOne user directory with subdirectories: "awg/src" (seqc sourcefiles), "awg/elf" (compiled AWG binaries),
-        "awag/waves" (user defined csv waveforms)."""
-        return self.awg_module.getString('awgModule/directory')
-
-    def enable(self, status: bool = None) -> bool:
-        """Start the AWG sequencer."""
-        # There is also 'awgModule/awg/enable', which seems to have the same functionality.
-        node_path = '/{}/awgs/{:d}/enable'.format(self.device.serial, self.awg_group_index)
-        if status is not None:
-            self.device.api_session.setInt(node_path, int(status))
-            self.device.api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
-        return bool(self.device.api_session.getInt(node_path))
+    def is_connected(self) -> bool:
+        return self._master_device is not None
 
     def user_register(self, reg: UserRegister, value: int = None) -> int:
         """Query user registers (1-16) and optionally set it.
@@ -613,18 +649,69 @@ class HDAWGChannelGroup(AWG):
             reg = UserRegister(one_based_value=reg)
 
         if reg.to_web_interface() not in range(1, 17):
-            raise HDAWGValueError('{reg:repr} not a valid (1-16) register.'.format(reg=reg))
+            raise HDAWGValueError(f'{reg:!r} not a valid (1-16) register.')
 
-        node_path = '/{}/awgs/{:d}/userregs/{:labone}'.format(self.device.serial, self.awg_group_index, reg)
+        node_path = '/{}/awgs/{:d}/userregs/{:labone}'.format(self.master_device.serial, self.awg_group_index, reg)
         if value is not None:
-            self.device.api_session.setInt(node_path, value)
-            self.device.api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
-        return self.device.api_session.getInt(node_path)
+            self.master_device.api_session.setInt(node_path, value)
+            # hackedy
+            for mds_serial in getattr(self, '_mds_devices', [])[1:]:
+                self.master_device.api_session.setInt(node_path.replace(self.master_device.serial, mds_serial), value)
+            self.master_device.api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
+        return self.master_device.api_session.getInt(node_path)
 
-    def _amplitude_scales(self) -> Tuple[float, ...]:
-        """not affected by grouping"""
-        return tuple(self.device.api_session.getDouble(f'/{self.device.serial}/awgs/{ch // 2:d}/outputs/{ch % 2:d}/amplitude')
-                     for ch in self._channels(index_start=0))
+
+@traced
+class MDSChannelGroup(HDAWGChannelGroup):
+    def __init__(self,
+                 identifier: str,
+                 timeout: float) -> None:
+        super().__init__(identifier, timeout)
+
+        self._master_device = None
+        self._mds_devices = None
+
+    @property
+    def num_channels(self) -> int:
+        """Number of channels"""
+        return len(self._mds_devices) * 8
+
+    @property
+    def awg_group_index(self):
+        return 0
+
+    def disconnect_group(self):
+        super().disconnect_group()
+        self._mds_devices = None
+
+    def connect_group(self, hdawg_device: HDAWGRepresentation):
+        mds_group = hdawg_device._get_mds_group_idx()
+        if mds_group is None:
+            raise HDAWGException("AWG not in any MDS group", hdawg_device)
+        mds_devices = hdawg_device.api_session.getString(f'/ZI/MDS/GROUPS/{mds_group}/DEVICES').split(',')
+        if hdawg_device.serial != mds_devices[0]:
+            raise HDAWGException("Only the master device can connect to the HDAWG MDS channel group.")
+        super().connect_group(hdawg_device)
+        self._mds_devices = mds_devices
+
+    def enable(self, status: bool = None) -> bool:
+        """Start the AWG sequencer."""
+        # There is also 'awgModule/awg/enable', which seems to have the same functionality.
+        node_path = '/{}/awgs/{:d}/enable'.format(self.master_device.serial, 0)
+        if status is not None:
+            self.awg_module.set('awg/enable', int(status))
+        else:
+            status = self.awg_module.get('awg/module')
+
+        #return bool(status)
+        """
+        if status is not None:
+            self.master_device.api_session.setInt(node_path, int(status))
+            for mds_device in self._mds_devices[1:]:
+                self.master_device.api_session.setInt(node_path.replace(self._mds_devices[0], mds_device), int(status))
+            self.master_device.api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
+            """
+        return bool(self.master_device.api_session.getInt(node_path))
 
     def amplitudes(self) -> Tuple[float, ...]:
         """Query AWG channel amplitude value (not peak to peak).
@@ -636,13 +723,83 @@ class HDAWGChannelGroup(AWG):
         stored in the waveform memory."""
         amplitudes = []
 
-        for ch, zi_amplitude in zip(self._channels(), self._amplitude_scales()):
-            zi_range = self.device.range(ch)
+        api_session = self.master_device.api_session
+        for mds_device in self._mds_devices:
+            amplitude_scales = _amplitude_scales(api_session, mds_device)
+            ranges = [_sigout_range(api_session, mds_device, ch) for ch in range(1, 9)]
+            amplitudes.extend(zi_amplitude * zi_range / 2 for zi_amplitude, zi_range in zip(amplitude_scales, ranges))
+        return tuple(amplitudes)
+
+    def offsets(self) -> Tuple[float, ...]:
+        offsets = []
+        api_session = self.master_device.api_session
+        for mds_device in self._mds_devices:
+            offsets.extend(_sigout_offset(api_session, mds_device, ch) for ch in range(1, 9))
+        return tuple(offsets)
+
+
+class SingleDeviceChannelGroup(HDAWGChannelGroup):
+    def __init__(self,
+                 group_idx: int,
+                 group_size: int,
+                 identifier: str,
+                 timeout: float) -> None:
+        super().__init__(identifier, timeout)
+        self._device = None
+
+        assert group_idx in range(4)
+        assert group_size in (2, 4, 8)
+
+        self._group_idx = group_idx
+        self._group_size = group_size
+
+    @property
+    def num_channels(self) -> int:
+        """Number of channels"""
+        return self._group_size
+
+    def _channels(self, index_start=1) -> Tuple[int, ...]:
+        """1 indexed channel"""
+        offset = index_start + self._group_size * self._group_idx
+        return tuple(ch + offset for ch in range(self.num_channels))
+
+    @property
+    def awg_group_index(self) -> int:
+        """AWG node group index assuming 4x2 channel grouping. Then 0...3 will give appropriate index of group."""
+        return self._group_idx
+
+    @property
+    def user_directory(self) -> str:
+        """LabOne user directory with subdirectories: "awg/src" (seqc sourcefiles), "awg/elf" (compiled AWG binaries),
+        "awag/waves" (user defined csv waveforms)."""
+        return self.awg_module.getString('awgModule/directory')
+
+    def enable(self, status: bool = None) -> bool:
+        """Start the AWG sequencer."""
+        # There is also 'awgModule/awg/enable', which seems to have the same functionality.
+        node_path = '/{}/awgs/{:d}/enable'.format(self.master_device.serial, self.awg_group_index)
+        if status is not None:
+            self.master_device.api_session.setInt(node_path, int(status))
+            self.master_device.api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
+        return bool(self.master_device.api_session.getInt(node_path))
+
+    def amplitudes(self) -> Tuple[float, ...]:
+        """Query AWG channel amplitude value (not peak to peak).
+
+        From manual:
+        The final signal amplitude is given by the product of the full scale
+        output range of 1 V[in this example], the dimensionless amplitude
+        scaling factor 1.0, and the actual dimensionless signal amplitude
+        stored in the waveform memory."""
+        amplitudes = []
+
+        for ch, zi_amplitude in zip(self._channels(), _amplitude_scales(self.master_device.api_session, self.master_device.serial)):
+            zi_range = self.master_device.range(ch)
             amplitudes.append(zi_amplitude * zi_range / 2)
         return tuple(amplitudes)
 
     def offsets(self) -> Tuple[float, ...]:
-        return tuple(map(self.device.offset, self._channels()))
+        return tuple(map(self.master_device.offset, self._channels()))
 
 
 class ELFManager:
@@ -840,7 +997,10 @@ class ELFManager:
             assert elf_upload == 0
 
     def _upload(self, elf_file) -> Generator[str, str, None]:
-        self._start_elf_upload(elf_file)
+        if self.awg_module.compiler_upload:
+            pass
+        else:
+            self._start_elf_upload(elf_file)
 
         while True:
             self._update_upload_job_status()

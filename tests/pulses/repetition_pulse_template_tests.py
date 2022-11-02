@@ -87,6 +87,16 @@ class RepetitionPulseTemplateTest(unittest.TestCase):
         template = RepetitionPulseTemplate(dummy, Expression('2+m'))
         self.assertEqual({'A': Expression('(2+m)*(foo+2)'), 'B': Expression('(2+m)*(k*3+x**2)')}, template.integral)
 
+    def test_initial_values(self):
+        dummy = DummyPulseTemplate(initial_values={'A': ExpressionScalar('a + 3')})
+        rpt = RepetitionPulseTemplate(dummy, repetition_count='n')
+        self.assertEqual(dummy.initial_values, rpt.initial_values)
+
+    def test_final_values(self):
+        dummy = DummyPulseTemplate(final_values={'A': ExpressionScalar('a + 3')})
+        rpt = RepetitionPulseTemplate(dummy, repetition_count='n')
+        self.assertEqual(dummy.final_values, rpt.final_values)
+
     def test_parameter_names_param_only_in_constraint(self) -> None:
         pt = RepetitionPulseTemplate(DummyPulseTemplate(parameter_names={'a'}), 'n', parameter_constraints=['a<c'])
         self.assertEqual(pt.parameter_names, {'a','c', 'n'})

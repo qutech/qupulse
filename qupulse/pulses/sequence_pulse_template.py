@@ -188,3 +188,12 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
             return {k: x[k] + y[k] for k in x}
 
         return functools.reduce(add_dicts, [sub.integral for sub in self.__subtemplates], expressions)
+
+    @property
+    def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        return self.__subtemplates[0].initial_values
+
+    @property
+    def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        return self.__subtemplates[-1].final_values
+

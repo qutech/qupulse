@@ -29,7 +29,7 @@ from qupulse.utils.types import TimeType
 from qupulse._program._loop import Loop
 from tests.pulses.sequencing_dummies import DummyWaveform
 from qupulse.hardware.awgs.zihdawg import HDAWGChannelGroup, HDAWGRepresentation, HDAWGValueError, UserRegister,\
-    ConstantParameter, ELFManager, HDAWGChannelGrouping
+    ConstantParameter, ELFManager, HDAWGChannelGrouping, SingleDeviceChannelGroup
 
 
 class HDAWGRepresentationTests(unittest.TestCase):
@@ -47,7 +47,7 @@ class HDAWGRepresentationTests(unittest.TestCase):
                 mock.patch.object(zhinst_core, 'ziDAQServer') as mock_daq_server, \
                 mock.patch('qupulse.hardware.awgs.zihdawg.HDAWGRepresentation._initialize') as mock_init, \
                 mock.patch('qupulse.hardware.awgs.zihdawg.HDAWGRepresentation.channel_grouping', new_callable=mock.PropertyMock) as mock_grouping, \
-                mock.patch('qupulse.hardware.awgs.zihdawg.HDAWGChannelGroup') as mock_channel_pair,\
+                mock.patch('qupulse.hardware.awgs.zihdawg.SingleDeviceChannelGroup') as mock_channel_pair,\
                 mock.patch('zhinst.utils.disable_everything') as mock_reset,\
                 mock.patch('pathlib.Path') as mock_path:
 
@@ -130,7 +130,7 @@ class HDAWGChannelGroupTests(unittest.TestCase):
             channels = (3, 4)
             awg_group_idx = 1
 
-            channel_pair = HDAWGChannelGroup(awg_group_idx, 2, 'foo', 3.4)
+            channel_pair = SingleDeviceChannelGroup(awg_group_idx, 2, 'foo', 3.4)
 
             self.assertEqual(channel_pair.timeout, 3.4)
             self.assertEqual(channel_pair._channels(), channels)
@@ -145,8 +145,8 @@ class HDAWGChannelGroupTests(unittest.TestCase):
             channel_pair.connect_group(mock_device)
             self.assertTrue(channel_pair.is_connected())
             proxy_mock.assert_called_once_with(mock_device)
-            self.assertIs(channel_pair.device, proxy_mock.return_value)
-            self.assertIs(channel_pair.awg_module, channel_pair.device.api_session.awgModule.return_value)
+            self.assertIs(channel_pair.master_device, proxy_mock.return_value)
+            self.assertIs(channel_pair.awg_module, channel_pair.master_device.api_session.awgModule.return_value)
 
     def test_set_volatile_parameters(self):
         mock_device = mock.Mock()
@@ -156,7 +156,7 @@ class HDAWGChannelGroupTests(unittest.TestCase):
 
         expected_user_reg_calls = [mock.call(*args) for args in requested_changes.items()]
 
-        channel_pair = HDAWGChannelGroup(1, 2, 'foo', 3.4)
+        channel_pair = SingleDeviceChannelGroup(1, 2, 'foo', 3.4)
 
         channel_pair._current_program = 'active_program'
         with mock.patch.object(channel_pair._program_manager, 'get_register_values_to_update_volatile_parameters',
@@ -184,7 +184,7 @@ class HDAWGChannelGroupTests(unittest.TestCase):
 
         with mock.patch('weakref.proxy'),\
              mock.patch('qupulse.hardware.awgs.zihdawg.make_compatible') as mock_make_compatible:
-            channel_pair = HDAWGChannelGroup(1, 2, 'foo', 3.4)
+            channel_pair = SingleDeviceChannelGroup(1, 2, 'foo', 3.4)
 
             with self.assertRaisesRegex(HDAWGValueError, 'Channel ID'):
                 channel_pair.upload('bar', mock_loop, ('A'), (None, 'A', None, None), voltage_trafos)
