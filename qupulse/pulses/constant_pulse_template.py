@@ -66,6 +66,15 @@ class ConstantPulseTemplate(AtomicPulseTemplate):  # type: ignore
         })
         return data
 
+    @classmethod
+    def deserialize(cls, serializer: Optional = None, **kwargs) -> 'ConstantPulseTemplate':
+        assert serializer is None, f"{cls} does not support legacy deserialization"
+        # this is for backwards compatible deserialization.
+        amplitudes = kwargs.pop('#amplitudes', None)
+        if amplitudes is not None:
+            kwargs['amplitude_dict'] = amplitudes
+        return cls(**kwargs)
+
     @property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
         """Returns an expression giving the integral over the pulse."""
