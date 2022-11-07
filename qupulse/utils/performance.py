@@ -1,5 +1,16 @@
-from typing import Tuple
+from typing import Tuple, Union, BinaryIO
+from pathlib import Path
 import numpy as np
+
+try:
+    import pandas as pd
+except ImportError:
+    pd = None
+
+try:
+    import polars as pl
+except ImportError:
+    pl = None
 
 try:
     import numba
@@ -22,6 +33,12 @@ def _is_monotonic_numpy(arr: np.ndarray) -> bool:
     # A bit faster than np.all(np.diff(arr) > 0) for small arrays
     # No difference for big arrays
     return np.all(arr[1:] >= arr[:-1])
+
+
+if numba is None:
+    is_monotonic = _is_monotonic_numpy
+else:
+    is_monotonic = _is_monotonic_numba
 
 
 @njit
@@ -75,10 +92,30 @@ def time_windows_to_samples(begins: np.ndarray, lengths: np.ndarray,
     return begins, lengths
 
 
-if numba is None:
-    is_monotonic = _is_monotonic_numpy
-else:
-    is_monotonic = _is_monotonic_numba
+def _write_csv_with_pandas(destination, table):
+    # roughly a factor of 2 faster in Nov 2022
+    df = pd.DataFrame(table)
+    df.to_csv(destination, header=False, compression=None, index=False,
+              sep=' ', line_terminator='\n')
 
 
+def _write_csv_with_polars(destination, table):
+    # polars only supports file names or binary targets as of version 0.14.24
+    # otherwise factor of 1000 faster for large tables
+    df = pl.DataFrame(table)
+    df.write_csv(file=destination, has_header=False, sep=' ')
 
+
+def _write_csv_with_numpy(destination, table):
+    np.savetxt(destination, table, '%u')
+
+
+def save_integer_csv(destination: Union[Path, str, BinaryIO], table: np.ndarray):
+    if pl is not None and not hasattr(destination, 'encoding'):  # pragma: no cover
+        _write_csv_with_polars(destination, table)
+
+    elif pd is not None:  # pragma: no cover
+        _write_csv_with_pandas(destination, table)
+
+    else:
+        _write_csv_with_numpy(destination, table)
