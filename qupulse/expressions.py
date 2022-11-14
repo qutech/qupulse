@@ -359,6 +359,11 @@ class ExpressionScalar(Expression):
                             -> Union['ExpressionScalar', Number, sympy.Expr]:
         return getattr(other, '_sympified_expression', other)
 
+    @classmethod
+    def _extract_sympified(cls, other: Union['ExpressionScalar', Number, sympy.Expr]) \
+                            -> Union['ExpressionScalar', Number, sympy.Expr]:
+        return getattr(other, '_sympified_expression', other)
+
     def __lt__(self, other: Union['ExpressionScalar', Number, sympy.Expr]) -> Union[bool, None]:
         result = self._sympified_expression < self._extract_sympified(other)
         return None if isinstance(result, sympy.Rel) else bool(result)
