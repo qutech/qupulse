@@ -1,4 +1,4 @@
-from typing import Mapping, Set, Tuple, Sequence, AbstractSet, Union
+from typing import Any, Mapping, Set, Tuple, Sequence, AbstractSet, Union, TYPE_CHECKING
 from abc import abstractmethod
 from numbers import Real
 
@@ -263,9 +263,13 @@ class ScalingTransformation(Transformation):
 
 
 try:
-    import pandas
+    if TYPE_CHECKING:
+        import pandas
+        PandasDataFrameType = pandas.DataFrame
+    else:
+        PandasDataFrameType = Any
 
-    def linear_transformation_from_pandas(transformation: pandas.DataFrame) -> LinearTransformation:
+    def linear_transformation_from_pandas(transformation: PandasDataFrameType) -> LinearTransformation:
         """ Creates a LinearTransformation object out of a pandas data frame.
 
         Args:

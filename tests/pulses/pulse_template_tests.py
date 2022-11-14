@@ -82,6 +82,14 @@ class PulseTemplateStub(PulseTemplate):
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
         raise NotImplementedError()
 
+    @property
+    def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        raise NotImplementedError()
+
+    @property
+    def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        raise NotImplementedError()
+
     def __repr__(self):
         return f"PulseTemplateStub(id={id(self)})"
 
@@ -269,7 +277,9 @@ class PulseTemplateTest(unittest.TestCase):
                                                                          parent_loop=inner_program_builder)
                         to_waveform.assert_called_once_with(expected_inner_program)
 
-                        self.assertEqual(expected_program, program_builder.to_program())
+                        self.assertEqual(expected_program, program_builder.to_program(),
+                                         f"To single waveform failed with to_single_waveform={to_single_waveform!r} and"
+                                         f" global_transformation={global_transformation!r}")
 
     def test_create_program_defaults(self) -> None:
         template = PulseTemplateStub(defined_channels={'A', 'B'}, parameter_names={'foo'}, measurement_names={'hugo', 'foo'})
@@ -447,4 +457,3 @@ class AtomicPulseTemplateTests(unittest.TestCase):
                                               to_single_waveform=set(),
                                               global_transformation=None)
         self.assertEqual(Loop(), program)
-

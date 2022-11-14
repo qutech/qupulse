@@ -120,6 +120,28 @@ LOOP 1 times:
         self.assertNotEqual(tree1, tree4)
         self.assertEqual(tree1, tree5)
 
+    def test_get_measurement_windows(self):
+        wf_1 = ConstantWaveform(channel='A', duration=32, amplitude=1)
+        wf_2 = ConstantWaveform(channel='A', duration=10, amplitude=2)
+
+        prog = Loop(children=[
+            Loop(waveform=wf_1, measurements=[('x', 0, 16)], repetition_count=3),
+            Loop(waveform=wf_2, measurements=[('y', 5, 5)], repetition_count=5),
+        ], repetition_count=2)
+
+        expected_measurements = {
+            'x': (np.array([0, 32, 64, 146, 178, 210]), np.array([16]*6)),
+            'y': (np.array([101, 111, 121, 131, 141, 247, 257, 267, 277, 287]), np.array([5]*10))
+        }
+        measurements_no_drop = prog.get_measurement_windows()
+        np.testing.assert_equal(expected_measurements, measurements_no_drop)
+
+        measurements_drop = prog.get_measurement_windows(drop=True)
+        np.testing.assert_equal(expected_measurements, measurements_drop)
+
+        # no measurements left
+        self.assertEqual({}, prog.get_measurement_windows())
+
     def test_repr(self):
         tree = self.get_test_loop()
         self.assertEqual(tree, eval(repr(tree)))

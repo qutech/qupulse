@@ -344,37 +344,30 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
             measurement_mapping=self.get_updated_measurement_mapping(measurement_mapping=measurement_mapping)
         )
 
-    @property
-    def integral(self) -> Dict[ChannelID, ExpressionScalar]:
-        internal_integral = self.__template.integral
-        expressions = dict()
-
-        # sympy.subs() does not work if one of the mappings in the provided dict is an Expression object
-        # the following is an ugly workaround
-        # todo: make Expressions compatible with sympy.subs()
+    def _apply_mapping_to_inner_channel_dict(self, to_map: Dict[ChannelID, ExpressionScalar]) -> Dict[ChannelID, ExpressionScalar]:
         parameter_mapping = {parameter_name: expression.underlying_expression
                              for parameter_name, expression in self.__parameter_mapping.items()}
-        for channel, ch_integral in internal_integral.items():
-            channel_out = self.__channel_mapping.get(channel, channel)
-            if channel_out is None:
-                continue
-
-            expressions[channel_out] = ExpressionScalar(
-                ch_integral.sympified_expression.subs(parameter_mapping, simultaneous=True)
-            )
-
-        return expressions
-
-    def _as_expression(self) -> Dict[ChannelID, ExpressionScalar]:
-        parameter_mapping = {parameter_name: expression.underlying_expression
-                             for parameter_name, expression in self.__parameter_mapping.items()}
-        inner = self.__template._as_expression()
         return {
             self.__channel_mapping.get(ch, ch): ExpressionScalar(ch_expr.sympified_expression.subs(parameter_mapping,
                                                                                                    simultaneous=True))
-            for ch, ch_expr in inner.items()
+            for ch, ch_expr in to_map.items()
             if self.__channel_mapping.get(ch, ch) is not None
         }
+
+    @property
+    def integral(self) -> Dict[ChannelID, ExpressionScalar]:
+        return self._apply_mapping_to_inner_channel_dict(self.__template.integral)
+
+    def _as_expression(self) -> Dict[ChannelID, ExpressionScalar]:
+        return self._apply_mapping_to_inner_channel_dict(self.__template._as_expression())
+
+    @property
+    def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        return self._apply_mapping_to_inner_channel_dict(self.__template.initial_values)
+
+    @property
+    def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        return self._apply_mapping_to_inner_channel_dict(self.__template.final_values)
 
 
 class MissingMappingException(Exception):

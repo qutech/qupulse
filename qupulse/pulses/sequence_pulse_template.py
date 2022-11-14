@@ -123,9 +123,9 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                        parameters: Dict[str, Real],
                        channel_mapping: Dict[ChannelID, ChannelID]) -> SequenceWaveform:
         self.validate_parameter_constraints(parameters=parameters, volatile=set())
-        return SequenceWaveform([sub_template.build_waveform(parameters,
-                                                             channel_mapping=channel_mapping)
-                                 for sub_template in self.__subtemplates])
+        return SequenceWaveform.from_sequence(
+            [sub_template.build_waveform(parameters, channel_mapping=channel_mapping)
+             for sub_template in self.__subtemplates])
 
     def _internal_create_program(self, *,
                                  scope: Scope,
@@ -184,3 +184,12 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
             return {k: x[k] + y[k] for k in x}
 
         return functools.reduce(add_dicts, [sub.integral for sub in self.__subtemplates], expressions)
+
+    @property
+    def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        return self.__subtemplates[0].initial_values
+
+    @property
+    def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        return self.__subtemplates[-1].final_values
+

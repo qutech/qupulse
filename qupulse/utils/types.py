@@ -246,7 +246,7 @@ class TimeType:
 
     @classmethod
     def as_comparable(cls, other: typing.Union['TimeType', typing.Any]):
-        if type(other) == cls:
+        if type(other) is cls:
             return other._value
         else:
             return other
@@ -404,9 +404,13 @@ class HashableNumpyArray(numpy.ndarray):
         return hash(self.tobytes())
 
 
+@functools.lru_cache(maxsize=128)
+def _public_type_attributes(type_obj):
+    return {attr for attr in dir(type_obj) if not attr.startswith('_')}
+
 def has_type_interface(obj: typing.Any, type_obj: typing.Type) -> bool:
-    """Return true if all public attributes of the class are attribues of the object"""
-    return set(dir(obj)) >= {attr for attr in dir(type_obj) if not attr.startswith('_')}
+    """Return true if all public attributes of the class are attributes of the object"""
+    return set(dir(obj)) >= _public_type_attributes(type_obj)
 
 
 _KT_hash = typing.TypeVar('_KT_hash', bound=typing.Hashable)  # Key type.

@@ -97,6 +97,16 @@ class PulseTemplate(Serializable):
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
         """Returns an expression giving the integral over the pulse."""
 
+    @property
+    def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        """Values of defined channels at t == 0"""
+        raise NotImplementedError(f"The pulse template of type {type(self)} does not implement `initial_values`")
+
+    @property
+    def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        """Values of defined channels at t == self.duration"""
+        raise NotImplementedError(f"The pulse template of type {type(self)} does not implement `final_values`")
+
     def create_program(self, *,
                        parameters: Optional[Mapping[str, Union[Expression, str, Number, ConstantParameter]]]=None,
                        measurement_mapping: Optional[Mapping[str, Optional[str]]]=None,
@@ -218,7 +228,7 @@ class PulseTemplate(Serializable):
                 waveform = to_waveform(program)
 
                 if global_transformation:
-                    waveform = TransformingWaveform(waveform, global_transformation)
+                    waveform = TransformingWaveform.from_transformation(waveform, global_transformation)
 
                 # convert the nicely formatted measurement windows back into the old format again :(
                 measurements = program.get_measurement_windows()
@@ -333,7 +343,7 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
                                                         measurement_mapping=measurement_mapping)
 
             if global_transformation:
-                waveform = TransformingWaveform(waveform, global_transformation)
+                waveform = TransformingWaveform.from_transformation(waveform, global_transformation)
 
             parent_loop.append_leaf(waveform=waveform, measurements=measurements)
 
@@ -358,7 +368,29 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
     def _as_expression(self) -> Dict[ChannelID, ExpressionScalar]:
         """Helper function to allow integral calculation in case of truncation. AtomicPulseTemplate._AS_EXPRESSION_TIME
         is by convention the time variable."""
-        raise NotImplementedError(f"_as_expression is not implemented for {type(self)} which means it cannot be truncated and integrated over.")
+        raise NotImplementedError(f"_as_expression is not implemented for {type(self)} "
+                                  f"which means it cannot be truncated and integrated over.")
+
+    @property
+    def integral(self) -> Dict[ChannelID, ExpressionScalar]:
+        # this default implementation uses _as_expression
+        return {ch: ExpressionScalar(sympy.integrate(expr.sympified_expression,
+                                                     (self._AS_EXPRESSION_TIME, 0, self.duration.sympified_expression)))
+                for ch, expr in self._as_expression().items()}
+
+    @property
+    def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        values = self._as_expression()
+        for ch, value in values.items():
+            values[ch] = value.evaluate_symbolic({self._AS_EXPRESSION_TIME: 0})
+        return values
+
+    @property
+    def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        values = self._as_expression()
+        for ch, value in values.items():
+            values[ch] = value.evaluate_symbolic({self._AS_EXPRESSION_TIME: self.duration})
+        return values
 
 
 class DoubleParameterNameException(Exception):

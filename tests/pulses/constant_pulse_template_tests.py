@@ -4,13 +4,16 @@ import qupulse.pulses.plotting
 import qupulse._program.waveforms
 import qupulse.utils.sympy
 from qupulse.pulses import TablePT, FunctionPT, AtomicMultiChannelPT, MappingPT
+from qupulse.pulses.multi_channel_pulse_template import AtomicMultiChannelPulseTemplate
 from qupulse.pulses.plotting import plot
 from qupulse.pulses.sequence_pulse_template import SequencePulseTemplate
 from qupulse._program._loop import make_compatible
 from qupulse._program.waveforms import ConstantWaveform
 
-from qupulse.pulses.constant_pulse_template import ConstantPulseTemplate
+from qupulse.serialization import DictBackend, PulseStorage
+from qupulse.pulses.constant_pulse_template import ConstantPulseTemplate, ExpressionScalar, TimeType
 
+from tests.serialization_tests import SerializableTests
 
 class TestConstantPulseTemplate(unittest.TestCase):
 
@@ -23,6 +26,9 @@ class TestConstantPulseTemplate(unittest.TestCase):
 
         self.assertIn('ConstantPulseTemplate', str(pt))
         self.assertIn('ConstantPulseTemplate', repr(pt))
+
+        self.assertEqual({'P1': .5, 'P2': .25}, pt.initial_values)
+        self.assertEqual({'P1': .5, 'P2': .25}, pt.final_values)
 
     def test_zero_duration(self):
         p1 = ConstantPulseTemplate(10, {'P1': 1.})
@@ -87,6 +93,28 @@ class TestConstantPulseTemplate(unittest.TestCase):
         plot(p)
         self.assertEqual(p.defined_channels, {'C2'})
 
+    def test_expressions(self):
+        cpt = ConstantPulseTemplate('duration', {'A': 5.4, 'B': 'amplitude_b'})
+        self.assertEqual({'duration', 'amplitude_b'}, cpt.parameter_names)
+        self.assertEqual(ExpressionScalar('duration'), cpt.duration)
+
+        self.assertIsNone(cpt.build_waveform({'duration': 0., 'amplitude_b': 1.}, {'A': 'A', 'B': 'B'}))
+        self.assertIsNone(cpt.build_waveform({'duration': 1., 'amplitude_b': 1.}, {'A': None, 'B': None}))
+
+        wf1 = ConstantWaveform(duration=TimeType.from_float(1.4), channel='C', amplitude=1.6)
+        wf2 = ConstantWaveform(duration=TimeType.from_float(1.5), channel='A', amplitude=5.4)
+        self.assertEqual(wf1, cpt.build_waveform({'duration': 1.4, 'amplitude_b': 1.6}, {'A': None, 'B': 'C'}))
+        self.assertEqual(wf2, cpt.build_waveform({'duration': 1.5, 'amplitude_b': None}, {'A': 'A', 'B': None}))
+
+        wf3 = ConstantWaveform.from_mapping(duration=TimeType.from_float(1.6), constant_values={'C': 5.4, 'B': -.3})
+        self.assertEqual(wf3, cpt.build_waveform({'duration': 1.6, 'amplitude_b': -.3}, {'A': 'C', 'B': 'B'}))
+
+    def test_regression_defined_channels(self):
+        p=ConstantPulseTemplate(100, {'a': 1.})
+        q=ConstantPulseTemplate(100, {'b': 1.})
+        pt=AtomicMultiChannelPulseTemplate(p, q)
+        self.assertEqual(pt.defined_channels, {'a', 'b'})
+
     def test_build_waveform(self):
         tpt = ConstantPulseTemplate(200, {'C1': 2, 'C2': 3})
 
@@ -115,3 +143,46 @@ class TestConstantPulseTemplate(unittest.TestCase):
         )
 
         self.assertIsNone(tpt.build_waveform({}, {'C1': None, 'C2': None}))
+
+
+class ConstantPulseTemplateSerializationTests(SerializableTests, unittest.TestCase):
+    @property
+    def class_to_test(self):
+        return ConstantPulseTemplate
+
+    def make_kwargs(self):
+        return {
+            'name': 'yoho',
+            'duration': 'dur',
+            'amplitude_dict': {'int': 1, 'float': -3.4, 'expr': 'x + y'},
+            'measurements': [('m', 1, 1), ('foo', 'z', 'o')],
+        }
+
+    def assert_equal_instance_except_id(self, lhs: ConstantPulseTemplate, rhs: ConstantPulseTemplate):
+        self.assertIsInstance(lhs, ConstantPulseTemplate)
+        self.assertIsInstance(rhs, ConstantPulseTemplate)
+        self.assertEqual(lhs._name, rhs._name)
+        self.assertEqual(lhs.measurement_declarations, rhs.measurement_declarations)
+        self.assertEqual(lhs._amplitude_dict, rhs._amplitude_dict)
+        self.assertEqual(lhs.duration, rhs.duration)
+
+    def test_legacy_deserialization(self):
+        serialized = """{
+            "#amplitudes": {
+                "ZI0_A_MARKER_FRONT": 1
+            },
+            "#type": "qupulse.pulses.constant_pulse_template.ConstantPulseTemplate",
+            "duration": 62848.0,
+            "name": "constant_pulse"
+        }"""
+        backend = DictBackend()
+        backend.storage['my_pt'] = serialized
+
+        ps = PulseStorage(backend)
+
+        deserialized = ps['my_pt']
+        expected = ConstantPulseTemplate(
+            amplitude_dict={"ZI0_A_MARKER_FRONT": 1},
+            duration=62848, name="constant_pulse"
+        )
+        self.assert_equal_instance(expected, deserialized)
