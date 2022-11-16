@@ -18,6 +18,12 @@ except ImportError:
                   "will be removed in a future release.", category=DeprecationWarning)
     frozendict = None
 
+try:
+    from qupulse_rs.qupulse_rs import TimeType as RsTimeType
+    numbers.Rational.register(RsTimeType)
+except ImportError:
+    RsTimeType = None
+
 import qupulse.utils.numeric as qupulse_numeric
 
 __all__ = ["MeasurementWindow", "ChannelID", "HashableNumpyArray", "TimeType", "time_from_float", "DocStringABCMeta",
@@ -234,7 +240,7 @@ class TimeType:
 
     def __eq__(self, other):
         if type(other) == type(self):
-            return self._value.__eq__(other._value)
+            return self._value == other._value
         else:
             return self._value == other
 
@@ -310,16 +316,22 @@ class TimeType:
         return int(self._value.numerator) / int(self._value.denominator)
 
 
+PyTimeType = TimeType
+
+if RsTimeType:
+    TimeType = RsTimeType
+
+
 # this asserts isinstance(TimeType, Rational) is True
 numbers.Rational.register(TimeType)
 
 
 _converter = {
-    float: TimeType.from_float,
-    TimeType._InternalType: TimeType,
-    fractions.Fraction: TimeType,
-    sympy.Rational: lambda q: TimeType.from_fraction(q.p, q.q),
-    TimeType: lambda x: x
+    float: PyTimeType.from_float,
+    PyTimeType._InternalType: PyTimeType,
+    fractions.Fraction: PyTimeType,
+    sympy.Rational: lambda q: PyTimeType.from_fraction(q.p, q.q),
+    PyTimeType: lambda x: x
 }
 
 
@@ -558,3 +570,20 @@ class SequenceProxy(collections.abc.Sequence):
             return NotImplemented
 
 
+def use_rs_replacements(glbls, rs_replacement, base_class: type):
+    name_suffix = base_class.__name__
+    for name, rs_obj in vars(rs_replacement).items():
+        if not name.endswith(name_suffix):
+            continue
+
+        py_name = f'Py{name}'
+        rs_name = f'Rs{name}'
+        glbls[name] = rs_obj
+        try:
+            py_obj = glbls[name]
+        except KeyError:
+            pass
+        else:
+            glbls.setdefault(py_name, py_obj)
+        glbls.setdefault(rs_name, rs_obj)
+        base_class.register(rs_obj)

@@ -30,6 +30,7 @@ import warnings
 import gc
 import importlib
 import warnings
+from typing import Protocol, runtime_checkable
 from contextlib import contextmanager
 
 from qupulse.utils.types import DocStringABCMeta, FrozenDict
@@ -1064,7 +1065,7 @@ class JSONSerializableEncoder(json.JSONEncoder):
             else:
                 return o.get_serialization_data()
 
-        elif isinstance(o, AnonymousSerializable):
+        elif hasattr(o, 'get_serialization_data'):
             return o.get_serialization_data()
 
         elif type(o) is set:
@@ -1091,7 +1092,7 @@ class ExtendedJSONEncoder(json.JSONEncoder):
         super().__init__(*args, **kwargs)
 
     def default(self, o: Any) -> Any:
-        if isinstance(o, AnonymousSerializable):
+        if hasattr(o, 'get_serialization_data'):
             return o.get_serialization_data()
         elif type(o) is set:
             return list(o)

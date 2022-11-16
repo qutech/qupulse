@@ -481,7 +481,18 @@ class ArithmeticPulseTemplateTest(unittest.TestCase):
         expected = dict(u=ExpressionScalar('ui / (x + y)'),
                         v=ExpressionScalar('vi / 2.2'),
                         w=ExpressionScalar('wi'))
-        self.assertEqual(expected, ArithmeticPulseTemplate(pt, '/', mapping).integral)
+        actual = ArithmeticPulseTemplate(pt, '/', mapping).integral
+        self.assertEqual(expected, actual)
+
+    def test_initial_values(self):
+        lhs = DummyPulseTemplate(initial_values={'A': .3, 'B': 'b'}, defined_channels={'A', 'B'})
+        apt = lhs + 'a'
+        self.assertEqual({'A': 'a + 0.3', 'B': 'b + a'}, apt.initial_values)
+
+    def test_final_values(self):
+        lhs = DummyPulseTemplate(final_values={'A': .3, 'B': 'b'}, defined_channels={'A', 'B'})
+        apt = lhs - 'a'
+        self.assertEqual({'A': '-a + .3', 'B': 'b - a'}, apt.final_values)
 
     def test_initial_values(self):
         lhs = DummyPulseTemplate(initial_values={'A': .3, 'B': 'b'}, defined_channels={'A', 'B'})

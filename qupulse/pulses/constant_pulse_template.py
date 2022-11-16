@@ -10,6 +10,8 @@ import logging
 import numbers
 from typing import Any, Dict, List, Optional, Union, Mapping, AbstractSet
 
+from qupulse.utils import cached_property
+from qupulse._program import ProgramBuilder
 from qupulse._program.waveforms import ConstantWaveform
 from qupulse.utils.types import TimeType, ChannelID
 from qupulse.utils import cached_property

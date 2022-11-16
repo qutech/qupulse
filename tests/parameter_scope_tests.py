@@ -1,7 +1,7 @@
 import unittest
 from unittest import mock
 
-from qupulse.parameter_scope import Scope, DictScope, MappedScope, ParameterNotProvidedException, NonVolatileChange
+from qupulse.parameter_scope import Scope, DictScope, MappedScope, ParameterNotProvidedException, NonVolatileChange, parameter_scope_rs
 from qupulse.expressions import ExpressionScalar
 
 from qupulse.utils.types import FrozenDict
@@ -9,17 +9,20 @@ from qupulse.utils.types import FrozenDict
 
 class DictScopeTests(unittest.TestCase):
     def test_init(self):
-        with self.assertRaises(AssertionError):
-            DictScope(dict())
+        if parameter_scope_rs is None:
+            with self.assertRaises(AssertionError):
+                DictScope(dict())
         fd = FrozenDict({'a': 2})
         ds = DictScope(fd)
-        self.assertIs(fd, ds._values)
-        self.assertEqual(FrozenDict(), ds._volatile_parameters)
+        if parameter_scope_rs is None:
+            self.assertIs(fd, ds._values)
+        self.assertEqual(FrozenDict(), ds.get_volatile_parameters())
 
         vp = frozenset('a')
         ds = DictScope(fd, vp)
-        self.assertIs(fd, ds._values)
-        self.assertEqual(FrozenDict(a=ExpressionScalar('a')), ds._volatile_parameters)
+        if parameter_scope_rs is None:
+            self.assertIs(fd, ds._values)
+        self.assertEqual(FrozenDict(a=ExpressionScalar('a')), ds.get_volatile_parameters())
 
     def test_mapping(self):
         ds = DictScope(FrozenDict({'a': 1, 'b': 2}))
@@ -136,6 +139,7 @@ class MappedScopeTests(unittest.TestCase):
         with self.assertRaisesRegex(KeyError, 'd'):
             _ = ms['d']
 
+    @unittest.skipIf(parameter_scope_rs is not None, "Tested method not present in rust")
     def test_parameter(self):
         mock_a = mock.Mock(wraps=1)
         mock_result = mock.Mock()
@@ -163,9 +167,10 @@ class MappedScopeTests(unittest.TestCase):
     def test_update_constants(self):
         ds = DictScope.from_kwargs(a=1, b=2, c=3, volatile={'c'})
         ds2 = DictScope.from_kwargs(a=1, b=2, c=4, volatile={'c'})
-        ms = MappedScope(ds, FrozenDict(x=ExpressionScalar('a * b'),
-                                        c=ExpressionScalar('a - b')))
-        ms2 = MappedScope(ds2, ms._mapping)
+        mapping = FrozenDict(x=ExpressionScalar('a * b'),
+                                        c=ExpressionScalar('a - b'))
+        ms = MappedScope(ds, mapping)
+        ms2 = MappedScope(ds2, mapping)
 
         self.assertIs(ms, ms.change_constants({'f': 1}))
 
@@ -180,7 +185,7 @@ class MappedScopeTests(unittest.TestCase):
                                         y=ExpressionScalar('c - a')))
         expected_volatile = FrozenDict(d=ExpressionScalar('d'), y=ExpressionScalar('c - 1'))
         self.assertEqual(expected_volatile, ms.get_volatile_parameters())
-        self.assertIs(ms.get_volatile_parameters(), ms.get_volatile_parameters())
+        self.assertEqual(ms.get_volatile_parameters(), ms.get_volatile_parameters())
 
     def test_eq(self):
         ds1 = DictScope.from_kwargs(a=1, b=2, c=3, d=4)

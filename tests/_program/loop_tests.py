@@ -143,6 +143,10 @@ LOOP 1 times:
         self.assertEqual({}, prog.get_measurement_windows())
 
     def test_repr(self):
+        tree = self.get_test_loop()
+        self.assertEqual(tree, eval(repr(tree)))
+
+    def test_str(self):
         wf_gen = WaveformGenerator(num_channels=1)
         wfs = [wf_gen() for _ in range(11)]
 
@@ -154,10 +158,10 @@ LOOP 1 times:
                 loop.waveform = wfs.pop(0)
         self.assertEqual(len(wfs), 0)
 
-        self.assertEqual(repr(tree), expected)
+        self.assertEqual(str(tree), expected)
 
         with mock.patch.object(Loop, 'MAX_REPR_SIZE', 1):
-            self.assertEqual(repr(tree), '...')
+            self.assertEqual(str(tree), '...')
 
     def test_is_leaf(self):
         root_loop = self.get_test_loop(waveform_generator=WaveformGenerator(1))
@@ -221,7 +225,7 @@ LOOP 1 times:
       ->LOOP 9 times:
           ->EXEC {J} 10 times
           ->EXEC {K} 11 times""".format(**wf_reprs)
-        self.assertEqual(repr(before), before_repr)
+        self.assertEqual(str(before), before_repr)
 
         expected_after_repr = """\
 LOOP 1 times:
@@ -263,7 +267,7 @@ LOOP 1 times:
       ->EXEC {J} 10 times
       ->EXEC {K} 11 times""".format(**wf_reprs)
 
-        self.assertEqual(expected_after_repr, repr(after))
+        self.assertEqual(expected_after_repr, str(after))
 
     def test_flatten_and_balance_comparison_based(self):
         wfs = [DummyWaveform(duration=i) for i in range(2)]
@@ -425,29 +429,22 @@ class ProgramWaveformCompatibilityTest(unittest.TestCase):
 
         program = Loop(children=[Loop(waveform=wf1, repetition_count=2),
                                  Loop(waveform=wf2)])
+        expected_program = Loop(children=[
+            Loop(waveform=RepetitionWaveform(wf1, 2)),
+            Loop(waveform=wf2)
+        ])
 
         _make_compatible(program, min_len=1, quantum=1, sample_rate=TimeType.from_float(1.))
-
-        self.assertIsNone(program.waveform)
-        self.assertEqual(len(program), 2)
-        self.assertIsInstance(program[0].waveform, RepetitionWaveform)
-        self.assertIs(program[0].waveform._body, wf1)
-        self.assertEqual(program[0].waveform._repetition_count, 2)
-        self.assertIs(program[1].waveform, wf2)
+        self.assertEqual(expected_program, program)
 
         program = Loop(children=[Loop(waveform=wf1, repetition_count=2),
-                                 Loop(waveform=wf2)], repetition_count=2)
+                                 Loop(waveform=wf2)], repetition_count=3)
+        expected_program = Loop(waveform=SequenceWaveform([
+            RepetitionWaveform(wf1, 2),
+            wf2
+        ]), repetition_count=3)
         _make_compatible(program, min_len=5, quantum=1, sample_rate=TimeType.from_float(1.))
-
-        self.assertIsInstance(program.waveform, SequenceWaveform)
-        self.assertEqual(list(program.children), [])
-        self.assertEqual(program.repetition_count, 2)
-
-        self.assertEqual(len(program.waveform._sequenced_waveforms), 2)
-        self.assertIsInstance(program.waveform._sequenced_waveforms[0], RepetitionWaveform)
-        self.assertIs(program.waveform._sequenced_waveforms[0]._body, wf1)
-        self.assertEqual(program.waveform._sequenced_waveforms[0]._repetition_count, 2)
-        self.assertIs(program.waveform._sequenced_waveforms[1], wf2)
+        self.assertEqual(expected_program, program)
 
     def test_make_compatible_complete_unroll(self):
         wf1 = DummyWaveform(duration=1.5)
@@ -456,21 +453,18 @@ class ProgramWaveformCompatibilityTest(unittest.TestCase):
         program = Loop(children=[Loop(waveform=wf1, repetition_count=2),
                                  Loop(waveform=wf2, repetition_count=1)], repetition_count=2)
 
+        expected_program = Loop(repetition_count=1,
+                                waveform=RepetitionWaveform(
+                                    body=SequenceWaveform([
+                                        RepetitionWaveform(wf1, 2),
+                                        wf2
+                                    ]),
+                                    repetition_count=2
+                                )
+                                )
+
         _make_compatible(program, min_len=5, quantum=10, sample_rate=TimeType.from_float(1.))
-
-        self.assertIsInstance(program.waveform, RepetitionWaveform)
-        self.assertEqual(list(program.children), [])
-        self.assertEqual(program.repetition_count, 1)
-
-        self.assertIsInstance(program.waveform, RepetitionWaveform)
-
-        self.assertIsInstance(program.waveform._body, SequenceWaveform)
-        body_wf = program.waveform._body
-        self.assertEqual(len(body_wf._sequenced_waveforms), 2)
-        self.assertIsInstance(body_wf._sequenced_waveforms[0], RepetitionWaveform)
-        self.assertIs(body_wf._sequenced_waveforms[0]._body, wf1)
-        self.assertEqual(body_wf._sequenced_waveforms[0]._repetition_count, 2)
-        self.assertIs(body_wf._sequenced_waveforms[1], wf2)
+        self.assertEqual(expected_program, program)
 
     def test_make_compatible(self):
         program = Loop()

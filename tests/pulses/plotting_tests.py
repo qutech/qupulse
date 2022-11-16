@@ -5,6 +5,11 @@ import importlib
 
 import numpy
 
+try:
+    import qupulse_rs
+except ImportError:
+    qupulse_rs = None
+
 from qupulse.pulses import ConstantPT
 from qupulse.pulses.plotting import PlottingNotPossibleException, render, plot
 from qupulse.pulses.table_pulse_template import TablePulseTemplate
@@ -151,6 +156,7 @@ class PlottingIsinstanceTests(unittest.TestCase):
 
             plot(pt, parameters={})
 
+    @unittest.skipIf(qupulse_rs is not None, "Not relevant for rust code")
     def test_bug_422_mock(self):
         pt = TablePulseTemplate({'X': [(0, 1), (100, 1)]})
         program = pt.create_program()

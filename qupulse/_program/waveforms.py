@@ -25,9 +25,17 @@ from qupulse.comparable import Comparable
 from qupulse.expressions import ExpressionScalar
 from qupulse.pulses.interpolation import InterpolationStrategy
 from qupulse.utils import checked_int_cast, isclose
-from qupulse.utils.types import TimeType, time_from_float, FrozenDict
+from qupulse.utils.types import TimeType, time_from_float, FrozenDict, use_rs_replacements
 from qupulse._program.transformation import Transformation
 from qupulse.utils import pairwise
+
+try:
+    import qupulse_rs
+except ImportError:
+    qupulse_rs = None
+    waveforms_rs = None
+else:
+    from qupulse_rs.replacements import waveforms as waveforms_rs
 
 class ConstantFunctionPulseTemplateWarning(UserWarning):
     """  This warning indicates a constant waveform is constructed from a FunctionPulseTemplate """
@@ -850,8 +858,8 @@ class RepetitionWaveform(Waveform):
         return output_array
 
     @property
-    def compare_key(self) -> Tuple[Any, int]:
-        return self._body.compare_key, self._repetition_count
+    def compare_key(self) -> Tuple[int, Any]:
+        return self._repetition_count, self._body
 
     def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> Waveform:
         return RepetitionWaveform.from_repetition_count(
@@ -987,9 +995,14 @@ class SubsetWaveform(Waveform):
         return self.inner_waveform.unsafe_sample(channel, sample_times, output_array)
 
     def constant_value_dict(self) -> Optional[Mapping[ChannelID, float]]:
-        d = self._inner_waveform.constant_value_dict()
-        if d is not None:
-            return {ch: d[ch] for ch in self._channel_subset}
+        constant_values = {}
+        for ch in self.defined_channels:
+            value = self._inner_waveform.constant_value(ch)
+            if value is None:
+                return
+            else:
+                constant_values[ch] = value
+        return constant_values
 
     def constant_value(self, channel: ChannelID) -> Optional[float]:
         if channel not in self._channel_subset:
@@ -1231,3 +1244,9 @@ class ReversedWaveform(Waveform):
 
     def reversed(self) -> 'Waveform':
         return self._inner
+
+
+
+
+if waveforms_rs:
+    use_rs_replacements(globals(), waveforms_rs, Waveform)

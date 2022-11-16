@@ -152,6 +152,9 @@ class Node:
         else:
             return self
 
+    def _children_repr(self):
+        return repr(self.__children)
+
     def _reverse_children(self):
         """Reverse children in-place"""
         self.__children.reverse()

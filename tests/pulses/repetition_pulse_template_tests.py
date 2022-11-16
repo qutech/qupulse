@@ -2,6 +2,8 @@ import unittest
 import warnings
 from unittest import mock
 
+import numpy.testing
+
 from qupulse.parameter_scope import Scope, DictScope
 from qupulse.utils.types import FrozenDict
 
@@ -120,13 +122,13 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         to_single_waveform = {'to', 'single', 'waveform'}
 
         program = Loop()
-        expected_program = Loop(children=[Loop(children=[Loop(waveform=wf)], repetition_count=6)],
-                                measurements=[('l', .1, .2)])
+        expected_program = Loop(children=[Loop(children=[Loop(children=[Loop(waveform=wf)], repetition_count=6)],
+                                measurements=[('l', .1, .2)])])
 
         real_relevant_parameters = dict(n_rep=3, mul=2, a=0.1, b=0.2)
 
         with mock.patch.object(body, '_create_program',
-                               wraps=get_appending_internal_create_program(wf, always_append=True)) as body_create_program:
+                               wraps=get_appending_internal_create_program(wf, always_append=True)):
             with mock.patch.object(rpt, 'validate_scope') as validate_scope:
                 with mock.patch.object(rpt, 'get_repetition_count_value', return_value=6) as get_repetition_count_value:
                     with mock.patch.object(rpt, 'get_measurement_windows', return_value=[('l', .1, .2)]) as get_meas:
@@ -138,12 +140,6 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
                                                      parent_loop=program)
 
                         self.assertEqual(program, expected_program)
-                        body_create_program.assert_called_once_with(scope=scope,
-                                                                    measurement_mapping=measurement_mapping,
-                                                                    channel_mapping=channel_mapping,
-                                                                    global_transformation=global_transformation,
-                                                                    to_single_waveform=to_single_waveform,
-                                                                    parent_loop=program.children[0])
                         validate_scope.assert_called_once_with(scope)
                         get_repetition_count_value.assert_called_once_with(scope)
                         get_meas.assert_called_once_with(scope, measurement_mapping)
@@ -163,15 +159,17 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
                                    global_transformation=None,
                                    parent_loop=program)
 
-        self.assertEqual(1, len(program.children))
-        internal_loop = program[0]  # type: Loop
-        self.assertEqual(repetitions, internal_loop.repetition_count)
+        expected_program = Loop(children=[Loop(
+            measurements=[("thy", 2, 2)],
+            children=[Loop(
+                children=[Loop(waveform=body.waveform, measurements=[('b', 0, 1)])],
+                repetition_count=repetitions
+            )])
+        ])
 
-        self.assertEqual(1, len(internal_loop))
-        self.assertEqual((scope, measurement_mapping, channel_mapping, internal_loop), body.create_program_calls[-1])
-        self.assertEqual(body.waveform, internal_loop[0].waveform)
-
-        self.assert_measurement_windows_equal({'b': ([0, 2, 4], [1, 1, 1]), 'thy': ([2], [2])}, program.get_measurement_windows())
+        self.assertEqual(expected_program, program)
+        self.assert_measurement_windows_equal({'b': ([0, 2, 4], [1, 1, 1]), 'thy': ([2], [2])},
+                                              program.get_measurement_windows())
 
         # done in MultiChannelProgram
         program.cleanup()
@@ -194,16 +192,11 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
                                    global_transformation=None,
                                    parent_loop=program)
 
-        self.assertEqual(1, program.repetition_count)
-        self.assertEqual(1, len(program.children))
-        internal_loop = program.children[0]  # type: Loop
-        self.assertEqual(scope[repetitions], internal_loop.repetition_count)
-
-        self.assertEqual(1, len(internal_loop))
-        self.assertEqual((scope, measurement_mapping, channel_mapping, internal_loop),
-                         body.create_program_calls[-1])
-        self.assertEqual(body.waveform, internal_loop[0].waveform)
-
+        expected_program = Loop(children=[
+            Loop(repetition_count=scope['foo'],
+                 children=[Loop(waveform=body.waveform)])
+        ])
+        self.assertEqual(expected_program, program)
         self.assert_measurement_windows_equal({}, program.get_measurement_windows())
 
         # ensure same result as from Sequencer
@@ -219,7 +212,7 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
         measurement_mapping = dict(moth='fire', b='b')
         channel_mapping = dict(asd='f')
         children = [Loop(waveform=DummyWaveform(duration=0))]
-        program = Loop(children=children, measurements=[('a', [0], [1])], repetition_count=2)
+        program = Loop(children=children, measurements=[('a', 0, 1)], repetition_count=2)
 
         t._internal_create_program(scope=scope,
                                    measurement_mapping=measurement_mapping,
@@ -228,22 +221,21 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
                                    global_transformation=None,
                                    parent_loop=program)
 
-        self.assertEqual(2, program.repetition_count)
-        self.assertEqual(2, len(program.children))
-        self.assertIs(program.children[0], children[0])
-        internal_loop = program.children[1]  # type: Loop
-        self.assertEqual(scope[repetitions], internal_loop.repetition_count)
+        expected_program = Loop(children=children + [Loop(
+            measurements=[('fire', 0, 7.1)],
+            children=[Loop(repetition_count=scope['foo'], children=[Loop(waveform=body.waveform, measurements=[('b', 0, 1)])])]
+        )],
+                                measurements=[('a', 0, 1)], repetition_count=2)
+        self.assertEqual(expected_program, program)
 
-        self.assertEqual(1, len(internal_loop))
-        self.assertEqual((scope, measurement_mapping, channel_mapping, internal_loop), body.create_program_calls[-1])
-        self.assertEqual(body.waveform, internal_loop[0].waveform)
+        expected_measurementt_windows = {
+            'fire': ([0, 6], [7.1, 7.1]),
+            'b': ([0, 2, 4, 6, 8, 10], [1, 1, 1, 1, 1, 1]),
+            'a': ([0, expected_program.body_duration], [1, 1])}
+        numpy.testing.assert_equal(expected_measurementt_windows, program.get_measurement_windows())
 
-        self.assert_measurement_windows_equal({'fire': ([0, 6], [7.1, 7.1]),
-                                         'b': ([0, 2, 4, 6, 8, 10], [1, 1, 1, 1, 1, 1]),
-                                         'a': ([0], [1])}, program.get_measurement_windows())
-
-        # not ensure same result as from Sequencer here - we're testing appending to an already existing parent loop
-        # which is a use case that does not immediately arise from using Sequencer
+        self.assert_measurement_windows_equal(expected_measurementt_windows,
+            program.get_measurement_windows())
 
     def test_create_program_declaration_success_measurements(self) -> None:
         repetitions = "foo"
@@ -260,15 +252,11 @@ class RepetitionPulseTemplateSequencingTests(MeasurementWindowTestCase):
                                    global_transformation=None,
                                    parent_loop=program)
 
-        self.assertEqual(1, program.repetition_count)
-        self.assertEqual(1, len(program.children))
-        internal_loop = program.children[0]  # type: Loop
-        self.assertEqual(scope[repetitions], internal_loop.repetition_count)
-
-        self.assertEqual(1, len(internal_loop))
-        self.assertEqual((scope, measurement_mapping, channel_mapping, internal_loop), body.create_program_calls[-1])
-        self.assertEqual(body.waveform, internal_loop[0].waveform)
-
+        expected_program = Loop(children=[
+            Loop(measurements=[('fire', 0, scope['meas_end'])],
+                 children=[Loop(children=[Loop(waveform=body.waveform, measurements=[('b', 0, 1)])], repetition_count=scope['foo'])])
+        ])
+        self.assertEqual(expected_program, program)
         self.assert_measurement_windows_equal({'fire': ([0], [7.1]), 'b': ([0, 2, 4], [1, 1, 1])}, program.get_measurement_windows())
 
     def test_create_program_declaration_exceeds_bounds(self) -> None:

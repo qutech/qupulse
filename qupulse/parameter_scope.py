@@ -7,7 +7,15 @@ import warnings
 import itertools
 
 from qupulse.expressions import Expression, ExpressionVariableMissingException
-from qupulse.utils.types import FrozenMapping, FrozenDict
+from qupulse.utils.types import FrozenMapping, FrozenDict, use_rs_replacements
+
+try:
+    import qupulse_rs
+except ImportError:
+    qupulse_rs = None
+    parameter_scope_rs = None
+else:
+    from qupulse_rs.replacements import parameter_scope as parameter_scope_rs
 
 
 class Scope(Mapping[str, Number]):
@@ -319,3 +327,7 @@ class ParameterNotProvidedException(KeyError):
 
 class NonVolatileChange(RuntimeWarning):
     """Raised if a non volatile parameter is updated"""
+
+
+if parameter_scope_rs:
+    use_rs_replacements(globals(), parameter_scope_rs, Scope)

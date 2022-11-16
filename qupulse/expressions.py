@@ -6,7 +6,7 @@ import operator
 from typing import Any, Dict, Union, Sequence, Callable, TypeVar, Type, Mapping
 from numbers import Number
 import warnings
-import functools
+import inspect
 import array
 import itertools
 
@@ -17,6 +17,14 @@ from qupulse.serialization import AnonymousSerializable
 from qupulse.utils.sympy import sympify, to_numpy, recursive_substitution, evaluate_lambdified,\
     get_most_simple_representation, get_variables, evaluate_lamdified_exact_rational
 from qupulse.utils.types import TimeType
+
+try:
+    import qupulse_rs
+except ImportError:
+    qupulse_rs = None
+    RsExpressionScalar = None
+else:
+    from qupulse_rs.replacements import ExpressionScalar as RsExpressionScalar
 
 __all__ = ["Expression", "ExpressionVariableMissingException", "ExpressionScalar", "ExpressionVector", "ExpressionLike"]
 
@@ -83,6 +91,15 @@ class _ExpressionMeta(type):
             return cls.make(*args, **kwargs)
         else:
             return type.__call__(cls, *args, **kwargs)
+
+    if RsExpressionScalar is not None:
+        def __subclasscheck__(cls, subclass):
+            return cls.__name__ == subclass.__name__ or super().__subclasscheck__(subclass)
+
+        def __instancecheck__(cls, instance):
+            if cls is ExpressionScalar or cls is Expression:
+                return isinstance(instance, RsExpressionScalar) or super().__instancecheck__(instance)
+            super().__instancecheck__(instance)
 
 
 class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
@@ -236,7 +253,7 @@ class ExpressionVector(Expression):
                 other = Expression.make(other)
             except (ValueError, TypeError):
                 return NotImplemented
-        if isinstance(other, ExpressionScalar):
+        if type(other).__name__ == 'ExpressionScalar':
             return self._expression_shape in ((), (1,)) and self._expression_items[0] == other.sympified_expression
         else:
             return self._expression_shape == other._expression_shape and \
@@ -335,7 +352,12 @@ class ExpressionScalar(Expression):
 
     @classmethod
     def _sympify(cls, other: Union['ExpressionScalar', Number, sympy.Expr]) -> sympy.Expr:
-        return other._sympified_expression if isinstance(other, cls) else sympify(other)
+        return sympify(other)
+
+    @classmethod
+    def _extract_sympified(cls, other: Union['ExpressionScalar', Number, sympy.Expr]) \
+                            -> Union['ExpressionScalar', Number, sympy.Expr]:
+        return getattr(other, '_sympified_expression', other)
 
     @classmethod
     def _extract_sympified(cls, other: Union['ExpressionScalar', Number, sympy.Expr]) \
@@ -465,7 +487,7 @@ class ExpressionVariableMissingException(Exception):
             str(self.expression), self.variable)
 
 
-class NonNumericEvaluation(Exception):
+class NonNumericEvaluation(TypeError):
     """An exception that is raised if the result of evaluate_numeric is not a number.
 
     See also:
@@ -492,3 +514,21 @@ class NonNumericEvaluation(Exception):
 
 
 ExpressionLike = TypeVar('ExpressionLike', str, Number, sympy.Expr, ExpressionScalar)
+
+
+if RsExpressionScalar:
+    PyExpressionScalar = ExpressionScalar
+
+    class ExpressionScalar(PyExpressionScalar):
+        def __new__(cls, *args, **kwargs):
+            if qupulse_rs and cls.__name__ == 'ExpressionScalar':
+                try:
+                    return RsExpressionScalar(*args, **kwargs)
+                except (ValueError, TypeError, RuntimeError):
+                    pass
+            return PyExpressionScalar.__new__(cls)
+
+assert isinstance(ExpressionScalar('a'), ExpressionScalar)
+assert isinstance(ExpressionScalar('a'), Expression)
+if RsExpressionScalar:
+    assert issubclass(RsExpressionScalar, ExpressionScalar)

@@ -9,7 +9,7 @@ from qupulse.pulses.interpolation import HoldInterpolationStrategy, LinearInterp
     JumpInterpolationStrategy
 from qupulse._program.waveforms import MultiChannelWaveform, RepetitionWaveform, SequenceWaveform,\
     TableWaveformEntry, TableWaveform, TransformingWaveform, SubsetWaveform, ArithmeticWaveform, ConstantWaveform,\
-    Waveform, FunctorWaveform, FunctionWaveform, ReversedWaveform
+    Waveform, FunctorWaveform, FunctionWaveform, ReversedWaveform, waveforms_rs
 from qupulse._program.transformation import LinearTransformation
 from qupulse.expressions import ExpressionScalar, Expression
 
@@ -150,9 +150,9 @@ class WaveformTest(unittest.TestCase):
 
 class MultiChannelWaveformTest(unittest.TestCase):
     def test_init_no_args(self) -> None:
-        with self.assertRaises(ValueError):
+        with self.assertRaises((TypeError, ValueError)):
             MultiChannelWaveform(dict())
-        with self.assertRaises(ValueError):
+        with self.assertRaises((TypeError, ValueError)):
             MultiChannelWaveform(None)
 
     def test_from_parallel(self):
@@ -239,7 +239,9 @@ class MultiChannelWaveformTest(unittest.TestCase):
         result_a = waveform.unsafe_sample('A', sample_times, reuse_output)
         self.assertEqual(len(dwf_a.sample_calls), 2)
         self.assertIs(result_a, reuse_output)
-        self.assertIs(result_a, dwf_a.sample_calls[1][2])
+        if waveforms_rs is None:
+            # rust extension cannot forward the numpy array back to python without performance degradation
+            self.assertIs(result_a, dwf_a.sample_calls[1][2])
         numpy.testing.assert_equal(result_b, samples_b)
 
     def test_equality(self) -> None:
@@ -247,10 +249,13 @@ class MultiChannelWaveformTest(unittest.TestCase):
         dwf_b = DummyWaveform(duration=246.2, defined_channels={'B'})
         dwf_c = DummyWaveform(duration=246.2, defined_channels={'C'})
         waveform_a1 = MultiChannelWaveform([dwf_a, dwf_b])
-        waveform_a2 = MultiChannelWaveform([dwf_a, dwf_b])
+        waveform_a2 = MultiChannelWaveform([dwf_b, dwf_a])
         waveform_a3 = MultiChannelWaveform([dwf_a, dwf_c])
+        waveform_a4 = MultiChannelWaveform([dwf_a, dwf_b, dwf_c])
         self.assertEqual(waveform_a1, waveform_a1)
         self.assertEqual(waveform_a1, waveform_a2)
+        self.assertEqual(waveform_a4.get_subset_for_channels({'A', 'B'}), waveform_a4.get_subset_for_channels({'B', 'A'}))
+        self.assertEqual({waveform_a1}, {waveform_a1, waveform_a2})
         self.assertNotEqual(waveform_a1, waveform_a3)
 
     def test_unsafe_get_subset_for_channels(self):
@@ -301,10 +306,10 @@ class RepetitionWaveformTest(unittest.TestCase):
     def test_init(self):
         body_wf = DummyWaveform()
 
-        with self.assertRaises(ValueError):
+        with self.assertRaises((ValueError, OverflowError)):
             RepetitionWaveform(body_wf, -1)
 
-        with self.assertRaises(ValueError):
+        with self.assertRaises((ValueError, TypeError)):
             RepetitionWaveform(body_wf, 1.1)
 
         wf = RepetitionWaveform(body_wf, 3)
@@ -318,9 +323,7 @@ class RepetitionWaveformTest(unittest.TestCase):
         self.assertEqual(RepetitionWaveform(dwf, 3), RepetitionWaveform.from_repetition_count(dwf, 3))
 
         cwf = ConstantWaveform(duration=3, amplitude=2.2, channel='A')
-        with mock.patch.object(ConstantWaveform, 'from_mapping', return_value=mock.sentinel) as from_mapping:
-            self.assertIs(from_mapping.return_value, RepetitionWaveform.from_repetition_count(cwf, 5))
-            from_mapping.assert_called_once_with(15, {'A': 2.2})
+        self.assertEqual(ConstantWaveform.from_mapping(15, {'A': 2.2}), RepetitionWaveform.from_repetition_count(cwf, 5))
 
     def test_duration(self):
         wf = RepetitionWaveform(DummyWaveform(duration=2.2), 3)
@@ -328,12 +331,12 @@ class RepetitionWaveformTest(unittest.TestCase):
 
     def test_defined_channels(self):
         body_wf = DummyWaveform(defined_channels={'a'})
-        self.assertIs(RepetitionWaveform(body_wf, 2).defined_channels, body_wf.defined_channels)
+        self.assertEqual(RepetitionWaveform(body_wf, 2).defined_channels, body_wf.defined_channels)
 
     def test_compare_key(self):
         body_wf = DummyWaveform(defined_channels={'a'})
         wf = RepetitionWaveform(body_wf, 2)
-        self.assertEqual(wf.compare_key, (body_wf.compare_key, 2))
+        self.assertEqual(wf.compare_key, (2, body_wf))
 
     def test_unsafe_get_subset_for_channels(self):
         body_wf = DummyWaveform(defined_channels={'a', 'b'})
@@ -343,7 +346,7 @@ class RepetitionWaveformTest(unittest.TestCase):
         subset = RepetitionWaveform(body_wf, 3).get_subset_for_channels(chs)
         self.assertIsInstance(subset, RepetitionWaveform)
         self.assertIsInstance(subset._body, DummyWaveform)
-        self.assertIs(subset._body.defined_channels, chs)
+        self.assertEqual(subset._body.defined_channels, chs)
         self.assertEqual(subset._repetition_count, 3)
 
     def test_unsafe_sample(self):
@@ -395,12 +398,12 @@ class SequenceWaveformTest(unittest.TestCase):
 
         swf1 = SequenceWaveform((dwf_ab, dwf_ab))
         self.assertEqual(swf1.duration, 2*dwf_ab.duration)
-        self.assertEqual(len(swf1.compare_key), 2)
+        self.assertEqual(len(swf1.sequenced_waveforms), 2)
 
         swf2 = SequenceWaveform((swf1, dwf_ab))
         self.assertEqual(swf2.duration, 3 * dwf_ab.duration)
 
-        self.assertEqual(len(swf2.compare_key), 2)
+        self.assertEqual(len(swf2.sequenced_waveforms), 2)
 
     def test_from_sequence(self):
         dwf = DummyWaveform(duration=1.1, defined_channels={'A'})
@@ -419,10 +422,10 @@ class SequenceWaveformTest(unittest.TestCase):
         cwf_3 = ConstantWaveform(duration=1.1, amplitude=3.3, channel='A')
         cwf_2_b = ConstantWaveform(duration=1.1, amplitude=2.2, channel='A')
 
-        with mock.patch.object(ConstantWaveform, 'from_mapping', return_value=mock.sentinel) as from_mapping:
-            new_constant = SequenceWaveform.from_sequence((cwf_2_a, cwf_2_b))
-            self.assertIs(from_mapping.return_value, new_constant)
-            from_mapping.assert_called_once_with(2*TimeType.from_float(1.1), {'A': 2.2})
+        new_constant = SequenceWaveform.from_sequence((cwf_2_a, cwf_2_b))
+        expected_constant = ConstantWaveform.from_mapping(2*TimeType.from_float(1.1), {'A': 2.2})
+        self.assertEqual(expected_constant,
+                         new_constant)
 
         swf3 = SequenceWaveform.from_sequence((cwf_2_a, dwf))
         self.assertEqual((cwf_2_a, dwf), swf3.sequenced_waveforms)
@@ -434,6 +437,7 @@ class SequenceWaveformTest(unittest.TestCase):
         self.assertIsNone(swf3.constant_value('A'))
         assert_constant_consistent(self, swf3)
 
+    @unittest.skipIf(waveforms_rs is not None, "sentinel based test do not work with rust extension")
     def test_sample_times_type(self) -> None:
         with mock.patch.object(DummyWaveform, 'unsafe_sample') as unsafe_sample_patch:
             dwfs = (DummyWaveform(duration=1.),
@@ -478,12 +482,12 @@ class SequenceWaveformTest(unittest.TestCase):
         sub_wf = wf.unsafe_get_subset_for_channels(subset)
         self.assertIsInstance(sub_wf, SequenceWaveform)
 
-        self.assertEqual(len(sub_wf.compare_key), 2)
-        self.assertEqual(sub_wf.compare_key[0].defined_channels, subset)
-        self.assertEqual(sub_wf.compare_key[1].defined_channels, subset)
+        self.assertEqual(len(sub_wf.sequenced_waveforms), 2)
+        self.assertEqual(sub_wf.sequenced_waveforms[0].defined_channels, subset)
+        self.assertEqual(sub_wf.sequenced_waveforms[1].defined_channels, subset)
 
-        self.assertEqual(sub_wf.compare_key[0].duration, TimeType.from_float(2.2))
-        self.assertEqual(sub_wf.compare_key[1].duration, TimeType.from_float(3.3))
+        self.assertEqual(sub_wf.sequenced_waveforms[0].duration, TimeType.from_float(2.2))
+        self.assertEqual(sub_wf.sequenced_waveforms[1].duration, TimeType.from_float(3.3))
 
     def test_repr(self):
         cwf_2_a = ConstantWaveform(duration=1.1, amplitude=2.2, channel='A')
@@ -589,7 +593,7 @@ class TableWaveformTests(unittest.TestCase):
         entries = (TableWaveformEntry(0, 0, interp),
                    TableWaveformEntry(2.1, -33.2, interp),
                    TableWaveformEntry(5.7, 123.4, interp))
-        waveform = TableWaveform('A', entries)
+        waveform = TableWaveform.from_table('A', entries)
         self.assertIs(waveform.unsafe_get_subset_for_channels({'A'}), waveform)
 
     def test_unsafe_sample(self) -> None:
@@ -597,7 +601,7 @@ class TableWaveformTests(unittest.TestCase):
         entries = (TableWaveformEntry(0, 0, interp),
                    TableWaveformEntry(2.1, -33.2, interp),
                    TableWaveformEntry(5.7, 123.4, interp))
-        waveform = TableWaveform('A', entries)
+        waveform = TableWaveform.from_table('A', entries)
         sample_times = numpy.linspace(.5, 5.5, num=11)
 
         expected_interp_arguments = [((0, 0), (2.1, -33.2), [0.5, 1.0, 1.5, 2.0]),
@@ -606,7 +610,8 @@ class TableWaveformTests(unittest.TestCase):
 
         result = waveform.unsafe_sample('A', sample_times)
 
-        self.assertEqual(expected_interp_arguments, interp.call_arguments)
+        if waveforms_rs is None:
+            self.assertEqual(expected_interp_arguments, interp.call_arguments)
         numpy.testing.assert_equal(expected_result, result)
 
         output_expected = numpy.empty_like(expected_result)
@@ -780,7 +785,7 @@ class SubsetWaveformTest(unittest.TestCase):
 
         self.assertIs(subset_wf.inner_waveform, inner_wf)
         self.assertEqual(subset_wf.compare_key, (frozenset(['a', 'c']), inner_wf))
-        self.assertIs(subset_wf.duration, inner_wf.duration)
+        self.assertEqual(subset_wf.duration, inner_wf.duration)
         self.assertEqual(subset_wf.defined_channels, {'a', 'c'})
 
     def test_get_subset_for_channels(self):
@@ -795,7 +800,8 @@ class SubsetWaveformTest(unittest.TestCase):
             get_subset_for_channels.assert_called_once_with({'a'})
             self.assertIs(subsetted, actual_subsetted)
 
-    def test_unsafe_sample(self):
+    @unittest.skipIf(waveforms_rs is not None, "Test requires pure python.")
+    def test_unsafe_sample_pure(self):
         """Test perfect forwarding"""
         time = {'time'}
         output = {'output'}
@@ -810,6 +816,27 @@ class SubsetWaveformTest(unittest.TestCase):
             actual_data = subset_wf.unsafe_sample('g', time, output)
             self.assertIs(expected_data, actual_data)
             unsafe_sample.assert_called_once_with('g', time, output)
+
+    def test_unsafe_sample_pure(self):
+        """Test perfect forwarding"""
+        time = np.arange(0., 1., 17)
+
+        output_values = np.sin(time + 1e-4)
+        sample_output = dict(
+            a=output_values + 3,
+            b=output_values + 9,
+            c=output_values + 17,
+        )
+
+        inner_wf = DummyWaveform(sample_output=sample_output, duration=2.)
+
+        subset_wf = SubsetWaveform(inner_wf, {'a', 'c'})
+
+        for ch in 'ac':
+            output_place = np.full_like(time, np.nan)
+            output = subset_wf.unsafe_sample(ch, sample_times=time, output_array=output_place)
+            self.assertIs(output, output_place)
+            numpy.testing.assert_equal(sample_output[ch], output)
 
 
 class ArithmeticWaveformTest(unittest.TestCase):

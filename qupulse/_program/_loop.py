@@ -1,4 +1,5 @@
-from typing import Union, Dict, Iterable, Tuple, cast, List, Optional, Generator, Mapping
+import contextlib
+from typing import Union, Dict, Iterable, Tuple, cast, List, Optional, Generator, Mapping, ContextManager, Sequence
 from collections import defaultdict
 from enum import Enum
 import warnings
@@ -15,6 +16,7 @@ from qupulse.utils.types import TimeType, MeasurementWindow
 from qupulse.utils.tree import Node, is_tree_circular
 from qupulse.utils.numeric import smallest_factor_ge
 
+from qupulse._program import ProgramBuilder, Program
 from qupulse._program.waveforms import SequenceWaveform, RepetitionWaveform
 
 __all__ = ['Loop', 'make_compatible', 'MakeCompatibleWarning']
@@ -101,6 +103,9 @@ class Loop(Node):
         Args:
             measurements: Measurements to add
         """
+        warnings.warn("Loop.add_measurements is deprecated since qupulse 0.7 and will be removed in a future version.",
+                      DeprecationWarning,
+                      stacklevel=2)
         body_duration = float(self.body_duration)
         if body_duration == 0:
             measurements = measurements
@@ -198,23 +203,47 @@ class Loop(Node):
         self._measurements = None
         self.assert_tree_integrity()
 
-    def _get_repr(self, first_prefix, other_prefixes) -> Generator[str, None, None]:
+    def __repr__(self):
+        kwargs = []
+
+        repetition_count = self._repetition_definition
+        if repetition_count != 1:
+            kwargs.append(f"repetition_count={repetition_count!r}")
+
+        waveform = self._waveform
+        if waveform:
+            kwargs.append(f"waveform={waveform!r}")
+
+        children = self.children
+        if children:
+            try:
+                kwargs.append(f"children={self._children_repr()}")
+            except RecursionError:
+                kwargs.append("children=[...]")
+
+        measurements = self._measurements
+        if measurements:
+            kwargs.append(f"measurements={measurements!r}")
+
+        return f"Loop({','.join(kwargs)})"
+
+    def _get_str(self, first_prefix, other_prefixes) -> Generator[str, None, None]:
         if self.is_leaf():
             yield '%sEXEC %r %d times' % (first_prefix, self._waveform, self.repetition_count)
         else:
             yield '%sLOOP %d times:' % (first_prefix, self.repetition_count)
 
             for elem in self:
-                yield from cast(Loop, elem)._get_repr(other_prefixes + '  ->', other_prefixes + '    ')
+                yield from cast(Loop, elem)._get_str(other_prefixes + '  ->', other_prefixes + '    ')
 
-    def __repr__(self) -> str:
+    def __str__(self) -> str:
         is_circular = is_tree_circular(self)
         if is_circular:
             return '{}: Circ {}'.format(id(self), is_circular)
 
         str_len = 0
         repr_list = []
-        for sub_repr in self._get_repr('', ''):
+        for sub_repr in self._get_str('', ''):
             str_len += len(sub_repr)
 
             if self.MAX_REPR_SIZE and str_len > self.MAX_REPR_SIZE:
@@ -404,6 +433,21 @@ class Loop(Node):
         self._invalidate_duration()
         return True
 
+    @contextlib.contextmanager
+    def potential_child(self,
+                        measurements: Optional[List[MeasurementWindow]],
+                        repetition_count: Union[VolatileRepetitionCount, int] = 1) -> ContextManager['Loop']:
+        if repetition_count != 1 and measurements:
+            # current design requires an extra level of nesting here because the measurements are NOT to be repeated
+            # with the repetition count
+            inner_child = Loop(repetition_count=repetition_count)
+            child = Loop(measurements=measurements, children=[inner_child])
+        else:
+            inner_child = child = Loop(measurements=measurements, repetition_count=repetition_count)
+        yield inner_child
+        if inner_child.waveform or len(inner_child):
+            self.append_child(child)
+
     def cleanup(self, actions=('remove_empty_loops', 'merge_single_child')):
         """Apply the specified actions to cleanup the Loop.
 
@@ -451,6 +495,32 @@ class Loop(Node):
         else:
             return self.repetition_count, tuple(child.get_duration_structure() for child in self)
 
+    def to_single_waveform(self) -> Waveform:
+        if self.is_leaf():
+            if self.repetition_count == 1:
+                return self.waveform
+            else:
+                return RepetitionWaveform.from_repetition_count(self.waveform, self.repetition_count)
+        else:
+            if len(self) == 1:
+                sequenced_waveform = to_waveform(cast(Loop, self[0]))
+            else:
+                sequenced_waveform = SequenceWaveform.from_sequence([to_waveform(cast(Loop, sub_program))
+                                                                     for sub_program in self])
+            if self.repetition_count > 1:
+                return RepetitionWaveform.from_repetition_count(sequenced_waveform, self.repetition_count)
+            else:
+                return sequenced_waveform
+
+    def append_leaf(self, waveform: Waveform,
+                    measurements: Optional[Sequence[MeasurementWindow]] = None,
+                    repetition_count: int = 1):
+        self.append_child(waveform=waveform, measurements=measurements, repetition_count=repetition_count)
+
+    def to_program(self) -> Optional['Loop']:
+        if self.waveform or self.children:
+            return self
+
     def reverse_inplace(self):
         if self.is_leaf():
             self._waveform = self._waveform.reversed()
@@ -465,6 +535,37 @@ class Loop(Node):
                 for name, begin, length in self._measurements
             ]
 
+    def make_compatible_inplace(self, minimal_waveform_length: int, waveform_quantum: int, sample_rate: TimeType):
+        program = self
+        comp_level = _is_compatible(program,
+                                    min_len=minimal_waveform_length,
+                                    quantum=waveform_quantum,
+                                    sample_rate=sample_rate)
+        if comp_level == _CompatibilityLevel.incompatible_fraction:
+            raise ValueError(
+                'The program duration in samples {} is not an integer'.format(program.duration * sample_rate))
+        if comp_level == _CompatibilityLevel.incompatible_too_short:
+            raise ValueError('The program is too short to be a valid waveform. \n'
+                             ' program duration in samples: {} \n'
+                             ' minimal length: {}'.format(program.duration * sample_rate, minimal_waveform_length))
+        if comp_level == _CompatibilityLevel.incompatible_quantum:
+            raise ValueError('The program duration in samples {} '
+                             'is not a multiple of quantum {}'.format(program.duration * sample_rate, waveform_quantum))
+
+        elif comp_level == _CompatibilityLevel.action_required:
+            warnings.warn(
+                "qupulse will now concatenate waveforms to make the pulse/program compatible with the chosen AWG."
+                " This might take some time. If you need this pulse more often it makes sense to write it in a "
+                "way which is more AWG friendly.", MakeCompatibleWarning)
+
+            _make_compatible(program,
+                             min_len=minimal_waveform_length,
+                             quantum=waveform_quantum,
+                             sample_rate=sample_rate)
+
+        else:
+            assert comp_level == _CompatibilityLevel.compatible
+
 
 class ChannelSplit(Exception):
     def __init__(self, channel_sets):
@@ -472,22 +573,7 @@ class ChannelSplit(Exception):
 
 
 def to_waveform(program: Loop) -> Waveform:
-    if program.is_leaf():
-        if program.repetition_count == 1:
-            return program.waveform
-        else:
-            return RepetitionWaveform.from_repetition_count(program.waveform, program.repetition_count)
-    else:
-        if len(program) == 1:
-            sequenced_waveform = to_waveform(cast(Loop, program[0]))
-        else:
-            sequenced_waveform = SequenceWaveform.from_sequence(
-                [to_waveform(cast(Loop, sub_program))
-                 for sub_program in program])
-        if program.repetition_count > 1:
-            return RepetitionWaveform.from_repetition_count(sequenced_waveform, program.repetition_count)
-        else:
-            return sequenced_waveform
+    return program.to_single_waveform()
 
 
 class _CompatibilityLevel(Enum):
@@ -568,32 +654,7 @@ def _make_compatible(program: Loop, min_len: int, quantum: int, sample_rate: Tim
 
 def make_compatible(program: Loop, minimal_waveform_length: int, waveform_quantum: int, sample_rate: TimeType):
     """ check program for compatibility to AWG requirements, make it compatible if necessary and  possible"""
-    comp_level = _is_compatible(program,
-                                min_len=minimal_waveform_length,
-                                quantum=waveform_quantum,
-                                sample_rate=sample_rate)
-    if comp_level == _CompatibilityLevel.incompatible_fraction:
-        raise ValueError('The program duration in samples {} is not an integer'.format(program.duration * sample_rate))
-    if comp_level == _CompatibilityLevel.incompatible_too_short:
-        raise ValueError('The program is too short to be a valid waveform. \n'
-                         ' program duration in samples: {} \n'
-                         ' minimal length: {}'.format(program.duration * sample_rate, minimal_waveform_length))
-    if comp_level == _CompatibilityLevel.incompatible_quantum:
-        raise ValueError('The program duration in samples {} '
-                         'is not a multiple of quantum {}'.format(program.duration * sample_rate, waveform_quantum))
-
-    elif comp_level == _CompatibilityLevel.action_required:
-        warnings.warn("qupulse will now concatenate waveforms to make the pulse/program compatible with the chosen AWG."
-                      " This might take some time. If you need this pulse more often it makes sense to write it in a "
-                      "way which is more AWG friendly.", MakeCompatibleWarning)
-
-        _make_compatible(program,
-                         min_len=minimal_waveform_length,
-                         quantum=waveform_quantum,
-                         sample_rate=sample_rate)
-
-    else:
-        assert comp_level == _CompatibilityLevel.compatible
+    program.make_compatible_inplace(minimal_waveform_length, waveform_quantum, sample_rate)
 
 
 def roll_constant_waveforms(program: Loop, minimal_waveform_quanta: int, waveform_quantum: int, sample_rate: TimeType):

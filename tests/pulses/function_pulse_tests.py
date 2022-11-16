@@ -85,12 +85,12 @@ class FunctionPulsePropertyTest(FunctionPulseTest):
         self.assertEqual({'default': Expression('2.0*cos(b) - 2.0*cos(1.0*Tmax+b)')}, pulse.integral)
 
     def test_initial_values(self):
-        fpt = FunctionPulseTemplate('3 + exp(t * a)', 'pi', channel='A')
+        fpt = FunctionPulseTemplate('3 + exp(t * a)', '3.14', channel='A')
         self.assertEqual({'A': 4}, fpt.initial_values)
 
     def test_final_values(self):
-        fpt = FunctionPulseTemplate('3 + exp(t * a)', 'pi', channel='A')
-        self.assertEqual({'A': Expression('3 + exp(pi*a)')}, fpt.final_values)
+        fpt = FunctionPulseTemplate('3 + exp(t * a)', '3.14', channel='A')
+        self.assertEqual({'A': Expression('3 + exp(3.14*a)')}, fpt.final_values)
 
     def test_as_expression(self):
         pulse = FunctionPulseTemplate('sin(0.5*t+b)', '2*Tmax')
