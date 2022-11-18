@@ -7,6 +7,10 @@ import numpy as np
 from qupulse import ChannelID
 from qupulse.comparable import Comparable
 from qupulse.utils.types import SingletonABCMeta
+from qupulse.expressions import ExpressionScalar
+
+
+_TrafoValue = Union[Real, ExpressionScalar]
 
 
 class Transformation(Comparable):
@@ -194,7 +198,7 @@ class LinearTransformation(Transformation):
 
 
 class OffsetTransformation(Transformation):
-    def __init__(self, offsets: Mapping[ChannelID, Real]):
+    def __init__(self, offsets: Mapping[ChannelID, _TrafoValue]):
         """Adds an offset to each channel specified in offsets.
 
         Channels not in offsets are forewarded
@@ -206,7 +210,8 @@ class OffsetTransformation(Transformation):
 
     def __call__(self, time: Union[np.ndarray, float],
                  data: Mapping[ChannelID, Union[np.ndarray, float]]) -> Mapping[ChannelID, Union[np.ndarray, float]]:
-        return {channel: channel_values + self._offsets[channel] if channel in self._offsets else channel_values
+        offsets = _instantiate_expression_dict(time, self._offsets)
+        return {channel: channel_values + offsets[channel] if channel in offsets else channel_values
                 for channel, channel_values in data.items()}
 
     def get_input_channels(self, output_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
@@ -228,12 +233,13 @@ class OffsetTransformation(Transformation):
 
 
 class ScalingTransformation(Transformation):
-    def __init__(self, factors: Mapping[ChannelID, Real]):
+    def __init__(self, factors: Mapping[ChannelID, _TrafoValue]):
         self._factors = dict(factors.items())
 
     def __call__(self, time: Union[np.ndarray, float],
                  data: Mapping[ChannelID, Union[np.ndarray, float]]) -> Mapping[ChannelID, Union[np.ndarray, float]]:
-        return {channel: channel_values * self._factors[channel] if channel in self._factors else channel_values
+        factors = _instantiate_expression_dict(time, self._factors)
+        return {channel: channel_values * factors[channel] if channel in factors else channel_values
                 for channel, channel_values in data.items()}
 
     def get_input_channels(self, output_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
@@ -277,21 +283,25 @@ except ImportError:
     pass
 
 
-class ParallelConstantChannelTransformation(Transformation):
-    def __init__(self, channels: Mapping[ChannelID, Real]):
+class ParallelConstantTransformation(Transformation):
+    def __init__(self, channels: Mapping[ChannelID, _TrafoValue]):
         """Set channel values to given values regardless their former existence
 
         Args:
             channels: Channels present in this map are set to the given value.
         """
-        self._channels = {channel: float(value)
-                          for channel, value in channels.items()}
+        self._channels = dict(channels.items())
 
     def __call__(self, time: Union[np.ndarray, float],
                  data: Mapping[ChannelID, Union[np.ndarray, float]]) -> Mapping[ChannelID, Union[np.ndarray, float]]:
         overwritten = {channel: np.full_like(time, fill_value=value, dtype=float)
                        for channel, value in self._channels.items()}
         return {**data, **overwritten}
+
+    def _instantiated_values(self, time):
+        scope = {'t': time}
+        return {channel: value.evaluate_in_scope(scope) if hasattr(value, 'evaluate_in_scope') else np.full_like(time, fill_value=value, dtype=float)
+                for channel, value in self._channels.items()}
 
     @property
     def compare_key(self) -> Tuple[Tuple[ChannelID, float], ...]:
@@ -326,3 +336,15 @@ def chain_transformations(*transformations: Transformation) -> Transformation:
         return parsed_transformations[0]
     else:
         return ChainedTransformation(*parsed_transformations)
+
+
+def _instantiate_expression_dict(time, expressions: Mapping[str, Union[Real, ExpressionScalar]]) -> Mapping[str, Union[Real, np.ndarray]]:
+    scope = {'t': time}
+    modified_expressions = {}
+    for name, value in expressions.items():
+        if hasattr(value, 'evaluate_in_scope'):
+            modified_expressions[name] = value.evaluate_in_scope(scope)
+    if modified_expressions:
+        return {**expressions, **modified_expressions}
+    else:
+        return expressions

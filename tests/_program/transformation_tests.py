@@ -4,7 +4,7 @@ from unittest import mock
 import numpy as np
 
 from qupulse._program.transformation import LinearTransformation, Transformation, IdentityTransformation,\
-    ChainedTransformation, ParallelConstantChannelTransformation, chain_transformations, OffsetTransformation,\
+    ChainedTransformation, ParallelConstantTransformation, chain_transformations, OffsetTransformation,\
     ScalingTransformation
 
 
@@ -290,7 +290,7 @@ class ParallelConstantChannelTransformationTests(unittest.TestCase):
     def test_init(self):
         channels = {'X': 2, 'Y': 4.4}
 
-        trafo = ParallelConstantChannelTransformation(channels)
+        trafo = ParallelConstantTransformation(channels)
 
         self.assertEqual(trafo._channels, channels)
         self.assertTrue(all(isinstance(v, float) for v in trafo._channels.values()))
@@ -308,7 +308,7 @@ class ParallelConstantChannelTransformationTests(unittest.TestCase):
 
     def test_trafo(self):
         channels = {'X': 2, 'Y': 4.4}
-        trafo = ParallelConstantChannelTransformation(channels)
+        trafo = ParallelConstantTransformation(channels)
 
         n_points = 17
         time = np.arange(17, dtype=float)
@@ -330,18 +330,18 @@ class ParallelConstantChannelTransformationTests(unittest.TestCase):
 
     def test_repr(self):
         channels = {'X': 2, 'Y': 4.4}
-        trafo = ParallelConstantChannelTransformation(channels)
+        trafo = ParallelConstantTransformation(channels)
         self.assertEqual(trafo, eval(repr(trafo)))
 
     def test_scalar_trafo_works(self):
         channels = {'X': 2, 'Y': 4.4}
-        trafo = ParallelConstantChannelTransformation(channels)
+        trafo = ParallelConstantTransformation(channels)
 
         assert_scalar_trafo_works(self, trafo, {'a': 0., 'b': 0.3, 'c': 0.6})
 
     def test_constant_propagation(self):
         channels = {'X': 2, 'Y': 4.4}
-        trafo = ParallelConstantChannelTransformation(channels)
+        trafo = ParallelConstantTransformation(channels)
         self.assertTrue(trafo.is_constant_invariant())
 
 

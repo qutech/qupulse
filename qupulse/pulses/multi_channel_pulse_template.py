@@ -18,7 +18,7 @@ from qupulse.utils import isclose
 from qupulse.utils.sympy import almost_equal, Sympifyable
 from qupulse.utils.types import ChannelID, TimeType
 from qupulse._program.waveforms import MultiChannelWaveform, Waveform, TransformingWaveform
-from qupulse._program.transformation import ParallelConstantChannelTransformation, Transformation, chain_transformations
+from qupulse._program.transformation import ParallelConstantTransformation, Transformation, chain_transformations
 from qupulse.pulses.pulse_template import PulseTemplate, AtomicPulseTemplate
 from qupulse.pulses.mapping_pulse_template import MappingPulseTemplate, MappingTuple
 from qupulse.pulses.parameters import Parameter, ParameterConstrainer
@@ -245,7 +245,7 @@ class ParallelConstantChannelPulseTemplate(PulseTemplate):
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  **kwargs):
         overwritten_channels = self._get_overwritten_channels_values(parameters=scope, channel_mapping=channel_mapping)
-        transformation = ParallelConstantChannelTransformation(overwritten_channels)
+        transformation = ParallelConstantTransformation(overwritten_channels)
 
         if global_transformation is not None:
             transformation = chain_transformations(global_transformation, transformation)
@@ -262,7 +262,7 @@ class ParallelConstantChannelPulseTemplate(PulseTemplate):
         if inner_waveform:
             overwritten_channels = self._get_overwritten_channels_values(parameters=parameters,
                                                                          channel_mapping=channel_mapping)
-            transformation = ParallelConstantChannelTransformation(overwritten_channels)
+            transformation = ParallelConstantTransformation(overwritten_channels)
             return TransformingWaveform.from_transformation(inner_waveform, transformation)
 
     @property

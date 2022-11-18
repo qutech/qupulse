@@ -7,7 +7,7 @@ import sympy
 
 from qupulse.parameter_scope import DictScope
 from qupulse.expressions import ExpressionScalar
-from qupulse.pulses.parameters import ConstantParameter
+from qupulse.pulses import MappingPT
 from qupulse.pulses.arithmetic_pulse_template import ArithmeticAtomicPulseTemplate, ArithmeticPulseTemplate,\
     ImplicitAtomicityInArithmeticPT, UnequalDurationWarningInArithmeticPT, try_operation
 from qupulse._program.waveforms import TransformingWaveform
@@ -361,6 +361,23 @@ class ArithmeticPulseTemplateTest(unittest.TestCase):
 
             expected_trafo = ScalingTransformation(inv_scalar)
             self.assertEqual(expected_trafo, trafo)
+
+    def test_time_dependent_expression(self):
+        inner = FunctionPT('exp(-(t - t_duration/2)**2)', duration_expression='t_duration')
+        inner_iq = AtomicMultiChannelPT((inner, {'default': 'I'}), (inner, {'default': 'Q'}))
+        modulated = ArithmeticPulseTemplate(inner_iq, '*', {'I': 'sin(2*pi*f*t)', 'Q': 'cos(2*pi*f*t)'})
+        program = modulated.create_program(parameters={'t_duration': 10, 'f': 1.})
+        wf = program[0].waveform
+        self.assertEqual(1, len(program))
+        time = np.linspace(0, 10)
+
+        sampled_i = wf.get_sampled('I', time)
+        sampled_q = wf.get_sampled('Q', time)
+
+        expected_sampled_i = np.sin(2*np.pi*time) * np.exp(-(time - 5)**2)
+        expected_sampled_q = np.cos(2*np.pi*time) * np.exp(-(time - 5)**2)
+        np.testing.assert_allclose(expected_sampled_i, sampled_i)
+        np.testing.assert_allclose(expected_sampled_q, sampled_q)
 
     def test_internal_create_program(self):
         lhs = 'x + y'

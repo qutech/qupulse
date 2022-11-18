@@ -6,7 +6,7 @@ import numpy
 from qupulse.parameter_scope import DictScope
 from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform, MappingPulseTemplate,\
     ChannelMappingException, AtomicMultiChannelPulseTemplate, ParallelConstantChannelPulseTemplate,\
-    TransformingWaveform, ParallelConstantChannelTransformation
+    TransformingWaveform, ParallelConstantTransformation
 from qupulse.pulses.parameters import ParameterConstraint, ParameterConstraintViolation, ConstantParameter
 from qupulse.expressions import ExpressionScalar, Expression
 from qupulse._program.transformation import LinearTransformation, chain_transformations
@@ -419,7 +419,7 @@ class ParallelConstantChannelPulseTemplateTests(unittest.TestCase):
         kwargs = {**other_kwargs, 'scope': scope, 'global_transformation': None}
 
         expected_overwritten_channels = {'O': 1.2, 'Z': 3.4}
-        expected_transformation = ParallelConstantChannelTransformation(expected_overwritten_channels)
+        expected_transformation = ParallelConstantTransformation(expected_overwritten_channels)
         expected_kwargs = {**kwargs, 'global_transformation': expected_transformation}
 
         with mock.patch.object(template, '_create_program', spec=template._create_program) as cp_mock:
@@ -444,7 +444,7 @@ class ParallelConstantChannelPulseTemplateTests(unittest.TestCase):
 
         parameters = {'c': 1.2, 'a': 3.4}
         expected_overwritten_channels = {'K': 1.2, 'Z': 3.4}
-        expected_transformation = ParallelConstantChannelTransformation(expected_overwritten_channels)
+        expected_transformation = ParallelConstantTransformation(expected_overwritten_channels)
         expected_waveform = TransformingWaveform(template.waveform, expected_transformation)
 
         resulting_waveform = pccpt.build_waveform(parameters.copy(), channel_mapping.copy())

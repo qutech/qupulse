@@ -298,7 +298,7 @@ class ArithmeticPulseTemplate(PulseTemplate):
                     if channel_mapping[channel]}
 
         else:
-            return {channel_mapping[channel]: value.evaluate_in_scope(parameters)
+            return {channel_mapping[channel]: value.evaluate_symbolic(parameters) if 't' in value.variables else value.evaluate_in_scope(parameters)
                     for channel, value in self._scalar.items()
                     if channel_mapping[channel]}
 
@@ -479,9 +479,11 @@ class ArithmeticPulseTemplate(PulseTemplate):
     @cached_property
     def _scalar_operand_parameters(self) -> FrozenSet[str]:
         if isinstance(self._scalar, dict):
-            return frozenset(*(value.variables for value in self._scalar.values()))
+            return frozenset(variable
+                             for value in self._scalar.values()
+                             for variable in value.variables) - {'t'}
         else:
-            return frozenset(self._scalar.variables)
+            return frozenset(self._scalar.variables) - {'t'}
 
     @property
     def parameter_names(self) -> Set[str]:
