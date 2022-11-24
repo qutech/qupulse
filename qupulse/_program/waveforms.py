@@ -27,6 +27,8 @@ from qupulse.pulses.interpolation import InterpolationStrategy
 from qupulse.utils import checked_int_cast, isclose
 from qupulse.utils.types import TimeType, time_from_float, FrozenDict
 from qupulse._program.transformation import Transformation
+from qupulse._program.time_expression import TimeDependentValue, ProgramExpression
+from qupulse._program.time_expression import TimeDependentValue
 from qupulse.utils import pairwise
 
 class ConstantFunctionPulseTemplateWarning(UserWarning):
@@ -215,6 +217,9 @@ class Waveform(Comparable, metaclass=ABCMeta):
         # We don't check for constness here because const waveforms are supposed to override this method
         return ReversedWaveform(self)
 
+    def as_expression(self) -> Mapping[ChannelID, Optional[ProgramExpression]]:
+        return self.constant_value_dict() or {ch: None for ch in self.defined_channels}
+
 
 class TableWaveformEntry(NamedTuple('TableWaveformEntry', [('t', Real),
                                                            ('v', float),
@@ -386,6 +391,24 @@ class TableWaveform(Waveform):
     def __repr__(self):
         return f'{type(self).__name__}(channel={self._channel_id!r}, waveform_table={self._table!r})'
 
+    def as_expression(self) -> Mapping[ChannelID, Optional[ProgramExpression]]:
+        conditions = []
+        callables = []
+        for entry1, entry2 in pairwise(self._table):
+            conditions.append(f't >= {entry1.t}')
+            interp = str(entry2.interp)
+            if interp == 'hold':
+                callables.append(entry1.v)
+            elif interp == 'jump':
+                callables.append(entry2.v)
+            else:
+                expr = str(entry2.interp.expression.evaluate_symbolic(
+                    {'v0': entry1.v, 't0': entry1.t,
+                     't1': entry2.t, 'v1': entry2.v}))
+                callables.append(f'lambda t: {expr}')
+        table_expr = f'piecewise(t, {conditions}, {callables}'
+        return {self._channel_id: TimeDependentValue(table_expr)}
+
 
 class ConstantWaveform(Waveform):
 
@@ -530,6 +553,9 @@ class FunctionWaveform(Waveform):
     def __repr__(self):
         return f"{type(self).__name__}(duration={self.duration!r}, "\
                f"expression={self._expression!r}, channel={self._channel_id!r})"
+
+    def as_expression(self) -> Mapping[ChannelID, Optional[ProgramExpression]]:
+        return {self._channel_id: TimeDependentValue(str(self._expression))}
 
 
 class SequenceWaveform(Waveform):
@@ -704,7 +730,7 @@ class MultiChannelWaveform(Waveform):
         sub_waveforms.sort(key=lambda wf: wf._sort_key_for_channels())
 
         super().__init__(duration=sub_waveforms[0].duration)
-        self._sub_waveforms = tuple(sub_waveforms)
+        self._sub_waveforms: Tuple[Waveform] = tuple(sub_waveforms)
 
         defined_channels = set()
         for waveform in self._sub_waveforms:
@@ -804,6 +830,9 @@ class MultiChannelWaveform(Waveform):
 
     def __repr__(self):
         return f"{type(self).__name__}({self._sub_waveforms!r})"
+
+    def as_expression(self) -> Mapping[ChannelID, Optional[ProgramExpression]]:
+        return {**wf.as_expression() for wf in self._sub_waveforms}
 
 
 class RepetitionWaveform(Waveform):
