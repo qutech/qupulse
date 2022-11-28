@@ -246,6 +246,18 @@ class PulseTemplate(Serializable):
                                           global_transformation=global_transformation,
                                           parent_loop=parent_loop)
 
+    def with_constant_channels(self, values: Mapping[ChannelID, ExpressionLike]) -> 'PulseTemplate':
+        """Create a new pulse template that sets the given channels to the corresponding values.
+
+        Args:
+            values: Constant values to be set for each channel.
+        """
+        from qupulse.pulses.multi_channel_pulse_template import ParallelConstantChannelPulseTemplate
+        return ParallelConstantChannelPulseTemplate(
+            self,
+            values
+        )
+
     def __format__(self, format_spec: str):
         if format_spec == '':
             format_spec = self._DEFAULT_FORMAT_SPEC
