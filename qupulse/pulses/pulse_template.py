@@ -258,6 +258,45 @@ class PulseTemplate(Serializable):
             values
         )
 
+    def with_repetition(self, repetition_count: ExpressionLike) -> 'PulseTemplate':
+        from qupulse.pulses.repetition_pulse_template import RepetitionPulseTemplate
+        return RepetitionPulseTemplate(self, repetition_count)
+
+    def with_mapping(self, *mapping_tuple_args: Mapping, **mapping_kwargs: Mapping) -> 'PulseTemplate':
+        """
+
+        Args:
+            *mapping_tuple_args:
+            **mapping_kwargs:
+
+        Returns:
+
+        """
+        from qupulse.pulses import MappingPT
+
+        if mapping_kwargs and mapping_tuple_args:
+            raise ValueError("Only positional argument (auto detection of mapping type) "
+                             "xor keyword arguments are allowed.")
+        if mapping_tuple_args:
+            return MappingPT.from_tuple((self, *mapping_tuple_args))
+        else:
+            return MappingPT(self, **mapping_kwargs)
+
+    def with_iteration(self, loop_idx: str, loop_range) -> 'PulseTemplate':
+        from qupulse.pulses import ForLoopPT
+        return ForLoopPT(self, loop_idx, loop_range)
+
+    def with_time_reversal(self) -> 'PulseTemplate':
+        from qupulse.pulses import TimeReversalPT
+        return TimeReversalPT(self)
+
+    def with_appended(self, *appended: 'PulseTemplate'):
+        from qupulse.pulses import SequencePT
+        if appended:
+            return SequencePT(self, *appended)
+        else:
+            return self
+
     def __format__(self, format_spec: str):
         if format_spec == '':
             format_spec = self._DEFAULT_FORMAT_SPEC
@@ -328,6 +367,13 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
                  measurements: Optional[List[MeasurementDeclaration]]):
         PulseTemplate.__init__(self, identifier=identifier)
         MeasurementDefiner.__init__(self, measurements=measurements)
+
+    def with_parallel_atomic(self, *parallel: 'AtomicPulseTemplate') -> 'AtomicPulseTemplate':
+        from qupulse.pulses import AtomicMultiChannelPT
+        if parallel:
+            return AtomicMultiChannelPT(self, *parallel)
+        else:
+            return self
 
     @property
     def atomicity(self) -> bool:
