@@ -298,7 +298,7 @@ class TableWaveform(Waveform):
             raise ValueError('Negative time values are not allowed.')
 
         # constant_v is None <=> the waveform is constant until up to the current entry
-        constant_v = first_interp.constant_value((previous_t, previous_v), (t, v))
+        constant_v = interp.constant_value((previous_t, previous_v), (t, v))
 
         for next_t, next_v, next_interp in input_iter:
             if next_t < t:
