@@ -21,6 +21,7 @@ from qupulse.pulses.parameters import InvalidParameterNameException, ParameterCo
 from qupulse.pulses.pulse_template import PulseTemplate, ChannelID, AtomicPulseTemplate
 from qupulse._program.waveforms import SequenceWaveform as ForLoopWaveform
 from qupulse.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
+from qupulse.pulses.range import ParametrizedRange, RangeScope
 
 __all__ = ['ForLoopPulseTemplate', 'LoopPulseTemplate', 'LoopIndexNotUsedException']
 
@@ -43,54 +44,6 @@ class LoopPulseTemplate(PulseTemplate):
     @property
     def measurement_names(self) -> Set[str]:
         return self.__body.measurement_names
-
-
-class ParametrizedRange:
-    """Like the builtin python range but with parameters."""
-    def __init__(self, *args, **kwargs):
-        """Positional and keyword arguments cannot be mixed.
-
-        Args:
-            *args: Interpreted as ``(start, )`` or ``(start, stop[, step])``
-            **kwargs: Expected to contain ``start``, ``stop`` and ``step``
-        Raises:
-            TypeError: If positional and keyword arguments are mixed
-            KeyError: If keyword arguments but one of ``start``, ``stop`` or ``step`` is missing
-        """
-        if args and kwargs:
-            raise TypeError('ParametrizedRange only takes either positional or keyword arguments')
-        elif kwargs:
-            start = kwargs['start']
-            stop = kwargs['stop']
-            step = kwargs['step']
-        elif len(args) in (1, 2, 3):
-            if len(args) == 3:
-                start, stop, step = args
-            elif len(args) == 2:
-                (start, stop), step = args, 1
-            elif len(args) == 1:
-                start, (stop,), step = 0, args, 1
-        else:
-            raise TypeError('ParametrizedRange expected 1 to 3 arguments, got {}'.format(len(args)))
-
-        self.start = ExpressionScalar.make(start)
-        self.stop = ExpressionScalar.make(stop)
-        self.step = ExpressionScalar.make(step)
-
-    def to_tuple(self) -> Tuple[Any, Any, Any]:
-        """Return a simple representation of the range which is useful for comparison and serialization"""
-        return (self.start.get_serialization_data(),
-                self.stop.get_serialization_data(),
-                self.step.get_serialization_data())
-
-    def to_range(self, parameters: Mapping[str, Number]) -> range:
-        return range(checked_int_cast(self.start.evaluate_in_scope(parameters)),
-                     checked_int_cast(self.stop.evaluate_in_scope(parameters)),
-                     checked_int_cast(self.step.evaluate_in_scope(parameters)))
-
-    @property
-    def parameter_names(self) -> Set[str]:
-        return set(self.start.variables) | set(self.stop.variables) | set(self.step.variables)
 
 
 class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConstrainer):
@@ -122,18 +75,7 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
         MeasurementDefiner.__init__(self, measurements=measurements)
         ParameterConstrainer.__init__(self, parameter_constraints=parameter_constraints)
 
-        if isinstance(loop_range, ParametrizedRange):
-            self._loop_range = loop_range
-        elif isinstance(loop_range, (int, str)):
-            self._loop_range = ParametrizedRange(loop_range)
-        elif isinstance(loop_range, (tuple, list)):
-            self._loop_range = ParametrizedRange(*loop_range)
-        elif isinstance(loop_range, range):
-            self._loop_range = ParametrizedRange(start=loop_range.start,
-                                                 stop=loop_range.stop,
-                                                 step=loop_range.step)
-        else:
-            raise ValueError('loop_range is not valid')
+        self._loop_range = ParametrizedRange.from_range_like(loop_range)
 
         if not loop_index.isidentifier():
             raise InvalidParameterNameException(loop_index)
@@ -198,15 +140,8 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
         loop_range = loop_range if forward else reversed(loop_range)
         loop_index_name = self._loop_index
 
-        get_for_loop_scope = _get_for_loop_scope
-
         for loop_index_value in loop_range:
-            try:
-                yield get_for_loop_scope(scope, loop_index_name, loop_index_value)
-            except TypeError:
-                # we cannot hash the scope so we will not try anymore
-                get_for_loop_scope = _ForLoopScope
-                yield get_for_loop_scope(scope, loop_index_name, loop_index_value)
+            yield _ForLoopScope(scope, loop_index_name, loop_index_value)
 
     def _internal_create_program(self, *,
                                  scope: Scope,
@@ -290,6 +225,24 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
 
         return body_integrals
 
+    @property
+    def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        values = self.body.initial_values
+        initial_idx = self._loop_range.start
+        for ch, value in values.items():
+            values[ch] = ExpressionScalar(value.underlying_expression.subs(self._loop_index, initial_idx))
+        return values
+
+    @property
+    def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        values = self.body.final_values
+        start, step, stop = self._loop_range.start.sympified_expression, self._loop_range.step.sympified_expression, self._loop_range.stop.sympified_expression
+        n = (stop - start) // step
+        final_idx = start + sympy.Max(n - 1, 0) * step
+        for ch, value in values.items():
+            values[ch] = ExpressionScalar(value.underlying_expression.subs(self._loop_index, final_idx))
+        return values
+
 
 class LoopIndexNotUsedException(Exception):
     def __init__(self, loop_index: str, body_parameter_names: Set[str]):
@@ -301,78 +254,4 @@ class LoopIndexNotUsedException(Exception):
                                                                                       self.body_parameter_names)
 
 
-class _ForLoopScope(Scope):
-    __slots__ = ('_index_name', '_index_value', '_inner')
-
-    def __init__(self, inner: Scope, index_name: str, index_value: int):
-        super().__init__()
-        self._inner = inner
-        self._index_name = index_name
-        self._index_value = index_value
-
-    def get_volatile_parameters(self) -> FrozenMapping[str, Expression]:
-        inner_volatile = self._inner.get_volatile_parameters()
-
-        if self._index_name in inner_volatile:
-            # TODO: use delete method of frozendict
-            index_name = self._index_name
-            return FrozenDict((name, value) for name, value in inner_volatile.items() if name != index_name)
-        else:
-            return inner_volatile
-
-    def __hash__(self):
-        return hash((self._inner, self._index_name, self._index_value))
-
-    def __eq__(self, other: '_ForLoopScope'):
-        try:
-            return (self._index_name == other._index_name
-                    and self._index_value == other._index_value
-                    and self._inner == other._inner)
-        except AttributeError:
-            return False
-
-    def __contains__(self, item):
-        return item == self._index_name or item in self._inner
-
-    def get_parameter(self, parameter_name: str) -> Number:
-        if parameter_name == self._index_name:
-            return self._index_value
-        else:
-            return self._inner.get_parameter(parameter_name)
-
-    __getitem__ = get_parameter
-
-    def change_constants(self, new_constants: Mapping[str, Number]) -> 'Scope':
-        return _get_for_loop_scope(self._inner.change_constants(new_constants), self._index_name, self._index_value)
-
-    def __len__(self) -> int:
-        return len(self._inner) + int(self._index_name not in self._inner)
-
-    def __iter__(self) -> Iterator:
-        if self._index_name in self._inner:
-            return iter(self._inner)
-        else:
-            return itertools.chain(self._inner, (self._index_name,))
-
-    def as_dict(self) -> FrozenMapping[str, Number]:
-        if self._as_dict is None:
-            self._as_dict = FrozenDict({**self._inner.as_dict(), self._index_name: self._index_value})
-        return self._as_dict
-
-    def keys(self):
-        return self.as_dict().keys()
-
-    def items(self):
-        return self.as_dict().items()
-
-    def values(self):
-        return self.as_dict().values()
-
-    def __repr__(self):
-        return f'{type(self)}(inner={self._inner!r}, index_name={self._index_name!r}, ' \
-               f'index_value={self._index_value!r})'
-
-
-@functools.lru_cache(maxsize=10**6)
-def _get_for_loop_scope(inner: Scope, index_name: str, index_value: int) -> Scope:
-    return _ForLoopScope(inner, index_name, index_value)
+_ForLoopScope = RangeScope

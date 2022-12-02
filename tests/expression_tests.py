@@ -1,3 +1,4 @@
+import pickle
 import unittest
 import sys
 
@@ -102,6 +103,22 @@ class ExpressionVectorTests(unittest.TestCase):
         self.assertEqual(e1, [1, 2])
         self.assertNotEqual(e6, 1)
         self.assertEqual(e7, ExpressionScalar('a'))
+
+    def test_hash(self):
+        e1 = ExpressionVector([1, 2])
+        e2 = ExpressionVector(['1', '2'])
+        e7 = ExpressionVector(['a'])
+
+        s = ExpressionScalar('a')
+        self.assertEqual({e1, e7}, {e1, e2, e7, s})
+
+    def test_pickle(self):
+        expr = ExpressionVector([1, 'a + 5', 3])
+        # populate lambdified
+        expr.evaluate_in_scope({'a': 3})
+        dumped = pickle.dumps(expr)
+        loaded = pickle.loads(dumped)
+        self.assertEqual(expr, loaded)
 
 
 class ExpressionScalarTests(unittest.TestCase):
@@ -416,6 +433,14 @@ class ExpressionScalarTests(unittest.TestCase):
         expr = ExpressionScalar('dot(a, b) * (1 / 3)')
         self.assertEqual(TimeType.from_fraction(10, 3),
                          expr.evaluate_with_exact_rationals({'a': [2, 2], 'b': [1, 4]}))
+
+    def test_pickle(self):
+        expr = ExpressionScalar('1 / a')
+        # populate lambdified
+        expr.evaluate_in_scope({'a': 7})
+        dumped = pickle.dumps(expr)
+        loaded = pickle.loads(dumped)
+        self.assertEqual(expr, loaded)
 
 
 class ExpressionExceptionTests(unittest.TestCase):

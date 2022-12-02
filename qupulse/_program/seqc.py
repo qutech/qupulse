@@ -11,7 +11,7 @@ Furthermore:
 - `WaveformMemory`: Functionality to sync waveforms to the device (via the LabOne user folder)
 - `ProgramWaveformManager` and `HDAWGProgramEntry`: Program wise handling of waveforms and seqc-code
 classes that convert `Loop` objects"""
-
+import warnings
 from typing import Optional, Union, Sequence, Dict, Iterator, Tuple, Callable, NamedTuple, MutableMapping, Mapping,\
     Iterable, Any, List, Deque
 from types import MappingProxyType
@@ -20,6 +20,7 @@ import itertools
 import inspect
 import logging
 import hashlib
+from weakref import WeakValueDictionary
 from collections import OrderedDict
 import re
 import collections
@@ -36,9 +37,14 @@ from qupulse._program.waveforms import Waveform
 from qupulse._program._loop import Loop
 from qupulse._program.volatile import VolatileRepetitionCount, VolatileProperty
 from qupulse.hardware.awgs.base import ProgramEntry
+from qupulse.hardware.util import zhinst_voltage_to_uint16
+from qupulse.pulses.parameters import MappedParameter, ConstantParameter
 
 try:
-    import zhinst.utils
+    # zhinst fires a DeprecationWarning from its own code in some versions...
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', DeprecationWarning)
+        import zhinst.utils
 except ImportError:
     zhinst = None
 
@@ -117,20 +123,7 @@ class BinaryWaveform:
         Returns:
 
         """
-        all_input = (ch1, ch2, *markers)
-        assert any(x is not None for x in all_input)
-        size = {x.size for x in all_input if x is not None}
-        assert len(size) == 1, "Inputs have incompatible dimension"
-        size, = size
-        if ch1 is None:
-            ch1 = np.zeros(size)
-        if ch2 is None:
-            ch2 = np.zeros(size)
-        marker_data = np.zeros(size, dtype=np.uint16)
-        for idx, marker in enumerate(markers):
-            if marker is not None:
-                marker_data += np.uint16((marker > 0) * 2**idx)
-        return cls(zhinst.utils.convert_awg_waveform(ch1, ch2, marker_data))
+        return cls(zhinst_voltage_to_uint16(ch1, ch2, markers))
 
     @classmethod
     def zeroed(cls, size):
@@ -149,7 +142,7 @@ class BinaryWaveform:
         """This fingerprint is runtime independent"""
         return hashlib.sha256(self.data).hexdigest()
 
-    def to_csv_compatible_table(self):
+    def to_csv_compatible_table(self) -> np.ndarray:
         """The integer values in that file should be 18-bit unsigned integers with the two least significant bits
         being the markers. The values are mapped to 0 => -FS, 262143 => +FS, with FS equal to the full scale.
 
@@ -225,6 +218,7 @@ class ConcatenatedWaveform:
 
 class WaveformFileSystem:
     logger = logging.getLogger('qupulse.hdawg.waveforms')
+    _by_path = WeakValueDictionary()
 
     def __init__(self, path: Path):
         """This class coordinates multiple AWGs (channel pairs) using the same file system to store the waveforms.
@@ -234,6 +228,11 @@ class WaveformFileSystem:
         """
         self._required = {}
         self._path = path
+    
+    @classmethod
+    def get_waveform_file_system(cls, path: Path) -> 'WaveformFileSystem':
+        """Get the instance for the given path. Multiple instances that access the same path lead to inconsistencies."""
+        return cls._by_path.setdefault(path, cls(path))
 
     def sync(self, client: 'WaveformMemory', waveforms: Mapping[str, BinaryWaveform], **kwargs):
         """Write the required waveforms to the filesystem."""
@@ -812,7 +811,34 @@ class HDAWGProgramManager:
         assert self._programs[name].name == name
         return self._programs[name].selection_index
 
-    def to_seqc_program(self) -> str:
+    def _get_sub_program_source_code(self, program_name: str) -> str:
+        program = self.programs[program_name]
+        program_function_name = self.get_program_function_name(program_name)
+        return "\n".join(
+            [
+                f"void {program_function_name}() {{",
+                program.seqc_source,
+                "}\n"
+            ]
+        )
+
+    def _get_program_selection_code(self) -> str:
+        return _make_program_selection_block((program.selection_index, self.get_program_function_name(program_name))
+                                             for program_name, program in self.programs.items())
+
+    def to_seqc_program(self, single_program: Optional[str] = None) -> str:
+        """Generate sequencing c source code that is either capable of playing pack all uploaded programs where the
+        program is selected at runtime without re-compile or always will play the same program if `single_program`
+        is specified.
+
+         The program selection is based on a user register in the first case.
+
+        Args:
+            single_program: The seqc source only contains this program if not None
+
+        Returns:
+            SEQC source code.
+        """
         lines = []
         for const_name, const_val in self.Constants.as_dict().items():
             if isinstance(const_val, (int, str)):
@@ -829,44 +855,23 @@ class HDAWGProgramManager:
         replacements = self._waveform_memory.waveform_name_replacements()
 
         lines.append('\n// program definitions')
-        for program_name, program in self.programs.items():
-            program_function_name = self.get_program_function_name(program_name)
-            lines.append('void {program_function_name}() {{'.format(program_function_name=program_function_name))
-            lines.append(replace_multiple(program.seqc_source, replacements))
-            lines.append('}\n')
+        if single_program:
+            lines.append(
+                replace_multiple(self._get_sub_program_source_code(single_program), replacements)
+            )
+
+        else:
+            for program_name, program in self.programs.items():
+                lines.append(replace_multiple(self._get_sub_program_source_code(program_name), replacements))
 
         lines.append(self.GlobalVariables.get_init_block())
 
         lines.append('\n// runtime block')
-        lines.append('while (true) {')
-        lines.append('  // read program selection value')
-        lines.append('  prog_sel = getUserReg(PROG_SEL_REGISTER);')
-        lines.append('  ')
-        lines.append('  // calculate value to write back to PROG_SEL_REGISTER')
-        lines.append('  new_prog_sel = prog_sel | playback_finished;')
-        lines.append('  if (!(prog_sel & NO_RESET_MASK)) new_prog_sel &= INVERTED_PROG_SEL_MASK;')
-        lines.append('  setUserReg(PROG_SEL_REGISTER, new_prog_sel);')
-        lines.append('  ')
-        lines.append('  // reset playback flag')
-        lines.append('  playback_finished = 0;')
-        lines.append('  ')
-        lines.append('  // only use part of prog sel that does not mean other things to select the program.')
-        lines.append('  prog_sel &= PROG_SEL_MASK;')
-        lines.append('  ')
-        lines.append('  switch (prog_sel) {')
-
-        for program_name, program_entry in self.programs.items():
-            program_function_name = self.get_program_function_name(program_name)
-            lines.append('    case {selection_index}:'.format(selection_index=program_entry.selection_index))
-            lines.append('      {program_function_name}();'.format(program_function_name=program_function_name))
-            lines.append('      waitWave();')
-            lines.append('      playback_finished = PLAYBACK_FINISHED_MASK;')
-
-        lines.append('    default:')
-        lines.append('      wait(IDLE_WAIT_CYCLES);')
-        lines.append('  }')
-        lines.append('}')
-
+        if single_program:
+            lines.append(f"{self.get_program_function_name(single_program)}();")
+        else:
+            lines.append(self._get_program_selection_code())
+        
         return '\n'.join(lines)
 
 
@@ -973,8 +978,6 @@ def to_node_clusters(loop: Union[Sequence[Loop], Loop], loop_to_seqc_kwargs: dic
 
     node_clusters: List[List[SEQCNode]] = []
 
-
-    last_period = []
     # this is the period that we currently are collecting
     current_period: List[SEQCNode] = []
 
@@ -1019,6 +1022,8 @@ def to_node_clusters(loop: Union[Sequence[Loop], Loop], loop_to_seqc_kwargs: dic
                 last_nodes.extend(current_period)
                 last_hashes.extend(current_template_hashes[:len(current_period)])
 
+                current_period.clear()
+
                 last_nodes.append(current_node)
                 last_hashes.append(current_hash)
 
@@ -1027,6 +1032,7 @@ def to_node_clusters(loop: Union[Sequence[Loop], Loop], loop_to_seqc_kwargs: dic
                  current_cluster) = _find_repetition(last_nodes, last_hashes,
                                                      node_clusters)
         else:
+            assert not current_period
             if len(last_nodes) == last_nodes.maxlen:
                 # lookup deque is full
                 node_clusters.append([last_nodes.popleft()])
@@ -1041,7 +1047,8 @@ def to_node_clusters(loop: Union[Sequence[Loop], Loop], loop_to_seqc_kwargs: dic
                                                  node_clusters)
 
     assert not (current_cluster and last_nodes)
-    node_clusters.append(current_cluster)
+    if current_cluster:
+        node_clusters.append(current_cluster)
     node_clusters.extend([node] for node in current_period)
     node_clusters.extend([node] for node in last_nodes)
 
@@ -1205,6 +1212,9 @@ class Scope(SEQCNode):
             return self.nodes == other.nodes
         else:
             return NotImplemented
+
+    def __repr__(self):
+        return f"Scope(nodes={self.nodes!r})"
 
 
 class Repeat(SEQCNode):
@@ -1389,6 +1399,9 @@ class WaveformPlayback(SEQCNode):
         self.shared = shared
         self.rate = rate
 
+    def __repr__(self):
+        return f"WaveformPlayback(<{id(self)}>)"
+
     def samples(self) -> int:
         """Samples consumed in the big concatenated waveform"""
         if self.shared:
@@ -1446,3 +1459,41 @@ class WaveformPlayback(SEQCNode):
             else:
                 advance_cmd = self.ADVANCE_DISABLED_COMMENT
             yield play_cmd + advance_cmd
+
+
+_PROGRAM_SELECTION_BLOCK = """\
+while (true) {{
+  // read program selection value
+  prog_sel = getUserReg(PROG_SEL_REGISTER);
+  
+  // calculate value to write back to PROG_SEL_REGISTER
+  new_prog_sel = prog_sel | playback_finished;
+  if (!(prog_sel & NO_RESET_MASK)) new_prog_sel &= INVERTED_PROG_SEL_MASK;
+  setUserReg(PROG_SEL_REGISTER, new_prog_sel);
+  
+  // reset playback flag
+  playback_finished = 0;
+  
+  // only use part of prog sel that does not mean other things to select the program.
+  prog_sel &= PROG_SEL_MASK;
+  
+  switch (prog_sel) {{
+{program_cases}
+    default:
+      wait(IDLE_WAIT_CYCLES);
+  }}
+}}"""
+
+_PROGRAM_SELECTION_CASE = """\
+    case {selection_index}:
+      {program_function_name}();
+      waitWave();
+      playback_finished = PLAYBACK_FINISHED_MASK;"""
+
+
+def _make_program_selection_block(programs: Iterable[Tuple[int, str]]):
+    program_cases = []
+    for selection_index, program_function_name in programs:
+        program_cases.append(_PROGRAM_SELECTION_CASE.format(selection_index=selection_index,
+                                                            program_function_name=program_function_name))
+    return _PROGRAM_SELECTION_BLOCK.format(program_cases="\n".join(program_cases))

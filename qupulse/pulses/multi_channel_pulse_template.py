@@ -134,7 +134,7 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
         if len(sub_waveforms) == 1:
             waveform = sub_waveforms[0]
         else:
-            waveform = MultiChannelWaveform(sub_waveforms)
+            waveform = MultiChannelWaveform.from_parallel(sub_waveforms)
 
         if self._duration:
             expected_duration = self._duration.evaluate_numeric(**parameters)
@@ -194,6 +194,20 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
             expressions.update(subtemplate._as_expression())
         return expressions
 
+    @property
+    def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        values = {}
+        for subtemplate in self._subtemplates:
+            values.update(subtemplate.initial_values)
+        return values
+
+    @property
+    def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        values = {}
+        for subtemplate in self._subtemplates:
+            values.update(subtemplate.final_values)
+        return values
+
 
 class ParallelConstantChannelPulseTemplate(PulseTemplate):
     def __init__(self,
@@ -249,7 +263,7 @@ class ParallelConstantChannelPulseTemplate(PulseTemplate):
             overwritten_channels = self._get_overwritten_channels_values(parameters=parameters,
                                                                          channel_mapping=channel_mapping)
             transformation = ParallelConstantChannelTransformation(overwritten_channels)
-            return TransformingWaveform(inner_waveform, transformation)
+            return TransformingWaveform.from_transformation(inner_waveform, transformation)
 
     @property
     def defined_channels(self) -> Set[ChannelID]:
@@ -279,6 +293,18 @@ class ParallelConstantChannelPulseTemplate(PulseTemplate):
         for channel, value in self._overwritten_channels.items():
             integral[channel] = value * duration
         return integral
+
+    @property
+    def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        values = self._template.initial_values
+        values.update(self._overwritten_channels)
+        return values
+
+    @property
+    def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        values = self._template.final_values
+        values.update(self._overwritten_channels)
+        return values
 
     def get_serialization_data(self, serializer: Optional[Serializer]=None) -> Dict[str, Any]:
         if serializer:

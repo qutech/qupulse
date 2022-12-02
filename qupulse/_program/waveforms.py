@@ -11,13 +11,16 @@ from abc import ABCMeta, abstractmethod
 from numbers import Real
 from typing import (
     AbstractSet, Any, FrozenSet, Iterable, Mapping, NamedTuple, Sequence, Set,
-    Tuple, Union, cast, Optional, List)
+    Tuple, Union, cast, Optional, List, Hashable)
 from weakref import WeakValueDictionary, ref
 
 import numpy as np
 
 from qupulse import ChannelID
 from qupulse._program.transformation import Transformation
+from qupulse.utils import checked_int_cast, isclose
+from qupulse.utils.types import TimeType, time_from_float
+from qupulse.utils.performance import is_monotonic
 from qupulse.comparable import Comparable
 from qupulse.expressions import ExpressionScalar
 from qupulse.pulses.interpolation import InterpolationStrategy
@@ -26,9 +29,13 @@ from qupulse.utils.types import TimeType, time_from_float, FrozenDict
 from qupulse._program.transformation import Transformation
 from qupulse.utils import pairwise
 
+class ConstantFunctionPulseTemplateWarning(UserWarning):
+    """  This warning indicates a constant waveform is constructed from a FunctionPulseTemplate """
+    pass
 
 __all__ = ["Waveform", "TableWaveform", "TableWaveformEntry", "FunctionWaveform", "SequenceWaveform",
-           "MultiChannelWaveform", "RepetitionWaveform", "TransformingWaveform", "ArithmeticWaveform"]
+           "MultiChannelWaveform", "RepetitionWaveform", "TransformingWaveform", "ArithmeticWaveform",
+           "ConstantFunctionPulseTemplateWarning"]
 
 PULSE_TO_WAVEFORM_ERROR = None  # error margin in pulse template to waveform conversion
 
@@ -97,13 +104,13 @@ class Waveform(Comparable, metaclass=ABCMeta):
         """
         if len(sample_times) == 0:
             if output_array is None:
-                return np.zeros_like(sample_times)
+                return np.zeros_like(sample_times, dtype=float)
             elif len(output_array) == len(sample_times):
                 return output_array
             else:
                 raise ValueError('Output array length and sample time length are different')
 
-        if np.any(np.diff(sample_times) < 0):
+        if not is_monotonic(sample_times):
             raise ValueError('The sample times are not monotonously increasing')
         if sample_times[0] < 0 or sample_times[-1] > float(self.duration):
             raise ValueError(f'The sample times [{sample_times[0]}, ..., {sample_times[-1]}] are not in the range'
@@ -194,7 +201,7 @@ class Waveform(Comparable, metaclass=ABCMeta):
         return None
 
     def __neg__(self):
-        return FunctorWaveform(self, {ch: np.negative for ch in self.defined_channels})
+        return FunctorWaveform.from_functor(self, {ch: np.negative for ch in self.defined_channels})
 
     def __pos__(self):
         return self
@@ -202,6 +209,11 @@ class Waveform(Comparable, metaclass=ABCMeta):
     def _sort_key_for_channels(self) -> Sequence[Tuple[str, int]]:
         """Makes reproducible sorting by defined channels possible"""
         return sorted((ch, 0) if isinstance(ch, str) else ('', ch) for ch in self.defined_channels)
+
+    def reversed(self) -> 'Waveform':
+        """Returns a reversed version of this waveform."""
+        # We don't check for constness here because const waveforms are supposed to override this method
+        return ReversedWaveform(self)
 
 
 class TableWaveformEntry(NamedTuple('TableWaveformEntry', [('t', Real),
@@ -286,7 +298,7 @@ class TableWaveform(Waveform):
             raise ValueError('Negative time values are not allowed.')
 
         # constant_v is None <=> the waveform is constant until up to the current entry
-        constant_v = first_interp.constant_value((previous_t, previous_v), (t, v))
+        constant_v = interp.constant_value((previous_t, previous_v), (t, v))
 
         for next_t, next_v, next_interp in input_iter:
             if next_t < t:
@@ -440,6 +452,9 @@ class ConstantWaveform(Waveform):
         return f"{type(self).__name__}(duration={self.duration!r}, "\
                f"amplitude={self._amplitude!r}, channel={self._channel!r})"
 
+    def reversed(self) -> 'Waveform':
+        return self
+
 
 class FunctionWaveform(Waveform):
     """Waveform obtained from instantiating a FunctionPulseTemplate."""
@@ -463,7 +478,7 @@ class FunctionWaveform(Waveform):
             raise ValueError('FunctionWaveforms may not depend on anything but "t"')
         elif not expression.variables:
             warnings.warn("Constant FunctionWaveform is not recommended as the constant propagation will be suboptimal",
-                          category=UserWarning)
+                          category=ConstantFunctionPulseTemplateWarning)
         super().__init__(duration=_to_time_type(duration))
         self._expression = expression
         self._channel_id = channel
@@ -626,9 +641,9 @@ class SequenceWaveform(Waveform):
         return self._duration
 
     def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> 'Waveform':
-        return SequenceWaveform(
+        return SequenceWaveform.from_sequence([
             sub_waveform.unsafe_get_subset_for_channels(channels & sub_waveform.defined_channels)
-            for sub_waveform in self._sequenced_waveforms if sub_waveform.defined_channels & channels)
+            for sub_waveform in self._sequenced_waveforms if sub_waveform.defined_channels & channels])
 
     @property
     def sequenced_waveforms(self) -> Sequence[Waveform]:
@@ -838,9 +853,10 @@ class RepetitionWaveform(Waveform):
     def compare_key(self) -> Tuple[Any, int]:
         return self._body.compare_key, self._repetition_count
 
-    def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> 'RepetitionWaveform':
-        return RepetitionWaveform(body=self._body.unsafe_get_subset_for_channels(channels),
-                                  repetition_count=self._repetition_count)
+    def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> Waveform:
+        return RepetitionWaveform.from_repetition_count(
+            body=self._body.unsafe_get_subset_for_channels(channels),
+            repetition_count=self._repetition_count)
 
     def is_constant(self) -> bool:
         return self._body.is_constant()
@@ -875,7 +891,7 @@ class TransformingWaveform(Waveform):
         if constant_values is None or not transformation.is_constant_invariant():
             return cls(inner_waveform, transformation)
 
-        transformed_constant_values = transformation(0., constant_values)
+        transformed_constant_values = {key: float(value) for key, value in transformation(0., constant_values).items()}
         return ConstantWaveform.from_mapping(inner_waveform.duration, transformed_constant_values)
 
     def is_constant(self) -> bool:
@@ -1164,9 +1180,54 @@ class FunctorWaveform(Waveform):
         return self._functor[channel](inner_output, out=inner_output)
 
     def unsafe_get_subset_for_channels(self, channels: Set[ChannelID]) -> Waveform:
-        return FunctorWaveform(self._inner_waveform.unsafe_get_subset_for_channels(channels),
-                               {ch: self._functor[ch] for ch in channels})
+        return FunctorWaveform.from_functor(
+            self._inner_waveform.unsafe_get_subset_for_channels(channels),
+            {ch: self._functor[ch] for ch in channels})
 
     @property
     def compare_key(self) -> Tuple[Waveform, FrozenSet]:
         return self._inner_waveform, frozenset(self._functor.items())
+
+
+class ReversedWaveform(Waveform):
+    """Reverses the inner waveform in time."""
+
+    __slots__ = ('_inner',)
+
+    def __init__(self, inner: Waveform):
+        super().__init__(duration=inner.duration)
+        self._inner = inner
+
+    @classmethod
+    def from_to_reverse(cls, inner: Waveform) -> Waveform:
+        if inner.constant_value_dict():
+            return inner
+        else:
+            return cls(inner)
+
+    def unsafe_sample(self, channel: ChannelID, sample_times: np.ndarray,
+                      output_array: Union[np.ndarray, None] = None) -> np.ndarray:
+        inner_sample_times = (float(self.duration) - sample_times)[::-1]
+        if output_array is None:
+            return self._inner.unsafe_sample(channel, inner_sample_times, None)[::-1]
+        else:
+            inner_output_array = output_array[::-1]
+            inner_output_array = self._inner.unsafe_sample(channel, inner_sample_times, output_array=inner_output_array)
+            if inner_output_array.base not in (output_array, output_array.base):
+                # TODO: is there a guarantee by numpy we never end up here?
+                output_array[:] = inner_output_array[::-1]
+            return output_array
+
+    @property
+    def defined_channels(self) -> AbstractSet[ChannelID]:
+        return self._inner.defined_channels
+
+    def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> 'Waveform':
+        return ReversedWaveform.from_to_reverse(self._inner.unsafe_get_subset_for_channels(channels))
+
+    @property
+    def compare_key(self) -> Hashable:
+        return self._inner.compare_key
+
+    def reversed(self) -> 'Waveform':
+        return self._inner

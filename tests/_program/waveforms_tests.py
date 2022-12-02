@@ -9,7 +9,7 @@ from qupulse.pulses.interpolation import HoldInterpolationStrategy, LinearInterp
     JumpInterpolationStrategy
 from qupulse._program.waveforms import MultiChannelWaveform, RepetitionWaveform, SequenceWaveform,\
     TableWaveformEntry, TableWaveform, TransformingWaveform, SubsetWaveform, ArithmeticWaveform, ConstantWaveform,\
-    Waveform, FunctorWaveform, FunctionWaveform
+    Waveform, FunctorWaveform, FunctionWaveform, ReversedWaveform
 from qupulse._program.transformation import LinearTransformation
 from qupulse.expressions import ExpressionScalar, Expression
 
@@ -555,6 +555,31 @@ class TableWaveformTests(unittest.TestCase):
                                            TableWaveformEntry(-0.2, 0.2, HoldInterpolationStrategy()),
                                            TableWaveformEntry(0.1, 0.2, HoldInterpolationStrategy())])
 
+    def test_validate_input_const_detection(self):
+        constant_table = [TableWaveformEntry(0.0, 2.5, HoldInterpolationStrategy()),
+                          (1.4, 2.5, LinearInterpolationStrategy())]
+        linear_table = [TableWaveformEntry(0.0, 0.0, HoldInterpolationStrategy()),
+                        TableWaveformEntry(1.4, 2.5, LinearInterpolationStrategy())]
+
+        self.assertEqual((1.4, 2.5), TableWaveform._validate_input(constant_table))
+        self.assertEqual(linear_table,
+                         TableWaveform._validate_input(linear_table))
+
+    def test_const_detection_regression(self):
+        # regression test 707
+        from qupulse.pulses import PointPT
+        second_point_pt = PointPT([(0, 'v_0+v_1'),
+                                   ('t_2', 'v_0', 'linear')],
+                                  channel_names=('A',),
+                                  measurements=[('M', 0, 1)])
+        parameters = dict(t=3,
+                          t_2=2,
+                          v_0=1,
+                          v_1=1.4)
+        channel_mapping = {'A': 'A'}
+        wf = second_point_pt.build_waveform(parameters=parameters, channel_mapping=channel_mapping)
+        self.assertIsInstance(wf, TableWaveform)
+
     def test_validate_input_duplicate_removal(self):
         validated = TableWaveform._validate_input([TableWaveformEntry(0.0, 0.2, HoldInterpolationStrategy()),
                                                    TableWaveformEntry(0.1, 0.2, LinearInterpolationStrategy()),
@@ -1049,3 +1074,33 @@ class FunctorWaveformTests(unittest.TestCase):
         self.assertNotEqual(wf11, wf12)
         self.assertNotEqual(wf11, wf21)
         self.assertNotEqual(wf11, wf22)
+
+
+class ReversedWaveformTest(unittest.TestCase):
+    def test_simple_properties(self):
+        dummy_wf = DummyWaveform(1.5, defined_channels={'A', 'B'})
+        reversed_wf = ReversedWaveform(dummy_wf)
+
+        self.assertEqual(dummy_wf.duration, reversed_wf.duration)
+        self.assertEqual(dummy_wf.defined_channels, reversed_wf.defined_channels)
+        self.assertEqual(dummy_wf.compare_key, reversed_wf.compare_key)
+        self.assertNotEqual(reversed_wf, dummy_wf)
+
+    def test_reversed_sample(self):
+        time_array = np.array([0.1, 0.2, 0.21, 0.3])
+        sample_output = np.array([1.1, 1.2, 1.3, 0.9])
+
+        dummy_wf = DummyWaveform(1.5, defined_channels={'A', 'B'}, sample_output=sample_output.copy())
+        reversed_wf = ReversedWaveform(dummy_wf)
+
+        output = reversed_wf.unsafe_sample('A', time_array)
+        np.testing.assert_equal(output, sample_output[::-1])
+        self.assertEqual(dummy_wf.sample_calls, [('A', list(1.5 - time_array[::-1]), None)])
+
+        mem = np.full_like(time_array, fill_value=np.nan)
+        output = reversed_wf.unsafe_sample('A', time_array, output_array=mem)
+        self.assertIs(output, mem)
+        np.testing.assert_equal(output, sample_output[::-1])
+        np.testing.assert_equal(dummy_wf.sample_calls, [
+            ('A', list(1.5 - time_array[::-1]), None),
+            ('A', list(1.5 - time_array[::-1]), mem[::-1])])

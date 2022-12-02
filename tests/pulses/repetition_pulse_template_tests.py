@@ -7,6 +7,7 @@ from qupulse.utils.types import FrozenDict
 
 from qupulse._program._loop import Loop
 from qupulse.expressions import Expression, ExpressionScalar
+from qupulse.pulses import ConstantPT
 from qupulse.pulses.repetition_pulse_template import RepetitionPulseTemplate,ParameterNotIntegerException
 from qupulse.pulses.parameters import ParameterNotProvidedException, ParameterConstraintViolation, ConstantParameter, \
     ParameterConstraint
@@ -48,10 +49,9 @@ class RepetitionPulseTemplateTest(unittest.TestCase):
         self.assertEqual(body.parameter_names, t.parameter_names)
 
     def test_parameter_names(self) -> None:
-        body = DummyPulseTemplate(parameter_names={'foo', 'bar'})
-        t = RepetitionPulseTemplate(body, 5, parameter_constraints={'foo > hugo'}, measurements=[('meas', 'd', 0)])
-
-        self.assertEqual({'foo', 'bar', 'hugo', 'd'}, t.parameter_names)
+        for body in [DummyPulseTemplate(parameter_names={'foo', 'bar'}), ConstantPT(1.4, {'A': 'foo', 'B': 'bar'})]:
+            t = RepetitionPulseTemplate(body, 5, parameter_constraints={'foo > hugo'}, measurements=[('meas', 'd', 0)])
+            self.assertEqual({'foo', 'bar', 'hugo', 'd'}, t.parameter_names)
 
     def test_str(self) -> None:
         body = DummyPulseTemplate()
@@ -86,6 +86,16 @@ class RepetitionPulseTemplateTest(unittest.TestCase):
 
         template = RepetitionPulseTemplate(dummy, Expression('2+m'))
         self.assertEqual({'A': Expression('(2+m)*(foo+2)'), 'B': Expression('(2+m)*(k*3+x**2)')}, template.integral)
+
+    def test_initial_values(self):
+        dummy = DummyPulseTemplate(initial_values={'A': ExpressionScalar('a + 3')})
+        rpt = RepetitionPulseTemplate(dummy, repetition_count='n')
+        self.assertEqual(dummy.initial_values, rpt.initial_values)
+
+    def test_final_values(self):
+        dummy = DummyPulseTemplate(final_values={'A': ExpressionScalar('a + 3')})
+        rpt = RepetitionPulseTemplate(dummy, repetition_count='n')
+        self.assertEqual(dummy.final_values, rpt.final_values)
 
     def test_parameter_names_param_only_in_constraint(self) -> None:
         pt = RepetitionPulseTemplate(DummyPulseTemplate(parameter_names={'a'}), 'n', parameter_constraints=['a<c'])

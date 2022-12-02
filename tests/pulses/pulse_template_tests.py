@@ -52,7 +52,8 @@ class PulseTemplateStub(PulseTemplate):
         return self._parameter_names
 
     def get_serialization_data(self, serializer: Optional['Serializer']=None) -> Dict[str, Any]:
-        raise NotImplementedError()
+        # required for hashability
+        return {'id_self': id(self)}
 
     @classmethod
     def deserialize(cls, serializer: Optional['Serializer']=None, **kwargs) -> 'AtomicPulseTemplateStub':
@@ -79,6 +80,14 @@ class PulseTemplateStub(PulseTemplate):
 
     @property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
+        raise NotImplementedError()
+
+    @property
+    def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        raise NotImplementedError()
+
+    @property
+    def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
         raise NotImplementedError()
 
 
@@ -444,4 +453,3 @@ class AtomicPulseTemplateTests(unittest.TestCase):
                                               to_single_waveform=set(),
                                               global_transformation=None)
         self.assertEqual(Loop(), program)
-
