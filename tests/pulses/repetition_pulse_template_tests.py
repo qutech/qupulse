@@ -48,10 +48,9 @@ class RepetitionPulseTemplateTest(unittest.TestCase):
         self.assertEqual(body.parameter_names, t.parameter_names)
 
     def test_parameter_names(self) -> None:
-        body = DummyPulseTemplate(parameter_names={'foo', 'bar'})
-        t = RepetitionPulseTemplate(body, 5, parameter_constraints={'foo > hugo'}, measurements=[('meas', 'd', 0)])
-
-        self.assertEqual({'foo', 'bar', 'hugo', 'd'}, t.parameter_names)
+        for body in [DummyPulseTemplate(parameter_names={'foo', 'bar'}), ConstantPT(1.4, {'A': 'foo', 'B': 'bar'})]:
+            t = RepetitionPulseTemplate(body, 5, parameter_constraints={'foo > hugo'}, measurements=[('meas', 'd', 0)])
+            self.assertEqual({'foo', 'bar', 'hugo', 'd'}, t.parameter_names)
 
     def test_str(self) -> None:
         body = DummyPulseTemplate()

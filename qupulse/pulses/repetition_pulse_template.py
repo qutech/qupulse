@@ -87,9 +87,11 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
             .format(self._repetition_count, self.body)
 
     @property
-    def parameter_names(self) -> Set[str]:
-        return set.union(self.body.parameter_names, self.repetition_count.variables, self.constrained_parameters,
-                         self.measurement_parameters)
+    def parameter_names(self) -> AbstractSet[str]:
+        return set().union(self.body.parameter_names,
+                           self.constrained_parameters,
+                           self.measurement_parameters,
+                           self.repetition_count.variables)
 
     @property
     def measurement_names(self) -> Set[str]:
