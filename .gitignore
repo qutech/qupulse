@@ -14,3 +14,5 @@ MATLAB/+qc/personalPaths.mat
 .idea/
 .mypy_cache/*
 tests/hardware/WX2184C.exe
+research_tech/*
+
