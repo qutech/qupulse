@@ -7,6 +7,7 @@ from qupulse.utils.types import FrozenDict
 
 from qupulse._program._loop import Loop
 from qupulse.expressions import Expression, ExpressionScalar
+from qupulse.pulses import ConstantPT
 from qupulse.pulses.repetition_pulse_template import RepetitionPulseTemplate,ParameterNotIntegerException
 from qupulse.pulses.parameters import ParameterNotProvidedException, ParameterConstraintViolation, ConstantParameter, \
     ParameterConstraint

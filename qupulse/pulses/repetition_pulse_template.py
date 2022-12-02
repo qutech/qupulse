@@ -1,7 +1,7 @@
 """This module defines RepetitionPulseTemplate, a higher-order hierarchical pulse template that
 represents the n-times repetition of another PulseTemplate."""
 
-from typing import Dict, List, Set, Optional, Union, Any, Mapping, cast
+from typing import Dict, List, AbstractSet, Optional, Union, Any, Mapping, cast
 from numbers import Real
 from warnings import warn
 
@@ -94,7 +94,7 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
                            self.repetition_count.variables)
 
     @property
-    def measurement_names(self) -> Set[str]:
+    def measurement_names(self) -> AbstractSet[str]:
         return self.body.measurement_names | MeasurementDefiner.measurement_names.fget(self)
 
     @property
@@ -106,7 +106,7 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
                                  measurement_mapping: Dict[str, Optional[str]],
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional['Transformation'],
-                                 to_single_waveform: Set[Union[str, 'PulseTemplate']],
+                                 to_single_waveform: AbstractSet[Union[str, 'PulseTemplate']],
                                  parent_loop: Loop) -> None:
         self.validate_scope(scope)
 
