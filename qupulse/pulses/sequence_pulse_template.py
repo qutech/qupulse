@@ -13,7 +13,7 @@ from qupulse.parameter_scope import Scope
 from qupulse.utils import cached_property
 from qupulse.utils.types import MeasurementWindow, ChannelID, TimeType
 from qupulse.pulses.pulse_template import PulseTemplate, AtomicPulseTemplate
-from qupulse.pulses.parameters import Parameter, ParameterConstrainer, ParameterNotProvidedException
+from qupulse.pulses.parameters import ConstraintLike, ParameterConstrainer
 from qupulse.pulses.mapping_pulse_template import MappingPulseTemplate, MappingTuple
 from qupulse._program.waveforms import SequenceWaveform
 from qupulse.pulses.measurement import MeasurementDeclaration, MeasurementDefiner
@@ -38,7 +38,7 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
     def __init__(self,
                  *subtemplates: Union[PulseTemplate, MappingTuple],
                  identifier: Optional[str]=None,
-                 parameter_constraints: Optional[List[Union[str, Expression]]]=None,
+                 parameter_constraints: Optional[Iterable[ConstraintLike]]=None,
                  measurements: Optional[List[MeasurementDeclaration]]=None,
                  registry: PulseRegistryType=None) -> None:
         """Create a new SequencePulseTemplate instance.
@@ -75,6 +75,17 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
                                  + f' defined {defined_channels} vs. subtemplate {subtemplate.defined_channels}')
 
         self._register(registry=registry)
+
+    def with_appended(self, *appended: 'PulseTemplate'):
+        if appended:
+            if self.identifier:
+                return SequencePulseTemplate(self, *appended)
+            else:
+                return SequencePulseTemplate(*self.__subtemplates, *appended,
+                                             parameter_constraints=self.parameter_constraints,
+                                             measurements=self.measurement_declarations)
+        else:
+            return self
 
     @classmethod
     def concatenate(cls, *pulse_templates: Union[PulseTemplate, MappingTuple], **kwargs) -> 'SequencePulseTemplate':

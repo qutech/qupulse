@@ -70,6 +70,17 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
 
         self._register(registry=registry)
 
+    def with_repetition(self, repetition_count: Union[int, str, ExpressionScalar]) -> 'PulseTemplate':
+        if self.identifier:
+            return RepetitionPulseTemplate(self, repetition_count)
+        else:
+            return RepetitionPulseTemplate(
+                self.body,
+                self.repetition_count * repetition_count,
+                parameter_constraints=self.parameter_constraints,
+                measurements=self.measurement_declarations
+            )
+
     @property
     def repetition_count(self) -> ExpressionScalar:
         """The amount of repetitions. Either a constant integer or a ParameterDeclaration object."""
