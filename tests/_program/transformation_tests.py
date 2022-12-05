@@ -20,6 +20,9 @@ class TransformationStub(Transformation):
     def get_input_channels(self, output_channels):
         raise NotImplementedError()
 
+    def get_constant_output_channels(self, input_channels):
+        raise NotImplementedError()
+
     @property
     def compare_key(self):
         return id(self)
@@ -169,6 +172,9 @@ class LinearTransformationTests(unittest.TestCase):
         trafo = LinearTransformation(matrix, in_chs, out_chs)
         self.assertTrue(trafo.is_constant_invariant())
 
+    def test_time_dependence(self):
+        raise NotImplementedError()
+
 
 class IdentityTransformationTests(unittest.TestCase):
     def test_compare_key(self):
@@ -305,6 +311,8 @@ class ParallelChannelTransformationTests(unittest.TestCase):
         self.assertEqual(trafo.get_output_channels({'X'}), {'X', 'Y', 'Z'})
         self.assertEqual(trafo.get_output_channels({'X', 'Z', 'K'}), {'X', 'Y', 'Z', 'K'})
 
+        self.assertEqual(trafo.get_constant_output_channels({'X', 'Y', 'Z', 'K'}), {'X', 'Y', 'K'})
+
     def test_trafo(self):
         channels = {'X': 2, 'Y': 4.4, 'Z': ExpressionScalar('t')}
         trafo = ParallelChannelTransformation(channels)
@@ -345,6 +353,9 @@ class ParallelChannelTransformationTests(unittest.TestCase):
         trafo = ParallelChannelTransformation(channels)
         self.assertTrue(trafo.is_constant_invariant())
 
+    def test_time_dependence(self):
+        raise NotImplementedError()
+
 
 class TestChaining(unittest.TestCase):
     def test_identity_result(self):
@@ -376,6 +387,9 @@ class TestChaining(unittest.TestCase):
         result = chain_transformations(trafo, IdentityTransformation(), trafo)
 
         self.assertEqual(result, expected)
+
+    def test_constant_propagation(self):
+        raise NotImplementedError()
 
 
 class TestOffsetTransformation(unittest.TestCase):
@@ -430,6 +444,9 @@ class TestOffsetTransformation(unittest.TestCase):
         constant_trafo = OffsetTransformation({'a': 7, 'b': 8.})
         self.assertTrue(constant_trafo.is_constant_invariant())
 
+    def test_time_dependence(self):
+        raise NotImplementedError()
+
 
 class TestScalingTransformation(unittest.TestCase):
     def setUp(self) -> None:
@@ -482,3 +499,6 @@ class TestScalingTransformation(unittest.TestCase):
         const_trafo = ScalingTransformation(self.constant_scales)
         self.assertFalse(trafo.is_constant_invariant())
         self.assertTrue(const_trafo.is_constant_invariant())
+
+    def test_time_dependence(self):
+        raise NotImplementedError()
