@@ -2,7 +2,7 @@
 combines several other PulseTemplate objects for sequential execution."""
 
 import numpy as np
-from typing import Dict, List, Set, Optional, Any, AbstractSet, Union, Callable, cast
+from typing import Dict, List, Set, Optional, Any, AbstractSet, Union, Callable, cast, Iterable
 from numbers import Real
 import functools
 import warnings
