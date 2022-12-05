@@ -239,10 +239,13 @@ class ParameterConstraint(AnonymousSerializable):
         return str(self)
 
 
+ConstraintLike = Union[sympy.Expr, str, ParameterConstraint]
+
+
 class ParameterConstrainer:
     """A class that implements the testing of parameter constraints. It is used by the subclassing pulse templates."""
     def __init__(self, *,
-                 parameter_constraints: Optional[Iterable[Union[str, ParameterConstraint]]]) -> None:
+                 parameter_constraints: Optional[Iterable[ConstraintLike]]) -> None:
         if parameter_constraints is None:
             self._parameter_constraints = []
         else:

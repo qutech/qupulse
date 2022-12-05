@@ -92,6 +92,20 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
 
         self._register(registry=registry)
 
+    def with_parallel_atomic(self, *parallel: 'AtomicPulseTemplate') -> 'AtomicPulseTemplate':
+        from qupulse.pulses import AtomicMultiChannelPT
+        if parallel:
+            if self.identifier:
+                return AtomicMultiChannelPT(self, *parallel)
+            else:
+                return AtomicMultiChannelPT(
+                    *self._subtemplates, *parallel,
+                    measurements=self.measurement_declarations,
+                    parameter_constraints=self.parameter_constraints,
+                )
+        else:
+            return self
+
     @property
     def duration(self) -> ExpressionScalar:
         if self._duration is None:
@@ -333,6 +347,15 @@ class ParallelChannelPulseTemplate(PulseTemplate):
         data['template'] = self._template
         data['overwritten_channels'] = self._overwritten_channels
         return data
+
+    def with_parallel_channels(self, values: Mapping[ChannelID, ExpressionLike]) -> 'PulseTemplate':
+        if self.identifier:
+            return super().with_parallel_channels(values)
+        else:
+            return ParallelConstantChannelPulseTemplate(
+                self._template,
+                {**self._overwritten_channels, **values},
+            )
 
     def _is_atomic(self) -> bool:
         return self._template._is_atomic()
