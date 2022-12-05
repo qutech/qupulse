@@ -216,6 +216,16 @@ class ParallelChannelPulseTemplate(PulseTemplate):
                  overwritten_channels: Mapping[ChannelID, Union[ExpressionScalar, Sympifyable]], *,
                  identifier: Optional[str]=None,
                  registry: Optional[PulseRegistryType] = None):
+        """Pulse template to add new or overwrite existing channels of a contained pulse template. The channel values
+        may be time dependent if the contained pulse template is atomic.
+
+        Args:
+            template: Inner pulse template where all channels that are not overwritten will stay the same.
+            overwritten_channels: Mapping of channels to values that this channel will have. This can overwrite existing
+            channels or add new ones. May be time dependent if template is atomic.
+            identifier: Name of the pulse template for serialization
+            registry: Pulse template gets registered here if not None.
+        """
         super().__init__(identifier=identifier)
 
         self._template = template
