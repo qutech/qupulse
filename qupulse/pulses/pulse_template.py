@@ -246,14 +246,16 @@ class PulseTemplate(Serializable):
                                           global_transformation=global_transformation,
                                           parent_loop=parent_loop)
 
-    def with_constant_channels(self, values: Mapping[ChannelID, ExpressionLike]) -> 'PulseTemplate':
+    def with_parallel_channels(self, values: Mapping[ChannelID, ExpressionLike]) -> 'PulseTemplate':
         """Create a new pulse template that sets the given channels to the corresponding values.
 
+        See :class:`~qupulse.pulses.ParallelChannelPulseTemplate` for implementation details and restictions.
+
         Args:
-            values: Constant values to be set for each channel.
+            values: Values to be set for each channel.
         """
-        from qupulse.pulses.multi_channel_pulse_template import ParallelConstantChannelPulseTemplate
-        return ParallelConstantChannelPulseTemplate(
+        from qupulse.pulses.multi_channel_pulse_template import ParallelChannelPulseTemplate
+        return ParallelChannelPulseTemplate(
             self,
             values
         )

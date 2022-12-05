@@ -329,9 +329,9 @@ class ParallelConstantChannelPulseTemplate(PulseTemplate):
         data['overwritten_channels'] = self._overwritten_channels
         return data
 
-    def with_constant_channels(self, values: Mapping[ChannelID, ExpressionLike]) -> 'PulseTemplate':
+    def with_parallel_channels(self, values: Mapping[ChannelID, ExpressionLike]) -> 'PulseTemplate':
         if self.identifier:
-            return super().with_constant_channels(values)
+            return super().with_parallel_channels(values)
         else:
             return ParallelConstantChannelPulseTemplate(
                 self._template,
