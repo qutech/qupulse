@@ -3,8 +3,10 @@ from unittest import mock
 
 import numpy as np
 
+
+from qupulse.expressions import ExpressionScalar
 from qupulse._program.transformation import LinearTransformation, Transformation, IdentityTransformation,\
-    ChainedTransformation, ParallelConstantTransformation, chain_transformations, OffsetTransformation,\
+    ChainedTransformation, ParallelChannelTransformation, chain_transformations, OffsetTransformation,\
     ScalingTransformation
 
 
@@ -286,62 +288,61 @@ class ChainedTransformationTests(unittest.TestCase):
         self.assertFalse(trafo.is_constant_invariant())
 
 
-class ParallelConstantChannelTransformationTests(unittest.TestCase):
+class ParallelChannelTransformationTests(unittest.TestCase):
     def test_init(self):
-        channels = {'X': 2, 'Y': 4.4}
+        channels = {'X': 2, 'Y': 4.4, 'Z': ExpressionScalar('t')}
 
-        trafo = ParallelConstantTransformation(channels)
+        trafo = ParallelChannelTransformation(channels)
 
         self.assertEqual(trafo._channels, channels)
-        self.assertTrue(all(isinstance(v, float) for v in trafo._channels.values()))
-
-        self.assertEqual(trafo.compare_key, (('X', 2.), ('Y', 4.4)))
 
         self.assertEqual(trafo.get_input_channels(set()), set())
         self.assertEqual(trafo.get_input_channels({'X'}), set())
-        self.assertEqual(trafo.get_input_channels({'Z'}), {'Z'})
-        self.assertEqual(trafo.get_input_channels({'X', 'Z'}), {'Z'})
+        self.assertEqual(trafo.get_input_channels({'K'}), {'K'})
+        self.assertEqual(trafo.get_input_channels({'X', 'Z', 'K'}), {'K'})
 
-        self.assertEqual(trafo.get_output_channels(set()), {'X', 'Y'})
-        self.assertEqual(trafo.get_output_channels({'X'}), {'X', 'Y'})
-        self.assertEqual(trafo.get_output_channels({'X', 'Z'}), {'X', 'Y', 'Z'})
+        self.assertEqual(trafo.get_output_channels(set()), {'X', 'Y', 'Z'})
+        self.assertEqual(trafo.get_output_channels({'X'}), {'X', 'Y', 'Z'})
+        self.assertEqual(trafo.get_output_channels({'X', 'Z', 'K'}), {'X', 'Y', 'Z', 'K'})
 
     def test_trafo(self):
-        channels = {'X': 2, 'Y': 4.4}
-        trafo = ParallelConstantTransformation(channels)
+        channels = {'X': 2, 'Y': 4.4, 'Z': ExpressionScalar('t')}
+        trafo = ParallelChannelTransformation(channels)
 
         n_points = 17
         time = np.arange(17, dtype=float)
 
         expected_overwrites = {'X': np.full((n_points,), 2.),
-                               'Y': np.full((n_points,), 4.4)}
+                               'Y': np.full((n_points,), 4.4),
+                               'Z': time}
 
         empty_input_result = trafo(time, {})
         np.testing.assert_equal(empty_input_result, expected_overwrites)
 
-        z_input_result = trafo(time, {'Z': np.sin(time)})
-        np.testing.assert_equal(z_input_result, {'Z': np.sin(time), **expected_overwrites})
+        k_input = {'K': np.sin(time)}
+        k_input_result = trafo(time, k_input)
+        np.testing.assert_equal(k_input_result, {**k_input, **expected_overwrites})
 
         x_input_result = trafo(time, {'X': np.cos(time)})
-        np.testing.assert_equal(empty_input_result, expected_overwrites)
+        np.testing.assert_equal(x_input_result, expected_overwrites)
 
-        x_z_input_result = trafo(time, {'X': np.cos(time), 'Z': np.sin(time)})
-        np.testing.assert_equal(z_input_result, {'Z': np.sin(time), **expected_overwrites})
+        x_k_input_result = trafo(time, {'X': np.cos(time), 'K': np.sin(time)})
+        np.testing.assert_equal(x_k_input_result, {'K': np.sin(time), **expected_overwrites})
 
     def test_repr(self):
         channels = {'X': 2, 'Y': 4.4}
-        trafo = ParallelConstantTransformation(channels)
+        trafo = ParallelChannelTransformation(channels)
         self.assertEqual(trafo, eval(repr(trafo)))
 
     def test_scalar_trafo_works(self):
         channels = {'X': 2, 'Y': 4.4}
-        trafo = ParallelConstantTransformation(channels)
+        trafo = ParallelChannelTransformation(channels)
 
         assert_scalar_trafo_works(self, trafo, {'a': 0., 'b': 0.3, 'c': 0.6})
 
     def test_constant_propagation(self):
         channels = {'X': 2, 'Y': 4.4}
-        trafo = ParallelConstantTransformation(channels)
+        trafo = ParallelChannelTransformation(channels)
         self.assertTrue(trafo.is_constant_invariant())
 
 
@@ -379,7 +380,7 @@ class TestChaining(unittest.TestCase):
 
 class TestOffsetTransformation(unittest.TestCase):
     def setUp(self) -> None:
-        self.offsets = {'A': 1., 'B': 1.2}
+        self.offsets = {'A': 1., 'B': 1.2, 'C': ExpressionScalar('t')}
 
     def test_init(self):
         trafo = OffsetTransformation(self.offsets)
@@ -390,26 +391,29 @@ class TestOffsetTransformation(unittest.TestCase):
 
     def test_get_input_channels(self):
         trafo = OffsetTransformation(self.offsets)
-        channels = {'A', 'C'}
+        channels = {'A', 'K'}
         self.assertIs(channels, trafo.get_input_channels(channels))
         self.assertIs(channels, trafo.get_output_channels(channels))
 
     def test_compare_key(self):
         trafo = OffsetTransformation(self.offsets)
         _ = hash(trafo)
-        self.assertEqual(frozenset([('A', 1.), ('B', 1.2)]), trafo.compare_key)
+        self.assertEqual(trafo, OffsetTransformation(self.offsets))
+        self.assertEqual({trafo}, {OffsetTransformation(self.offsets), trafo})
 
     def test_trafo(self):
         trafo = OffsetTransformation(self.offsets)
 
         time = np.asarray([.5, .6])
-        in_data = {'A': np.asarray([.1, .2]), 'C': np.asarray([3., 4.])}
+        in_data = {'A': np.asarray([.1, .2]),
+                   'C': np.asarray([.5, .6]),
+                   'K': np.asarray([3., 4.])}
 
-        expected = {'A': np.asarray([1.1, 1.2]), 'C': in_data['C']}
+        expected = {'A': np.asarray([1.1, 1.2]), 'C': in_data['C'] + time, 'K': in_data['K']}
 
         out_data = trafo(time, in_data)
 
-        self.assertIs(expected['C'], out_data['C'])
+        self.assertIs(expected['K'], out_data['K'])
         np.testing.assert_equal(expected, out_data)
 
     def test_repr(self):
@@ -422,12 +426,15 @@ class TestOffsetTransformation(unittest.TestCase):
 
     def test_constant_propagation(self):
         trafo = OffsetTransformation(self.offsets)
-        self.assertTrue(trafo.is_constant_invariant())
+        self.assertFalse(trafo.is_constant_invariant())
+        constant_trafo = OffsetTransformation({'a': 7, 'b': 8.})
+        self.assertTrue(constant_trafo.is_constant_invariant())
 
 
 class TestScalingTransformation(unittest.TestCase):
     def setUp(self) -> None:
-        self.scales = {'A': 1.5, 'B': 1.2}
+        self.constant_scales = {'A': 1.5, 'B': 1.2}
+        self.scales = {'A': 1.5, 'B': 1.2, 'C': ExpressionScalar('t')}
 
     def test_init(self):
         trafo = ScalingTransformation(self.scales)
@@ -443,19 +450,23 @@ class TestScalingTransformation(unittest.TestCase):
 
     def test_compare_key(self):
         trafo = OffsetTransformation(self.scales)
+        const_trafo = OffsetTransformation(self.constant_scales)
         _ = hash(trafo)
-        self.assertEqual(frozenset([('A', 1.5), ('B', 1.2)]), trafo.compare_key)
+        self.assertEqual(trafo, trafo)
+        self.assertNotEqual(trafo, const_trafo)
+        self.assertEqual({trafo}, {trafo, OffsetTransformation(self.scales)})
+        self.assertEqual({trafo, const_trafo}, {trafo, OffsetTransformation(self.constant_scales)})
 
     def test_trafo(self):
         trafo = ScalingTransformation(self.scales)
 
         time = np.asarray([.5, .6])
-        in_data = {'A': np.asarray([.1, .2]), 'C': np.asarray([3., 4.])}
-        expected = {'A': np.asarray([.1 * 1.5, .2 * 1.5]), 'C': in_data['C']}
+        in_data = {'A': np.asarray([.1, .2]), 'C': np.asarray([3., 4.]), 'K': np.asarray([5., 6.])}
+        expected = {'A': in_data['A'] * 1.5, 'C': in_data['C'] * time, 'K': in_data['K']}
 
         out_data = trafo(time, in_data)
 
-        self.assertIs(expected['C'], out_data['C'])
+        self.assertIs(expected['K'], out_data['K'])
         np.testing.assert_equal(expected, out_data)
 
     def test_repr(self):
@@ -468,4 +479,6 @@ class TestScalingTransformation(unittest.TestCase):
 
     def test_constant_propagation(self):
         trafo = ScalingTransformation(self.scales)
-        self.assertTrue(trafo.is_constant_invariant())
+        const_trafo = ScalingTransformation(self.constant_scales)
+        self.assertFalse(trafo.is_constant_invariant())
+        self.assertTrue(const_trafo.is_constant_invariant())
