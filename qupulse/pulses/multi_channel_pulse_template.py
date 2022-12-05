@@ -283,7 +283,7 @@ class ParallelChannelPulseTemplate(PulseTemplate):
 
     @property
     def transformation_parameters(self) -> AbstractSet[str]:
-        return set().union(*(value.variables for value in self.overwritten_channels.values()))
+        return set().union(*(value.variables for value in self.overwritten_channels.values())) - {'t'}
 
     @property
     def parameter_names(self):
