@@ -29,7 +29,6 @@ __all__ = ["AtomicMultiChannelPulseTemplate", "ParallelConstantChannelPulseTempl
 
 
 class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
-    """Combines multiple PulseTemplates that are defined on different channels into an AtomicPulseTemplate."""
     def __init__(self,
                  *subtemplates: Union[AtomicPulseTemplate, MappingTuple, MappingPulseTemplate],
                  identifier: Optional[str] = None,
@@ -37,9 +36,11 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
                  measurements: Optional[List[MeasurementDeclaration]] = None,
                  registry: PulseRegistryType = None,
                  duration: Optional[ExpressionLike] = None) -> None:
-        """Parallels multiple AtomicPulseTemplates of the same duration. If the duration keyword argument is given
-        it is enforced that the instantiated pulse template has this duration. If duration is None the duration of the
-        PT is the duration of the first subtemplate. There are probably changes to this behaviour in the future.
+        """Combines multiple AtomicPulseTemplates of the same duration that are defined on different channels into an
+        AtomicPulseTemplate.
+        If the duration keyword argument is given it is enforced that the instantiated pulse template has this duration.
+        If duration is None the duration of the PT is the duration of the first subtemplate.
+        There are probably changes to this behaviour in the future.
 
         Args:
             *subtemplates: Positional arguments are subtemplates to combine.
