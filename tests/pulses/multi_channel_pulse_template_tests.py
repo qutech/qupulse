@@ -483,6 +483,11 @@ class ParallelChannelPulseTemplateTests(unittest.TestCase):
         }
         np.testing.assert_equal(expected_values, vals)
 
+    def test_parameter_names(self):
+        inner = ConstantPT(1.4, {'a': ExpressionScalar('x'), 'b': 1.})
+        pc = ParallelChannelPulseTemplate(inner, {'c': 'sin(2*pi*f*t)', 'd': 'k'})
+        self.assertEqual({'x', 'f', 'k'}, pc.parameter_names)
+
 
 class ParallelChannelPulseTemplateSerializationTests(SerializableTests, unittest.TestCase):
     @property

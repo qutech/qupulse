@@ -536,8 +536,10 @@ class ArithmeticPulseTemplateTest(unittest.TestCase):
         self.assertEqual({'x', 'y', 'foo', 'bar'}, arith.parameter_names)
 
         pt = DummyPulseTemplate(defined_channels={'a'}, parameter_names={'foo', 'bar'})
-        mapping = {'a': 'x', 'b': 'y'}
         self.assertEqual(frozenset({'x', 'y'}), arith._scalar_operand_parameters)
+        self.assertEqual({'x', 'y', 'foo', 'bar'}, arith.parameter_names)
+
+        arith = ArithmeticPulseTemplate(pt, '+', scalar + '+t')
         self.assertEqual({'x', 'y', 'foo', 'bar'}, arith.parameter_names)
 
     def test_try_operation(self):
