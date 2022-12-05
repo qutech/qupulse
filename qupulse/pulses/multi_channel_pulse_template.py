@@ -7,7 +7,7 @@ Classes:
     - MultiChannelWaveform: A waveform defined for several channels by combining waveforms
 """
 
-from typing import Dict, List, Optional, Any, Iterable, Union, Set, Sequence, Mapping
+from typing import Dict, List, Optional, Any, AbstractSet, Union, Set, Sequence, Mapping
 import numbers
 import warnings
 
@@ -99,19 +99,19 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
             return self._duration
 
     @property
-    def parameter_names(self) -> Set[str]:
-        return set.union(self.measurement_parameters,
-                         self.constrained_parameters,
-                         *(st.parameter_names for st in self._subtemplates),
-                         self._duration.variables if self._duration else ())
+    def parameter_names(self) -> AbstractSet[str]:
+        return set().union(self.measurement_parameters,
+                           self.constrained_parameters,
+                           *(st.parameter_names for st in self._subtemplates),
+                           getattr(self._duration, 'variables', ()))
 
     @property
     def subtemplates(self) -> Sequence[Union[AtomicPulseTemplate, MappingPulseTemplate]]:
         return self._subtemplates
 
     @property
-    def defined_channels(self) -> Set[ChannelID]:
-        return set.union(*(st.defined_channels for st in self._subtemplates))
+    def defined_channels(self) -> AbstractSet[ChannelID]:
+        return set().union(*(st.defined_channels for st in self._subtemplates))
 
     @property
     def measurement_names(self) -> Set[str]:
@@ -266,16 +266,16 @@ class ParallelConstantChannelPulseTemplate(PulseTemplate):
             return TransformingWaveform.from_transformation(inner_waveform, transformation)
 
     @property
-    def defined_channels(self) -> Set[ChannelID]:
-        return set.union(self._template.defined_channels, self._overwritten_channels.keys())
+    def defined_channels(self) -> AbstractSet[ChannelID]:
+        return set().union(self._template.defined_channels, self._overwritten_channels.keys())
 
     @property
-    def measurement_names(self) -> Set[str]:
+    def measurement_names(self) -> AbstractSet[str]:
         return self._template.measurement_names
 
     @property
-    def transformation_parameters(self) -> Set[str]:
-        return set.union(*(set(value.variables) for value in self.overwritten_channels.values()))
+    def transformation_parameters(self) -> AbstractSet[str]:
+        return set().union(*(value.variables for value in self.overwritten_channels.values()))
 
     @property
     def parameter_names(self):
