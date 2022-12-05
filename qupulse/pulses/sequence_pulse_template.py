@@ -76,17 +76,6 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
 
         self._register(registry=registry)
 
-    def with_appended(self, *appended: 'PulseTemplate'):
-        if appended:
-            if self.identifier:
-                return SequencePulseTemplate(self, *appended)
-            else:
-                return SequencePulseTemplate(*self.__subtemplates, *appended,
-                                             parameter_constraints=self.parameter_constraints,
-                                             measurements=self.measurement_declarations)
-        else:
-            return self
-
     @classmethod
     def concatenate(cls, *pulse_templates: Union[PulseTemplate, MappingTuple], **kwargs) -> 'SequencePulseTemplate':
         """Sequences the given pulse templates by creating a SequencePulseTemplate. Pulse templates that are
