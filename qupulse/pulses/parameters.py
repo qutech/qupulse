@@ -283,11 +283,8 @@ class ParameterConstrainer:
                 raise ParameterConstraintViolation(constraint, constrained_parameters)
 
     @property
-    def constrained_parameters(self) -> Set[str]:
-        if self._parameter_constraints:
-            return set.union(*(c.affected_parameters for c in self._parameter_constraints))
-        else:
-            return set()
+    def constrained_parameters(self) -> AbstractSet[str]:
+        return set().union(*(c.affected_parameters for c in self._parameter_constraints))
 
 
 class ParameterConstraintViolation(Exception):
