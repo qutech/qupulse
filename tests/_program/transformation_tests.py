@@ -172,9 +172,6 @@ class LinearTransformationTests(unittest.TestCase):
         trafo = LinearTransformation(matrix, in_chs, out_chs)
         self.assertTrue(trafo.is_constant_invariant())
 
-    def test_time_dependence(self):
-        raise NotImplementedError()
-
 
 class IdentityTransformationTests(unittest.TestCase):
     def test_compare_key(self):
@@ -209,6 +206,8 @@ class IdentityTransformationTests(unittest.TestCase):
 
     def test_constant_propagation(self):
         self.assertTrue(IdentityTransformation().is_constant_invariant())
+        chans = {'a', 'b'}
+        self.assertIs(chans, IdentityTransformation().get_constant_output_channels(chans))
 
 
 class ChainedTransformationTests(unittest.TestCase):
@@ -290,6 +289,8 @@ class ChainedTransformationTests(unittest.TestCase):
     def test_constant_propagation(self):
         trafo = ChainedTransformation(ScalingTransformation({'a': 1.1}), OffsetTransformation({'b': 6.6}))
         self.assertTrue(trafo.is_constant_invariant())
+        self.assertEqual({'a', 'b', 'c'}, trafo.get_constant_output_channels({'a', 'b', 'c'}))
+
         trafo = ChainedTransformation(ScalingTransformation({'a': 1.1}), TransformationStub())
         self.assertFalse(trafo.is_constant_invariant())
 
@@ -354,7 +355,22 @@ class ParallelChannelTransformationTests(unittest.TestCase):
         self.assertTrue(trafo.is_constant_invariant())
 
     def test_time_dependence(self):
-        raise NotImplementedError()
+        channels = {'X': 2, 'Y': ExpressionScalar('sin(t)')}
+        trafo = ParallelChannelTransformation(channels)
+        self.assertEqual({'X', 'K'}, trafo.get_constant_output_channels({'X', 'Y', 'K'}))
+
+        t = np.linspace(0., 1., num=50)
+        values = {
+            'X': np.cos(t),
+            'Y': 4. * np.ones_like(t),
+            'K': 5. * np.ones_like(t)
+        }
+        transformed = trafo(t, values)
+        np.testing.assert_equal({
+            'X': np.ones_like(t) * 2,
+            'Y': np.sin(t),
+            'K': values['K']
+        }, transformed)
 
 
 class TestChaining(unittest.TestCase):
@@ -389,7 +405,13 @@ class TestChaining(unittest.TestCase):
         self.assertEqual(result, expected)
 
     def test_constant_propagation(self):
-        raise NotImplementedError()
+        chained = ChainedTransformation(
+            ScalingTransformation({'K': 1.1, 'X': ExpressionScalar('sin(t)')}),
+            OffsetTransformation({'K': 2.2, 'Y': ExpressionScalar('cos(t)')}),
+            ParallelChannelTransformation({'Z': ExpressionScalar('exp(t)')})
+        )
+
+        self.assertEqual({'K', 'other'}, chained.get_constant_output_channels({'K', 'X', 'Y', 'Z', 'other'}))
 
 
 class TestOffsetTransformation(unittest.TestCase):
@@ -445,7 +467,22 @@ class TestOffsetTransformation(unittest.TestCase):
         self.assertTrue(constant_trafo.is_constant_invariant())
 
     def test_time_dependence(self):
-        raise NotImplementedError()
+        channels = {'X': 2, 'Y': ExpressionScalar('sin(t)')}
+        trafo = OffsetTransformation(channels)
+        self.assertEqual({'X', 'K'}, trafo.get_constant_output_channels({'X', 'Y', 'K'}))
+
+        t = np.linspace(0., 1., num=50)
+        values = {
+            'X': np.cos(t),
+            'Y': 4. * np.ones_like(t),
+            'K': 5. * np.ones_like(t)
+        }
+        transformed = trafo(t, values)
+        np.testing.assert_equal({
+            'X': np.cos(t) + 2,
+            'Y': np.sin(t) + 4.,
+            'K': values['K']
+        }, transformed)
 
 
 class TestScalingTransformation(unittest.TestCase):
@@ -501,4 +538,22 @@ class TestScalingTransformation(unittest.TestCase):
         self.assertTrue(const_trafo.is_constant_invariant())
 
     def test_time_dependence(self):
-        raise NotImplementedError()
+        channels = {'X': 2, 'Y': ExpressionScalar('sin(t)'), 'Z': ExpressionScalar('exp(t)')}
+        trafo = ScalingTransformation(channels)
+        self.assertEqual({'X', 'K'},
+                         trafo.get_constant_output_channels({'X', 'Y', 'K'}))
+
+        t = np.linspace(0., 1., num=50)
+        values = {
+            'X': np.cos(t),
+            'Y': 4. * np.ones_like(t),
+            'Z': np.tan(t),
+            'K': 5. * np.ones_like(t)
+        }
+        transformed = trafo(t, values)
+        np.testing.assert_equal({
+            'X': np.cos(t) * 2,
+            'Y': np.sin(t) * 4.,
+            'Z': np.tan(t) * np.exp(t),
+            'K': values['K']
+        }, transformed)

@@ -392,7 +392,7 @@ def _get_constant_output_channels(expressions: Mapping[ChannelID, _TrafoValue],
                                   constant_input_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
     return {ch
             for ch in constant_input_channels
-            if hasattr(expressions[ch], 'variables')}
+            if not hasattr(expressions.get(ch, None), 'variables')}
 
 def _are_valid_transformation_expressions(expressions: Mapping[ChannelID, _TrafoValue]) -> bool:
     return all(expr.variables == ('t',)
