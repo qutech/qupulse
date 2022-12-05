@@ -2,7 +2,7 @@
 combines several other PulseTemplate objects for sequential execution."""
 
 import numpy as np
-from typing import Dict, List, Set, Optional, Any, Iterable, Union, Callable, cast
+from typing import Dict, List, Set, Optional, Any, AbstractSet, Union, Callable, cast
 from numbers import Real
 import functools
 import warnings
@@ -115,9 +115,9 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
         return self.__subtemplates[0].defined_channels if self.__subtemplates else set()
 
     @property
-    def measurement_names(self) -> Set[str]:
-        return set.union(MeasurementDefiner.measurement_names.fget(self),
-                         *(st.measurement_names for st in self.subtemplates))
+    def measurement_names(self) -> AbstractSet[str]:
+        return MeasurementDefiner.measurement_names.fget(self).union(*(st.measurement_names
+                                                                       for st in self.subtemplates))
 
     def build_waveform(self,
                        parameters: Dict[str, Real],

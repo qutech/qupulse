@@ -7,7 +7,8 @@ import sympy
 
 from qupulse.parameter_scope import DictScope
 from qupulse.expressions import ExpressionScalar
-from qupulse.pulses.parameters import ConstantParameter
+from qupulse.pulses import MappingPT, ConstantPT, RepetitionPT
+from qupulse.pulses.plotting import render
 from qupulse.pulses.arithmetic_pulse_template import ArithmeticAtomicPulseTemplate, ArithmeticPulseTemplate,\
     ImplicitAtomicityInArithmeticPT, UnequalDurationWarningInArithmeticPT, try_operation
 from qupulse._program.waveforms import TransformingWaveform
@@ -240,23 +241,31 @@ class ArithmeticPulseTemplateTest(unittest.TestCase):
 
         with mock.patch.object(ArithmeticPulseTemplate, '_parse_operand',
                                return_value=scalar) as parse_operand:
-            arith = ArithmeticPulseTemplate(lhs, '/', non_pt)
-            parse_operand.assert_called_once_with(non_pt, lhs.defined_channels)
-            self.assertEqual(lhs, arith.lhs)
-            self.assertEqual(scalar, arith.rhs)
-            self.assertEqual(lhs, arith._pulse_template)
-            self.assertEqual(scalar, arith._scalar)
-            self.assertEqual('/', arith._arithmetic_operator)
+            with mock.patch('qupulse.pulses.arithmetic_pulse_template._is_time_dependent', return_value=False):
+                arith = ArithmeticPulseTemplate(lhs, '/', non_pt)
+                parse_operand.assert_called_once_with(non_pt, lhs.defined_channels)
+                self.assertEqual(lhs, arith.lhs)
+                self.assertEqual(scalar, arith.rhs)
+                self.assertEqual(lhs, arith._pulse_template)
+                self.assertEqual(scalar, arith._scalar)
+                self.assertEqual('/', arith._arithmetic_operator)
 
         with mock.patch.object(ArithmeticPulseTemplate, '_parse_operand',
                                return_value=scalar) as parse_operand:
-            arith = ArithmeticPulseTemplate(non_pt, '-', rhs)
-            parse_operand.assert_called_once_with(non_pt, rhs.defined_channels)
-            self.assertEqual(scalar, arith.lhs)
-            self.assertEqual(rhs, arith.rhs)
-            self.assertEqual(rhs, arith._pulse_template)
-            self.assertEqual(scalar, arith._scalar)
-            self.assertEqual('-', arith._arithmetic_operator)
+            with mock.patch('qupulse.pulses.arithmetic_pulse_template._is_time_dependent', return_value=False):
+                arith = ArithmeticPulseTemplate(non_pt, '-', rhs)
+                parse_operand.assert_called_once_with(non_pt, rhs.defined_channels)
+                self.assertEqual(scalar, arith.lhs)
+                self.assertEqual(rhs, arith.rhs)
+                self.assertEqual(rhs, arith._pulse_template)
+                self.assertEqual(scalar, arith._scalar)
+                self.assertEqual('-', arith._arithmetic_operator)
+
+        with mock.patch.object(ArithmeticPulseTemplate, '_parse_operand',
+                               return_value=scalar) as parse_operand:
+            with mock.patch('qupulse.pulses.arithmetic_pulse_template._is_time_dependent', return_value=True):
+                with self.assertRaises(TypeError):
+                    ArithmeticPulseTemplate(non_pt, '-', RepetitionPT(rhs, 3))
 
     def test_parse_operand(self):
         operand = {'a': 3, 'b': 'x'}
@@ -361,6 +370,23 @@ class ArithmeticPulseTemplateTest(unittest.TestCase):
 
             expected_trafo = ScalingTransformation(inv_scalar)
             self.assertEqual(expected_trafo, trafo)
+
+    def test_time_dependent_expression(self):
+        inner = FunctionPT('exp(-(t - t_duration/2)**2)', duration_expression='t_duration')
+        inner_iq = AtomicMultiChannelPT((inner, {'default': 'I'}), (inner, {'default': 'Q'}))
+        modulated = ArithmeticPulseTemplate(inner_iq, '*', {'I': 'sin(2*pi*f*t)', 'Q': 'cos(2*pi*f*t)'})
+        program = modulated.create_program(parameters={'t_duration': 10, 'f': 1.})
+        wf = program[0].waveform
+        self.assertEqual(1, len(program))
+        time = np.linspace(0, 10)
+
+        sampled_i = wf.get_sampled('I', time)
+        sampled_q = wf.get_sampled('Q', time)
+
+        expected_sampled_i = np.sin(2*np.pi*time) * np.exp(-(time - 5)**2)
+        expected_sampled_q = np.cos(2*np.pi*time) * np.exp(-(time - 5)**2)
+        np.testing.assert_allclose(expected_sampled_i, sampled_i)
+        np.testing.assert_allclose(expected_sampled_q, sampled_q)
 
     def test_internal_create_program(self):
         lhs = 'x + y'
@@ -510,8 +536,10 @@ class ArithmeticPulseTemplateTest(unittest.TestCase):
         self.assertEqual({'x', 'y', 'foo', 'bar'}, arith.parameter_names)
 
         pt = DummyPulseTemplate(defined_channels={'a'}, parameter_names={'foo', 'bar'})
-        mapping = {'a': 'x', 'b': 'y'}
         self.assertEqual(frozenset({'x', 'y'}), arith._scalar_operand_parameters)
+        self.assertEqual({'x', 'y', 'foo', 'bar'}, arith.parameter_names)
+
+        arith = ArithmeticPulseTemplate(pt, '+', scalar + '+t')
         self.assertEqual({'x', 'y', 'foo', 'bar'}, arith.parameter_names)
 
     def test_try_operation(self):
@@ -559,6 +587,20 @@ class ArithmeticPulseTemplateTest(unittest.TestCase):
 
         arith = ArithmeticPulseTemplate(pt, '-', scalar, identifier='id')
         self.assertEqual(super(ArithmeticPulseTemplate, arith).__repr__(), repr(arith))
+
+    def test_time_dependence(self):
+        inner = ConstantPT(1.4, {'a': ExpressionScalar('x'), 'b': 1.1})
+        with self.assertRaises(TypeError):
+            ArithmeticPulseTemplate(RepetitionPT(inner, 3), '*', {'a': 'sin(t)', 'b': 'cos(t)'})
+
+        pc = ArithmeticPulseTemplate(inner, '*', {'a': 'sin(t)', 'b': 'cos(t)'})
+        prog = pc.create_program(parameters={'x': -1})
+        t, vals, _ = render(prog, sample_rate=10)
+        expected_values = {
+            'a': -np.sin(t),
+            'b': 1.1 * np.cos(t)
+        }
+        np.testing.assert_equal(expected_values, vals)
 
 
 class ArithmeticUsageTests(unittest.TestCase):

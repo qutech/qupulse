@@ -65,3 +65,6 @@ class TimeReversalPulseTemplate(PulseTemplate):
             **super().get_serialization_data(),
             'inner': self._inner
         }
+
+    def _is_atomic(self) -> bool:
+        return self._inner._is_atomic()
