@@ -243,10 +243,15 @@ class ArithmeticPulseTemplate(PulseTemplate):
         self._lhs = lhs
         self._rhs = rhs
 
-        self._pulse_template = pulse_template
+        self._pulse_template: PulseTemplate = pulse_template
         self._scalar = scalar
 
         self._arithmetic_operator = arithmetic_operator
+
+        if _is_time_dependent(self._scalar):
+            if not self._pulse_template._is_atomic():
+                raise TypeError("A time dependent ArithmeticPulseTemplate scalar operand currently requires an atomic "
+                                "pulse template as the other operand.", self)
 
     @staticmethod
     def _parse_operand(operand: Union[ExpressionLike, Mapping[ChannelID, ExpressionLike]],
@@ -501,6 +506,9 @@ class ArithmeticPulseTemplate(PulseTemplate):
                                                                  measurement_mapping=measurement_mapping))
         return measurements
 
+    def _is_atomic(self):
+        return self._pulse_template._is_atomic()
+
 
 def try_operation(lhs: Union[PulseTemplate, ExpressionLike, Mapping[ChannelID, ExpressionLike]],
                   op: str,
@@ -531,6 +539,13 @@ def try_operation(lhs: Union[PulseTemplate, ExpressionLike, Mapping[ChannelID, E
     except ValueError:
         # invalid operand
         return NotImplemented
+
+
+def _is_time_dependent(scalar: Union[ExpressionScalar, Dict[str, ExpressionScalar]]) -> bool:
+    if isinstance(scalar, dict):
+        return any('t' in value.variables for value in scalar.values())
+    else:
+        return 't' in scalar.variables
 
 
 class UnequalDurationWarningInArithmeticPT(RuntimeWarning):

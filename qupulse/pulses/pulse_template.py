@@ -6,6 +6,7 @@ Classes:
     - AtomicPulseTemplate: PulseTemplate that does imply any control flow disruptions and can be
         directly translated into a waveform.
 """
+import warnings
 from abc import abstractmethod
 from typing import Dict, Tuple, Set, Optional, Union, List, Callable, Any, Generic, TypeVar, Mapping
 import itertools
@@ -78,6 +79,10 @@ class PulseTemplate(Serializable):
     def num_channels(self) -> int:
         """The number of channels this PulseTemplate defines"""
         return len(self.defined_channels)
+
+    def _is_atomic(self) -> bool:
+        """This is (currently a private) a check if this pulse template always is translated into a single waveform."""
+        return False
 
     def __matmul__(self, other: Union['PulseTemplate', MappingTuple]) -> 'SequencePulseTemplate':
         """This method enables using the @-operator (intended for matrix multiplication) for
@@ -319,6 +324,10 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
 
     @property
     def atomicity(self) -> bool:
+        warnings.warn("Deprecated since neither maintained nor properly designed.", category=DeprecationWarning)
+        return True
+
+    def _is_atomic(self) -> bool:
         return True
 
     measurement_names = MeasurementDefiner.measurement_names

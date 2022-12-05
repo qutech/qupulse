@@ -209,17 +209,23 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
         return values
 
 
-class ParallelConstantChannelPulseTemplate(PulseTemplate):
+class ParallelChannelPulseTemplate(PulseTemplate):
     def __init__(self,
                  template: PulseTemplate,
                  overwritten_channels: Mapping[ChannelID, Union[ExpressionScalar, Sympifyable]], *,
                  identifier: Optional[str]=None,
-                 registry: Optional[PulseRegistryType]=None):
+                 registry: Optional[PulseRegistryType] = None):
         super().__init__(identifier=identifier)
 
         self._template = template
         self._overwritten_channels = {channel: ExpressionScalar(value)
                                       for channel, value in overwritten_channels.items()}
+
+        if not template._is_atomic():
+            for expr in self._overwritten_channels.values():
+                if 't' in expr.variables:
+                    raise TypeError(f"{type(self).__name__} currently only supports time dependent expressions if the "
+                                    f"pulse template is atomic.", self)
 
         self._register(registry=registry)
 
@@ -234,8 +240,10 @@ class ParallelConstantChannelPulseTemplate(PulseTemplate):
     def _get_overwritten_channels_values(self,
                                          parameters: Mapping[str, Union[numbers.Real]],
                                          channel_mapping: Dict[ChannelID, Optional[ChannelID]]
-                                         ) -> Dict[str, numbers.Real]:
-        return {channel_mapping[name]: value.evaluate_in_scope(parameters)
+                                         ) -> Dict[str, Union[numbers.Real, ExpressionScalar]]:
+        """Return a dictionary of ChannelID to channel value mappings. The channel values can bei either numbers or time
+        dependent expressions."""
+        return {channel_mapping[name]: value.evaluate_symbolic(parameters) if 't' in value.variables else value.evaluate_in_scope(parameters)
                 for name, value in self.overwritten_channels.items()
                 if channel_mapping[name] is not None}
 
@@ -314,6 +322,12 @@ class ParallelConstantChannelPulseTemplate(PulseTemplate):
         data['template'] = self._template
         data['overwritten_channels'] = self._overwritten_channels
         return data
+
+    def _is_atomic(self) -> bool:
+        return self._template._is_atomic()
+
+
+ParallelConstantChannelPulseTemplate = ParallelChannelPulseTemplate
 
 
 class ChannelMappingException(Exception):

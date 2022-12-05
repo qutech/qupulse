@@ -240,23 +240,31 @@ class ArithmeticPulseTemplateTest(unittest.TestCase):
 
         with mock.patch.object(ArithmeticPulseTemplate, '_parse_operand',
                                return_value=scalar) as parse_operand:
-            arith = ArithmeticPulseTemplate(lhs, '/', non_pt)
-            parse_operand.assert_called_once_with(non_pt, lhs.defined_channels)
-            self.assertEqual(lhs, arith.lhs)
-            self.assertEqual(scalar, arith.rhs)
-            self.assertEqual(lhs, arith._pulse_template)
-            self.assertEqual(scalar, arith._scalar)
-            self.assertEqual('/', arith._arithmetic_operator)
+            with mock.patch('qupulse.pulses.arithmetic_pulse_template._is_time_dependent', return_value=False):
+                arith = ArithmeticPulseTemplate(lhs, '/', non_pt)
+                parse_operand.assert_called_once_with(non_pt, lhs.defined_channels)
+                self.assertEqual(lhs, arith.lhs)
+                self.assertEqual(scalar, arith.rhs)
+                self.assertEqual(lhs, arith._pulse_template)
+                self.assertEqual(scalar, arith._scalar)
+                self.assertEqual('/', arith._arithmetic_operator)
 
         with mock.patch.object(ArithmeticPulseTemplate, '_parse_operand',
                                return_value=scalar) as parse_operand:
-            arith = ArithmeticPulseTemplate(non_pt, '-', rhs)
-            parse_operand.assert_called_once_with(non_pt, rhs.defined_channels)
-            self.assertEqual(scalar, arith.lhs)
-            self.assertEqual(rhs, arith.rhs)
-            self.assertEqual(rhs, arith._pulse_template)
-            self.assertEqual(scalar, arith._scalar)
-            self.assertEqual('-', arith._arithmetic_operator)
+            with mock.patch('qupulse.pulses.arithmetic_pulse_template._is_time_dependent', return_value=False):
+                arith = ArithmeticPulseTemplate(non_pt, '-', rhs)
+                parse_operand.assert_called_once_with(non_pt, rhs.defined_channels)
+                self.assertEqual(scalar, arith.lhs)
+                self.assertEqual(rhs, arith.rhs)
+                self.assertEqual(rhs, arith._pulse_template)
+                self.assertEqual(scalar, arith._scalar)
+                self.assertEqual('-', arith._arithmetic_operator)
+
+        with mock.patch.object(ArithmeticPulseTemplate, '_parse_operand',
+                               return_value=scalar) as parse_operand:
+            with mock.patch('qupulse.pulses.arithmetic_pulse_template._is_time_dependent', return_value=True):
+                with self.assertRaises(TypeError):
+                    ArithmeticPulseTemplate(non_pt, '-', RepetitionPT(rhs, 3))
 
     def test_parse_operand(self):
         operand = {'a': 3, 'b': 'x'}

@@ -4,6 +4,7 @@ from unittest import mock
 import numpy
 
 from qupulse.parameter_scope import DictScope
+from qupulse.pulses import RepetitionPT
 from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform, MappingPulseTemplate,\
     ChannelMappingException, AtomicMultiChannelPulseTemplate, ParallelConstantChannelPulseTemplate,\
     TransformingWaveform, ParallelChannelTransformation
@@ -358,6 +359,14 @@ class ParallelConstantChannelPulseTemplateTests(unittest.TestCase):
         self.assertEqual({'M'}, pccpt.measurement_names)
         self.assertEqual({'a', 'c'}, pccpt.transformation_parameters)
         self.assertIs(template.duration, pccpt.duration)
+
+        non_atomic_pt = RepetitionPT(template, 5)
+        ParallelConstantChannelPulseTemplate(non_atomic_pt, overwritten_channels)
+        with self.assertRaises(TypeError):
+            overwritten_channels['T'] = 'a * t'
+            ParallelConstantChannelPulseTemplate(non_atomic_pt, overwritten_channels)
+
+        ParallelConstantChannelPulseTemplate(template, overwritten_channels)
 
     def test_missing_implementations(self):
         pccpt = ParallelConstantChannelPulseTemplate(DummyPulseTemplate(), {})
