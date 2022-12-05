@@ -4,7 +4,7 @@ AtomicPulseTemplates into a single template spanning several channels.
 Classes:
     - MultiChannelPulseTemplate: A pulse template defined for several channels by combining pulse
         templates
-    - MultiChannelWaveform: A waveform defined for several channels by combining waveforms
+    - ParallelChannelPulseTemplate: A pulse template to add channels to an existing pulse template.
 """
 
 from typing import Dict, List, Optional, Any, AbstractSet, Union, Set, Sequence, Mapping
