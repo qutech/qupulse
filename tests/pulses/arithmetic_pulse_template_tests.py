@@ -7,7 +7,8 @@ import sympy
 
 from qupulse.parameter_scope import DictScope
 from qupulse.expressions import ExpressionScalar
-from qupulse.pulses import MappingPT
+from qupulse.pulses import MappingPT, ConstantPT, RepetitionPT
+from qupulse.pulses.plotting import render
 from qupulse.pulses.arithmetic_pulse_template import ArithmeticAtomicPulseTemplate, ArithmeticPulseTemplate,\
     ImplicitAtomicityInArithmeticPT, UnequalDurationWarningInArithmeticPT, try_operation
 from qupulse._program.waveforms import TransformingWaveform
@@ -584,6 +585,20 @@ class ArithmeticPulseTemplateTest(unittest.TestCase):
 
         arith = ArithmeticPulseTemplate(pt, '-', scalar, identifier='id')
         self.assertEqual(super(ArithmeticPulseTemplate, arith).__repr__(), repr(arith))
+
+    def test_time_dependence(self):
+        inner = ConstantPT(1.4, {'a': ExpressionScalar('x'), 'b': 1.1})
+        with self.assertRaises(TypeError):
+            ArithmeticPulseTemplate(RepetitionPT(inner, 3), '*', {'a': 'sin(t)', 'b': 'cos(t)'})
+
+        pc = ArithmeticPulseTemplate(inner, '*', {'a': 'sin(t)', 'b': 'cos(t)'})
+        prog = pc.create_program(parameters={'x': -1})
+        t, vals, _ = render(prog, sample_rate=10)
+        expected_values = {
+            'a': -np.sin(t),
+            'b': 1.1 * np.cos(t)
+        }
+        np.testing.assert_equal(expected_values, vals)
 
 
 class ArithmeticUsageTests(unittest.TestCase):
