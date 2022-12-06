@@ -221,7 +221,7 @@ class OffsetTransformation(Transformation):
             offsets: Channel -> offset mapping
         """
         self._offsets = frozendict(offsets)
-        assert _are_valid_transformation_expressions(self._offsets)
+        assert _are_valid_transformation_expressions(self._offsets), f"Not valid transformation expressions: {self._offsets}"
 
     def __call__(self, time: Union[np.ndarray, float],
                  data: Mapping[ChannelID, Union[np.ndarray, float]]) -> Mapping[ChannelID, Union[np.ndarray, float]]:
@@ -253,7 +253,7 @@ class OffsetTransformation(Transformation):
 class ScalingTransformation(Transformation):
     def __init__(self, factors: Mapping[ChannelID, _TrafoValue]):
         self._factors = frozendict(factors)
-        assert _are_valid_transformation_expressions(self._factors)
+        assert _are_valid_transformation_expressions(self._factors), f"Not valid transformation expressions: {self._factors}"
 
     def __call__(self, time: Union[np.ndarray, float],
                  data: Mapping[ChannelID, Union[np.ndarray, float]]) -> Mapping[ChannelID, Union[np.ndarray, float]]:
@@ -314,7 +314,7 @@ class ParallelChannelTransformation(Transformation):
             channels: Channels present in this map are set to the given value.
         """
         self._channels: Mapping[ChannelID, _TrafoValue] = frozendict(channels.items())
-        assert _are_valid_transformation_expressions(self._channels)
+        assert _are_valid_transformation_expressions(self._channels), f"Not valid transformation expressions: {self._channels}"
 
     def __call__(self, time: Union[np.ndarray, float],
                  data: Mapping[ChannelID, Union[np.ndarray, float]]) -> Mapping[ChannelID, Union[np.ndarray, float]]:

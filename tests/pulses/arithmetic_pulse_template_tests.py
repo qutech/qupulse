@@ -414,6 +414,15 @@ class ArithmeticPulseTemplateTest(unittest.TestCase):
         np.testing.assert_allclose(expected_sampled_i, sampled_i)
         np.testing.assert_allclose(expected_sampled_q, sampled_q)
 
+    def test_time_dependent_integral(self):
+        gauss = FunctionPT('sin(f * t)', 't_gauss', 'C').with_mapping({'f': 'omega'})
+        gauss_mod = (gauss * 'sin(omega * t)').with_mapping({'omega': .1})
+        symbolic, = gauss_mod.integral.values()
+        t_gauss = np.linspace(0., 60., num=1000)
+        expected = 0.5*t_gauss - 5.0*np.sin(0.1*t_gauss)*np.cos(0.1*t_gauss)
+        evaluated = symbolic.evaluate_in_scope({'t_gauss': t_gauss})
+        np.testing.assert_allclose(expected, evaluated)
+
     def test_internal_create_program(self):
         lhs = 'x + y'
         rhs = DummyPulseTemplate(defined_channels={'u', 'v', 'w'})
