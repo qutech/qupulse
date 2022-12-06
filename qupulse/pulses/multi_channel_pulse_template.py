@@ -62,14 +62,7 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
             duration = None
 
         for subtemplate in self._subtemplates:
-            if isinstance(subtemplate, AtomicPulseTemplate):
-                continue
-            elif isinstance(subtemplate, MappingPulseTemplate):
-                if isinstance(subtemplate.template, AtomicPulseTemplate):
-                    continue
-                else:
-                    raise TypeError('Non atomic subtemplate of MappingPulseTemplate: {}'.format(subtemplate.template))
-            else:
+            if not subtemplate._is_atomic():
                 raise TypeError('Non atomic subtemplate: {}'.format(subtemplate))
 
         if not self._subtemplates:
