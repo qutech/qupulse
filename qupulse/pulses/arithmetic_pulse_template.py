@@ -302,14 +302,20 @@ class ArithmeticPulseTemplate(PulseTemplate):
         Returns:
             The evaluation of the scalar operand for all relevant channels
         """
+        def _evaluate(value: ExpressionScalar):
+            if 't' in value.variables:
+                return value.evaluate_symbolic(parameters)
+            else:
+                return value.evaluate_in_scope(parameters)
+
         if isinstance(self._scalar, ExpressionScalar):
-            scalar_value = self._scalar.evaluate_in_scope(parameters)
+            scalar_value = _evaluate(self._scalar)
             return {channel_mapping[channel]: scalar_value
                     for channel in self._pulse_template.defined_channels
                     if channel_mapping[channel]}
 
         else:
-            return {channel_mapping[channel]: value.evaluate_symbolic(parameters) if 't' in value.variables else value.evaluate_in_scope(parameters)
+            return {channel_mapping[channel]: _evaluate(value)
                     for channel, value in self._scalar.items()
                     if channel_mapping[channel]}
 

@@ -388,6 +388,32 @@ class ArithmeticPulseTemplateTest(unittest.TestCase):
         np.testing.assert_allclose(expected_sampled_i, sampled_i)
         np.testing.assert_allclose(expected_sampled_q, sampled_q)
 
+    def test_time_dependent_global_expression(self):
+        # test case stems from failing example
+        gauss = FunctionPT('ampl * exp(-((t - t_gauss/2) / tau)**2)', 't_gauss', 'C')
+
+        gauss_iq = AtomicMultiChannelPT(
+            gauss.with_mapping({'C': 'I'}) * 'cos(omega * t)',
+            gauss.with_mapping({'C': 'Q'}) * 'sin(omega * t)',
+        )
+        program = gauss_iq.create_program(parameters={
+            'ampl': 1.,
+            'tau': 10.,
+            't_gauss': 50,
+            'omega': .2,
+        })
+        wf = program[0].waveform
+        self.assertEqual(1, len(program))
+
+        time = np.linspace(0, 50)
+
+        sampled_i = wf.get_sampled('I', time)
+        sampled_q = wf.get_sampled('Q', time)
+        expected_sampled_i = np.cos(0.2*time) * np.exp(-((time - 25)/10)**2)
+        expected_sampled_q = np.sin(0.2*time) * np.exp(-((time - 25)/10)**2)
+        np.testing.assert_allclose(expected_sampled_i, sampled_i)
+        np.testing.assert_allclose(expected_sampled_q, sampled_q)
+
     def test_internal_create_program(self):
         lhs = 'x + y'
         rhs = DummyPulseTemplate(defined_channels={'u', 'v', 'w'})
