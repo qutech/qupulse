@@ -259,6 +259,10 @@ class ArithmeticPulseTemplate(PulseTemplate):
             raise TypeError("A time dependent ArithmeticPulseTemplate scalar operand currently requires an atomic "
                             "pulse template as the other operand.", self)
 
+        if self._pulse_template._is_atomic():
+            # this is a hack so we can use the AtomicPulseTemplate.integral default implementation
+            self._AS_EXPRESSION_TIME = AtomicPulseTemplate._AS_EXPRESSION_TIME
+
     @staticmethod
     def _parse_operand(operand: Union[ExpressionLike, Mapping[ChannelID, ExpressionLike]],
                        channels: Set[ChannelID]) -> Union[ExpressionScalar, Mapping[ChannelID, ExpressionScalar]]:
@@ -303,10 +307,7 @@ class ArithmeticPulseTemplate(PulseTemplate):
             The evaluation of the scalar operand for all relevant channels
         """
         def _evaluate(value: ExpressionScalar):
-            if 't' in value.variables:
-                return value.evaluate_symbolic(parameters)
-            else:
-                return value.evaluate_in_scope(parameters)
+            return value._evaluate_to_time_dependent(parameters)
 
         if isinstance(self._scalar, ExpressionScalar):
             scalar_value = _evaluate(self._scalar)
@@ -318,6 +319,16 @@ class ArithmeticPulseTemplate(PulseTemplate):
             return {channel_mapping[channel]: _evaluate(value)
                     for channel, value in self._scalar.items()
                     if channel_mapping[channel]}
+
+    def _as_expression(self):
+        atomic = cast(AtomicPulseTemplate, self._pulse_template)
+        as_expression = atomic._as_expression()
+        scalar = self._scalar_as_dict()
+        for ch, value in scalar.items():
+            if 't' in value.variables:
+                scalar[ch] = value.evaluate_symbolic({'t': self._AS_EXPRESSION_TIME})
+
+        return self._apply_operation_to_channel_dict(as_expression, scalar)
 
     @property
     def lhs(self):
@@ -436,6 +447,10 @@ class ArithmeticPulseTemplate(PulseTemplate):
 
     @property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
+        if _is_time_dependent(self._scalar):
+            # use the superclass implementation that relies on _as_expression
+            return AtomicPulseTemplate.integral.fget(self)
+
         integral = {channel: value.sympified_expression for channel, value in self._pulse_template.integral.items()}
         scalar = self._scalar_as_dict()
 

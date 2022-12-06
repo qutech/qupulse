@@ -126,6 +126,14 @@ class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
             return self
         return Expression.make(recursive_substitution(sympify(self.underlying_expression), substitutions))
 
+    def _evaluate_to_time_dependent(self, scope: Mapping) -> Union['Expression', Number, numpy.ndarray]:
+        try:
+            return self.evaluate_numeric(**scope, t=sympy.symbols('t'))
+        except NonNumericEvaluation as non_num:
+            return ExpressionScalar(non_num.non_numeric_result)
+        except TypeError:
+            return self.evaluate_symbolic(scope)
+
     @property
     def variables(self) -> Sequence[str]:
         """ Get all free variables in the expression.
