@@ -69,7 +69,7 @@ class ArithmeticAtomicPulseTemplate(AtomicPulseTemplate):
                           "(it may be unequal only for fringe cases)" % (lhs.duration, rhs.duration),
                           category=UnequalDurationWarningInArithmeticPT)
 
-        if not silent_atomic and (not isinstance(lhs, AtomicPulseTemplate) or not isinstance(rhs, AtomicPulseTemplate)):
+        if not silent_atomic and not (lhs._is_atomic() and rhs._is_atomic()):
             warnings.warn("ArithmeticAtomicPulseTemplate treats all operands as if they are atomic. "
                           "You can silence this warning by passing `silent_atomic=True` or by ignoring this category.",
                           category=ImplicitAtomicityInArithmeticPT)
