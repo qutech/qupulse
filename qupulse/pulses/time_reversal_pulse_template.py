@@ -19,6 +19,13 @@ class TimeReversalPulseTemplate(PulseTemplate):
         self._inner = inner
         self._register(registry=registry)
 
+    def with_time_reversal(self) -> 'PulseTemplate':
+        from qupulse.pulses import TimeReversalPT
+        if self.identifier:
+            return TimeReversalPT(self)
+        else:
+            return self._inner
+
     @property
     def parameter_names(self) -> Set[str]:
         return self._inner.parameter_names
@@ -58,3 +65,6 @@ class TimeReversalPulseTemplate(PulseTemplate):
             **super().get_serialization_data(),
             'inner': self._inner
         }
+
+    def _is_atomic(self) -> bool:
+        return self._inner._is_atomic()

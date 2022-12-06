@@ -112,7 +112,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                                for k, v in template.channel_mapping.items()}
             template = template.template
 
-        self.__template = template
+        self.__template: PulseTemplate = template
         self.__parameter_mapping = FrozenDict(parameter_mapping)
         self.__external_parameters = set(itertools.chain(*(expr.variables for expr in self.__parameter_mapping.values())))
         self.__external_parameters |= self.constrained_parameters
@@ -229,6 +229,9 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
             data['parameter_constraints'] = [str(c) for c in self.parameter_constraints]
 
         return data
+
+    def _is_atomic(self):
+        return self.__template._is_atomic()
 
     @classmethod
     def deserialize(cls,

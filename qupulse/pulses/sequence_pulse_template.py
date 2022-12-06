@@ -2,7 +2,7 @@
 combines several other PulseTemplate objects for sequential execution."""
 
 import numpy as np
-from typing import Dict, List, Set, Optional, Any, Iterable, Union, Callable, cast
+from typing import Dict, List, Set, Optional, Any, AbstractSet, Union, Callable, cast, Iterable
 from numbers import Real
 import functools
 import warnings
@@ -13,7 +13,7 @@ from qupulse.parameter_scope import Scope
 from qupulse.utils import cached_property
 from qupulse.utils.types import MeasurementWindow, ChannelID, TimeType
 from qupulse.pulses.pulse_template import PulseTemplate, AtomicPulseTemplate
-from qupulse.pulses.parameters import Parameter, ParameterConstrainer, ParameterNotProvidedException
+from qupulse.pulses.parameters import ConstraintLike, ParameterConstrainer
 from qupulse.pulses.mapping_pulse_template import MappingPulseTemplate, MappingTuple
 from qupulse._program.waveforms import SequenceWaveform
 from qupulse.pulses.measurement import MeasurementDeclaration, MeasurementDefiner
@@ -38,7 +38,7 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
     def __init__(self,
                  *subtemplates: Union[PulseTemplate, MappingTuple],
                  identifier: Optional[str]=None,
-                 parameter_constraints: Optional[List[Union[str, Expression]]]=None,
+                 parameter_constraints: Optional[Iterable[ConstraintLike]]=None,
                  measurements: Optional[List[MeasurementDeclaration]]=None,
                  registry: PulseRegistryType=None) -> None:
         """Create a new SequencePulseTemplate instance.
@@ -115,9 +115,9 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
         return self.__subtemplates[0].defined_channels if self.__subtemplates else set()
 
     @property
-    def measurement_names(self) -> Set[str]:
-        return set.union(MeasurementDefiner.measurement_names.fget(self),
-                         *(st.measurement_names for st in self.subtemplates))
+    def measurement_names(self) -> AbstractSet[str]:
+        return MeasurementDefiner.measurement_names.fget(self).union(*(st.measurement_names
+                                                                       for st in self.subtemplates))
 
     def build_waveform(self,
                        parameters: Dict[str, Real],
