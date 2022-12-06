@@ -10,7 +10,7 @@ from qupulse.pulses.plotting import render
 from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform, MappingPulseTemplate,\
     ChannelMappingException, AtomicMultiChannelPulseTemplate, ParallelChannelPulseTemplate,\
     TransformingWaveform, ParallelChannelTransformation
-from qupulse.pulses.parameters import ParameterConstraint, ParameterConstraintViolation, ConstantParameter
+from qupulse.pulses.parameters import ParameterConstraint, ParameterConstraintViolation
 from qupulse.expressions import ExpressionScalar, Expression
 from qupulse._program.transformation import LinearTransformation, chain_transformations
 from qupulse.utils.sympy import sympify

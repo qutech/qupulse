@@ -9,10 +9,9 @@ from qupulse._program._loop import Loop
 from qupulse.expressions import Expression, ExpressionScalar
 from qupulse.pulses import ConstantPT
 from qupulse.pulses.repetition_pulse_template import RepetitionPulseTemplate,ParameterNotIntegerException
-from qupulse.pulses.parameters import ParameterNotProvidedException, ParameterConstraintViolation, ConstantParameter, \
-    ParameterConstraint
+from qupulse.pulses.parameters import ParameterNotProvidedException, ParameterConstraintViolation, ParameterConstraint
 
-from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummyParameter, DummyWaveform, MeasurementWindowTestCase
+from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummyWaveform, MeasurementWindowTestCase
 from tests.serialization_dummies import DummySerializer
 from tests.serialization_tests import SerializableTests
 from tests._program.transformation_tests import TransformationStub

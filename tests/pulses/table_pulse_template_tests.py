@@ -11,7 +11,7 @@ from qupulse.pulses.parameters import ParameterNotProvidedException, ParameterCo
 from qupulse.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy, JumpInterpolationStrategy
 from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
 
-from tests.pulses.sequencing_dummies import DummyInterpolationStrategy, DummyParameter, DummyPulseTemplate
+from tests.pulses.sequencing_dummies import DummyInterpolationStrategy, DummyPulseTemplate
 from tests.serialization_dummies import DummySerializer, DummyStorageBackend
 from tests.pulses.measurement_tests import ParameterConstrainerTest, MeasurementDefinerTest
 from tests.serialization_tests import SerializableTests
