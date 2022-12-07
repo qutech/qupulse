@@ -70,7 +70,7 @@ class MarkerChannel(_SingleChannel):
 
 
 RegisteredProgram = NamedTuple('RegisteredProgram', [('program', Loop),
-                                                     ('measurement_windows', Dict[str, Tuple[float, float]]),
+                                                     ('measurement_windows', Dict[str, Tuple[np.ndarray, np.ndarray]]),
                                                      ('run_callback', Callable),
                                                      ('awgs_to_upload_to', Set[AWG]),
                                                      ('dacs_to_arm', Set[DAC])])
@@ -102,7 +102,7 @@ class HardwareSetup:
                 channels - set(self._channel_map.keys())))
 
         temp_measurement_windows = defaultdict(list)
-        for mw_name, begins_lengths in program.get_measurement_windows().items():
+        for mw_name, begins_lengths in program.get_measurement_windows(drop=True).items():
             temp_measurement_windows[mw_name].append(begins_lengths)
 
         if set(temp_measurement_windows.keys()) - set(self._measurement_map.keys()):

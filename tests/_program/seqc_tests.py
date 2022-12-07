@@ -74,7 +74,7 @@ def make_binary_waveform(waveform):
         return (BinaryWaveform(data),)
     else:
         chs = sorted(waveform.defined_channels)
-        t = np.arange(0., waveform.duration, 1.)
+        t = np.arange(0., float(waveform.duration), 1.)
 
         sampled = [None if ch is None else waveform.get_sampled(ch, t)
                    for _, ch in zip_longest(range(6), take(6, chs), fillvalue=None)]
@@ -385,7 +385,7 @@ class LoopToSEQCTranslationTests(TestCase):
         # we use None because it is not used in this test
         user_registers = None
 
-        wf = DummyWaveform(duration=32)
+        wf = DummyWaveform(duration=32, sample_output=lambda x: np.sin(x))
         loop = Loop(waveform=wf)
 
         # with wrapping repetition

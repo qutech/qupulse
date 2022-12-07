@@ -6,7 +6,6 @@ from qupulse.pulses.parameters import ParameterNotProvidedException
 
 from qupulse.pulses.point_pulse_template import PointPulseTemplate, PointWaveform, InvalidPointDimension, PointPulseEntry, PointWaveformEntry
 from tests.pulses.measurement_tests import ParameterConstrainerTest, MeasurementDefinerTest
-from tests.pulses.sequencing_dummies import DummyParameter
 from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
 from qupulse.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy
 from qupulse.expressions import Expression, ExpressionScalar
@@ -103,6 +102,29 @@ class PointPulseTemplateTests(unittest.TestCase):
         self.assertEqual({'X': 2 * (3.4 + 4) / 2 + (5 - 2) * 4,
                           'Y': 2 * (4.1 + 4) / 2 + (5 - 2) * 4},
                          integral)
+
+    def test_initial_final_values(self):
+        pulse = PointPulseTemplate(
+            [(1, (2, 'b'), 'hold'),
+             (3, (0, 0), 'linear'),
+             (4, (2, 'c'), 'jump'),
+             (5, (8, 'd'), 'hold')],
+            [0, 'other_channel']
+        )
+        self.assertEqual({0: 2, 'other_channel': 'b'}, pulse.initial_values)
+        self.assertEqual({0: 8, 'other_channel': 'd'}, pulse.final_values)
+
+        pulse = PointPulseTemplate(
+            [(1, 'b', 'hold'),
+             (3, (0, 0), 'linear'),
+             (4, (2, 'c'), 'jump'),
+             (5, 'd', 'hold')],
+            [0, 'other_channel']
+        )
+        self.assertEqual({0: 'IndexedBroadcast(b, (2,), 0)', 'other_channel': 'IndexedBroadcast(b, (2,), 1)'},
+                         pulse.initial_values)
+        self.assertEqual({0: 'IndexedBroadcast(d, (2,), 0)', 'other_channel': 'IndexedBroadcast(d, (2,), 1)'},
+                         pulse.final_values)
 
 
 class PointPulseTemplateSequencingTests(unittest.TestCase):

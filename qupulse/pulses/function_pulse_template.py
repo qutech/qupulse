@@ -15,7 +15,7 @@ from qupulse.expressions import ExpressionScalar
 from qupulse.serialization import Serializer, PulseRegistryType
 
 from qupulse.utils.types import ChannelID, TimeType, time_from_float
-from qupulse.pulses.parameters import Parameter, ParameterConstrainer, ParameterConstraint
+from qupulse.pulses.parameters import ParameterConstrainer, ParameterConstraint
 from qupulse.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration
 from qupulse._program.waveforms import FunctionWaveform
 
@@ -153,6 +153,16 @@ class FunctionPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
 
     def _as_expression(self) -> Dict[ChannelID, ExpressionScalar]:
         expr = ExpressionScalar.make(self.__expression.underlying_expression.subs({'t': self._AS_EXPRESSION_TIME}))
+        return {self.__channel: expr}
+
+    @property
+    def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        expr = ExpressionScalar.make(self.__expression.underlying_expression.subs('t', 0))
+        return {self.__channel: expr}
+
+    @property
+    def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        expr = ExpressionScalar.make(self.__expression.underlying_expression.subs('t', self.__duration_expression.underlying_expression))
         return {self.__channel: expr}
 
 

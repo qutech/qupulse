@@ -1,6 +1,7 @@
 name: Pytest and coveralls
 
 on:
+  workflow_dispatch:
   pull_request:
     types:
      - opened

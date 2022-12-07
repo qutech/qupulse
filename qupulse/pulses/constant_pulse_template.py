@@ -66,6 +66,15 @@ class ConstantPulseTemplate(AtomicPulseTemplate):  # type: ignore
         })
         return data
 
+    @classmethod
+    def deserialize(cls, serializer: Optional = None, **kwargs) -> 'ConstantPulseTemplate':
+        assert serializer is None, f"{cls} does not support legacy deserialization"
+        # this is for backwards compatible deserialization.
+        amplitudes = kwargs.pop('#amplitudes', None)
+        if amplitudes is not None:
+            kwargs['amplitude_dict'] = amplitudes
+        return cls(**kwargs)
+
     @property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
         """Returns an expression giving the integral over the pulse."""
@@ -94,7 +103,7 @@ class ConstantPulseTemplate(AtomicPulseTemplate):  # type: ignore
     @property
     def defined_channels(self) -> AbstractSet['ChannelID']:
         """Returns the number of hardware output channels this PulseTemplate defines."""
-        return self._amplitude_dict.keys()
+        return set(self._amplitude_dict)
 
     def build_waveform(self,
                        parameters: Dict[str, numbers.Real],
@@ -120,3 +129,11 @@ class ConstantPulseTemplate(AtomicPulseTemplate):  # type: ignore
             if constant_values:
                 return ConstantWaveform.from_mapping(duration, constant_values)
         return None
+
+    @property
+    def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        return {ch: ExpressionScalar(val) for ch, val in self._amplitude_dict.items()}
+
+    @property
+    def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        return {ch: ExpressionScalar(val) for ch, val in self._amplitude_dict.items()}

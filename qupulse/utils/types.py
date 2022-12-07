@@ -21,7 +21,7 @@ except ImportError:
 import qupulse.utils.numeric as qupulse_numeric
 
 __all__ = ["MeasurementWindow", "ChannelID", "HashableNumpyArray", "TimeType", "time_from_float", "DocStringABCMeta",
-           "SingletonABCMeta", "SequenceProxy"]
+           "SingletonABCMeta", "SequenceProxy", "frozendict"]
 
 MeasurementWindow = typing.Tuple[str, numbers.Real, numbers.Real]
 ChannelID = typing.Union[str, int]
@@ -240,7 +240,7 @@ class TimeType:
 
     @classmethod
     def as_comparable(cls, other: typing.Union['TimeType', typing.Any]):
-        if type(other) == cls:
+        if type(other) is cls:
             return other._value
         else:
             return other

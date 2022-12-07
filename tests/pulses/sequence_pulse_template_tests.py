@@ -9,8 +9,7 @@ from qupulse.pulses.mapping_pulse_template import MappingPulseTemplate
 from qupulse.pulses.parameters import ParameterConstraint, ParameterConstraintViolation, ParameterNotProvidedException
 from qupulse._program._loop import Loop
 
-from tests.pulses.sequencing_dummies import DummyPulseTemplate,\
-    DummyNoValueParameter, DummyWaveform, MeasurementWindowTestCase
+from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummyWaveform, MeasurementWindowTestCase
 from tests.serialization_dummies import DummySerializer
 from tests.serialization_tests import SerializableTests
 from tests._program.transformation_tests import TransformationStub
@@ -109,6 +108,13 @@ class SequencePulseTemplateTest(unittest.TestCase):
         pulse = SequencePulseTemplate(dummy1, dummy2)
 
         self.assertEqual({'A': ExpressionScalar('k+2*b+7*(b-f)'), 'B': ExpressionScalar('0.24*f')}, pulse.integral)
+
+    def test_initial_final_values(self):
+        pt1 = DummyPulseTemplate(initial_values={'A': 'a'})
+        pt2 = DummyPulseTemplate(final_values={'A': 'b'})
+        spt = pt1 @ pt2
+        self.assertEqual(pt1.initial_values, spt.initial_values)
+        self.assertEqual(pt2.final_values, spt.final_values)
 
     def test_concatenate(self):
         a = DummyPulseTemplate(parameter_names={'foo'}, defined_channels={'A'})

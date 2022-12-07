@@ -1,1 +1,0 @@
-`floor` will now return an integer in lambda expressions with numpy to allow usage in ForLoopPT range expression.

@@ -10,7 +10,6 @@ from qupulse.pulses.parameters import ParameterConstraintViolation, ParameterCon
 from qupulse._program.waveforms import FunctionWaveform
 
 from tests.serialization_dummies import DummySerializer, DummyStorageBackend
-from tests.pulses.sequencing_dummies import DummyParameter
 from tests.pulses.measurement_tests import MeasurementDefinerTest, ParameterConstrainerTest
 from tests.serialization_tests import SerializableTests
 
@@ -47,8 +46,6 @@ class FunctionPulseTest(unittest.TestCase):
                                          measurements=self.meas_list,
                                          parameter_constraints=self.constraints)
 
-        self.pars = dict(a=DummyParameter(1), b=DummyParameter(2), c=DummyParameter(136.78))
-
 
 class FunctionPulsePropertyTest(FunctionPulseTest):
     def test_expression(self):
@@ -83,6 +80,14 @@ class FunctionPulsePropertyTest(FunctionPulseTest):
     def test_integral(self) -> None:
         pulse = FunctionPulseTemplate('sin(0.5*t+b)', '2*Tmax')
         self.assertEqual({'default': Expression('2.0*cos(b) - 2.0*cos(1.0*Tmax+b)')}, pulse.integral)
+
+    def test_initial_values(self):
+        fpt = FunctionPulseTemplate('3 + exp(t * a)', 'pi', channel='A')
+        self.assertEqual({'A': 4}, fpt.initial_values)
+
+    def test_final_values(self):
+        fpt = FunctionPulseTemplate('3 + exp(t * a)', 'pi', channel='A')
+        self.assertEqual({'A': Expression('3 + exp(pi*a)')}, fpt.final_values)
 
     def test_as_expression(self):
         pulse = FunctionPulseTemplate('sin(0.5*t+b)', '2*Tmax')

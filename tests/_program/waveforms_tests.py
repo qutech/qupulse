@@ -555,6 +555,31 @@ class TableWaveformTests(unittest.TestCase):
                                            TableWaveformEntry(-0.2, 0.2, HoldInterpolationStrategy()),
                                            TableWaveformEntry(0.1, 0.2, HoldInterpolationStrategy())])
 
+    def test_validate_input_const_detection(self):
+        constant_table = [TableWaveformEntry(0.0, 2.5, HoldInterpolationStrategy()),
+                          (1.4, 2.5, LinearInterpolationStrategy())]
+        linear_table = [TableWaveformEntry(0.0, 0.0, HoldInterpolationStrategy()),
+                        TableWaveformEntry(1.4, 2.5, LinearInterpolationStrategy())]
+
+        self.assertEqual((1.4, 2.5), TableWaveform._validate_input(constant_table))
+        self.assertEqual(linear_table,
+                         TableWaveform._validate_input(linear_table))
+
+    def test_const_detection_regression(self):
+        # regression test 707
+        from qupulse.pulses import PointPT
+        second_point_pt = PointPT([(0, 'v_0+v_1'),
+                                   ('t_2', 'v_0', 'linear')],
+                                  channel_names=('A',),
+                                  measurements=[('M', 0, 1)])
+        parameters = dict(t=3,
+                          t_2=2,
+                          v_0=1,
+                          v_1=1.4)
+        channel_mapping = {'A': 'A'}
+        wf = second_point_pt.build_waveform(parameters=parameters, channel_mapping=channel_mapping)
+        self.assertIsInstance(wf, TableWaveform)
+
     def test_validate_input_duplicate_removal(self):
         validated = TableWaveform._validate_input([TableWaveformEntry(0.0, 0.2, HoldInterpolationStrategy()),
                                                    TableWaveformEntry(0.1, 0.2, LinearInterpolationStrategy()),

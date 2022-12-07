@@ -65,7 +65,7 @@ class AlazarProgramTest(unittest.TestCase):
         self.assertFalse(result[0].flags.writeable)
         self.assertFalse(result[1].flags.writeable)
 
-        with self.assertRaisesRegex(RuntimeError, 'differing sample factor'):
+        with self.assertRaisesRegex(RuntimeError, 'differing sample rate'):
             program.set_measurement_mask('sorted', self.sample_factor*5/4, *self.masks['sorted'])
 
         result = program.set_measurement_mask('sorted', self.sample_factor, *self.masks['sorted'])
