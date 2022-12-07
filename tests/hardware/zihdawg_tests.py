@@ -29,7 +29,7 @@ from qupulse.utils.types import TimeType
 from qupulse._program._loop import Loop
 from tests.pulses.sequencing_dummies import DummyWaveform
 from qupulse.hardware.awgs.zihdawg import HDAWGChannelGroup, HDAWGRepresentation, HDAWGValueError, UserRegister,\
-    ConstantParameter, ELFManager, HDAWGChannelGrouping, SingleDeviceChannelGroup
+    ELFManager, HDAWGChannelGrouping, SingleDeviceChannelGroup
 
 
 class HDAWGRepresentationTests(unittest.TestCase):
