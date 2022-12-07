@@ -11,7 +11,6 @@ from qupulse.expressions import Expression, ExpressionScalar
 from qupulse.pulses import ConstantPT, FunctionPT, RepetitionPT, ForLoopPT, ParallelChannelPT, MappingPT,\
     TimeReversalPT, AtomicMultiChannelPT
 from qupulse.pulses.pulse_template import AtomicPulseTemplate, PulseTemplate
-from qupulse.pulses.parameters import Parameter, ConstantParameter, ParameterNotProvidedException
 from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
 from qupulse._program._loop import Loop
 
@@ -114,7 +113,7 @@ class AtomicPulseTemplateStub(AtomicPulseTemplate):
         self._parameter_names = parameter_names
         self._register(registry=registry)
 
-    def build_waveform(self, parameters: Dict[str, Parameter], channel_mapping):
+    def build_waveform(self, parameters, channel_mapping):
         raise NotImplementedError()
 
     @property
@@ -315,10 +314,7 @@ class PulseTemplateTest(unittest.TestCase):
 
     def test_create_program_none(self) -> None:
         template = PulseTemplateStub(defined_channels={'A'}, parameter_names={'foo'})
-        with self.assertWarns(DeprecationWarning):
-            # just a test that old stuff wont break. remove in the future
-            constant_parameter = ConstantParameter(2.126)
-        parameters = {'foo': constant_parameter, 'bar': -26.2, 'hugo': 'exp(sin(pi/2))'}
+        parameters = {'foo': 2.126, 'bar': -26.2, 'hugo': 'exp(sin(pi/2))'}
         measurement_mapping = {'M': 'N'}
         channel_mapping = {'A': 'B'}
         volatile = {'hugo'}

@@ -1,7 +1,7 @@
 import unittest
 
 from qupulse.pulses.parameters import ParameterConstraint, ParameterConstraintViolation,\
-    ParameterNotProvidedException, ParameterConstrainer, ConstantParameter, ConstrainedParameterIsVolatileWarning
+    ParameterNotProvidedException, ParameterConstrainer, ConstrainedParameterIsVolatileWarning
 from qupulse.pulses.measurement import MeasurementDefiner
 
 

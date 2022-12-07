@@ -21,7 +21,7 @@ from qupulse._program.waveforms import MultiChannelWaveform, Waveform, Transform
 from qupulse._program.transformation import ParallelChannelTransformation, Transformation, chain_transformations
 from qupulse.pulses.pulse_template import PulseTemplate, AtomicPulseTemplate
 from qupulse.pulses.mapping_pulse_template import MappingPulseTemplate, MappingTuple
-from qupulse.pulses.parameters import Parameter, ParameterConstrainer
+from qupulse.pulses.parameters import ParameterConstrainer
 from qupulse.pulses.measurement import MeasurementDeclaration, MeasurementWindow
 from qupulse.expressions import Expression, ExpressionScalar, ExpressionLike
 
