@@ -1191,6 +1191,40 @@ while (true) {
                             (None,) * 16, (4.,)*8, (0.,)*8, (None,)*8,
                             default_parameters['sample_rate'])
 
+    @unittest.skipIf(sys.version_info.minor < 6, "This test requires dict to be ordered.")
+    def test_DigTrigger(self):
+        defined_channels = frozenset(['A', 'B', 'C'])
+
+        unique_n = 1000
+        unique_duration = 32
+
+        unique_wfs = get_unique_wfs(n=unique_n, duration=unique_duration, defined_channels=defined_channels)
+        same_wf = DummyWaveform(duration=48, sample_output=np.ones(48), defined_channels=defined_channels)
+
+        channels = ('A', 'B')
+        markers = ('C', None, 'A', None)
+        amplitudes = (1., 1.)
+        offsets = (0., 0.)
+        volatage_transformations = (lambda x: x, lambda x: x)
+        sample_rate = 1
+
+        triggerIn = 8
+        DigTriggerIndex = 1
+
+        root = complex_program_as_loop(unique_wfs, wf_same=same_wf)
+        seqc_nodes = complex_program_as_seqc(unique_wfs, wf_same=same_wf)
+
+        manager = HDAWGProgramManager()
+        compiler_settings = manager.DEFAULT_COMPILER_SETTINGS
+        compiler_settings['trigger_wait_code'] = f'waitDigTrigger({DigTriggerIndex});'
+        manager.add_program('test', root, channels, markers, amplitudes, offsets, volatage_transformations, sample_rate)
+
+        # 0: Program selection
+        # 1: Trigger
+
+        seqc_program = manager.to_seqc_program()
+
+        return seqc_program
 
 
 

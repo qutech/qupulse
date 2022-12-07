@@ -328,7 +328,7 @@ if ~isempty(a.fig_position)
 end
 scan.disp = [];
 for l = 1:length(a.disp_ops)
-    for d = a.disp_dim
+    for d = a.disp_dim(l)
         scan.disp(end+1).loop = 1;
         scan.disp(end).channel = nGetChan + a.disp_ops(l);
         scan.disp(end).dim = d;
@@ -367,5 +367,6 @@ str = str(1:end-2);
 str = strrep(str, 'RepAverage', 'RSA');
 str = strrep(str, 'Downsample', 'DS');
 str = strrep(str, 'Qubit', 'Q');
-
+str = strrep(str, 'Aux 1 Aux 2 Meas 1 Mask 1', 'SET Left');
+str = strrep(str, 'Aux 1 Aux 2 Meas 1 Mask 2', 'SET Right');
 end
