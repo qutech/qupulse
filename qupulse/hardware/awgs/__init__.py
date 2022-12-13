@@ -1,13 +1,9 @@
-import sys
-import subprocess
-import warnings
-
 import lazy_loader as lazy
 
 
 __getattr__, __dir__, __all__ = lazy.attach(
     __name__,
-    submodules=['base'],
+    submodules={'base'},
     submod_attrs={
         'tabor': ['TaborAWGRepresentation', 'TaborChannelPair'],
         'tektronix': ['TektronixAWG'],
