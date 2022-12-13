@@ -6,6 +6,10 @@
 Welcome to qupulse's documentation!
 ======================================
 
+``qupulse`` is a python package to write, manage and playback arbitrarily nested quantum control pulses. This documentation contains concept explanations, jupyter notebook examples and the automatically generated API reference. The API reference does not cover parts of qupulse that are explicitly considered an implementation detail like ``qupulse._program``.
+
+You are encouraged to read the concept explanations and interactively explore the linked examples. To do this you can install qupulse via ``python -m pip install -e git+https://github.com/qutech/qupulse.git#egg=qupulse[default]`` which will clone the qupulse into ``./src/qupulse``. You can find the examples in ``doc/source/examples`` and open them with jupyter, Spyder or another IDE of your choice.
+
 Contents:
 
 .. toctree::

@@ -14,7 +14,7 @@ The :class:`.PulseStorage` offers a convenient dictionary-like interface for sto
 
 Finally, the :class:`.StorageBackend` interface abstracts the actual storage backend. While currently there only exists a few implementations of this interface, most importantly the :class:`.FilesystemStorageBackend`, this allows to support, e.g., database storage, in the future. :class:`.PulseStorage` requires an instance of :class:`.StorageBackend` which represents its persistent pulse storage during initialization.
 
-For an example of how to use :class:`.PulseStorage` to store and load pulse templates, see :ref:`/examples/04PulseStorage.ipynb` in the examples section.
+For an example of how to use :class:`.PulseStorage` to store and load pulse templates, see :ref:`/examples/01PulseStorage.ipynb` in the examples section.
 
 Global Pulse Registry
 ^^^^^^^^^^^^^^^^^^^^^^
