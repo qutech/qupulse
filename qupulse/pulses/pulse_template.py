@@ -22,7 +22,6 @@ from qupulse.expressions import ExpressionScalar, Expression, ExpressionLike
 from qupulse._program._loop import Loop, to_waveform
 from qupulse._program.transformation import Transformation, IdentityTransformation, ChainedTransformation, chain_transformations
 
-from qupulse.pulses.parameters import Parameter, ConstantParameter, ParameterNotProvidedException
 from qupulse._program.waveforms import Waveform, TransformingWaveform
 from qupulse.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
 from qupulse.parameter_scope import Scope, DictScope
@@ -112,7 +111,7 @@ class PulseTemplate(Serializable):
         raise NotImplementedError(f"The pulse template of type {type(self)} does not implement `final_values`")
 
     def create_program(self, *,
-                       parameters: Optional[Mapping[str, Union[Expression, str, Number, ConstantParameter]]]=None,
+                       parameters: Optional[Mapping[str, Union[Expression, str, Number]]]=None,
                        measurement_mapping: Optional[Mapping[str, Optional[str]]]=None,
                        channel_mapping: Optional[Mapping[ChannelID, Optional[ChannelID]]]=None,
                        global_transformation: Optional[Transformation]=None,
@@ -163,9 +162,7 @@ class PulseTemplate(Serializable):
         else:
             parameters = dict(parameters)
             for parameter_name, value in parameters.items():
-                if isinstance(value, Parameter):
-                    parameters[parameter_name] = value.get_value()
-                elif not isinstance(value, Number):
+                if not isinstance(value, Number):
                     parameters[parameter_name] = Expression(value).evaluate_numeric()
 
             scope = DictScope(values=FrozenDict(parameters), volatile=volatile)

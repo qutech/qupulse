@@ -1,4 +1,5 @@
 """STANDARD LIBRARY IMPORTS"""
+import numbers
 from typing import Tuple, List, Dict, Optional, Set, Any, Union, Mapping
 import copy
 
@@ -11,7 +12,6 @@ from qupulse._program._loop import Loop
 from qupulse.utils.types import MeasurementWindow, ChannelID, TimeType, time_from_float
 from qupulse.serialization import Serializer
 from qupulse._program.waveforms import Waveform
-from qupulse.pulses.parameters import Parameter
 from qupulse.pulses.pulse_template import AtomicPulseTemplate
 from qupulse.pulses.interpolation import InterpolationStrategy
 from qupulse.expressions import Expression, ExpressionScalar
@@ -24,53 +24,6 @@ class MeasurementWindowTestCase(unittest.TestCase):
         for k in expected:
             self.assertEqual(list(expected[k][0]), list(actual[k][0]))
             self.assertEqual(list(expected[k][1]), list(actual[k][1]))
-
-
-class DummyParameter(Parameter):
-
-    def __init__(self, value: float = 0, requires_stop: bool = False) -> None:
-        super().__init__()
-        self.value = value
-        self.requires_stop_ = requires_stop
-
-    def get_value(self) -> float:
-        return self.value
-
-    @property
-    def requires_stop(self) -> bool:
-        return self.requires_stop_
-
-    def __hash__(self):
-        return hash(self.value)
-
-    def get_serialization_data(self, serializer: Optional[Serializer]=None) -> None:
-            raise NotImplementedError()
-
-    @classmethod
-    def deserialize(cls, serializer: Optional[Serializer]=None) -> 'DummyParameter':
-        raise NotImplementedError()
-
-class DummyNoValueParameter(Parameter):
-
-    def __init__(self) -> None:
-        super().__init__()
-
-    def get_value(self) -> float:
-        raise Exception("May not call get_value on DummyNoValueParameter.")
-
-    @property
-    def requires_stop(self) -> bool:
-        return True
-
-    def get_serialization_data(self, serializer: Optional[Serializer]=None) -> None:
-            raise NotImplementedError()
-
-    @classmethod
-    def deserialize(cls, serializer: Optional[Serializer]=None) -> 'DummyParameter':
-        raise NotImplementedError()
-
-    def __hash__(self):
-        return 0
 
 
 class DummyWaveform(Waveform):
@@ -256,7 +209,7 @@ class DummyPulseTemplate(AtomicPulseTemplate):
             parent_loop.append_child(waveform=self.waveform)
 
     def build_waveform(self,
-                       parameters: Dict[str, Parameter],
+                       parameters: Dict[str, numbers.Real],
                        channel_mapping: Dict[ChannelID, ChannelID]):
         self.build_waveform_calls.append((parameters, channel_mapping))
         if self.waveform or self.waveform is None:
