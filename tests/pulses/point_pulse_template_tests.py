@@ -6,7 +6,6 @@ from qupulse.pulses.parameters import ParameterNotProvidedException
 
 from qupulse.pulses.point_pulse_template import PointPulseTemplate, PointWaveform, InvalidPointDimension, PointPulseEntry, PointWaveformEntry
 from tests.pulses.measurement_tests import ParameterConstrainerTest, MeasurementDefinerTest
-from tests.pulses.sequencing_dummies import DummyParameter
 from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
 from qupulse.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy
 from qupulse.expressions import Expression, ExpressionScalar

@@ -19,8 +19,7 @@ from sympy.logic.boolalg import BooleanAtom
 from qupulse.utils import pairwise
 from qupulse.utils.types import ChannelID
 from qupulse.serialization import Serializer, PulseRegistryType
-from qupulse.pulses.parameters import Parameter, \
-    ParameterNotProvidedException, ParameterConstraint, ParameterConstrainer
+from qupulse.pulses.parameters import ParameterNotProvidedException, ParameterConstraint, ParameterConstrainer
 from qupulse.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration
 from qupulse.pulses.interpolation import InterpolationStrategy, LinearInterpolationStrategy, \
     HoldInterpolationStrategy, JumpInterpolationStrategy

@@ -4,10 +4,10 @@ AtomicPulseTemplates into a single template spanning several channels.
 Classes:
     - MultiChannelPulseTemplate: A pulse template defined for several channels by combining pulse
         templates
-    - MultiChannelWaveform: A waveform defined for several channels by combining waveforms
+    - ParallelChannelPulseTemplate: A pulse template to add channels to an existing pulse template.
 """
 
-from typing import Dict, List, Optional, Any, Iterable, Union, Set, Sequence, Mapping
+from typing import Dict, List, Optional, Any, AbstractSet, Union, Set, Sequence, Mapping
 import numbers
 import warnings
 
@@ -18,10 +18,10 @@ from qupulse.utils import isclose
 from qupulse.utils.sympy import almost_equal, Sympifyable
 from qupulse.utils.types import ChannelID, TimeType
 from qupulse._program.waveforms import MultiChannelWaveform, Waveform, TransformingWaveform
-from qupulse._program.transformation import ParallelConstantChannelTransformation, Transformation, chain_transformations
+from qupulse._program.transformation import ParallelChannelTransformation, Transformation, chain_transformations
 from qupulse.pulses.pulse_template import PulseTemplate, AtomicPulseTemplate
 from qupulse.pulses.mapping_pulse_template import MappingPulseTemplate, MappingTuple
-from qupulse.pulses.parameters import Parameter, ParameterConstrainer
+from qupulse.pulses.parameters import ParameterConstrainer
 from qupulse.pulses.measurement import MeasurementDeclaration, MeasurementWindow
 from qupulse.expressions import Expression, ExpressionScalar, ExpressionLike
 
@@ -29,7 +29,6 @@ __all__ = ["AtomicMultiChannelPulseTemplate", "ParallelConstantChannelPulseTempl
 
 
 class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
-    """Combines multiple PulseTemplates that are defined on different channels into an AtomicPulseTemplate."""
     def __init__(self,
                  *subtemplates: Union[AtomicPulseTemplate, MappingTuple, MappingPulseTemplate],
                  identifier: Optional[str] = None,
@@ -37,9 +36,11 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
                  measurements: Optional[List[MeasurementDeclaration]] = None,
                  registry: PulseRegistryType = None,
                  duration: Optional[ExpressionLike] = None) -> None:
-        """Parallels multiple AtomicPulseTemplates of the same duration. If the duration keyword argument is given
-        it is enforced that the instantiated pulse template has this duration. If duration is None the duration of the
-        PT is the duration of the first subtemplate. There are probably changes to this behaviour in the future.
+        """Combines multiple AtomicPulseTemplates of the same duration that are defined on different channels into an
+        AtomicPulseTemplate.
+        If the duration keyword argument is given it is enforced that the instantiated pulse template has this duration.
+        If duration is None the duration of the PT is the duration of the first subtemplate.
+        There are probably changes to this behaviour in the future.
 
         Args:
             *subtemplates: Positional arguments are subtemplates to combine.
@@ -61,14 +62,7 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
             duration = None
 
         for subtemplate in self._subtemplates:
-            if isinstance(subtemplate, AtomicPulseTemplate):
-                continue
-            elif isinstance(subtemplate, MappingPulseTemplate):
-                if isinstance(subtemplate.template, AtomicPulseTemplate):
-                    continue
-                else:
-                    raise TypeError('Non atomic subtemplate of MappingPulseTemplate: {}'.format(subtemplate.template))
-            else:
+            if not subtemplate._is_atomic():
                 raise TypeError('Non atomic subtemplate: {}'.format(subtemplate))
 
         if not self._subtemplates:
@@ -91,6 +85,20 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
 
         self._register(registry=registry)
 
+    def with_parallel_atomic(self, *parallel: 'AtomicPulseTemplate') -> 'AtomicPulseTemplate':
+        from qupulse.pulses import AtomicMultiChannelPT
+        if parallel:
+            if self.identifier:
+                return AtomicMultiChannelPT(self, *parallel)
+            else:
+                return AtomicMultiChannelPT(
+                    *self._subtemplates, *parallel,
+                    measurements=self.measurement_declarations,
+                    parameter_constraints=self.parameter_constraints,
+                )
+        else:
+            return self
+
     @property
     def duration(self) -> ExpressionScalar:
         if self._duration is None:
@@ -99,19 +107,19 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
             return self._duration
 
     @property
-    def parameter_names(self) -> Set[str]:
-        return set.union(self.measurement_parameters,
-                         self.constrained_parameters,
-                         *(st.parameter_names for st in self._subtemplates),
-                         self._duration.variables if self._duration else ())
+    def parameter_names(self) -> AbstractSet[str]:
+        return set().union(self.measurement_parameters,
+                           self.constrained_parameters,
+                           *(st.parameter_names for st in self._subtemplates),
+                           getattr(self._duration, 'variables', ()))
 
     @property
     def subtemplates(self) -> Sequence[Union[AtomicPulseTemplate, MappingPulseTemplate]]:
         return self._subtemplates
 
     @property
-    def defined_channels(self) -> Set[ChannelID]:
-        return set.union(*(st.defined_channels for st in self._subtemplates))
+    def defined_channels(self) -> AbstractSet[ChannelID]:
+        return set().union(*(st.defined_channels for st in self._subtemplates))
 
     @property
     def measurement_names(self) -> Set[str]:
@@ -209,17 +217,33 @@ class AtomicMultiChannelPulseTemplate(AtomicPulseTemplate, ParameterConstrainer)
         return values
 
 
-class ParallelConstantChannelPulseTemplate(PulseTemplate):
+class ParallelChannelPulseTemplate(PulseTemplate):
     def __init__(self,
                  template: PulseTemplate,
                  overwritten_channels: Mapping[ChannelID, Union[ExpressionScalar, Sympifyable]], *,
                  identifier: Optional[str]=None,
-                 registry: Optional[PulseRegistryType]=None):
+                 registry: Optional[PulseRegistryType] = None):
+        """Pulse template to add new or overwrite existing channels of a contained pulse template. The channel values
+        may be time dependent if the contained pulse template is atomic.
+
+        Args:
+            template: Inner pulse template where all channels that are not overwritten will stay the same.
+            overwritten_channels: Mapping of channels to values that this channel will have. This can overwrite existing
+            channels or add new ones. May be time dependent if template is atomic.
+            identifier: Name of the pulse template for serialization
+            registry: Pulse template gets registered here if not None.
+        """
         super().__init__(identifier=identifier)
 
         self._template = template
         self._overwritten_channels = {channel: ExpressionScalar(value)
                                       for channel, value in overwritten_channels.items()}
+
+        if not template._is_atomic():
+            for expr in self._overwritten_channels.values():
+                if 't' in expr.variables:
+                    raise TypeError(f"{type(self).__name__} currently only supports time dependent expressions if the "
+                                    f"pulse template is atomic.", self)
 
         self._register(registry=registry)
 
@@ -234,8 +258,10 @@ class ParallelConstantChannelPulseTemplate(PulseTemplate):
     def _get_overwritten_channels_values(self,
                                          parameters: Mapping[str, Union[numbers.Real]],
                                          channel_mapping: Dict[ChannelID, Optional[ChannelID]]
-                                         ) -> Dict[str, numbers.Real]:
-        return {channel_mapping[name]: value.evaluate_in_scope(parameters)
+                                         ) -> Dict[str, Union[numbers.Real, ExpressionScalar]]:
+        """Return a dictionary of ChannelID to channel value mappings. The channel values can bei either numbers or time
+        dependent expressions."""
+        return {channel_mapping[name]: value.evaluate_symbolic(parameters) if 't' in value.variables else value.evaluate_in_scope(parameters)
                 for name, value in self.overwritten_channels.items()
                 if channel_mapping[name] is not None}
 
@@ -245,7 +271,7 @@ class ParallelConstantChannelPulseTemplate(PulseTemplate):
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  **kwargs):
         overwritten_channels = self._get_overwritten_channels_values(parameters=scope, channel_mapping=channel_mapping)
-        transformation = ParallelConstantChannelTransformation(overwritten_channels)
+        transformation = ParallelChannelTransformation(overwritten_channels)
 
         if global_transformation is not None:
             transformation = chain_transformations(global_transformation, transformation)
@@ -262,20 +288,20 @@ class ParallelConstantChannelPulseTemplate(PulseTemplate):
         if inner_waveform:
             overwritten_channels = self._get_overwritten_channels_values(parameters=parameters,
                                                                          channel_mapping=channel_mapping)
-            transformation = ParallelConstantChannelTransformation(overwritten_channels)
+            transformation = ParallelChannelTransformation(overwritten_channels)
             return TransformingWaveform.from_transformation(inner_waveform, transformation)
 
     @property
-    def defined_channels(self) -> Set[ChannelID]:
-        return set.union(self._template.defined_channels, self._overwritten_channels.keys())
+    def defined_channels(self) -> AbstractSet[ChannelID]:
+        return set().union(self._template.defined_channels, self._overwritten_channels.keys())
 
     @property
-    def measurement_names(self) -> Set[str]:
+    def measurement_names(self) -> AbstractSet[str]:
         return self._template.measurement_names
 
     @property
-    def transformation_parameters(self) -> Set[str]:
-        return set.union(*(set(value.variables) for value in self.overwritten_channels.values()))
+    def transformation_parameters(self) -> AbstractSet[str]:
+        return set().union(*(value.variables for value in self.overwritten_channels.values())) - {'t'}
 
     @property
     def parameter_names(self):
@@ -314,6 +340,21 @@ class ParallelConstantChannelPulseTemplate(PulseTemplate):
         data['template'] = self._template
         data['overwritten_channels'] = self._overwritten_channels
         return data
+
+    def with_parallel_channels(self, values: Mapping[ChannelID, ExpressionLike]) -> 'PulseTemplate':
+        if self.identifier:
+            return super().with_parallel_channels(values)
+        else:
+            return ParallelConstantChannelPulseTemplate(
+                self._template,
+                {**self._overwritten_channels, **values},
+            )
+
+    def _is_atomic(self) -> bool:
+        return self._template._is_atomic()
+
+
+ParallelConstantChannelPulseTemplate = ParallelChannelPulseTemplate
 
 
 class ChannelMappingException(Exception):

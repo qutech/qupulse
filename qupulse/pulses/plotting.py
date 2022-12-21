@@ -19,7 +19,6 @@ import functools
 from qupulse._program import waveforms
 from qupulse.utils.types import ChannelID, MeasurementWindow, has_type_interface
 from qupulse.pulses.pulse_template import PulseTemplate
-from qupulse.pulses.parameters import Parameter
 from qupulse._program.waveforms import Waveform
 from qupulse._program._loop import Loop, to_waveform
 
@@ -117,7 +116,7 @@ def _render_loop(loop: Loop,
 
 
 def plot(pulse: PulseTemplate,
-         parameters: Dict[str, Parameter]=None,
+         parameters: Dict[str, Real]=None,
          sample_rate: Optional[Real]=10,
          axes: Any=None,
          show: bool=True,

@@ -1,4 +1,4 @@
-from typing import Optional, List, Tuple, Union, Dict, Set, Mapping
+from typing import Optional, List, Tuple, Union, Dict, Set, Mapping, AbstractSet
 from numbers import Real
 import itertools
 
@@ -62,7 +62,7 @@ class MeasurementDefiner:
         return resulting_windows
 
     @property
-    def measurement_parameters(self) -> Set[str]:
+    def measurement_parameters(self) -> AbstractSet[str]:
         """Return the parameters of measurements that are directly declared on `self`.
         Does _not_ visit eventual child objects."""
         return set(var

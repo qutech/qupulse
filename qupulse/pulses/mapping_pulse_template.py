@@ -7,7 +7,7 @@ from qupulse.utils.types import ChannelID, FrozenDict, FrozenMapping
 from qupulse.expressions import Expression, ExpressionScalar
 from qupulse.parameter_scope import Scope, MappedScope
 from qupulse.pulses.pulse_template import PulseTemplate, MappingTuple
-from qupulse.pulses.parameters import Parameter, MappedParameter, ParameterNotProvidedException, ParameterConstrainer
+from qupulse.pulses.parameters import ParameterNotProvidedException, ParameterConstrainer
 from qupulse._program.waveforms import Waveform
 from qupulse._program._loop import Loop
 from qupulse.serialization import Serializer, PulseRegistryType
@@ -112,7 +112,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                                for k, v in template.channel_mapping.items()}
             template = template.template
 
-        self.__template = template
+        self.__template: PulseTemplate = template
         self.__parameter_mapping = FrozenDict(parameter_mapping)
         self.__external_parameters = set(itertools.chain(*(expr.variables for expr in self.__parameter_mapping.values())))
         self.__external_parameters |= self.constrained_parameters
@@ -230,6 +230,9 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
 
         return data
 
+    def _is_atomic(self):
+        return self.__template._is_atomic()
+
     @classmethod
     def deserialize(cls,
                     serializer: Optional[Serializer]=None, # compatibility to old serialization routines, deprecated
@@ -240,7 +243,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         # return MappingPulseTemplate(template=serializer.deserialize(template),
         #                             **kwargs)
 
-    def _validate_parameters(self, parameters: Dict[str, Union[Parameter, numbers.Real]], volatile: Set[str]):
+    def _validate_parameters(self, parameters: Dict[str, Union[numbers.Real]], volatile: Set[str]):
         missing = set(self.__external_parameters) - set(parameters.keys())
         if missing:
             raise ParameterNotProvidedException(missing.pop())
@@ -260,27 +263,11 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
         return {parameter: mapping_function.evaluate_numeric(**parameters)
                 for parameter, mapping_function in self.__parameter_mapping.items()}
 
-    def map_parameter_objects(self, parameters: Dict[str, Parameter],
-                              volatile: Set[str] = frozenset()) -> Dict[str, Parameter]:
-        """Map parameter objects (instances of Parameter class) according to the defined mappings.
-
-        Args:
-            parameters: Dictionary with parameter objects
-            volatile(Optional): Forwarded to `validate_parameter_constraints`
-        Returns:
-            A new dictionary with mapped parameter objects
-        """
-        self._validate_parameters(parameters=parameters, volatile=volatile)
-        return {parameter: MappedParameter(mapping_function,
-                                           {name: parameters[name] for name in mapping_function.variables})
-                for (parameter, mapping_function) in self.__parameter_mapping.items()}
-
     def map_scope(self, scope: Scope) -> MappedScope:
         return MappedScope(scope=scope, mapping=self.__parameter_mapping)
 
     def map_parameters(self,
-                       parameters: Dict[str, Union[Parameter, numbers.Real]]) -> Dict[str,
-                                                                                      Union[Parameter, numbers.Real]]:
+                       parameters: Dict[str, numbers.Real]) -> Dict[str, numbers.Real]:
         """Map parameter values according to the defined mappings.
 
         Args:
@@ -294,9 +281,6 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
 
         elif all(isinstance(parameter, numbers.Real) for parameter in parameters.values()):
             return self.map_parameter_values(parameters=parameters)
-
-        elif all(isinstance(parameter, Parameter) for parameter in parameters.values()):
-            return self.map_parameter_objects(parameters=parameters)
 
         else:
             raise TypeError('Values of parameter dict are neither all Parameter nor Real')

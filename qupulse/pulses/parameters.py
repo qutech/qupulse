@@ -1,10 +1,4 @@
-"""This module defines parameters and parameter declaration for usage in pulse modelling.
-
-Classes:
-    - Parameter: A base class representing a single pulse parameter.
-    - ConstantParameter: A single parameter with a constant value.
-    - MappedParameter: A parameter whose value is mathematically computed from another parameter.
-    - ParameterNotProvidedException.
+"""This module defines parameter constriants.
 """
 
 from abc import abstractmethod
@@ -16,168 +10,10 @@ import sympy
 import numpy
 
 from qupulse.serialization import AnonymousSerializable
-from qupulse.expressions import Expression, ExpressionVariableMissingException
+from qupulse.expressions import Expression
 from qupulse.parameter_scope import Scope, ParameterNotProvidedException
-from qupulse.utils.types import HashableNumpyArray, DocStringABCMeta
 
-__all__ = ["Parameter", "ConstantParameter",
-           "ParameterNotProvidedException", "ParameterConstraintViolation", "ParameterConstraint"]
-
-
-class Parameter(metaclass=DocStringABCMeta):
-    """A parameter for pulses.
-    
-    Parameter specifies a concrete value which is inserted instead
-    of the parameter declaration reference in a PulseTemplate if it satisfies
-    the minimum and maximum boundary of the corresponding ParameterDeclaration.
-    Implementations of Parameter may provide a single constant value or
-    obtain values by computation (e.g. from measurement results).
-    """
-    @abstractmethod
-    def get_value(self) -> Real:
-        """Compute and return the parameter value."""
-
-    @property
-    @abstractmethod
-    def requires_stop(self) -> bool:
-        """Query whether the evaluation of this Parameter instance requires an interruption in
-        execution/sequencing, e.g., because it depends on data that is only measured in during the
-        next execution.
-
-        Returns:
-            True, if evaluating this Parameter instance requires an interruption.
-        """
-
-    def __eq__(self, other: 'Parameter') -> bool:
-        return numpy.array_equal(self.get_value(), other.get_value())
-        
-        
-class ConstantParameter(Parameter):
-    def __init__(self, value: Union[Real, numpy.ndarray, Expression, str, sympy.Expr]) -> None:
-        """
-        .. deprecated:: 0.5
-
-        A pulse parameter with a constant value.
-
-        Args:
-            value: The value of the parameter
-        """
-        warnings.warn("ConstantParameter is deprecated. Use plain number types instead", DeprecationWarning,
-                      stacklevel=2)
-
-        super().__init__()
-        try:
-            if isinstance(value, Real):
-                self._value = value
-            elif isinstance(value, (str, Expression, sympy.Expr)):
-                self._value = Expression(value).evaluate_numeric()
-            else:
-                self._value = numpy.array(value).view(HashableNumpyArray)
-        except ExpressionVariableMissingException:
-            raise RuntimeError("Expressions passed into ConstantParameter may not have free variables.")
-        
-    def get_value(self) -> Union[Real, numpy.ndarray]:
-        return self._value
-
-    def __hash__(self) -> int:
-        return hash(self._value)
-
-    @property
-    def requires_stop(self) -> bool:
-        return False
-
-    def __repr__(self) -> str:
-        return "<ConstantParameter {0}>".format(self._value)
-
-
-class MappedParameter(Parameter):
-    """A pulse parameter whose value is derived from other parameters via some mathematical
-    expression.
-
-    This class bundles an expression with some concrete Parameters which in turn can be derived from other Parameters.
-
-    The dependencies of a MappedParameter instance are defined by the free variables appearing
-    in the expression that defines how its value is derived.
-
-    MappedParameter holds a dictionary which assign Parameter objects to these dependencies.
-    Evaluation of the MappedParameter will raise a ParameterNotProvidedException if a Parameter
-    object is missing for some dependency.
-    """
-
-    def __init__(self,
-                 expression: Expression,
-                 namespace: Optional[Mapping[str, Parameter]]=None) -> None:
-        """Create a MappedParameter instance.
-
-        Args:
-            expression (Expression): The expression defining how the the value of this
-                MappedParameter instance is derived from its dependencies.
-             dependencies (Dict(str -> Parameter)): Parameter objects of the dependencies. The objects them selves must
-             not change but the parameters might return different values.
-        """
-        warnings.warn("MappedParameter is deprecated. There should be no interface depending on it", DeprecationWarning,
-                      stacklevel=2)
-
-        super().__init__()
-        self._expression = expression
-        self._namespace = dict() if namespace is None else namespace
-        self._cached_value = None
-
-    def _collect_dependencies(self) -> Dict[str, float]:
-        # filter only real dependencies from the dependencies dictionary
-        try:
-            return {parameter_name: self._namespace[parameter_name].get_value()
-                    for parameter_name in self._expression.variables}
-        except KeyError as key_error:
-            raise ParameterNotProvidedException(str(key_error)) from key_error
-
-    def get_value(self) -> Union[Real, numpy.ndarray]:
-        """Does not check explicitly if a parameter requires to stop."""
-        if self._cached_value is None:
-            self._cached_value = self._expression.evaluate_numeric(**self._collect_dependencies())
-        return self._cached_value
-
-    @property
-    def expression(self):
-        return self._expression
-
-    def update_constants(self, new_values: Mapping[str, ConstantParameter]):
-        """This is stupid"""
-        for parameter_name, parameter in self._namespace.items():
-            if hasattr(parameter, '__hash__'):
-                # very stupid
-                # a constant parameter has a hash function
-                if parameter_name in new_values:
-                    self._namespace[parameter_name] = new_values[parameter_name]
-            else:
-                parameter.update_constants(new_values)
-        self._cached_value = None
-
-    @property
-    def requires_stop(self) -> bool:
-        """Does not explicitly check that all parameters are provided if one requires stopping"""
-        try:
-            return any(self._namespace[v].requires_stop
-                       for v in self._expression.variables)
-        except KeyError as err:
-            raise ParameterNotProvidedException(err.args[0]) from err
-
-    def __eq__(self, other):
-        if type(other) == type(self):
-            return (self._expression == other._expression and
-                    self._namespace == other._namespace)
-        else:
-            return NotImplemented
-
-    def __repr__(self) -> str:
-        try:
-            value = self.get_value()
-        except ParameterNotProvidedException:
-            value = 'nothing'
-
-        return "<MappedParameter {0} evaluating to {1}>".format(
-            self._expression, value
-        )
+__all__ = ["ParameterNotProvidedException", "ParameterConstraintViolation", "ParameterConstraint"]
 
 
 class ParameterConstraint(AnonymousSerializable):
@@ -239,10 +75,13 @@ class ParameterConstraint(AnonymousSerializable):
         return str(self)
 
 
+ConstraintLike = Union[sympy.Expr, str, ParameterConstraint]
+
+
 class ParameterConstrainer:
     """A class that implements the testing of parameter constraints. It is used by the subclassing pulse templates."""
     def __init__(self, *,
-                 parameter_constraints: Optional[Iterable[Union[str, ParameterConstraint]]]) -> None:
+                 parameter_constraints: Optional[Iterable[ConstraintLike]]) -> None:
         if parameter_constraints is None:
             self._parameter_constraints = []
         else:
@@ -254,7 +93,7 @@ class ParameterConstrainer:
     def parameter_constraints(self) -> List[ParameterConstraint]:
         return self._parameter_constraints
 
-    def validate_parameter_constraints(self, parameters: [str, Union[Parameter, Real]], volatile: Set[str]) -> None:
+    def validate_parameter_constraints(self, parameters: [str, Real], volatile: Set[str]) -> None:
         """
         Raises a ParameterConstraintViolation exception if one of the constraints is violated.
 
@@ -269,9 +108,8 @@ class ParameterConstrainer:
             ConstrainedParameterIsVolatileWarning: via `ParameterConstraint.is_fulfilled`
         """
         for constraint in self._parameter_constraints:
-            constraint_parameters = {k: v.get_value() if isinstance(v, Parameter) else v for k, v in parameters.items()}
-            if not constraint.is_fulfilled(constraint_parameters, volatile=volatile):
-                raise ParameterConstraintViolation(constraint, constraint_parameters)
+            if not constraint.is_fulfilled(parameters, volatile=volatile):
+                raise ParameterConstraintViolation(constraint, parameters)
 
     def validate_scope(self, scope: Scope):
         volatile = scope.get_volatile_parameters().keys()
@@ -283,11 +121,8 @@ class ParameterConstrainer:
                 raise ParameterConstraintViolation(constraint, constrained_parameters)
 
     @property
-    def constrained_parameters(self) -> Set[str]:
-        if self._parameter_constraints:
-            return set.union(*(c.affected_parameters for c in self._parameter_constraints))
-        else:
-            return set()
+    def constrained_parameters(self) -> AbstractSet[str]:
+        return set().union(*(c.affected_parameters for c in self._parameter_constraints))
 
 
 class ParameterConstraintViolation(Exception):

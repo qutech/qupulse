@@ -7,12 +7,7 @@ import functools
 import warnings
 import logging
 
-try:
-    import tek_awg
-except ImportError:  # pragma: no cover
-    warnings.warn("Could not import Tektronix driver backend. "
-                  "If you wish to use it execute qupulse.hardware.awgs.install_requirements('tektronix')")
-    raise
+import tek_awg
 
 from qupulse.hardware.awgs.base import AWG, AWGAmplitudeOffsetHandling, ProgramOverwriteException
 from qupulse import ChannelID
@@ -285,9 +280,6 @@ class TektronixAWG(AWG):
         """
         super().__init__(identifier=identifier)
         self.logger = logger or logging.getLogger("qupulse.tektronix")
-
-        if device is None:
-            raise RuntimeError('Please install the tek_awg package or run "install_requirements" from this module')
 
         self._device = device
         self._synchronized = False # this gets set to True by synchronize or clear and to False on error during manupulation

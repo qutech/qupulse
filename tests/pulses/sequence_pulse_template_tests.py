@@ -9,8 +9,7 @@ from qupulse.pulses.mapping_pulse_template import MappingPulseTemplate
 from qupulse.pulses.parameters import ParameterConstraint, ParameterConstraintViolation, ParameterNotProvidedException
 from qupulse._program._loop import Loop
 
-from tests.pulses.sequencing_dummies import DummyPulseTemplate,\
-    DummyNoValueParameter, DummyWaveform, MeasurementWindowTestCase
+from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummyWaveform, MeasurementWindowTestCase
 from tests.serialization_dummies import DummySerializer
 from tests.serialization_tests import SerializableTests
 from tests._program.transformation_tests import TransformationStub

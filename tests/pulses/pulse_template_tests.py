@@ -8,8 +8,9 @@ import sympy
 from qupulse.parameter_scope import Scope, DictScope
 from qupulse.utils.types import ChannelID
 from qupulse.expressions import Expression, ExpressionScalar
+from qupulse.pulses import ConstantPT, FunctionPT, RepetitionPT, ForLoopPT, ParallelChannelPT, MappingPT,\
+    TimeReversalPT, AtomicMultiChannelPT
 from qupulse.pulses.pulse_template import AtomicPulseTemplate, PulseTemplate
-from qupulse.pulses.parameters import Parameter, ConstantParameter, ParameterNotProvidedException
 from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
 from qupulse._program._loop import Loop
 
@@ -112,7 +113,7 @@ class AtomicPulseTemplateStub(AtomicPulseTemplate):
         self._parameter_names = parameter_names
         self._register(registry=registry)
 
-    def build_waveform(self, parameters: Dict[str, Parameter], channel_mapping):
+    def build_waveform(self, parameters, channel_mapping):
         raise NotImplementedError()
 
     @property
@@ -313,10 +314,7 @@ class PulseTemplateTest(unittest.TestCase):
 
     def test_create_program_none(self) -> None:
         template = PulseTemplateStub(defined_channels={'A'}, parameter_names={'foo'})
-        with self.assertWarns(DeprecationWarning):
-            # just a test that old stuff wont break. remove in the future
-            constant_parameter = ConstantParameter(2.126)
-        parameters = {'foo': constant_parameter, 'bar': -26.2, 'hugo': 'exp(sin(pi/2))'}
+        parameters = {'foo': 2.126, 'bar': -26.2, 'hugo': 'exp(sin(pi/2))'}
         measurement_mapping = {'M': 'N'}
         channel_mapping = {'A': 'B'}
         volatile = {'hugo'}
@@ -361,6 +359,52 @@ class PulseTemplateTest(unittest.TestCase):
         self.assertEqual("PulseTemplateStub(identifier='asd')", format(a))
         self.assertEqual("PulseTemplateStub(identifier='asd', duration='5')",
                          "{:identifier;duration}".format(a))
+
+
+class WithMethodTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.fpt = FunctionPT(1.4, 'sin(f*t)', 'X')
+        self.cpt = ConstantPT(1.4, {'Y': 'start + idx * step'})
+    def test_parallel_channels(self):
+        expected = ParallelChannelPT(self.fpt, {'K': 'k'})
+        actual = self.fpt.with_parallel_channels({'K': 'k'})
+        self.assertEqual(expected, actual)
+
+    def test_parallel_channels_optimization(self):
+        expected = ParallelChannelPT(self.fpt, {'K': 'k', 'C': 'c'})
+        actual = self.fpt.with_parallel_channels({'K': 'k'}).with_parallel_channels({'C': 'c'})
+        self.assertEqual(expected, actual)
+
+    def test_iteration(self):
+        expected = ForLoopPT(self.cpt, 'idx', 'n_steps')
+        actual = self.cpt.with_iteration('idx', 'n_steps')
+        self.assertEqual(expected, actual)
+
+    def test_appended(self):
+        expected = self.fpt @ self.fpt.with_time_reversal()
+        actual = self.fpt.with_appended(self.fpt.with_time_reversal())
+        self.assertEqual(expected, actual)
+
+    def test_repetition(self):
+        expected = RepetitionPT(self.fpt, 6)
+        actual = self.fpt.with_repetition(6)
+        self.assertEqual(expected, actual)
+
+    def test_repetition_optimization(self):
+        # unstable test due to flimsy expression equality :(
+        expected = RepetitionPT(self.fpt, ExpressionScalar(6) * 2)
+        actual = self.fpt.with_repetition(6).with_repetition(2)
+        self.assertEqual(expected, actual)
+
+    def test_time_reversal(self):
+        expected = TimeReversalPT(self.fpt)
+        actual = self.fpt.with_time_reversal()
+        self.assertEqual(expected, actual)
+
+    def test_parallel_atomic(self):
+        expected = AtomicMultiChannelPT(self.fpt, self.cpt)
+        actual = self.fpt.with_parallel_atomic(self.cpt)
+        self.assertEqual(expected, actual)
 
 
 class AtomicPulseTemplateTests(unittest.TestCase):
