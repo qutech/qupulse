@@ -6,13 +6,15 @@ Functions:
     - plot: Plot a pulse using matplotlib.
 """
 
-from typing import Dict, Tuple, Any, Optional, Set, List, Union
+from typing import Dict, Tuple, Any, Optional, Set, List, Union, Mapping
 from numbers import Real
 
+import matplotlib.pyplot as plt
 import numpy as np
 import warnings
 import operator
 import itertools
+import functools
 
 from qupulse._program import waveforms
 from qupulse.utils.types import ChannelID, MeasurementWindow, has_type_interface
@@ -251,6 +253,42 @@ def plot(pulse: PulseTemplate,
             warnings.filterwarnings(action="ignore",message=".*which is a non-GUI backend, so cannot show the figure.*")
             axes.get_figure().show()
     return axes.get_figure()
+
+
+@functools.singledispatch
+def plot_2d(program: Loop, channels: Tuple[ChannelID, ChannelID],
+            sample_rate: float = None,
+            ax: plt.Axes = None,
+            plot_kwargs: Mapping = None):
+    _, rendered, _ = render(program, sample_rate, plot_channels=set(channels))
+    x_y = np.array([rendered[channels[0]], rendered[channels[1]]])
+    keep = np.full(x_y.shape[0], fill_value=True)
+    keep[1:] = np.any(x_y[1:, :] != x_y[:-1, :], axis=1)
+    x_y_plt = x_y[keep]
+
+    plt.plot(x_y_plt[:, 0], x_y_plt[:, 1], ax=ax, **(plot_kwargs or {}))
+    plt.xlabel(channels[0], ax=ax)
+    plt.ylabel(channels[1], ax=ax)
+
+
+@plot_2d.register
+def _(pulse_template: PulseTemplate,
+      channels: Tuple[ChannelID, ChannelID],
+      sample_rate: float = None,
+      ax: plt.Axes = None,
+      plot_kwargs: Mapping = None,
+      parameters=None,
+      channel_mapping=None):
+
+    if channel_mapping is None:
+        channel_mapping = {ch: ch if ch in channels else None
+                           for ch in pulse_template.defined_channels}
+    create_program_kwargs = {'channel_mapping': channel_mapping}
+    if parameters is not None:
+        create_program_kwargs['parameters'] = parameters
+
+    program = pulse_template.create_program(**create_program_kwargs)
+    return plot_2d(program, channels, sample_rate=sample_rate, ax=ax, plot_kwargs=plot_kwargs)
 
 
 class PlottingNotPossibleException(Exception):
