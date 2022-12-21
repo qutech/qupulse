@@ -260,6 +260,18 @@ def plot_2d(program: Loop, channels: Tuple[ChannelID, ChannelID],
             sample_rate: float = None,
             ax: plt.Axes = None,
             plot_kwargs: Mapping = None):
+    """Plot the pulse/program in the plane of the given channels to the specified axis.
+
+    Args:
+        program: The program to plot
+        channels: (x_axis, y_axis) name tuple
+        sample_rate: Sample rate to use
+        ax: Axis to plot into.
+        plot_kwargs: Forwarded to the plot function.
+
+    Returns:
+
+    """
     _, rendered, _ = render(program, sample_rate, plot_channels=set(channels))
     x_y = np.array([rendered[channels[0]], rendered[channels[1]]])
     keep = np.full(x_y.shape[0], fill_value=True)
