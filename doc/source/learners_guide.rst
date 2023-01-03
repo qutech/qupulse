@@ -1,5 +1,7 @@
+.. _learners_guide:
+
 Learners Guide - writing pulses with qupulse
----------------------
+--------------------------------------------
 
 This is a little guide through the documentation of qupulse with the idea that *you* as an interested person can find the materials corresponding to the desired skills.
 
@@ -20,7 +22,7 @@ Basic pulse writing
 
     **Learning Goals:** The learner is able to define and save a parameterized nested pulse template. The learner can use pulse identifiers measurement windows and parameter constraints as needed. The learner is able to verify pulse and measurement windows are as intended for a given parameter set by plotting and inspecting. The learner can load pulses from a file and other valid datasources and use them as a building block in their own pulses.
 
-**Learning Task 1:** Read the concept section about :ref:`concept/pulsetemplates`.
+**Learning Task 1:** Read the concept section about :ref:`pulsetemplates`.
 
 **Exercise Task 1:** Go through the following examples that introduce the shipped atomic pulse templates:
 
