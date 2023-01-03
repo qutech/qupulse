@@ -6,7 +6,7 @@ import importlib
 import numpy
 
 from qupulse.pulses import ConstantPT
-from qupulse.pulses.plotting import PlottingNotPossibleException, render, plot
+from qupulse.plotting import PlottingNotPossibleException, render, plot
 from qupulse.pulses.table_pulse_template import TablePulseTemplate
 from qupulse.pulses.sequence_pulse_template import SequencePulseTemplate
 from qupulse._program._loop import Loop
