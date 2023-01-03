@@ -10,6 +10,8 @@ Welcome to qupulse's documentation!
 
 You are encouraged to read the concept explanations and interactively explore the linked examples. To do this you can install qupulse via ``python -m pip install -e git+https://github.com/qutech/qupulse.git#egg=qupulse[default]`` which will clone the qupulse into ``./src/qupulse``. You can find the examples in ``doc/source/examples`` and open them with jupyter, Spyder or another IDE of your choice.
 
+There is a :ref:`learners_guide` available to help with an efficient exploration of qupulse's features.
+
 Contents:
 
 .. toctree::
