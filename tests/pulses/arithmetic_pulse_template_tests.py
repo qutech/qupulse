@@ -7,8 +7,8 @@ import sympy
 
 from qupulse.parameter_scope import DictScope
 from qupulse.expressions import ExpressionScalar
-from qupulse.pulses import MappingPT, ConstantPT, RepetitionPT
-from qupulse.pulses.plotting import render
+from qupulse.pulses import ConstantPT
+from qupulse.plotting import render
 from qupulse.pulses.arithmetic_pulse_template import ArithmeticAtomicPulseTemplate, ArithmeticPulseTemplate,\
     ImplicitAtomicityInArithmeticPT, UnequalDurationWarningInArithmeticPT, try_operation
 from qupulse._program.waveforms import TransformingWaveform
@@ -650,7 +650,7 @@ class ArithmeticUsageTests(unittest.TestCase):
         self.parameters = dict(t_duration=10, omega=3.14*2/10, t_y=3.4)
 
     def test_scaling(self):
-        from qupulse.pulses import plotting
+        from qupulse import plotting
 
         parameters = {**self.parameters, 'foo': 5.3}
         t_ref, reference, _ = plotting.render(self.complex_pt.create_program(parameters=parameters))
