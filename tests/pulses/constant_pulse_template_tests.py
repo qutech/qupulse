@@ -1,11 +1,11 @@
 import unittest
 
-import qupulse.pulses.plotting
+import qupulse.plotting
 import qupulse._program.waveforms
 import qupulse.utils.sympy
 from qupulse.pulses import TablePT, FunctionPT, AtomicMultiChannelPT, MappingPT
 from qupulse.pulses.multi_channel_pulse_template import AtomicMultiChannelPulseTemplate
-from qupulse.pulses.plotting import plot
+from qupulse.plotting import plot
 from qupulse.pulses.sequence_pulse_template import SequencePulseTemplate
 from qupulse._program._loop import make_compatible
 from qupulse._program.waveforms import ConstantWaveform
@@ -35,11 +35,11 @@ class TestConstantPulseTemplate(unittest.TestCase):
         p2 = ConstantPulseTemplate(0, {'P1': 1.})
         p3 = ConstantPulseTemplate(2, {'P1': 1.})
 
-        _ = qupulse.pulses.plotting.render(p1.create_program())
+        _ = qupulse.plotting.render(p1.create_program())
 
         pulse = SequencePulseTemplate(p1, p2, p3)
         prog = pulse.create_program()
-        _ = qupulse.pulses.plotting.render(prog)
+        _ = qupulse.plotting.render(prog)
 
         self.assertEqual(pulse.duration, 12)
 

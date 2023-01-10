@@ -6,14 +6,13 @@ import numpy as np
 
 from qupulse.parameter_scope import DictScope
 from qupulse.pulses import RepetitionPT, ConstantPT
-from qupulse.pulses.plotting import render
-from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform, MappingPulseTemplate,\
+from qupulse.plotting import render
+from qupulse.pulses.multi_channel_pulse_template import MappingPulseTemplate,\
     ChannelMappingException, AtomicMultiChannelPulseTemplate, ParallelChannelPulseTemplate,\
     TransformingWaveform, ParallelChannelTransformation
 from qupulse.pulses.parameters import ParameterConstraint, ParameterConstraintViolation
-from qupulse.expressions import ExpressionScalar, Expression
+from qupulse.expressions import ExpressionScalar
 from qupulse._program.transformation import LinearTransformation, chain_transformations
-from qupulse.utils.sympy import sympify
 
 from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummyWaveform
 from tests.serialization_dummies import DummySerializer
