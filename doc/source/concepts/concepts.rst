@@ -8,3 +8,5 @@ This section explains the fundamental design concepts of qupulse.
     serialization
     instantiating
     program
+    awgs
+
