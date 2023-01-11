@@ -52,7 +52,7 @@ Basic pulse writing
 
 **Exercise Task 6:** Go through the :ref:`/examples/01ParameterConstraints.ipynb` example. It shows how to use parameter constraints to enforce invariants.
 
-**Exercise Task 7:** Go through the :ref:`examples/03SnakeChargeScan.ipynb` example which shows a realistic pulse.
+**Exercise Task 7:** Go through the :ref:`/examples/03SnakeChargeScan.ipynb` example which shows a realistic pulse.
 
 Hardware limitations
 ^^^^^^^^^^^^^^^^^^^^
