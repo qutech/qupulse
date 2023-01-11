@@ -75,7 +75,9 @@ Examples demonstrating the construction of pulse templates and parameters from v
 
 :ref:`/examples/01Measurements.ipynb` shows how to specify measurements.
 
-Finally, :ref:`/examples/02CreatePrograms.ipynb` illustrates usage of the :meth:`.PulseTemplate.create_program` method.
+:ref:`/examples/02CreatePrograms.ipynb` illustrates usage of the :meth:`.PulseTemplate.create_program` method.
+
+:ref:`physical_examples` show realistic use cases of pulse templates.
 
 .. rubric:: Footnotes
 .. [#tree] Regarded as objects in the programming language, each pulse template is a tree of PulseTemplate objects, where the atomic templates (:class:`.TablePulseTemplate` and :class:`.FunctionPulseTemplate` objects) are the leafs while the remaining ones form the inner nodes of the tree.
