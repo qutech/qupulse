@@ -35,6 +35,7 @@ All examples are provided as static text in this documentation and, additionally
     :caption: Physically motivated examples
     :name: physical_examples
 
+    03SnakeChargeScan
     03FreeInductionDecayExample
     03GateConfigurationExample
     03DynamicNuclearPolarisation
