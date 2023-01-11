@@ -57,7 +57,24 @@ Basic pulse writing
 Hardware limitations
 ^^^^^^^^^^^^^^^^^^^^
 
-This section is under construction.
+This section is incomplete.
+
+.. topic:: Info
+
+    **Estimated time:**
+    20 minutes for reading
+
+    **Target group:** People who want to use qupulse in an experiment.
+
+    **Learning Goals:**
+    The learner can identify if a hardware limitation related exception that is raised is due to an error on their end and mitigate it.
+    The learner understands capabilities of at least one type of AWGs.
+
+
+**Learning Task 1:**
+
+Read :ref:`program` and :ref:`awgs`.
+
 
 Setup an experiment
 ^^^^^^^^^^^^^^^^^^^
