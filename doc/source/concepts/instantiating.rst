@@ -40,3 +40,5 @@ In contrast, the Zurich Instruments HDAWG allows arbitrary nesting levels and is
 
 However, as already mentioned, the user does not have to be concerned about this in regular use of qupulse, since this
 is dealt with transparently in the hardware backend.
+
+The section :ref:`program` touches the ideas behind the current program implementation i.e. :class:`.Loop`.

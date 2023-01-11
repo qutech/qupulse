@@ -7,3 +7,4 @@ This section explains the fundamental design concepts of qupulse.
     pulsetemplates
     serialization
     instantiating
+    program
