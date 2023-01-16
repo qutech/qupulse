@@ -20,7 +20,7 @@ Basic pulse writing
 
     **Target group:**
 
-    **Learning Goals:** The learner is able to define and save a parameterized nested pulse template. The learner can use pulse identifiers measurement windows and parameter constraints as needed. The learner is able to verify pulse and measurement windows are as intended for a given parameter set by plotting and inspecting. The learner can load pulses from a file and other valid datasources and use them as a building block in their own pulses.
+    **Learning Goals:** The learner is able to define a parameterized nested pulse template.
 
 **Learning Task 1:** Read the concept section about :ref:`pulsetemplates`.
 
@@ -44,6 +44,22 @@ Basic pulse writing
 * :ref:`/examples/00RetrospectiveConstantChannelAddition.ipynb`
 * :ref:`/examples/00TimeReversal.ipynb`
 
+Pulse template features
+^^^^^^^^^^^^^^^^^^^^^^^
+
+.. topic:: Info
+
+    **Estimated time:**
+    20 minutes for reading
+    60 minutes for the examples
+    60 minutes for experimenting
+
+    **Target group:**
+
+    **Learning Goals:** The learner to save pulse templates to the file system.
+    The learner can use pulse identifiers measurement windows and parameter constraints as needed. The learner is able to verify pulse and measurement windows are as intended for a given parameter set by plotting and inspecting. The learner can load pulses from a file and other valid datasources and use them as a building block in their own pulses.
+
+
 **Learning Task 2:** Read the concept section about :ref:`serialization`.
 
 **Exercise Task 4:** Go through the :ref:`/examples/01PulseStorage.ipynb` example. It shows how to load and store pulse templates to disk.
@@ -54,8 +70,10 @@ Basic pulse writing
 
 **Exercise Task 7:** Go through the :ref:`/examples/03SnakeChargeScan.ipynb` example which shows a realistic pulse.
 
-Hardware limitations
-^^^^^^^^^^^^^^^^^^^^
+Hardware capabilities and limitations
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+This section introduces aspects of the hardware that are relevant for every experimenter.
 
 This section is incomplete.
 
