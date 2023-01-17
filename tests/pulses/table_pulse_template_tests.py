@@ -11,7 +11,7 @@ from qupulse.pulses.parameters import ParameterNotProvidedException, ParameterCo
 from qupulse.pulses.interpolation import HoldInterpolationStrategy, LinearInterpolationStrategy, JumpInterpolationStrategy
 from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
 
-from tests.pulses.sequencing_dummies import DummyInterpolationStrategy, DummyParameter, DummyPulseTemplate
+from tests.pulses.sequencing_dummies import DummyInterpolationStrategy, DummyPulseTemplate
 from tests.serialization_dummies import DummySerializer, DummyStorageBackend
 from tests.pulses.measurement_tests import ParameterConstrainerTest, MeasurementDefinerTest
 from tests.serialization_tests import SerializableTests
@@ -474,6 +474,13 @@ class TablePulseTemplateTest(unittest.TestCase):
                     'symbolic': Expression('3 * a + (b-3)*a + (c-b)*(d+4) / 2 + (Max(10, c) - c) * d')}
 
         self.assertEqual(expected, pulse.integral)
+
+    def test_initial_final_values(self):
+        pulse = TablePulseTemplate(entries={0: [(1, 2), (3, 0, 'linear'), (4, 2, 'jump'), (5, 8, 'hold')],
+                                            'other_channel': [(0, 7), (2, 0, 'linear'), (10, 0)],
+                                            'symbolic': [(3, 'a'), ('b', 4, 'hold'), ('c', Expression('d'), 'linear')]})
+        self.assertEqual({0: 2, 'other_channel': 7, 'symbolic': 'a'}, pulse.initial_values)
+        self.assertEqual({0: 8, 'other_channel': 0, 'symbolic': 'd'}, pulse.final_values)
 
     def test_as_expression(self):
         pulse = TablePulseTemplate(entries={0: [(0, 0), (1, 2), (3, 0, 'linear'), (4, 2, 'jump'), (5, 8, 'hold')],

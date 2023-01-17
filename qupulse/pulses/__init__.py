@@ -7,7 +7,8 @@ from qupulse.pulses.abstract_pulse_template import AbstractPulseTemplate as Abst
 from qupulse.pulses.function_pulse_template import FunctionPulseTemplate as FunctionPT
 from qupulse.pulses.loop_pulse_template import ForLoopPulseTemplate as ForLoopPT
 from qupulse.pulses.multi_channel_pulse_template import AtomicMultiChannelPulseTemplate as AtomicMultiChannelPT,\
-    ParallelConstantChannelPulseTemplate as ParallelConstantChannelPT
+    ParallelConstantChannelPulseTemplate as ParallelConstantChannelPT,\
+    ParallelChannelPulseTemplate as ParallelChannelPT
 from qupulse.pulses.mapping_pulse_template import MappingPulseTemplate as MappingPT
 from qupulse.pulses.repetition_pulse_template import RepetitionPulseTemplate as RepetitionPT
 from qupulse.pulses.sequence_pulse_template import SequencePulseTemplate as SequencePT
@@ -30,5 +31,4 @@ del warnings
 
 __all__ = ["FunctionPT", "ForLoopPT", "AtomicMultiChannelPT", "MappingPT", "RepetitionPT", "SequencePT", "TablePT",
            "PointPT", "ConstantPT", "AbstractPT", "ParallelConstantChannelPT", "ArithmeticPT", "ArithmeticAtomicPT",
-           "TimeReversalPT"]
-
+           "TimeReversalPT", "ParallelChannelPT"]

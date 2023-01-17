@@ -2,8 +2,14 @@ import unittest
 
 import numpy as np
 
+try:
+    import zhinst.utils
+except ImportError:
+    zhinst = None
+
 from qupulse.utils.types import TimeType
-from qupulse.hardware.util import voltage_to_uint16, find_positions, get_sample_times
+from qupulse.hardware.util import voltage_to_uint16, find_positions, get_sample_times, not_none_indices, \
+    zhinst_voltage_to_uint16
 from tests.pulses.sequencing_dummies import DummyWaveform
 
 
@@ -29,8 +35,6 @@ class VoltageToBinaryTests(unittest.TestCase):
     def test_zero_level_14bit(self):
         zero_level = voltage_to_uint16(np.zeros(1), 0.5, 0., 14)
         self.assertEqual(zero_level, 8192)
-
-
 
 
 class FindPositionTest(unittest.TestCase):
@@ -73,3 +77,45 @@ class SampleTimeCalculationTest(unittest.TestCase):
 
         np.testing.assert_equal(times, expected_times)
         np.testing.assert_equal(n_samples, np.asarray(4))
+
+
+class NotNoneIndexTest(unittest.TestCase):
+    def test_not_none_indices(self):
+        self.assertEqual(([None, 0, 1, None, None, 2], 3),
+                         not_none_indices([None, 'a', 'b', None, None, 'c']))
+
+
+@unittest.skipIf(zhinst is None, "zhinst not installed")
+class ZHInstVoltageToUint16Test(unittest.TestCase):
+    def test_size_exception(self):
+        with self.assertRaisesRegex(ValueError, "No input"):
+            zhinst_voltage_to_uint16(None, None, (None, None, None, None))
+        with self.assertRaisesRegex(ValueError, "dimension"):
+            zhinst_voltage_to_uint16(np.zeros(192), np.zeros(191), (None, None, None, None))
+        with self.assertRaisesRegex(ValueError, "dimension"):
+            zhinst_voltage_to_uint16(np.zeros(192), None, (np.zeros(191), None, None, None))
+
+    def test_range_exception(self):
+        with self.assertRaisesRegex(ValueError, "invalid"):
+            zhinst_voltage_to_uint16(2.*np.ones(192), None, (None, None, None, None))
+        # this should work
+        zhinst_voltage_to_uint16(None, None, (2. * np.ones(192), None, None, None))
+
+    def test_zeros(self):
+        combined = zhinst_voltage_to_uint16(None, np.zeros(192), (None, None, None, None))
+        np.testing.assert_array_equal(np.zeros(3*192, dtype=np.uint16), combined)
+
+    def test_full(self):
+        ch1 = np.linspace(0, 1., num=192)
+        ch2 = np.linspace(0., -1., num=192)
+
+        markers = tuple(np.array(([1.] + [0.]*m) * 192)[:192] for m in range(1, 5))
+
+        combined = zhinst_voltage_to_uint16(ch1, ch2, markers)
+
+        marker_data = [sum(int(markers[m][idx] > 0) << m for m in range(4))
+                       for idx in range(192)]
+        marker_data = np.array(marker_data, dtype=np.uint16)
+        expected = zhinst.utils.convert_awg_waveform(ch1, ch2, marker_data)
+
+        np.testing.assert_array_equal(expected, combined)

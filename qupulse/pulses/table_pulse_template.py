@@ -19,8 +19,7 @@ from sympy.logic.boolalg import BooleanAtom
 from qupulse.utils import pairwise
 from qupulse.utils.types import ChannelID
 from qupulse.serialization import Serializer, PulseRegistryType
-from qupulse.pulses.parameters import Parameter, \
-    ParameterNotProvidedException, ParameterConstraint, ParameterConstrainer
+from qupulse.pulses.parameters import ParameterNotProvidedException, ParameterConstraint, ParameterConstrainer
 from qupulse.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration
 from qupulse.pulses.interpolation import InterpolationStrategy, LinearInterpolationStrategy, \
     HoldInterpolationStrategy, JumpInterpolationStrategy
@@ -435,6 +434,16 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
                                                                       pre_value=pre_value,
                                                                       post_value=post_value)
         return expressions
+
+    @property
+    def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        return {ch: entries[0].v
+                for ch, entries in self._entries.items()}
+
+    @property
+    def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        return {ch: entries[-1].v
+                for ch, entries in self._entries.items()}
 
 
 def concatenate(*table_pulse_templates: TablePulseTemplate, **kwargs) -> TablePulseTemplate:

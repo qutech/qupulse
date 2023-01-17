@@ -62,20 +62,22 @@ Relevant Examples
 Examples demonstrating the construction of pulse templates and parameters from very simple to somewhat more complex pulses are
 
 * :ref:`/examples/00SimpleTablePulse.ipynb`
-* :ref:`/examples/01AdvancedTablePulse.ipynb`
-* :ref:`/examples/02FunctionPulse.ipynb`
-* :ref:`/examples/03PointPulse.ipynb`
-* :ref:`/examples/03xComposedPulses.ipynb`
-* :ref:`/examples/03ConstantPulseTemplate.ipynb`
-* :ref:`/examples/05MappingTemplate.ipynb`
-* :ref:`/examples/07MultiChannelTemplates.ipynb`
-* :ref:`/examples/14ArithmeticWithPulseTemplates.ipynb`
+* :ref:`/examples/00AdvancedTablePulse.ipynb`
+* :ref:`/examples/00FunctionPulse.ipynb`
+* :ref:`/examples/00PointPulse.ipynb`
+* :ref:`/examples/00ComposedPulses.ipynb`
+* :ref:`/examples/00ConstantPulseTemplate.ipynb`
+* :ref:`/examples/00MappingTemplate.ipynb`
+* :ref:`/examples/00MultiChannelTemplates.ipynb`
+* :ref:`/examples/00ArithmeticWithPulseTemplates.ipynb`
 
-:ref:`/examples/09ParameterConstraints.ipynb` demonstrates the mentioned parameter constraints.
+:ref:`/examples/01ParameterConstraints.ipynb` demonstrates the mentioned parameter constraints.
 
-:ref:`/examples/08Measurements.ipynb` shows how to specify measurements.
+:ref:`/examples/01Measurements.ipynb` shows how to specify measurements.
 
-Finally, :ref:`/examples/06CreatePrograms.ipynb` illustrates usage of the :meth:`.PulseTemplate.create_program` method.
+:ref:`/examples/02CreatePrograms.ipynb` illustrates usage of the :meth:`.PulseTemplate.create_program` method.
+
+:ref:`physical_examples` show realistic use cases of pulse templates.
 
 .. rubric:: Footnotes
 .. [#tree] Regarded as objects in the programming language, each pulse template is a tree of PulseTemplate objects, where the atomic templates (:class:`.TablePulseTemplate` and :class:`.FunctionPulseTemplate` objects) are the leafs while the remaining ones form the inner nodes of the tree.

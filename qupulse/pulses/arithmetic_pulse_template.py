@@ -2,6 +2,7 @@
 from typing import Any, Dict, List, Set, Optional, Union, Mapping, FrozenSet, cast, Callable
 from numbers import Real
 import warnings
+import operator
 
 import sympy
 
@@ -18,15 +19,17 @@ from qupulse._program.transformation import Transformation, ScalingTransformatio
     IdentityTransformation
 
 
-def _apply_operation_to_channel_dict(operator: str,
-                                     lhs: Mapping[ChannelID, Any],
-                                     rhs: Mapping[ChannelID, Any]) -> Dict[ChannelID, Any]:
+def _apply_operation_to_channel_dict(lhs: Mapping[ChannelID, Any],
+                                     rhs: Mapping[ChannelID, Any],
+                                     operator_both: Optional[Callable[[Any, Any], Any]],
+                                     rhs_only: Optional[Callable[[Any], Any]]
+                                     ) -> Dict[ChannelID, Any]:
     result = dict(lhs)
     for channel, rhs_value in rhs.items():
         if channel in result:
-            result[channel] = ArithmeticWaveform.operator_map[operator](result[channel], rhs_value)
+            result[channel] = operator_both(result[channel], rhs_value)
         else:
-            result[channel] = ArithmeticWaveform.rhs_only_map[operator](rhs_value)
+            result[channel] = rhs_only(rhs_value)
     return result
 
 
@@ -66,7 +69,7 @@ class ArithmeticAtomicPulseTemplate(AtomicPulseTemplate):
                           "(it may be unequal only for fringe cases)" % (lhs.duration, rhs.duration),
                           category=UnequalDurationWarningInArithmeticPT)
 
-        if not silent_atomic and (not isinstance(lhs, AtomicPulseTemplate) or not isinstance(rhs, AtomicPulseTemplate)):
+        if not silent_atomic and not (lhs._is_atomic() and rhs._is_atomic()):
             warnings.warn("ArithmeticAtomicPulseTemplate treats all operands as if they are atomic. "
                           "You can silence this warning by passing `silent_atomic=True` or by ignoring this category.",
                           category=ImplicitAtomicityInArithmeticPT)
@@ -106,14 +109,30 @@ class ArithmeticAtomicPulseTemplate(AtomicPulseTemplate):
         """Duration of the lhs operand if it is larger zero. Else duration of the rhs."""
         return ExpressionScalar(sympy.Max(self.lhs.duration, self.rhs.duration))
 
+    def _apply_operation(self, lhs: Mapping[str, Any], rhs: Mapping[str, Any]) -> Dict[str, Any]:
+        operator_both = ArithmeticWaveform.operator_map[self._arithmetic_operator]
+        rhs_only = ArithmeticWaveform.rhs_only_map[self._arithmetic_operator]
+        return _apply_operation_to_channel_dict(lhs, rhs,
+                                                operator_both=operator_both,
+                                                rhs_only=rhs_only)
+
     @property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
-        return _apply_operation_to_channel_dict(self._arithmetic_operator, self.lhs.integral, self.rhs.integral)
+        # this is a guard for possible future changes
+        assert self._arithmetic_operator in ('+', '-'), \
+            f"Integral not correctly implemented for '{self._arithmetic_operator}'"
+        return self._apply_operation(self.lhs.integral, self.rhs.integral)
 
     def _as_expression(self) -> Dict[ChannelID, ExpressionScalar]:
-        return _apply_operation_to_channel_dict(self._arithmetic_operator,
-                                                self.lhs._as_expression(),
-                                                self.rhs._as_expression())
+        return self._apply_operation(self.lhs._as_expression(), self.rhs._as_expression())
+
+    @property
+    def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        return self._apply_operation(self.lhs.initial_values, self.rhs.initial_values)
+
+    @property
+    def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        return self._apply_operation(self.lhs.final_values, self.rhs.final_values)
 
     def build_waveform(self,
                        parameters: Dict[str, Real],
@@ -126,7 +145,7 @@ class ArithmeticAtomicPulseTemplate(AtomicPulseTemplate):
         if lhs is None:
             return ArithmeticWaveform.rhs_only_map[self.arithmetic_operator](rhs)
         else:
-            return ArithmeticWaveform(lhs, self.arithmetic_operator, rhs)
+            return ArithmeticWaveform.from_operator(lhs, self.arithmetic_operator, rhs)
 
     def get_measurement_windows(self,
                                 parameters: Dict[str, Real],
@@ -173,24 +192,37 @@ class ArithmeticAtomicPulseTemplate(AtomicPulseTemplate):
 
 
 class ArithmeticPulseTemplate(PulseTemplate):
-    """"""
-
     def __init__(self,
                  lhs: Union[PulseTemplate, ExpressionLike, Mapping[ChannelID, ExpressionLike]],
                  arithmetic_operator: str,
                  rhs: Union[PulseTemplate, ExpressionLike, Mapping[ChannelID, ExpressionLike]],
                  *,
                  identifier: Optional[str] = None):
-        """
+        """Implements the arithmetics between an aribrary pulse template and scalar values. The values can be the same
+        for all channels, channel specific or only for a subset of the inner pulse templates defined channels.
+        The expression may be time dependent if the pulse template is atomic.
+
+        A channel dependent scalar is represented by a mapping of ChannelID -> Expression.
+
+        The allowed operations are:
+            scalar + pulse_template
+            scalar - pulse_template
+            scalar * pulse_template
+            pulse_template + scalar
+            pulse_template - scalar
+            pulse_template * scalar
+            pulse_template / scalar
 
         Args:
             lhs: Left hand side operand
             arithmetic_operator: String representation of the operator
             rhs: Right hand side operand
-            identifier:
+            identifier: Identifier used for serialization
 
         Raises:
-             TypeError if both or none of the  operands are pulse templates
+            TypeError: If both or none of the  operands are pulse templates or if there is a time dependent expression
+                        and a composite pulse template.
+            ValueError: If the scalar is a mapping and contains channels that are not defined on the pulse template.
         """
         PulseTemplate.__init__(self, identifier=identifier)
 
@@ -218,10 +250,18 @@ class ArithmeticPulseTemplate(PulseTemplate):
         self._lhs = lhs
         self._rhs = rhs
 
-        self._pulse_template = pulse_template
+        self._pulse_template: PulseTemplate = pulse_template
         self._scalar = scalar
 
         self._arithmetic_operator = arithmetic_operator
+
+        if not self._pulse_template._is_atomic() and _is_time_dependent(self._scalar):
+            raise TypeError("A time dependent ArithmeticPulseTemplate scalar operand currently requires an atomic "
+                            "pulse template as the other operand.", self)
+
+        if self._pulse_template._is_atomic():
+            # this is a hack so we can use the AtomicPulseTemplate.integral default implementation
+            self._AS_EXPRESSION_TIME = AtomicPulseTemplate._AS_EXPRESSION_TIME
 
     @staticmethod
     def _parse_operand(operand: Union[ExpressionLike, Mapping[ChannelID, ExpressionLike]],
@@ -266,16 +306,29 @@ class ArithmeticPulseTemplate(PulseTemplate):
         Returns:
             The evaluation of the scalar operand for all relevant channels
         """
+        def _evaluate(value: ExpressionScalar):
+            return value._evaluate_to_time_dependent(parameters)
+
         if isinstance(self._scalar, ExpressionScalar):
-            scalar_value = self._scalar.evaluate_in_scope(parameters)
+            scalar_value = _evaluate(self._scalar)
             return {channel_mapping[channel]: scalar_value
                     for channel in self._pulse_template.defined_channels
                     if channel_mapping[channel]}
 
         else:
-            return {channel_mapping[channel]: value.evaluate_in_scope(parameters)
+            return {channel_mapping[channel]: _evaluate(value)
                     for channel, value in self._scalar.items()
                     if channel_mapping[channel]}
+
+    def _as_expression(self):
+        atomic = cast(AtomicPulseTemplate, self._pulse_template)
+        as_expression = atomic._as_expression()
+        scalar = self._scalar_as_dict()
+        for ch, value in scalar.items():
+            if 't' in value.variables:
+                scalar[ch] = value.evaluate_symbolic({'t': self._AS_EXPRESSION_TIME})
+
+        return self._apply_operation_to_channel_dict(as_expression, scalar)
 
     @property
     def lhs(self):
@@ -357,7 +410,7 @@ class ArithmeticPulseTemplate(PulseTemplate):
         transformation = self._get_transformation(parameters=parameters,
                                                   channel_mapping=channel_mapping)
 
-        return TransformingWaveform(inner_waveform, transformation=transformation)
+        return TransformingWaveform.from_transformation(inner_waveform, transformation=transformation)
 
     def __repr__(self):
         if any(v for k, v in super().get_serialization_data().items() if k != '#type'):
@@ -385,47 +438,71 @@ class ArithmeticPulseTemplate(PulseTemplate):
     def duration(self) -> ExpressionScalar:
         return self._pulse_template.duration
 
+    def _scalar_as_dict(self) -> Dict[ChannelID, ExpressionScalar]:
+        if isinstance(self._scalar, ExpressionScalar):
+            return {channel: self._scalar
+                    for channel in self.defined_channels}
+        else:
+            return dict(self._scalar)
+
     @property
     def integral(self) -> Dict[ChannelID, ExpressionScalar]:
+        if _is_time_dependent(self._scalar):
+            # use the superclass implementation that relies on _as_expression
+            return AtomicPulseTemplate.integral.fget(self)
+
         integral = {channel: value.sympified_expression for channel, value in self._pulse_template.integral.items()}
+        scalar = self._scalar_as_dict()
 
-        if isinstance(self._scalar, ExpressionScalar):
-            scalar = {channel: self._scalar.sympified_expression
-                      for channel in self.defined_channels}
+        if self._arithmetic_operator in ('+', '-'):
+            for ch, value in scalar.items():
+                scalar[ch] = value * self.duration.sympified_expression
+
+        return self._apply_operation_to_channel_dict(integral, scalar)
+
+    def _apply_operation_to_channel_dict(self,
+                                         pt_values: Dict[ChannelID, ExpressionScalar],
+                                         scalar_values: Dict[ChannelID, ExpressionScalar]):
+        operator_map = {
+            '+': operator.add,
+            '-': operator.sub,
+            '/': operator.truediv,
+            '*': operator.mul
+        }
+
+        rhs_only_map = {
+            '+': operator.pos,
+            '-': operator.neg,
+            '*': lambda x: x,
+            '/': lambda x: 1 / x
+        }
+
+        if self._pulse_template is self.lhs:
+            lhs, rhs = pt_values, scalar_values
         else:
-            scalar = {channel: value.sympified_expression
-                      for channel, value in self._scalar.items()}
+            lhs, rhs = scalar_values, pt_values
+            # cannot divide by pulse templates
+            operator_map.pop('/')
+            rhs_only_map.pop('/')
 
-        if self._arithmetic_operator == '+':
-            for channel, value in scalar.items():
-                integral[channel] = integral[channel] + (value * self.duration.sympified_expression)
+        operator_both = operator_map.get(self._arithmetic_operator, None)
+        rhs_only = rhs_only_map.get(self._arithmetic_operator, None)
 
-        elif self._arithmetic_operator == '*':
-            for channel, value in scalar.items():
-                integral[channel] = integral[channel] * value
+        return _apply_operation_to_channel_dict(lhs, rhs, operator_both=operator_both, rhs_only=rhs_only)
 
-        elif self._arithmetic_operator == '/':
-            assert self._pulse_template is self.lhs
-            for channel, value in scalar.items():
-                integral[channel] = integral[channel] / value
+    @property
+    def initial_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        return self._apply_operation_to_channel_dict(
+            self._pulse_template.initial_values,
+            self._scalar_as_dict()
+        )
 
-        else:
-            assert self._arithmetic_operator == '-'
-            if self._pulse_template is self.rhs:
-                # we need to negate all existing values
-                for channel, inner_value in integral.items():
-                    if channel in scalar:
-                        integral[channel] = scalar[channel] * self.duration.sympified_expression - inner_value
-                    else:
-                        integral[channel] = -inner_value
-
-            else:
-                for channel, value in scalar.items():
-                    integral[channel] = integral[channel] - value * self.duration.sympified_expression
-
-        for channel, value in integral.items():
-            integral[channel] = ExpressionScalar(value)
-        return integral
+    @property
+    def final_values(self) -> Dict[ChannelID, ExpressionScalar]:
+        return self._apply_operation_to_channel_dict(
+            self._pulse_template.final_values,
+            self._scalar_as_dict()
+        )
 
     @property
     def measurement_names(self) -> Set[str]:
@@ -434,9 +511,11 @@ class ArithmeticPulseTemplate(PulseTemplate):
     @cached_property
     def _scalar_operand_parameters(self) -> FrozenSet[str]:
         if isinstance(self._scalar, dict):
-            return frozenset(*(value.variables for value in self._scalar.values()))
+            return frozenset(variable
+                             for value in self._scalar.values()
+                             for variable in value.variables) - {'t'}
         else:
-            return frozenset(self._scalar.variables)
+            return frozenset(self._scalar.variables) - {'t'}
 
     @property
     def parameter_names(self) -> Set[str]:
@@ -453,6 +532,9 @@ class ArithmeticPulseTemplate(PulseTemplate):
             measurements.extend(self.rhs.get_measurement_windows(parameters=parameters,
                                                                  measurement_mapping=measurement_mapping))
         return measurements
+
+    def _is_atomic(self):
+        return self._pulse_template._is_atomic()
 
 
 def try_operation(lhs: Union[PulseTemplate, ExpressionLike, Mapping[ChannelID, ExpressionLike]],
@@ -484,6 +566,13 @@ def try_operation(lhs: Union[PulseTemplate, ExpressionLike, Mapping[ChannelID, E
     except ValueError:
         # invalid operand
         return NotImplemented
+
+
+def _is_time_dependent(scalar: Union[ExpressionScalar, Dict[str, ExpressionScalar]]) -> bool:
+    if isinstance(scalar, dict):
+        return any('t' in value.variables for value in scalar.values())
+    else:
+        return 't' in scalar.variables
 
 
 class UnequalDurationWarningInArithmeticPT(RuntimeWarning):

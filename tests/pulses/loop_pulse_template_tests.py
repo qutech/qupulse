@@ -6,8 +6,8 @@ from qupulse.utils.types import FrozenDict
 
 from qupulse.expressions import Expression, ExpressionScalar
 from qupulse.pulses.loop_pulse_template import ForLoopPulseTemplate, ParametrizedRange,\
-    LoopIndexNotUsedException, LoopPulseTemplate, _get_for_loop_scope, _ForLoopScope
-from qupulse.pulses.parameters import ConstantParameter, InvalidParameterNameException, ParameterConstraintViolation,\
+    LoopIndexNotUsedException, LoopPulseTemplate, _ForLoopScope, _ForLoopScope
+from qupulse.pulses.parameters import InvalidParameterNameException, ParameterConstraintViolation,\
     ParameterNotProvidedException, ParameterConstraint
 
 from qupulse._program._loop import Loop
@@ -100,7 +100,7 @@ class ForLoopPulseTemplateTest(unittest.TestCase):
         with self.assertRaises(InvalidParameterNameException):
             ForLoopPulseTemplate(body=dt, loop_index='1i', loop_range=6)
 
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             ForLoopPulseTemplate(body=dt, loop_index='i', loop_range=slice(None))
 
         with self.assertRaises(LoopIndexNotUsedException):
@@ -176,6 +176,19 @@ class ForLoopPulseTemplateTest(unittest.TestCase):
         expected = {'A': ExpressionScalar('Sum(t1-3.1*(1+2*i), (i, 0, 3))'),
                     'B': ExpressionScalar('Sum((1+2*i), (i, 0, 3))') }
         self.assertEqual(expected, pulse.integral)
+
+    def test_initial_values(self):
+        dpt = DummyPulseTemplate(initial_values={'A': 'a + 3 + i', 'B': 7}, parameter_names={'i', 'a'})
+        fpt = ForLoopPulseTemplate(dpt, 'i', (1, 'n', 2))
+        self.assertEqual({'A': 'a+4', 'B': 7}, fpt.initial_values)
+
+    def test_final_values(self):
+        dpt = DummyPulseTemplate(final_values={'A': 'a + 3 + i', 'B': 7}, parameter_names={'i', 'a'})
+        fpt = ForLoopPulseTemplate(dpt, 'i', 'n')
+        self.assertEqual({'A': 'a+3+Max(0, floor(n) - 1)', 'B': 7}, fpt.final_values)
+
+        fpt_fin = ForLoopPulseTemplate(dpt, 'i', (1, 'n', 2)).final_values
+        self.assertEqual('a + 10', fpt_fin['A'].evaluate_symbolic({'n': 8}))
 
 
 class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
@@ -363,7 +376,7 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
                                               to_single_waveform=to_single_waveform,
                                               parent_loop=program)
         expected_create_program_calls = [mock.call(**expected_create_program_kwargs,
-                                                   scope=_get_for_loop_scope(scope, 'i', i))
+                                                   scope=_ForLoopScope(scope, 'i', i))
                                          for i in (1, 3)]
 
         with mock.patch.object(flt, 'validate_scope') as validate_scope:
@@ -435,7 +448,7 @@ class ForLoopPulseTemplateSerializationTests(SerializableTests, unittest.TestCas
         self.assertIsInstance(rhs, ForLoopPulseTemplate)
         self.assertEqual(lhs.body, rhs.body)
         self.assertEqual(lhs.loop_index, rhs.loop_index)
-        self.assertEqual(lhs.loop_range.to_tuple(), rhs.loop_range.to_tuple())
+        self.assertEqual(lhs.loop_range, rhs.loop_range)
         self.assertEqual(lhs.parameter_constraints, rhs.parameter_constraints)
         self.assertEqual(lhs.measurement_declarations, rhs.measurement_declarations)
 

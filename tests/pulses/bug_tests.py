@@ -11,7 +11,7 @@ from qupulse.pulses.multi_channel_pulse_template import AtomicMultiChannelPulseT
 from qupulse.pulses.mapping_pulse_template import MappingPulseTemplate
 from qupulse.pulses.loop_pulse_template import ForLoopPulseTemplate
 
-from qupulse.pulses.plotting import plot
+from qupulse.plotting import plot
 
 from qupulse._program._loop import to_waveform
 from qupulse.utils import isclose

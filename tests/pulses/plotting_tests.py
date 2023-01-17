@@ -5,7 +5,8 @@ import importlib
 
 import numpy
 
-from qupulse.pulses.plotting import PlottingNotPossibleException, render, plot
+from qupulse.pulses import ConstantPT
+from qupulse.plotting import PlottingNotPossibleException, render, plot
 from qupulse.pulses.table_pulse_template import TablePulseTemplate
 from qupulse.pulses.sequence_pulse_template import SequencePulseTemplate
 from qupulse._program._loop import Loop
@@ -92,6 +93,12 @@ class PlotterTests(unittest.TestCase):
         pt = DummyPulseTemplate()
         with self.assertWarnsRegex(UserWarning, "empty", msg="plot() did not issue a warning for an empty pulse"):
             plot(pt, dict(), show=False)
+
+    def test_plot_pulse_automatic_sample_rate(self) -> None:
+        import matplotlib
+        matplotlib.use('svg') # use non-interactive backend so that test does not fail on travis
+        pt=ConstantPT(100, {'a': 1})
+        plot(pt, sample_rate=None)
 
     def test_bug_447(self):
         """Adapted code from https://github.com/qutech/qupulse/issues/447"""
