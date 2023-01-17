@@ -215,6 +215,9 @@ class Waveform(Comparable, metaclass=ABCMeta):
         # We don't check for constness here because const waveforms are supposed to override this method
         return ReversedWaveform(self)
 
+    def get_slice(self, start: TimeType, duration: TimeType) -> 'Waveform':
+        return SlicedWaveform(self, start, duration)
+
 
 class TableWaveformEntry(NamedTuple('TableWaveformEntry', [('t', Real),
                                                            ('v', float),
@@ -1231,3 +1234,42 @@ class ReversedWaveform(Waveform):
 
     def reversed(self) -> 'Waveform':
         return self._inner
+
+
+class SlicedWaveform(Waveform):
+    __slots__ = ('_inner', '_start')
+
+    def __init__(self, inner: Waveform, start: TimeType, duration: TimeType):
+        Waveform.__init__(self, duration)
+        self._inner = inner
+        self._start = start
+
+        if start < 0 or duration < 0:
+            raise ValueError()
+
+        if start + duration > inner.duration:
+            raise ValueError(f"start: {start}, duration: {duration} is not a slice of "
+                             f"start: 0, duration: {inner.duration}", inner, start, duration)
+
+    def unsafe_sample(self, channel: ChannelID, sample_times: np.ndarray,
+                      output_array: Union[np.ndarray, None] = None) -> np.ndarray:
+        if self._start > 0:
+            inner_sample_times = sample_times + float(self._start)
+        else:
+            inner_sample_times = sample_times
+
+        return self._inner.unsafe_sample(channel, inner_sample_times, output_array=output_array)
+
+    @property
+    def defined_channels(self) -> AbstractSet[ChannelID]:
+        return self._inner.defined_channels
+
+    def unsafe_get_subset_for_channels(self, channels: AbstractSet[ChannelID]) -> 'Waveform':
+        return SlicedWaveform(self._inner.unsafe_get_subset_for_channels(channels), self._start, self._duration)
+
+    @property
+    def compare_key(self) -> Hashable:
+        return self._start, self._duration, self._inner
+
+    def get_slice(self, start: TimeType, duration: TimeType) -> 'Waveform':
+        return SlicedWaveform(self._inner, start + self._start, duration)
