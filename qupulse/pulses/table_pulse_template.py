@@ -259,6 +259,9 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
 
         duration = max(instantiated[-1].t for instantiated in instantiated_entries.values())
 
+        if duration == 0:
+            return {}
+
         # ensure that all channels have equal duration
         for channel, instantiated in instantiated_entries.items():
             final_entry = instantiated[-1]
@@ -324,9 +327,7 @@ class TablePulseTemplate(AtomicPulseTemplate, ParameterConstrainer):
         waveforms = [TableWaveform.from_table(*ch_instantiated)
                      for ch_instantiated in instantiated]
 
-        mc_waveform = MultiChannelWaveform.from_parallel(waveforms)
-        if mc_waveform.duration != 0:
-            return mc_waveform
+        return MultiChannelWaveform.from_parallel(waveforms)
 
     @staticmethod
     def from_array(times: np.ndarray, voltages: np.ndarray, channels: List[ChannelID]) -> 'TablePulseTemplate':
