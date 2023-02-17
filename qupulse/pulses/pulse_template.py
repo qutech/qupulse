@@ -26,7 +26,8 @@ from qupulse._program.waveforms import Waveform, TransformingWaveform
 from qupulse.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
 from qupulse.parameter_scope import Scope, DictScope
 
-__all__ = ["PulseTemplate", "AtomicPulseTemplate", "DoubleParameterNameException", "MappingTuple"]
+__all__ = ["PulseTemplate", "AtomicPulseTemplate", "DoubleParameterNameException", "MappingTuple",
+           "UnknownVolatileParameter"]
 
 
 MappingTuple = Union[Tuple['PulseTemplate'],
