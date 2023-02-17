@@ -1,6 +1,11 @@
 """This module contains the interface / protocol descriptions."""
 
-from typing import Protocol
+try:
+    from typing import Protocol
+except ImportError:
+    # python version < 3.8
+    from typing_extensions import Protocol
+
 from typing import Mapping, Union, Sequence, Hashable, Any
 
 from numbers import Real
