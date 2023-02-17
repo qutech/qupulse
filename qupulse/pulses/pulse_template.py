@@ -116,7 +116,7 @@ class PulseTemplate(Serializable):
                        channel_mapping: Optional[Mapping[ChannelID, Optional[ChannelID]]]=None,
                        global_transformation: Optional[Transformation]=None,
                        to_single_waveform: Set[Union[str, 'PulseTemplate']]=None,
-                       volatile: Set[str] = None) -> Optional['Loop']:
+                       volatile: Union[Set[str], str] = None) -> Optional['Loop']:
         """Translates this PulseTemplate into a program Loop.
 
         The returned Loop represents the PulseTemplate with all parameter values instantiated provided as dictated by
@@ -144,6 +144,10 @@ class PulseTemplate(Serializable):
             to_single_waveform = set()
         if volatile is None:
             volatile = set()
+        elif isinstance(volatile, str):
+            volatile = {volatile}
+        else:
+            volatile = set(volatile)
 
         # make sure all channels are mapped
         complete_channel_mapping = {channel: channel for channel in self.defined_channels}
@@ -166,6 +170,12 @@ class PulseTemplate(Serializable):
                     parameters[parameter_name] = Expression(value).evaluate_numeric()
 
             scope = DictScope(values=FrozenDict(parameters), volatile=volatile)
+
+        for volatile_name in scope.get_volatile_parameters():
+            if volatile_name not in scope:
+                warnings.warn(f"The volatile parameter {volatile_name!r} is not in the given parameters.",
+                              category=UnknownVolatileParameter,
+                              stacklevel=2)
 
         root_loop = Loop()
 
@@ -531,3 +541,6 @@ class DoubleParameterNameException(Exception):
             self.templateA, self.templateB, ', '.join(self.names)
         )
 
+
+class UnknownVolatileParameter(RuntimeWarning):
+    pass
