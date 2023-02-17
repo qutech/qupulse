@@ -10,7 +10,7 @@ from qupulse.utils.types import ChannelID
 from qupulse.expressions import Expression, ExpressionScalar
 from qupulse.pulses import ConstantPT, FunctionPT, RepetitionPT, ForLoopPT, ParallelChannelPT, MappingPT,\
     TimeReversalPT, AtomicMultiChannelPT
-from qupulse.pulses.pulse_template import AtomicPulseTemplate, PulseTemplate
+from qupulse.pulses.pulse_template import AtomicPulseTemplate, PulseTemplate, UnknownVolatileParameter
 from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
 from qupulse._program._loop import Loop
 
@@ -311,6 +311,38 @@ class PulseTemplateTest(unittest.TestCase):
             template.create_program(channel_mapping={'A': 'C'})
 
             _internal_create_program.assert_called_once_with(**expected_internal_kwargs, parent_loop=Loop())
+
+    def test_create_program_volatile(self):
+        template = PulseTemplateStub(defined_channels={'A', 'B'})
+
+        parameters = {'abc': 1.}
+
+        expected_internal_kwargs = dict(scope=DictScope.from_kwargs(volatile={'abc'}, **parameters),
+                                        measurement_mapping=dict(),
+                                        channel_mapping={'A': 'A', 'B': 'B'},
+                                        global_transformation=None,
+                                        to_single_waveform=set())
+
+        with mock.patch.object(template, '_internal_create_program') as _internal_create_program:
+            template.create_program(parameters=parameters, volatile='abc')
+
+            _internal_create_program.assert_called_once_with(**expected_internal_kwargs, parent_loop=Loop())
+        with mock.patch.object(template, '_internal_create_program') as _internal_create_program:
+            template.create_program(parameters=parameters, volatile={'abc'})
+
+            _internal_create_program.assert_called_once_with(**expected_internal_kwargs, parent_loop=Loop())
+
+        expected_internal_kwargs = dict(scope=DictScope.from_kwargs(volatile={'abc', 'dfg'}, **parameters),
+                                        measurement_mapping=dict(),
+                                        channel_mapping={'A': 'A', 'B': 'B'},
+                                        global_transformation=None,
+                                        to_single_waveform=set())
+        with mock.patch.object(template, '_internal_create_program') as _internal_create_program:
+            with self.assertWarns(UnknownVolatileParameter):
+                template.create_program(parameters=parameters, volatile={'abc', 'dfg'})
+
+        _internal_create_program.assert_called_once_with(**expected_internal_kwargs, parent_loop=Loop())
+
 
     def test_create_program_none(self) -> None:
         template = PulseTemplateStub(defined_channels={'A'}, parameter_names={'foo'})
