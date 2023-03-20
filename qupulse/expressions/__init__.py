@@ -1,10 +1,15 @@
+"""This subpackage contains qupulse's expression logic. The submodule :py:`protocol` defines the :py:`typing.Protocol`
+that expression functionality providers must implement. This allows to substitute the powerful and expressive but slow
+default implementation with a faster less expressive backend.
+"""
+
 from typing import Type, TypeVar
 from numbers import Real
 
 import numpy as np
 import sympy
 
-from . import legacy, protocol
+from . import legacy, protocol, wrapper
 
 
 __all__ = ["Expression", "ExpressionVector", "ExpressionScalar",
@@ -14,6 +19,11 @@ __all__ = ["Expression", "ExpressionVector", "ExpressionScalar",
 Expression: Type[protocol.Expression] = legacy.Expression
 ExpressionScalar: Type[protocol.ExpressionScalar] = legacy.ExpressionScalar
 ExpressionVector: Type[protocol.ExpressionVector] = legacy.ExpressionVector
+
+
+Expression, ExpressionScalar, ExpressionVector = wrapper.make_wrappers(legacy.Expression,
+                                                                       legacy.ExpressionScalar,
+                                                                       legacy.ExpressionVector)
 
 
 ExpressionLike = TypeVar('ExpressionLike', str, Real, sympy.Expr, ExpressionScalar)
