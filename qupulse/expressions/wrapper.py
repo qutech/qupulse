@@ -1,5 +1,6 @@
-import functools
-import inspect
+"""This module contains wrapper classes for expression protocol implementations which only implements methods of
+the protocol. It is used for finding code that relies on expression implementation details."""
+
 import math
 from typing import Sequence, Any, Mapping, Union
 from numbers import Real
