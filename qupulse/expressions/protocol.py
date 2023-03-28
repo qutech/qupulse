@@ -53,8 +53,6 @@ class Scalar(Protocol):
         pass
 
 
-
-
 class Expression(Hashable, Protocol):
     def evaluate_in_scope(self, scope: Mapping) -> Union[Real, np.ndarray]:
         """Evaluate the expression by taking the variables from the given scope (typically of type Scope but it can be

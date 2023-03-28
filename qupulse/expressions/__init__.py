@@ -1,10 +1,18 @@
 """This subpackage contains qupulse's expression logic. The submodule :py:`protocol` defines the :py:`typing.Protocol`
 that expression functionality providers must implement. This allows to substitute the powerful and expressive but slow
 default implementation with a faster less expressive backend.
+
+Currently, the
+
+The default implementation is in :py:``qupulse.expressions.sympy``.
+
+There is are wrapper classes for finding non-protocol uses of expression in :py:``qupulse.expressions.wrapper``. Define
+``QUPULSE_EXPRESSION_WRAPPER`` environment variable when running python to wrap all expression usages.
 """
 
 from typing import Type, TypeVar
 from numbers import Real
+import os
 
 import numpy as np
 import sympy as sp
@@ -21,9 +29,10 @@ ExpressionScalar: Type[protocol.ExpressionScalar] = sympy.ExpressionScalar
 ExpressionVector: Type[protocol.ExpressionVector] = sympy.ExpressionVector
 
 
-Expression, ExpressionScalar, ExpressionVector = wrapper.make_wrappers(sympy.Expression,
-                                                                       sympy.ExpressionScalar,
-                                                                       sympy.ExpressionVector)
+if os.environ.get('QUPULSE_EXPRESSION_WRAPPER', None):  # pragma: no cover
+    Expression, ExpressionScalar, ExpressionVector = wrapper.make_wrappers(sympy.Expression,
+                                                                           sympy.ExpressionScalar,
+                                                                           sympy.ExpressionVector)
 
 
 ExpressionLike = TypeVar('ExpressionLike', str, Real, sp.Expr, ExpressionScalar)

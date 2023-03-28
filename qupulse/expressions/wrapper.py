@@ -1,8 +1,9 @@
-"""This module contains wrapper classes for expression protocol implementations which only implements methods of
-the protocol. It is used for finding code that relies on expression implementation details."""
+"""This module contains the function :py:``make_wrappers`` to define wrapper classes for expression protocol implementations
+which only implements methods of the protocol.
+It is used for finding code that relies on expression implementation details."""
 
 import math
-from typing import Sequence, Any, Mapping, Union
+from typing import Sequence, Any, Mapping, Union, Tuple
 from numbers import Real
 
 import numpy as np
@@ -10,13 +11,27 @@ import numpy as np
 from qupulse.expressions import protocol, sympy
 
 
-def make_wrappers(expr, expr_scalar, expr_vector):
+def make_wrappers(expr: type, expr_scalar: type, expr_vector: type) -> Tuple[type, type, type]:
+    """Create wrappers for expression base, scalar and vector types that only expose the methods defined in the
+    corresponding expression protocol classes.
+
+    The vector is currently not implemented.
+
+    Args:
+        expr: Expression base type of the implementation
+        expr_scalar: Expression scalar type of the implementation
+        expr_vector: Expression vector type of the implementation
+
+    Returns:
+        A tuple of (base, scalar, vector) types that wrap the given types.
+    """
+
     class ExpressionWrapper(protocol.Expression):
         def __init__(self, x):
             self._wrapped: protocol.Expression = expr(x)
 
         @classmethod
-        def make(cls, expression_or_dict, numpy_evaluation=None) -> 'Expression':
+        def make(cls, expression_or_dict, numpy_evaluation=None) -> 'ExpressionWrapper':
             return cls(expression_or_dict)
 
         @property
