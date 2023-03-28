@@ -6,7 +6,7 @@ import numpy as np
 import sympy.abc
 from sympy import sympify, Eq
 
-from qupulse.expressions.legacy import Expression, ExpressionScalar, ExpressionVector
+from qupulse.expressions.sympy import Expression, ExpressionScalar, ExpressionVector
 from qupulse.expressions import ExpressionVariableMissingException, NonNumericEvaluation
 from qupulse.utils.types import TimeType
 

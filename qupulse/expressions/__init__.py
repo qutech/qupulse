@@ -7,26 +7,26 @@ from typing import Type, TypeVar
 from numbers import Real
 
 import numpy as np
-import sympy
+import sympy as sp
 
-from . import legacy, protocol, wrapper
+from . import sympy, protocol, wrapper
 
 
 __all__ = ["Expression", "ExpressionVector", "ExpressionScalar",
            "NonNumericEvaluation", "ExpressionVariableMissingException"]
 
 
-Expression: Type[protocol.Expression] = legacy.Expression
-ExpressionScalar: Type[protocol.ExpressionScalar] = legacy.ExpressionScalar
-ExpressionVector: Type[protocol.ExpressionVector] = legacy.ExpressionVector
+Expression: Type[protocol.Expression] = sympy.Expression
+ExpressionScalar: Type[protocol.ExpressionScalar] = sympy.ExpressionScalar
+ExpressionVector: Type[protocol.ExpressionVector] = sympy.ExpressionVector
 
 
-Expression, ExpressionScalar, ExpressionVector = wrapper.make_wrappers(legacy.Expression,
-                                                                       legacy.ExpressionScalar,
-                                                                       legacy.ExpressionVector)
+Expression, ExpressionScalar, ExpressionVector = wrapper.make_wrappers(sympy.Expression,
+                                                                       sympy.ExpressionScalar,
+                                                                       sympy.ExpressionVector)
 
 
-ExpressionLike = TypeVar('ExpressionLike', str, Real, sympy.Expr, ExpressionScalar)
+ExpressionLike = TypeVar('ExpressionLike', str, Real, sp.Expr, ExpressionScalar)
 
 
 class ExpressionVariableMissingException(Exception):

@@ -6,7 +6,7 @@ from numbers import Real
 
 import numpy as np
 
-from qupulse.expressions import protocol, legacy
+from qupulse.expressions import protocol, sympy
 
 
 def make_wrappers(expr, expr_scalar, expr_vector):
