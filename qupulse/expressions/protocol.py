@@ -1,13 +1,7 @@
-"""This module contains the interface / protocol descriptions."""
+"""This module contains the interface / protocol descriptions of ``Expression``, ``ExpressionScalar`` and
+``ExpressionVector``."""
 
-try:
-    from typing import Protocol
-except ImportError:
-    # python version < 3.8
-    from typing_extensions import Protocol
-
-from typing import Mapping, Union, Sequence, Hashable, Any
-
+from typing import Mapping, Union, Sequence, Hashable, Any, Protocol
 from numbers import Real
 
 import numpy as np
