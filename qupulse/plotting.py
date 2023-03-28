@@ -16,6 +16,13 @@ import operator
 import itertools
 import functools
 
+try:
+    from matplotlib import colormaps
+    get_cmap = colormaps.get_cmap
+except (ImportError, AttributeError):  # pragma: no cover
+    # was deprecated in matplotlib 3.7, but we keep it around to allow this code to work with older versions
+    get_cmap = plt.get_cmap
+
 from qupulse._program import waveforms
 from qupulse.utils.types import ChannelID, MeasurementWindow, has_type_interface
 from qupulse.pulses.pulse_template import PulseTemplate
@@ -222,7 +229,7 @@ def plot(pulse: PulseTemplate,
             if name in plot_measurements:
                 measurement_dict.setdefault(name, []).append((begin, begin+length))
 
-        color_map = plt.cm.get_cmap('plasma')
+        color_map = get_cmap('plasma')
         meas_colors = {name: color_map(i/len(measurement_dict))
                        for i, name in enumerate(measurement_dict.keys())}
         for name, begin_end_list in measurement_dict.items():
