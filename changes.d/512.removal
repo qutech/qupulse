@@ -1,1 +1,0 @@
-Remove the ``Parameter``, ``MappedParameter`` and ``ConstantParameter`` classes that where deprecated in version 0.5.

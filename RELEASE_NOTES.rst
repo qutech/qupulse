@@ -2,6 +2,28 @@
 
 .. towncrier release notes start
 
+qupulse 0.8 (2023-03-28)
+========================
+
+Features
+--------
+
+- New two dimensional plotting function ``qupulse.pulses.plotting.plot_2d``. (`#703 <https://github.com/qutech/qupulse/issues/703>`_)
+- Add support for time dependent expressions for arithmetics with atomic pulse templates i.e. ``ParallelChannelPT`` and
+  ``ArithmeticPT`` support time dependent expressions if used with atomic pulse templates.
+  Rename ``ParallelConstantChannelPT`` to ``ParallelChannelPT`` to reflect this change. (`#709 <https://github.com/qutech/qupulse/issues/709>`_)
+- Add ``with_`` family of helper methods to ``PulseTemplate`` to allow convinient and easily discoverable pulse template
+  combination. (`#710 <https://github.com/qutech/qupulse/issues/710>`_)
+- The plotting module is now located at `qupulse.plotting`. There is a legacy alias at `qupulse.pulses.plotting`. (`#735 <https://github.com/qutech/qupulse/issues/735>`_)
+
+
+Deprecations and Removals
+-------------------------
+
+- Remove the ``Parameter``, ``MappedParameter`` and ``ConstantParameter`` classes that where deprecated in version 0.5. (`#512 <https://github.com/qutech/qupulse/issues/512>`_)
+- Drop support for python version 3.7. (`#760 <https://github.com/qutech/qupulse/issues/760>`_)
+
+
 qupulse 0.7 (2022-10-05)
 ========================
 
