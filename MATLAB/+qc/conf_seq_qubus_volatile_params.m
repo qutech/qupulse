@@ -342,13 +342,7 @@ for l = 1:length(a.disp_ops)
         % added new condition "numel(opInd) == 1" to check for several
         % inchans, later they should get a proper title (marcel)
         if numel(opInd) == 1 && opInd <= numel(a.operations)
-            if strcmp(a.operations{opInd}{1}, 'ChunkedAverage')
-                % the last element is the chuncksize exceeding unicode
-                % space resulting in meaningless Chinese character.
-                scan.disp(end).title = prepare_title(sprintf(['%s: '], a.operations{opInd}{1:end-1}));
-            else
-                scan.disp(end).title = prepare_title(sprintf(['%s: '], a.operations{opInd}{:}));
-            end
+            scan.disp(end).title = prepare_title(sprintf(['%s: '], a.operations{opInd}{:}));
         elseif numel(opInd) == 1 && length(a.procfn_ops{opInd - nOperations}) > 4
             scan.disp(end).title = prepare_title(sprintf(['%s: '], a.procfn_ops{opInd - nOperations}{5}));
         else
@@ -375,6 +369,4 @@ str = strrep(str, 'Downsample', 'DS');
 str = strrep(str, 'Qubit', 'Q');
 str = strrep(str, 'Aux 1 Aux 2 Meas 1 Mask 1', 'SET Left');
 str = strrep(str, 'Aux 1 Aux 2 Meas 1 Mask 2', 'SET Right');
-str = strrep(str, 'Aux 1 Meas 1 Mask 1', 'SET Left - loading');
-str = strrep(str, 'Aux 1 Meas 2 Mask 1', 'SET Left - reading');
 end
