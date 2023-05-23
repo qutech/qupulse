@@ -253,7 +253,7 @@ class ParallelConstantChannelPulseTemplate(PulseTemplate):
 
     @property
     def defined_channels(self) -> Set[ChannelID]:
-        return set.union(self._template.defined_channels, self._overwritten_channels.keys())
+        return set.union(set(self._template.defined_channels), set(self._overwritten_channels.keys()))
 
     @property
     def measurement_names(self) -> Set[str]:
