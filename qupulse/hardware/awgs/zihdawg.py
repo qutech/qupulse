@@ -975,13 +975,15 @@ class ELFManager:
 
     def _update_upload_job_status(self):
         elf_upload = self.awg_module.elf_upload
+        elf_file = self.awg_module.elf_file
+        old_status = None
+
         if self._upload_job is None:
             assert not elf_upload
-            return
-
-        elf_file, old_status = self._upload_job
-        assert self.awg_module.elf_file == elf_file
-
+        else:
+            elf_file, old_status = self._upload_job
+            assert self.awg_module.elf_file == elf_file
+        
         if isinstance(old_status, float) or old_status is None:
             status_int, progress = self.awg_module.elf_status
             if status_int == 2:
