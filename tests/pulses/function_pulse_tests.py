@@ -10,7 +10,6 @@ from qupulse.pulses.parameters import ParameterConstraintViolation, ParameterCon
 from qupulse._program.waveforms import FunctionWaveform
 
 from tests.serialization_dummies import DummySerializer, DummyStorageBackend
-from tests.pulses.sequencing_dummies import DummyParameter
 from tests.pulses.measurement_tests import MeasurementDefinerTest, ParameterConstrainerTest
 from tests.serialization_tests import SerializableTests
 
@@ -46,8 +45,6 @@ class FunctionPulseTest(unittest.TestCase):
         self.fpt = FunctionPulseTemplate(self.s, self.s2, channel='A',
                                          measurements=self.meas_list,
                                          parameter_constraints=self.constraints)
-
-        self.pars = dict(a=DummyParameter(1), b=DummyParameter(2), c=DummyParameter(136.78))
 
 
 class FunctionPulsePropertyTest(FunctionPulseTest):

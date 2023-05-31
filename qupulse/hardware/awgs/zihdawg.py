@@ -1,3 +1,4 @@
+import numbers
 from pathlib import Path
 import functools
 from typing import Tuple, Set, Callable, Optional, Mapping, Generator, Union, Sequence, Dict
@@ -32,7 +33,6 @@ from qupulse.utils.types import ChannelID, TimeType, time_from_float
 from qupulse._program._loop import Loop, make_compatible
 from qupulse._program.seqc import HDAWGProgramManager, UserRegister, WaveformFileSystem
 from qupulse.hardware.awgs.base import AWG, ChannelNotFoundException, AWGAmplitudeOffsetHandling
-from qupulse.pulses.parameters import ConstantParameter
 from qupulse.hardware.util import traced
 
 
@@ -514,7 +514,7 @@ class HDAWGChannelGroup(AWG):
         playback_finished_mask = int(HDAWGProgramManager.Constants.PLAYBACK_FINISHED_MASK, 2)
         return bool(self.user_register(HDAWGProgramManager.Constants.PROG_SEL_REGISTER) & playback_finished_mask)
 
-    def set_volatile_parameters(self, program_name: str, parameters: Mapping[str, ConstantParameter]):
+    def set_volatile_parameters(self, program_name: str, parameters: Mapping[str, numbers.Real]):
         """Set the values of parameters which were marked as volatile on program creation."""
         new_register_values = self._program_manager.get_register_values_to_update_volatile_parameters(program_name,
                                                                                                       parameters)

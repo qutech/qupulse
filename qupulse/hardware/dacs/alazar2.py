@@ -1,3 +1,4 @@
+import dataclasses
 from typing import Union, Iterable, Dict, Tuple, Mapping, Optional
 from types import MappingProxyType
 import logging
@@ -29,6 +30,13 @@ class AlazarCard(DAC):
         # for debugging purposes
         self._raw_data_mask = None
         self.default_buffer_strategy: Optional[BufferStrategySettings] = None
+
+        # sadly this is required to associate masks with their corresponding channels
+        # the better place for this would be in the MeasurementMask class but we do not want to touch it
+        # to avoid breaking experiments
+        # TODO: possible improvement is wildcard/regex support but this is complicated to maintain
+        #  (competing matches etc)
+        self._mask_name_to_hw_channel = {}
 
     @property
     def atsaverage_card(self):
@@ -74,6 +82,13 @@ class AlazarCard(DAC):
         sample_rate_in_hz = int(sample_rate_in_ghz * 10 ** 9)
 
         masks = program.masks(make_best_mask)
+        for mask in masks:
+            try:
+                mask.channel = self._mask_name_to_hw_channel[mask.identifier]
+            except KeyError as err:
+                raise KeyError(f"There was no hardware channel registered for the mask {mask!r}",
+                               mask.identifier) from err
+
         if sample_rate_in_ghz != program.sample_rate:
             raise RuntimeError("Masks were registered with a different sample rate")
         return create_scanline_definition(masks, program.operations,
@@ -130,3 +145,14 @@ class AlazarCard(DAC):
             input_range = get_input_range(op_name)
             data[op_name] = scanline_data.operationResults[op_name].getAsVoltage(input_range)
         return data
+
+    def register_mask_for_channel(self, mask_id: str, hw_channel: int) -> None:
+        """
+
+        Args:
+            mask_id: Identifier of the measurement windows
+            hw_channel: Associated hardware channel (0, 1, 2, 3)
+        """
+        if hw_channel not in range(4):
+            raise ValueError('{} is not a valid hw channel'.format(hw_channel))
+        self._mask_name_to_hw_channel[mask_id] = hw_channel

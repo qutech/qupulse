@@ -19,7 +19,7 @@ with parameter constraints and returns an object of type
 :class:`.Loop` which represents a pulse as nested loops of atomic waveforms. This is another object tree structure
 but all parameters (including repetition counts) have been substituted by the corresponding numeric values passed into
 ``create_program``. The :class:`.Loop` object acts as your reference to the instantiated pulse.
-See :ref:`/examples/06CreatePrograms.ipynb` for an example on usage of :meth:`.PulseTemplate.create_program`.
+See :ref:`/examples/02CreatePrograms.ipynb` for an example on usage of :meth:`.PulseTemplate.create_program`.
 
 The second step of the instantiation is performed by the hardware backend and transparent to the user. Upon registering
 the pulse with the hardware backend via :meth:`qupulse.hardware.HardwareSetup.register_program`, the backend will determine which
@@ -40,3 +40,5 @@ In contrast, the Zurich Instruments HDAWG allows arbitrary nesting levels and is
 
 However, as already mentioned, the user does not have to be concerned about this in regular use of qupulse, since this
 is dealt with transparently in the hardware backend.
+
+The section :ref:`program` touches the ideas behind the current program implementation i.e. :class:`.Loop`.

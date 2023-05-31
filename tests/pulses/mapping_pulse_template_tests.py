@@ -6,7 +6,7 @@ from qupulse.parameter_scope import DictScope, MappedScope
 from qupulse.pulses.mapping_pulse_template import MissingMappingException,\
     UnnecessaryMappingException, MappingPulseTemplate,\
     AmbiguousMappingException, MappingCollisionException
-from qupulse.pulses.parameters import ConstantParameter, ParameterConstraintViolation, ParameterConstraint, ParameterNotProvidedException
+from qupulse.pulses.parameters import ParameterConstraintViolation, ParameterConstraint, ParameterNotProvidedException
 from qupulse.expressions import Expression
 from qupulse._program._loop import Loop
 
@@ -177,12 +177,6 @@ class MappingTemplateTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "type of return value"):
             st.map_parameters({})
-
-        with self.assertWarns(DeprecationWarning):
-            # remove if ConstantParameter is removed
-            parameters = dict(t=3, k=2, l=ConstantParameter(7))
-        with self.assertRaisesRegex(TypeError, "neither all Parameter nor Real"):
-            st.map_parameters(parameters)
 
     def test_partial_parameter_mapping(self):
         template = DummyPulseTemplate(parameter_names={'foo', 'bar'})

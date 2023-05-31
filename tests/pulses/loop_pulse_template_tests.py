@@ -7,7 +7,7 @@ from qupulse.utils.types import FrozenDict
 from qupulse.expressions import Expression, ExpressionScalar
 from qupulse.pulses.loop_pulse_template import ForLoopPulseTemplate, ParametrizedRange,\
     LoopIndexNotUsedException, LoopPulseTemplate, _ForLoopScope, _ForLoopScope
-from qupulse.pulses.parameters import ConstantParameter, InvalidParameterNameException, ParameterConstraintViolation,\
+from qupulse.pulses.parameters import InvalidParameterNameException, ParameterConstraintViolation,\
     ParameterNotProvidedException, ParameterConstraint
 
 from qupulse._program._loop import Loop

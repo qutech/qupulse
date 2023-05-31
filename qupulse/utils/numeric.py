@@ -7,9 +7,16 @@ from functools import partial
 import sympy
 
 
-def lcm(a: int, b: int):
-    """least common multiple"""
-    return a * b // gcd(a, b)
+try:
+    from math import lcm
+except ImportError:
+    # python version < 3.9
+    def lcm(*integers: int):
+        """Re-implementation of the least common multiple function that is in the standard library since python 3.9"""
+        result = 1
+        for value in integers:
+            result = result * value // gcd(value, result)
+        return result
 
 
 def smallest_factor_ge(n: int, min_factor: int, brute_force: int = 5):

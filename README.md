@@ -11,10 +11,8 @@ It provides a high-level hardware-independent representation of pulses as well a
 Pulses can be assembled from previously defined subpulses, allowing easy construction of high-level from low-level pulses and re-use of previous work.
 Additionally, all pulses are parameterizable allowing users to fine-tune and adapt pulse templates to specific hardware or functionality without redefining an entire pulse sequence. To ensure meaningful parameter values, constraints can be put on parameters on a per-pulse basis.  
 
-## Status
-Note that the project is still in development and thus not feature-complete.
-
-The qupulse library is already used productively by the Quantum Technology Group at the 2nd Institute of Physics at the RWTH Aachen University. As such, some features - such as pulse definition - are mostly complete and tested and interfaces are expected to remain largely stable (or changes to be backward compatible).
+## Status and stability
+The qupulse library is used productively by the Quantum Technology Group at the 2nd Institute of Physics at the RWTH Aachen University. As such, some features - such as pulse definition - are mostly complete and tested and interfaces are expected to remain largely stable (or changes to be backward compatible). A key goal is that experiments should be repeatable with new versions of qupulse.
 However, it is still possible for existing portions of the code base to be redesigned if this will increase the usability long-term.
  
 The current feature list is as follows:
@@ -22,42 +20,38 @@ The current feature list is as follows:
 - Definition of complex (arbitrarily deep nested and looped pulses) parameterized pulses in Python (including measurement windows)
 - Mathematical expression evaluation (based on sympy) for parameter values and parameter constraints
 - Serialization of pulses (to allow storing into permanent storage)
-- Hardware model representation (prototype, work in progress)
+- Hardware model representation
 - High-level pulse to hardware configuration and waveform translation routines 
 - Hardware drivers for Tabor Electronics, Tektronix and Zurich Instruments AWGs and AlazarTech Digitizers
 - MATLAB interface to access qupulse functionality
  
-Pending changes are tracked in the `changes.d` subdirectory and published in [`RELEASE_NOTES.rst`](RELEASE_NOTES.rst) on
-release using the tool `towncrier`.
+Pending changes are tracked in the `changes.d` subdirectory and published in [`RELEASE_NOTES.rst`](RELEASE_NOTES.rst) on release using the tool `towncrier`.
 
 ## Installation
 qupulse is available on [PyPi](https://pypi.org/project/qupulse/) and the latest release can be installed by executing:
+```sh
+python -m pip install qupulse[default]
 ```
-pip3 install qupulse
-```
-qupulse version numbers follow the [Semantic Versioning](https://semver.org/) conventions.
+which will install all required and optional dependencies except for hardware support. qupulse version numbers follow the [Semantic Versioning](https://semver.org/) conventions.
 
-Alternatively, the current development version of qupulse can be installed by executing in the cloned repository root folder: 
+Alternatively, the current development version of qupulse can be installed by executing
+```sh
+python -m pip install -e git+https://github.com/qutech/qupulse.git#egg=qupulse[default]
 ```
-pip3 install .
-```
+which will clone the github repository to `./src/qupulse` and do an editable/development install. 
 
-qupulse is developed using Python 3.6 and tested on 3.5 - 3.7 It relies on some external Python packages as dependencies; 
-`requirements.txt` lists the versions of these qupulse is developed against. 
-We intentionally did not restrict versions of dependencies in the install scripts to not unnecessarily prevent usage of
-newer releases of dependencies that might be compatible. However, if qupulse does encounter problems with a particular dependency version,
-try installing the version listed in `requirements.txt`.   
+### Requirements and dependencies
+qupulse requires at least Python 3.8 and is tested on 3.8, 3.9 and 3.10. It relies on some external Python packages as dependencies. 
+We intentionally did not restrict versions of dependencies in the install scripts to not unnecessarily prevent usage of newer releases of dependencies that might be compatible. However, if qupulse does encounter problems with a particular dependency version please file an issue. 
 
 The backend for TaborAWGs requires packages that can be found [here](https://git.rwth-aachen.de/qutech/python-TaborDriver). As a shortcut you can install it from the python interpreter via `qupulse.hardware.awgs.install_requirements('tabor')`.
 
 The data acquisition backend for AlazarTech cards needs a package that unfortunately is not open source (yet). If you need it or have questions contact <simon.humpohl@rwth-aachen.de>.
 
-The optional script *tests/utils/syntax_check.py* invokes pyflakes to perform a static code analysis, so pyflakes should be installed if its usage is intended.
-
 ## Documentation
 You can find documentation on how to use this library on [readthedocs](https://qupulse.readthedocs.io/en/latest/) and [IPython notebooks with examples in this repo](doc/source/examples). You can build it locally with `python setup.py build_sphinx`.
 
-## Folder Structure
+### Folder Structure
 The repository primarily consists of the folders `qupulse` (toolkit core code) and `tests` (toolkit core tests). Additional parts of the project reside in `MATLAB` (MATLAB interface) and `doc` (configuration and source files to build documentation)  
 
 `qupulse` contains the entire Python source code of the project and is further partitioned the following packages of related modules 

@@ -7,11 +7,11 @@ from qupulse.utils.types import FrozenDict
 
 from qupulse._program._loop import Loop
 from qupulse.expressions import Expression, ExpressionScalar
+from qupulse.pulses import ConstantPT
 from qupulse.pulses.repetition_pulse_template import RepetitionPulseTemplate,ParameterNotIntegerException
-from qupulse.pulses.parameters import ParameterNotProvidedException, ParameterConstraintViolation, ConstantParameter, \
-    ParameterConstraint
+from qupulse.pulses.parameters import ParameterNotProvidedException, ParameterConstraintViolation, ParameterConstraint
 
-from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummyParameter, DummyWaveform, MeasurementWindowTestCase
+from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummyWaveform, MeasurementWindowTestCase
 from tests.serialization_dummies import DummySerializer
 from tests.serialization_tests import SerializableTests
 from tests._program.transformation_tests import TransformationStub
@@ -48,10 +48,9 @@ class RepetitionPulseTemplateTest(unittest.TestCase):
         self.assertEqual(body.parameter_names, t.parameter_names)
 
     def test_parameter_names(self) -> None:
-        body = DummyPulseTemplate(parameter_names={'foo', 'bar'})
-        t = RepetitionPulseTemplate(body, 5, parameter_constraints={'foo > hugo'}, measurements=[('meas', 'd', 0)])
-
-        self.assertEqual({'foo', 'bar', 'hugo', 'd'}, t.parameter_names)
+        for body in [DummyPulseTemplate(parameter_names={'foo', 'bar'}), ConstantPT(1.4, {'A': 'foo', 'B': 'bar'})]:
+            t = RepetitionPulseTemplate(body, 5, parameter_constraints={'foo > hugo'}, measurements=[('meas', 'd', 0)])
+            self.assertEqual({'foo', 'bar', 'hugo', 'd'}, t.parameter_names)
 
     def test_str(self) -> None:
         body = DummyPulseTemplate()

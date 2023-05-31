@@ -232,8 +232,12 @@ class Loop(Node):
                           measurements=None if self._measurements is None else list(self._measurements),
                           children=(child.copy_tree_structure() for child in self))
 
-    def _get_measurement_windows(self) -> Mapping[str, np.ndarray]:
+    def _get_measurement_windows(self, drop: bool) -> Mapping[str, np.ndarray]:
         """Private implementation of get_measurement_windows with a slightly different data format for easier tiling.
+
+        Args:
+            drop: Drops the measurements from the Loop i.e. the Loop will no longer have measurements attached after
+            collecting them
 
         Returns:
              A dictionary (measurement_name -> array) with begin == array[:, 0] and length == array[:, 1]
@@ -246,46 +250,43 @@ class Loop(Node):
             for mw_name, begin_length_list in temp_meas_windows.items():
                 temp_meas_windows[mw_name] = [np.asarray(begin_length_list, dtype=float)]
 
+            if drop:
+                self._measurements = None
+
         # calculate duration together with meas windows in the same iteration
         if self.is_leaf():
             body_duration = float(self.body_duration)
         else:
             offset = TimeType(0)
             for child in self:
-                for mw_name, begins_length_array in child._get_measurement_windows().items():
+                for mw_name, begins_length_array in child._get_measurement_windows(drop).items():
                     begins_length_array[:, 0] += float(offset)
                     temp_meas_windows[mw_name].append(begins_length_array)
                 offset += child.duration
 
             body_duration = float(offset)
 
-        # this gives us regular dict behaviour of the returned object
-        temp_meas_windows.default_factory = None
+        # formatting like this for easier debugging
+        result = {}
 
         # repeat and add repetition based offset
         for mw_name, begin_length_list in temp_meas_windows.items():
-            temp_begin_length_array = np.concatenate(begin_length_list)
+            result[mw_name] = _repeat_loop_measurements(begin_length_list, self.repetition_count, body_duration)
 
-            begin_length_array = np.tile(temp_begin_length_array, (self.repetition_count, 1))
+        return result
 
-            shaped_begin_length_array = np.reshape(begin_length_array, (self.repetition_count, -1, 2))
-
-            shaped_begin_length_array[:, :, 0] += (np.arange(self.repetition_count) * body_duration)[:, np.newaxis]
-
-            temp_meas_windows[mw_name] = begin_length_array
-
-        # the cast is here because static type analysis struggles to detect that we replace _all_ values by ndarray in
-        # the previous loop
-        return cast(Mapping[str, np.ndarray], temp_meas_windows)
-
-    def get_measurement_windows(self) -> Dict[str, Tuple[np.ndarray, np.ndarray]]:
+    def get_measurement_windows(self, drop=False) -> Dict[str, Tuple[np.ndarray, np.ndarray]]:
         """Iterates over all children and collect the begin and length arrays of each measurement window.
+
+        Args:
+            drop: Drops the measurements from the Loop i.e. the Loop will no longer have measurements attached after
+            collecting them.
 
         Returns:
             A dictionary (measurement_name -> (begin, length)) with begin and length being :class:`numpy.ndarray`
         """
         return {mw_name: (begin_length_list[:, 0], begin_length_list[:, 1])
-                for mw_name, begin_length_list in self._get_measurement_windows().items()}
+                for mw_name, begin_length_list in self._get_measurement_windows(drop=drop).items()}
 
     def split_one_child(self, child_index=None) -> None:
         """Take the last child that has a repetition count larger one, decrease it's repetition count and insert a copy
@@ -598,7 +599,8 @@ def make_compatible(program: Loop, minimal_waveform_length: int, waveform_quantu
 
 def roll_constant_waveforms(program: Loop, minimal_waveform_quanta: int, waveform_quantum: int, sample_rate: TimeType):
     """This function finds waveforms in program that can be replaced with repetitions of shorter waveforms and replaces
-    them. Complexity O(N_waveforms)
+    them. Complexity O(N_waveforms). Drops measurements because they are not correctly handled here for performance
+    reasons.
 
     This is possible if:
      - The waveform is constant on all channels
@@ -609,7 +611,15 @@ def roll_constant_waveforms(program: Loop, minimal_waveform_quanta: int, wavefor
         minimal_waveform_quanta:
         waveform_quantum:
         sample_rate:
+
+    Warnings:
+        DroppedMeasurementWarning: This warning is raised if a measurement is dropped.
     """
+    if program._measurements:
+        warnings.warn("Dropping measurements. Remove measurements before calling roll_constant_waveforms by calling"
+                      " get_measurement_windows(drop=True).", category=DroppedMeasurementWarning)
+        program._measurements = None
+
     waveform = program.waveform
 
     if waveform is None:
@@ -646,6 +656,21 @@ def roll_constant_waveforms(program: Loop, minimal_waveform_quanta: int, wavefor
         # use the private properties to avoid invalidating the duration cache of the parent loop
         program._repetition_definition = program.repetition_definition * additional_repetition_count
         program._waveform = new_waveform
+
+
+def _repeat_loop_measurements(begin_length_list: List[np.ndarray],
+                              repetition_count: int,
+                              body_duration: float
+                              ) -> np.ndarray:
+    temp_begin_length_array = np.concatenate(begin_length_list)
+
+    begin_length_array = np.tile(temp_begin_length_array, (repetition_count, 1))
+
+    shaped_begin_length_array = np.reshape(begin_length_array, (repetition_count, -1, 2))
+
+    shaped_begin_length_array[:, :, 0] += (np.arange(repetition_count) * body_duration)[:, np.newaxis]
+
+    return begin_length_array
 
 
 class MakeCompatibleWarning(ResourceWarning):

@@ -1,15 +1,16 @@
 import unittest
 
-import qupulse.pulses.plotting
+import qupulse.plotting
 import qupulse._program.waveforms
 import qupulse.utils.sympy
 from qupulse.pulses import TablePT, FunctionPT, AtomicMultiChannelPT, MappingPT
 from qupulse.pulses.multi_channel_pulse_template import AtomicMultiChannelPulseTemplate
-from qupulse.pulses.plotting import plot
+from qupulse.plotting import plot
 from qupulse.pulses.sequence_pulse_template import SequencePulseTemplate
 from qupulse._program._loop import make_compatible
 from qupulse._program.waveforms import ConstantWaveform
 
+from qupulse.serialization import DictBackend, PulseStorage
 from qupulse.pulses.constant_pulse_template import ConstantPulseTemplate, ExpressionScalar, TimeType
 
 from tests.serialization_tests import SerializableTests
@@ -34,11 +35,11 @@ class TestConstantPulseTemplate(unittest.TestCase):
         p2 = ConstantPulseTemplate(0, {'P1': 1.})
         p3 = ConstantPulseTemplate(2, {'P1': 1.})
 
-        _ = qupulse.pulses.plotting.render(p1.create_program())
+        _ = qupulse.plotting.render(p1.create_program())
 
         pulse = SequencePulseTemplate(p1, p2, p3)
         prog = pulse.create_program()
-        _ = qupulse.pulses.plotting.render(prog)
+        _ = qupulse.plotting.render(prog)
 
         self.assertEqual(pulse.duration, 12)
 
@@ -164,3 +165,24 @@ class ConstantPulseTemplateSerializationTests(SerializableTests, unittest.TestCa
         self.assertEqual(lhs.measurement_declarations, rhs.measurement_declarations)
         self.assertEqual(lhs._amplitude_dict, rhs._amplitude_dict)
         self.assertEqual(lhs.duration, rhs.duration)
+
+    def test_legacy_deserialization(self):
+        serialized = """{
+            "#amplitudes": {
+                "ZI0_A_MARKER_FRONT": 1
+            },
+            "#type": "qupulse.pulses.constant_pulse_template.ConstantPulseTemplate",
+            "duration": 62848.0,
+            "name": "constant_pulse"
+        }"""
+        backend = DictBackend()
+        backend.storage['my_pt'] = serialized
+
+        ps = PulseStorage(backend)
+
+        deserialized = ps['my_pt']
+        expected = ConstantPulseTemplate(
+            amplitude_dict={"ZI0_A_MARKER_FRONT": 1},
+            duration=62848, name="constant_pulse"
+        )
+        self.assert_equal_instance(expected, deserialized)

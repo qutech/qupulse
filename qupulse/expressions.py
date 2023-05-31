@@ -126,6 +126,14 @@ class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
             return self
         return Expression.make(recursive_substitution(sympify(self.underlying_expression), substitutions))
 
+    def _evaluate_to_time_dependent(self, scope: Mapping) -> Union['Expression', Number, numpy.ndarray]:
+        try:
+            return self.evaluate_numeric(**scope, t=sympy.symbols('t'))
+        except NonNumericEvaluation as non_num:
+            return ExpressionScalar(non_num.non_numeric_result)
+        except TypeError:
+            return self.evaluate_symbolic(scope)
+
     @property
     def variables(self) -> Sequence[str]:
         """ Get all free variables in the expression.
@@ -214,6 +222,12 @@ class ExpressionVector(Expression):
             return serialized_items
         else:
             return numpy.array(serialized_items).reshape(self._expression_shape).tolist()
+
+    def __getstate__(self):
+        return self.get_serialization_data()
+
+    def __setstate__(self, state):
+        self.__init__(state)
 
     def __str__(self):
         return str(self.get_serialization_data())
@@ -411,6 +425,12 @@ class ExpressionScalar(Expression):
             return self.original_expression
         else:
             return serialized
+
+    def __getstate__(self):
+        return self.get_serialization_data()
+
+    def __setstate__(self, state):
+        self.__init__(state)
 
     def is_nan(self) -> bool:
         return sympy.sympify('nan') == self._sympified_expression

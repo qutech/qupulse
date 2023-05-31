@@ -1,4 +1,4 @@
-from typing import Any, Mapping, Set, Tuple, Sequence, AbstractSet, Union, TYPE_CHECKING
+from typing import Any, Mapping, Set, Tuple, Sequence, AbstractSet, Union, TYPE_CHECKING, Hashable
 from abc import abstractmethod
 from numbers import Real
 
@@ -6,7 +6,11 @@ import numpy as np
 
 from qupulse import ChannelID
 from qupulse.comparable import Comparable
-from qupulse.utils.types import SingletonABCMeta
+from qupulse.utils.types import SingletonABCMeta, frozendict
+from qupulse.expressions import ExpressionScalar
+
+
+_TrafoValue = Union[Real, ExpressionScalar]
 
 
 class Transformation(Comparable):
@@ -44,6 +48,9 @@ class Transformation(Comparable):
         """Signals if the transformation always maps constants to constants."""
         return False
 
+    def get_constant_output_channels(self, input_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
+        return frozenset()
+
 
 class IdentityTransformation(Transformation, metaclass=SingletonABCMeta):
     def __call__(self, time: Union[np.ndarray, float],
@@ -69,6 +76,9 @@ class IdentityTransformation(Transformation, metaclass=SingletonABCMeta):
     def is_constant_invariant(self):
         """Signals if the transformation always maps constants to constants."""
         return True
+
+    def get_constant_output_channels(self, input_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
+        return input_channels
 
 
 class ChainedTransformation(Transformation):
@@ -103,11 +113,16 @@ class ChainedTransformation(Transformation):
         return chain_transformations(*self.transformations, next_transformation)
 
     def __repr__(self):
-        return 'ChainedTransformation%r' % (self._transformations,)
+        return f'{type(self).__name__}{self._transformations!r}'
 
     def is_constant_invariant(self):
         """Signals if the transformation always maps constants to constants."""
         return all(trafo.is_constant_invariant() for trafo in self._transformations)
+
+    def get_constant_output_channels(self, input_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
+        for trafo in self._transformations:
+            input_channels = trafo.get_constant_output_channels(input_channels)
+        return input_channels
 
 
 class LinearTransformation(Transformation):
@@ -192,9 +207,12 @@ class LinearTransformation(Transformation):
         """Signals if the transformation always maps constants to constants."""
         return True
 
+    def get_constant_output_channels(self, input_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
+        return input_channels
+
 
 class OffsetTransformation(Transformation):
-    def __init__(self, offsets: Mapping[ChannelID, Real]):
+    def __init__(self, offsets: Mapping[ChannelID, _TrafoValue]):
         """Adds an offset to each channel specified in offsets.
 
         Channels not in offsets are forewarded
@@ -202,11 +220,13 @@ class OffsetTransformation(Transformation):
         Args:
             offsets: Channel -> offset mapping
         """
-        self._offsets = dict(offsets.items())
+        self._offsets = frozendict(offsets)
+        assert _are_valid_transformation_expressions(self._offsets), f"Not valid transformation expressions: {self._offsets}"
 
     def __call__(self, time: Union[np.ndarray, float],
                  data: Mapping[ChannelID, Union[np.ndarray, float]]) -> Mapping[ChannelID, Union[np.ndarray, float]]:
-        return {channel: channel_values + self._offsets[channel] if channel in self._offsets else channel_values
+        offsets = _instantiate_expression_dict(time, self._offsets)
+        return {channel: channel_values + offsets[channel] if channel in offsets else channel_values
                 for channel, channel_values in data.items()}
 
     def get_input_channels(self, output_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
@@ -216,24 +236,29 @@ class OffsetTransformation(Transformation):
         return input_channels
 
     @property
-    def compare_key(self) -> frozenset:
-        return frozenset(self._offsets.items())
+    def compare_key(self) -> Hashable:
+        return self._offsets
 
     def __repr__(self):
-        return 'OffsetTransformation(%r)' % self._offsets
+        return f'{type(self).__name__}({dict(self._offsets)!r})'
 
     def is_constant_invariant(self):
         """Signals if the transformation always maps constants to constants."""
-        return True
+        return not _has_time_dependent_values(self._offsets)
+
+    def get_constant_output_channels(self, input_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
+        return _get_constant_output_channels(self._offsets, input_channels)
 
 
 class ScalingTransformation(Transformation):
-    def __init__(self, factors: Mapping[ChannelID, Real]):
-        self._factors = dict(factors.items())
+    def __init__(self, factors: Mapping[ChannelID, _TrafoValue]):
+        self._factors = frozendict(factors)
+        assert _are_valid_transformation_expressions(self._factors), f"Not valid transformation expressions: {self._factors}"
 
     def __call__(self, time: Union[np.ndarray, float],
                  data: Mapping[ChannelID, Union[np.ndarray, float]]) -> Mapping[ChannelID, Union[np.ndarray, float]]:
-        return {channel: channel_values * self._factors[channel] if channel in self._factors else channel_values
+        factors = _instantiate_expression_dict(time, self._factors)
+        return {channel: channel_values * factors[channel] if channel in factors else channel_values
                 for channel, channel_values in data.items()}
 
     def get_input_channels(self, output_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
@@ -243,15 +268,18 @@ class ScalingTransformation(Transformation):
         return input_channels
 
     @property
-    def compare_key(self) -> frozenset:
-        return frozenset(self._factors.items())
+    def compare_key(self) -> Hashable:
+        return self._factors
 
     def __repr__(self):
-        return 'ScalingTransformation(%r)' % self._factors
+        return f'{type(self).__name__}({dict(self._factors)!r})'
 
     def is_constant_invariant(self):
         """Signals if the transformation always maps constants to constants."""
-        return True
+        return not _has_time_dependent_values(self._factors)
+
+    def get_constant_output_channels(self, input_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
+        return _get_constant_output_channels(self._factors, input_channels)
 
 
 try:
@@ -277,25 +305,30 @@ except ImportError:
     pass
 
 
-class ParallelConstantChannelTransformation(Transformation):
-    def __init__(self, channels: Mapping[ChannelID, Real]):
-        """Set channel values to given values regardless their former existence
+class ParallelChannelTransformation(Transformation):
+    def __init__(self, channels: Mapping[ChannelID, _TrafoValue]):
+        """Set channel values to given values regardless their former existence. The values can be time dependent
+        expressions.
 
         Args:
             channels: Channels present in this map are set to the given value.
         """
-        self._channels = {channel: float(value)
-                          for channel, value in channels.items()}
+        self._channels: Mapping[ChannelID, _TrafoValue] = frozendict(channels.items())
+        assert _are_valid_transformation_expressions(self._channels), f"Not valid transformation expressions: {self._channels}"
 
     def __call__(self, time: Union[np.ndarray, float],
                  data: Mapping[ChannelID, Union[np.ndarray, float]]) -> Mapping[ChannelID, Union[np.ndarray, float]]:
-        overwritten = {channel: np.full_like(time, fill_value=value, dtype=float)
-                       for channel, value in self._channels.items()}
+        overwritten = self._instantiated_values(time)
         return {**data, **overwritten}
 
+    def _instantiated_values(self, time):
+        scope = {'t': time}
+        return {channel: value.evaluate_in_scope(scope) if hasattr(value, 'evaluate_in_scope') else np.full_like(time, fill_value=value, dtype=float)
+                for channel, value in self._channels.items()}
+
     @property
-    def compare_key(self) -> Tuple[Tuple[ChannelID, float], ...]:
-        return tuple(sorted(self._channels.items()))
+    def compare_key(self) -> Hashable:
+        return self._channels
 
     def get_input_channels(self, output_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
         return output_channels - self._channels.keys()
@@ -304,11 +337,21 @@ class ParallelConstantChannelTransformation(Transformation):
         return input_channels | self._channels.keys()
 
     def __repr__(self):
-        return 'ParallelConstantChannelTransformation(%r)' % self._channels
+        return f'{type(self).__name__}({dict(self._channels)!r})'
 
     def is_constant_invariant(self):
         """Signals if the transformation always maps constants to constants."""
-        return True
+        return not _has_time_dependent_values(self._channels)
+
+    def get_constant_output_channels(self, input_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
+        output_channels = set(input_channels)
+        for ch, value in self._channels.items():
+            if hasattr(value, 'variables'):
+                output_channels.discard(ch)
+            else:
+                output_channels.add(ch)
+
+        return output_channels
 
 
 def chain_transformations(*transformations: Transformation) -> Transformation:
@@ -326,3 +369,32 @@ def chain_transformations(*transformations: Transformation) -> Transformation:
         return parsed_transformations[0]
     else:
         return ChainedTransformation(*parsed_transformations)
+
+
+def _instantiate_expression_dict(time, expressions: Mapping[str, _TrafoValue]) -> Mapping[str, Union[Real, np.ndarray]]:
+    scope = {'t': time}
+    modified_expressions = {}
+    for name, value in expressions.items():
+        if hasattr(value, 'evaluate_in_scope'):
+            modified_expressions[name] = value.evaluate_in_scope(scope)
+    if modified_expressions:
+        return {**expressions, **modified_expressions}
+    else:
+        return expressions
+
+
+def _has_time_dependent_values(expressions: Mapping[ChannelID, _TrafoValue]) -> bool:
+    return any(hasattr(value, 'variables')
+               for value in expressions.values())
+
+
+def _get_constant_output_channels(expressions: Mapping[ChannelID, _TrafoValue],
+                                  constant_input_channels: AbstractSet[ChannelID]) -> AbstractSet[ChannelID]:
+    return {ch
+            for ch in constant_input_channels
+            if not hasattr(expressions.get(ch, None), 'variables')}
+
+def _are_valid_transformation_expressions(expressions: Mapping[ChannelID, _TrafoValue]) -> bool:
+    return all(expr.variables == ('t',)
+               for expr in expressions.values()
+               if hasattr(expr, 'variables'))

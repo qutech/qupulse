@@ -1,7 +1,10 @@
 from abc import ABCMeta, abstractmethod
-from typing import Dict, Tuple, Iterable
+from typing import Dict, Tuple, Iterable, TYPE_CHECKING
 
-import numpy
+if TYPE_CHECKING:
+    import numpy
+else:
+    numpy = None
 
 __all__ = ['DAC']
 
@@ -10,8 +13,8 @@ class DAC(metaclass=ABCMeta):
     """Representation of a data acquisition card"""
 
     @abstractmethod
-    def register_measurement_windows(self, program_name: str, windows: Dict[str, Tuple[numpy.ndarray,
-                                                                                       numpy.ndarray]]) -> None:
+    def register_measurement_windows(self, program_name: str, windows: Dict[str, Tuple['numpy.ndarray',
+                                                                                       'numpy.ndarray']]) -> None:
         """Register measurement windows for a given program. Overwrites previously defined measurement windows for
         this program.
 
@@ -24,8 +27,8 @@ class DAC(metaclass=ABCMeta):
 
     @abstractmethod
     def set_measurement_mask(self, program_name: str, mask_name: str,
-                             begins: numpy.ndarray,
-                             lengths: numpy.ndarray) -> Tuple[numpy.ndarray, numpy.ndarray]:
+                             begins: 'numpy.ndarray',
+                             lengths: 'numpy.ndarray') -> Tuple['numpy.ndarray', 'numpy.ndarray']:
         """Set/overwrite a single the measurement mask for a program. Begins and lengths are in nanoseconds.
 
         Args:
@@ -60,5 +63,5 @@ class DAC(metaclass=ABCMeta):
         """Clears all registered programs."""
 
     @abstractmethod
-    def measure_program(self, channels: Iterable[str]) -> Dict[str, numpy.ndarray]:
+    def measure_program(self, channels: Iterable[str]) -> Dict[str, 'numpy.ndarray']:
         """Get the last measurement's results of the specified operations/channels"""

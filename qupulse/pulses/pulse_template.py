@@ -6,6 +6,7 @@ Classes:
     - AtomicPulseTemplate: PulseTemplate that does imply any control flow disruptions and can be
         directly translated into a waveform.
 """
+import warnings
 from abc import abstractmethod
 from typing import Dict, Tuple, Set, Optional, Union, List, Callable, Any, Generic, TypeVar, Mapping
 import itertools
@@ -21,12 +22,12 @@ from qupulse.expressions import ExpressionScalar, Expression, ExpressionLike
 from qupulse._program._loop import Loop, to_waveform
 from qupulse._program.transformation import Transformation, IdentityTransformation, ChainedTransformation, chain_transformations
 
-from qupulse.pulses.parameters import Parameter, ConstantParameter, ParameterNotProvidedException
 from qupulse._program.waveforms import Waveform, TransformingWaveform
 from qupulse.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
 from qupulse.parameter_scope import Scope, DictScope
 
-__all__ = ["PulseTemplate", "AtomicPulseTemplate", "DoubleParameterNameException", "MappingTuple"]
+__all__ = ["PulseTemplate", "AtomicPulseTemplate", "DoubleParameterNameException", "MappingTuple",
+           "UnknownVolatileParameter"]
 
 
 MappingTuple = Union[Tuple['PulseTemplate'],
@@ -79,6 +80,10 @@ class PulseTemplate(Serializable):
         """The number of channels this PulseTemplate defines"""
         return len(self.defined_channels)
 
+    def _is_atomic(self) -> bool:
+        """This is (currently a private) a check if this pulse template always is translated into a single waveform."""
+        return False
+
     def __matmul__(self, other: Union['PulseTemplate', MappingTuple]) -> 'SequencePulseTemplate':
         """This method enables using the @-operator (intended for matrix multiplication) for
          concatenating pulses. If one of the pulses is a SequencePulseTemplate the other pulse gets merged into it"""
@@ -107,12 +112,12 @@ class PulseTemplate(Serializable):
         raise NotImplementedError(f"The pulse template of type {type(self)} does not implement `final_values`")
 
     def create_program(self, *,
-                       parameters: Optional[Mapping[str, Union[Expression, str, Number, ConstantParameter]]]=None,
+                       parameters: Optional[Mapping[str, Union[Expression, str, Number]]]=None,
                        measurement_mapping: Optional[Mapping[str, Optional[str]]]=None,
                        channel_mapping: Optional[Mapping[ChannelID, Optional[ChannelID]]]=None,
                        global_transformation: Optional[Transformation]=None,
                        to_single_waveform: Set[Union[str, 'PulseTemplate']]=None,
-                       volatile: Set[str] = None) -> Optional['Loop']:
+                       volatile: Union[Set[str], str] = None) -> Optional['Loop']:
         """Translates this PulseTemplate into a program Loop.
 
         The returned Loop represents the PulseTemplate with all parameter values instantiated provided as dictated by
@@ -140,6 +145,10 @@ class PulseTemplate(Serializable):
             to_single_waveform = set()
         if volatile is None:
             volatile = set()
+        elif isinstance(volatile, str):
+            volatile = {volatile}
+        else:
+            volatile = set(volatile)
 
         # make sure all channels are mapped
         complete_channel_mapping = {channel: channel for channel in self.defined_channels}
@@ -158,12 +167,16 @@ class PulseTemplate(Serializable):
         else:
             parameters = dict(parameters)
             for parameter_name, value in parameters.items():
-                if isinstance(value, Parameter):
-                    parameters[parameter_name] = value.get_value()
-                elif not isinstance(value, Number):
+                if not isinstance(value, Number):
                     parameters[parameter_name] = Expression(value).evaluate_numeric()
 
             scope = DictScope(values=FrozenDict(parameters), volatile=volatile)
+
+        for volatile_name in scope.get_volatile_parameters():
+            if volatile_name not in scope:
+                warnings.warn(f"The volatile parameter {volatile_name!r} is not in the given parameters.",
+                              category=UnknownVolatileParameter,
+                              stacklevel=2)
 
         root_loop = Loop()
 
@@ -246,6 +259,116 @@ class PulseTemplate(Serializable):
                                           global_transformation=global_transformation,
                                           parent_loop=parent_loop)
 
+    def with_parallel_channels(self, values: Mapping[ChannelID, ExpressionLike]) -> 'PulseTemplate':
+        """Create a new pulse template that sets the given channels to the corresponding values.
+
+        See :class:`~qupulse.pulses.ParallelChannelPulseTemplate` for implementation details and restictions.
+
+        Examples:
+            >>> from qupulse.pulses import FunctionPT
+            ... fpt = FunctionPT('sin(0.1 * t)', duration_expression=10)
+            ... fpt_and_marker = fpt.with_parallel_channels({'marker': 1})
+
+        Args:
+            values: Values to be set for each channel.
+
+        Returns:
+            A newly created pulse template.
+        """
+        from qupulse.pulses.multi_channel_pulse_template import ParallelChannelPulseTemplate
+        return ParallelChannelPulseTemplate(
+            self,
+            values
+        )
+
+    def with_repetition(self, repetition_count: ExpressionLike) -> 'PulseTemplate':
+        """Repeat this pulse template `repetition_count` times via a :class:`~qupulse.pulses.RepetitionPulseTemplate`.
+
+        Examples:
+            >>> from qupulse.pulses import FunctionPT
+            ... fpt = FunctionPT('sin(0.1 * t)', duration_expression=10)
+            ... repeated = fpt.with_repetition('n_periods')
+
+        Args:
+            repetition_count: Amount of times this pulse template is repeated in the return value.
+
+        Returns:
+            A newly created pulse template.
+        """
+        from qupulse.pulses.repetition_pulse_template import RepetitionPulseTemplate
+        return RepetitionPulseTemplate(self, repetition_count)
+
+    def with_mapping(self, *mapping_tuple_args: Mapping, **mapping_kwargs: Mapping) -> 'PulseTemplate':
+        """Map parameters / channel names / measurement names. You may either specify the mappings as positional
+        arguments XOR as keyword arguments. Positional arguments are forwarded to
+        :func:`~qupulse.pulses.MappingPT.from_tuple` which automatically determines the "type" of the mappings.
+        Keyword arguments must be one of the keyword arguments of :class:`~qupulse.pulses.MappingPT`.
+
+        Args:
+            *mapping_tuple_args: Mappings for parameters / channel names / measurement names
+            **mapping_kwargs: Mappings for parameters / channel names / measurement names
+
+        Examples:
+            Equivalent ways to rename a channel and map a parameter value
+            >>> from qupulse.pulses import FunctionPT
+            ... fpt = FunctionPT('sin(f * t)', duration_expression=10, channel='A')
+            ... mapped = fpt.with_mapping({'f': 0.1}, {'A': 'B'})
+            ... mapped.defined_channels
+            {'B'}
+
+            >>> from qupulse.pulses import FunctionPT
+            ... fpt = FunctionPT('sin(f * t)', duration_expression=10, channel='A')
+            ... mapped = fpt.with_mapping(parameter_mapping={'f': 0.1}, channel_mapping={'A': 'B'})
+            ... mapped.defined_channels
+            {'B'}
+
+        Returns:
+            A newly created mapping pulse template
+        """
+        from qupulse.pulses import MappingPT
+
+        if mapping_kwargs and mapping_tuple_args:
+            raise ValueError("Only positional argument (auto detection of mapping type) "
+                             "xor keyword arguments are allowed.")
+        if mapping_tuple_args:
+            return MappingPT.from_tuple((self, *mapping_tuple_args))
+        else:
+            return MappingPT(self, **mapping_kwargs)
+
+    def with_iteration(self, loop_idx: str, loop_range) -> 'PulseTemplate':
+        """Create a :class:`~qupulse.pulses.ForLoopPT` with the given index and range.
+
+        Examples:
+            >>> from qupulse.pulses import ConstantPT
+            ... const = ConstantPT('t_hold', {'x': 'start_x + i_x * step_x', 'y': 'start_y + i_y * step_y'})
+            ... scan_2d = const.with_iteration('i_x', 'n_x').with_iteration('i_y', 'n_y')
+        """
+        from qupulse.pulses import ForLoopPT
+        return ForLoopPT(self, loop_idx, loop_range)
+
+    def with_time_reversal(self) -> 'PulseTemplate':
+        """Reverse this pulse template by creating a :class:`~qupulse.pulses.TimeReversalPT`.
+
+        Examples:
+            >>> from qupulse.pulses import FunctionPT
+            ... forward = FunctionPT('sin(f * t)', duration_expression=10, channel='A')
+            ... backward = fpt.with_time_reversal()
+            ... forward_and_backward = forward @ backward
+        """
+        from qupulse.pulses import TimeReversalPT
+        return TimeReversalPT(self)
+
+    def with_appended(self, *appended: 'PulseTemplate'):
+        """Create a :class:`~qupulse.pulses.SequencePT` that represents a sequence of this pulse template and `appended`
+
+        You can also use the `@` operator to do this or call :func:`qupulse.pulses.SequencePT.concatenate` directly.
+        """
+        from qupulse.pulses import SequencePT
+        if appended:
+            return SequencePT.concatenate(self, *appended)
+        else:
+            return self
+
     def __format__(self, format_spec: str):
         if format_spec == '':
             format_spec = self._DEFAULT_FORMAT_SPEC
@@ -317,8 +440,19 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
         PulseTemplate.__init__(self, identifier=identifier)
         MeasurementDefiner.__init__(self, measurements=measurements)
 
+    def with_parallel_atomic(self, *parallel: 'AtomicPulseTemplate') -> 'AtomicPulseTemplate':
+        from qupulse.pulses import AtomicMultiChannelPT
+        if parallel:
+            return AtomicMultiChannelPT(self, *parallel)
+        else:
+            return self
+
     @property
     def atomicity(self) -> bool:
+        warnings.warn("Deprecated since neither maintained nor properly designed.", category=DeprecationWarning)
+        return True
+
+    def _is_atomic(self) -> bool:
         return True
 
     measurement_names = MeasurementDefiner.measurement_names
@@ -408,3 +542,6 @@ class DoubleParameterNameException(Exception):
             self.templateA, self.templateB, ', '.join(self.names)
         )
 
+
+class UnknownVolatileParameter(RuntimeWarning):
+    pass
