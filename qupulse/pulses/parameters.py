@@ -12,6 +12,7 @@ import numpy
 from qupulse.serialization import AnonymousSerializable
 from qupulse.expressions import Expression
 from qupulse.parameter_scope import Scope, ParameterNotProvidedException
+from qupulse.utils.sympy import sympify
 
 __all__ = ["ParameterNotProvidedException", "ParameterConstraintViolation", "ParameterConstraint"]
 
@@ -22,9 +23,9 @@ class ParameterConstraint(AnonymousSerializable):
         super().__init__()
         if isinstance(relation, str) and '==' in relation:
             # The '==' operator is interpreted by sympy as exactly, however we need a symbolical evaluation
-            self._expression = sympy.Eq(*sympy.sympify(relation.split('==')))
+            self._expression = sympy.Eq(*sympify(relation.split('==')))
         else:
-            self._expression = sympy.sympify(relation)
+            self._expression = sympify(relation)
         if not isinstance(self._expression, sympy.logic.boolalg.Boolean):
             raise ValueError('Constraint is not boolean')
         self._expression = Expression(self._expression)
