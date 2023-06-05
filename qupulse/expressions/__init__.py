@@ -2,8 +2,6 @@
 that expression functionality providers must implement. This allows to substitute the powerful and expressive but slow
 default implementation with a faster less expressive backend.
 
-Currently, the
-
 The default implementation is in :py:``qupulse.expressions.sympy``.
 
 There is are wrapper classes for finding non-protocol uses of expression in :py:``qupulse.expressions.wrapper``. Define

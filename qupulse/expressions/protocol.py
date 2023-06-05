@@ -55,7 +55,7 @@ class Scalar(Protocol):
 
 class Expression(Hashable, Protocol):
     def evaluate_in_scope(self, scope: Mapping) -> Union[Real, np.ndarray]:
-        """Evaluate the expression by taking the variables from the given scope (typically of type Scope but it can be
+        """Evaluate the expression by taking the variables from the given scope (typically of type Scope, but it can be
         any mapping.)
         Args:
             scope:
@@ -69,6 +69,7 @@ class Expression(Hashable, Protocol):
 
     def evaluate_time_dependent(self, scope: Mapping) -> Union['Expression', Real, np.ndarray]:
         """Evaluate to a time dependent expression or a constant."""
+
     @property
     def variables(self) -> Sequence[str]:
         """ Get all free variables in the expression.
@@ -91,7 +92,7 @@ class Expression(Hashable, Protocol):
         raise NotImplementedError()
 
     def get_serialization_data(self):
-        pass
+        raise NotImplementedError()
 
 
 class ExpressionScalar(Expression, Scalar, Ordered, Protocol):
