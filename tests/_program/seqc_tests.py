@@ -1065,3 +1065,231 @@ while (true) {
   }
 }"""
         self.assertEqual(expected_program, seqc_program)
+
+    def test_shuttle_pulse(self):
+        from qupulse.pulses import PointPT, RepetitionPT, ParallelChannelPT, MappingPT, ForLoopPT, AtomicMultiChannelPT, FunctionPT, TimeReversalPT
+        import sympy
+
+        read_pls = PointPT([
+            ('t_read_0', 'V_read_0'),
+            ('t_read_1', 'V_read_1'),
+            ('t_read_2', 'V_read_2'),
+            ('t_read_3', 'V_read_3'),
+        ], tuple('ABCDEFGHIJKLMNOP'), measurements=[('read', 0, 't_read_3')])
+
+        arbitrary_load = PointPT([
+            ('t_load_0', 'V_load_0 * bit_flag + V_empty_0 * (1 - bit_flag)'),
+            ('t_load_1', 'V_load_1 * bit_flag + V_empty_1 * (1 - bit_flag)'),
+            ('t_load_2', 'V_load_2 * bit_flag + V_empty_2 * (1 - bit_flag)'),
+            ('t_load_3', 'V_load_3 * bit_flag + V_empty_3 * (1 - bit_flag)'),
+        ], tuple('ABCDEFGHIJKLMNOP'), measurements=[('load', 0, 't_load_3')])
+
+        load_bit = MappingPT(arbitrary_load, parameter_mapping={'bit_flag': 'pattern[bit]'})
+
+        reduce_amp = PointPT([
+            (0, 'V_reduce_amp_0'),
+            ('t_reduce_amp', 'V_reduce_amp_1', 'linear'),
+            ('t_amp_holdon', 'V_reduce_amp_1', 'hold'),
+            ('t_recover_amp', 'V_reduce_amp_2', 'linear'),
+        ], tuple('ABCDEFGHIJKLMNOP'), measurements=[('reduce_amp', 0, 't_recover_amp')])
+
+        #  define sinewaves by FunctionPT
+
+        sample_rate, f, n_segments = sympy.symbols('sample_rate, f, n_segments')
+        n_oct = sympy.symbols('n_oct')
+        segment_time = n_segments / sample_rate  # in ns
+
+        shuttle_period = sympy.ceiling(1 / f / segment_time) * segment_time  # in ns
+        shuttle_oct = shuttle_period / 8
+        actual_frequency = 1 / shuttle_period
+
+        # Make a shuttle pulse including 4 clavier gates + 2 individual gates on each side.
+        arbitrary_shuttle = AtomicMultiChannelPT(
+            FunctionPT(f'amp_A * cos(2*pi*{actual_frequency}*t + phi[0]) + offset[0]', duration_expression='duration',
+                       channel='A'),
+            FunctionPT(f'amp_B * cos(2*pi*{actual_frequency}*t + phi[1]) + offset[1]', duration_expression='duration',
+                       channel='B'),
+            FunctionPT(f'amp_C * cos(2*pi*{actual_frequency}*t + phi[2]) + offset[2]', duration_expression='duration',
+                       channel='C'),
+            FunctionPT(f'amp_D * cos(2*pi*{actual_frequency}*t + phi[3]) + offset[3]', duration_expression='duration',
+                       channel='D'),
+
+            # >> Add T gates for both ends with consistent channel names ('F': TLB2 <- S4, 'K': TRB2 <- S4)
+            FunctionPT(f'amp_F * cos(2*pi*{actual_frequency}*t + phi[5]) + offset[5]', duration_expression='duration',
+                       channel='F'),
+            FunctionPT(f'amp_K * cos(2*pi*{actual_frequency}*t + phi[10]) + offset[10]', duration_expression='duration',
+                       channel='K'),
+            measurements=[('shuttle', 0, 'duration')]
+        )
+
+        shuttle_in = MappingPT(arbitrary_shuttle,
+                               parameter_mapping={'duration': shuttle_period},
+                               measurement_mapping={'shuttle': 'shuttle_in'})
+
+        shuttle_out = MappingPT(TimeReversalPT(arbitrary_shuttle),
+                                parameter_mapping={'duration': shuttle_period},
+                                measurement_mapping={'shuttle': 'shuttle_out'})
+
+        shuttle_fract_in = MappingPT(arbitrary_shuttle,
+                                     parameter_mapping={'duration': shuttle_oct * n_oct},
+                                     measurement_mapping={'shuttle': 'shuttle_in'}
+                                     )
+
+        shuttle_fract_out = shuttle_fract_in.with_time_reversal()
+
+        flush_out = MappingPT(RepetitionPT(TimeReversalPT(arbitrary_shuttle), '2 * len(pattern)'),
+                              parameter_mapping={'duration': shuttle_period},
+                              measurement_mapping={'shuttle': 'flush_out'},
+                              parameter_constraints=['len(pattern) > 0'])
+
+        wobble_shuttle = MappingPT(arbitrary_shuttle @ arbitrary_shuttle.with_time_reversal(),
+                                   parameter_mapping={'duration': shuttle_period},
+                                   measurement_mapping={'shuttle': 'shuttle_in'})
+
+        # Plug load, shuttle in and read together => PL1 --> S+n --> DL1
+        channels_onhold = load_bit.defined_channels - shuttle_in.defined_channels
+        bit_in = load_bit @ ParallelChannelPT(shuttle_in,
+                                              overwritten_channels={ch: f"offset[{ord(ch) - ord('A')}]" for ch in
+                                                                    channels_onhold})
+        pattern_in = ForLoopPT(bit_in, 'bit', 'len(pattern)')
+
+        # Plug fractional shuttle in, reduce amplitude and fractional out together
+        channels_onhold = pattern_in.defined_channels - shuttle_fract_in.defined_channels
+        fract_in_n_reduce_amp = ParallelChannelPT(
+            shuttle_fract_in,
+            overwritten_channels={ch: f"offset[{ord(ch) - ord('A')}]" for ch in channels_onhold}
+        ) @ reduce_amp @ ParallelChannelPT(
+            shuttle_fract_out,
+            overwritten_channels={ch: f"offset[{ord(ch) - ord('A')}]" for ch in channels_onhold})
+
+        # plug read and shuttle out together => S(-n' per read) --> DL1
+        channels_onhold = reduce_amp.defined_channels - shuttle_in.defined_channels
+        period_out = ParallelChannelPT(shuttle_out, overwritten_channels={ch: f"offset[{ord(ch) - ord('A')}]" for ch in
+                                                                          channels_onhold}) @ read_pls
+
+        #
+        channels_onhold = read_pls.defined_channels - shuttle_in.defined_channels
+        wobble = ParallelChannelPT(RepetitionPT(wobble_shuttle, 3),
+                                   overwritten_channels={ch: f"offset[{ord(ch) - ord('A')}]" for ch in channels_onhold})
+
+        # repeated read and shuttle out => [S(-n' per read) --> DL1] x (n_in + n_extra)
+        tot_period_out = RepetitionPT(period_out, 'len(pattern) + n_period_extra')
+
+        # make a flush pulse according to the last read.
+        channels_onhold = read_pls.defined_channels - flush_out.defined_channels
+        flush = ParallelChannelPT(flush_out,
+                                  overwritten_channels={ch: f"flush[{ord(ch) - ord('A')}]" for ch in channels_onhold})
+
+        pattern_in_n_out = pattern_in @ fract_in_n_reduce_amp @ tot_period_out
+
+        default_params = {}
+
+        for n in ('load', 'read', 'empty'):
+            for ii in range(4):
+                default_params[f't_{n}_{ii}'] = ii * 25e6
+
+        default_params = {**default_params,
+                          'amp_A': .14 * 2,
+                          'amp_B': .14,
+                          'amp_C': .14 * 2,
+                          'amp_D': .14,
+                          'amp_F': .14,
+                          'amp_K': .14,
+                          }
+
+        default_params = {**default_params,
+                          #              A,   B,   C,   D,   E,    F,    G,    H,    I,   J,    K,   L,   M,   N,   O,   P
+                          #             S1,  S2,  S3,  S4, TRP, TRB2,  RB2, TRB1, TLB1, TLP, TLB2, LB2, LB1, RB1, EMP, CLK
+
+                          'V_load_0': [-.3, 0., .3, 0., -.2, 0., -.1, -.4, 0., 0., 0, -.3, 0., 0., 0., 0.],
+                          'V_load_1': [-.3, 0., .3, 0., -.2, 0., -.1, -.4, 0., .5, 0, -.3, 0., 0., 0., 0.],
+                          'V_load_2': [-.3, 0., .3, 0., -.2, 0., -.1, -.4, -.5, .5, 0, -.3, 0., 0., 0., 0.],
+                          'V_load_3': [-.3, 0., .3, 0., -.2, 0., -.1, -.4, -.5, .5, 0, -.3, 0., 0., 0., 0.],
+
+                          'V_read_0': [-.3, 0., .3, 0., -.2, 0., -.1, -.4, -.5, .5, 0, -.3, 0., 0., 0., 0.],
+                          'V_read_1': [-.3, 0., .3, 0., -.2, 0., -.1, -.4, -.5, .5, 0, -.3, 0., 0., 0., 0.],
+                          'V_read_2': [-.3, 0., .3, 0., -.2, 0., -.1, -.4, 0., .5, 0, -.3, 0., 0., 0., 0.],
+                          'V_read_3': [-.3, 0., .3, 0., -.2, 0., -.1, -.4, 0., 0., 0, -.3, 0., 0., 0., 0.],
+
+                          'V_empty_0': [-.3, 0., .3, 0., -.2, 0., 0, -.4, 0., 0., 0, -.3, 0., 0., 0., 0.],
+                          'V_empty_1': [-.3, 0., .3, 0., -.2, 0., 0, -.4, 0., 0., 0, -.3, 0., 0., 0., 0.],
+                          'V_empty_2': [-.3, 0., .3, 0., -.2, 0., 0, -.4, -.5, 0., 0, -.3, 0., 0., 0., 0.],
+                          'V_empty_3': [-.3, 0., .3, 0., -.2, 0., 0, -.4, -.5, 0., 0, -.3, 0., 0., 0., 0.],
+
+                          'offset': [0., 0., 0., 0., -.2, 0., -.1, -.2, 0., 0., 0, -.3, 0., 0., 0., 0.],
+                          'flush': [0., 0., 0., 0., -.2, 0., -.1, -.2, 0., 0., 0, -.3, 0., 0., 0., 0.],
+
+                          'f': 100e-9,
+
+                          'pattern': [1, 0, 1, 0, 1, 1],
+                          'n_oct': 1,
+                          'n_period_extra': 3,
+                          # number of period (extra reading wrt shuttle in. Default = 3 -> 3 additiional reading)
+
+                          't_reduce_amp': 30e6,
+                          't_amp_holdon': 60e6,
+                          't_recover_amp': 90e6,
+
+                          'V_reduce_amp_0': [-.3, 0., .3, 0., -.2, 0., -.1, -.4, 0., 0., 0, -.3, 0., 0., 0., 0.],
+                          'V_reduce_amp_1': [-.3, -.1, .3, .1, -.2, 0., -.1, -.4, 0., 0., 0, -.3, 0., 0., 0., 0.],
+                          'V_reduce_amp_2': [-.3, 0., .3, 0., -.2, 0., -.1, -.4, 0., 0., 0, -.3, 0., 0., 0., 0.],
+
+                          'phi': [-3.1416, -4.7124, -6.2832, -7.8540, -1.5708, -7.8540, -1.5708, -1.5708, -1.5708,
+                                  -1.5708, -1.5708, -1.5708],
+                          'n_segments': 192,
+                          'sample_rate': 0.1 / 2 ** 5,
+                          }
+
+        program = pattern_in_n_out.create_program(parameters=default_params)
+
+        manager = HDAWGProgramManager()
+
+        manager.add_program('test', program,
+                            channels=('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'),
+                            markers=(None,) * 16,
+                            amplitudes=(4.,)*8,
+                            offsets=(0.,)*8,
+                            voltage_transformations=(None,)*8,
+                            sample_rate=default_params['sample_rate'])
+        seqc_program = manager.to_seqc_program()
+
+        return seqc_program
+
+    @unittest.skipIf(sys.version_info.minor < 6, "This test requires dict to be ordered.")
+    def test_DigTrigger(self):
+        defined_channels = frozenset(['A', 'B', 'C'])
+
+        unique_n = 1000
+        unique_duration = 32
+
+        unique_wfs = get_unique_wfs(n=unique_n, duration=unique_duration, defined_channels=defined_channels)
+        same_wf = DummyWaveform(duration=48, sample_output=np.ones(48), defined_channels=defined_channels)
+
+        channels = ('A', 'B')
+        markers = ('C', None, 'A', None)
+        amplitudes = (1., 1.)
+        offsets = (0., 0.)
+        volatage_transformations = (lambda x: x, lambda x: x)
+        sample_rate = 1
+
+        triggerIn = 8
+        DigTriggerIndex = 1
+
+        root = complex_program_as_loop(unique_wfs, wf_same=same_wf)
+        seqc_nodes = complex_program_as_seqc(unique_wfs, wf_same=same_wf)
+
+        manager = HDAWGProgramManager()
+        compiler_settings = manager.DEFAULT_COMPILER_SETTINGS
+        compiler_settings['trigger_wait_code'] = f'waitDigTrigger({DigTriggerIndex});'
+        manager.add_program('test', root, channels, markers, amplitudes, offsets, volatage_transformations, sample_rate)
+
+        # 0: Program selection
+        # 1: Trigger
+
+        seqc_program = manager.to_seqc_program()
+
+        return seqc_program
+
+
+
+

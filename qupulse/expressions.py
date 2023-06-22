@@ -109,7 +109,12 @@ class Expression(AnonymousSerializable, metaclass=_ExpressionMeta):
         Returns:
 
         """
-        raise NotImplementedError("")
+        parsed_kwargs = self._parse_evaluate_numeric_arguments(scope)
+
+        result, self._expression_lambda = evaluate_lambdified(self.underlying_expression, self.variables,
+                                                              parsed_kwargs, lambdified=self._expression_lambda)
+
+        return self._parse_evaluate_numeric_result(result, scope)
 
     def evaluate_numeric(self, **kwargs) -> Union[Number, numpy.ndarray]:
         return self.evaluate_in_scope(kwargs)

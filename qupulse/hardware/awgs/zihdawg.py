@@ -10,7 +10,7 @@ import pathlib
 import hashlib
 import argparse
 import re
-from abc import abstractmethod
+from abc import abstractmethod, ABC
 
 try:
     # zhinst fires a DeprecationWarning from its own code in some versions...
@@ -59,6 +59,7 @@ def _amplitude_scales(api_session, serial: str):
         for ch in range(8)
     )
 
+
 def _sigout_double(api_session, prop: str, serial: str, channel: int, value: float = None) -> float:
     """Query channel offset voltage and optionally set it."""
     node_path = f'/{serial}/sigouts/{channel-1:d}/{prop}'
@@ -67,11 +68,14 @@ def _sigout_double(api_session, prop: str, serial: str, channel: int, value: flo
         api_session.sync()  # Global sync: Ensure settings have taken effect on the device.
     return api_session.getDouble(node_path)
 
+
 def _sigout_range(api_session, serial: str, channel: int, voltage: float = None) -> float:
     return _sigout_double(api_session, 'range', serial, channel, voltage)
 
+
 def _sigout_offset(api_session, serial: str, channel: int, voltage: float = None) -> float:
     return _sigout_double(api_session, 'offset', serial, channel, voltage)
+
 
 def _sigout_on(api_session, serial: str, channel: int, value: bool = None) -> bool:
     """Query channel signal output status (enabled/disabled) and optionally set it. Corresponds to front LED."""
@@ -292,7 +296,7 @@ class HDAWGRepresentation:
         idx = 0
         while True:
             try:
-                devices =  self.api_session.getString(f'/ZI/MDS/GROUPS/{idx}/DEVICES').split(',')
+                devices = self.api_session.getString(f'/ZI/MDS/GROUPS/{idx}/DEVICES').split(',')
             except RuntimeError:
                 break
 
@@ -394,7 +398,7 @@ class HDAWGChannelGroup(AWG):
         self._awg_module.set('awgModule/device', self.master_device.serial)
         self._awg_module.set('awgModule/index', self.awg_group_index)
         self._awg_module.execute()
-        self._elf_manager = ELFManager(self._awg_module)
+        self._elf_manager = ELFManager.DEFAULT_CLS(self._awg_module)
         self._upload_generator = ()
 
     @property
@@ -501,6 +505,7 @@ class HDAWGChannelGroup(AWG):
     def _start_compile_and_upload(self):
         self._uploaded_seqc_source = None
         self._upload_generator = self._elf_manager.compile_and_upload(self._required_seqc_source)
+        logger.debug(f"_start_compile_and_upload: %r", next(self._upload_generator, "Finished"))
 
     def _wait_for_compile_and_upload(self):
         for state in self._upload_generator:
@@ -551,15 +556,18 @@ class HDAWGChannelGroup(AWG):
         Currently hardware triggering is not implemented. The HDAWGProgramManager needs to emit code that calls
         `waitDigTrigger` to do that.
         """
-        if self.num_channels > 8:
+        if self.master_device._is_mds_master():
+            # This is required in MDS mode because program select does not work properly yet so we use single program
+            # mode
             if name is None:
-                self._required_seqc_source = ""
+                self._required_seqc_source = "sync();"
             else:
                 self._required_seqc_source = self._program_manager.to_seqc_program(name)
             self._start_compile_and_upload()
 
         if self._required_seqc_source != self._uploaded_seqc_source:
             self._wait_for_compile_and_upload()
+        assert self._required_seqc_source == self._uploaded_seqc_source
 
         self.user_register(self._program_manager.Constants.TRIGGER_REGISTER, 0)
 
@@ -581,10 +589,8 @@ class HDAWGChannelGroup(AWG):
             self.user_register(self._program_manager.Constants.PROG_SEL_REGISTER,
                                self._program_manager.name_to_index(name) | int(self._program_manager.Constants.NO_RESET_MASK, 2))
 
-        # this was a workaround for problems in the past and I totally forgot why it was here
-        # for ch_pair in self.master.channel_tuples:
-        #    ch_pair._wait_for_compile_and_upload()
-        self.enable(True)
+        if name is not None:
+            self.enable(True)
 
     def run_current_program(self) -> None:
         """Run armed program."""
@@ -802,7 +808,9 @@ class SingleDeviceChannelGroup(HDAWGChannelGroup):
         return tuple(map(self.master_device.offset, self._channels()))
 
 
-class ELFManager:
+class ELFManager(ABC):
+    DEFAULT_CLS = None
+
     class AWGModule:
         def __init__(self, awg_module: zhinst_core.AwgModule):
             """Provide an easily mockable interface to the zhinst AwgModule object"""
@@ -837,6 +845,14 @@ class ELFManager:
         @compiler_source_file.setter
         def compiler_source_file(self, source_file: str):
             self._module.set('compiler/sourcefile', source_file)
+
+        @property
+        def compiler_source_string(self) -> str:
+            return self._module.getString('compiler/sourcestring')
+
+        @compiler_source_string.setter
+        def compiler_source_string(self, source_string: str):
+            self._module.set('compiler/sourcestring', source_string)
 
         @property
         def compiler_upload(self) -> bool:
@@ -912,6 +928,87 @@ class ELFManager:
         # use utf-16 because str is UTF16 on most relevant machines (Windows)
         return hashlib.sha512(bytes(source_string, 'utf-16')).hexdigest()
 
+    @abstractmethod
+    def compile_and_upload(self, source_string: str) -> Generator[str, str, None]:
+        """The function returns a generator that yields the current state of the progress. The generator is empty iff
+        the upload is complete. An exception is raised if there is an error.
+
+        To abort send 'abort' to the generator. (not implemented :P)
+
+        Example:
+            >>> my_source = 'playWave("my_wave");'
+            >>> for state in elf_manager.compile_and_upload(my_source):
+            ...     print('Current state:', state)
+            ...     time.sleep(1)
+
+        Args:
+            source_string: Source code to compile
+
+        Returns:
+            Generator object that needs to be consumed
+        """
+
+
+class SimpleELFManager(ELFManager):
+    def __init__(self, awg_module: zhinst.ziPython.AwgModule):
+        """This class organizes compiling and uploading of compiled programs. The source code file is named based on the
+        code hash to cache compilation results. This requires that the waveform names are unique.
+
+        The compilation and upload itself are done asynchronously by zhinst.ziPython. To avoid spawning a useless
+        thread for updating the status the method :py:meth:`~ELFManager.compile_and_upload` returns a generator which
+        talks to the undelying library when needed."""
+        super().__init__(awg_module)
+
+    def compile_and_upload(self, source_string: str) -> Generator[str, str, None]:
+        self.awg_module.compiler_upload = True
+        self.awg_module.compiler_source_string = source_string
+
+        while True:
+            status, msg = self.awg_module.compiler_status
+            if status == - 1:
+                yield 'compiling'
+            elif status == 0:
+                break
+            elif status == 1:
+                raise HDAWGCompilationException(msg)
+            elif status == 2:
+                logger.warning("Compiler warings: %s", msg)
+                break
+            else:
+                raise RuntimeError("Unexpected status", status, msg)
+
+        while True:
+            status_int, progress = self.awg_module.elf_status
+            if progress == 1.0:
+                break
+            elif status_int == 1:
+                HDAWGUploadException(self.awg_module.compiler_status)
+            else:
+                yield 'uploading @ %d%%' % (100*progress)
+
+
+ELFManager.DEFAULT_CLS = SimpleELFManager
+
+
+class CachingELFManager(ELFManager):
+    def __init__(self, awg_module: zhinst.ziPython.AwgModule):
+        """FAILS TO UPLOAD THE CORRECT ELF FOR SOME REASON
+        TODO: Investigat
+
+        This class organizes compiling and uploading of compiled programs. The source code file is named based on the
+        code hash to cache compilation results. This requires that the waveform names are unique.
+
+        The compilation and upload itself are done asynchronously by zhinst.ziPython. To avoid spawning a useless
+        thread for updating the status the method :py:meth:`~ELFManager.compile_and_upload` returns a generator which
+        talks to the undelying library when needed."""
+        super().__init__(awg_module)
+
+        # automatically upload after successful compilation
+        self.awg_module.compiler_upload = True
+
+        self._compile_job = None  # type: Optional[Union[str, Tuple[str, int, str]]]
+        self._upload_job = None  # type: Optional[Union[Tuple[str, float], Tuple[str, int]]]
+
     def _update_compile_job_status(self):
         """Store current compile status in self._compile_job."""
         compiler_start = self.awg_module.compiler_start
@@ -920,8 +1017,7 @@ class ELFManager:
 
         elif isinstance(self._compile_job, str):
             if compiler_start:
-                # compilation is running
-                pass
+                logger.debug("Compiler is running.")
 
             else:
                 compiler_status, status_string = self.awg_module.compiler_status
@@ -975,15 +1071,13 @@ class ELFManager:
 
     def _update_upload_job_status(self):
         elf_upload = self.awg_module.elf_upload
-        elf_file = self.awg_module.elf_file
-        old_status = None
-
         if self._upload_job is None:
             assert not elf_upload
-        else:
-            elf_file, old_status = self._upload_job
-            assert self.awg_module.elf_file == elf_file
-        
+            return
+
+        elf_file, old_status = self._upload_job
+        assert self.awg_module.elf_file == elf_file
+
         if isinstance(old_status, float) or old_status is None:
             status_int, progress = self.awg_module.elf_status
             if status_int == 2:
