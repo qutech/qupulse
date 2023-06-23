@@ -22,7 +22,7 @@ try:
 except ImportError:
     _special_functions = {fname: numpy.vectorize(fobject)
                           for fname, fobject in math.__dict__.items()
-                          if not fname.startswith('_') and fname not in numpy.__dict__}
+                          if callable(fobject) and not fname.startswith('_') and fname not in numpy.__dict__}
     warnings.warn('scipy is not installed. This reduces the set of available functions to those present in numpy + '
                   'manually vectorized functions in math.')
 
