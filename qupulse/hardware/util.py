@@ -99,7 +99,7 @@ def voltage_to_uint16(voltage: np.ndarray, output_amplitude: float, output_offse
 def find_positions(data: Sequence, to_find: Sequence) -> np.ndarray:
     """Find indices of the first occurrence of the elements of to_find in data. Elements that are not in data result in
     -1"""
-    data_sorter = np.argsort(data)
+    data_sorter = np.argsort(data, kind='stable')
 
     pos_left = np.searchsorted(data, to_find, side='left', sorter=data_sorter)
     pos_right = np.searchsorted(data, to_find, side='right', sorter=data_sorter)

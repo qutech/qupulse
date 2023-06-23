@@ -345,7 +345,11 @@ class CompiledEvaluationTest(EvaluationTestsBase, unittest.TestCase):
         if isinstance(expression, np.ndarray):
             return self.evaluate(sympy.Array(expression), parameters)
 
-        result, _ = evaluate_compiled(expression, parameters, compiled=None)
+        try:
+            result, _ = evaluate_compiled(expression, parameters, compiled=None)
+        except Exception as err:
+            raise AssertionError(f"Compiled evaluation of {expression!r} with {parameters!r} failed: {err!r}",
+                                 expression, parameters) from err
 
         if isinstance(result, (list, tuple)):
             return np.array(result)
