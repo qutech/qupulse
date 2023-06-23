@@ -550,7 +550,7 @@ class TaborChannelPair(AWG):
             current_segment_capacities=self._segment_capacity,
             current_segment_references=self._segment_references,
             total_capacity=self.total_capacity,
-            segment_lengths=segment_lengths,
+            new_segment_lengths=segment_lengths,
             new_segment_hashes=segment_hashes
         )
 
