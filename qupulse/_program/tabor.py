@@ -792,11 +792,11 @@ def find_place_for_segments_in_memory(
 
     # try to find places that are larger than the segments to fit in starting with the large segments and large
     # free spaces
-    segment_indices = np.flatnonzero(to_amend)[np.argsort(new_segment_lengths[to_amend])[::-1]]
+    segment_indices = np.flatnonzero(to_amend)[np.argsort(new_segment_lengths[to_amend], kind='stable')[::-1]]
     capacities = current_segment_capacities[:first_free]
     for segment_idx in segment_indices:
         free_capacities = capacities[free_segments]
-        free_segments_indices = np.flatnonzero(free_segments)[np.argsort(free_capacities)[::-1]]
+        free_segments_indices = np.flatnonzero(free_segments)[np.argsort(free_capacities, kind='stable')[::-1]]
 
         if len(free_segments_indices) == 0:
             break
