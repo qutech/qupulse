@@ -1,6 +1,7 @@
 import unittest
 import itertools
 import numpy as np
+from copy import deepcopy
 from qupulse.utils.types import FrozenDict
 from unittest import mock
 
@@ -15,7 +16,7 @@ try:
 except ImportError:
     pytabor = None
 
-from qupulse._program.tabor import TaborException, TaborProgram, \
+from qupulse._program.tabor import TaborException, TaborProgram, find_place_for_segments_in_memory,\
     TaborSegment, TaborSequencing, PlottableProgram, TableDescription, make_combined_wave, TableEntry
 from qupulse._program._loop import Loop
 from qupulse._program.volatile import VolatileRepetitionCount
@@ -704,3 +705,89 @@ class TaborMakeCombinedPyTaborCompareTest(TaborMakeCombinedTest):
 
         with self.assertRaises(ValueError):
             make_combined_wave(tabor_segments, destination_array=np.ones(16))
+
+
+class TaborMemoryManagementTests(unittest.TestCase):
+    def test_find_place_for_segments_in_memory(self):
+        # empty
+        kwargs = dict(
+            total_capacity=2**20,
+            current_segment_capacities=np.asarray([], dtype=np.uint32),
+            current_segment_hashes=np.asarray([], dtype=np.int64),
+            current_segment_references=np.asarray([], dtype=np.int32),
+        )
+        prev_kwargs = deepcopy(kwargs)
+
+        segments = np.asarray([-5, -6, -7, -8, -9])
+        segment_lengths = 192 + np.asarray([32, 16, 64, 32, 16])
+
+        w2s, ta, ti = find_place_for_segments_in_memory(
+            **kwargs,
+            segments=segments, segment_lengths=segment_lengths)
+        self.assertEqual(w2s.tolist(), [-1, -1, -1, -1, -1])
+        self.assertEqual(ta.tolist(), [True, True, True, True, True])
+        self.assertEqual(ti.tolist(), [-1, -1, -1, -1, -1])
+        np.testing.assert_equal(kwargs, prev_kwargs)
+
+        # all new segments
+        kwargs['current_segment_capacities'] = 192 + np.asarray([0, 16, 32, 16, 0], dtype=np.uint32)
+        kwargs['current_segment_hashes'] = np.asarray([1, 2, 3, 4, 5], dtype=np.int64)
+        kwargs['current_segment_references'] = np.asarray([1, 1, 1, 2, 1], dtype=np.int32)
+        prev_kwargs = deepcopy(kwargs)
+
+        w2s, ta, ti = find_place_for_segments_in_memory(segments=segments, segment_lengths=segment_lengths, **kwargs)
+        self.assertEqual(w2s.tolist(), [-1, -1, -1, -1, -1])
+        self.assertEqual(ta.tolist(), [True, True, True, True, True])
+        self.assertEqual(ti.tolist(), [-1, -1, -1, -1, -1])
+        np.testing.assert_equal(kwargs, prev_kwargs)
+
+        # some known segments
+        kwargs['current_segment_capacities'] = 192 + np.asarray([0, 16, 32, 64, 0, 16], dtype=np.uint32)
+        kwargs['current_segment_hashes'] = np.asarray([1, 2, 3, -7, 5, -9], dtype=np.int64)
+        kwargs['current_segment_references'] = np.asarray([1, 1, 1, 2, 1, 3], dtype=np.int32)
+        prev_kwargs = deepcopy(kwargs)
+
+        w2s, ta, ti = find_place_for_segments_in_memory(segments=segments, segment_lengths=segment_lengths, **kwargs)
+        self.assertEqual(w2s.tolist(), [-1, -1, 3, -1, 5])
+        self.assertEqual(ta.tolist(), [True, True, False, True, False])
+        self.assertEqual(ti.tolist(), [-1, -1, -1, -1, -1])
+        np.testing.assert_equal(kwargs, prev_kwargs)
+
+        # insert some segments with same length
+        kwargs['current_segment_capacities'] = 192 + np.asarray([0, 16, 32, 64, 0, 16], dtype=np.uint32)
+        kwargs['current_segment_hashes'] = np.asarray([1, 2, 3, 4, 5, 6], dtype=np.int64)
+        kwargs['current_segment_references'] = np.asarray([1, 0, 1, 0, 1, 3], dtype=np.int32)
+        prev_kwargs = deepcopy(kwargs)
+
+        w2s, ta, ti = find_place_for_segments_in_memory(segments=segments, segment_lengths=segment_lengths, **kwargs)
+        self.assertEqual(w2s.tolist(), [-1, -1, -1, -1, -1])
+        self.assertEqual(ta.tolist(), [True, False, False, True, True])
+        self.assertEqual(ti.tolist(), [-1, 1, 3, -1, -1])
+        np.testing.assert_equal(kwargs, prev_kwargs)
+
+        # insert some segments with smaller length
+        kwargs['current_segment_capacities'] = 192 + np.asarray([0, 80, 32, 64, 96, 16], dtype=np.uint32)
+        kwargs['current_segment_hashes'] = np.asarray([1, 2, 3, 4, 5, 6], dtype=np.int64)
+        kwargs['current_segment_references'] = np.asarray([1, 0, 1, 1, 0, 3], dtype=np.int32)
+        prev_kwargs = deepcopy(kwargs)
+
+        w2s, ta, ti = find_place_for_segments_in_memory(segments=segments, segment_lengths=segment_lengths, **kwargs)
+        self.assertEqual(w2s.tolist(), [-1, -1, -1, -1, -1])
+        self.assertEqual(ta.tolist(), [True, True, False, False, True])
+        self.assertEqual(ti.tolist(), [-1, -1, 4, 1, -1])
+        np.testing.assert_equal(kwargs, prev_kwargs)
+
+        # mix everything
+        segments = np.asarray([-5, -6, -7, -8, -9, -10, -11])
+        segment_lengths = 192 + np.asarray([32, 16, 64, 32, 16, 0, 0])
+
+        kwargs['current_segment_capacities'] = 192 + np.asarray([0, 80, 32, 64, 32, 16], dtype=np.uint32)
+        kwargs['current_segment_hashes'] = np.asarray([1, 2, 3, 4, -8, 6], dtype=np.int64)
+        kwargs['current_segment_references'] = np.asarray([1, 0, 1, 0, 1, 0], dtype=np.int32)
+        prev_kwargs = deepcopy(kwargs)
+
+        w2s, ta, ti = find_place_for_segments_in_memory(segments=segments, segment_lengths=segment_lengths, **kwargs)
+        self.assertEqual(w2s.tolist(), [-1,    -1,   -1,    4,     -1,     -1, -1])
+        self.assertEqual(ta.tolist(),  [False, True, False, False, True, True, True])
+        self.assertEqual(ti.tolist(),  [1,     -1,   3,     -1,    -1,   -1,   -1])
+        np.testing.assert_equal(kwargs, prev_kwargs)
