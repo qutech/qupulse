@@ -543,13 +543,15 @@ class TaborChannelPair(AWG):
         self.change_armed_program(None)
 
     def _find_place_for_segments_in_memory(self, segments: Sequence, segment_lengths: Sequence) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        segment_hashes = np.fromiter((hash(segment) for segment in segments), dtype=np.int64, count=len(segments))
+
         return find_place_for_segments_in_memory(
             current_segment_hashes=self._segment_hashes,
             current_segment_capacities=self._segment_capacity,
             current_segment_references=self._segment_references,
             total_capacity=self.total_capacity,
-            segments=segments,
-            segment_lengths=segment_lengths
+            segment_lengths=segment_lengths,
+            new_segment_hashes=segment_hashes
         )
 
     @with_select

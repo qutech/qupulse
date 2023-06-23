@@ -723,7 +723,7 @@ class TaborMemoryManagementTests(unittest.TestCase):
 
         w2s, ta, ti = find_place_for_segments_in_memory(
             **kwargs,
-            segments=segments, segment_lengths=segment_lengths)
+            new_segment_hashes=segments, new_segment_lengths=segment_lengths)
         self.assertEqual(w2s.tolist(), [-1, -1, -1, -1, -1])
         self.assertEqual(ta.tolist(), [True, True, True, True, True])
         self.assertEqual(ti.tolist(), [-1, -1, -1, -1, -1])
@@ -735,7 +735,7 @@ class TaborMemoryManagementTests(unittest.TestCase):
         kwargs['current_segment_references'] = np.asarray([1, 1, 1, 2, 1], dtype=np.int32)
         prev_kwargs = deepcopy(kwargs)
 
-        w2s, ta, ti = find_place_for_segments_in_memory(segments=segments, segment_lengths=segment_lengths, **kwargs)
+        w2s, ta, ti = find_place_for_segments_in_memory(new_segment_hashes=segments, new_segment_lengths=segment_lengths, **kwargs)
         self.assertEqual(w2s.tolist(), [-1, -1, -1, -1, -1])
         self.assertEqual(ta.tolist(), [True, True, True, True, True])
         self.assertEqual(ti.tolist(), [-1, -1, -1, -1, -1])
@@ -747,7 +747,7 @@ class TaborMemoryManagementTests(unittest.TestCase):
         kwargs['current_segment_references'] = np.asarray([1, 1, 1, 2, 1, 3], dtype=np.int32)
         prev_kwargs = deepcopy(kwargs)
 
-        w2s, ta, ti = find_place_for_segments_in_memory(segments=segments, segment_lengths=segment_lengths, **kwargs)
+        w2s, ta, ti = find_place_for_segments_in_memory(new_segment_hashes=segments, new_segment_lengths=segment_lengths, **kwargs)
         self.assertEqual(w2s.tolist(), [-1, -1, 3, -1, 5])
         self.assertEqual(ta.tolist(), [True, True, False, True, False])
         self.assertEqual(ti.tolist(), [-1, -1, -1, -1, -1])
@@ -759,7 +759,7 @@ class TaborMemoryManagementTests(unittest.TestCase):
         kwargs['current_segment_references'] = np.asarray([1, 0, 1, 0, 1, 3], dtype=np.int32)
         prev_kwargs = deepcopy(kwargs)
 
-        w2s, ta, ti = find_place_for_segments_in_memory(segments=segments, segment_lengths=segment_lengths, **kwargs)
+        w2s, ta, ti = find_place_for_segments_in_memory(new_segment_hashes=segments, new_segment_lengths=segment_lengths, **kwargs)
         self.assertEqual(w2s.tolist(), [-1, -1, -1, -1, -1])
         self.assertEqual(ta.tolist(), [True, False, False, True, True])
         self.assertEqual(ti.tolist(), [-1, 1, 3, -1, -1])
@@ -771,7 +771,7 @@ class TaborMemoryManagementTests(unittest.TestCase):
         kwargs['current_segment_references'] = np.asarray([1, 0, 1, 1, 0, 3], dtype=np.int32)
         prev_kwargs = deepcopy(kwargs)
 
-        w2s, ta, ti = find_place_for_segments_in_memory(segments=segments, segment_lengths=segment_lengths, **kwargs)
+        w2s, ta, ti = find_place_for_segments_in_memory(new_segment_hashes=segments, new_segment_lengths=segment_lengths, **kwargs)
         self.assertEqual(w2s.tolist(), [-1, -1, -1, -1, -1])
         self.assertEqual(ta.tolist(), [True, True, False, False, True])
         self.assertEqual(ti.tolist(), [-1, -1, 4, 1, -1])
@@ -786,7 +786,7 @@ class TaborMemoryManagementTests(unittest.TestCase):
         kwargs['current_segment_references'] = np.asarray([1, 0, 1, 0, 1, 0], dtype=np.int32)
         prev_kwargs = deepcopy(kwargs)
 
-        w2s, ta, ti = find_place_for_segments_in_memory(segments=segments, segment_lengths=segment_lengths, **kwargs)
+        w2s, ta, ti = find_place_for_segments_in_memory(new_segment_hashes=segments, new_segment_lengths=segment_lengths, **kwargs)
         self.assertEqual(w2s.tolist(), [-1,    -1,   -1,    4,     -1,     -1, -1])
         self.assertEqual(ta.tolist(),  [False, True, False, False, True, True, True])
         self.assertEqual(ti.tolist(),  [1,     -1,   3,     -1,    -1,   -1,   -1])

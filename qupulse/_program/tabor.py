@@ -1,5 +1,6 @@
 import sys
-from typing import NamedTuple, Optional, List, Generator, Tuple, Sequence, Mapping, Union, Dict, FrozenSet, cast
+from typing import NamedTuple, Optional, List, Generator, Tuple, Sequence, Mapping, Union, Dict, FrozenSet, cast,\
+    Hashable
 from enum import Enum
 import operator
 from collections import OrderedDict
@@ -733,7 +734,8 @@ def find_place_for_segments_in_memory(
         current_segment_references: np.ndarray,
         current_segment_capacities: np.ndarray,
         total_capacity: int,
-        segments: Sequence, segment_lengths: Sequence) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        new_segment_hashes: Sequence[int],
+        new_segment_lengths: Sequence[int]) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     1. Find known segments
     2. Find empty spaces with fitting length
@@ -743,9 +745,10 @@ def find_place_for_segments_in_memory(
     :param segment_lengths:
     :return:
     """
-    segment_hashes = np.fromiter((hash(segment) for segment in segments), count=len(segments), dtype=np.int64)
+    new_segment_hashes = np.asarray(new_segment_hashes)
+    new_segment_lengths = np.asarray(new_segment_lengths)
 
-    waveform_to_segment = find_positions(current_segment_hashes, segment_hashes)
+    waveform_to_segment = find_positions(current_segment_hashes, new_segment_hashes)
 
     # separate into known and unknown
     unknown = waveform_to_segment == -1
@@ -753,18 +756,18 @@ def find_place_for_segments_in_memory(
 
     known_pos_in_memory = waveform_to_segment[known]
 
-    assert len(known_pos_in_memory) == 0 or np.all(current_segment_hashes[known_pos_in_memory] == segment_hashes[known])
+    assert len(known_pos_in_memory) == 0 or np.all(current_segment_hashes[known_pos_in_memory] == new_segment_hashes[known])
 
     new_reference_counter = current_segment_references.copy()
     new_reference_counter[known_pos_in_memory] += 1
 
-    to_upload_size = np.sum(segment_lengths[unknown] + 16)
+    to_upload_size = np.sum(new_segment_lengths[unknown] + 16)
     free_points_in_total = total_capacity - np.sum(current_segment_capacities[current_segment_references > 0])
     if free_points_in_total < to_upload_size:
         raise RuntimeError(f'Not enough free memory. Required {to_upload_size}. Available: {free_points_in_total}')
 
     to_amend = cast(np.ndarray, unknown)
-    to_insert = np.full(len(segments), fill_value=-1, dtype=np.int64)
+    to_insert = np.full(len(new_segment_hashes), fill_value=-1, dtype=np.int64)
 
     reserved_indices = np.flatnonzero(new_reference_counter > 0)
     first_free = reserved_indices[-1] + 1 if len(reserved_indices) else 0
@@ -778,7 +781,7 @@ def find_place_for_segments_in_memory(
             break
 
         pos_of_same_length = np.logical_and(free_segments,
-                                            segment_lengths[segment_idx] == current_segment_capacities[:first_free])
+                                            new_segment_lengths[segment_idx] == current_segment_capacities[:first_free])
         idx_same_length = np.argmax(pos_of_same_length)
         if pos_of_same_length[idx_same_length]:
             free_segments[idx_same_length] = False
@@ -789,7 +792,7 @@ def find_place_for_segments_in_memory(
 
     # try to find places that are larger than the segments to fit in starting with the large segments and large
     # free spaces
-    segment_indices = np.flatnonzero(to_amend)[np.argsort(segment_lengths[to_amend])[::-1]]
+    segment_indices = np.flatnonzero(to_amend)[np.argsort(new_segment_lengths[to_amend])[::-1]]
     capacities = current_segment_capacities[:first_free]
     for segment_idx in segment_indices:
         free_capacities = capacities[free_segments]
@@ -798,17 +801,17 @@ def find_place_for_segments_in_memory(
         if len(free_segments_indices) == 0:
             break
 
-        fitting_segment = np.argmax((free_capacities >= segment_lengths[segment_idx])[::-1])
+        fitting_segment = np.argmax((free_capacities >= new_segment_lengths[segment_idx])[::-1])
         fitting_segment = free_segments_indices[fitting_segment]
-        if current_segment_capacities[fitting_segment] >= segment_lengths[segment_idx]:
+        if current_segment_capacities[fitting_segment] >= new_segment_lengths[segment_idx]:
             free_segments[fitting_segment] = False
             to_amend[segment_idx] = False
             to_insert[segment_idx] = fitting_segment
 
     free_points_at_end = total_capacity - np.sum(current_segment_capacities[:first_free])
-    if np.sum(segment_lengths[to_amend] + 16) > free_points_at_end:
+    if np.sum(new_segment_lengths[to_amend] + 16) > free_points_at_end:
         raise RuntimeError('Fragmentation does not allow upload.',
-                           np.sum(segment_lengths[to_amend] + 16),
+                           np.sum(new_segment_lengths[to_amend] + 16),
                            free_points_at_end)
 
     return waveform_to_segment, to_amend, to_insert
