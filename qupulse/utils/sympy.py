@@ -363,7 +363,7 @@ def recursive_substitution(expression: sympy.Expr,
     return _recursive_substitution(expression, substitutions)
 
 
-_base_environment = {'builtins': builtins, '__builtins__':  builtins}
+_base_environment = {'builtins': builtins, '__builtins__':  builtins, 'math': math}
 _math_environment = {**_base_environment, **math.__dict__}
 _numpy_environment = {**_base_environment, **numpy.__dict__}
 _sympy_environment = {**_base_environment, **sympy.__dict__}
