@@ -197,7 +197,8 @@ class ArithmeticPulseTemplate(PulseTemplate):
                  arithmetic_operator: str,
                  rhs: Union[PulseTemplate, ExpressionLike, Mapping[ChannelID, ExpressionLike]],
                  *,
-                 identifier: Optional[str] = None):
+                 identifier: Optional[str] = None,
+                 registry: PulseRegistryType = None):
         """Implements the arithmetics between an aribrary pulse template and scalar values. The values can be the same
         for all channels, channel specific or only for a subset of the inner pulse templates defined channels.
         The expression may be time dependent if the pulse template is atomic.
@@ -262,6 +263,8 @@ class ArithmeticPulseTemplate(PulseTemplate):
         if self._pulse_template._is_atomic():
             # this is a hack so we can use the AtomicPulseTemplate.integral default implementation
             self._AS_EXPRESSION_TIME = AtomicPulseTemplate._AS_EXPRESSION_TIME
+
+        self._register(registry=registry)
 
     @staticmethod
     def _parse_operand(operand: Union[ExpressionLike, Mapping[ChannelID, ExpressionLike]],
