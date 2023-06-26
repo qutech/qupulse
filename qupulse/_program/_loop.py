@@ -3,6 +3,7 @@ from collections import defaultdict
 from enum import Enum
 import warnings
 import bisect
+import reprlib
 
 import numpy as np
 import sympy.ntheory
@@ -198,23 +199,20 @@ class Loop(Node):
         self._measurements = None
         self.assert_tree_integrity()
 
-    def _get_repr(self, first_prefix, other_prefixes) -> Generator[str, None, None]:
+    def _get_str(self, first_prefix, other_prefixes) -> Generator[str, None, None]:
         if self.is_leaf():
             yield '%sEXEC %r %d times' % (first_prefix, self._waveform, self.repetition_count)
         else:
             yield '%sLOOP %d times:' % (first_prefix, self.repetition_count)
 
             for elem in self:
-                yield from cast(Loop, elem)._get_repr(other_prefixes + '  ->', other_prefixes + '    ')
+                yield from cast(Loop, elem)._get_str(other_prefixes + '  ->', other_prefixes + '    ')
 
-    def __repr__(self) -> str:
-        is_circular = is_tree_circular(self)
-        if is_circular:
-            return '{}: Circ {}'.format(id(self), is_circular)
-
+    @reprlib.recursive_repr()
+    def __str__(self) -> str:
         str_len = 0
         repr_list = []
-        for sub_repr in self._get_repr('', ''):
+        for sub_repr in self._get_str('', ''):
             str_len += len(sub_repr)
 
             if self.MAX_REPR_SIZE and str_len > self.MAX_REPR_SIZE:
@@ -223,6 +221,47 @@ class Loop(Node):
             else:
                 repr_list.append(sub_repr)
         return '\n'.join(repr_list)
+
+    @reprlib.recursive_repr()
+    def __repr__(self):
+        children = self.children
+        waveform = self.waveform
+        measurements = self._measurements
+        repetition_count = self.repetition_count
+
+        max_repr_size = self.MAX_REPR_SIZE
+
+        reprs = {}
+        if children:
+            if len(children) < max_repr_size // len('Loop(...)'):
+                reprs['children'] = repr(list(children))
+            else:
+                reprs['children'] = '[...]'
+
+        if waveform:
+            waveform_repr = repr(waveform)
+            if len(waveform_repr) >= max_repr_size:
+                waveform_repr = '...'
+            reprs['waveform'] = waveform_repr
+
+        if measurements:
+            meas_repr = repr(measurements)
+            if len(meas_repr) >= max_repr_size:
+                meas_repr = '[...]'
+            reprs['measurements'] = meas_repr
+
+        if repetition_count != 1:
+            reprs['repetition_count'] = repr(repetition_count)
+
+        kwargs = ', '.join(f'{attr}={val}' for attr, val in reprs.items())
+
+        type_name = type(self).__name__
+        max_kwargs = max(self.MAX_REPR_SIZE - len(type_name) - 2, 0)
+
+        if len(kwargs) > max_kwargs:
+            kwargs = '...'
+
+        return f'{type(self).__name__}({kwargs})'
 
     def copy_tree_structure(self, new_parent: Union['Loop', bool]=False) -> 'Loop':
         return type(self)(parent=self.parent if new_parent is False else new_parent,

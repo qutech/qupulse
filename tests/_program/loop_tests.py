@@ -142,7 +142,7 @@ LOOP 1 times:
         # no measurements left
         self.assertEqual({}, prog.get_measurement_windows())
 
-    def test_repr(self):
+    def test_str(self):
         wf_gen = WaveformGenerator(num_channels=1)
         wfs = [wf_gen() for _ in range(11)]
 
@@ -154,10 +154,19 @@ LOOP 1 times:
                 loop.waveform = wfs.pop(0)
         self.assertEqual(len(wfs), 0)
 
-        self.assertEqual(repr(tree), expected)
+        self.assertEqual(str(tree), expected)
 
         with mock.patch.object(Loop, 'MAX_REPR_SIZE', 1):
-            self.assertEqual(repr(tree), '...')
+            self.assertEqual(str(tree), '...')
+
+    def test_repr(self):
+        root_loop = self.get_test_loop()
+
+        root_repr = repr(root_loop)
+
+        root_eval = eval(root_repr)
+
+        self.assertEqual(root_loop, root_eval)
 
     def test_is_leaf(self):
         root_loop = self.get_test_loop(waveform_generator=WaveformGenerator(1))
@@ -195,12 +204,12 @@ LOOP 1 times:
         after = before.copy_tree_structure()
         after.flatten_and_balance(2)
 
-        wf_reprs = dict(zip(ascii_uppercase,
-                            (repr(loop.waveform)
+        wf_strs = dict(zip(ascii_uppercase,
+                            (str(loop.waveform)
                              for loop in before.get_depth_first_iterator()
                              if loop.is_leaf())))
 
-        before_repr = """\
+        before_str = """\
 LOOP 1 times:
   ->EXEC {A} 1 times
   ->LOOP 10 times:
@@ -220,10 +229,10 @@ LOOP 1 times:
           ->EXEC {I} 8 times
       ->LOOP 9 times:
           ->EXEC {J} 10 times
-          ->EXEC {K} 11 times""".format(**wf_reprs)
-        self.assertEqual(repr(before), before_repr)
+          ->EXEC {K} 11 times""".format(**wf_strs)
+        self.assertEqual(str(before), before_str)
 
-        expected_after_repr = """\
+        expected_after_str = """\
 LOOP 1 times:
   ->LOOP 1 times:
       ->EXEC {A} 1 times
@@ -261,9 +270,9 @@ LOOP 1 times:
       ->EXEC {I} 8 times
   ->LOOP 9 times:
       ->EXEC {J} 10 times
-      ->EXEC {K} 11 times""".format(**wf_reprs)
+      ->EXEC {K} 11 times""".format(**wf_strs)
 
-        self.assertEqual(expected_after_repr, repr(after))
+        self.assertEqual(expected_after_str, str(after))
 
     def test_flatten_and_balance_comparison_based(self):
         wfs = [DummyWaveform(duration=i) for i in range(2)]
