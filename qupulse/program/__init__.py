@@ -17,6 +17,15 @@ NumVal = TypeVar('NumVal', bound=Real)
 
 @dataclass
 class SimpleExpression(Generic[NumVal]):
+    """This is a potential hardware evaluable expression of the form
+
+    C + C1*R1 + C2*R2 + ...
+    where R1, R2, ... are potential runtime parameters.
+
+    The main use case is the expression of for loop dependent variables where the Rs are loop indices. There the
+    expressions can be calculated via simple increments.
+    """
+
     base: NumVal
     offsets: Sequence[Tuple[str, NumVal]]
 
