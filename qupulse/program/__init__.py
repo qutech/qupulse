@@ -1,6 +1,7 @@
+import contextlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Optional, Union, Sequence, ContextManager, Mapping, Tuple, Generic, TypeVar
+from typing import Optional, Union, Sequence, ContextManager, Mapping, Tuple, Generic, TypeVar, Iterable
 from numbers import Real
 
 import numpy as np
@@ -8,6 +9,7 @@ import numpy as np
 from qupulse._program.waveforms import Waveform
 from qupulse.utils.types import MeasurementWindow, TimeType
 from qupulse._program.volatile import VolatileRepetitionCount
+from qupulse.parameter_scope import Scope
 
 from typing import Protocol, runtime_checkable
 
@@ -72,6 +74,10 @@ class ProgramBuilder(Protocol):
 
     """
 
+    def inner_scope(self, scope: Scope) -> Scope:
+        """This function is necessary to inject program builder specific parameter implementations into the build
+        process."""
+
     def hold_voltage(self, duration: HardwareTime, voltages: Mapping[str, HardwareVoltage]):
         """Supports dynamic i.e. for loop generated offsets and duration"""
 
@@ -83,7 +89,7 @@ class ProgramBuilder(Protocol):
     def measure(self, measurements: Optional[Sequence[MeasurementWindow]]):
         """Add given measurements at the current position"""
 
-    def with_repetition(self, repetition_count: RepetitionCount) -> ContextManager['ProgramBuilder']:
+    def with_repetition(self, repetition_count: RepetitionCount) -> Iterable['ProgramBuilder']:
         """Measurements that are added to the new builder are dropped if the builder is empty upon exit"""
 
     def with_sequence(self) -> ContextManager['ProgramBuilder']:
@@ -101,8 +107,14 @@ class ProgramBuilder(Protocol):
         """Create a context managed program builder whose contents are translated into a single waveform upon exit if
         it is not empty."""
 
-    def with_iteration(self, index_name: str, rng: range) -> Tuple[ContextManager['ProgramBuilder'], Any]:
+    def with_iteration(self, index_name: str, rng: range) -> Iterable['ProgramBuilder']:
         pass
 
     def to_program(self) -> Optional[Program]:
         """Further addition of new elements might fail after finalizing the program."""
+
+
+def iterate_context_managers(iterable):
+    for cm in iterable:
+        with cm as inner:
+            yield inner
