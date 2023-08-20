@@ -89,20 +89,18 @@ class LoopBuilder(ProgramBuilder):
 
     def with_iteration(self, index_name: str, rng: range,
                        measurements: Optional[Sequence[MeasurementWindow]] = None) -> Iterable['ProgramBuilder']:
-        top_frame = StackFrame(LoopGuard(self._top, measurements), None)
-        self._push(top_frame)
-        for value in rng:
-            top_frame.iterating = (index_name, value)
-            yield self
-        self._pop()
+        with self.with_sequence():
+            top_frame = self._stack[-1]
+            for value in rng:
+                top_frame.iterating = (index_name, value)
+                yield self
 
     @contextmanager
     def with_sequence(self, measurements: Optional[Sequence[MeasurementWindow]] = None) -> ContextManager['ProgramBuilder']:
-        sequence_loop = Loop(measurements=measurements)
-        self._push(StackFrame(sequence_loop, None))
+        top_frame = StackFrame(LoopGuard(self._top, measurements), None)
+        self._push(top_frame)
         yield self
         self._pop()
-        self._try_append(sequence_loop, None)
 
     def hold_voltage(self, duration: HardwareTime, voltages: Mapping[str, HardwareVoltage]):
         self.play_arbitrary_waveform(ConstantWaveform.from_mapping(duration, voltages))
