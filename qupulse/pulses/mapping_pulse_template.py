@@ -9,7 +9,7 @@ from qupulse.parameter_scope import Scope, MappedScope
 from qupulse.pulses.pulse_template import PulseTemplate, MappingTuple
 from qupulse.pulses.parameters import ParameterNotProvidedException, ParameterConstrainer
 from qupulse._program.waveforms import Waveform
-from qupulse._program._loop import Loop
+from qupulse.program import ProgramBuilder
 from qupulse.serialization import Serializer, PulseRegistryType
 
 __all__ = [
@@ -301,7 +301,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional['Transformation'],
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
-                                 parent_loop: Loop) -> None:
+                                 program_builder: ProgramBuilder) -> None:
         self.validate_scope(scope)
 
         # parameters are validated in map_parameters() call, no need to do it here again explicitly
@@ -310,7 +310,7 @@ class MappingPulseTemplate(PulseTemplate, ParameterConstrainer):
                                       channel_mapping=self.get_updated_channel_mapping(channel_mapping),
                                       global_transformation=global_transformation,
                                       to_single_waveform=to_single_waveform,
-                                      parent_loop=parent_loop)
+                                      program_builder=program_builder)
 
     def build_waveform(self,
                        parameters: Dict[str, numbers.Real],

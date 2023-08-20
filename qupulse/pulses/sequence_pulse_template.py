@@ -137,9 +137,7 @@ class SequencePulseTemplate(PulseTemplate, ParameterConstrainer, MeasurementDefi
         self.validate_scope(scope)
 
         measurements = self.get_measurement_windows(scope, measurement_mapping)
-        with program_builder.with_sequence() as sequence_program_builder:
-            if measurements:
-                sequence_program_builder.measure(measurements)
+        with program_builder.with_sequence(measurements=measurements) as sequence_program_builder:
             for subtemplate in self.subtemplates:
                 subtemplate._create_program(scope=scope,
                                             measurement_mapping=measurement_mapping,

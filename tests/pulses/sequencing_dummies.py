@@ -1,10 +1,13 @@
 """STANDARD LIBRARY IMPORTS"""
 import numbers
+import typing
 from typing import Tuple, List, Dict, Optional, Set, Any, Union, Mapping
 import copy
 
 import numpy
 import unittest
+
+import qupulse.program.loop
 
 """LOCAL IMPORTS"""
 from qupulse.parameter_scope import Scope
@@ -12,6 +15,7 @@ from qupulse._program._loop import Loop
 from qupulse.utils.types import MeasurementWindow, ChannelID, TimeType, time_from_float
 from qupulse.serialization import Serializer
 from qupulse._program.waveforms import Waveform
+from qupulse.program import ProgramBuilder
 from qupulse.pulses.pulse_template import AtomicPulseTemplate
 from qupulse.pulses.interpolation import InterpolationStrategy
 from qupulse.expressions import Expression, ExpressionScalar
@@ -198,15 +202,18 @@ class DummyPulseTemplate(AtomicPulseTemplate):
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional['Transformation'],
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
-                                 parent_loop: Loop) -> None:
+                                 program_builder: ProgramBuilder) -> None:
         measurements = self.get_measurement_windows(scope, measurement_mapping)
-        self.create_program_calls.append((scope, measurement_mapping, channel_mapping, parent_loop))
+        self.create_program_calls.append((scope, measurement_mapping, channel_mapping, program_builder))
         if self._program:
+            program_builder = typing.cast(program_builder, qupulse.program.loop.LoopBuilder)
+            parent_loop = program_builder._top
+
             parent_loop.add_measurements(measurements)
             parent_loop.append_child(waveform=self._program.waveform, children=self._program.children)
         elif self.waveform:
-            parent_loop.add_measurements(measurements)
-            parent_loop.append_child(waveform=self.waveform)
+            program_builder.measure(measurements)
+            program_builder.play_arbitrary_waveform(waveform=self.waveform)
 
     def build_waveform(self,
                        parameters: Dict[str, numbers.Real],

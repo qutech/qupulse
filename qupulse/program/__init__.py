@@ -87,12 +87,14 @@ class ProgramBuilder(Protocol):
         """"""
 
     def measure(self, measurements: Optional[Sequence[MeasurementWindow]]):
-        """Add given measurements at the current position"""
+        """Unconditionally add given measurements relative to the current position."""
 
-    def with_repetition(self, repetition_count: RepetitionCount) -> Iterable['ProgramBuilder']:
+    def with_repetition(self, repetition_count: RepetitionCount,
+                        measurements: Optional[Sequence[MeasurementWindow]] = None) -> Iterable['ProgramBuilder']:
         """Measurements that are added to the new builder are dropped if the builder is empty upon exit"""
 
-    def with_sequence(self) -> ContextManager['ProgramBuilder']:
+    def with_sequence(self,
+                      measurements: Optional[Sequence[MeasurementWindow]] = None) -> ContextManager['ProgramBuilder']:
         """
 
         Measurements that are added in to the returned program builder are discarded if the sequence is empty on exit.
@@ -107,14 +109,14 @@ class ProgramBuilder(Protocol):
         """Create a context managed program builder whose contents are translated into a single waveform upon exit if
         it is not empty."""
 
-    def with_iteration(self, index_name: str, rng: range) -> Iterable['ProgramBuilder']:
+    def with_iteration(self, index_name: str, rng: range,
+                       measurements: Optional[Sequence[MeasurementWindow]] = None) -> Iterable['ProgramBuilder']:
         pass
 
     def to_program(self) -> Optional[Program]:
         """Further addition of new elements might fail after finalizing the program."""
 
 
-def iterate_context_managers(iterable):
-    for cm in iterable:
-        with cm as inner:
-            yield inner
+def default_program_builder() -> ProgramBuilder:
+    from qupulse.program.loop import LoopBuilder
+    return LoopBuilder()

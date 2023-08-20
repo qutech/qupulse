@@ -133,10 +133,9 @@ class RepetitionPulseTemplate(LoopPulseTemplate, ParameterConstrainer, Measureme
 
             measurements = self.get_measurement_windows(scope, measurement_mapping)
 
-            with program_builder.with_repetition(repetition_definition) as repetition_program_builder:
-                if measurements:
-                    repetition_program_builder.measure(measurements)
-                self.body._create_program(scope=scope,
+            for repetition_program_builder in program_builder.with_repetition(repetition_definition,
+                                                                              measurements=measurements):
+                self.body._create_program(scope=repetition_program_builder.inner_scope(scope),
                                           measurement_mapping=measurement_mapping,
                                           channel_mapping=channel_mapping,
                                           global_transformation=global_transformation,

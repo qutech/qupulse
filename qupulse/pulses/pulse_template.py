@@ -26,7 +26,7 @@ from qupulse._program.waveforms import Waveform, TransformingWaveform
 from qupulse.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
 from qupulse.parameter_scope import Scope, DictScope
 
-from qupulse.program import ProgramBuilder
+from qupulse.program import ProgramBuilder, default_program_builder
 
 __all__ = ["PulseTemplate", "AtomicPulseTemplate", "DoubleParameterNameException", "MappingTuple",
            "UnknownVolatileParameter"]
@@ -120,7 +120,7 @@ class PulseTemplate(Serializable):
                        global_transformation: Optional[Transformation]=None,
                        to_single_waveform: Set[Union[str, 'PulseTemplate']]=None,
                        volatile: Union[Set[str], str] = None,
-                       program_builder: ProgramBuilder) -> Optional['Loop']:
+                       program_builder: ProgramBuilder = None) -> Optional['Loop']:
         """Translates this PulseTemplate into a program Loop.
 
         The returned Loop represents the PulseTemplate with all parameter values instantiated provided as dictated by
@@ -152,6 +152,8 @@ class PulseTemplate(Serializable):
             volatile = {volatile}
         else:
             volatile = set(volatile)
+        if program_builder is None:
+            program_builder = default_program_builder()
 
         # make sure all channels are mapped
         complete_channel_mapping = {channel: channel for channel in self.defined_channels}
@@ -181,9 +183,6 @@ class PulseTemplate(Serializable):
                               category=UnknownVolatileParameter,
                               stacklevel=2)
 
-        if program_builder is None:
-            program_builder = Loop()
-
         # call subclass specific implementation
         self._create_program(scope=scope,
                              measurement_mapping=measurement_mapping,
@@ -192,8 +191,6 @@ class PulseTemplate(Serializable):
                              to_single_waveform=to_single_waveform,
                              program_builder=program_builder)
 
-        if program_builder.waveform is None and len(program_builder.children) == 0:
-            return None  # return None if no program
         return program_builder.to_program()
 
     @abstractmethod
@@ -453,7 +450,7 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
                                  channel_mapping: Dict[ChannelID, Optional[ChannelID]],
                                  global_transformation: Optional[Transformation],
                                  to_single_waveform: Set[Union[str, 'PulseTemplate']],
-                                 parent_loop: Loop) -> None:
+                                 program_builder: ProgramBuilder) -> None:
         """Parameter constraints are validated in build_waveform because build_waveform is guaranteed to be called
         during sequencing"""
         ### current behavior (same as previously): only adds EXEC Loop and measurements if a waveform exists.
@@ -465,12 +462,17 @@ class AtomicPulseTemplate(PulseTemplate, MeasurementDefiner):
         if waveform:
             measurements = self.get_measurement_windows(parameters=scope,
                                                         measurement_mapping=measurement_mapping)
+            program_builder.measure(measurements)
 
             if global_transformation:
                 waveform = TransformingWaveform.from_transformation(waveform, global_transformation)
 
-            parent_loop.add_measurements(measurements=measurements)
-            parent_loop.append_child(waveform=waveform)
+            constant_values = waveform.constant_value_dict()
+            if constant_values is None:
+                program_builder.play_arbitrary_waveform(waveform)
+            else:
+                program_builder.hold_voltage(waveform.duration, constant_values)
+
 
     @abstractmethod
     def build_waveform(self,

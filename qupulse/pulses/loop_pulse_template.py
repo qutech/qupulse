@@ -153,17 +153,14 @@ class ForLoopPulseTemplate(LoopPulseTemplate, MeasurementDefiner, ParameterConst
                                  program_builder: ProgramBuilder) -> None:
         self.validate_scope(scope=scope)
 
-        measurements = self.get_measurement_windows(scope, measurement_mapping)
         loop_range = self._loop_range.to_range(scope)
         loop_index_name = self._loop_index
 
-        with program_builder.with_iteration(loop_index_name, loop_range) as iteration_program_builder:
-            iteration_program_builder.measure(measurements)
+        measurements = self.get_measurement_windows(scope, measurement_mapping)
 
-            # todo: create specialized scope?
-            inner_scope = MappedScope(scope, {loop_index_name: _ForLoopIndexValue(loop_index_name, loop_range)})
-
-            self.body._create_program(scope=inner_scope,
+        for iteration_program_builder in program_builder.with_iteration(loop_index_name, loop_range,
+                                                                         measurements=measurements):
+            self.body._create_program(scope=iteration_program_builder.inner_scope(scope),
                                       measurement_mapping=measurement_mapping,
                                       channel_mapping=channel_mapping,
                                       global_transformation=global_transformation,
