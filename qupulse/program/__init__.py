@@ -35,11 +35,23 @@ class SimpleExpression(Generic[NumVal]):
             value += scope[name] * factor
         return value
 
+    def __add__(self, other):
+        if isinstance(other, (float, int, TimeType)):
+            return SimpleExpression(self.base + other, self.offsets)
 
-RepetitionCount = Union[int, VolatileRepetitionCount]
-Value = Union[Real, SimpleExpression]
+        if type(other) == type(self):
+            return SimpleExpression(self.base + other.base, self.offsets + other.offsets)
+
+        return NotImplemented
+
+    def __mul__(self, other: NumVal):
+        return SimpleExpression(self.base * other, tuple((name, value * other) for name, value in self.offsets))
 
 
+
+RepetitionCount = Union[int, VolatileRepetitionCount, SimpleExpression[int]]
+HardwareTime = Union[TimeType, SimpleExpression[TimeType]]
+HardwareVoltage = Union[float, SimpleExpression[float]]
 
 
 @runtime_checkable
@@ -60,7 +72,7 @@ class ProgramBuilder(Protocol):
 
     """
 
-    def hold_voltage(self, duration: Value, voltages: Mapping[str, Value]):
+    def hold_voltage(self, duration: HardwareTime, voltages: Mapping[str, HardwareVoltage]):
         """Supports dynamic i.e. for loop generated offsets and duration"""
 
     # further specialized commandos like play_harmoic might be added here
@@ -89,7 +101,7 @@ class ProgramBuilder(Protocol):
         """Create a context managed program builder whose contents are translated into a single waveform upon exit if
         it is not empty."""
 
-    def with_iteration(self, index_name: str, rng: range) -> ContextManager['ProgramBuilder']:
+    def with_iteration(self, index_name: str, rng: range) -> Tuple[ContextManager['ProgramBuilder'], Any]:
         pass
 
     def to_program(self) -> Optional[Program]:
