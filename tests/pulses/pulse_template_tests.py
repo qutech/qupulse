@@ -453,7 +453,7 @@ class AtomicPulseTemplateTests(unittest.TestCase):
         scope = DictScope.from_kwargs(foo=7.2, volatile={'gutes_zeuch'})
         measurement_mapping = {'M': 'N'}
         channel_mapping = {'B': 'A'}
-        program = Loop()
+        program_builder = LoopBuilder()
 
         expected_program = Loop(children=[Loop(waveform=wf)],
                                 measurements=[('N', 0, 5)])
@@ -462,20 +462,17 @@ class AtomicPulseTemplateTests(unittest.TestCase):
             template._internal_create_program(scope=scope,
                                               measurement_mapping=measurement_mapping,
                                               channel_mapping=channel_mapping,
-                                              parent_loop=program,
+                                              program_builder=program_builder,
                                               to_single_waveform=set(),
                                               global_transformation=None)
             build_waveform.assert_called_once_with(parameters=scope, channel_mapping=channel_mapping)
-
+        program = program_builder.to_program()
         self.assertEqual(expected_program, program)
-
-        # MultiChannelProgram calls cleanup
-        program.cleanup()
 
     def test_internal_create_program_transformation(self):
         inner_wf = DummyWaveform()
         template = AtomicPulseTemplateStub(parameter_names=set())
-        program = Loop()
+        program_builder = LoopBuilder()
         global_transformation = TransformationStub()
         scope = DictScope.from_kwargs()
         expected_program = Loop(children=[Loop(waveform=TransformingWaveform(inner_wf, global_transformation))])
@@ -484,10 +481,10 @@ class AtomicPulseTemplateTests(unittest.TestCase):
             template._internal_create_program(scope=scope,
                                               measurement_mapping={},
                                               channel_mapping={},
-                                              parent_loop=program,
+                                              program_builder=program_builder,
                                               to_single_waveform=set(),
                                               global_transformation=global_transformation)
-
+        program = program_builder.to_program()
         self.assertEqual(expected_program, program)
 
     def test_internal_create_program_no_waveform(self) -> None:
@@ -497,7 +494,7 @@ class AtomicPulseTemplateTests(unittest.TestCase):
         scope = DictScope.from_kwargs(foo=3.5, bar=3, volatile={'bar'})
         measurement_mapping = {'M': 'N'}
         channel_mapping = {'B': 'A'}
-        program = Loop()
+        program_builder = LoopBuilder()
 
         expected_program = Loop()
 
@@ -508,13 +505,13 @@ class AtomicPulseTemplateTests(unittest.TestCase):
                 template._internal_create_program(scope=scope,
                                                   measurement_mapping=measurement_mapping,
                                                   channel_mapping=channel_mapping,
-                                                  parent_loop=program,
+                                                  program_builder=program_builder,
                                                   to_single_waveform=set(),
                                                   global_transformation=None)
                 build_waveform.assert_called_once_with(parameters=scope, channel_mapping=channel_mapping)
                 get_meas_windows.assert_not_called()
 
-        self.assertEqual(expected_program, program)
+        self.assertIsNone(program_builder.to_program())
 
     def test_internal_create_program_volatile(self):
         template = AtomicPulseTemplateStub(parameter_names={'foo'})
@@ -522,13 +519,13 @@ class AtomicPulseTemplateTests(unittest.TestCase):
         measurement_mapping = {'M': 'N'}
         channel_mapping = {'B': 'A'}
 
-        program = Loop()
+        program_builder = LoopBuilder()
 
         with self.assertRaisesRegex(AssertionError, "volatile"):
             template._internal_create_program(scope=scope,
                                               measurement_mapping=measurement_mapping,
                                               channel_mapping=channel_mapping,
-                                              parent_loop=program,
+                                              program_builder=program_builder,
                                               to_single_waveform=set(),
                                               global_transformation=None)
-        self.assertEqual(Loop(), program)
+        self.assertIsNone(program_builder.to_program())
