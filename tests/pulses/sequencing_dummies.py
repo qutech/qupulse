@@ -24,10 +24,13 @@ from qupulse.expressions import Expression, ExpressionScalar
 class MeasurementWindowTestCase(unittest.TestCase):
 
     def assert_measurement_windows_equal(self, expected, actual) -> bool:
-        self.assertEqual(expected.keys(), actual.keys())
-        for k in expected:
-            self.assertEqual(list(expected[k][0]), list(actual[k][0]))
-            self.assertEqual(list(expected[k][1]), list(actual[k][1]))
+        def normalize_measurement_windows(mw):
+            return {name: ([bs[idx] for idx in numpy.argsort(bs)], [ls[idx] for idx in numpy.argsort(bs)])
+                    for name, (bs, ls) in mw.items()}
+
+        expected = normalize_measurement_windows(expected)
+        actual = normalize_measurement_windows(actual)
+        self.assertEqual(expected, actual)
 
 
 class DummyWaveform(Waveform):
