@@ -390,7 +390,6 @@ class ForLoopTemplateSequencingTests(MeasurementWindowTestCase):
                     get_measurement_windows.assert_called_once_with(scope, measurement_mapping)
                     self.assertEqual(body_create_program.call_args_list, expected_create_program_calls)
 
-
     def test_create_program_append(self) -> None:
         dt = DummyPulseTemplate(parameter_names={'i'}, waveform=DummyWaveform(duration=4.0), duration=4,
                                 measurements=[('b', 2, 1)])
