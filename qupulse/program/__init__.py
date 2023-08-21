@@ -105,7 +105,7 @@ class ProgramBuilder(Protocol):
         Returns:
         """
 
-    def new_subprogram(self) -> ContextManager['ProgramBuilder']:
+    def new_subprogram(self, global_transformation: 'Transformation' = None) -> ContextManager['ProgramBuilder']:
         """Create a context managed program builder whose contents are translated into a single waveform upon exit if
         it is not empty."""
 

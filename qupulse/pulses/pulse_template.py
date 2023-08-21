@@ -225,7 +225,7 @@ class PulseTemplate(Serializable):
         """Generic part of create program. This method handles to_single_waveform and the configuration of the
         transformer."""
         if self.identifier in to_single_waveform or self in to_single_waveform:
-            with program_builder.new_subprogram() as inner_program_builder:
+            with program_builder.new_subprogram(global_transformation=global_transformation) as inner_program_builder:
 
                 if not scope.get_volatile_parameters().keys().isdisjoint(self.parameter_names):
                     raise NotImplementedError('A pulse template that has volatile parameters cannot be transformed into a '
@@ -234,7 +234,7 @@ class PulseTemplate(Serializable):
                 self._internal_create_program(scope=scope,
                                               measurement_mapping=measurement_mapping,
                                               channel_mapping=channel_mapping,
-                                              global_transformation=global_transformation,
+                                              global_transformation=None,
                                               to_single_waveform=to_single_waveform,
                                               program_builder=inner_program_builder)
 

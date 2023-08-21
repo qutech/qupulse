@@ -15,8 +15,9 @@ from qupulse.program import ProgramBuilder, RepetitionCount, HardwareTime, Hardw
 from qupulse.program.waveforms import ConstantWaveform, Waveform
 from qupulse.pulses.range import RangeScope
 from qupulse.parameter_scope import Scope
-from qupulse.program.waveforms import Waveform, ConstantWaveform
+from qupulse.program.waveforms import Waveform, ConstantWaveform, TransformingWaveform
 from qupulse.program.volatile import VolatileRepetitionCount, VolatileProperty
+from qupulse.program.transformation import Transformation
 
 from qupulse.utils import is_integer
 from qupulse.utils.types import TimeType, MeasurementWindow
@@ -826,16 +827,20 @@ class LoopBuilder(ProgramBuilder):
         self._top.append_child(waveform=waveform)
 
     @contextmanager
-    def new_subprogram(self) -> ContextManager['ProgramBuilder']:
+    def new_subprogram(self, global_transformation: Transformation = None) -> ContextManager['ProgramBuilder']:
         inner_builder = LoopBuilder()
         yield inner_builder
         inner_program = inner_builder.to_program()
 
         if inner_program is not None:
-            for name, (begins, lengths) in inner_program.get_measurement_windows().items():
-                for begin, length in zip(begins, lengths):
-                    self._top.add_measurements((name, begin, length))
-            self.play_arbitrary_waveform(to_waveform(inner_program))
+            measurements = [(name, begin, length)
+                            for name, (begins, lengths) in inner_program.get_measurement_windows().items()
+                            for begin, length in zip(begins, lengths)]
+            self._top.add_measurements(measurements)
+            waveform = to_waveform(inner_program)
+            if global_transformation is not None:
+                waveform = TransformingWaveform.from_transformation(waveform, global_transformation)
+            self.play_arbitrary_waveform(waveform)
 
     def to_program(self) -> Optional[Loop]:
         if len(self._stack) != 1:
