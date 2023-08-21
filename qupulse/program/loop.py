@@ -807,7 +807,7 @@ class LoopBuilder(ProgramBuilder):
 
     def with_iteration(self, index_name: str, rng: range,
                        measurements: Optional[Sequence[MeasurementWindow]] = None) -> Iterable['ProgramBuilder']:
-        with self.with_sequence():
+        with self.with_sequence(measurements):
             top_frame = self._stack[-1]
             for value in rng:
                 top_frame.iterating = (index_name, value)
