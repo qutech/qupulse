@@ -19,10 +19,10 @@ from qupulse.utils.types import ChannelID, DocStringABCMeta, FrozenDict
 from qupulse.utils import forced_hash
 from qupulse.serialization import Serializable
 from qupulse.expressions import ExpressionScalar, Expression, ExpressionLike
-from qupulse._program._loop import Loop, to_waveform
-from qupulse._program.transformation import Transformation, IdentityTransformation, ChainedTransformation, chain_transformations
+from qupulse.program.loop import Loop, to_waveform
+from qupulse.program.transformation import Transformation, IdentityTransformation, ChainedTransformation, chain_transformations
 
-from qupulse._program.waveforms import Waveform, TransformingWaveform
+from qupulse.program.waveforms import Waveform, TransformingWaveform
 from qupulse.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
 from qupulse.parameter_scope import Scope, DictScope
 

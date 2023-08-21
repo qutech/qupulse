@@ -13,13 +13,13 @@ from qupulse.serialization import Serializer, PulseRegistryType
 from qupulse.parameter_scope import Scope, MappedScope, DictScope
 from qupulse.utils.types import FrozenDict, FrozenMapping
 
-from qupulse._program._loop import Loop
+from qupulse.program.loop import Loop
 
 from qupulse.expressions import ExpressionScalar, ExpressionVariableMissingException, Expression
 from qupulse.utils import checked_int_cast, cached_property
 from qupulse.pulses.parameters import InvalidParameterNameException, ParameterConstrainer, ParameterNotProvidedException
 from qupulse.pulses.pulse_template import PulseTemplate, ChannelID, AtomicPulseTemplate
-from qupulse._program.waveforms import SequenceWaveform as ForLoopWaveform
+from qupulse.program.waveforms import SequenceWaveform as ForLoopWaveform
 from qupulse.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
 from qupulse.pulses.range import ParametrizedRange, RangeScope
 

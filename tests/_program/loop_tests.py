@@ -11,12 +11,11 @@ from qupulse.expressions import ExpressionScalar
 from qupulse.parameter_scope import DictScope
 
 from qupulse.utils.types import TimeType, time_from_float
-from qupulse._program.volatile import VolatileRepetitionCount
-from qupulse._program._loop import Loop, _make_compatible, _is_compatible, _CompatibilityLevel,\
+from qupulse.program.volatile import VolatileRepetitionCount
+from qupulse.program.loop import Loop, _make_compatible, _is_compatible, _CompatibilityLevel,\
     RepetitionWaveform, SequenceWaveform, make_compatible, MakeCompatibleWarning, DroppedMeasurementWarning,\
     VolatileModificationWarning, roll_constant_waveforms
-from qupulse._program._loop import Loop, _make_compatible, _is_compatible, _CompatibilityLevel,\
-    RepetitionWaveform, SequenceWaveform, make_compatible, MakeCompatibleWarning, ConstantWaveform
+from qupulse.program.waveforms import *
 from tests.pulses.sequencing_dummies import DummyWaveform
 from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
 
@@ -488,27 +487,27 @@ class ProgramWaveformCompatibilityTest(unittest.TestCase):
                           sample_rate=TimeType.from_float(1.))
         priv_kwargs = dict(min_len=5, quantum=10, sample_rate=TimeType.from_float(1.))
 
-        with mock.patch('qupulse._program._loop._is_compatible',
+        with mock.patch('qupulse.program.loop._is_compatible',
                         return_value=_CompatibilityLevel.incompatible_too_short) as mocked:
             with self.assertRaisesRegex(ValueError, 'too short'):
                 make_compatible(program, **pub_kwargs)
             mocked.assert_called_once_with(program, **priv_kwargs)
 
-        with mock.patch('qupulse._program._loop._is_compatible',
+        with mock.patch('qupulse.program.loop._is_compatible',
                         return_value=_CompatibilityLevel.incompatible_fraction) as mocked:
             with self.assertRaisesRegex(ValueError, 'not an integer'):
                 make_compatible(program, **pub_kwargs)
             mocked.assert_called_once_with(program, **priv_kwargs)
 
-        with mock.patch('qupulse._program._loop._is_compatible',
+        with mock.patch('qupulse.program.loop._is_compatible',
                         return_value=_CompatibilityLevel.incompatible_quantum) as mocked:
             with self.assertRaisesRegex(ValueError, 'not a multiple of quantum'):
                 make_compatible(program, **pub_kwargs)
             mocked.assert_called_once_with(program, **priv_kwargs)
 
-        with mock.patch('qupulse._program._loop._is_compatible',
+        with mock.patch('qupulse.program.loop._is_compatible',
                         return_value=_CompatibilityLevel.action_required) as is_compat:
-            with mock.patch('qupulse._program._loop._make_compatible') as make_compat:
+            with mock.patch('qupulse.program.loop._make_compatible') as make_compat:
                 make_compatible(program, **pub_kwargs)
 
                 is_compat.assert_called_once_with(program, **priv_kwargs)

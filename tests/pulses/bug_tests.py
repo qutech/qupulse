@@ -13,7 +13,7 @@ from qupulse.pulses.loop_pulse_template import ForLoopPulseTemplate
 
 from qupulse.plotting import plot
 
-from qupulse._program._loop import to_waveform
+from qupulse.program.loop import to_waveform
 from qupulse.utils import isclose
 
 class BugTests(unittest.TestCase):
@@ -77,7 +77,7 @@ class BugTests(unittest.TestCase):
         """issue 584"""
         d = 598.3333333333334 - 480
         tpt = TablePulseTemplate(entries={'P': [(0, 1.0, 'hold'), (d, 1.0, 'hold')]})
-        with mock.patch('qupulse._program.waveforms.PULSE_TO_WAVEFORM_ERROR', 1e-6):
+        with mock.patch('qupulse.program.waveforms.PULSE_TO_WAVEFORM_ERROR', 1e-6):
             wf = to_waveform(tpt.create_program())
             self.assertTrue(isclose(d, wf.duration, abs_tol=1e-6))
 

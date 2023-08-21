@@ -10,7 +10,7 @@ from qupulse.pulses.loop_pulse_template import ForLoopPulseTemplate, Parametrize
 from qupulse.pulses.parameters import InvalidParameterNameException, ParameterConstraintViolation,\
     ParameterNotProvidedException, ParameterConstraint
 
-from qupulse._program._loop import Loop
+from qupulse.program.loop import Loop
 
 from tests.pulses.sequencing_dummies import DummyPulseTemplate, MeasurementWindowTestCase, DummyWaveform
 from tests.serialization_dummies import DummySerializer

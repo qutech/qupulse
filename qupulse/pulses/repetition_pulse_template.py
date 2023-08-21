@@ -8,7 +8,8 @@ from warnings import warn
 import numpy as np
 
 from qupulse.serialization import Serializer, PulseRegistryType
-from qupulse._program._loop import Loop, VolatileRepetitionCount
+from qupulse.program.loop import Loop
+from qupulse.program.volatile import VolatileRepetitionCount
 from qupulse.parameter_scope import Scope
 
 from qupulse.utils.types import ChannelID

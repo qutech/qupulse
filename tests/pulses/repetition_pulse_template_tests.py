@@ -5,7 +5,7 @@ from unittest import mock
 from qupulse.parameter_scope import Scope, DictScope
 from qupulse.utils.types import FrozenDict
 
-from qupulse._program._loop import Loop
+from qupulse.program.loop import Loop
 from qupulse.expressions import Expression, ExpressionScalar
 from qupulse.pulses import ConstantPT
 from qupulse.pulses.repetition_pulse_template import RepetitionPulseTemplate,ParameterNotIntegerException

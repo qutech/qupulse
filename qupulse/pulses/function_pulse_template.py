@@ -17,7 +17,7 @@ from qupulse.serialization import Serializer, PulseRegistryType
 from qupulse.utils.types import ChannelID, TimeType, time_from_float
 from qupulse.pulses.parameters import ParameterConstrainer, ParameterConstraint
 from qupulse.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration
-from qupulse._program.waveforms import FunctionWaveform
+from qupulse.program.waveforms import FunctionWaveform
 
 
 __all__ = ["FunctionPulseTemplate"]

@@ -5,7 +5,7 @@ import numbers
 
 from qupulse.hardware.awgs.base import AWG
 from qupulse.hardware.dacs import DAC
-from qupulse._program._loop import Loop
+from qupulse.program.loop import Loop
 
 from qupulse.utils.types import ChannelID
 
