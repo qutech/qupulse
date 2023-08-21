@@ -20,7 +20,7 @@ from qupulse.expressions import ExpressionScalar, ExpressionVariableMissingExcep
 from qupulse.utils import checked_int_cast, cached_property
 from qupulse.pulses.parameters import InvalidParameterNameException, ParameterConstrainer, ParameterNotProvidedException
 from qupulse.pulses.pulse_template import PulseTemplate, ChannelID, AtomicPulseTemplate
-from qupulse._program.waveforms import SequenceWaveform as ForLoopWaveform
+from qupulse.program.waveforms import SequenceWaveform as ForLoopWaveform
 from qupulse.pulses.measurement import MeasurementDefiner, MeasurementDeclaration
 from qupulse.pulses.range import ParametrizedRange, RangeScope
 

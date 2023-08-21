@@ -7,9 +7,8 @@ from qupulse.pulses.table_pulse_template import TablePulseTemplate
 from qupulse.pulses.sequence_pulse_template import SequencePulseTemplate, SequenceWaveform
 from qupulse.pulses.mapping_pulse_template import MappingPulseTemplate
 from qupulse.pulses.parameters import ParameterConstraint, ParameterConstraintViolation, ParameterNotProvidedException
-from qupulse._program._loop import Loop
 from qupulse.program import default_program_builder
-from qupulse.program.loop import LoopBuilder
+from qupulse.program.loop import LoopBuilder, Loop
 
 from tests.pulses.sequencing_dummies import DummyPulseTemplate, DummyWaveform, MeasurementWindowTestCase
 from tests.serialization_dummies import DummySerializer

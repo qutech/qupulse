@@ -10,7 +10,7 @@ import numpy as np
 
 from qupulse.hardware.awgs.base import AWGAmplitudeOffsetHandling
 from qupulse.utils.types import TimeType
-from qupulse._program._loop import Loop
+from qupulse.program.loop import Loop
 from qupulse._program.tabor import TableDescription, TimeType, TableEntry, TaborSegment, TaborProgram,\
     make_combined_wave, TaborSequencing
 from qupulse._program.waveforms import ConstantWaveform

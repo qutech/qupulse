@@ -3,7 +3,7 @@ from typing import Callable, Optional, Set, Tuple, Dict, Union, Any, Mapping
 from numbers import Real
 from enum import Enum
 
-from qupulse._program._loop import Loop
+from qupulse.program.loop import Loop
 from qupulse.hardware.feature_awg.base import AWGDeviceFeature, AWGChannelFeature, AWGChannelTupleFeature,\
     AWGChannelTuple
 from qupulse.utils.types import ChannelID

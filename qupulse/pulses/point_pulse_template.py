@@ -9,7 +9,7 @@ import numpy as np
 from qupulse.utils.sympy import IndexedBroadcast
 from qupulse.utils.types import ChannelID
 from qupulse.expressions import Expression, ExpressionScalar
-from qupulse._program.waveforms import TableWaveform, TableWaveformEntry
+from qupulse.program.waveforms import TableWaveform, TableWaveformEntry
 from qupulse.pulses.parameters import ParameterConstraint, ParameterConstrainer
 from qupulse.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration
 from qupulse.pulses.table_pulse_template import TableEntry, EntryInInit

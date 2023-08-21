@@ -10,7 +10,6 @@ from qupulse.pulses.parameters import ParameterConstraintViolation, ParameterCon
 from qupulse.expressions import Expression
 from qupulse.program import default_program_builder
 from qupulse.program.loop import Loop, LoopBuilder
-from qupulse._program._loop import Loop
 
 from tests.pulses.sequencing_dummies import DummyPulseTemplate, MeasurementWindowTestCase, DummyWaveform
 from tests.serialization_tests import SerializableTests

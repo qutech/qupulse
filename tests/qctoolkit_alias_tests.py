@@ -10,7 +10,7 @@ class QctoolkitAliasTest(unittest.TestCase):
         self.assertIs(qctoolkit.pulses.TablePT, qupulse.pulses.TablePT)
 
     def test_class_identity(self):
-        from qupulse._program._loop import Loop as Loop_qu
-        from qctoolkit._program._loop import Loop as Loop_qc
+        from qupulse.program.loop import Loop as Loop_qu
+        from qctoolkit.program.loop import Loop as Loop_qc
 
         self.assertIs(Loop_qc, Loop_qu)

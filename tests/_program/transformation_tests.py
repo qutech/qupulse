@@ -5,7 +5,7 @@ import numpy as np
 
 
 from qupulse.expressions import ExpressionScalar
-from qupulse._program.transformation import LinearTransformation, Transformation, IdentityTransformation,\
+from qupulse.program.transformation import LinearTransformation, Transformation, IdentityTransformation,\
     ChainedTransformation, ParallelChannelTransformation, chain_transformations, OffsetTransformation,\
     ScalingTransformation
 
@@ -43,7 +43,7 @@ class TransformationTests(unittest.TestCase):
 
         self.assertIs(trafo.chain(IdentityTransformation()), trafo)
 
-        with mock.patch('qupulse._program.transformation.chain_transformations',
+        with mock.patch('qupulse.program.transformation.chain_transformations',
                         return_value='asd') as chain_transformations:
             self.assertEqual(trafo.chain(trafo), 'asd')
             chain_transformations.assert_called_once_with(trafo, trafo)
@@ -277,7 +277,7 @@ class ChainedTransformationTests(unittest.TestCase):
         trafo = TransformationStub()
         chained = ChainedTransformation(*trafos)
 
-        with mock.patch('qupulse._program.transformation.chain_transformations',
+        with mock.patch('qupulse.program.transformation.chain_transformations',
                         return_value='asd') as chain_transformations:
             self.assertEqual(chained.chain(trafo), 'asd')
             chain_transformations.assert_called_once_with(*trafos, trafo)

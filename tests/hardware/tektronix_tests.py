@@ -13,7 +13,7 @@ import qupulse.hardware.awgs.tektronix as tektronix
 
 from qupulse.hardware.awgs.tektronix import TektronixAWG, TektronixProgram, parse_program, _make_binary_waveform,\
     voltage_to_uint16, WaveformEntry, WaveformStorage
-from qupulse._program._loop import Loop
+from qupulse.program.loop import Loop
 from qupulse.utils.types import TimeType
 from tests.pulses.sequencing_dummies import DummyWaveform
 from qupulse._program.waveforms import MultiChannelWaveform

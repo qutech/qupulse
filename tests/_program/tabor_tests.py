@@ -18,7 +18,7 @@ except ImportError:
 
 from qupulse._program.tabor import TaborException, TaborProgram, find_place_for_segments_in_memory,\
     TaborSegment, TaborSequencing, PlottableProgram, TableDescription, make_combined_wave, TableEntry
-from qupulse._program._loop import Loop
+from qupulse.program.loop import Loop
 from qupulse._program.volatile import VolatileRepetitionCount
 from qupulse.hardware.util import voltage_to_uint16
 from qupulse.utils.types import TimeType

@@ -8,7 +8,7 @@ from qupulse.expressions import Expression, ExpressionScalar
 from qupulse.parameter_scope import Scope, MappedScope
 from qupulse.pulses.pulse_template import PulseTemplate, MappingTuple
 from qupulse.pulses.parameters import ParameterNotProvidedException, ParameterConstrainer
-from qupulse._program.waveforms import Waveform
+from qupulse.program.waveforms import Waveform
 from qupulse.program import ProgramBuilder
 from qupulse.serialization import Serializer, PulseRegistryType
 

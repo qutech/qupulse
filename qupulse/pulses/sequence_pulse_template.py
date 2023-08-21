@@ -15,7 +15,7 @@ from qupulse.utils.types import MeasurementWindow, ChannelID, TimeType
 from qupulse.pulses.pulse_template import PulseTemplate, AtomicPulseTemplate
 from qupulse.pulses.parameters import ConstraintLike, ParameterConstrainer
 from qupulse.pulses.mapping_pulse_template import MappingPulseTemplate, MappingTuple
-from qupulse._program.waveforms import SequenceWaveform
+from qupulse.program.waveforms import SequenceWaveform
 from qupulse.pulses.measurement import MeasurementDeclaration, MeasurementDefiner
 from qupulse.expressions import Expression, ExpressionScalar
 

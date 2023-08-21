@@ -11,7 +11,7 @@ import tabor_control.device
 import numpy as np
 
 from qupulse.utils.types import ChannelID
-from qupulse._program._loop import Loop, make_compatible
+from qupulse.program.loop import Loop, make_compatible
 from qupulse.hardware.util import voltage_to_uint16, traced
 from qupulse.hardware.awgs.base import AWG, AWGAmplitudeOffsetHandling
 from qupulse._program.tabor import TaborSegment, TaborException, TaborProgram, PlottableProgram, TaborSequencing,\

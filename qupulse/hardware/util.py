@@ -10,7 +10,7 @@ except ImportError:
         """Noop traced that is used if autologging package is not available"""
         return obj
 
-from qupulse._program.waveforms import Waveform
+from qupulse.program.waveforms import Waveform
 from qupulse.utils.types import TimeType
 from qupulse.utils import pairwise
 

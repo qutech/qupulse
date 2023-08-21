@@ -5,7 +5,7 @@ from collections import OrderedDict
 import numpy as np
 
 from qupulse.utils.types import TimeType
-from qupulse._program._loop import Loop
+from qupulse.program.loop import Loop
 from qupulse.hardware.awgs.base import ProgramEntry
 
 from tests.pulses.sequencing_dummies import DummyWaveform
