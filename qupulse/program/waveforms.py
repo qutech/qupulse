@@ -17,7 +17,7 @@ from weakref import WeakValueDictionary, ref
 import numpy as np
 
 from qupulse import ChannelID
-from qupulse._program.transformation import Transformation
+from qupulse.program.transformation import Transformation
 from qupulse.utils import checked_int_cast, isclose
 from qupulse.utils.types import TimeType, time_from_float
 from qupulse.utils.performance import is_monotonic
@@ -26,16 +26,17 @@ from qupulse.expressions import ExpressionScalar
 from qupulse.pulses.interpolation import InterpolationStrategy
 from qupulse.utils import checked_int_cast, isclose
 from qupulse.utils.types import TimeType, time_from_float, FrozenDict
-from qupulse._program.transformation import Transformation
+from qupulse.program.transformation import Transformation
 from qupulse.utils import pairwise
 
 class ConstantFunctionPulseTemplateWarning(UserWarning):
     """  This warning indicates a constant waveform is constructed from a FunctionPulseTemplate """
     pass
 
+
 __all__ = ["Waveform", "TableWaveform", "TableWaveformEntry", "FunctionWaveform", "SequenceWaveform",
            "MultiChannelWaveform", "RepetitionWaveform", "TransformingWaveform", "ArithmeticWaveform",
-           "ConstantFunctionPulseTemplateWarning"]
+           "ConstantFunctionPulseTemplateWarning", "ConstantWaveform"]
 
 PULSE_TO_WAVEFORM_ERROR = None  # error margin in pulse template to waveform conversion
 

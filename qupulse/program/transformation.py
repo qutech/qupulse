@@ -13,6 +13,11 @@ from qupulse.expressions import ExpressionScalar
 _TrafoValue = Union[Real, ExpressionScalar]
 
 
+__all__ = ['Transformation', 'IdentityTransformation', 'LinearTransformation', 'ScalingTransformation',
+           'OffsetTransformation', 'ParallelChannelTransformation', 'ChainedTransformation',
+           'chain_transformations']
+
+
 class Transformation(Comparable):
     _identity_singleton = None
     """Transforms numeric time-voltage values for multiple channels to other time-voltage values. The number and names
@@ -393,6 +398,7 @@ def _get_constant_output_channels(expressions: Mapping[ChannelID, _TrafoValue],
     return {ch
             for ch in constant_input_channels
             if not hasattr(expressions.get(ch, None), 'variables')}
+
 
 def _are_valid_transformation_expressions(expressions: Mapping[ChannelID, _TrafoValue]) -> bool:
     return all(expr.variables == ('t',)

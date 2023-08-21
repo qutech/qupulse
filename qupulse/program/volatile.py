@@ -9,6 +9,9 @@ from qupulse.utils.types import FrozenDict, FrozenMapping
 from qupulse.utils import is_integer
 
 
+__all__ = ['VolatileProperty', 'VolatileValue', 'VolatileRepetitionCount']
+
+
 VolatileProperty = NamedTuple('VolatileProperty', [('expression', Expression),
                                                    ('dependencies', FrozenMapping[str, Expression])])
 VolatileProperty.__doc__ = """Hashable representation of a volatile program property. It does not contain the concrete

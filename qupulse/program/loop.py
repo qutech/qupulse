@@ -8,17 +8,17 @@ import reprlib
 import numpy as np
 import sympy.ntheory
 
-from qupulse._program.waveforms import Waveform, ConstantWaveform
-from qupulse._program.volatile import VolatileRepetitionCount, VolatileProperty
+from qupulse.program.waveforms import Waveform, ConstantWaveform
+from qupulse.program.volatile import VolatileRepetitionCount, VolatileProperty
 
 from qupulse.utils import is_integer
 from qupulse.utils.types import TimeType, MeasurementWindow
 from qupulse.utils.tree import Node, is_tree_circular
 from qupulse.utils.numeric import smallest_factor_ge
 
-from qupulse._program.waveforms import SequenceWaveform, RepetitionWaveform
+from qupulse.program.waveforms import SequenceWaveform, RepetitionWaveform
 
-__all__ = ['Loop', 'make_compatible', 'MakeCompatibleWarning']
+__all__ = ['Loop', 'make_compatible', 'MakeCompatibleWarning', 'to_waveform']
 
 
 class Loop(Node):
