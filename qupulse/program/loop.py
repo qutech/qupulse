@@ -1,22 +1,18 @@
-from typing import Union, Dict, Iterable, Tuple, cast, List, Optional, Generator, Mapping
+import reprlib
+import warnings
 from collections import defaultdict
 from enum import Enum
-import warnings
-import bisect
-import reprlib
+from typing import Union, Dict, Iterable, Tuple, cast, List, Optional, Generator, Mapping
 
 import numpy as np
-import sympy.ntheory
 
-from qupulse.program.waveforms import Waveform, ConstantWaveform
 from qupulse.program.volatile import VolatileRepetitionCount, VolatileProperty
-
-from qupulse.utils import is_integer
-from qupulse.utils.types import TimeType, MeasurementWindow
-from qupulse.utils.tree import Node, is_tree_circular
-from qupulse.utils.numeric import smallest_factor_ge
-
 from qupulse.program.waveforms import SequenceWaveform, RepetitionWaveform
+from qupulse.program.waveforms import Waveform, ConstantWaveform
+from qupulse.utils import is_integer
+from qupulse.utils.numeric import smallest_factor_ge
+from qupulse.utils.tree import Node
+from qupulse.utils.types import TimeType, MeasurementWindow
 
 __all__ = ['Loop', 'make_compatible', 'MakeCompatibleWarning', 'to_waveform']
 
