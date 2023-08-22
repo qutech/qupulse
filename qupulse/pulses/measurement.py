@@ -2,7 +2,7 @@ from typing import Optional, List, Tuple, Union, Dict, Set, Mapping, AbstractSet
 from numbers import Real
 import itertools
 
-from qupulse.expressions import Expression
+from qupulse.expressions import Expression, ExpressionScalar
 from qupulse.utils.types import MeasurementWindow
 from qupulse.parameter_scope import Scope
 
@@ -15,8 +15,8 @@ class MeasurementDefiner:
             self._measurement_windows = []
         else:
             self._measurement_windows = [(name,
-                                          begin if isinstance(begin, Expression) else Expression(begin),
-                                          length if isinstance(length, Expression) else Expression(length))
+                                          begin if isinstance(begin, Expression) else ExpressionScalar(begin),
+                                          length if isinstance(length, Expression) else ExpressionScalar(length))
                                          for name, begin, length in measurements]
         for _, _, length in self._measurement_windows:
             if (length < 0) is True:
@@ -73,8 +73,8 @@ class MeasurementDefiner:
     def measurement_declarations(self) -> List[MeasurementDeclaration]:
         """Return the measurements that are directly declared on `self`. Does _not_ visit eventual child objects."""
         return [(name,
-                 begin.original_expression,
-                 length.original_expression)
+                 begin,
+                 length)
                 for name, begin, length in self._measurement_windows]
 
     @property

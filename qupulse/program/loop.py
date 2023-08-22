@@ -1,32 +1,30 @@
-from typing import Union, Dict, Iterable, Tuple, cast, List, Optional, Generator, Mapping
-
-from enum import Enum
 import reprlib
+import warnings
+from collections import defaultdict
+from contextlib import contextmanager
+from dataclasses import dataclass
+from enum import Enum
+from typing import *
 
 import numpy as np
-import warnings
-from typing import *
-from collections import defaultdict
-from dataclasses import dataclass
-from contextlib import contextmanager
 
-from qupulse.utils.types import MeasurementWindow
-from qupulse.program import ProgramBuilder, RepetitionCount, HardwareTime, HardwareVoltage, TimeType
-from qupulse.program.waveforms import ConstantWaveform, Waveform
-from qupulse.pulses.range import RangeScope
 from qupulse.parameter_scope import Scope
-from qupulse.program.waveforms import Waveform, ConstantWaveform, TransformingWaveform
-from qupulse.program.volatile import VolatileRepetitionCount, VolatileProperty
+from qupulse.program import ProgramBuilder, RepetitionCount, HardwareTime, HardwareVoltage
 from qupulse.program.transformation import Transformation
-
-from qupulse.utils import is_integer
-from qupulse.utils.types import TimeType, MeasurementWindow
-from qupulse.utils.tree import Node
-from qupulse.utils.numeric import smallest_factor_ge
-
+from qupulse.program.volatile import VolatileRepetitionCount, VolatileProperty
 from qupulse.program.waveforms import SequenceWaveform, RepetitionWaveform
+from qupulse.program.waveforms import TransformingWaveform
+from qupulse.program.waveforms import Waveform, ConstantWaveform
+from qupulse.pulses.range import RangeScope
+from qupulse.utils import is_integer
+from qupulse.utils.numeric import smallest_factor_ge
+from qupulse.utils.tree import Node
+from qupulse.utils.types import TimeType, MeasurementWindow
 
 __all__ = ['Loop', 'make_compatible', 'MakeCompatibleWarning', 'to_waveform']
+
+
+DurationStructure = Tuple[int, Union[TimeType, 'DurationStructure']]
 
 
 class Loop(Node):
@@ -405,6 +403,8 @@ class Loop(Node):
                 i += 1
 
     def _has_single_child_that_can_be_merged(self) -> bool:
+        """Check if self has only once child which can cheaply be merged into self by multiplying the repetition counts.
+        """
         if len(self) == 1:
             child = cast(Loop, self[0])
             return not self._measurements or (child.repetition_count == 1 and not child.volatile_repetition)
@@ -492,7 +492,12 @@ class Loop(Node):
         if 'merge_single_child' in actions and self._has_single_child_that_can_be_merged():
             self._merge_single_child()
 
-    def get_duration_structure(self) -> Tuple[int, Union[TimeType, tuple]]:
+    def get_duration_structure(self) -> DurationStructure:
+        """Returns a tuple that fingerprints the structure of waveform durations and repetitions of self.
+
+        One possible use case is to identify repeated duration structures and reuse the same control flow with
+        differing data.
+        """
         if self.is_leaf():
             return self.repetition_count, self.waveform.duration
         else:
@@ -511,11 +516,6 @@ class Loop(Node):
                 (name, duration - (begin + length), length)
                 for name, begin, length in self._measurements
             ]
-
-
-class ChannelSplit(Exception):
-    def __init__(self, channel_sets):
-        self.channel_sets = channel_sets
 
 
 def to_waveform(program: Loop) -> Waveform:

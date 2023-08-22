@@ -33,7 +33,7 @@ Parameters
 
 As mentioned above, all pulse templates may depend on parameters. During pulse template initialization the parameters simply are the free variables of expressions that occur in the pulse template. For example the :class:`.FunctionPulseTemplate` has expressions for its duration and the voltage time dependency i.e. the underlying function. Some pulse templates provided means to constrain parameters by accepting a list of :class:`.ParameterConstraint` which encapsulate comparative expressions that must evaluate to true for a given parameter set to successfully instantiate a pulse from the pulse template. This can be used to encode physical or logical parameter boundaries at pulse level.
 
-The mathematical expressions (for parameter transformation or as the function of the :class:`.FunctionPulseTemplate`) are encapsulated into an :class:`.Expression` class which wraps `sympy <http://www.sympy.org/en/index.html>`_ for string evaluation.
+The mathematical expressions (for parameter transformation or as the function of the :class:`.FunctionPulseTemplate`) are encapsulated into an :class:`.sympy.Expression` class which wraps `sympy <http://www.sympy.org/en/index.html>`_ for string evaluation by default. Other more performant or secure backends can potentially be implemented by conforming to the :class:`.protocol.Expression`.
 
 Parameters can be mapped to arbitrary expressions via :class:`.mapping_pulse_template.MappingPulseTemplate`. One use case can be deriving pulse parameters from physical quantities.
 
