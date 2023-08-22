@@ -4,7 +4,7 @@ from unittest import mock
 import numpy as np
 
 from qupulse.hardware.setup import HardwareSetup, PlaybackChannel, MarkerChannel, MeasurementMask
-from qupulse._program._loop import Loop
+from qupulse.program.loop import Loop
 
 from tests.pulses.sequencing_dummies import DummyWaveform
 

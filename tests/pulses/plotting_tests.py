@@ -9,7 +9,7 @@ from qupulse.pulses import ConstantPT
 from qupulse.plotting import PlottingNotPossibleException, render, plot
 from qupulse.pulses.table_pulse_template import TablePulseTemplate
 from qupulse.pulses.sequence_pulse_template import SequencePulseTemplate
-from qupulse._program._loop import Loop
+from qupulse.program.loop import Loop
 
 from tests.pulses.sequencing_dummies import DummyWaveform, DummyPulseTemplate
 

@@ -14,8 +14,8 @@ from collections import OrderedDict
 
 from qupulse.hardware.util import get_sample_times, not_none_indices
 from qupulse.utils.types import ChannelID
-from qupulse._program._loop import Loop
-from qupulse._program.waveforms import Waveform
+from qupulse.program.loop import Loop
+from qupulse.program.waveforms import Waveform
 from qupulse.comparable import Comparable
 from qupulse.utils.types import TimeType
 

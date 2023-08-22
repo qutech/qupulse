@@ -12,7 +12,7 @@ from qupulse.pulses import ConstantPT, FunctionPT, RepetitionPT, ForLoopPT, Para
     TimeReversalPT, AtomicMultiChannelPT
 from qupulse.pulses.pulse_template import AtomicPulseTemplate, PulseTemplate, UnknownVolatileParameter
 from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
-from qupulse._program._loop import Loop
+from qupulse.program.loop import Loop
 
 from qupulse._program.transformation import Transformation
 from qupulse._program.waveforms import TransformingWaveform

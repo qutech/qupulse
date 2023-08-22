@@ -1,14 +1,14 @@
 import unittest
 
 import qupulse.plotting
-import qupulse._program.waveforms
+import qupulse.program.waveforms
 import qupulse.utils.sympy
 from qupulse.pulses import TablePT, FunctionPT, AtomicMultiChannelPT, MappingPT
 from qupulse.pulses.multi_channel_pulse_template import AtomicMultiChannelPulseTemplate
 from qupulse.plotting import plot
 from qupulse.pulses.sequence_pulse_template import SequencePulseTemplate
-from qupulse._program._loop import make_compatible
-from qupulse._program.waveforms import ConstantWaveform
+from qupulse.program.loop import make_compatible
+from qupulse.program.waveforms import ConstantWaveform
 
 from qupulse.serialization import DictBackend, PulseStorage
 from qupulse.pulses.constant_pulse_template import ConstantPulseTemplate, ExpressionScalar, TimeType
@@ -44,10 +44,10 @@ class TestConstantPulseTemplate(unittest.TestCase):
         self.assertEqual(pulse.duration, 12)
 
     def test_regression_duration_conversion(self):
-        old_value = qupulse._program.waveforms.PULSE_TO_WAVEFORM_ERROR
+        old_value = qupulse.program.waveforms.PULSE_TO_WAVEFORM_ERROR
 
         try:
-            qupulse._program.waveforms.PULSE_TO_WAVEFORM_ERROR = 1e-6
+            qupulse.program.waveforms.PULSE_TO_WAVEFORM_ERROR = 1e-6
             for duration_in_samples in [64, 936320, 24615392]:
                 p = ConstantPulseTemplate(duration_in_samples / 2.4, {'a': 0})
                 number_of_samples = p.create_program().duration * 2.4
@@ -57,19 +57,19 @@ class TestConstantPulseTemplate(unittest.TestCase):
                 p2 = ConstantPulseTemplate((duration_in_samples + 1) / 2.4, {'a': 0})
                 self.assertNotEqual(p.create_program().duration, p2.create_program().duration)
         finally:
-            qupulse._program.waveforms.PULSE_TO_WAVEFORM_ERROR = old_value
+            qupulse.program.waveforms.PULSE_TO_WAVEFORM_ERROR = old_value
 
     def test_regression_duration_conversion_functionpt(self):
-        old_value = qupulse._program.waveforms.PULSE_TO_WAVEFORM_ERROR
+        old_value = qupulse.program.waveforms.PULSE_TO_WAVEFORM_ERROR
 
         try:
-            qupulse._program.waveforms.PULSE_TO_WAVEFORM_ERROR = 1e-6
+            qupulse.program.waveforms.PULSE_TO_WAVEFORM_ERROR = 1e-6
             for duration_in_samples in [64, 2000, 936320]:
                 p = FunctionPT('1', duration_expression=duration_in_samples / 2.4, channel='a')
                 number_of_samples = p.create_program().duration * 2.4
                 self.assertEqual(number_of_samples.denominator, 1)
         finally:
-            qupulse._program.waveforms.PULSE_TO_WAVEFORM_ERROR = old_value
+            qupulse.program.waveforms.PULSE_TO_WAVEFORM_ERROR = old_value
 
     def test_regression_template_combination(self):
         old_value = qupulse.utils.sympy.SYMPY_DURATION_ERROR_MARGIN

@@ -13,7 +13,7 @@ import numpy as np
 from qupulse.expressions import ExpressionScalar
 from qupulse.parameter_scope import DictScope
 
-from qupulse._program._loop import Loop
+from qupulse.program.loop import Loop
 from qupulse._program.waveforms import ConstantWaveform
 from qupulse._program.seqc import BinaryWaveform, loop_to_seqc, WaveformPlayback, Repeat, SteppingRepeat, Scope,\
     to_node_clusters, find_sharable_waveforms, mark_sharable_waveforms, UserRegisterManager, HDAWGProgramManager,\

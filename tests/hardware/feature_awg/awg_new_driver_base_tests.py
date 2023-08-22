@@ -3,7 +3,7 @@ import unittest
 import warnings
 
 from qupulse import ChannelID
-from qupulse._program._loop import Loop
+from qupulse.program.loop import Loop
 from qupulse.hardware.feature_awg import channel_tuple_wrapper
 from qupulse.hardware.feature_awg.base import AWGDevice, AWGChannel, AWGChannelTuple, AWGMarkerChannel
 from qupulse.hardware.feature_awg.features import ChannelSynchronization, ProgramManagement, VoltageRange, \

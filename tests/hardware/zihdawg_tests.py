@@ -26,7 +26,7 @@ else:
         raise unittest.SkipTest("zhinst not present") from err
 
 from qupulse.utils.types import TimeType
-from qupulse._program._loop import Loop
+from qupulse.program.loop import Loop
 from tests.pulses.sequencing_dummies import DummyWaveform
 from qupulse.hardware.awgs.zihdawg import HDAWGChannelGroup, HDAWGRepresentation, HDAWGValueError, UserRegister,\
     ELFManager, HDAWGChannelGrouping, SingleDeviceChannelGroup

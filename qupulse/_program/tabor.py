@@ -12,9 +12,9 @@ import numpy as np
 from qupulse.utils.types import ChannelID, TimeType
 from qupulse.hardware.awgs.base import ProgramEntry
 from qupulse.hardware.util import get_sample_times, voltage_to_uint16, find_positions
-from qupulse._program.waveforms import Waveform
-from qupulse._program._loop import Loop
-from qupulse._program.volatile import VolatileRepetitionCount, VolatileProperty
+from qupulse.program.waveforms import Waveform
+from qupulse.program.loop import Loop
+from qupulse.program.volatile import VolatileRepetitionCount, VolatileProperty
 
 assert(sys.byteorder == 'little')
 

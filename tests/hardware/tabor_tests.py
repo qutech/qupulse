@@ -9,7 +9,7 @@ except ImportError as err:
 
 from qupulse.hardware.awgs.tabor import TaborException, TaborProgram, \
     TaborSegment, TaborSequencing, with_configuration_guard, PlottableProgram
-from qupulse._program._loop import Loop
+from qupulse.program.loop import Loop
 from qupulse.hardware.util import voltage_to_uint16
 
 from tests.pulses.sequencing_dummies import DummyWaveform

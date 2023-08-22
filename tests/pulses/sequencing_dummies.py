@@ -8,7 +8,7 @@ import unittest
 
 """LOCAL IMPORTS"""
 from qupulse.parameter_scope import Scope
-from qupulse._program._loop import Loop
+from qupulse.program.loop import Loop
 from qupulse.utils.types import MeasurementWindow, ChannelID, TimeType, time_from_float
 from qupulse.serialization import Serializer
 from qupulse._program.waveforms import Waveform

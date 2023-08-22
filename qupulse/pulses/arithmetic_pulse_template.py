@@ -14,8 +14,8 @@ from qupulse.utils import cached_property
 from qupulse.utils.types import ChannelID
 from qupulse.pulses.measurement import MeasurementWindow
 from qupulse.pulses.pulse_template import AtomicPulseTemplate, PulseTemplate
-from qupulse._program.waveforms import Waveform, ArithmeticWaveform, TransformingWaveform
-from qupulse._program.transformation import Transformation, ScalingTransformation, OffsetTransformation,\
+from qupulse.program.waveforms import Waveform, ArithmeticWaveform, TransformingWaveform
+from qupulse.program.transformation import Transformation, ScalingTransformation, OffsetTransformation,\
     IdentityTransformation
 
 

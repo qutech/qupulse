@@ -8,7 +8,7 @@ from qupulse.pulses.mapping_pulse_template import MissingMappingException,\
     AmbiguousMappingException, MappingCollisionException
 from qupulse.pulses.parameters import ParameterConstraintViolation, ParameterConstraint, ParameterNotProvidedException
 from qupulse.expressions import Expression
-from qupulse._program._loop import Loop
+from qupulse.program.loop import Loop
 
 from tests.pulses.sequencing_dummies import DummyPulseTemplate, MeasurementWindowTestCase, DummyWaveform
 from tests.serialization_tests import SerializableTests

@@ -23,7 +23,7 @@ from qupulse.pulses.parameters import ParameterNotProvidedException, ParameterCo
 from qupulse.pulses.pulse_template import AtomicPulseTemplate, MeasurementDeclaration
 from qupulse.pulses.interpolation import InterpolationStrategy, LinearInterpolationStrategy, \
     HoldInterpolationStrategy, JumpInterpolationStrategy
-from qupulse._program.waveforms import TableWaveform, TableWaveformEntry
+from qupulse.program.waveforms import TableWaveform, TableWaveformEntry
 from qupulse.expressions import ExpressionScalar, Expression
 from qupulse.pulses.multi_channel_pulse_template import MultiChannelWaveform
 
