@@ -219,15 +219,22 @@ class TablePulseTemplateTest(unittest.TestCase):
         table.build_waveform(parameters=dict(v=1., w=2, t=0.1, x=1.2, y=1, h=2),
                              channel_mapping={0: 0, 1: 1})
 
-    def test_get_entries_instantiated_one_entry_float_float(self) -> None:
+    def test_get_entries_instantiated_empty(self):
         table = TablePulseTemplate({0: [(0, 2)]})
+        self.assertEqual({}, table.get_entries_instantiated(dict()))
+
+    def test_get_entries_instantiated_one_entry_float_float(self) -> None:
+        table = TablePulseTemplate({0: [(1, 2)]})
         instantiated_entries = table.get_entries_instantiated(dict())[0]
-        self.assertEqual([(0, 2, HoldInterpolationStrategy())], instantiated_entries)
+        self.assertEqual([(0, 2, HoldInterpolationStrategy()), (1, 2, HoldInterpolationStrategy())],
+                         instantiated_entries)
 
     def test_get_entries_instantiated_one_entry_float_declaration(self) -> None:
-        table = TablePulseTemplate({0: [(0, 'foo')]})
+        table = TablePulseTemplate({0: [(1, 'foo')]})
         instantiated_entries = table.get_entries_instantiated({'foo': 2})[0]
-        self.assertEqual([(0, 2, HoldInterpolationStrategy())], instantiated_entries)
+        self.assertEqual([(0, 2, HoldInterpolationStrategy()),
+                          (1, 2, HoldInterpolationStrategy())],
+                         instantiated_entries)
 
     def test_get_entries_instantiated_two_entries_float_float_declaration_float(self) -> None:
         table = TablePulseTemplate({0: [('foo', -2.)]})
