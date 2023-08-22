@@ -1,10 +1,10 @@
-"""This subpackage contains qupulse's expression logic. The submodule :py:`protocol` defines the :py:`typing.Protocol`
+"""This subpackage contains qupulse's expression logic. The submodule :py:mod:`.expressions.protocol` defines the :py:class:`typing.Protocol`
 that expression functionality providers must implement. This allows to substitute the powerful and expressive but slow
 default implementation with a faster less expressive backend.
 
-The default implementation is in :py:``qupulse.expressions.sympy``.
+The default implementation is in :py:mod:`.expressions.sympy`.
 
-There is are wrapper classes for finding non-protocol uses of expression in :py:``qupulse.expressions.wrapper``. Define
+There is are wrapper classes for finding non-protocol uses of expression in :py:mod:`.expressions.wrapper`. Define
 ``QUPULSE_EXPRESSION_WRAPPER`` environment variable when running python to wrap all expression usages.
 """
 

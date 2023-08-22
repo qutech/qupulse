@@ -54,6 +54,8 @@ class Scalar(Protocol):
 
 
 class Expression(Hashable, Protocol):
+    """This protocol defines how Expressions are allowed to be used in qupulse."""
+
     def evaluate_in_scope(self, scope: Mapping) -> Union[Real, np.ndarray]:
         """Evaluate the expression by taking the variables from the given scope (typically of type Scope, but it can be
         any mapping.)
