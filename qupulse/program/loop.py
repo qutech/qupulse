@@ -501,11 +501,6 @@ class Loop(Node):
             ]
 
 
-class ChannelSplit(Exception):
-    def __init__(self, channel_sets):
-        self.channel_sets = channel_sets
-
-
 def to_waveform(program: Loop) -> Waveform:
     if program.is_leaf():
         if program.repetition_count == 1:
