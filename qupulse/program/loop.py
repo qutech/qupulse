@@ -17,6 +17,9 @@ from qupulse.utils.types import TimeType, MeasurementWindow
 __all__ = ['Loop', 'make_compatible', 'MakeCompatibleWarning', 'to_waveform']
 
 
+DurationStructure = Tuple[int, Union[TimeType, 'DurationStructure']]
+
+
 class Loop(Node):
     MAX_REPR_SIZE = 2000
     __slots__ = ('_waveform', '_measurements', '_repetition_definition', '_cached_body_duration')
@@ -393,6 +396,8 @@ class Loop(Node):
                 i += 1
 
     def _has_single_child_that_can_be_merged(self) -> bool:
+        """Check if self has only once child which can cheaply be merged into self by multiplying the repetition counts.
+        """
         if len(self) == 1:
             child = cast(Loop, self[0])
             return not self._measurements or (child.repetition_count == 1 and not child.volatile_repetition)
@@ -480,7 +485,12 @@ class Loop(Node):
         if 'merge_single_child' in actions and self._has_single_child_that_can_be_merged():
             self._merge_single_child()
     
-    def get_duration_structure(self) -> Tuple[int, Union[TimeType, tuple]]:
+    def get_duration_structure(self) -> DurationStructure:
+        """Returns a tuple that fingerprints the structure of waveform durations and repetitions of self.
+
+        One possible use case is to identify repeated duration structures and reuse the same control flow with
+        differing data.
+        """
         if self.is_leaf():
             return self.repetition_count, self.waveform.duration
         else:
