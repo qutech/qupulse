@@ -63,6 +63,23 @@ class BinaryWaveformTest(unittest.TestCase):
 
                     self.assertEqual(min(max_rate, n), dyn_n)
 
+    def test_marker_data(self):
+        channel_1_data = np.linspace(-0.3, 0.4, num=192)
+        channel_2_data = np.linspace(-0.1, 0.1, num=192)
+
+        bit_gen = np.random.PCG64(49174928843)
+        rng = np.random.Generator(bit_gen)
+
+        m1, m2, m3, m4 = rng.integers(2, size=(4, 192), dtype=np.uint16)
+
+        bwf = BinaryWaveform.from_sampled(channel_1_data, channel_2_data, (m1, m2, m3, m4))
+
+        ch1_markers = m1 | m2 << 1
+        ch2_markers = m3 | m4 << 1
+
+        np.testing.assert_equal(ch1_markers, bwf.markers_ch1)
+        np.testing.assert_equal(ch2_markers, bwf.markers_ch2)
+
 
 def make_binary_waveform(waveform):
     if zhinst is None:
